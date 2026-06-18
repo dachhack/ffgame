@@ -3,7 +3,7 @@ import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, ThemeSwitcher, PlayerImg, Avatar, Img, InjuryBadge } from '../app/ui';
 import { avatarUrl, teamLogo } from '../data/media';
-import { nflGameForTeam } from '../data/nflSlate';
+import { nflGameForTeam, gamesInWindow } from '../data/nflSlate';
 import { WINDOWS, METRICS, metricById } from '../data/metrics';
 import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
@@ -516,7 +516,8 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
           </div>
           {pools[w.id].length === 0 && <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', padding: '0 4px' }}>— none playing —</span>}
           {pools[w.id].map((p) => {
-            const assigned = assignedIds.has(p.id);
+            // Never reveal which players the opponent has selected during setup.
+            const assigned = assignedIds.has(p.id) && (side === 'you' || phase !== 'setup');
             const interactive = side === 'you' && phase === 'setup';
             return (
               <button
@@ -592,18 +593,22 @@ function WindowSection(props: {
   // actual away@home matchup that week, and list the players involved.
   interface SlateGame { away: string; home: string; you: string[]; their: string[] }
   const slate: SlateGame[] = (() => {
+    // Seed with every real NFL game in this window — so the chip shows even
+    // before anyone is assigned (e.g. a lone TNF game).
     const games = new Map<string, SlateGame>();
+    for (const g of gamesInWindow(week, w.id)) {
+      games.set(`${g.away}@${g.home}`, { away: g.away, home: g.home, you: [], their: [] });
+    }
     const add = (team: string | undefined, name: string, side: 'you' | 'their') => {
       const g = nflGameForTeam(week, team);
-      if (!g) return;
-      const key = `${g.away}@${g.home}`;
-      const e = games.get(key) ?? { away: g.away, home: g.home, you: [], their: [] };
-      e[side].push(`${name} · ${team}`);
-      games.set(key, e);
+      if (!g || g.win !== w.id) return;
+      const e = games.get(`${g.away}@${g.home}`);
+      if (e) e[side].push(`${name} · ${team}`);
     };
     for (const s of rw.slots) {
       if (s.you?.player.team) add(s.you.player.team, s.you.player.name, 'you');
-      if (s.their?.player.team) add(s.their.player.team, s.their.player.name, 'their');
+      // Don't reveal the opponent's lineup during setup.
+      if (phase !== 'setup' && s.their?.player.team) add(s.their.player.team, s.their.player.name, 'their');
     }
     return [...games.values()];
   })();

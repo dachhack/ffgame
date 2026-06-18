@@ -29,3 +29,8 @@ export function nflGameForTeam(week: number, team?: string | null): NflGame | un
 export function windowForTeam(week: number, team?: string | null): WindowId | null {
   return nflGameForTeam(week, team)?.win ?? null;
 }
+
+/** Every real NFL game scheduled in a given time-slot window that week. */
+export function gamesInWindow(week: number, win: WindowId): NflGame[] {
+  return (NFL_SLATE[week] || []).filter((g) => g.win === win);
+}
