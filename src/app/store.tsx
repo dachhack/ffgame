@@ -1,7 +1,13 @@
 import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ThemeName } from '../theme';
+import type { WindowId } from '../types';
 import { LEAGUE, YOU_TEAM_ID } from '../data/league';
 import { powerupById } from '../data/powerups';
+
+/** Powerups applied to a given week (their effects, not the inventory). */
+export interface AppliedWeek {
+  extraSlots: Partial<Record<WindowId, number>>; // bonus slots per window (mirrored to opponent)
+}
 
 export type Phase = 'setup' | 'live' | 'final';
 
@@ -25,6 +31,9 @@ interface Store {
   buyPowerup: (id: string) => boolean;
   /** Consume one of a held powerup. Returns false if none held. */
   useConsumable: (id: string) => boolean;
+  applied: Record<number, AppliedWeek>; // week -> applied powerup effects
+  /** Apply an Extra Slot to a window for a week (consumes one). Returns success. */
+  applyExtraSlot: (week: number, win: WindowId) => boolean;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -32,7 +41,7 @@ const Ctx = createContext<Store | null>(null);
 const THEME_KEY = 'gc-theme';
 const SAVE_KEY = 'gc-coins';
 
-interface SaveState { coins: number; weeks: number[]; inv: Record<string, number>; }
+interface SaveState { coins: number; weeks: number[]; inv: Record<string, number>; applied: Record<number, AppliedWeek>; }
 function loadState(): SaveState {
   try {
     const raw = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -40,8 +49,9 @@ function loadState(): SaveState {
       coins: raw.coins ?? 0,
       weeks: Array.isArray(raw.weeks) ? raw.weeks : [],
       inv: raw.inv && typeof raw.inv === 'object' ? raw.inv : {},
+      applied: raw.applied && typeof raw.applied === 'object' ? raw.applied : {},
     };
-  } catch { return { coins: 0, weeks: [], inv: {} }; }
+  } catch { return { coins: 0, weeks: [], inv: {}, applied: {} }; }
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -54,16 +64,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const initial = useRef(loadState());
   const [coins, setCoins] = useState<number>(initial.current.coins);
   const [inventory, setInventory] = useState<Record<string, number>>(initial.current.inv);
+  const [applied, setApplied] = useState<Record<number, AppliedWeek>>(initial.current.applied);
   const creditedWeeks = useRef<Set<number>>(new Set(initial.current.weeks));
 
-  // Persist coins + inventory together. Pass next values explicitly so we don't
-  // race React's async state.
-  const persist = (next: { coins?: number; inv?: Record<string, number> }) => {
+  // Persist coins + inventory + applied together. Pass next values explicitly so
+  // we don't race React's async state.
+  const persist = (next: { coins?: number; inv?: Record<string, number>; applied?: Record<number, AppliedWeek> }) => {
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({
         coins: next.coins ?? coins,
         weeks: [...creditedWeeks.current],
         inv: next.inv ?? inventory,
+        applied: next.applied ?? applied,
       }));
     } catch { /* ignore */ }
   };
@@ -95,9 +107,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
+  const applyExtraSlot = (week: number, win: WindowId): boolean => {
+    if ((inventory['extra-slot'] ?? 0) <= 0) return false;
+    const nextInv = { ...inventory, ['extra-slot']: inventory['extra-slot'] - 1 };
+    const prev = applied[week]?.extraSlots ?? {};
+    const nextApplied = { ...applied, [week]: { extraSlots: { ...prev, [win]: (prev[win] ?? 0) + 1 } } };
+    setInventory(nextInv); setApplied(nextApplied); persist({ inv: nextInv, applied: nextApplied });
+    return true;
+  };
+
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable }),
-    [theme, route, coins, inventory],
+    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot }),
+    [theme, route, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, ThemeSwitcher, PosPill } from '../app/ui';
-import { WINDOWS, METRICS, TOTAL_SLOTS, metricById } from '../data/metrics';
+import { WINDOWS, METRICS, metricById } from '../data/metrics';
 import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
-  windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock, signatureCoins,
+  windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock, signatureCoins, slotsFor, totalSlotsWith,
 } from '../engine/matchup';
 import { fmtClock, statlineAt, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
@@ -16,7 +16,8 @@ const TICK_MS = 700;
 const TICK_SECONDS = 20;
 
 export function Matchup({ week, initialPhase }: { week: number; initialPhase: Phase }) {
-  const { navigate, coins, creditWeek } = useStore();
+  const { navigate, coins, creditWeek, inventory, applied, applyExtraSlot } = useStore();
+  const extraSlots = applied[week]?.extraSlots ?? {};
   const oppId = gameForTeam(YOU, week)?.oppId ?? 'rock-tunnel';
   const you = getTeam(YOU)!;
   const opp = getTeam(oppId)!;
@@ -39,10 +40,11 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     return () => { alive = false; };
   }, [week]);
 
+  const extraKey = JSON.stringify(extraSlots);
   const youPools = useMemo(() => windowPools(YOU, week), [week]);
   const oppPools = useMemo(() => windowPools(oppId, week), [week, oppId]);
-  const oppPicks = useMemo(() => defaultLineup(oppId, week), [oppId, week, ready]);
-  const youDefault = useMemo(() => defaultLineup(YOU, week), [week, ready]);
+  const oppPicks = useMemo(() => defaultLineup(oppId, week, extraSlots), [oppId, week, ready, extraKey]);
+  const youDefault = useMemo(() => defaultLineup(YOU, week, extraSlots), [week, ready, extraKey]);
 
   const playerWindow = useMemo(() => {
     const m = new Map<string, WindowId>();
@@ -56,8 +58,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   }, [phase, picks, youDefault]);
 
   const resolved = useMemo(
-    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks),
-    [oppId, week, effYouPicks, oppPicks, ready],
+    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots),
+    [oppId, week, effYouPicks, oppPicks, ready, extraKey],
   );
 
   // Drip coin: +5 per signature play your lineup makes this week (credited once).
@@ -148,22 +150,24 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   }, [resolved, winClocks, phase]);
 
   const filledCount = Object.values(picks).filter((p) => p.metricId).length;
+  const totalSlots = totalSlotsWith(extraSlots);
   const anyPlaying = Object.values(winPlaying).some(Boolean);
+  const extraSlotQty = inventory['extra-slot'] ?? 0;
 
   // ── setup interactions ──
   function assignFromRoster(playerId: string) {
     if (phase !== 'setup') return;
     const win = playerWindow.get(playerId);
     if (!win) return;
-    const w = WINDOWS.find((x) => x.id === win)!;
-    for (let i = 0; i < w.slots; i++) {
+    const nSlots = slotsFor(win, extraSlots);
+    for (let i = 0; i < nSlots; i++) {
       const k = slotKey(win, i);
       if (picks[k]?.playerId === playerId) { setSelSlot(k); return; }
     }
     let target: string | null = null;
     if (selSlot && selSlot.startsWith(win + '#') && !picks[selSlot]) target = selSlot;
     if (!target) {
-      for (let i = 0; i < w.slots; i++) {
+      for (let i = 0; i < nSlots; i++) {
         const k = slotKey(win, i);
         if (!picks[k]) { target = k; break; }
       }
@@ -279,7 +283,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
             </div>
             <div style={{ textAlign: 'right', flex: 'none' }}>
               <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>{phase === 'setup' ? 'SLOTS SET' : 'WEEK ' + week}</div>
-              <div className="mono" style={{ fontSize: 12, color: 'var(--text)' }}>{phase === 'setup' ? `${filledCount}/${TOTAL_SLOTS}` : phase.toUpperCase()}</div>
+              <div className="mono" style={{ fontSize: 12, color: 'var(--text)' }}>{phase === 'setup' ? `${filledCount}/${totalSlots}` : phase.toUpperCase()}</div>
             </div>
           </div>
 
@@ -295,6 +299,9 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 playing={!!winPlaying[rw.window.id]}
                 onTogglePlay={() => setWinPlay(rw.window.id, !winPlaying[rw.window.id])}
                 onReplay={() => replayWin(rw.window.id)}
+                canApplyExtra={phase === 'setup' && extraSlotQty > 0}
+                extraSlotQty={extraSlotQty}
+                onApplyExtra={() => applyExtraSlot(week, rw.window.id)}
                 picks={picks}
                 selSlot={selSlot}
                 setSelSlot={setSelSlot}
@@ -377,6 +384,9 @@ function WindowSection(props: {
   playing: boolean;
   onTogglePlay: () => void;
   onReplay: () => void;
+  canApplyExtra: boolean;
+  extraSlotQty: number;
+  onApplyExtra: () => void;
   picks: Record<string, Pick>;
   selSlot: string | null;
   setSelSlot: (k: string | null) => void;
@@ -387,7 +397,7 @@ function WindowSection(props: {
   youPools: Record<WindowId, Player[]>;
   onAssign: (id: string) => void;
 }) {
-  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, picks, selSlot, setSelSlot, pickMetricFor, clearSlot, openPBP, togglePBP, onAssign } = props;
+  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, picks, selSlot, setSelSlot, pickMetricFor, clearSlot, openPBP, togglePBP, onAssign } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
@@ -403,7 +413,19 @@ function WindowSection(props: {
         </div>
 
         {phase === 'setup' ? (
-          <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--dim)' }}>{setN}/{w.slots} SET</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            {canApplyExtra && (
+              <button
+                onClick={onApplyExtra}
+                title="Add a slot to this window — for you AND your opponent. Locks once any window starts."
+                className="mono"
+                style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px dashed var(--warn)', borderRadius: 4, padding: '4px 8px' }}
+              >
+                ➕ ADD SLOT (◈ ×{extraSlotQty})
+              </button>
+            )}
+            <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--dim)' }}>{setN}/{rw.slots.length} SET</span>
+          </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             {/* per-window clock */}

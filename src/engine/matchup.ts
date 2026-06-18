@@ -34,11 +34,23 @@ export function slotKey(win: WindowId, idx: number): string {
   return `${win}#${idx}`;
 }
 
+/** Extra-slot powerups: per-window count of bonus slots applied this week. */
+export type ExtraSlots = Partial<Record<WindowId, number>>;
+/** Slots in a window including any Extra Slot powerups applied this week. */
+export function slotsFor(win: WindowId, extra?: ExtraSlots): number {
+  const base = WINDOWS.find((w) => w.id === win)?.slots ?? 0;
+  return base + (extra?.[win] ?? 0);
+}
+/** Total lineup slots across all windows including extras. */
+export function totalSlotsWith(extra?: ExtraSlots): number {
+  return WINDOWS.reduce((n, w) => n + slotsFor(w.id, extra), 0);
+}
+
 /**
  * When real play-by-play is baked for the week, field the roster's real top-8
  * performers (benching anyone who didn't play) into the 8 slots in order.
  */
-function realLineup(teamId: string, week: number): Record<string, Pick> {
+function realLineup(teamId: string, week: number, extra?: ExtraSlots): Record<string, Pick> {
   const pts = realPointsFor(week);
   const ranked = teamRoster(teamId)
     .filter((p) => pts[p.id] !== undefined)
@@ -46,7 +58,7 @@ function realLineup(teamId: string, week: number): Record<string, Pick> {
   const picks: Record<string, Pick> = {};
   let idx = 0;
   for (const w of WINDOWS) {
-    for (let i = 0; i < w.slots; i++) {
+    for (let i = 0; i < slotsFor(w.id, extra); i++) {
       const p = ranked[idx++];
       if (p) picks[slotKey(w.id, i)] = { playerId: p.id, metricId: pickMetric(p, week) };
     }
@@ -55,16 +67,16 @@ function realLineup(teamId: string, week: number): Record<string, Pick> {
 }
 
 /** Best available player per slot, with a hidden metric — used to seed lineups. */
-export function defaultLineup(teamId: string, week: number): Record<string, Pick> {
+export function defaultLineup(teamId: string, week: number, extra?: ExtraSlots): Record<string, Pick> {
   if (REAL_WEEKS.has(week)) {
-    const rl = realLineup(teamId, week);
+    const rl = realLineup(teamId, week, extra);
     if (Object.keys(rl).length >= TOTAL_SLOTS) return rl;
   }
   const pools = windowPools(teamId, week);
   const picks: Record<string, Pick> = {};
   for (const w of WINDOWS) {
     const ranked = [...pools[w.id]].sort((a, b) => projectedPoints(b, week) - projectedPoints(a, week));
-    for (let i = 0; i < w.slots; i++) {
+    for (let i = 0; i < slotsFor(w.id, extra); i++) {
       const p = ranked[i];
       if (p) picks[slotKey(w.id, i)] = { playerId: p.id, metricId: pickMetric(p, week) };
     }
@@ -118,6 +130,7 @@ export function buildMatchup(
   week: number,
   youPicks: Record<string, Pick>,
   oppPicks: Record<string, Pick>,
+  extraSlots: ExtraSlots = {},
 ): ResolvedMatchup {
   const youPools = windowPools(youTeamId, week);
   const oppPools = windowPools(oppTeamId, week);
@@ -135,11 +148,12 @@ export function buildMatchup(
   let youSuppress = 0, theirSuppress = 0;
 
   for (const w of WINDOWS) {
+    const nSlots = slotsFor(w.id, extraSlots);
     // Pre-pass: collect this window's filled slots per side, so a Field
     // General QB can build a window-wide multiplier on its own side.
     const youIns: SlotInput[] = [];
     const theirIns: SlotInput[] = [];
-    for (let i = 0; i < w.slots; i++) {
+    for (let i = 0; i < nSlots; i++) {
       const y = lookup(youPools, youPicks, slotKey(w.id, i));
       const t = lookup(oppPools, oppPicks, slotKey(w.id, i));
       if (y) youIns.push({ player: y.player, metricId: y.metricId });
@@ -153,7 +167,7 @@ export function buildMatchup(
     const theirTeTd = teTdNukeClocks(theirIns, week);
 
     const slots: ResolvedSlot[] = [];
-    for (let i = 0; i < w.slots; i++) {
+    for (let i = 0; i < nSlots; i++) {
       const key = slotKey(w.id, i);
       const you = lookup(youPools, youPicks, key);
       const their = lookup(oppPools, oppPicks, key);
