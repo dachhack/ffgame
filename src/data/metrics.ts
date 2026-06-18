@@ -20,7 +20,7 @@ export const METRICS: Record<Pos, Metric[]> = {
     { id: 'rush', name: 'Rush Yards', tag: 'DRIP', fx: 'compression', sc: '0.1 pts / yd', ef: 'Steady drip on your own scrambles. Purely additive, no interaction.' },
   ],
   RB: [
-    { id: 'rush', name: 'Rush Yards', tag: 'COMPRESSION', fx: 'compression', sc: '0.1 / yd (no TD)', ef: 'Drip on rushing yards. A 3+ carry streak with no opponent score compresses: each further carry trims the opponent’s most recent score by 25%.' },
+    { id: 'rush', name: 'Rush Yards', tag: 'DRIP', fx: 'sys', sc: '0.01 / yd → rate (pts/min)', ef: 'Each carry permanently raises a drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. An opponent catch erases the last 10 min and pauses it; a target pauses it; a TD wipes the bank. Rate survives erases.' },
     { id: 'rec', name: 'Receptions', tag: 'RATE RESET', fx: 'reset', sc: '1 pt / catch', ef: 'Each catch zeroes the opponent’s active drip rate. They keep the bank, rebuild from scratch.' },
     { id: 'td', name: 'Touchdowns', tag: 'NUKE', fx: 'nuke', sc: '6 pts / TD', ef: 'Each TD wipes the opponent’s entire banked score to zero.' },
   ],

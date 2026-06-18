@@ -369,10 +369,17 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const youFam = familyOf(you.player.pos, you.metricId);
   const theirFam = familyOf(their.player.pos, their.metricId);
 
-  // WR Receiving Yards is a possession-gated drip: a catch raises a permanent
-  // rate (yds × 0.01 pts/min) that accrues over the WR team's offensive time.
-  const dripYou = you.player.pos === 'WR' && you.metricId === 'recyd';
-  const dripTheir = their.player.pos === 'WR' && their.metricId === 'recyd';
+  // Drip metrics: WR Receiving Yards (built by catches) and RB Rush Yards
+  // (built by carries). A drip play raises a permanent rate (yds × 0.01
+  // pts/min) that accrues over the player's team offensive time.
+  const dripKindOf = (s: SlotInput): RealPlayKind | null =>
+    (s.player.pos === 'WR' && s.metricId === 'recyd') ? 'rec'
+      : (s.player.pos === 'RB' && s.metricId === 'rush') ? 'rush'
+        : null;
+  const youDripKind = dripKindOf(you);
+  const theirDripKind = dripKindOf(their);
+  const dripYou = youDripKind !== null;
+  const dripTheir = theirDripKind !== null;
   const youPoss = dripYou ? realPossFor(week, you.player.team) : [];
   const theirPoss = dripTheir ? realPossFor(week, their.player.team) : [];
   let lastClock = 0;
@@ -409,7 +416,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     // nothing directly. Otherwise the metric's per-play points (× FG mult).
     let pts = 0;
     if (iAmDrip) {
-      if (play.kind === 'rec') { mine.rate += play.yards * 0.01; mine.paused = false; }
+      const dk = play.side === 'you' ? youDripKind : theirDripKind;
+      if (play.kind === dk) { mine.rate += play.yards * 0.01; mine.paused = false; }
     } else {
       pts = scorePlay(play, myPlayer.player.pos, myPlayer.metricId, myFam === 'streak' && mine.hot);
       if (mine.dead) pts = 0;
@@ -420,13 +428,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     mine.bank += pts;
     if (pts > 0) mine.hist.push({ clock: play.clock, pts });
 
-    if (pts > 0 && (oppFam === 'streak' || oppFam === 'compression')) { opp.streak = 0; opp.hot = false; }
+    if (pts > 0 && oppFam === 'streak') { opp.streak = 0; opp.hot = false; }
 
     if (myFam === 'streak') {
       if (play.td) { mine.streak = 3; mine.hot = true; }
       else if (play.catch) { mine.streak += 1; if (mine.streak >= 3) mine.hot = true; }
     }
-    if (myFam === 'compression' && play.kind === 'rush') mine.streak += 1;
 
     if (play.td && myPlayer.metricId === 'td') { if (play.side === 'you') youTds++; else theirTds++; }
     if (myPlayer.player.pos === 'K' && myPlayer.metricId === 'banker' && play.kind === 'xp') {
@@ -481,10 +488,6 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       if (last) { const cut = last.pts * 0.5; opp.bank = Math.max(0, opp.bank - cut); last.pts -= cut; effect = { type: 'reset', text: 'RATE RESET' }; }
     } else if (myFam === 'stop' && play.target && opp.hist.length) {
       effect = { type: 'stop', text: 'CLOCK STOP' };
-    } else if (myFam === 'compression' && play.kind === 'rush' && mine.streak >= 3 && opp.hist.length) {
-      const last = opp.hist[opp.hist.length - 1];
-      const cut = Math.round(last.pts * 0.25 * 10) / 10;
-      if (cut > 0) { opp.bank = Math.max(0, opp.bank - cut); last.pts -= cut; effect = { type: 'reset', text: `COMPRESSION −${cut.toFixed(1)}` }; }
     }
 
     // streak / drip badges
