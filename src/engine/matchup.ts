@@ -98,6 +98,13 @@ export interface ResolvedSlot {
   theirFinal: number;
   gameLabel: string;
   real: boolean;
+  // Unopposed → BACKUP: this player doesn't score directly; its score can
+  // replace a starter slot of the same side if higher.
+  backup?: boolean;
+  backupScore?: number;   // the score this backup would post
+  backupUsed?: boolean;   // it was subbed into a starter slot
+  subInName?: string;     // a backup player's name subbed INTO this slot
+  subFromScore?: number;  // this slot's original score before the sub
 }
 
 export interface ResolvedWindow {
@@ -230,6 +237,12 @@ export function buildMatchup(
     windows.push({ window: w, slots });
   }
 
+  // Unopposed players are BACKUPS (best-ball insurance): a backup doesn't score
+  // in its own slot, but its highest score can replace your lowest starter's
+  // score when it beats it. Applied per side, before suppress/sum.
+  applyBackups(windows, 'you');
+  applyBackups(windows, 'their');
+
   // DEF SUPPRESS (HALVING): your suppress DST halves every opposing slot (any
   // window) that scored at or below its threshold; their DST does the same to
   // your slots. Applied once per slot, after all in-slot scoring resolves.
@@ -263,6 +276,43 @@ export function signatureCoins(m: ResolvedMatchup, side: 'you' | 'their'): numbe
   let n = 0;
   for (const w of m.windows) for (const s of w.slots) for (const e of s.events) if (e.side === side && e.sig) n++;
   return n * COIN_PER_SIG;
+}
+
+/**
+ * Best-ball backups: a side's unopposed slots (player present, no opponent)
+ * don't score directly. Instead the highest backup replaces the side's lowest
+ * starter score when it beats it — greedily pairing the biggest backups with
+ * the smallest beatable starters to maximize the side's total.
+ */
+function applyBackups(windows: ResolvedWindow[], side: 'you' | 'their'): void {
+  const all = windows.flatMap((w) => w.slots);
+  const mine = (s: ResolvedSlot) => (side === 'you' ? s.you : s.their);
+  const opp = (s: ResolvedSlot) => (side === 'you' ? s.their : s.you);
+  const getF = (s: ResolvedSlot) => (side === 'you' ? s.youFinal : s.theirFinal);
+  const setF = (s: ResolvedSlot, v: number) => { if (side === 'you') s.youFinal = v; else s.theirFinal = v; };
+
+  const backups = all.filter((s) => mine(s) && !opp(s));
+  if (!backups.length) return;
+  // A backup doesn't score on its own — record its would-be score, zero it out.
+  for (const b of backups) { b.backup = true; b.backupScore = getF(b); setF(b, 0); }
+
+  const starters = all.filter((s) => mine(s) && opp(s));
+  const backupsDesc = [...backups].sort((a, b) => (b.backupScore ?? 0) - (a.backupScore ?? 0));
+  const startersAsc = [...starters].sort((a, b) => getF(a) - getF(b));
+  let si = 0;
+  for (const b of backupsDesc) {
+    if (si >= startersAsc.length) break;
+    const st = startersAsc[si];
+    if ((b.backupScore ?? 0) > getF(st)) {
+      st.subInName = mine(b)!.player.name;
+      st.subFromScore = getF(st);
+      setF(st, b.backupScore ?? 0);
+      b.backupUsed = true;
+      si++;
+    } else {
+      break; // largest remaining backup can't beat the smallest remaining starter → none can
+    }
+  }
 }
 
 /** Running banks at a given clock (live phase) for one slot's event feed. */

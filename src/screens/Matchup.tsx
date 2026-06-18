@@ -620,6 +620,27 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
   week: number; clock: number; open: boolean; onToggle: () => void; phase: Phase; done: boolean;
   canSwap: boolean; onPowerup: () => void;
 }) {
+  // Unopposed → BACKUP: doesn't score in its own slot; its score can replace a
+  // starter (best-ball). Render a distinct backup row.
+  if (slot.backup && slot.you) {
+    const bp = metricById(slot.you.player.pos, slot.you.metricId);
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', border: '1px dashed var(--warn)', borderLeft: '3px solid var(--warn)', borderRadius: 4, padding: '9px 11px' }}>
+        <PosPill pos={slot.you.player.pos} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{slot.you.player.name}</span>
+            <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 3, padding: '1px 4px' }}>BACKUP</span>
+          </div>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3 }}>{bp?.name} · unopposed — score can replace a starter</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--warn)', lineHeight: 1 }}>{(slot.backupScore ?? 0).toFixed(1)}</div>
+          <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: slot.backupUsed ? 'var(--you)' : 'var(--faint)', marginTop: 3 }}>{slot.backupUsed ? '✓ SUBBED IN' : 'BENCH'}</div>
+        </div>
+      </div>
+    );
+  }
   if (!slot.you || !slot.their) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14, border: '1px dashed var(--bd)', borderRadius: 4, color: 'var(--faint)', fontSize: 11 }} className="mono">
@@ -654,6 +675,11 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
         </div>
         <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={banks.their} onClick={onToggle} fx={lastEffect?.type} />
       </div>
+      {slot.subInName && (
+        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', marginTop: 3 }}>
+          ⤴ BACKUP {slot.subInName} subs in at final · {(slot.subFromScore ?? 0).toFixed(1)} → {slot.youFinal.toFixed(1)}
+        </div>
+      )}
       {open && <TwoColLog events={visibleEvents} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} />}
     </div>
   );
