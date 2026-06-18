@@ -413,6 +413,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const iAmDrip = play.side === 'you' ? dripYou : dripTheir;
     const oppIsDrip = play.side === 'you' ? dripTheir : dripYou;
     const myDripKind = play.side === 'you' ? youDripKind : theirDripKind;
+    // TE Targets (WIDE ERASE) fires on every target — incompletions included —
+    // unlike the catch-gated WR/TE Receptions erase.
+    const eraseOnTarget = myPlayer.player.pos === 'TE' && myPlayer.metricId === 'tgt';
+    const eraseTrigger = myFam === 'erase' && (eraseOnTarget ? play.target : play.catch);
+    const eraseWindow = eraseOnTarget ? 900 : 600;
 
     // Scoring. Drip: a catch/carry raises the rate and resumes the drip but
     // scores nothing directly; 3 straight (no opponent score) goes hot → 2×
@@ -468,9 +473,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       // any TD wipes the entire drip bank.
       if (play.kind === 'rec' || play.kind === 'incomplete') {
         opp.paused = true;
-        if (play.kind === 'rec' && myFam === 'erase') {
-          const windowSecs = myPlayer.player.pos === 'TE' ? (myPlayer.metricId === 'tgt' ? 900 : 600) : 600;
-          const cutoff = play.clock - windowSecs;
+        if (eraseTrigger) {
+          const cutoff = play.clock - eraseWindow;
           let erased = 0;
           opp.hist = opp.hist.filter((h) => { if (h.clock >= cutoff) { erased += h.pts; return false; } return true; });
           if (erased > 0) opp.bank = Math.max(0, opp.bank - erased);
@@ -491,9 +495,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       const wiped = opp.bank;
       opp.bank = 0; opp.hist = [];
       effect = { type: 'nuke', text: `✕ NUKE — wiped ${wiped.toFixed(1)}` };
-    } else if (myFam === 'erase' && play.catch) {
-      const windowSecs = myPlayer.player.pos === 'TE' ? (myPlayer.metricId === 'tgt' ? 900 : 600) : 600;
-      const cutoff = play.clock - windowSecs;
+    } else if (eraseTrigger) {
+      const cutoff = play.clock - eraseWindow;
       let erased = 0;
       opp.hist = opp.hist.filter((h) => {
         if (h.clock >= cutoff) { erased += h.pts; return false; }

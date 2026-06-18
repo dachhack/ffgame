@@ -32,7 +32,7 @@ export const METRICS: Record<Pos, Metric[]> = {
     { id: 'td', name: 'Touchdowns', tag: 'NUKE', fx: 'nuke', sc: '6 pts / TD', ef: 'Each TD wipes the opponent’s entire banked score to zero.' },
   ],
   TE: [
-    { id: 'tgt', name: 'Targets', tag: 'WIDE ERASE', fx: 'erase', sc: '1 pt / target', ef: 'Each reception erases the opponent’s drip from the last 15 min — wider than any WR.' },
+    { id: 'tgt', name: 'Targets', tag: 'WIDE ERASE', fx: 'erase', sc: '1 pt / target', ef: 'Every target — catch or incompletion — erases the opponent’s drip from the last 15 min. Wider than any WR, and fires on volume alone.' },
     { id: 'rec', name: 'Receptions', tag: 'ERASE', fx: 'erase', sc: '1.5 pts / catch', ef: 'Each catch erases the opponent’s drip from the last 10 clock-minutes.' },
     { id: 'td', name: 'Touchdowns', tag: '8-PT NUKE', fx: 'nuke', sc: '8 pts / TD', ef: 'The strongest single play in the game. Wipes the opponent’s entire bank.' },
   ],
