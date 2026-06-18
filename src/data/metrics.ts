@@ -30,12 +30,14 @@ export const METRICS: Record<Pos, Metric[]> = {
     { id: 'rec', name: 'Receptions', tag: 'ERASE', fx: 'erase', sc: '1 pt / catch', ef: 'Each catch erases the opponent’s drip from the last 10 clock-minutes.' },
     { id: 'tgt', name: 'Targets', tag: 'CLOCK STOP', fx: 'stop', sc: '0.5 pts / target', ef: 'Every target stops the opponent’s drip clock. No erase — pure denial.' },
     { id: 'td', name: 'Touchdowns', tag: 'NUKE', fx: 'nuke', sc: '6 pts / TD', ef: 'Each TD wipes the opponent’s entire banked score to zero.' },
+    { id: 'carries', name: 'Carries', tag: 'WIPE', fx: 'nuke', sc: '1 pt / carry', ef: 'Unlock (1 wk): every carry — jet sweep / end-around — instantly wipes the opposing player to 0.', lock: 'unlock-carries-wipe' },
   ],
   TE: [
     { id: 'recyd', name: 'Receiving Yards', tag: 'DRIP', fx: 'sys', sc: '0.005 / yd → rate (pts/min)', ef: 'Each catch raises a drip rate (yds × 0.005 pts/min) — half a WR’s — that accrues while your team has the ball. Immune to WR/RB pauses and erases: only a TD (or K shutdown) stops it. 3 straight (no opponent score) goes hot → drip doubles.' },
     { id: 'tgt', name: 'Targets', tag: 'WIDE ERASE', fx: 'erase', sc: '1 pt / target', ef: 'Every target — catch or incompletion — erases the opponent’s drip from the last 15 min. Wider than any WR, and fires on volume alone.' },
     { id: 'rec', name: 'Receptions', tag: 'ERASE', fx: 'erase', sc: '1.5 pts / catch', ef: 'Each catch erases the opponent’s drip from the last 10 clock-minutes.' },
     { id: 'td', name: 'Touchdowns', tag: '8-PT NUKE', fx: 'nuke', sc: '8 pts / TD', ef: 'The strongest single play in the game. Wipes the matched opponent’s entire bank AND instantly knocks every opposing drip in the window down by 1.0 pts/min (min 0).' },
+    { id: 'carries', name: 'Carries', tag: 'WIPE', fx: 'nuke', sc: '1 pt / carry', ef: 'Unlock (1 wk): every carry instantly wipes the opposing player to 0.', lock: 'unlock-carries-wipe' },
   ],
   K: [
     { id: 'banker', name: 'Banker', tag: 'XP BONUS', fx: 'mult', sc: 'FG by distance', ef: 'Each XP made adds +1 pt to ALL your TDs for the week.' },
@@ -54,6 +56,6 @@ export function metricById(pos: Pos, id: string | null | undefined): Metric | un
 
 /** A sensible default metric for auto-filled / opponent lineups. */
 export function defaultMetric(pos: Pos): Metric {
-  const list = METRICS[pos] || METRICS.WR;
+  const list = (METRICS[pos] || METRICS.WR).filter((m) => !m.lock);
   return list[0];
 }

@@ -199,11 +199,13 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
     if (metricId === 'rec') return play.catch ? 1 : 0;
     if (metricId === 'tgt') return play.target ? 0.5 : 0;
     if (metricId === 'td') return play.td ? 6 : 0;
+    if (metricId === 'carries') return play.kind === 'rush' ? 1 : 0; // WIPE (the wipe is applied in resolveSlot)
   }
   if (pos === 'TE') {
     if (metricId === 'tgt') return play.target ? 1 : 0;
     if (metricId === 'rec') return play.catch ? 1.5 : 0;
     if (metricId === 'td') return play.td ? 8 : 0; // NUKE
+    if (metricId === 'carries') return play.kind === 'rush' ? 1 : 0; // WIPE
   }
   if (pos === 'K') {
     // 'neg' (SHUTDOWN) scores 0 directly — it's a pure effect. 'banker' scores
@@ -661,6 +663,15 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         if (!effect) effect = { type: 'reset', text: `COMPRESSION −${cut.toFixed(1)}` };
         sig = true;
       }
+    }
+
+    // WR/TE Carries (WIPE, unlock): a carry instantly zeroes the opponent —
+    // fires against any opponent (drip included), like compression.
+    if ((myPlayer.player.pos === 'WR' || myPlayer.player.pos === 'TE') && myPlayer.metricId === 'carries' && play.kind === 'rush' && opp.bank > 0) {
+      const wiped = opp.bank;
+      opp.bank = 0; opp.hist = []; opp.paused = true;
+      if (!effect) effect = { type: 'nuke', text: `✕ CARRY WIPE −${wiped.toFixed(1)}` };
+      sig = true;
     }
 
     // streak / drip badges

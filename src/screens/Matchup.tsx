@@ -18,7 +18,7 @@ const TICK_MS = 700;
 const TICK_SECONDS = 20;
 
 export function Matchup({ week, initialPhase }: { week: number; initialPhase: Phase }) {
-  const { navigate, coins, creditWeek, inventory, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget } = useStore();
+  const { navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget } = useStore();
   const extraSlots = applied[week]?.extraSlots ?? {};
   const swaps = applied[week]?.swaps ?? {};
   const backupAssign = applied[week]?.backups ?? {};
@@ -195,6 +195,11 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   }
 
   function pickMetricFor(key: string, metricId: string) {
+    const pk = picks[key];
+    const player = pk ? getPlayer(pk.playerId) : null;
+    const m = player ? metricById(player.pos, metricId) : null;
+    // A locked (unlock) metric consumes one of its powerup the first time it's set.
+    if (m?.lock && pk?.metricId !== metricId && !useConsumable(m.lock)) return;
     setPicks((prev) => prev[key] ? { ...prev, [key]: { ...prev[key], metricId } } : prev);
     setSelSlot(null);
   }
@@ -325,6 +330,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 openPBP={openPBP}
                 togglePBP={(k) => setOpenPBP((o) => ({ ...o, [k]: !o[k] }))}
                 youPools={youPools}
+                inventory={inventory}
                 onAssign={assignFromRoster}
               />
             ))}
@@ -555,9 +561,10 @@ function WindowSection(props: {
   openPBP: Record<string, boolean>;
   togglePBP: (k: string) => void;
   youPools: Record<WindowId, Player[]>;
+  inventory: Record<string, number>;
   onAssign: (id: string) => void;
 }) {
-  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, setSelSlot, pickMetricFor, clearSlot, openPBP, togglePBP, onAssign } = props;
+  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, setSelSlot, pickMetricFor, clearSlot, openPBP, togglePBP, onAssign, inventory } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
@@ -683,7 +690,7 @@ function WindowSection(props: {
           if (phase === 'setup') {
             return (
               <SetupRow
-                key={key} slotKeyStr={key} winId={w.id} pick={picks[key]} selected={selSlot === key}
+                key={key} slotKeyStr={key} winId={w.id} pick={picks[key]} selected={selSlot === key} inventory={inventory}
                 onSelect={() => setSelSlot(key)} onPickMetric={(m) => pickMetricFor(key, m)} onClear={() => clearSlot(key)}
                 onDropPlayer={(id) => onAssign(id)}
               />
@@ -700,10 +707,10 @@ function WindowSection(props: {
 
 // ── Setup row ──
 function SetupRow(props: {
-  slotKeyStr: string; winId: WindowId; pick?: Pick; selected: boolean;
+  slotKeyStr: string; winId: WindowId; pick?: Pick; selected: boolean; inventory: Record<string, number>;
   onSelect: () => void; onPickMetric: (m: string) => void; onClear: () => void; onDropPlayer: (id: string) => void;
 }) {
-  const { winId, pick, selected, onSelect, onPickMetric, onClear, onDropPlayer } = props;
+  const { winId, pick, selected, inventory, onSelect, onPickMetric, onClear, onDropPlayer } = props;
   const player = pick ? getPlayer(pick.playerId) : null;
   const metric = player && pick?.metricId ? metricById(player.pos, pick.metricId) : null;
   const showPicker = !!player && !pick?.metricId;
@@ -727,9 +734,9 @@ function SetupRow(props: {
           </div>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, alignItems: 'flex-end', justifyContent: 'center' }}>
             {showPicker ? (
-              METRICS[player.pos].map((m) => (
-                <button key={m.id} title={m.ef} onClick={() => onPickMetric(m.id)} style={{ width: '100%', textAlign: 'left', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '4px 7px', display: 'flex', justifyContent: 'space-between', gap: 6, color: 'var(--text)' }}>
-                  <span style={{ fontSize: 11, fontWeight: 700 }}>{m.name}</span>
+              METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0).map((m) => (
+                <button key={m.id} title={m.ef} onClick={() => onPickMetric(m.id)} style={{ width: '100%', textAlign: 'left', background: m.lock ? 'color-mix(in srgb, var(--warn) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${m.lock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 3, padding: '4px 7px', display: 'flex', justifyContent: 'space-between', gap: 6, color: 'var(--text)' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700 }}>{m.lock ? '◈ ' : ''}{m.name}</span>
                   <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{m.sc}</span>
                 </button>
               ))

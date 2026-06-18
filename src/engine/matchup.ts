@@ -29,7 +29,8 @@ export function windowPools(teamId: string, week: number): Record<WindowId, Play
 
 /** A deterministic hidden metric for an auto/opponent pick. */
 export function pickMetric(p: Player, week: number): string {
-  const list = METRICS[p.pos] || METRICS.WR;
+  // Unlock (locked) metrics are never auto-assigned — they require a powerup.
+  const list = (METRICS[p.pos] || METRICS.WR).filter((m) => !m.lock);
   const idx = hashStr(`${p.id}|m${week}`) % list.length;
   return list[idx].id;
 }
