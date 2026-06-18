@@ -3,6 +3,19 @@ import type { Pos, ThemeName } from '../theme';
 import { THEMES } from '../theme';
 import { useStore } from './store';
 import { headshot, teamLogo } from '../data/media';
+import { injuryFor } from '../data/injuries';
+
+const INJURY_COLOR: Record<string, string> = { O: '#FF4F62', IR: '#C2304A', D: '#FF8A3D', Q: '#E8B23A' };
+const INJURY_LABEL: Record<string, string> = { O: 'Out', IR: 'Injured Reserve', D: 'Doubtful', Q: 'Questionable' };
+/** Info-only weekly injury / IR badge for a player slug, or nothing. */
+export function InjuryBadge({ week, slug, style }: { week: number; slug: string; style?: CSSProperties }) {
+  const s = injuryFor(week, slug);
+  if (!s) return null;
+  const c = INJURY_COLOR[s];
+  return (
+    <span className="mono" title={INJURY_LABEL[s]} style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.04em', color: c, border: `1px solid ${c}`, borderRadius: 2, padding: '0 3px', lineHeight: 1.5, flex: 'none', ...style }}>{s}</span>
+  );
+}
 
 export function useTheme() {
   const { theme } = useStore();

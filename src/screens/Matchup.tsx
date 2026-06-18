@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
-import { Brand, ThemeSwitcher, PlayerImg, Avatar, Img } from '../app/ui';
+import { Brand, ThemeSwitcher, PlayerImg, Avatar, Img, InjuryBadge } from '../app/ui';
 import { avatarUrl, teamLogo } from '../data/media';
 import { nflGameForTeam } from '../data/nflSlate';
 import { WINDOWS, METRICS, metricById } from '../data/metrics';
@@ -292,7 +292,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
       </header>
 
       <div style={{ flex: 1, display: 'flex', gap: 14, padding: 14, overflow: 'hidden', minHeight: 0 }}>
-        <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={!rosterOpen.you} onToggle={() => toggleRoster('you')} bye={byeYou} />
+        <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={!rosterOpen.you} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} />
 
         <main style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 18, marginBottom: 10 }}>
@@ -340,7 +340,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
           <div style={{ height: 40 }} />
         </main>
 
-        <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} collapsed={!rosterOpen.their} onToggle={() => toggleRoster('their')} bye={byeTheir} />
+        <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} collapsed={!rosterOpen.their} onToggle={() => toggleRoster('their')} bye={byeTheir} week={week} />
       </div>
 
       {swapTarget && (() => {
@@ -475,7 +475,7 @@ function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMe
 }
 
 // ── Roster aside ──────────────────────────────────────────────────────────
-function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, onToggle, bye = [] }: {
+function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, onToggle, bye = [], week }: {
   side: 'you' | 'their';
   pools: Record<WindowId, Player[]>;
   picks: Record<string, Pick>;
@@ -485,6 +485,7 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
   collapsed: boolean;
   onToggle: () => void;
   bye?: Player[];
+  week: number;
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
   const assignedIds = new Set(Object.values(picks).map((p) => p.playerId));
@@ -531,6 +532,7 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
               >
                 <PlayerImg playerId={p.id} team={p.team} pos={p.pos} size={18} />
                 <span className="grotesk" style={{ fontSize: 11.5, fontWeight: 700, color: side === 'you' ? 'var(--text)' : 'var(--dimstrong)', flex: 1, textDecoration: assigned ? 'line-through' : 'none', opacity: assigned ? 0.55 : 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                <InjuryBadge week={week} slug={p.id} />
                 <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.team}</span>
               </button>
             );
@@ -706,7 +708,7 @@ function WindowSection(props: {
           if (phase === 'setup') {
             return (
               <SetupRow
-                key={key} slotKeyStr={key} winId={w.id} pick={picks[key]} selected={selSlot === key} inventory={inventory}
+                key={key} slotKeyStr={key} winId={w.id} week={week} pick={picks[key]} selected={selSlot === key} inventory={inventory}
                 onSelect={() => setSelSlot(key)} onPickMetric={(m) => pickMetricFor(key, m)} onClear={() => clearSlot(key)}
                 onDropPlayer={(id) => onAssign(id)}
               />
@@ -723,10 +725,10 @@ function WindowSection(props: {
 
 // ── Setup row ──
 function SetupRow(props: {
-  slotKeyStr: string; winId: WindowId; pick?: Pick; selected: boolean; inventory: Record<string, number>;
+  slotKeyStr: string; winId: WindowId; week: number; pick?: Pick; selected: boolean; inventory: Record<string, number>;
   onSelect: () => void; onPickMetric: (m: string) => void; onClear: () => void; onDropPlayer: (id: string) => void;
 }) {
-  const { winId, pick, selected, inventory, onSelect, onPickMetric, onClear, onDropPlayer } = props;
+  const { winId, week, pick, selected, inventory, onSelect, onPickMetric, onClear, onDropPlayer } = props;
   const player = pick ? getPlayer(pick.playerId) : null;
   const metric = player && pick?.metricId ? metricById(player.pos, pick.metricId) : null;
   const showPicker = !!player && !pick?.metricId;
@@ -744,7 +746,10 @@ function SetupRow(props: {
             <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={showPicker ? 46 : 64} />
           </div>
           <div onClick={onSelect} style={{ cursor: 'pointer', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div className="grotesk" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap' }}>{player.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span className="grotesk" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap' }}>{player.name}</span>
+              <InjuryBadge week={week} slug={player.id} />
+            </div>
             <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>{player.pos} · {player.team}</span>
             {!showPicker && <button onClick={onClear} className="mono" style={{ background: 'none', border: 'none', fontSize: 8, letterSpacing: '0.14em', color: 'var(--opp)', padding: 0, marginTop: 5, textAlign: 'left' }}>CHANGE ✕</button>}
           </div>
@@ -825,11 +830,21 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
     );
   }
   const banks = banksAtClock(slot.events, clock);
-  // A backup subbed into this slot replaces the starter's score — show that.
-  const youShown = slot.youSub ? slot.youFinal : banks.you;
-  const theirShown = slot.theirSub ? slot.theirFinal : banks.their;
-  const lead = youShown - theirShown;
   const final = phase === 'final' || done;
+  // Displayed score per side: a sub replaces it; at final, suppress-halving and
+  // K-negation show the reduced value (with the original revealed below).
+  const shownFor = (side: 'you' | 'their') => {
+    const sub = side === 'you' ? slot.youSub : slot.theirSub;
+    if (sub) return sub.score;
+    if (side === 'you' && slot.youNegated) return 0;
+    if (side === 'their' && slot.theirNegated) return 0;
+    if (final && side === 'you' && slot.youHalvedFrom != null) return slot.youFinal;
+    if (final && side === 'their' && slot.theirHalvedFrom != null) return slot.theirFinal;
+    return side === 'you' ? banks.you : banks.their;
+  };
+  const youShown = shownFor('you');
+  const theirShown = shownFor('their');
+  const lead = youShown - theirShown;
   const verdict = final
     ? (lead > 0.1 ? { t: 'WON', c: 'var(--you)' } : lead < -0.1 ? { t: 'LOST', c: 'var(--opp)' } : { t: 'TIE', c: 'var(--dim)' })
     : (lead > 2 ? { t: 'EDGE YOU', c: 'var(--you)' } : lead < -2 ? { t: 'EDGE THEM', c: 'var(--opp)' } : Math.abs(lead) > 0.1 ? { t: 'CLOSE', c: 'var(--warn)' } : { t: 'EVEN', c: 'var(--dim)' });
@@ -842,7 +857,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'stretch', gap: 6 }}>
-        <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={slot.youSub?.name} />
+        <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={slot.youSub?.name} suppressSpent={slot.suppressSpentYou} negated={slot.youNegated} />
         <div style={{ width: 64, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
           <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--bg)', background: verdict.c, padding: '4px 6px', borderRadius: 3, textAlign: 'center', lineHeight: 1.1 }}>{verdict.t}</span>
           {canSwap && !done && (
@@ -852,7 +867,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
             <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
           )}
         </div>
-        <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={slot.theirSub?.name} />
+        <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={slot.theirSub?.name} suppressSpent={slot.suppressSpentTheir} negated={slot.theirNegated} />
       </div>
       {slot.youSub && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', marginTop: 3 }}>
@@ -862,6 +877,26 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
       {slot.theirSub && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--opp)', marginTop: 3, textAlign: 'right' }}>
           {slot.their.player.name} ← BACKUP {slot.theirSub.name} ⤴ · {slot.theirSub.from.toFixed(1)} → {slot.theirSub.score.toFixed(1)}
+        </div>
+      )}
+      {final && slot.youHalvedFrom != null && (
+        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--fx-stop)', marginTop: 3 }}>
+          ÷2 SUPPRESSED by {slot.their.player.name} · {slot.youHalvedFrom.toFixed(1)} → {slot.youFinal.toFixed(1)}
+        </div>
+      )}
+      {final && slot.theirHalvedFrom != null && (
+        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--fx-stop)', marginTop: 3, textAlign: 'right' }}>
+          {slot.their.player.name} ÷2 SUPPRESSED · {slot.theirHalvedFrom.toFixed(1)} → {slot.theirFinal.toFixed(1)}
+        </div>
+      )}
+      {slot.youNegated && (
+        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--fx-nuke)', marginTop: 3 }}>
+          ✕ NEGATED by {slot.their.player.name}'s K SHUTDOWN — scored 0
+        </div>
+      )}
+      {slot.theirNegated && (
+        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--fx-nuke)', marginTop: 3, textAlign: 'right' }}>
+          {slot.their.player.name} ✕ NEGATED by K SHUTDOWN — scored 0
         </div>
       )}
       {open && <TwoColLog events={visibleEvents} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} />}
@@ -899,11 +934,11 @@ function fmtStat(pos: Pos, s: StatLine): string {
   return '—';
 }
 
-function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, fx, subName }: {
-  side: 'you' | 'their'; player: Player; week: number; clock: number; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string;
+function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, fx, subName, suppressSpent, negated }: {
+  side: 'you' | 'their'; player: Player; week: number; clock: number; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; suppressSpent?: number; negated?: boolean;
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
-  const nuked = fx === 'nuke' && bank === 0 && !subName;
+  const nuked = fx === 'nuke' && bank === 0 && !subName && suppressSpent == null;
   const stat = useMemo(() => fmtStat(player.pos, statlineAt(player, week, clock)), [player, week, clock]);
   return (
     <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 10, cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
@@ -911,16 +946,24 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexDirection: side === 'you' ? 'row' : 'row-reverse' }}>
           <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={26} />
           <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>
+          <InjuryBadge week={week} slug={player.id} />
           <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{player.team}</span>
         </div>
         <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3, letterSpacing: '0.04em' }}>{metricName} · {tag}</div>
         {/* running statline (or the backup that's scoring this slot) */}
-        {subName
-          ? <div className="mono" style={{ fontSize: 9.5, color: accent, marginTop: 5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>⤴ {subName} scoring</div>
-          : <div className="mono" style={{ fontSize: 9.5, color: 'var(--dimstrong)', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stat}</div>}
+        {suppressSpent != null
+          ? <div className="mono" style={{ fontSize: 9, color: 'var(--fx-stop)', marginTop: 5, fontWeight: 700 }}>✕ {suppressSpent.toFixed(1)} spent on SUPPRESS</div>
+          : subName
+            ? <div className="mono" style={{ fontSize: 9.5, color: accent, marginTop: 5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>⤴ {subName} scoring</div>
+            : <div className="mono" style={{ fontSize: 9.5, color: 'var(--dimstrong)', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stat}</div>}
       </div>
-      <div style={{ flex: 'none', alignSelf: 'center' }}>
-        <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, color: accent, lineHeight: 1, letterSpacing: '-0.02em', animation: nuked ? 'shake .5s' : undefined }}>{bank.toFixed(1)}</div>
+      <div style={{ flex: 'none', alignSelf: 'center', textAlign: 'center' }}>
+        {suppressSpent != null ? (
+          // DEF on Suppress: show the earn points it forwent, struck through.
+          <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--dim)', lineHeight: 1, textDecoration: 'line-through' }}>{suppressSpent.toFixed(1)}</div>
+        ) : (
+          <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, color: negated ? 'var(--fx-nuke)' : accent, lineHeight: 1, letterSpacing: '-0.02em', textDecoration: negated ? 'line-through' : undefined, animation: nuked ? 'shake .5s' : undefined }}>{bank.toFixed(1)}</div>
+        )}
       </div>
     </div>
   );

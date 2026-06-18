@@ -1,0 +1,31 @@
+// Weekly NFL injury-report designations (Out/Doubtful/Questionable) and
+// season IR/PUP for rostered players, keyed by player slug.
+// Generated from Stathead get_injuries + get_rosters (2025).
+export type InjuryStatus = 'O' | 'D' | 'Q' | 'IR';
+
+// Per-week game-status designations.
+export const INJURIES: Record<number, Record<string, 'O' | 'D' | 'Q'>> = {
+  1: { 'christian-mccaffrey': 'Q', 'darnell-mooney': 'Q', 'isaiah-likely': 'O', 'jayden-reed': 'Q' },
+  2: { 'brock-bowers': 'Q', 'brock-purdy': 'O', 'dallas-goedert': 'O', 'isaiah-likely': 'O', 'jauan-jennings': 'Q', 'quinshon-judkins': 'Q', 'wandale-robinson': 'Q', 'xavier-worthy': 'O' },
+  3: { 'brock-purdy': 'Q', 'dandre-swift': 'Q', 'emeka-egbuka': 'Q', 'evan-engram': 'O', 'isaiah-likely': 'O', 'jauan-jennings': 'Q', 'jaxon-smith-njigba': 'Q', 'jayden-daniels': 'O', 'jayden-reed': 'O', 'jaylen-waddle': 'Q', 'jj-mccarthy': 'O', 'justin-fields': 'O', 'tucker-kraft': 'Q', 'tyler-warren': 'Q', 'xavier-worthy': 'Q', 'zach-charbonnet': 'D' },
+  4: { 'alec-pierce': 'O', 'baker-mayfield': 'Q', 'ceedee-lamb': 'O', 'chuba-hubbard': 'Q', 'colston-loveland': 'Q', 'dandre-swift': 'Q', 'davante-adams': 'Q', 'isaiah-likely': 'Q', 'jacory-croskey-merritt': 'Q', 'jauan-jennings': 'Q', 'jayden-daniels': 'O', 'jaylen-warren': 'Q', 'jj-mccarthy': 'O', 'jonnu-smith': 'Q', 'mike-evans': 'O', 'ricky-pearsall': 'Q', 'terry-mclaurin': 'O', 'tetairoa-mcmillan': 'Q', 'tyrone-tracy': 'O', 'zach-charbonnet': 'Q' },
+  5: { 'alec-pierce': 'O', 'brock-bowers': 'Q', 'brock-purdy': 'O', 'bucky-irving': 'O', 'ceedee-lamb': 'O', 'chuba-hubbard': 'O', 'jauan-jennings': 'O', 'jj-mccarthy': 'O', 'juwan-johnson': 'Q', 'lamar-jackson': 'O', 'mike-evans': 'O', 'ricky-pearsall': 'O', 'taysom-hill': 'Q', 'terry-mclaurin': 'O', 'tyrone-tracy': 'D' },
+  6: { 'alvin-kamara': 'Q', 'brock-bowers': 'O', 'brock-purdy': 'O', 'bucky-irving': 'O', 'ceedee-lamb': 'O', 'christian-watson': 'O', 'chuba-hubbard': 'O', 'colston-loveland': 'Q', 'dalton-kincaid': 'Q', 'darnell-mooney': 'O', 'deebo-samuel': 'Q', 'jamarr-chase': 'Q', 'jauan-jennings': 'Q', 'kyler-murray': 'Q', 'lamar-jackson': 'O', 'mike-evans': 'O', 'quentin-johnston': 'Q', 'ricky-pearsall': 'O', 'terry-mclaurin': 'O', 'zay-flowers': 'Q' },
+  7: { 'brock-bowers': 'D', 'brock-purdy': 'O', 'bucky-irving': 'O', 'christian-watson': 'O', 'dandre-swift': 'Q', 'darnell-mooney': 'Q', 'david-njoku': 'O', 'deebo-samuel': 'O', 'emeka-egbuka': 'Q', 'garrett-wilson': 'D', 'jakobi-meyers': 'Q', 'jj-mccarthy': 'Q', 'josh-downs': 'O', 'josh-jacobs': 'Q', 'kyler-murray': 'Q', 'mike-evans': 'Q', 'puka-nacua': 'O', 'ricky-pearsall': 'O', 'stefon-diggs': 'Q', 'terry-mclaurin': 'O', 'zach-ertz': 'Q' },
+  8: { 'aaron-jones': 'Q', 'aj-brown': 'O', 'breece-hall': 'Q', 'brock-purdy': 'O', 'bryce-young': 'D', 'bucky-irving': 'O', 'christian-watson': 'Q', 'cole-kmet': 'O', 'dalton-kincaid': 'Q', 'dandre-swift': 'Q', 'david-njoku': 'Q', 'drake-london': 'Q', 'garrett-wilson': 'O', 'jayden-daniels': 'O', 'jj-mccarthy': 'Q', 'lamar-jackson': 'O', 'matthew-golden': 'Q', 'michael-penix': 'Q', 'nico-collins': 'O', 'ricky-pearsall': 'O', 'shedeur-sanders': 'Q' },
+  9: { 'alvin-kamara': 'Q', 'brock-purdy': 'Q', 'cooper-kupp': 'Q', 'dalton-schultz': 'Q', 'dandre-swift': 'O', 'isiah-pacheco': 'O', 'kyler-murray': 'Q', 'rashid-shaheed': 'Q', 'rhamondre-stevenson': 'O', 'ricky-pearsall': 'O', 'terry-mclaurin': 'O', 'travis-hunter': 'O' },
+  10: { 'aaron-jones': 'Q', 'aj-barner': 'Q', 'alvin-kamara': 'Q', 'brian-thomas': 'O', 'brock-purdy': 'Q', 'bucky-irving': 'O', 'cj-stroud': 'O', 'cooper-kupp': 'Q', 'dandre-swift': 'Q', 'garrett-wilson': 'Q', 'harold-fannin': 'Q', 'jayden-daniels': 'O', 'matthew-golden': 'Q', 'ollie-gordon': 'Q', 'rhamondre-stevenson': 'Q', 'ricky-pearsall': 'O', 'terry-mclaurin': 'O', 'tetairoa-mcmillan': 'Q' },
+  11: { 'brenton-strange': 'O', 'brian-thomas': 'Q', 'bucky-irving': 'O', 'cj-stroud': 'O', 'dalton-kincaid': 'O', 'davante-adams': 'Q', 'drake-london': 'Q', 'garrett-wilson': 'O', 'isiah-pacheco': 'O', 'jaxson-dart': 'O', 'jayden-daniels': 'O', 'jk-dobbins': 'O', 'joe-burrow': 'O', 'marvin-harrison': 'O', 'matthew-golden': 'Q', 'quentin-johnston': 'Q', 'rhamondre-stevenson': 'O', 'sam-laporta': 'O', 'terry-mclaurin': 'O' },
+  12: { 'aaron-rodgers': 'Q', 'alvin-kamara': 'Q', 'brenton-strange': 'Q', 'brian-thomas': 'O', 'bucky-irving': 'O', 'cj-stroud': 'O', 'dalton-kincaid': 'O', 'dillon-gabriel': 'O', 'drake-london': 'O', 'isiah-pacheco': 'O', 'jaxson-dart': 'O', 'jayden-reed': 'O', 'joe-burrow': 'O', 'josh-jacobs': 'Q', 'kenneth-walker': 'Q', 'marvin-harrison': 'O', 'matthew-golden': 'Q', 'rhamondre-stevenson': 'Q', 'trey-benson': 'O', 'xavier-worthy': 'Q' },
+  13: { 'alvin-kamara': 'O', 'baker-mayfield': 'Q', 'bucky-irving': 'Q', 'chig-okonkwo': 'Q', 'chris-olave': 'Q', 'dalton-kincaid': 'Q', 'drake-london': 'O', 'jayden-daniels': 'O', 'jayden-reed': 'O', 'jj-mccarthy': 'O', 'marvin-harrison': 'Q', 'matthew-golden': 'Q', 'omarion-hampton': 'O', 'tee-higgins': 'O', 'trey-benson': 'O', 'tyler-warren': 'Q' },
+  14: { 'alvin-kamara': 'O', 'amon-ra-st-brown': 'Q', 'chris-olave': 'Q', 'dalton-kincaid': 'Q', 'drake-london': 'O', 'dylan-sampson': 'Q', 'jayden-reed': 'Q', 'justin-fields': 'O', 'justin-herbert': 'Q', 'marvin-harrison': 'O', 'matthew-golden': 'Q', 'mike-evans': 'O', 'omarion-hampton': 'Q', 'rome-odunze': 'O', 'trey-benson': 'O' },
+};
+
+// Season-long IR / PUP, by slug.
+export const IR_LIST: Record<string, true> = { 'bo-nix': true, 'braelon-allen': true, 'brock-bowers': true, 'cam-skattebo': true, 'daniel-jones': true, 'garrett-wilson': true, 'george-kittle': true, 'james-conner': true, 'javonte-williams': true, 'jk-dobbins': true, 'justin-fields': true, 'kyler-murray': true, 'malik-nabers': true, 'marvin-harrison': true, 'michael-penix': true, 'patrick-mahomes': true, 'quinshon-judkins': true, 'rashee-rice': true, 'sam-laporta': true, 'travis-hunter': true, 'trey-benson': true, 'tucker-kraft': true, 'wandale-robinson': true, 'zach-charbonnet': true, 'zach-ertz': true };
+
+// IR (season) takes precedence; else the week's designation; else null.
+export function injuryFor(week: number, slug: string): InjuryStatus | null {
+  if (IR_LIST[slug]) return 'IR';
+  return INJURIES[week]?.[slug] ?? null;
+}

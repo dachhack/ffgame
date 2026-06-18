@@ -9,6 +9,7 @@ export type SlotSwaps = Record<string, SlotSwap>; // slotKey -> swap
 import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, defEarnScore, EMPTY_PLAYER, type SlotInput } from './sim';
 import { REAL_WEEKS, realPointsFor } from '../data/realPbp';
 import { windowForTeam } from '../data/nflSlate';
+import { injuryFor } from '../data/injuries';
 
 // A roster grouped into the 5 windows by each player's REAL NFL game time slot
 // that week (their team's kickoff). A player only appears in — and can only be
@@ -62,11 +63,14 @@ export function defaultLineup(teamId: string, week: number, extra?: ExtraSlots):
   const pools = windowPools(teamId, week);
   const real = REAL_WEEKS.has(week);
   const pts = real ? realPointsFor(week) : {};
+  // Never auto-field a player ruled Out or on IR (the AI opponent uses this too,
+  // so it never starts an unavailable player). Questionable/Doubtful are fine.
+  const healthy = (p: Player) => { const s = injuryFor(week, p.id); return s !== 'O' && s !== 'IR'; };
   const picks: Record<string, Pick> = {};
   for (const w of WINDOWS) {
     const ranked = real
-      ? pools[w.id].filter((p) => pts[p.id] !== undefined).sort((a, b) => (pts[b.id] || 0) - (pts[a.id] || 0))
-      : pools[w.id]; // already projection-sorted
+      ? pools[w.id].filter((p) => healthy(p) && pts[p.id] !== undefined).sort((a, b) => (pts[b.id] || 0) - (pts[a.id] || 0))
+      : pools[w.id].filter(healthy); // already projection-sorted
     for (let i = 0; i < slotsFor(w.id, extra); i++) {
       const p = ranked[i];
       if (p) picks[slotKey(w.id, i)] = { playerId: p.id, metricId: pickMetric(p, week) };
@@ -94,6 +98,16 @@ export interface ResolvedSlot {
   // starter's). Side-aware so a yours-vs-theirs slot can show each correctly.
   youSub?: { name: string; score: number; from: number };
   theirSub?: { name: string; score: number; from: number };
+  // A DEF on SUPPRESS scores 0 but forgoes this many earn points (spent as the
+  // kill-threshold) — shown crossed out.
+  suppressSpentYou?: number;
+  suppressSpentTheir?: number;
+  // Score reduced by an opposing DEF SUPPRESS (halved) — the value before it.
+  youHalvedFrom?: number;
+  theirHalvedFrom?: number;
+  // Zeroed for the rest of the game by an opposing K SHUTDOWN (negated).
+  youNegated?: boolean;
+  theirNegated?: boolean;
 }
 
 export interface ResolvedWindow {
@@ -183,6 +197,10 @@ export function buildMatchup(
       let gameLabel = w.label;
       let real = false;
       let displayYou = you; // may reflect a real-time swap
+      let youNegated = false, theirNegated = false;
+      // A suppress DST forgoes its earn points (spent as the kill-threshold).
+      const suppressSpentYou = (you?.player.pos === 'DEF' && you.metricId === 'suppress') ? defEarnScore(you.player, week) : undefined;
+      const suppressSpentTheir = (their?.player.pos === 'DEF' && their.metricId === 'suppress') ? defEarnScore(their.player, week) : undefined;
 
       // Resolve whenever at least one side is filled. An unopposed slot plays
       // against the empty sentinel — the present player banks points with no
@@ -220,9 +238,10 @@ export function buildMatchup(
         if (res.maxClock > maxClock) maxClock = res.maxClock;
         youTds += res.youTds; theirTds += res.theirTds;
         youBankerXp += res.youBankerXp; theirBankerXp += res.theirBankerXp;
+        youNegated = res.youDead; theirNegated = res.theirDead;
       }
 
-      slots.push({ win: w.id, slotIndex: i, you: displayYou, their, events, youFinal: yF, theirFinal: tF, gameLabel, real });
+      slots.push({ win: w.id, slotIndex: i, you: displayYou, their, events, youFinal: yF, theirFinal: tF, gameLabel, real, suppressSpentYou, suppressSpentTheir, youNegated: youNegated || undefined, theirNegated: theirNegated || undefined });
     }
     windows.push({ window: w, slots });
   }
@@ -230,16 +249,16 @@ export function buildMatchup(
   // Unopposed players are BACKUPS (best-ball insurance): a backup doesn't score
   // in its own slot, but its highest score can replace your lowest starter's
   // score when it beats it. Applied per side, before suppress/sum.
-  applyBackups(windows, 'you', backupAssign);
-  applyBackups(windows, 'their', {});
+  applyBackups(windows, 'you', backupAssign, false); // your backups: manual only
+  applyBackups(windows, 'their', {}, true);          // opponent: auto-maximize
 
   // DEF SUPPRESS (HALVING): your suppress DST halves every opposing slot (any
   // window) that scored at or below its threshold; their DST does the same to
   // your slots. Applied once per slot, after all in-slot scoring resolves.
   if (youSuppress > 0 || theirSuppress > 0) {
     for (const w of windows) for (const s of w.slots) {
-      if (theirSuppress > 0 && s.youFinal > 0 && s.youFinal <= theirSuppress) s.youFinal = Math.round(s.youFinal * 0.5 * 10) / 10;
-      if (youSuppress > 0 && s.theirFinal > 0 && s.theirFinal <= youSuppress) s.theirFinal = Math.round(s.theirFinal * 0.5 * 10) / 10;
+      if (theirSuppress > 0 && s.youFinal > 0 && s.youFinal <= theirSuppress) { s.youHalvedFrom = s.youFinal; s.youFinal = Math.round(s.youFinal * 0.5 * 10) / 10; }
+      if (youSuppress > 0 && s.theirFinal > 0 && s.theirFinal <= youSuppress) { s.theirHalvedFrom = s.theirFinal; s.theirFinal = Math.round(s.theirFinal * 0.5 * 10) / 10; }
     }
   }
 
@@ -274,7 +293,7 @@ export function signatureCoins(m: ResolvedMatchup, side: 'you' | 'their'): numbe
  * starter score when it beats it — greedily pairing the biggest backups with
  * the smallest beatable starters to maximize the side's total.
  */
-function applyBackups(windows: ResolvedWindow[], side: 'you' | 'their', assign: Record<string, string>): void {
+function applyBackups(windows: ResolvedWindow[], side: 'you' | 'their', assign: Record<string, string>, auto: boolean): void {
   const all = windows.flatMap((w) => w.slots);
   const keyOf = (s: ResolvedSlot) => slotKey(s.win, s.slotIndex);
   const mine = (s: ResolvedSlot) => (side === 'you' ? s.you : s.their);
@@ -305,7 +324,9 @@ function applyBackups(windows: ResolvedWindow[], side: 'you' | 'their', assign: 
     // an assigned-but-invalid backup is left unused (respect the explicit choice)
   }
 
-  // 2) Auto-maximize the rest: biggest backups vs smallest beatable starters.
+  // 2) Auto-maximize the rest — only when auto (the AI opponent). Your own
+  // backups stay benched until you assign them (it's your choice).
+  if (!auto) return;
   const remStarters = starters.filter((s) => !used.has(s)).sort((a, b) => getF(a) - getF(b));
   autoBackups.sort((a, b) => (b.backupScore ?? 0) - (a.backupScore ?? 0));
   let si = 0;
