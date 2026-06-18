@@ -42,7 +42,7 @@ export const METRICS: Record<Pos, Metric[]> = {
     { id: 'neg', name: 'Negation', tag: 'SHUTDOWN', fx: 'nuke', sc: '0 pts', ef: '6+ kicks → the matched opponent scores 0 and all their effects are negated.' },
   ],
   DEF: [
-    { id: 'suppress', name: 'Suppress', tag: 'HALVING', fx: 'stop', sc: '0 pts', ef: 'Any opponent in the window scoring below your threshold gets halved.' },
+    { id: 'suppress', name: 'Suppress', tag: 'HALVING', fx: 'stop', sc: '0 pts', ef: 'Banks 0 itself — instead its own defensive week score (sk/int/fr/TD) becomes a kill-bar: EVERY opponent slot, in ANY window, that scores at or below it is halved.' },
     { id: 'earn', name: 'Earn Points', tag: 'FLAT', fx: 'sys', sc: 'sk1 / int3 / fr2', ef: 'Normal flat head-to-head scoring. No suppress, no halving.' },
   ],
 };

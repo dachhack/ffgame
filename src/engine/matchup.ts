@@ -2,7 +2,7 @@ import type { Player, WindowId, Pick, PbpEvent } from '../types';
 import { WINDOWS, METRICS, TOTAL_SLOTS } from '../data/metrics';
 import { teamRoster } from '../data/league';
 import { hashStr } from '../data/players';
-import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, type SlotInput } from './sim';
+import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, defEarnScore, type SlotInput } from './sim';
 import { REAL_WEEKS, realPointsFor } from '../data/realPbp';
 
 // Deterministic per-week assignment of a roster across the 5 windows. The
@@ -123,13 +123,16 @@ export function buildMatchup(
   const oppPools = windowPools(oppTeamId, week);
 
   const windows: ResolvedWindow[] = [];
-  let youFinal = 0;
-  let theirFinal = 0;
   let anyReal = false;
   let maxClock = 3300;
   // Lineup-wide tallies for the K banker bonus (each XP your banker kicker
   // makes adds +1 to each of your TDs scored under a TD-counting metric).
   let youTds = 0, theirTds = 0, youBankerXp = 0, theirBankerXp = 0;
+  // DEF SUPPRESS (HALVING) threshold: a suppress DST's own defensive week score
+  // is the bar — every OPPOSING slot (any window) scoring at or below it is
+  // halved. The DST banks 0; it spends its points as the threshold. With more
+  // than one suppress DST per side, the highest threshold applies.
+  let youSuppress = 0, theirSuppress = 0;
 
   for (const w of WINDOWS) {
     // Pre-pass: collect this window's filled slots per side, so a Field
@@ -155,6 +158,9 @@ export function buildMatchup(
       const you = lookup(youPools, youPicks, key);
       const their = lookup(oppPools, oppPicks, key);
 
+      if (you && you.player.pos === 'DEF' && you.metricId === 'suppress') youSuppress = Math.max(youSuppress, defEarnScore(you.player, week));
+      if (their && their.player.pos === 'DEF' && their.metricId === 'suppress') theirSuppress = Math.max(theirSuppress, defEarnScore(their.player, week));
+
       let events: PbpEvent[] = [];
       let yF = 0;
       let tF = 0;
@@ -176,12 +182,23 @@ export function buildMatchup(
         youBankerXp += res.youBankerXp; theirBankerXp += res.theirBankerXp;
       }
 
-      youFinal += yF;
-      theirFinal += tF;
       slots.push({ win: w.id, slotIndex: i, you, their, events, youFinal: yF, theirFinal: tF, gameLabel, real });
     }
     windows.push({ window: w, slots });
   }
+
+  // DEF SUPPRESS (HALVING): your suppress DST halves every opposing slot (any
+  // window) that scored at or below its threshold; their DST does the same to
+  // your slots. Applied once per slot, after all in-slot scoring resolves.
+  if (youSuppress > 0 || theirSuppress > 0) {
+    for (const w of windows) for (const s of w.slots) {
+      if (theirSuppress > 0 && s.youFinal > 0 && s.youFinal <= theirSuppress) s.youFinal = Math.round(s.youFinal * 0.5 * 10) / 10;
+      if (youSuppress > 0 && s.theirFinal > 0 && s.theirFinal <= youSuppress) s.theirFinal = Math.round(s.theirFinal * 0.5 * 10) / 10;
+    }
+  }
+
+  let youFinal = 0, theirFinal = 0;
+  for (const w of windows) for (const s of w.slots) { youFinal += s.youFinal; theirFinal += s.theirFinal; }
 
   // K banker (XP BONUS): +1 per banker XP to each of your TDs that was scored
   // under a TD-counting metric (yardage metrics don't qualify).

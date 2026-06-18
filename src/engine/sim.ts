@@ -338,6 +338,22 @@ export function windowFgMult(players: SlotInput[], week: number): ((clock: numbe
   };
 }
 
+// A DST's own defensive score for the week (sk1 / int3 / fr2 / def-TD6 /
+// safety2) — used as the SUPPRESS kill-threshold. A suppress DST forgoes these
+// points (it banks 0) and spends them as the bar every opponent slot must clear.
+export function defEarnScore(player: Player, week: number): number {
+  const plays = realRawPlays(player.id, week) ?? buildPlays(player, weekLine(player, week), week);
+  let s = 0;
+  for (const p of plays) {
+    if (p.kind === 'sack') s += 1;
+    else if (p.kind === 'int') s += 3;
+    else if (p.kind === 'fumrec') s += 2;
+    else if (p.kind === 'dst_td') s += 6;
+    else if (p.kind === 'safety') s += 2;
+  }
+  return s;
+}
+
 // Clocks at which a side's TE Touchdown (8-PT NUKE) players score a TD. Each
 // such clock knocks every opposing drip rate down by 1.0 across the window.
 export function teTdNukeClocks(players: SlotInput[], week: number): number[] {
@@ -606,11 +622,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     if (dripTheir && T.bank > tB + 0.05) events.push({ clock: GAME_SECONDS, side: 'their', play: `${their.player.team || 'NFL'}: drip`, delta: Math.round((T.bank - tB) * 10) / 10, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, effect: undefined });
   }
 
-  // DEF SUPPRESS (HALVING): a defense that holds its slot opponent below the
-  // threshold halves that opponent's slot score (resolved at game end).
-  const SUPPRESS_THRESHOLD = 10;
-  if (you.player.pos === 'DEF' && you.metricId === 'suppress' && T.bank > 0 && T.bank < SUPPRESS_THRESHOLD) T.bank = T.bank * 0.5;
-  if (their.player.pos === 'DEF' && their.metricId === 'suppress' && Y.bank > 0 && Y.bank < SUPPRESS_THRESHOLD) Y.bank = Y.bank * 0.5;
+  // DEF SUPPRESS (HALVING) resolves globally in buildMatchup — it reaches every
+  // opponent slot across every window — so it is not applied here.
 
   const maxClock = events.length ? Math.max(...events.map((e) => e.clock)) : GAME_SECONDS;
   return {
