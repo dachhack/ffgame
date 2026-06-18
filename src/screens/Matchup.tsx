@@ -16,8 +16,9 @@ const TICK_MS = 700;
 const TICK_SECONDS = 20;
 
 export function Matchup({ week, initialPhase }: { week: number; initialPhase: Phase }) {
-  const { navigate, coins, creditWeek, inventory, applied, applyExtraSlot } = useStore();
+  const { navigate, coins, creditWeek, inventory, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap } = useStore();
   const extraSlots = applied[week]?.extraSlots ?? {};
+  const swaps = applied[week]?.swaps ?? {};
   const oppId = gameForTeam(YOU, week)?.oppId ?? 'rock-tunnel';
   const you = getTeam(YOU)!;
   const opp = getTeam(oppId)!;
@@ -29,6 +30,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const [winClocks, setWinClocks] = useState<Record<string, number>>({});
   const [winPlaying, setWinPlaying] = useState<Record<string, boolean>>({});
   const [openPBP, setOpenPBP] = useState<Record<string, boolean>>({});
+  const [swapTarget, setSwapTarget] = useState<{ key: string; win: WindowId } | null>(null);
 
   // Lazy-load this week's real play-by-play (per-week JSON) before resolving.
   const [ready, setReady] = useState(() => !REAL_WEEKS.has(week) || isRealWeekLoaded(week));
@@ -57,9 +59,10 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     return { ...youDefault, ...picks };
   }, [phase, picks, youDefault]);
 
+  const swapsKey = JSON.stringify(swaps);
   const resolved = useMemo(
-    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots),
-    [oppId, week, effYouPicks, oppPicks, ready, extraKey],
+    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps),
+    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey],
   );
 
   // Drip coin: +5 per signature play your lineup makes this week (credited once).
@@ -153,6 +156,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const totalSlots = totalSlotsWith(extraSlots);
   const anyPlaying = Object.values(winPlaying).some(Boolean);
   const extraSlotQty = inventory['extra-slot'] ?? 0;
+  const canSwap = phase === 'live' && ((inventory['metric-swap'] ?? 0) > 0 || (inventory['player-swap'] ?? 0) > 0);
 
   // ── setup interactions ──
   function assignFromRoster(playerId: string) {
@@ -302,6 +306,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 canApplyExtra={phase === 'setup' && extraSlotQty > 0}
                 extraSlotQty={extraSlotQty}
                 onApplyExtra={() => applyExtraSlot(week, rw.window.id)}
+                canSwap={canSwap}
+                onPowerup={(key) => setSwapTarget({ key, win: rw.window.id })}
                 picks={picks}
                 selSlot={selSlot}
                 setSelSlot={setSelSlot}
@@ -319,7 +325,77 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
 
         <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} />
       </div>
+
+      {swapTarget && (() => {
+        const cur = effYouPicks[swapTarget.key];
+        const curPlayer = cur ? getPlayer(cur.playerId) : null;
+        if (!curPlayer) return null;
+        const slottedIds = new Set(
+          Array.from({ length: slotsFor(swapTarget.win, extraSlots) }, (_, i) => effYouPicks[slotKey(swapTarget.win, i)]?.playerId).filter(Boolean) as string[],
+        );
+        const bench = (youPools[swapTarget.win] || []).filter((p) => !slottedIds.has(p.id));
+        const atClock = winClocks[swapTarget.win] ?? 0;
+        return (
+          <SwapMenu
+            player={curPlayer}
+            metricId={cur!.metricId}
+            atClock={atClock}
+            bench={bench}
+            metricQty={inventory['metric-swap'] ?? 0}
+            playerQty={inventory['player-swap'] ?? 0}
+            onMetric={(m) => { applyMetricSwap(week, swapTarget.key, atClock, m); setSwapTarget(null); }}
+            onPlayer={(pid) => { applyPlayerSwap(week, swapTarget.key, atClock, pid); setSwapTarget(null); }}
+            onClose={() => setSwapTarget(null)}
+          />
+        );
+      })()}
     </>
+  );
+}
+
+// ── Real-time swap menu (Metric Swap / Player Swap during live) ──
+function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMetric, onPlayer, onClose }: {
+  player: Player; metricId: string | null; atClock: number; bench: Player[];
+  metricQty: number; playerQty: number; onMetric: (m: string) => void; onPlayer: (pid: string) => void; onClose: () => void;
+}) {
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '60px 16px', overflow: 'auto' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
+          <div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>⚡ Power-Up · {player.name}</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>APPLIES FROM {fmtClock(atClock)} · NOT RETROACTIVE</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
+        </div>
+        <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 7 }}>🔀 METRIC SWAP {metricQty > 0 ? `· ×${metricQty}` : '· NONE OWNED'}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, opacity: metricQty > 0 ? 1 : 0.4, pointerEvents: metricQty > 0 ? 'auto' : 'none' }}>
+              {METRICS[player.pos].filter((m) => m.id !== metricId).map((m) => (
+                <button key={m.id} onClick={() => onMetric(m.id)} title={m.ef} className="mono" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '7px 9px', color: 'var(--text)', textAlign: 'left' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700 }}>{m.name}</span>
+                  <span style={{ fontSize: 8, color: 'var(--faint)' }}>{m.tag}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 7 }}>🔁 PLAYER SWAP {playerQty > 0 ? `· ×${playerQty}` : '· NONE OWNED'}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflow: 'auto', opacity: playerQty > 0 ? 1 : 0.4, pointerEvents: playerQty > 0 ? 'auto' : 'none' }}>
+              {bench.length === 0 && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>No bench players in this window.</span>}
+              {bench.map((p) => (
+                <button key={p.id} onClick={() => onPlayer(p.id)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '7px 9px', color: 'var(--text)', textAlign: 'left' }}>
+                  <PosPill pos={p.pos} />
+                  <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, flex: 1 }}>{p.name}</span>
+                  <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.team}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -387,6 +463,8 @@ function WindowSection(props: {
   canApplyExtra: boolean;
   extraSlotQty: number;
   onApplyExtra: () => void;
+  canSwap: boolean;
+  onPowerup: (key: string) => void;
   picks: Record<string, Pick>;
   selSlot: string | null;
   setSelSlot: (k: string | null) => void;
@@ -397,7 +475,7 @@ function WindowSection(props: {
   youPools: Record<WindowId, Player[]>;
   onAssign: (id: string) => void;
 }) {
-  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, picks, selSlot, setSelSlot, pickMetricFor, clearSlot, openPBP, togglePBP, onAssign } = props;
+  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, canSwap, onPowerup, picks, selSlot, setSelSlot, pickMetricFor, clearSlot, openPBP, togglePBP, onAssign } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
@@ -461,7 +539,7 @@ function WindowSection(props: {
             );
           }
           return (
-            <ScoreRow key={key} slot={s} week={week} clock={clock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} />
+            <ScoreRow key={key} slot={s} week={week} clock={clock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} canSwap={canSwap && !!s.you} onPowerup={() => onPowerup(key)} />
           );
         })}
       </div>
@@ -537,9 +615,10 @@ function SetupRow(props: {
 }
 
 // ── Score row (live / final) ──
-function ScoreRow({ slot, week, clock, open, onToggle, phase, done }: {
+function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onPowerup }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
   week: number; clock: number; open: boolean; onToggle: () => void; phase: Phase; done: boolean;
+  canSwap: boolean; onPowerup: () => void;
 }) {
   if (!slot.you || !slot.their) {
     return (
@@ -568,6 +647,9 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done }: {
           <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--bg)', background: verdict.c, padding: '4px 6px', borderRadius: 3, textAlign: 'center', lineHeight: 1.1 }}>{verdict.t}</span>
           {visibleEvents.length > 0 && (
             <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
+          )}
+          {canSwap && !done && (
+            <button onClick={onPowerup} title="Apply a real-time powerup (Metric / Player Swap)" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, fontSize: 9, color: 'var(--warn)', padding: '2px 5px', marginTop: 2 }}>⚡</button>
           )}
         </div>
         <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={banks.their} onClick={onToggle} fx={lastEffect?.type} />

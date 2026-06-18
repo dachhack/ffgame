@@ -4,9 +4,13 @@ import type { WindowId } from '../types';
 import { LEAGUE, YOU_TEAM_ID } from '../data/league';
 import { powerupById } from '../data/powerups';
 
+import type { SlotSwap } from '../engine/matchup';
+export type { SlotSwap };
+
 /** Powerups applied to a given week (their effects, not the inventory). */
 export interface AppliedWeek {
   extraSlots: Partial<Record<WindowId, number>>; // bonus slots per window (mirrored to opponent)
+  swaps: Record<string, SlotSwap>;               // slotKey -> real-time swap (metric and/or player)
 }
 
 export type Phase = 'setup' | 'live' | 'final';
@@ -34,6 +38,10 @@ interface Store {
   applied: Record<number, AppliedWeek>; // week -> applied powerup effects
   /** Apply an Extra Slot to a window for a week (consumes one). Returns success. */
   applyExtraSlot: (week: number, win: WindowId) => boolean;
+  /** Real-time Metric Swap on a slot, effective from `atClock` (consumes one). */
+  applyMetricSwap: (week: number, slotKey: string, atClock: number, toMetricId: string) => boolean;
+  /** Real-time Player Swap on a slot, effective from `atClock` (consumes one). */
+  applyPlayerSwap: (week: number, slotKey: string, atClock: number, toPlayerId: string) => boolean;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -107,17 +115,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
-  const applyExtraSlot = (week: number, win: WindowId): boolean => {
-    if ((inventory['extra-slot'] ?? 0) <= 0) return false;
-    const nextInv = { ...inventory, ['extra-slot']: inventory['extra-slot'] - 1 };
-    const prev = applied[week]?.extraSlots ?? {};
-    const nextApplied = { ...applied, [week]: { extraSlots: { ...prev, [win]: (prev[win] ?? 0) + 1 } } };
+  // Consume one powerup and merge a patch into applied[week], preserving the
+  // week's other applied effects. Returns false if none held.
+  const consumeAndApply = (id: string, week: number, patch: (cur: AppliedWeek) => AppliedWeek): boolean => {
+    if ((inventory[id] ?? 0) <= 0) return false;
+    const nextInv = { ...inventory, [id]: inventory[id] - 1 };
+    const cur: AppliedWeek = applied[week] ?? { extraSlots: {}, swaps: {} };
+    const nextApplied = { ...applied, [week]: patch({ extraSlots: cur.extraSlots ?? {}, swaps: cur.swaps ?? {} }) };
     setInventory(nextInv); setApplied(nextApplied); persist({ inv: nextInv, applied: nextApplied });
     return true;
   };
 
+  const applyExtraSlot = (week: number, win: WindowId): boolean =>
+    consumeAndApply('extra-slot', week, (cur) => ({ ...cur, extraSlots: { ...cur.extraSlots, [win]: (cur.extraSlots[win] ?? 0) + 1 } }));
+
+  const applyMetricSwap = (week: number, slotKey: string, atClock: number, toMetricId: string): boolean =>
+    consumeAndApply('metric-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, toMetricId } } }));
+
+  const applyPlayerSwap = (week: number, slotKey: string, atClock: number, toPlayerId: string): boolean =>
+    consumeAndApply('player-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, toPlayerId } } }));
+
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot }),
+    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap }),
     [theme, route, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

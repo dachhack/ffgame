@@ -1,6 +1,10 @@
 import type { Player, WindowId, Pick, PbpEvent } from '../types';
 import { WINDOWS, METRICS, TOTAL_SLOTS } from '../data/metrics';
-import { teamRoster } from '../data/league';
+import { teamRoster, getPlayer } from '../data/league';
+
+/** A real-time swap on a slot, effective from `atClock` (Player/Metric Swap). */
+export interface SlotSwap { atClock: number; toMetricId?: string; toPlayerId?: string; }
+export type SlotSwaps = Record<string, SlotSwap>; // slotKey -> swap
 import { hashStr } from '../data/players';
 import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, defEarnScore, EMPTY_PLAYER, type SlotInput } from './sim';
 import { REAL_WEEKS, realPointsFor } from '../data/realPbp';
@@ -131,6 +135,7 @@ export function buildMatchup(
   youPicks: Record<string, Pick>,
   oppPicks: Record<string, Pick>,
   extraSlots: ExtraSlots = {},
+  swaps: SlotSwaps = {},
 ): ResolvedMatchup {
   const youPools = windowPools(youTeamId, week);
   const oppPools = windowPools(oppTeamId, week);
@@ -180,6 +185,7 @@ export function buildMatchup(
       let tF = 0;
       let gameLabel = w.label;
       let real = false;
+      let displayYou = you; // may reflect a real-time swap
 
       // Resolve whenever at least one side is filled. An unopposed slot plays
       // against the empty sentinel — the present player banks points with no
@@ -188,7 +194,27 @@ export function buildMatchup(
         const yIn: SlotInput = you ? { player: you.player, metricId: you.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
         const tIn: SlotInput = their ? { player: their.player, metricId: their.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
         gameLabel = `${you?.player.team || 'BYE'} · ${their?.player.team || 'BYE'}`;
-        const res = resolveSlot(yIn, tIn, week, gameLabel, { youMult, theirMult, youDripNukeClocks: theirTeTd, theirDripNukeClocks: youTeTd });
+        const opts = { youMult, theirMult, youDripNukeClocks: theirTeTd, theirDripNukeClocks: youTeTd };
+        let res = resolveSlot(yIn, tIn, week, gameLabel, opts);
+
+        // Real-time swap (Player/Metric Swap): keep your pre-swap banked points,
+        // then add only the new config's gains after the swap clock. Both sides'
+        // pre-swap banks come from the original config; post-swap from the new.
+        const swap = you ? swaps[key] : undefined;
+        if (swap) {
+          const swapped = getPlayer(swap.toPlayerId ?? '') ?? you!.player;
+          const newYIn: SlotInput = { player: swap.toPlayerId ? swapped : you!.player, metricId: swap.toMetricId ?? you!.metricId };
+          const sres = resolveSlot(newYIn, tIn, week, gameLabel, opts);
+          const C = swap.atClock;
+          const base = banksAtClock(res.events, C);
+          const after = banksAtClock(sres.events, C);
+          const youFinal = Math.max(0, base.you + Math.max(0, sres.youFinal - after.you));
+          const theirFinal = Math.max(0, base.their + (sres.theirFinal - after.their));
+          const mergedEvents = [...res.events.filter((e) => e.clock < C), ...sres.events.filter((e) => e.clock >= C)];
+          res = { ...sres, events: mergedEvents, youFinal: Math.round(youFinal * 10) / 10, theirFinal: Math.round(theirFinal * 10) / 10 };
+          displayYou = { player: newYIn.player, metricId: newYIn.metricId };
+        }
+
         events = res.events;
         yF = res.youFinal;
         tF = res.theirFinal;
@@ -199,7 +225,7 @@ export function buildMatchup(
         youBankerXp += res.youBankerXp; theirBankerXp += res.theirBankerXp;
       }
 
-      slots.push({ win: w.id, slotIndex: i, you, their, events, youFinal: yF, theirFinal: tF, gameLabel, real });
+      slots.push({ win: w.id, slotIndex: i, you: displayYou, their, events, youFinal: yF, theirFinal: tF, gameLabel, real });
     }
     windows.push({ window: w, slots });
   }
