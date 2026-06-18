@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, ThemeSwitcher, PosPill } from '../app/ui';
@@ -102,6 +102,28 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     }, TICK_MS);
     return () => clearInterval(id);
   }, [phase, winPlaying, winMax]);
+
+  // Auto-open a window's slot logs while it's in progress, auto-collapse them
+  // when it finishes (or the board goes FINAL). Fires only on the transition,
+  // so a manual toggle in between is respected until the next state change.
+  const prevActive = useRef<Record<string, boolean>>({});
+  useEffect(() => {
+    if (phase === 'setup') { prevActive.current = {}; return; }
+    setOpenPBP((prev) => {
+      let next = prev; let changed = false;
+      for (const rw of resolved.windows) {
+        const id = rw.window.id;
+        const c = winClocks[id] ?? 0;
+        const active = phase === 'live' && c > 0 && c < (winMax[id] ?? Infinity);
+        if (active !== (prevActive.current[id] ?? false)) {
+          if (!changed) { next = { ...prev }; changed = true; }
+          for (const s of rw.slots) next[slotKey(id, s.slotIndex)] = active;
+        }
+        prevActive.current[id] = active;
+      }
+      return changed ? next : prev;
+    });
+  }, [phase, winClocks, winMax, resolved]);
 
   // ── totals at each window's own clock ──
   const { youTotal, themTotal } = useMemo(() => {
@@ -586,11 +608,22 @@ function actionText(play: string): string {
 }
 
 // Two-column play-by-play: your player's plays on the left, theirs on the
-// right, the clock down the middle. Newest first so the latest tick is on top.
+// right, the clock down the middle. Chronological (newest at the bottom) so it
+// reads like a live ticker, auto-scrolling to keep the latest play in view.
 function TwoColLog({ events, youName, theirName, gameLabel }: { events: PbpEvent[]; youName: string; theirName: string; gameLabel: string }) {
-  const rows = [...events].reverse().slice(0, 60);
+  const scroller = useRef<HTMLDivElement>(null);
+  const stick = useRef(true);
+  useEffect(() => {
+    const el = scroller.current;
+    if (el && stick.current) el.scrollTop = el.scrollHeight;
+  }, [events.length]);
+  const onScroll = () => {
+    const el = scroller.current;
+    if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 28;
+  };
+  const rows = events.slice(-80); // chronological, last 80
   const cell = (ev: PbpEvent, mine: boolean) => (
-    <div style={{ flex: 1, minWidth: 0, textAlign: mine ? 'right' : 'left', opacity: ev.side === (mine ? 'you' : 'their') ? 1 : 0.15 }}>
+    <div style={{ flex: 1, minWidth: 0, textAlign: mine ? 'right' : 'left' }}>
       {ev.side === (mine ? 'you' : 'their') && (
         <>
           <div style={{ fontSize: 10.5, lineHeight: 1.35, color: 'var(--text)' }}>
@@ -605,19 +638,21 @@ function TwoColLog({ events, youName, theirName, gameLabel }: { events: PbpEvent
     </div>
   );
   return (
-    <div style={{ marginTop: 5, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px', maxHeight: 240, overflow: 'auto' }}>
+    <div style={{ marginTop: 5, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
         <span className="mono" style={{ flex: 1, textAlign: 'right', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{youName}</span>
         <span className="mono" style={{ width: 44, textAlign: 'center', fontSize: 7.5, color: 'var(--faint)', letterSpacing: '0.1em' }}>PBP</span>
         <span className="mono" style={{ flex: 1, textAlign: 'left', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{theirName}</span>
       </div>
-      {rows.map((ev, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '3px 0', borderTop: i === 0 ? undefined : '1px solid color-mix(in srgb, var(--bd) 45%, transparent)', animation: i === 0 ? 'slidein .3s ease' : undefined }}>
-          {cell(ev, true)}
-          <span className="mono" style={{ width: 44, flex: 'none', textAlign: 'center', fontSize: 8.5, color: 'var(--faint)', paddingTop: 1 }}>{fmtClock(ev.clock)}</span>
-          {cell(ev, false)}
-        </div>
-      ))}
+      <div ref={scroller} onScroll={onScroll} style={{ maxHeight: 210, overflow: 'auto' }}>
+        {rows.map((ev, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '3px 0', borderTop: i === 0 ? undefined : '1px solid color-mix(in srgb, var(--bd) 45%, transparent)', animation: i === rows.length - 1 ? 'slidein .3s ease' : undefined }}>
+            {cell(ev, true)}
+            <span className="mono" style={{ width: 44, flex: 'none', textAlign: 'center', fontSize: 8.5, color: 'var(--faint)', paddingTop: 1 }}>{fmtClock(ev.clock)}</span>
+            {cell(ev, false)}
+          </div>
+        ))}
+      </div>
       <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 6, textAlign: 'center' }}>{gameLabel}</div>
     </div>
   );
