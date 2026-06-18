@@ -389,7 +389,13 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const dripKindOf = (s: SlotInput): RealPlayKind | null =>
     (s.player.pos === 'WR' && s.metricId === 'recyd') ? 'rec'
       : (s.player.pos === 'RB' && s.metricId === 'rush') ? 'rush'
-        : null;
+        : (s.player.pos === 'TE' && s.metricId === 'recyd') ? 'rec'
+          : null;
+  // TE drip builds at half the rate (0.005/yd vs 0.01) but is immune to the
+  // pauses and erases that WR/RB opponents lay on a drip (see oppIsDrip below).
+  const dripRateOf = (s: SlotInput): number => (s.player.pos === 'TE' ? 0.005 : 0.01);
+  const youDripRate = dripRateOf(you);
+  const theirDripRate = dripRateOf(their);
   const youDripKind = dripKindOf(you);
   const theirDripKind = dripKindOf(their);
   const dripYou = youDripKind !== null;
@@ -448,9 +454,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const myFam = play.side === 'you' ? youFam : theirFam;
     const oppFam = play.side === 'you' ? theirFam : youFam;
     const myPlayer = play.side === 'you' ? you : their;
+    const oppPlayer = play.side === 'you' ? their : you;
     const iAmDrip = play.side === 'you' ? dripYou : dripTheir;
     const oppIsDrip = play.side === 'you' ? dripTheir : dripYou;
     const myDripKind = play.side === 'you' ? youDripKind : theirDripKind;
+    const myDripRate = play.side === 'you' ? youDripRate : theirDripRate;
     // TE Targets (WIDE ERASE) fires on every target — incompletions included —
     // unlike the catch-gated WR/TE Receptions erase.
     const eraseOnTarget = myPlayer.player.pos === 'TE' && myPlayer.metricId === 'tgt';
@@ -463,7 +471,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     let pts = 0;
     if (iAmDrip) {
       if (play.kind === myDripKind) {
-        mine.rate += play.yards * 0.01;
+        mine.rate += play.yards * myDripRate;
         mine.paused = false;
         mine.streak += 1;
         if (mine.streak >= 3) mine.hot = true;
@@ -478,7 +486,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     mine.bank += pts;
     if (pts > 0) mine.hist.push({ clock: play.clock, pts });
 
-    if (pts > 0 && (oppFam === 'streak' || oppIsDrip || oppFam === 'compression')) { opp.streak = 0; opp.hot = false; }
+    // A scoring opponent cools a streak/drip/compression run — except a TE drip
+    // shrugs off WR/RB scoring (its immunity covers the hot-streak break too).
+    const teDripShrugsCool = oppIsDrip && oppPlayer.player.pos === 'TE'
+      && (myPlayer.player.pos === 'WR' || myPlayer.player.pos === 'RB');
+    if (pts > 0 && !teDripShrugsCool && (oppFam === 'streak' || oppIsDrip || oppFam === 'compression')) { opp.streak = 0; opp.hot = false; }
 
     if (myFam === 'streak') {
       if (play.td) { mine.streak = 3; mine.hot = true; }
@@ -509,7 +521,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       // Drip opponent: a catch or target pauses it; my metric adds its counter
       // — ERASE wipes a recent window, RATE RESET zeroes the rate (bank kept);
       // any TD wipes the entire drip bank.
-      if (play.kind === 'rec' || play.kind === 'incomplete') {
+      // A TE drip is immune to the pause/erase/reset that a WR or RB lays on it
+      // (its rate and bank shrug off their catches/targets). TDs still wipe it.
+      const teDripImmune = oppPlayer.player.pos === 'TE'
+        && (myPlayer.player.pos === 'WR' || myPlayer.player.pos === 'RB');
+      if (!teDripImmune && (play.kind === 'rec' || play.kind === 'incomplete')) {
         opp.paused = true;
         if (eraseTrigger) {
           const cutoff = play.clock - eraseWindow;
