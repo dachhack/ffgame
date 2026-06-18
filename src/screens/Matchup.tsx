@@ -3,6 +3,7 @@ import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, ThemeSwitcher, PlayerImg, Avatar, Img } from '../app/ui';
 import { avatarUrl, teamLogo } from '../data/media';
+import { nflGameForTeam } from '../data/nflSlate';
 import { WINDOWS, METRICS, metricById } from '../data/metrics';
 import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
@@ -562,15 +563,26 @@ function WindowSection(props: {
   const done = clock >= maxClock;
   const pct = Math.round((Math.min(clock, maxClock) / maxClock) * 100);
   const [slateOpen, setSlateOpen] = useState(false);
-  // The NFL teams feeding this window (both sides) — the window's game slate.
-  const slate: [string, { you: string[]; their: string[] }][] = (() => {
-    const m = new Map<string, { you: string[]; their: string[] }>();
+  // The real NFL games feeding this window: map each window player's team to its
+  // actual away@home matchup that week, and list the players involved.
+  interface SlateGame { away: string; home: string; you: string[]; their: string[] }
+  const slate: SlateGame[] = (() => {
+    const games = new Map<string, SlateGame>();
+    const add = (team: string | undefined, name: string, side: 'you' | 'their') => {
+      const g = nflGameForTeam(week, team);
+      if (!g) return;
+      const key = `${g.away}@${g.home}`;
+      const e = games.get(key) ?? { away: g.away, home: g.home, you: [], their: [] };
+      e[side].push(`${name} · ${team}`);
+      games.set(key, e);
+    };
     for (const s of rw.slots) {
-      if (s.you?.player.team) { const e = m.get(s.you.player.team) ?? { you: [], their: [] }; e.you.push(s.you.player.name); m.set(s.you.player.team, e); }
-      if (s.their?.player.team) { const e = m.get(s.their.player.team) ?? { you: [], their: [] }; e.their.push(s.their.player.name); m.set(s.their.player.team, e); }
+      if (s.you?.player.team) add(s.you.player.team, s.you.player.name, 'you');
+      if (s.their?.player.team) add(s.their.player.team, s.their.player.name, 'their');
     }
-    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    return [...games.values()];
   })();
+  const slateTeams = [...new Set(slate.flatMap((g) => [g.away, g.home]))];
 
   return (
     <div>
@@ -580,9 +592,9 @@ function WindowSection(props: {
           <span style={{ fontSize: 10, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{w.sub}</span>
           <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{w.time}</span>
           {slate.length > 0 && (
-            <button onClick={() => setSlateOpen((o) => !o)} title="Game slate for this window" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: slateOpen ? 'var(--text)' : 'var(--dim)', background: 'var(--surface)', border: `1px solid ${slateOpen ? 'var(--bdh)' : 'var(--bd)'}`, borderRadius: 11, padding: '3px 8px' }}>
-              <span style={{ display: 'flex', gap: 1 }}>{slate.slice(0, 6).map(([t]) => <Img key={t} src={teamLogo(t)} size={13} radius={2} fallback={<span />} />)}</span>
-              SLATE · {slate.length} {slateOpen ? '▴' : '▾'}
+            <button onClick={() => setSlateOpen((o) => !o)} title="NFL game slate for this window" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: slateOpen ? 'var(--text)' : 'var(--dim)', background: 'var(--surface)', border: `1px solid ${slateOpen ? 'var(--bdh)' : 'var(--bd)'}`, borderRadius: 11, padding: '3px 8px' }}>
+              <span style={{ display: 'flex', gap: 1 }}>{slateTeams.slice(0, 8).map((t) => <Img key={t} src={teamLogo(t)} size={13} radius={2} fallback={<span />} />)}</span>
+              SLATE · {slate.length} {slate.length === 1 ? 'GAME' : 'GAMES'} {slateOpen ? '▴' : '▾'}
             </button>
           )}
         </div>
@@ -625,17 +637,21 @@ function WindowSection(props: {
 
       {slateOpen && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 9 }}>
-          {slate.map(([team, who]) => (
-            <div key={team} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '6px 9px', minWidth: 150 }}>
-              <Img src={teamLogo(team)} size={22} radius={4} fallback={<span className="mono" style={{ fontSize: 9, color: 'var(--dim)' }}>{team}</span>} />
-              <div style={{ minWidth: 0 }}>
-                <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)' }}>{team}</div>
-                <div style={{ fontSize: 9.5, lineHeight: 1.3 }}>
-                  {who.you.length > 0 && <span style={{ color: 'var(--you)' }}>{who.you.join(', ')}</span>}
-                  {who.you.length > 0 && who.their.length > 0 && <span style={{ color: 'var(--faint)' }}> · </span>}
-                  {who.their.length > 0 && <span style={{ color: 'var(--opp)' }}>{who.their.join(', ')}</span>}
-                </div>
+          {slate.map((g) => (
+            <div key={`${g.away}@${g.home}`} style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '7px 10px', minWidth: 168 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Img src={teamLogo(g.away)} size={18} radius={3} fallback={<span className="mono" style={{ fontSize: 9 }}>{g.away}</span>} />
+                <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)' }}>{g.away}</span>
+                <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>@</span>
+                <Img src={teamLogo(g.home)} size={18} radius={3} fallback={<span className="mono" style={{ fontSize: 9 }}>{g.home}</span>} />
+                <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)' }}>{g.home}</span>
               </div>
+              {(g.you.length > 0 || g.their.length > 0) && (
+                <div style={{ fontSize: 9, lineHeight: 1.4, marginTop: 4 }}>
+                  {g.you.map((p) => <div key={p} style={{ color: 'var(--you)' }}>{p}</div>)}
+                  {g.their.map((p) => <div key={p} style={{ color: 'var(--opp)' }}>{p}</div>)}
+                </div>
+              )}
             </div>
           ))}
         </div>
