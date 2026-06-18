@@ -127,6 +127,9 @@ export function buildMatchup(
   let theirFinal = 0;
   let anyReal = false;
   let maxClock = 3300;
+  // Lineup-wide tallies for the K banker bonus (each XP your banker kicker
+  // makes adds +1 to every TD across your lineup).
+  let youTds = 0, theirTds = 0, youBankerXp = 0, theirBankerXp = 0;
 
   for (const w of WINDOWS) {
     const slots: ResolvedSlot[] = [];
@@ -152,6 +155,8 @@ export function buildMatchup(
         real = res.real;
         if (real) anyReal = true;
         if (res.maxClock > maxClock) maxClock = res.maxClock;
+        youTds += res.youTds; theirTds += res.theirTds;
+        youBankerXp += res.youBankerXp; theirBankerXp += res.theirBankerXp;
       }
 
       youFinal += yF;
@@ -160,6 +165,10 @@ export function buildMatchup(
     }
     windows.push({ window: w, slots });
   }
+
+  // K banker (XP BONUS): +1 to every one of your TDs per banker XP made.
+  youFinal += youBankerXp * youTds;
+  theirFinal += theirBankerXp * theirTds;
 
   return {
     windows,

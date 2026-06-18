@@ -76,6 +76,9 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
 
   // ── derived totals (respecting live clock) ──
   const { youTotal, themTotal } = useMemo(() => {
+    // At FINAL, use the authoritative totals so end-of-game K/DST effects
+    // (suppress halving, banker bonus) are reflected; LIVE ticks off banks.
+    if (phase === 'final') return { youTotal: resolved.youFinal, themTotal: resolved.theirFinal };
     let y = 0; let t = 0;
     for (const w of resolved.windows) {
       for (const s of w.slots) {

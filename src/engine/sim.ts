@@ -246,6 +246,8 @@ interface SideState {
   hist: { clock: number; pts: number }[];
   streak: number;
   hot: boolean;
+  kicks: number;   // made kicks (for K neg shutdown)
+  dead: boolean;   // negated by an opponent K-neg shutdown → scores 0
 }
 
 interface MergedPlay extends RawPlay {
@@ -311,7 +313,7 @@ function playsForPlayer(player: Player, week: number): { plays: RawPlay[]; real:
  * Resolve one slot: your player+metric vs their player+metric over a merged
  * play-by-play timeline. Returns the full event feed plus final banks.
  */
-export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string): SlotResolution & { gameLabel: string; real: boolean; maxClock: number } {
+export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number } {
   const yp = playsForPlayer(you.player, week);
   const tp = playsForPlayer(their.player, week);
   const yPlays = yp.plays;
@@ -322,10 +324,13 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     ...tPlays.map((p) => ({ ...p, side: 'their' as const })),
   ].sort((a, b) => a.clock - b.clock);
 
-  const Y: SideState = { bank: 0, hist: [], streak: 0, hot: false };
-  const T: SideState = { bank: 0, hist: [], streak: 0, hot: false };
+  const Y: SideState = { bank: 0, hist: [], streak: 0, hot: false, kicks: 0, dead: false };
+  const T: SideState = { bank: 0, hist: [], streak: 0, hot: false, kicks: 0, dead: false };
   const youFam = familyOf(you.player.pos, you.metricId);
   const theirFam = familyOf(their.player.pos, their.metricId);
+
+  // TDs and banker-XPs per side, surfaced for the lineup-wide K banker bonus.
+  let youTds = 0, theirTds = 0, youBankerXp = 0, theirBankerXp = 0;
 
   const events: PbpEvent[] = [];
 
@@ -336,8 +341,10 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const oppFam = play.side === 'you' ? theirFam : youFam;
     const myPlayer = play.side === 'you' ? you : their;
 
-    // base points (hot streak doubling applies to recyd catches)
-    const pts = scorePlay(play, myPlayer.player.pos, myPlayer.metricId, myFam === 'streak' && mine.hot);
+    // base points (hot streak doubling applies to recyd catches). A side
+    // negated by a K-neg shutdown scores nothing for the rest of the slot.
+    let pts = scorePlay(play, myPlayer.player.pos, myPlayer.metricId, myFam === 'streak' && mine.hot);
+    if (mine.dead) pts = 0;
 
     mine.bank += pts;
     if (pts > 0) mine.hist.push({ clock: play.clock, pts });
@@ -351,10 +358,24 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       else if (play.catch) { mine.streak += 1; if (mine.streak >= 3) mine.hot = true; }
     }
 
+    // tallies for the K banker lineup-wide bonus
+    if (play.td) { if (play.side === 'you') youTds++; else theirTds++; }
+    if (myPlayer.player.pos === 'K' && myPlayer.metricId === 'banker' && play.kind === 'xp') {
+      if (play.side === 'you') youBankerXp++; else theirBankerXp++;
+    }
+
     let effect: { type: EffectType; text: string } | undefined;
 
-    // my effect onto opponent
-    if (myFam === 'nuke' && play.td && opp.bank > 0) {
+    // K NEG (SHUTDOWN): 6th made kick zeroes the matched opponent and negates
+    // the rest of their slot.
+    if (myPlayer.player.pos === 'K' && myPlayer.metricId === 'neg' && (play.kind === 'fg' || play.kind === 'xp')) {
+      mine.kicks++;
+      if (mine.kicks >= 6 && !opp.dead) {
+        const wiped = opp.bank;
+        opp.bank = 0; opp.hist = []; opp.dead = true;
+        effect = { type: 'nuke', text: `✕ SHUTDOWN — negated ${wiped.toFixed(1)}` };
+      }
+    } else if (myFam === 'nuke' && play.td && opp.bank > 0) {
       const wiped = opp.bank;
       opp.bank = 0; opp.hist = [];
       effect = { type: 'nuke', text: `✕ NUKE — wiped ${wiped.toFixed(1)}` };
@@ -396,6 +417,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     });
   }
 
+  // DEF SUPPRESS (HALVING): a defense that holds its slot opponent below the
+  // threshold halves that opponent's slot score (resolved at game end).
+  const SUPPRESS_THRESHOLD = 10;
+  if (you.player.pos === 'DEF' && you.metricId === 'suppress' && T.bank > 0 && T.bank < SUPPRESS_THRESHOLD) T.bank = T.bank * 0.5;
+  if (their.player.pos === 'DEF' && their.metricId === 'suppress' && Y.bank > 0 && Y.bank < SUPPRESS_THRESHOLD) Y.bank = Y.bank * 0.5;
+
   const maxClock = events.length ? Math.max(...events.map((e) => e.clock)) : GAME_SECONDS;
   return {
     events,
@@ -404,6 +431,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     gameLabel,
     real,
     maxClock,
+    youTds, theirTds, youBankerXp, theirBankerXp,
   };
 }
 
