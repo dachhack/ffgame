@@ -185,8 +185,8 @@ function buildPlays(p: Player, l: WeekLine, week: number): RawPlay[] {
 function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): number {
   if (pos === 'QB') {
     if (metricId === 'fg') return 0; // Field General scores nothing — it multiplies your other window players (see windowFgMult / resolveSlot opts)
-    if (metricId === 'pass') return play.kind === 'pass' ? play.yards * 0.04 : 0; // flat yards only — TDs are their own metric
-    if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 : 0;  // flat yards only
+    if (metricId === 'pass') return play.kind === 'pass' ? play.yards * 0.04 + (play.td ? 4 : 0) : 0; // yards + TD points, but no nuke/erase (flat family)
+    if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0;  // yards + TD points, flat
   }
   if (pos === 'RB') {
     if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 : 0; // drip, no TD
@@ -558,7 +558,9 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
           effect = { type: 'stop', text: 'DRIP STOP' };
         }
       }
-      if (play.td) {
+      // Only the dedicated TD (nuke) metric wipes a drip. A flat QB/RB TD under
+      // a yardage metric scores its points but does not nuke the opponent.
+      if (play.td && myFam === 'nuke') {
         const wiped = opp.bank;
         opp.bank = 0; opp.hist = []; opp.paused = true;
         effect = { type: 'nuke', text: `✕ TD — wiped drip ${wiped.toFixed(1)}` };

@@ -16,8 +16,8 @@ export const TOTAL_SLOTS = WINDOWS.reduce((n, w) => n + w.slots, 0);
 export const METRICS: Record<Pos, Metric[]> = {
   QB: [
     { id: 'fg', name: 'Field General', tag: 'MULTIPLIER', fx: 'mult', sc: '0 direct pts', ef: 'Passing yards set a window-wide drip multiplier on all your skill players. 300 yds = 1.9×.' },
-    { id: 'pass', name: 'Passing Yards', tag: 'FLAT', fx: 'sys', sc: '0.04 pts / yd', ef: 'Flat points at game end. No drip, no interaction. Predictable.' },
-    { id: 'rush', name: 'Rush Yards', tag: 'DRIP', fx: 'compression', sc: '0.1 pts / yd', ef: 'Steady drip on your own scrambles. Purely additive, no interaction.' },
+    { id: 'pass', name: 'Passing Yards', tag: 'FLAT', fx: 'sys', sc: '0.04 pts / yd + 4 / TD', ef: 'Flat points on passing yards and TDs. No drip, no nuke, no interaction. Predictable.' },
+    { id: 'rush', name: 'Rush Yards', tag: 'FLAT', fx: 'sys', sc: '0.1 pts / yd + 6 / TD', ef: 'Flat points on your scrambles and rushing TDs. Purely additive — no nuke, no erase, no interaction.' },
   ],
   RB: [
     { id: 'rush', name: 'Rush Yards', tag: 'DRIP', fx: 'sys', sc: '0.01 / yd → rate (pts/min)', ef: 'Each carry permanently raises a drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. An opponent catch erases the last 10 min and pauses it; a target pauses it; a TD wipes the bank. Rate survives erases. 3 straight (no opponent score) goes hot → drip doubles; cold when they score.' },
