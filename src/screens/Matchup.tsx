@@ -406,14 +406,14 @@ function BackupMenu({ backupName, backupScore, current, starters, onPick, onClos
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Backup · {backupName} <span style={{ color: 'var(--warn)' }}>{backupScore.toFixed(1)}</span></div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>REPLACE A STARTER IT OUTSCORES (BEST-BALL)</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>PICK A STARTER IT REPLACES AT FINAL (IF IT OUTSCORES)</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
         </div>
         <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 360, overflow: 'auto' }}>
-          <button onClick={() => onPick(null)} className="mono" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, background: !current ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${!current ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '8px 10px', color: 'var(--text)' }}>
-            <span style={{ fontSize: 11, fontWeight: 700 }}>AUTO — replace my lowest beatable starter</span>
-            {!current && <span style={{ fontSize: 9, color: 'var(--you)' }}>✓</span>}
+          <button onClick={() => onPick(null)} className="mono" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, background: !current ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${!current ? 'var(--bd)' : 'var(--bd)'}`, borderRadius: 4, padding: '8px 10px', color: 'var(--text)' }}>
+            <span style={{ fontSize: 11, fontWeight: 700 }}>Keep on bench — don't sub</span>
+            {!current && <span style={{ fontSize: 9, color: 'var(--dim)' }}>✓</span>}
           </button>
           {starters.map((s) => {
             const beats = backupScore > s.score;
@@ -813,6 +813,11 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
   // starter (best-ball). Render a distinct backup row.
   if (slot.backup && slot.you) {
     const bp = metricById(slot.you.player.pos, slot.you.metricId);
+    // Accrue live with this backup's own game clock; lock to the exact final
+    // once its game ends. Best-ball subbing only resolves in the Final view.
+    const liveBackup = done ? (slot.backupScore ?? 0) : banksAtClock(slot.events, clock).you;
+    const resolved = phase === 'final';
+    const status = resolved ? (slot.backupUsed ? '✓ SUBBED IN' : 'NOT USED') : '● LIVE';
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', border: '1px dashed var(--warn)', borderLeft: '3px solid var(--warn)', borderRadius: 4, padding: '9px 11px' }}>
         <PlayerImg playerId={slot.you.player.id} team={slot.you.player.team} pos={slot.you.player.pos} size={26} />
@@ -821,11 +826,11 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
             <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{slot.you.player.name}</span>
             <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 3, padding: '1px 4px' }}>BACKUP</span>
           </div>
-          <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3 }}>{bp?.name} · unopposed — score can replace a starter</div>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3 }}>{bp?.name} · unopposed — replaces an assigned starter at FINAL if it scores more</div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--warn)', lineHeight: 1 }}>{(slot.backupScore ?? 0).toFixed(1)}</div>
-          <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: slot.backupUsed ? 'var(--you)' : 'var(--faint)', marginTop: 3 }}>{slot.backupUsed ? '✓ SUBBED IN' : 'BENCH'}</div>
+          <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--warn)', lineHeight: 1 }}>{liveBackup.toFixed(1)}</div>
+          <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: resolved && slot.backupUsed ? 'var(--you)' : 'var(--faint)', marginTop: 3 }}>{status}</div>
         </div>
         <button onClick={onAssignBackup} title="Choose which starter this backup replaces" className="mono" style={{ alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 8px' }}>ASSIGN ▾</button>
       </div>
@@ -843,8 +848,11 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
   // Displayed score per side: a sub replaces it; at final, suppress-halving and
   // K-negation show the reduced value (with the original revealed below).
   const shownFor = (side: 'you' | 'their') => {
+    // Best-ball subbing is an end-of-game decision — only resolve it at FINAL.
+    // During live, the starter plays its own head-to-head; the backup accrues
+    // in its own row.
     const sub = side === 'you' ? slot.youSub : slot.theirSub;
-    if (sub) return sub.score;
+    if (phase === 'final' && sub) return sub.score;
     if (side === 'you' && slot.youNegated) return 0;
     if (side === 'their' && slot.theirNegated) return 0;
     if (final && side === 'you' && slot.youHalvedFrom != null) return slot.youFinal;
@@ -866,7 +874,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'stretch', gap: 6 }}>
-        <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={slot.youSub?.name} suppressSpent={slot.suppressSpentYou} negated={slot.youNegated} />
+        <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={slot.suppressSpentYou} negated={slot.youNegated} />
         <div style={{ width: 64, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
           <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--bg)', background: verdict.c, padding: '4px 6px', borderRadius: 3, textAlign: 'center', lineHeight: 1.1 }}>{verdict.t}</span>
           {canSwap && !done && (
@@ -876,14 +884,14 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
             <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
           )}
         </div>
-        <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={slot.theirSub?.name} suppressSpent={slot.suppressSpentTheir} negated={slot.theirNegated} />
+        <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={slot.suppressSpentTheir} negated={slot.theirNegated} />
       </div>
-      {slot.youSub && (
+      {phase === 'final' && slot.youSub && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', marginTop: 3 }}>
           ⤴ BACKUP {slot.youSub.name} subs in for {slot.you.player.name} · {slot.youSub.from.toFixed(1)} → {slot.youSub.score.toFixed(1)}
         </div>
       )}
-      {slot.theirSub && (
+      {phase === 'final' && slot.theirSub && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--opp)', marginTop: 3, textAlign: 'right' }}>
           {slot.their.player.name} ← BACKUP {slot.theirSub.name} ⤴ · {slot.theirSub.from.toFixed(1)} → {slot.theirSub.score.toFixed(1)}
         </div>
