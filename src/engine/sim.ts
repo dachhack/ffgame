@@ -1,7 +1,7 @@
 import type { Player, PlayerStats, Pos, PbpEvent, SlotResolution, EffectType } from '../types';
 import { hashStr } from '../data/players';
 import { metricById } from '../data/metrics';
-import { realPbpFor } from '../data/realPbp';
+import { realPbpFor, type RealPlayKind } from '../data/realPbp';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Deterministic simulation. Everything is seeded off (playerId, week) so a
@@ -83,7 +83,7 @@ export function projectedPoints(p: Player, week: number): number {
 
 interface RawPlay {
   clock: number;
-  kind: 'pass' | 'rush' | 'rec' | 'incomplete';
+  kind: RealPlayKind;
   yards: number;
   td: boolean;
   catch: boolean;   // a reception happened
@@ -150,6 +150,14 @@ function buildPlays(p: Player, l: WeekLine, week: number): RawPlay[] {
         plays.push({ clock: rcc[i], kind: 'rec', yards: y, td, catch: true, target: true });
       }
     }
+  } else if (p.pos === 'K') {
+    // Fallback only (real weeks supply actual kicks): a few FGs + XPs.
+    for (const c of spreadClocks(3, r)) plays.push({ clock: c, kind: 'fg', yards: 28 + Math.round(r() * 27), td: false, catch: false, target: false });
+    for (const c of spreadClocks(2, r)) plays.push({ clock: c, kind: 'xp', yards: 0, td: false, catch: false, target: false });
+  } else if (p.pos === 'DEF') {
+    // Fallback only: a couple sacks and a takeaway.
+    for (const c of spreadClocks(2, r)) plays.push({ clock: c, kind: 'sack', yards: 0, td: false, catch: false, target: false });
+    if (r() < 0.6) plays.push({ clock: spreadClocks(1, r)[0], kind: 'int', yards: 0, td: false, catch: false, target: false });
   } else {
     // WR / TE / other receivers
     const rec = Math.max(1, l.receptions);
@@ -196,6 +204,25 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
     if (metricId === 'rec') return play.catch ? 1.5 : 0;
     if (metricId === 'td') return play.td ? 8 : 0; // NUKE
   }
+  if (pos === 'K') {
+    // 'neg' (SHUTDOWN) scores 0 directly — it's a pure effect. 'banker' scores
+    // FG by distance + XP (the XP→TD bonus is applied as flavor, not here).
+    if (metricId === 'neg') return 0;
+    if (play.kind === 'fg') return play.yards < 40 ? 3 : play.yards < 50 ? 4 : 5;
+    if (play.kind === 'xp') return 1;
+    return 0;
+  }
+  if (pos === 'DEF') {
+    // 'suppress' (HALVING) scores 0 directly. 'earn' is flat: sk1 / int3 / fr2,
+    // plus def/ST TD 6 and safety 2.
+    if (metricId === 'suppress') return 0;
+    if (play.kind === 'sack') return 1;
+    if (play.kind === 'int') return 3;
+    if (play.kind === 'fumrec') return 2;
+    if (play.kind === 'dst_td') return 6;
+    if (play.kind === 'safety') return 2;
+    return 0;
+  }
   // fallback flat
   return play.catch ? play.yards * 0.1 + (play.td ? 6 : 0) : (play.kind === 'rush' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0);
 }
@@ -237,6 +264,15 @@ function playText(p: Player, play: RawPlay): string {
   if (play.kind === 'pass') return `${t}: ${p.name} ${play.yards}yd pass`;
   if (play.kind === 'rush') return `${t}: ${p.name} +${play.yards} rush`;
   if (play.kind === 'rec') return `${t}: ${p.name} +${play.yards} catch`;
+  if (play.kind === 'fg') return `${t}: ${p.name} ${play.yards}yd FG good`;
+  if (play.kind === 'fgmiss') return `${t}: ${p.name} ${play.yards}yd FG miss`;
+  if (play.kind === 'xp') return `${t}: ${p.name} XP good`;
+  if (play.kind === 'xpmiss') return `${t}: ${p.name} XP miss`;
+  if (play.kind === 'sack') return `${t} D: sack`;
+  if (play.kind === 'int') return `${t} D: interception`;
+  if (play.kind === 'fumrec') return `${t} D: fumble recovered`;
+  if (play.kind === 'dst_td') return `${t} D: TD`;
+  if (play.kind === 'safety') return `${t} D: safety`;
   return `${t}: ${p.name} incomplete`;
 }
 

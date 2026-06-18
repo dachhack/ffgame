@@ -138,7 +138,17 @@ const RAW_TEAMS: RawTeam[] = [
   },
 ];
 
-function buildPlayer(name: string, pos: Pos): Player {
+function buildPlayer(name: string, pos: Pos, team?: string): Player {
+  // K and DST are keyed by NFL team ("sea-k" / "sea-dst") to match the real
+  // per-week PBP, and display as "SEA K" / "SEA DST".
+  if (pos === 'K' || pos === 'DEF') {
+    const t = team || 'NFL';
+    return {
+      id: `${t.toLowerCase()}-${pos === 'K' ? 'k' : 'dst'}`,
+      name, full: name, pos, team: t,
+      stats: statsForName(name, pos),
+    };
+  }
   const stats = statsForName(name, pos);
   return {
     id: normName(name).replace(/\s+/g, '-'),
@@ -150,6 +160,21 @@ function buildPlayer(name: string, pos: Pos): Player {
   };
 }
 
+// 2 kickers + 2 DSTs per team, snake-drafted from 2025 K/DST season points
+// (added for the simulation; values are NFL team abbreviations).
+const KDST: Record<string, { k: [string, string]; dst: [string, string] }> = {
+  'happy-campers':  { k: ['SEA', 'KC'],  dst: ['SEA', 'MIN'] },
+  'coolaak':        { k: ['DAL', 'NYJ'], dst: ['PIT', 'MIA'] },
+  'next-year':      { k: ['LAC', 'ATL'], dst: ['JAX', 'ARI'] },
+  'rock-tunnel':    { k: ['HOU', 'TEN'], dst: ['HOU', 'NO'] },
+  'skeptic-tank':   { k: ['CHI', 'MIN'], dst: ['CHI', 'ATL'] },
+  'gadsden':        { k: ['SF', 'MIA'],  dst: ['CLE', 'LAC'] },
+  'rizzler':        { k: ['IND', 'JAX'], dst: ['LA', 'BUF'] },
+  'spartandawgs':   { k: ['TB', 'BAL'],  dst: ['TB', 'DET'] },
+  'happier-camper': { k: ['PIT', 'NE'],  dst: ['NE', 'DEN'] },
+  'achilles':       { k: ['CIN', 'DET'], dst: ['IND', 'PHI'] },
+};
+
 // Global player registry (id -> Player) and per-team rosters.
 const PLAYERS: Record<string, Player> = {};
 const TEAMS: FantasyTeam[] = RAW_TEAMS.map((rt) => {
@@ -158,6 +183,12 @@ const TEAMS: FantasyTeam[] = RAW_TEAMS.map((rt) => {
     const p = buildPlayer(name, pos);
     PLAYERS[p.id] = p;
     ids.push(p.id);
+  }
+  // Kickers + DSTs (added for the simulation).
+  const kd = KDST[rt.id];
+  if (kd) {
+    for (const t of kd.k) { const p = buildPlayer(`${t} K`, 'K', t); PLAYERS[p.id] = p; ids.push(p.id); }
+    for (const t of kd.dst) { const p = buildPlayer(`${t} DST`, 'DEF', t); PLAYERS[p.id] = p; ids.push(p.id); }
   }
   const t: FantasyTeam = {
     id: rt.id, name: rt.name, owner: rt.owner, ownerId: rt.ownerId,

@@ -56,6 +56,8 @@ for (const fn of files) {
 }
 
 // ── Attribute plays ──
+const fmtName = (s) => String(s).replace(/^([A-Z])\.(?=\S)/, '$1. '); // "B.Aubrey" -> "B. Aubrey"
+const kickerName = {}; // team abbr -> display name of its kicker
 let playCount = 0;
 for (const rows of games.values()) {
   for (const d of rows) {
@@ -86,28 +88,64 @@ for (const rows of games.values()) {
       playCount++;
     }
 
-    // ── K / DEF (activates once MCP exposes kicker/defense columns) ──
-    // Kicker:  d.kicker_player_id, d.kick_distance, d.field_goal_result, d.extra_point_result
-    // Defense: d.sack, d.interception, d.fumble_lost, d.safety, d.td_team, d.return_touchdown
-    // (keyed by team, since K/DEF are not roster slugs). TODO once columns land.
+    // ── Kicker — FG (by distance) and XP, keyed by the kicking team ("dal-k") ──
+    if (pt === 'field_goal' && isSet(d.kicker_player_id)) {
+      const slug = `${String(d.posteam).toLowerCase()}-k`;
+      push(week, slug, { c, k: d.field_goal_result === 'made' ? 'fg' : 'fgmiss', y: Number(d.kick_distance) || 0, td: 0, ca: 0, tg: 0 });
+      if (isSet(d.kicker_player_name)) kickerName[d.posteam] = fmtName(d.kicker_player_name);
+      playCount++;
+    }
+    if (pt === 'extra_point' && isSet(d.kicker_player_id)) {
+      const slug = `${String(d.posteam).toLowerCase()}-k`;
+      push(week, slug, { c, k: d.extra_point_result === 'good' ? 'xp' : 'xpmiss', y: 0, td: 0, ca: 0, tg: 0 });
+      if (isSet(d.kicker_player_name)) kickerName[d.posteam] = fmtName(d.kicker_player_name);
+    }
+    // ── Team defense — sacks, takeaways, def/ST TDs, safeties, keyed by defteam ("dal-dst") ──
+    if (isSet(d.defteam)) {
+      const slug = `${String(d.defteam).toLowerCase()}-dst`;
+      if (Number(d.sack) === 1) push(week, slug, { c, k: 'sack', y: 0, td: 0, ca: 0, tg: 0 });
+      if (Number(d.interception) === 1) push(week, slug, { c, k: 'int', y: 0, td: 0, ca: 0, tg: 0 });
+      if (Number(d.fumble_lost) === 1 && d.fumble_recovery_1_team === d.defteam) push(week, slug, { c, k: 'fumrec', y: 0, td: 0, ca: 0, tg: 0 });
+      if (Number(d.safety) === 1) push(week, slug, { c, k: 'safety', y: 0, td: 0, ca: 0, tg: 0 });
+      if (isSet(d.td_team) && d.td_team === d.defteam) push(week, slug, { c, k: 'dst_td', y: 0, td: 0, ca: 0, tg: 0 });
+    }
   }
 }
 
-// ── Points (PPR, mirrors the validated Week-4 build) ──
+// ── Points ──
+// Skill: PPR (mirrors the validated Week-4 build). K: FG 3/4/5 by distance + XP 1.
+// DST: sack 1, INT 3, fumble rec 2, def/ST TD 6, safety 2 (the MET-catalog "earn" rule).
 const points = {};
 for (const w of WEEKS) {
   points[w] = {};
   for (const [slug, plays] of Object.entries(pbp[w])) {
-    let recYds = 0, rushYds = 0, passYds = 0, rec = 0, rushTd = 0, recTd = 0, passTd = 0;
+    let recYds = 0, rushYds = 0, passYds = 0, rec = 0, rushTd = 0, recTd = 0, passTd = 0, sp = 0;
     for (const p of plays) {
       if (p.k === 'pass') { passYds += p.y; if (p.td) passTd++; }
       else if (p.k === 'rush') { rushYds += p.y; if (p.td) rushTd++; }
       else if (p.k === 'rec') { rec++; recYds += p.y; if (p.td) recTd++; }
+      else if (p.k === 'fg') sp += p.y < 40 ? 3 : p.y < 50 ? 4 : 5;
+      else if (p.k === 'xp') sp += 1;
+      else if (p.k === 'sack') sp += 1;
+      else if (p.k === 'int') sp += 3;
+      else if (p.k === 'fumrec') sp += 2;
+      else if (p.k === 'dst_td') sp += 6;
+      else if (p.k === 'safety') sp += 2;
     }
     plays.sort((a, b) => a.c - b.c);
-    points[w][slug] = Math.round((rec + recYds * 0.1 + rushYds * 0.1 + (rushTd + recTd) * 6 + passYds * 0.04 + passTd * 4) * 10) / 10;
+    points[w][slug] = Math.round((rec + recYds * 0.1 + rushYds * 0.1 + (rushTd + recTd) * 6 + passYds * 0.04 + passTd * 4 + sp) * 10) / 10;
   }
 }
+
+// ── K/DST registry: season totals + display names, to drive roster assignment ──
+const kSeason = {}, dSeason = {};
+for (const w of WEEKS) for (const [slug, pts] of Object.entries(points[w])) {
+  if (slug.endsWith('-k')) kSeason[slug] = (kSeason[slug] || 0) + pts;
+  else if (slug.endsWith('-dst')) dSeason[slug] = (dSeason[slug] || 0) + pts;
+}
+const kickers = Object.entries(kSeason).map(([slug, pts]) => ({ slug, team: slug.slice(0, -2).toUpperCase(), name: kickerName[slug.slice(0, -2).toUpperCase()] || slug, pts: Math.round(pts * 10) / 10 })).sort((a, b) => b.pts - a.pts);
+const dsts = Object.entries(dSeason).map(([slug, pts]) => ({ slug, team: slug.slice(0, -4).toUpperCase(), pts: Math.round(pts * 10) / 10 })).sort((a, b) => b.pts - a.pts);
+writeFileSync(new URL('kdst_registry.json', here), JSON.stringify({ kickers, dsts }, null, 2));
 
 // ── Emit: per-week JSON assets (lazy-loaded) + a tiny generated week index ──
 // A week ships as "real" only when ALL its expected games are present, so we
