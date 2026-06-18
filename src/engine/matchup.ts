@@ -1,8 +1,9 @@
 import type { Player, WindowId, Pick, PbpEvent } from '../types';
-import { WINDOWS, METRICS } from '../data/metrics';
+import { WINDOWS, METRICS, TOTAL_SLOTS } from '../data/metrics';
 import { teamRoster } from '../data/league';
 import { hashStr } from '../data/players';
 import { resolveSlot, projectedPoints, type SlotInput } from './sim';
+import { REAL_WEEKS, REAL_POINTS } from '../data/realPbp';
 
 // Deterministic per-week assignment of a roster across the 5 windows. The
 // wheel distributes players roughly in proportion to each window's slot count,
@@ -33,8 +34,32 @@ export function slotKey(win: WindowId, idx: number): string {
   return `${win}#${idx}`;
 }
 
+/**
+ * When real play-by-play is baked for the week, field the roster's real top-8
+ * performers (benching anyone who didn't play) into the 8 slots in order.
+ */
+function realLineup(teamId: string, week: number): Record<string, Pick> {
+  const pts = REAL_POINTS[week] || {};
+  const ranked = teamRoster(teamId)
+    .filter((p) => pts[p.id] !== undefined)
+    .sort((a, b) => (pts[b.id] || 0) - (pts[a.id] || 0));
+  const picks: Record<string, Pick> = {};
+  let idx = 0;
+  for (const w of WINDOWS) {
+    for (let i = 0; i < w.slots; i++) {
+      const p = ranked[idx++];
+      if (p) picks[slotKey(w.id, i)] = { playerId: p.id, metricId: pickMetric(p, week) };
+    }
+  }
+  return picks;
+}
+
 /** Best available player per slot, with a hidden metric — used to seed lineups. */
 export function defaultLineup(teamId: string, week: number): Record<string, Pick> {
+  if (REAL_WEEKS.has(week)) {
+    const rl = realLineup(teamId, week);
+    if (Object.keys(rl).length >= TOTAL_SLOTS) return rl;
+  }
   const pools = windowPools(teamId, week);
   const picks: Record<string, Pick> = {};
   for (const w of WINDOWS) {
@@ -56,6 +81,7 @@ export interface ResolvedSlot {
   youFinal: number;
   theirFinal: number;
   gameLabel: string;
+  real: boolean;
 }
 
 export interface ResolvedWindow {
@@ -67,6 +93,8 @@ export interface ResolvedMatchup {
   windows: ResolvedWindow[];
   youFinal: number;
   theirFinal: number;
+  real: boolean;
+  maxClock: number;
 }
 
 function lookup(pools: Record<WindowId, Player[]>, picks: Record<string, Pick>, key: string): { player: Player; metricId: string } | null {
@@ -97,6 +125,8 @@ export function buildMatchup(
   const windows: ResolvedWindow[] = [];
   let youFinal = 0;
   let theirFinal = 0;
+  let anyReal = false;
+  let maxClock = 3300;
 
   for (const w of WINDOWS) {
     const slots: ResolvedSlot[] = [];
@@ -109,6 +139,7 @@ export function buildMatchup(
       let yF = 0;
       let tF = 0;
       let gameLabel = w.label;
+      let real = false;
 
       if (you && their) {
         const yIn: SlotInput = { player: you.player, metricId: you.metricId };
@@ -118,16 +149,25 @@ export function buildMatchup(
         events = res.events;
         yF = res.youFinal;
         tF = res.theirFinal;
+        real = res.real;
+        if (real) anyReal = true;
+        if (res.maxClock > maxClock) maxClock = res.maxClock;
       }
 
       youFinal += yF;
       theirFinal += tF;
-      slots.push({ win: w.id, slotIndex: i, you, their, events, youFinal: yF, theirFinal: tF, gameLabel });
+      slots.push({ win: w.id, slotIndex: i, you, their, events, youFinal: yF, theirFinal: tF, gameLabel, real });
     }
     windows.push({ window: w, slots });
   }
 
-  return { windows, youFinal: Math.round(youFinal * 10) / 10, theirFinal: Math.round(theirFinal * 10) / 10 };
+  return {
+    windows,
+    youFinal: Math.round(youFinal * 10) / 10,
+    theirFinal: Math.round(theirFinal * 10) / 10,
+    real: anyReal,
+    maxClock,
+  };
 }
 
 /** Running banks at a given clock (live phase) for one slot's event feed. */

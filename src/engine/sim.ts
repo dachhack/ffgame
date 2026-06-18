@@ -1,6 +1,7 @@
 import type { Player, PlayerStats, Pos, PbpEvent, SlotResolution, EffectType } from '../types';
 import { hashStr } from '../data/players';
 import { metricById } from '../data/metrics';
+import { REAL_PBP, REAL_WEEKS } from '../data/realPbp';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Deterministic simulation. Everything is seeded off (playerId, week) so a
@@ -250,13 +251,37 @@ export interface SlotInput {
   metricId: string;
 }
 
+/** Real play-by-play for a player/week, if we've baked it; else null. */
+export function realRawPlays(playerId: string, week: number): RawPlay[] | null {
+  if (!REAL_WEEKS.has(week)) return null;
+  const ps = REAL_PBP[week]?.[playerId];
+  if (!ps || !ps.length) return null;
+  return ps
+    .map((p) => ({ clock: p.c, kind: p.k, yards: p.y, td: !!p.td, catch: !!p.ca, target: !!p.tg }))
+    .sort((a, b) => a.clock - b.clock);
+}
+
+export function hasRealPbp(playerId: string, week: number): boolean {
+  return realRawPlays(playerId, week) !== null;
+}
+
+/** Real plays when available, otherwise the deterministic simulation. */
+function playsForPlayer(player: Player, week: number): { plays: RawPlay[]; real: boolean } {
+  const r = realRawPlays(player.id, week);
+  if (r) return { plays: r, real: true };
+  return { plays: buildPlays(player, weekLine(player, week), week), real: false };
+}
+
 /**
  * Resolve one slot: your player+metric vs their player+metric over a merged
  * play-by-play timeline. Returns the full event feed plus final banks.
  */
-export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string): SlotResolution & { gameLabel: string } {
-  const yPlays = buildPlays(you.player, weekLine(you.player, week), week);
-  const tPlays = buildPlays(their.player, weekLine(their.player, week), week);
+export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string): SlotResolution & { gameLabel: string; real: boolean; maxClock: number } {
+  const yp = playsForPlayer(you.player, week);
+  const tp = playsForPlayer(their.player, week);
+  const yPlays = yp.plays;
+  const tPlays = tp.plays;
+  const real = yp.real || tp.real;
   const merged: MergedPlay[] = [
     ...yPlays.map((p) => ({ ...p, side: 'you' as const })),
     ...tPlays.map((p) => ({ ...p, side: 'their' as const })),
@@ -336,11 +361,14 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     });
   }
 
+  const maxClock = events.length ? Math.max(...events.map((e) => e.clock)) : GAME_SECONDS;
   return {
     events,
     youFinal: Math.round(Y.bank * 10) / 10,
     theirFinal: Math.round(T.bank * 10) / 10,
     gameLabel,
+    real,
+    maxClock,
   };
 }
 

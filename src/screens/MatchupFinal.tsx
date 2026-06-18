@@ -49,6 +49,7 @@ export function MatchupFinal({ week }: { week: number }) {
           <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderLeft: `4px solid ${won ? 'var(--you)' : 'var(--opp)'}`, borderRadius: 6, padding: 22, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
             <div>
               <span className="mono" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.16em', color: won ? 'var(--you)' : 'var(--opp)' }}>{won ? '★ VICTORY' : 'DEFEAT'}</span>
+              {m.real && <span className="mono" title="Resolved off real 2025 NFL play-by-play" style={{ marginLeft: 10, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 3, padding: '3px 6px' }}>● REAL PBP</span>}
               <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', marginTop: 8 }}>
                 {won ? `You took Week ${week} by ${margin}` : `Dropped Week ${week} by ${margin}`}
               </div>

@@ -7,7 +7,7 @@ import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
   windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock,
 } from '../engine/matchup';
-import { GAME_SECONDS, fmtClock } from '../engine/sim';
+import { fmtClock } from '../engine/sim';
 import type { Pick, Player, WindowId, PbpEvent } from '../types';
 
 const YOU = 'happy-campers';
@@ -23,7 +23,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const [phase, setPhase] = useState<Phase>(initialPhase);
   const [picks, setPicks] = useState<Record<string, Pick>>({});
   const [selSlot, setSelSlot] = useState<string | null>(null);
-  const [liveClock, setLiveClock] = useState(initialPhase === 'final' ? GAME_SECONDS : 1700);
+  const [liveClock, setLiveClock] = useState(initialPhase === 'final' ? 3599 : 1700);
   const [playing, setPlaying] = useState(true);
   const [openPBP, setOpenPBP] = useState<Record<string, boolean>>({});
 
@@ -51,16 +51,17 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     [oppId, week, effYouPicks, oppPicks],
   );
 
-  const effClock = phase === 'final' ? GAME_SECONDS : liveClock;
+  const maxClock = resolved.maxClock;
+  const effClock = phase === 'final' ? maxClock : liveClock;
 
   // live ticker
   useEffect(() => {
     if (phase !== 'live' || !playing) return;
     const id = setInterval(() => {
-      setLiveClock((c) => Math.min(GAME_SECONDS, c + TICK_SECONDS));
+      setLiveClock((c) => Math.min(maxClock, c + TICK_SECONDS));
     }, TICK_MS);
     return () => clearInterval(id);
-  }, [phase, playing]);
+  }, [phase, playing, maxClock]);
 
   // ── derived totals (respecting live clock) ──
   const { youTotal, themTotal } = useMemo(() => {
@@ -119,7 +120,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   }
 
   function lockIn() { setPhase('live'); setSelSlot(null); setPlaying(true); setLiveClock(1700); }
-  function changePhase(p: Phase) { setPhase(p); setSelSlot(null); if (p === 'final') setLiveClock(GAME_SECONDS); }
+  function changePhase(p: Phase) { setPhase(p); setSelSlot(null); if (p === 'final') setLiveClock(maxClock); }
 
   const headline = phase === 'setup' ? 'Set Your Windows' : phase === 'live' ? 'Live Resolution' : `Week ${week} — Final`;
   const subhead = `${you.name} vs ${opp.name} · drag or tap players into the 5 game windows, then seal a hidden metric for each.`;
@@ -137,6 +138,11 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
             ))}
           </div>
           <ThemeSwitcher />
+          {resolved.real && (
+            <span className="mono" title="This week resolves off real 2025 NFL play-by-play" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 3, padding: '3px 6px' }}>
+              ● REAL PBP
+            </span>
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, whiteSpace: 'nowrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -163,7 +169,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               <span style={{ display: 'inline-block', width: 8, height: 8, background: '#FF4F62', borderRadius: '50%', animation: 'lpulse 1.2s ease infinite' }} />
               <span className="mono" style={{ color: '#FF4F62', fontWeight: 700, letterSpacing: '0.14em', fontSize: 11 }}>LIVE</span>
               <span className="mono" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{fmtClock(liveClock)}</span>
-              <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>/ 55:00</span>
+              <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>/ {fmtClock(maxClock)}</span>
               <button onClick={() => setPlaying((p) => !p)} className="mono" style={{ fontSize: 12, color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 10px' }}>
                 {playing ? '❚❚' : '▶'}
               </button>
