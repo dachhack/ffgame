@@ -492,8 +492,9 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       // Only surface a drip tick once it rounds to ≥0.1 — sub-0.1 still banks
       // silently and shows up in the next tick's cumulative.
       const yd = Math.round(ya * 10) / 10, td = Math.round(ta * 10) / 10;
-      if (yd > 0) events.push({ clock: next, side: 'you', play: `${you.player.team || 'NFL'}: ${Y.hot ? 'HOT drip' : 'drip'}`, delta: yd, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true });
-      if (td > 0) events.push({ clock: next, side: 'their', play: `${their.player.team || 'NFL'}: ${T.hot ? 'HOT drip' : 'drip'}`, delta: td, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true });
+      const ym = opts.youMult?.(next), tm = opts.theirMult?.(next);
+      if (yd > 0) events.push({ clock: next, side: 'you', play: `${you.player.team || 'NFL'}: ${Y.hot ? 'HOT drip' : 'drip'}`, delta: yd, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true, mult: ym && ym !== 1 ? ym : undefined });
+      if (td > 0) events.push({ clock: next, side: 'their', play: `${their.player.team || 'NFL'}: ${T.hot ? 'HOT drip' : 'drip'}`, delta: td, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true, mult: tm && tm !== 1 ? tm : undefined });
       t = next;
     }
   };
@@ -546,6 +547,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     // accrual. Otherwise the metric's per-play points (× FG mult).
     let pts = 0;
     let sig = false; // a signature play this tick → +5 drip coin to the acting side
+    let evMult: number | undefined; // FG multiplier shown on this play in the log
+    const sideMult = (play.side === 'you' ? opts.youMult?.(play.clock) : opts.theirMult?.(play.clock)) ?? 1;
     if (iAmDrip) {
       if (play.kind === myDripKind) {
         mine.rate += play.yards * myDripRate;
@@ -556,9 +559,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     } else {
       pts = scorePlay(play, myPlayer.player.pos, myPlayer.metricId, myFam === 'streak' && mine.hot);
       if (mine.dead) pts = 0;
-      const fgMult = play.side === 'you' ? opts.youMult?.(play.clock) : opts.theirMult?.(play.clock);
-      if (fgMult && fgMult !== 1) pts *= fgMult;
+      if (sideMult !== 1 && pts > 0) { pts *= sideMult; evMult = sideMult; }
     }
+    // Field General QB: scores nothing itself, but each pass grows the window
+    // multiplier — surface it in the QB's own log so you can watch it build.
+    const isFG = myPlayer.player.pos === 'QB' && myPlayer.metricId === 'fg';
+    if (isFG && play.kind === 'pass') evMult = sideMult;
 
     mine.bank += pts;
     if (pts > 0) mine.hist.push({ clock: play.clock, pts });
@@ -666,11 +672,13 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     if (!effect && oppFam === 'streak' && pts > 0) {
       effect = { type: 'cold', text: 'STREAK COLD' };
     }
+    if (!effect && isFG && play.kind === 'pass') effect = { type: 'mult', text: `FIELD GENERAL ×${sideMult.toFixed(2)}` };
 
     events.push({
       clock: play.clock,
       side: play.side,
       play: playText(myPlayer.player, play),
+      mult: evMult,
       delta: Math.round(pts * 10) / 10,
       youBank: Math.round(Y.bank * 10) / 10,
       theirBank: Math.round(T.bank * 10) / 10,

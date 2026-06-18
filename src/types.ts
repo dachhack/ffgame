@@ -94,6 +94,7 @@ export interface PbpEvent {
   effect?: { type: EffectType; text: string };
   sig?: boolean;            // a "signature" play (drip economy: +5 coin to the acting side)
   drip?: boolean;           // a per-minute drip-accrual tick (hidden unless the log is expanded to minutes)
+  mult?: number;            // QB Field General multiplier in effect for this play (×N), for the log
   // for rate/drip bars
   youRate?: number;
   theirRate?: number;

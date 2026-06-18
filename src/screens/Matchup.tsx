@@ -97,7 +97,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     const playing: Record<string, boolean> = {};
     for (const id of Object.keys(winMax)) {
       clocks[id] = phase === 'final' ? winMax[id] : 0;
-      playing[id] = phase === 'live';
+      playing[id] = false; // live starts paused — hit ▶ per window or RUN ALL
     }
     setWinClocks(clocks);
     setWinPlaying(playing);
@@ -636,24 +636,44 @@ function WindowSection(props: {
       </div>
 
       {slateOpen && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 9 }}>
-          {slate.map((g) => (
-            <div key={`${g.away}@${g.home}`} style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '7px 10px', minWidth: 168 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Img src={teamLogo(g.away)} size={18} radius={3} fallback={<span className="mono" style={{ fontSize: 9 }}>{g.away}</span>} />
-                <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)' }}>{g.away}</span>
-                <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>@</span>
-                <Img src={teamLogo(g.home)} size={18} radius={3} fallback={<span className="mono" style={{ fontSize: 9 }}>{g.home}</span>} />
-                <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)' }}>{g.home}</span>
+        <div onClick={() => setSlateOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '60px 16px', overflow: 'auto' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
+              <div>
+                <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{w.label} · Game Slate</div>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{slate.length} {slate.length === 1 ? 'GAME' : 'GAMES'} · 2025 · {w.time.toUpperCase()}</div>
               </div>
-              {(g.you.length > 0 || g.their.length > 0) && (
-                <div style={{ fontSize: 9, lineHeight: 1.4, marginTop: 4 }}>
-                  {g.you.map((p) => <div key={p} style={{ color: 'var(--you)' }}>{p}</div>)}
-                  {g.their.map((p) => <div key={p} style={{ color: 'var(--opp)' }}>{p}</div>)}
-                </div>
-              )}
+              <button onClick={() => setSlateOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
             </div>
-          ))}
+            <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 7, maxHeight: 460, overflow: 'auto' }}>
+              {slate.map((g) => {
+                const ge = nflGameForTeam(week, g.home)!;
+                const homeWon = ge.hScore > ge.aScore;
+                const teamLine = (abbr: string, score: number, won: boolean) => (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
+                    <Img src={teamLogo(abbr)} size={22} radius={4} fallback={<span className="mono" style={{ fontSize: 9 }}>{abbr}</span>} />
+                    <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: won ? 'var(--text)' : 'var(--dim)' }}>{abbr}</span>
+                    <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: won ? 'var(--text)' : 'var(--dim)', marginLeft: 'auto' }}>{score}</span>
+                  </div>
+                );
+                return (
+                  <div key={`${g.away}@${g.home}`} style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '9px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {teamLine(g.away, ge.aScore, !homeWon)}
+                      <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>FINAL</span>
+                      {teamLine(g.home, ge.hScore, homeWon)}
+                    </div>
+                    {(g.you.length > 0 || g.their.length > 0) && (
+                      <div style={{ fontSize: 9.5, lineHeight: 1.5, marginTop: 6, paddingTop: 6, borderTop: '1px solid color-mix(in srgb, var(--bd) 60%, transparent)' }}>
+                        {g.you.map((p) => <span key={p} style={{ color: 'var(--you)', marginRight: 8 }}>● {p}</span>)}
+                        {g.their.map((p) => <span key={p} style={{ color: 'var(--opp)', marginRight: 8 }}>● {p}</span>)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 
@@ -694,17 +714,18 @@ function SetupRow(props: {
         <div
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); onDropPlayer(e.dataTransfer.getData('text/plain')); }}
-          style={{ flex: 1, minWidth: 0, background: selected ? 'var(--sh)' : 'var(--surface)', border: `1px solid ${selected ? 'var(--you)' : 'var(--bd)'}`, borderLeft: '3px solid var(--you)', borderRadius: 4, padding: '8px 10px', display: 'flex', gap: 10 }}
+          style={{ flex: 1, minWidth: 0, minHeight: showPicker ? 92 : 80, background: selected ? 'var(--sh)' : 'var(--surface)', border: `1px solid ${selected ? 'var(--you)' : 'var(--bd)'}`, borderLeft: '3px solid var(--you)', borderRadius: 4, padding: '8px 10px', display: 'flex', gap: 11, alignItems: 'stretch' }}
         >
-          <div onClick={onSelect} style={{ cursor: 'pointer', minWidth: 0 }}>
-            <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap' }}>{player.name}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
-              <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={20} />
-              <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{player.team}</span>
-            </div>
-            {!showPicker && <button onClick={onClear} className="mono" style={{ background: 'none', border: 'none', fontSize: 8, letterSpacing: '0.14em', color: 'var(--opp)', padding: 0, marginTop: 4 }}>CHANGE ✕</button>}
+          {/* Big player picture — fills the slot height once a metric is sealed. */}
+          <div onClick={onSelect} style={{ cursor: 'pointer', flex: 'none', display: 'flex', alignItems: showPicker ? 'flex-start' : 'center' }}>
+            <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={showPicker ? 46 : 64} />
           </div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, alignItems: 'flex-end' }}>
+          <div onClick={onSelect} style={{ cursor: 'pointer', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div className="grotesk" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap' }}>{player.name}</div>
+            <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>{player.pos} · {player.team}</span>
+            {!showPicker && <button onClick={onClear} className="mono" style={{ background: 'none', border: 'none', fontSize: 8, letterSpacing: '0.14em', color: 'var(--opp)', padding: 0, marginTop: 5, textAlign: 'left' }}>CHANGE ✕</button>}
+          </div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, alignItems: 'flex-end', justifyContent: 'center' }}>
             {showPicker ? (
               METRICS[player.pos].map((m) => (
                 <button key={m.id} title={m.ef} onClick={() => onPickMetric(m.id)} style={{ width: '100%', textAlign: 'left', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '4px 7px', display: 'flex', justifyContent: 'space-between', gap: 6, color: 'var(--text)' }}>
@@ -798,11 +819,11 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
         <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={banks.you} onClick={onToggle} fx={lastEffect?.type} />
         <div style={{ width: 64, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
           <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--bg)', background: verdict.c, padding: '4px 6px', borderRadius: 3, textAlign: 'center', lineHeight: 1.1 }}>{verdict.t}</span>
+          {canSwap && !done && (
+            <button onClick={onPowerup} title="Apply a real-time powerup (Metric / Player Swap)" className="mono" style={{ color: 'var(--bg)', background: 'var(--warn)', border: 'none', borderRadius: 4, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', padding: '5px 7px', boxShadow: '0 0 12px color-mix(in srgb, var(--warn) 55%, transparent)', animation: 'bpulse 1.5s ease infinite' }}>⚡ USE</button>
+          )}
           {visibleEvents.length > 0 && (
             <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
-          )}
-          {canSwap && !done && (
-            <button onClick={onPowerup} title="Apply a real-time powerup (Metric / Player Swap)" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, fontSize: 9, color: 'var(--warn)', padding: '2px 5px', marginTop: 2 }}>⚡</button>
           )}
         </div>
         <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={banks.their} onClick={onToggle} fx={lastEffect?.type} />
@@ -885,28 +906,37 @@ function actionText(play: string): string {
 // reads like a live ticker, auto-scrolling to keep the latest play in view.
 function TwoColLog({ events, youName, theirName, gameLabel }: { events: PbpEvent[]; youName: string; theirName: string; gameLabel: string }) {
   const [minutes, setMinutes] = useState(false);
+  const [top, setTop] = useState(false); // newest entries on top vs bottom
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   // Compact view hides the per-minute drip ticks; "minutes" shows scoring accrue.
   const filtered = minutes ? events : events.filter((e) => !e.drip);
   useEffect(() => {
     const el = scroller.current;
-    if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [filtered.length]);
+    if (el && stick.current) el.scrollTop = top ? 0 : el.scrollHeight;
+  }, [filtered.length, top]);
   const onScroll = () => {
     const el = scroller.current;
-    if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 28;
+    if (el) stick.current = top ? el.scrollTop < 28 : el.scrollHeight - el.scrollTop - el.clientHeight < 28;
   };
-  const rows = filtered.slice(minutes ? -220 : -90); // chronological
+  const slice = filtered.slice(minutes ? -220 : -90);
+  const rows = top ? [...slice].reverse() : slice;
+  const newestIdx = top ? 0 : rows.length - 1;
+
+  // Running cumulative for a side at the far edge (outside the action column).
+  const cum = (ev: PbpEvent, mine: boolean) => (
+    <span className="mono" style={{ width: 34, flex: 'none', textAlign: mine ? 'left' : 'right', fontSize: 9, fontWeight: 700, color: ev.side === (mine ? 'you' : 'their') ? (mine ? 'var(--you)' : 'var(--opp)') : 'var(--faint)', opacity: 0.85 }}>
+      {(mine ? ev.youBank : ev.theirBank).toFixed(1)}
+    </span>
+  );
   const cell = (ev: PbpEvent, mine: boolean) => {
     if (ev.side !== (mine ? 'you' : 'their')) return <div style={{ flex: 1 }} />;
-    const cum = mine ? ev.youBank : ev.theirBank;
     return (
       <div style={{ flex: 1, minWidth: 0, textAlign: mine ? 'right' : 'left', opacity: ev.drip ? 0.62 : 1 }}>
         <div style={{ fontSize: 10.5, lineHeight: 1.35, color: 'var(--text)' }}>
           {actionText(ev.play)}
           {ev.delta > 0 && <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: mine ? 'var(--you)' : 'var(--opp)', marginLeft: 5 }}>+{ev.delta.toFixed(1)}</span>}
-          <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginLeft: 5 }}>={cum.toFixed(1)}</span>
+          {ev.mult && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--fx-mult)', marginLeft: 4 }}>×{ev.mult.toFixed(2)}</span>}
         </div>
         {ev.effect && (
           <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: FX_COLOR[ev.effect.type] ?? 'var(--dim)', marginTop: 1 }}>{ev.effect.text}</div>
@@ -914,23 +944,31 @@ function TwoColLog({ events, youName, theirName, gameLabel }: { events: PbpEvent
       </div>
     );
   };
+  const toggle = (on: boolean, label: string, onClick: () => void) => (
+    <button onClick={onClick} className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--you)' : 'var(--faint)', background: 'var(--surface)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 3, padding: '2px 6px' }}>{label}</button>
+  );
   return (
     <div style={{ marginTop: 5, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
         <span className="mono" style={{ flex: 1, textAlign: 'right', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{youName}</span>
-        <button onClick={() => setMinutes((m) => !m)} className="mono" style={{ width: 64, textAlign: 'center', fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: minutes ? 'var(--you)' : 'var(--faint)', background: 'var(--surface)', border: `1px solid ${minutes ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 3, padding: '2px 0' }}>{minutes ? 'MINUTES' : 'PLAYS'}</button>
+        <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
+          {toggle(minutes, minutes ? 'MINUTES' : 'PLAYS', () => setMinutes((m) => !m))}
+          {toggle(top, top ? 'NEWest ↑' : 'NEWest ↓', () => setTop((t) => !t))}
+        </div>
         <span className="mono" style={{ flex: 1, textAlign: 'left', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{theirName}</span>
       </div>
       <div ref={scroller} onScroll={onScroll} style={{ maxHeight: 210, overflow: 'auto' }}>
         {rows.map((ev, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '3px 0', borderTop: i === 0 ? undefined : '1px solid color-mix(in srgb, var(--bd) 45%, transparent)', animation: i === rows.length - 1 ? 'slidein .3s ease' : undefined }}>
+          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '3px 0', borderTop: i === 0 ? undefined : '1px solid color-mix(in srgb, var(--bd) 45%, transparent)', animation: i === newestIdx ? 'slidein .3s ease' : undefined }}>
+            {cum(ev, true)}
             {cell(ev, true)}
-            <span className="mono" style={{ width: 44, flex: 'none', textAlign: 'center', fontSize: 8.5, color: 'var(--faint)', paddingTop: 1 }}>{fmtClock(ev.clock)}</span>
+            <span className="mono" style={{ width: 42, flex: 'none', textAlign: 'center', fontSize: 8.5, color: 'var(--faint)', paddingTop: 1 }}>{fmtClock(ev.clock)}</span>
             {cell(ev, false)}
+            {cum(ev, false)}
           </div>
         ))}
       </div>
-      <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 6, textAlign: 'center' }}>{minutes ? 'MINUTE-BY-MINUTE · drip ticks shown · = cumulative' : 'PLAYS · tap MINUTES for drip accrual'} · {gameLabel}</div>
+      <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 6, textAlign: 'center' }}>cumulative totals on the edges · {minutes ? 'minute-by-minute drip' : 'plays'} · {gameLabel}</div>
     </div>
   );
 }
