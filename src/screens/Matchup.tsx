@@ -5,7 +5,7 @@ import { Brand, ThemeSwitcher, PosPill } from '../app/ui';
 import { WINDOWS, METRICS, TOTAL_SLOTS, metricById } from '../data/metrics';
 import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
-  windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock,
+  windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock, signatureCoins,
 } from '../engine/matchup';
 import { fmtClock, statlineAt, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
@@ -16,7 +16,7 @@ const TICK_MS = 700;
 const TICK_SECONDS = 20;
 
 export function Matchup({ week, initialPhase }: { week: number; initialPhase: Phase }) {
-  const { navigate } = useStore();
+  const { navigate, coins, creditWeek } = useStore();
   const oppId = gameForTeam(YOU, week)?.oppId ?? 'rock-tunnel';
   const you = getTeam(YOU)!;
   const opp = getTeam(oppId)!;
@@ -59,6 +59,12 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks),
     [oppId, week, effYouPicks, oppPicks, ready],
   );
+
+  // Drip coin: +5 per signature play your lineup makes this week (credited once).
+  const weekCoins = useMemo(() => signatureCoins(resolved, 'you'), [resolved]);
+  useEffect(() => {
+    if (phase === 'live' || phase === 'final') creditWeek(week, weekCoins);
+  }, [phase, week, weekCoins]);
 
   // Each window's own end-of-game clock (latest event among its slots).
   const winMax = useMemo(() => {
@@ -221,6 +227,11 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, whiteSpace: 'nowrap' }}>
+          <div title={`Drip Coin — +5 per signature play your lineup makes${weekCoins > 0 ? ` (+${weekCoins} this week)` : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 9px' }}>
+            <span style={{ color: 'var(--fx-mult)', fontSize: 12 }}>◈</span>
+            <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{coins}</span>
+            {weekCoins > 0 && <span className="mono" style={{ fontSize: 8.5, color: 'var(--fx-streak)' }}>+{weekCoins}</span>}
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="mono" style={{ color: 'var(--you)', fontWeight: 700, fontSize: 11, letterSpacing: '0.1em' }}>YOU</span>
             <span className="mono" style={{ color: 'var(--text)', fontSize: 14, fontWeight: 700 }}>{youTotal.toFixed(1)}</span>

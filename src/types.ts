@@ -92,6 +92,7 @@ export interface PbpEvent {
   youBank: number;          // running bank for your side after this event
   theirBank: number;        // running bank for their side after this event
   effect?: { type: EffectType; text: string };
+  sig?: boolean;            // a "signature" play (drip economy: +5 coin to the acting side)
   // for rate/drip bars
   youRate?: number;
   theirRate?: number;

@@ -214,6 +214,14 @@ export function buildMatchup(
   };
 }
 
+export const COIN_PER_SIG = 5;
+/** Drip coin earned by a side: +5 for every signature play its lineup makes. */
+export function signatureCoins(m: ResolvedMatchup, side: 'you' | 'their'): number {
+  let n = 0;
+  for (const w of m.windows) for (const s of w.slots) for (const e of s.events) if (e.side === side && e.sig) n++;
+  return n * COIN_PER_SIG;
+}
+
 /** Running banks at a given clock (live phase) for one slot's event feed. */
 export function banksAtClock(events: PbpEvent[], clock: number): { you: number; their: number } {
   let you = 0;

@@ -518,12 +518,13 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     // scores nothing directly; 3 straight (no opponent score) goes hot → 2×
     // accrual. Otherwise the metric's per-play points (× FG mult).
     let pts = 0;
+    let sig = false; // a signature play this tick → +5 drip coin to the acting side
     if (iAmDrip) {
       if (play.kind === myDripKind) {
         mine.rate += play.yards * myDripRate;
         mine.paused = false;
         mine.streak += 1;
-        if (mine.streak >= 3) mine.hot = true;
+        if (mine.streak >= 3 && !mine.hot) { mine.hot = true; sig = true; } // drip goes HOT
       }
     } else {
       pts = scorePlay(play, myPlayer.player.pos, myPlayer.metricId, myFam === 'streak' && mine.hot);
@@ -564,7 +565,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       if (mine.kicks >= 6 && !opp.dead) {
         const wiped = opp.bank;
         opp.bank = 0; opp.hist = []; opp.dead = true; opp.paused = true;
-        effect = { type: 'nuke', text: `✕ SHUTDOWN — negated ${wiped.toFixed(1)}` };
+        effect = { type: 'nuke', text: `✕ SHUTDOWN — negated ${wiped.toFixed(1)}` }; sig = true;
       }
     } else if (oppIsDrip) {
       // Drip opponent: a catch or target pauses it; my metric adds its counter
@@ -580,11 +581,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
           const cutoff = play.clock - eraseWindow;
           let erased = 0;
           opp.hist = opp.hist.filter((h) => { if (h.clock >= cutoff) { erased += h.pts; return false; } return true; });
-          if (erased > 0) opp.bank = Math.max(0, opp.bank - erased);
+          if (erased > 0) { opp.bank = Math.max(0, opp.bank - erased); sig = true; }
           effect = { type: 'erase', text: erased > 0 ? `ERASE −${erased.toFixed(1)} · drip stop` : 'DRIP STOP' };
         } else if (play.kind === 'rec' && myFam === 'reset') {
           const had = opp.rate; opp.rate = 0; opp.streak = 0; opp.hot = false;
-          effect = { type: 'reset', text: had > 0 ? `RATE RESET ${had.toFixed(2)}→0 · drip stop` : 'DRIP STOP' };
+          effect = { type: 'reset', text: had > 0 ? `RATE RESET ${had.toFixed(2)}→0 · drip stop` : 'DRIP STOP' }; if (had > 0) sig = true;
         } else {
           effect = { type: 'stop', text: 'DRIP STOP' };
         }
@@ -594,12 +595,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       if (play.td && myFam === 'nuke') {
         const wiped = opp.bank;
         opp.bank = 0; opp.hist = []; opp.paused = true;
-        effect = { type: 'nuke', text: `✕ TD — wiped drip ${wiped.toFixed(1)}` };
+        effect = { type: 'nuke', text: `✕ TD — wiped drip ${wiped.toFixed(1)}` }; sig = true;
       }
     } else if (myFam === 'nuke' && play.td && opp.bank > 0) {
       const wiped = opp.bank;
       opp.bank = 0; opp.hist = [];
-      effect = { type: 'nuke', text: `✕ NUKE — wiped ${wiped.toFixed(1)}` };
+      effect = { type: 'nuke', text: `✕ NUKE — wiped ${wiped.toFixed(1)}` }; sig = true;
     } else if (eraseTrigger) {
       const cutoff = play.clock - eraseWindow;
       let erased = 0;
@@ -607,10 +608,10 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         if (h.clock >= cutoff) { erased += h.pts; return false; }
         return true;
       });
-      if (erased > 0) { opp.bank = Math.max(0, opp.bank - erased); effect = { type: 'erase', text: `ERASE −${erased.toFixed(1)}` }; }
+      if (erased > 0) { opp.bank = Math.max(0, opp.bank - erased); effect = { type: 'erase', text: `ERASE −${erased.toFixed(1)}` }; sig = true; }
     } else if (myFam === 'reset' && play.catch) {
       const last = opp.hist[opp.hist.length - 1];
-      if (last) { const cut = last.pts * 0.5; opp.bank = Math.max(0, opp.bank - cut); last.pts -= cut; effect = { type: 'reset', text: 'RATE RESET' }; }
+      if (last) { const cut = last.pts * 0.5; opp.bank = Math.max(0, opp.bank - cut); last.pts -= cut; effect = { type: 'reset', text: 'RATE RESET' }; sig = true; }
     } else if (myFam === 'stop' && play.target && opp.hist.length) {
       effect = { type: 'stop', text: 'CLOCK STOP' };
     }
@@ -625,6 +626,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         opp.bank = Math.max(0, opp.bank - cut);
         last.pts -= cut;
         if (!effect) effect = { type: 'reset', text: `COMPRESSION −${cut.toFixed(1)}` };
+        sig = true;
       }
     }
 
@@ -646,6 +648,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       youBank: Math.round(Y.bank * 10) / 10,
       theirBank: Math.round(T.bank * 10) / 10,
       effect,
+      sig,
     });
   }
 
