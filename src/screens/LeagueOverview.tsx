@@ -6,6 +6,7 @@ import { TOTAL_SLOTS } from '../data/metrics';
 import { POWERUPS } from '../data/powerups';
 import { avatarUrl } from '../data/media';
 import { DEMO_WEEK, SLEEPER_HANDLE } from '../config';
+import { APP_VERSION, DATA_SOURCE } from '../app/version';
 import type { FantasyTeam } from '../types';
 
 const YOU = 'happy-campers';
@@ -148,6 +149,15 @@ export function LeagueOverview() {
                 })}
               </div>
             </div>
+          </div>
+
+          {/* attribution */}
+          <div className="mono" style={{ marginTop: 30, paddingTop: 14, borderTop: '1px solid var(--bd)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 9.5, color: 'var(--faint)', letterSpacing: '0.04em' }}>
+            <span>
+              Player stats, injuries &amp; 2025 NFL play-by-play built off{' '}
+              <a href={DATA_SOURCE.url} target="_blank" rel="noreferrer" style={{ color: 'var(--you)', fontWeight: 700, textDecoration: 'none' }}>{DATA_SOURCE.name} ↗</a>.
+            </span>
+            <span>Gridiron Clash {APP_VERSION}</span>
           </div>
         </div>
       </main>

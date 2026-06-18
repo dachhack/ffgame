@@ -3,7 +3,7 @@ import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, ThemeSwitcher, PlayerImg, Avatar, Img, InjuryBadge } from '../app/ui';
 import { avatarUrl, teamLogo } from '../data/media';
-import { nflGameForTeam, gamesInWindow } from '../data/nflSlate';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange } from '../data/nflSlate';
 import { WINDOWS, METRICS, metricById } from '../data/metrics';
 import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
@@ -296,7 +296,12 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
 
         <main style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 18, marginBottom: 10 }}>
-            <div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5, flexWrap: 'wrap' }}>
+                <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--bg)', background: 'var(--you)', borderRadius: 4, padding: '4px 9px' }}>NFL WEEK {week}</span>
+                <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)' }}>{weekDateRange(week)}</span>
+                <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>2025 SEASON</span>
+              </div>
               <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{headline}</div>
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, maxWidth: 520, lineHeight: 1.5 }}>{subhead}</div>
             </div>
@@ -620,7 +625,8 @@ function WindowSection(props: {
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
           <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)' }}>{w.label}</span>
           <span style={{ fontSize: 10, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{w.sub}</span>
-          <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{w.time}</span>
+          <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--dimstrong)' }}>{windowDateLabel(week, w.id)}</span>
+          <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{w.time.split(' ').slice(1).join(' ')}</span>
           {slate.length > 0 && (
             <button onClick={() => setSlateOpen((o) => !o)} title="NFL game slate for this window" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: slateOpen ? 'var(--text)' : 'var(--dim)', background: 'var(--surface)', border: `1px solid ${slateOpen ? 'var(--bdh)' : 'var(--bd)'}`, borderRadius: 11, padding: '3px 8px' }}>
               <span style={{ display: 'flex', gap: 1 }}>{slateTeams.slice(0, 8).map((t) => <Img key={t} src={teamLogo(t)} size={13} radius={2} fallback={<span />} />)}</span>
@@ -671,27 +677,25 @@ function WindowSection(props: {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
               <div>
                 <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{w.label} · Game Slate</div>
-                <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{slate.length} {slate.length === 1 ? 'GAME' : 'GAMES'} · 2025 · {w.time.toUpperCase()}</div>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{slate.length} {slate.length === 1 ? 'GAME' : 'GAMES'} · {windowDateLabel(week, w.id).toUpperCase()} · {w.time.split(' ').slice(1).join(' ').toUpperCase()}</div>
               </div>
               <button onClick={() => setSlateOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
             </div>
             <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 7, maxHeight: 460, overflow: 'auto' }}>
               {slate.map((g) => {
-                const ge = nflGameForTeam(week, g.home)!;
-                const homeWon = ge.hScore > ge.aScore;
-                const teamLine = (abbr: string, score: number, won: boolean) => (
+                const teamLine = (abbr: string) => (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
                     <Img src={teamLogo(abbr)} size={22} radius={4} fallback={<span className="mono" style={{ fontSize: 9 }}>{abbr}</span>} />
-                    <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: won ? 'var(--text)' : 'var(--dim)' }}>{abbr}</span>
-                    <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: won ? 'var(--text)' : 'var(--dim)', marginLeft: 'auto' }}>{score}</span>
+                    <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{abbr}</span>
                   </div>
                 );
                 return (
                   <div key={`${g.away}@${g.home}`} style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '9px 12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      {teamLine(g.away, ge.aScore, !homeWon)}
-                      <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>FINAL</span>
-                      {teamLine(g.home, ge.hScore, homeWon)}
+                      {teamLine(g.away)}
+                      <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--faint)', flex: 'none' }}>@</span>
+                      {teamLine(g.home)}
+                      <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--dim)', flex: 'none', marginLeft: 6 }}>{w.time.split(' ').slice(1).join(' ')}</span>
                     </div>
                     {(g.you.length > 0 || g.their.length > 0) && (
                       <div style={{ fontSize: 9.5, lineHeight: 1.5, marginTop: 6, paddingTop: 6, borderTop: '1px solid color-mix(in srgb, var(--bd) 60%, transparent)' }}>

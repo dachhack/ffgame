@@ -34,3 +34,32 @@ export function windowForTeam(week: number, team?: string | null): WindowId | nu
 export function gamesInWindow(week: number, win: WindowId): NflGame[] {
   return (NFL_SLATE[week] || []).filter((g) => g.win === win);
 }
+
+// ── Calendar dates ──────────────────────────────────────────────────────────
+// 2025 NFL season opened Thursday, Sept 4 (Week 1 TNF). Each later week shifts
+// by 7 days; windows fall on Thu / Sun / Mon within the week.
+const SEASON_START = Date.UTC(2025, 8, 4); // Thu Sep 4 2025
+const DAY = 86_400_000;
+const WIN_DAY_OFFSET: Record<WindowId, number> = { tnf: 0, early: 3, late: 3, snf: 3, mnf: 4 };
+const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** The calendar date a given window is played on, that week. */
+export function windowDate(week: number, win: WindowId): Date {
+  return new Date(SEASON_START + ((week - 1) * 7 + WIN_DAY_OFFSET[win]) * DAY);
+}
+
+/** e.g. "Thu, Sep 4" for a window. */
+export function windowDateLabel(week: number, win: WindowId): string {
+  const d = windowDate(week, win);
+  return `${WD[d.getUTCDay()]}, ${MO[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+
+/** The week's date span, Thursday → Monday, e.g. "Sep 4 – 8". */
+export function weekDateRange(week: number): string {
+  const thu = windowDate(week, 'tnf');
+  const mon = windowDate(week, 'mnf');
+  const a = `${MO[thu.getUTCMonth()]} ${thu.getUTCDate()}`;
+  const b = thu.getUTCMonth() === mon.getUTCMonth() ? `${mon.getUTCDate()}` : `${MO[mon.getUTCMonth()]} ${mon.getUTCDate()}`;
+  return `${a} – ${b}`;
+}

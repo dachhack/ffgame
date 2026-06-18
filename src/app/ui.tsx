@@ -4,6 +4,7 @@ import { THEMES } from '../theme';
 import { useStore } from './store';
 import { headshot, teamLogo } from '../data/media';
 import { injuryFor } from '../data/injuries';
+import { APP_VERSION, DATA_SOURCE } from './version';
 
 const INJURY_COLOR: Record<string, string> = { O: '#FF4F62', IR: '#C2304A', D: '#FF8A3D', Q: '#E8B23A' };
 const INJURY_LABEL: Record<string, string> = { O: 'Out', IR: 'Injured Reserve', D: 'Doubtful', Q: 'Questionable' };
@@ -129,8 +130,24 @@ export function Brand({ onClick }: { onClick?: () => void }) {
       style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, cursor: onClick ? 'pointer' : 'default' }}
     >
       <div style={{ width: 13, height: 13, background: 'var(--you)', transform: 'rotate(45deg)', flex: 'none' }} />
-      <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)', whiteSpace: 'nowrap' }}>
-        GRIDIRON CLASH
+      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: 1.1 }}>
+        <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)', whiteSpace: 'nowrap' }}>
+          GRIDIRON CLASH
+        </div>
+        <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 7.5, letterSpacing: '0.06em', color: 'var(--faint)', marginTop: 2, whiteSpace: 'nowrap' }}>
+          <span>{APP_VERSION}</span>
+          <span style={{ opacity: 0.5 }}>·</span>
+          <span>data</span>
+          <a
+            href={DATA_SOURCE.url}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            style={{ color: 'var(--you)', textDecoration: 'none', fontWeight: 700 }}
+          >
+            {DATA_SOURCE.name} ↗
+          </a>
+        </div>
       </div>
     </div>
   );
