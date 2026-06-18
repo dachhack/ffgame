@@ -3,6 +3,7 @@ import { useStore, LEAGUE_REF } from '../app/store';
 import { Brand, Header, ThemeSwitcher, UserChip, Avatar, PosPill } from '../app/ui';
 import { getTeam, teamRoster, gameForTeam, teamResults, freeAgents } from '../data/league';
 import { TOTAL_SLOTS } from '../data/metrics';
+import { POWERUPS, powerupById } from '../data/powerups';
 import { DEMO_WEEK, SLEEPER_HANDLE } from '../config';
 import type { FantasyTeam } from '../types';
 
@@ -12,10 +13,11 @@ type ModalState =
   | null
   | { type: 'roster'; teamId: string }
   | { type: 'waivers' }
-  | { type: 'schedule' };
+  | { type: 'schedule' }
+  | { type: 'shop' };
 
 export function LeagueOverview() {
-  const { navigate } = useStore();
+  const { navigate, coins } = useStore();
   const [modal, setModal] = useState<ModalState>(null);
   const teams = [...LEAGUE_REF.teams].sort((a, b) => a.seed - b.seed);
   const you = getTeam(YOU)!;
@@ -53,6 +55,7 @@ export function LeagueOverview() {
               <Stat label="SEED" value={`#${you.seed}`} />
               <Stat label="RECORD" value={`${you.wins}-${you.losses}`} />
               <Stat label="POINTS FOR" value={you.pf.toFixed(0)} />
+              <Stat label="◈ DRIP COIN" value={`${coins}`} />
             </div>
           </div>
 
@@ -60,6 +63,7 @@ export function LeagueOverview() {
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
             <ToolButton onClick={() => setModal({ type: 'schedule' })}>📅 ALL MATCHUPS</ToolButton>
             <ToolButton onClick={() => setModal({ type: 'waivers' })}>🔁 WAIVER WIRE</ToolButton>
+            <ToolButton onClick={() => setModal({ type: 'shop' })}>🛒 POWER-UP SHOP</ToolButton>
             <span style={{ fontSize: 11, color: 'var(--faint)' }}>Tap any team in standings to see their roster &amp; schedule.</span>
           </div>
 
@@ -150,7 +154,59 @@ export function LeagueOverview() {
       {modal?.type === 'roster' && <TeamModal teamId={modal.teamId} onClose={() => setModal(null)} onOpenTeam={(id) => setModal({ type: 'roster', teamId: id })} />}
       {modal?.type === 'waivers' && <WaiverModal onClose={() => setModal(null)} />}
       {modal?.type === 'schedule' && <ScheduleModal onClose={() => setModal(null)} onOpenTeam={(id) => setModal({ type: 'roster', teamId: id })} />}
+      {modal?.type === 'shop' && <ShopModal onClose={() => setModal(null)} />}
     </>
+  );
+}
+
+function ShopModal({ onClose }: { onClose: () => void }) {
+  const { coins, inventory, unlocks, buyPowerup } = useStore();
+  const [flash, setFlash] = useState<string | null>(null);
+  const owned = (id: string) => {
+    const pu = powerupById(id);
+    if (!pu) return 0;
+    return pu.kind === 'unlock' ? (unlocks.includes(id) ? 1 : 0) : (inventory[id] ?? 0);
+  };
+  function buy(id: string) {
+    if (buyPowerup(id)) { setFlash(id); setTimeout(() => setFlash((f) => (f === id ? null : f)), 600); }
+  }
+  return (
+    <Modal title="Power-Up Shop" sub={`◈ ${coins} DRIP COIN · +5 per signature play`} onClose={onClose} maxWidth={560}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 480, overflow: 'auto' }}>
+        {POWERUPS.map((p) => {
+          const have = owned(p.id);
+          const isUnlockOwned = p.kind === 'unlock' && have > 0;
+          const afford = coins >= p.price;
+          const disabled = isUnlockOwned || !afford;
+          const timingTag = p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME';
+          return (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: 'var(--bg)', border: `1px solid ${flash === p.id ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, padding: '10px 12px', transition: 'border-color .3s' }}>
+              <span style={{ fontSize: 20, flex: 'none', width: 26, textAlign: 'center' }}>{p.icon}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{p.name}</span>
+                  <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: p.timing === 'pre' ? 'var(--warn)' : 'var(--you)', border: `1px solid ${p.timing === 'pre' ? 'var(--warn)' : 'var(--you)'}`, borderRadius: 3, padding: '1px 4px' }}>{timingTag}</span>
+                  {p.kind === 'unlock' && <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }}>UNLOCK</span>}
+                </div>
+                <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>{p.blurb}</div>
+                {have > 0 && <div className="mono" style={{ fontSize: 8.5, color: 'var(--you)', marginTop: 3, letterSpacing: '0.08em' }}>{isUnlockOwned ? '✓ UNLOCKED' : `OWNED ×${have}`}</div>}
+              </div>
+              <button
+                onClick={() => buy(p.id)}
+                disabled={disabled}
+                className="mono"
+                style={{ flex: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', borderRadius: 4, padding: '8px 11px', border: 'none', cursor: disabled ? 'default' : 'pointer', color: disabled ? 'var(--faint)' : 'var(--bg)', background: disabled ? 'var(--surface)' : 'var(--you)', opacity: disabled ? 0.6 : 1 }}
+              >
+                {isUnlockOwned ? 'OWNED' : `◈ ${p.price}`}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.06em', marginTop: 12, lineHeight: 1.5 }}>
+        PRE-MATCH powerups apply during setup and lock once a window starts. REAL-TIME powerups can be applied during live play. Apply them from the matchup screen.
+      </div>
+    </Modal>
   );
 }
 
