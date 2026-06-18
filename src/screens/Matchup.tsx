@@ -33,6 +33,9 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const [openPBP, setOpenPBP] = useState<Record<string, boolean>>({});
   const [swapTarget, setSwapTarget] = useState<{ key: string; win: WindowId } | null>(null);
   const [backupMenu, setBackupMenu] = useState<{ key: string } | null>(null);
+  // Rosters expand in setup (you need them to set lineups), collapse otherwise.
+  const [rosterOpen, setRosterOpen] = useState<{ you: boolean; their: boolean }>(() => ({ you: initialPhase === 'setup', their: initialPhase === 'setup' }));
+  const toggleRoster = (side: 'you' | 'their') => setRosterOpen((o) => ({ ...o, [side]: !o[side] }));
 
   // Lazy-load this week's real play-by-play (per-week JSON) before resolving.
   const [ready, setReady] = useState(() => !REAL_WEEKS.has(week) || isRealWeekLoaded(week));
@@ -198,8 +201,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     setSelSlot(key);
   }
 
-  function lockIn() { setPhase('live'); setSelSlot(null); }
-  function changePhase(p: Phase) { setPhase(p); setSelSlot(null); }
+  function lockIn() { setPhase('live'); setSelSlot(null); setRosterOpen({ you: false, their: false }); }
+  function changePhase(p: Phase) { setPhase(p); setSelSlot(null); setRosterOpen({ you: p === 'setup', their: p === 'setup' }); }
   function toggleAll() {
     const v = !anyPlaying;
     setWinPlaying(() => { const n: Record<string, boolean> = {}; for (const k of Object.keys(winMax)) n[k] = v; return n; });
@@ -280,7 +283,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
       </header>
 
       <div style={{ flex: 1, display: 'flex', gap: 14, padding: 14, overflow: 'hidden', minHeight: 0 }}>
-        <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} />
+        <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={!rosterOpen.you} onToggle={() => toggleRoster('you')} />
 
         <main style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 18, marginBottom: 10 }}>
@@ -327,7 +330,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
           <div style={{ height: 40 }} />
         </main>
 
-        <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} />
+        <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} collapsed={!rosterOpen.their} onToggle={() => toggleRoster('their')} />
       </div>
 
       {swapTarget && (() => {
@@ -462,23 +465,37 @@ function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMe
 }
 
 // ── Roster aside ──────────────────────────────────────────────────────────
-function RosterAside({ side, pools, picks, onPlayer, phase, sealed }: {
+function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, onToggle }: {
   side: 'you' | 'their';
   pools: Record<WindowId, Player[]>;
   picks: Record<string, Pick>;
   onPlayer?: (id: string) => void;
   phase: Phase;
   sealed?: boolean;
+  collapsed: boolean;
+  onToggle: () => void;
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
   const assignedIds = new Set(Object.values(picks).map((p) => p.playerId));
   const total = (Object.values(pools) as Player[][]).reduce((n, a) => n + a.length, 0);
+
+  if (collapsed) {
+    return (
+      <aside style={{ width: 26, flex: 'none' }} className="hide-narrow">
+        <button onClick={onToggle} title={`Show ${side === 'you' ? 'your' : 'their'} roster`} className="mono" style={{ width: 26, height: '100%', minHeight: 120, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '8px 0', background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, color: accent, cursor: 'pointer' } as React.CSSProperties}>
+          <span style={{ fontSize: 11 }}>{side === 'you' ? '▸' : '◂'}</span>
+          <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.18em', writingMode: 'vertical-rl', textOrientation: 'mixed' }}>{side === 'you' ? 'YOUR' : 'THEIR'} ROSTER · {total}</span>
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside style={{ width: side === 'you' ? 170 : 196, flex: 'none', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} className="hide-narrow">
-      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
-        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.2em', color: accent, fontWeight: 700 }}>▼ {side === 'you' ? 'YOUR' : 'THEIR'} ROSTER</span>
+      <button onClick={onToggle} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}>
+        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.2em', color: accent, fontWeight: 700 }}>{side === 'you' ? '◂' : '▸'} {side === 'you' ? 'YOUR' : 'THEIR'} ROSTER</span>
         <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{total}</span>
-      </div>
+      </button>
       {WINDOWS.map((w) => (
         <div key={w.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
