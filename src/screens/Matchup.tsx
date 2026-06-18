@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
-import { Brand, ThemeSwitcher, PosPill } from '../app/ui';
+import { Brand, ThemeSwitcher, PlayerImg, Avatar, Img } from '../app/ui';
+import { avatarUrl, teamLogo } from '../data/media';
 import { WINDOWS, METRICS, metricById } from '../data/metrics';
 import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
@@ -246,12 +247,12 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
             <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{coins}</span>
             {weekCoins > 0 && <span className="mono" style={{ fontSize: 8.5, color: 'var(--fx-streak)' }}>+{weekCoins}</span>}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span className="mono" style={{ color: 'var(--you)', fontWeight: 700, fontSize: 11, letterSpacing: '0.1em' }}>YOU</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <Avatar name={you.name} accent="var(--you)" size={20} src={avatarUrl(you.ownerId)} />
             <span className="mono" style={{ color: 'var(--text)', fontSize: 14, fontWeight: 700 }}>{youTotal.toFixed(1)}</span>
             <span className="mono" style={{ color: 'var(--faint)', fontSize: 9 }}>VS</span>
-            <span className="mono" style={{ color: 'var(--opp)', fontWeight: 700, fontSize: 11, letterSpacing: '0.1em' }}>{opp.name.slice(0, 14).toUpperCase()}</span>
             <span className="mono" style={{ color: 'var(--text)', fontSize: 14, fontWeight: 700 }}>{themTotal.toFixed(1)}</span>
+            <Avatar name={opp.name} accent="var(--opp)" size={20} src={avatarUrl(opp.ownerId)} />
           </div>
           <div style={{ height: 30, width: 1, background: 'var(--bd)' }} />
           {phase === 'setup' && (
@@ -451,7 +452,7 @@ function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMe
               {bench.length === 0 && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>No bench players in this window.</span>}
               {bench.map((p) => (
                 <button key={p.id} onClick={() => onPlayer(p.id)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '7px 9px', color: 'var(--text)', textAlign: 'left' }}>
-                  <PosPill pos={p.pos} />
+                  <PlayerImg playerId={p.id} team={p.team} pos={p.pos} size={18} />
                   <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, flex: 1 }}>{p.name}</span>
                   <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.team}</span>
                 </button>
@@ -517,7 +518,7 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
                   cursor: interactive ? 'pointer' : 'default', textAlign: 'left', opacity: sealed && side === 'their' ? 0.92 : 1,
                 }}
               >
-                <PosPill pos={p.pos} />
+                <PlayerImg playerId={p.id} team={p.team} pos={p.pos} size={18} />
                 <span className="grotesk" style={{ fontSize: 11.5, fontWeight: 700, color: side === 'you' ? 'var(--text)' : 'var(--dimstrong)', flex: 1, textDecoration: assigned ? 'line-through' : 'none', opacity: assigned ? 0.55 : 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                 <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.team}</span>
               </button>
@@ -560,6 +561,16 @@ function WindowSection(props: {
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
   const pct = Math.round((Math.min(clock, maxClock) / maxClock) * 100);
+  const [slateOpen, setSlateOpen] = useState(false);
+  // The NFL teams feeding this window (both sides) — the window's game slate.
+  const slate: [string, { you: string[]; their: string[] }][] = (() => {
+    const m = new Map<string, { you: string[]; their: string[] }>();
+    for (const s of rw.slots) {
+      if (s.you?.player.team) { const e = m.get(s.you.player.team) ?? { you: [], their: [] }; e.you.push(s.you.player.name); m.set(s.you.player.team, e); }
+      if (s.their?.player.team) { const e = m.get(s.their.player.team) ?? { you: [], their: [] }; e.their.push(s.their.player.name); m.set(s.their.player.team, e); }
+    }
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  })();
 
   return (
     <div>
@@ -568,6 +579,12 @@ function WindowSection(props: {
           <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)' }}>{w.label}</span>
           <span style={{ fontSize: 10, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{w.sub}</span>
           <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{w.time}</span>
+          {slate.length > 0 && (
+            <button onClick={() => setSlateOpen((o) => !o)} title="Game slate for this window" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: slateOpen ? 'var(--text)' : 'var(--dim)', background: 'var(--surface)', border: `1px solid ${slateOpen ? 'var(--bdh)' : 'var(--bd)'}`, borderRadius: 11, padding: '3px 8px' }}>
+              <span style={{ display: 'flex', gap: 1 }}>{slate.slice(0, 6).map(([t]) => <Img key={t} src={teamLogo(t)} size={13} radius={2} fallback={<span />} />)}</span>
+              SLATE · {slate.length} {slateOpen ? '▴' : '▾'}
+            </button>
+          )}
         </div>
 
         {phase === 'setup' ? (
@@ -605,6 +622,24 @@ function WindowSection(props: {
           </div>
         )}
       </div>
+
+      {slateOpen && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 9 }}>
+          {slate.map(([team, who]) => (
+            <div key={team} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '6px 9px', minWidth: 150 }}>
+              <Img src={teamLogo(team)} size={22} radius={4} fallback={<span className="mono" style={{ fontSize: 9, color: 'var(--dim)' }}>{team}</span>} />
+              <div style={{ minWidth: 0 }}>
+                <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)' }}>{team}</div>
+                <div style={{ fontSize: 9.5, lineHeight: 1.3 }}>
+                  {who.you.length > 0 && <span style={{ color: 'var(--you)' }}>{who.you.join(', ')}</span>}
+                  {who.you.length > 0 && who.their.length > 0 && <span style={{ color: 'var(--faint)' }}> · </span>}
+                  {who.their.length > 0 && <span style={{ color: 'var(--opp)' }}>{who.their.join(', ')}</span>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {rw.slots.map((s) => {
@@ -648,7 +683,7 @@ function SetupRow(props: {
           <div onClick={onSelect} style={{ cursor: 'pointer', minWidth: 0 }}>
             <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap' }}>{player.name}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
-              <PosPill pos={player.pos} />
+              <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={20} />
               <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{player.team}</span>
             </div>
             {!showPicker && <button onClick={onClear} className="mono" style={{ background: 'none', border: 'none', fontSize: 8, letterSpacing: '0.14em', color: 'var(--opp)', padding: 0, marginTop: 4 }}>CHANGE ✕</button>}
@@ -706,7 +741,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
     const bp = metricById(slot.you.player.pos, slot.you.metricId);
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', border: '1px dashed var(--warn)', borderLeft: '3px solid var(--warn)', borderRadius: 4, padding: '9px 11px' }}>
-        <PosPill pos={slot.you.player.pos} />
+        <PlayerImg playerId={slot.you.player.id} team={slot.you.player.team} pos={slot.you.player.pos} size={26} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{slot.you.player.name}</span>
@@ -806,7 +841,7 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
     <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 10, cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
       <div style={{ flex: 1, minWidth: 0, textAlign: side === 'you' ? 'left' : 'right' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexDirection: side === 'you' ? 'row' : 'row-reverse' }}>
-          <PosPill pos={player.pos} />
+          <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={26} />
           <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>
           <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{player.team}</span>
         </div>

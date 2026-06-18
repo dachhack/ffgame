@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react';
 import { useStore, LEAGUE_REF } from '../app/store';
-import { Brand, Header, ThemeSwitcher, UserChip, Avatar, PosPill } from '../app/ui';
+import { Brand, Header, ThemeSwitcher, UserChip, Avatar, PosPill, PlayerImg } from '../app/ui';
 import { getTeam, teamRoster, gameForTeam, teamResults, freeAgents } from '../data/league';
 import { TOTAL_SLOTS } from '../data/metrics';
 import { POWERUPS } from '../data/powerups';
+import { avatarUrl } from '../data/media';
 import { DEMO_WEEK, SLEEPER_HANDLE } from '../config';
 import type { FantasyTeam } from '../types';
 
@@ -135,7 +136,7 @@ export function LeagueOverview() {
                     >
                       <span className="mono" style={{ fontSize: 11, color: playoff ? 'var(--warn)' : 'var(--faint)' }}>{t.seed}</span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                        <Avatar name={t.name} accent={isYou ? 'var(--you)' : 'var(--dim)'} size={22} />
+                        <Avatar name={t.name} accent={isYou ? 'var(--you)' : 'var(--dim)'} size={22} src={avatarUrl(t.ownerId)} />
                         <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: isYou ? 'var(--you)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
                         {isYou && <span className="mono" style={{ fontSize: 8, color: 'var(--bg)', background: 'var(--you)', padding: '1px 4px', borderRadius: 2, letterSpacing: '0.1em' }}>YOU</span>}
                       </span>
@@ -223,7 +224,7 @@ function ToolButton({ children, onClick }: { children: ReactNode; onClick: () =>
 function TeamMini({ team, accent, right }: { team: FantasyTeam; accent: string; right?: boolean }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexDirection: right ? 'row-reverse' : 'row', flex: 1, justifyContent: right ? 'flex-end' : 'flex-start' }}>
-      <Avatar name={team.name} accent={accent} size={28} />
+      <Avatar name={team.name} accent={accent} size={28} src={avatarUrl(team.ownerId)} />
       <div style={{ textAlign: right ? 'right' : 'left' }}>
         <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: accent }}>{team.name}</div>
         <div className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>SEED {team.seed} · {team.wins}-{team.losses}</div>
@@ -275,7 +276,7 @@ function TeamModal({ teamId, onClose, onOpenTeam }: { teamId: string; onClose: (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 440, overflow: 'auto' }}>
           {roster.map((p) => (
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '7px 10px' }}>
-              <PosPill pos={p.pos} />
+              <PlayerImg playerId={p.id} team={p.team} pos={p.pos} size={22} />
               <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', flex: 1 }}>{p.full}</span>
               <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{p.team}</span>
             </div>
@@ -353,7 +354,7 @@ function ScheduleModal({ onClose, onOpenTeam }: { onClose: () => void; onOpenTea
           return (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg)', border: '1px solid var(--bd)', borderLeft: `3px solid ${involvesYou ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '9px 12px' }}>
               <button onClick={() => onOpenTeam(a.id)} style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', flex: 1, minWidth: 0 }}>
-                <Avatar name={a.name} accent={done && aWon ? 'var(--you)' : 'var(--dim)'} size={20} />
+                <Avatar name={a.name} accent={done && aWon ? 'var(--you)' : 'var(--dim)'} size={20} src={avatarUrl(a.ownerId)} />
                 <span className="grotesk" style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
               </button>
               <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: done && aWon ? 'var(--you)' : 'var(--mid)' }}>{done ? g.homeScore.toFixed(0) : ''}</span>
@@ -361,7 +362,7 @@ function ScheduleModal({ onClose, onOpenTeam }: { onClose: () => void; onOpenTea
               <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: done && !aWon ? 'var(--you)' : 'var(--mid)' }}>{done ? g.awayScore.toFixed(0) : ''}</span>
               <button onClick={() => onOpenTeam(b.id)} style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
                 <span className="grotesk" style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
-                <Avatar name={b.name} accent={done && !aWon ? 'var(--you)' : 'var(--dim)'} size={20} />
+                <Avatar name={b.name} accent={done && !aWon ? 'var(--you)' : 'var(--dim)'} size={20} src={avatarUrl(b.ownerId)} />
               </button>
             </div>
           );

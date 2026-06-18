@@ -1,7 +1,8 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import type { Pos, ThemeName } from '../theme';
 import { THEMES } from '../theme';
 import { useStore } from './store';
+import { headshot, teamLogo } from '../data/media';
 
 export function useTheme() {
   const { theme } = useStore();
@@ -10,6 +11,30 @@ export function useTheme() {
 
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
 const GROTESK = "'Space Grotesk', system-ui, sans-serif";
+
+// An image that swaps to a fallback node if it fails to load (offline / 404).
+export function Img({ src, size, radius, alt, fallback }: { src?: string | null; size: number; radius?: number; alt?: string; fallback: ReactNode }) {
+  const [bad, setBad] = useState(false);
+  if (!src || bad) return <>{fallback}</>;
+  return (
+    <img
+      src={src}
+      alt={alt ?? ''}
+      width={size}
+      height={size}
+      onError={() => setBad(true)}
+      style={{ width: size, height: size, borderRadius: radius ?? Math.round(size * 0.22), objectFit: 'cover', flex: 'none', background: 'var(--surface)' }}
+    />
+  );
+}
+
+// Player image: ESPN headshot → team logo → position pill.
+export function PlayerImg({ playerId, team, pos, size = 30 }: { playerId: string; team?: string | null; pos: Pos; size?: number }) {
+  return (
+    <Img src={headshot(playerId)} size={size} radius={Math.round(size * 0.3)} alt={playerId}
+      fallback={<Img src={teamLogo(team)} size={size} radius={Math.round(size * 0.3)} fallback={<PosPill pos={pos} />} />} />
+  );
+}
 
 export function PosPill({ pos, style }: { pos: Pos; style?: CSSProperties }) {
   return (
@@ -27,7 +52,7 @@ export function PosPill({ pos, style }: { pos: Pos; style?: CSSProperties }) {
 }
 
 /** Initials-in-a-box avatar, tinted by an accent color. */
-export function Avatar({ name, accent = 'var(--you)', size = 30 }: { name: string; accent?: string; size?: number }) {
+export function Avatar({ name, accent = 'var(--you)', size = 30, src }: { name: string; accent?: string; size?: number; src?: string | null }) {
   const initials = name
     .replace(/[^A-Za-z0-9 ]/g, '')
     .split(' ')
@@ -36,7 +61,7 @@ export function Avatar({ name, accent = 'var(--you)', size = 30 }: { name: strin
     .map((w) => w[0])
     .join('')
     .toUpperCase() || '?';
-  return (
+  const fallback = (
     <div
       style={{
         width: size, height: size, borderRadius: size * 0.22, flex: 'none',
@@ -49,6 +74,8 @@ export function Avatar({ name, accent = 'var(--you)', size = 30 }: { name: strin
       {initials}
     </div>
   );
+  if (src) return <Img src={src} size={size} radius={Math.round(size * 0.22)} alt={name} fallback={fallback} />;
+  return fallback;
 }
 
 export function ThemeSwitcher() {
