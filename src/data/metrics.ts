@@ -1,0 +1,57 @@
+import type { Metric, Pos, GameWindow } from '../types';
+
+// The five game-time windows. 1 + 3 + 2 + 1 + 1 = 8 slots.
+export const WINDOWS: GameWindow[] = [
+  { id: 'tnf', label: 'TNF', sub: 'Thursday Night', slots: 1, time: 'Thu 8:15p' },
+  { id: 'early', label: 'SUN 1PM', sub: 'Sunday Early', slots: 3, time: 'Sun 1:00p' },
+  { id: 'late', label: 'SUN 4PM', sub: 'Sunday Late', slots: 2, time: 'Sun 4:05p' },
+  { id: 'snf', label: 'SNF', sub: 'Sunday Night', slots: 1, time: 'Sun 8:20p' },
+  { id: 'mnf', label: 'MNF', sub: 'Monday Night', slots: 1, time: 'Mon 8:15p' },
+];
+
+export const TOTAL_SLOTS = WINDOWS.reduce((n, w) => n + w.slots, 0);
+
+// Hidden scoring metrics per position. Each carries a scoring rule AND a
+// strategic effect. Text mirrors the design handoff's MET catalog.
+export const METRICS: Record<Pos, Metric[]> = {
+  QB: [
+    { id: 'fg', name: 'Field General', tag: 'MULTIPLIER', fx: 'mult', sc: '0 direct pts', ef: 'Passing yards set a window-wide drip multiplier on all your skill players. 300 yds = 1.9×.' },
+    { id: 'pass', name: 'Passing Yards', tag: 'FLAT', fx: 'sys', sc: '0.04 pts / yd', ef: 'Flat points at game end. No drip, no interaction. Predictable.' },
+    { id: 'rush', name: 'Rush Yards', tag: 'DRIP', fx: 'compression', sc: '0.1 pts / yd', ef: 'Steady drip on your own scrambles. Purely additive, no interaction.' },
+  ],
+  RB: [
+    { id: 'rush', name: 'Rush Yards', tag: 'COMPRESSION', fx: 'compression', sc: '0.1 / yd + 6 / TD', ef: 'Each carry shrinks the opponent’s erase window by 30s. 20 carries → a 4-min window.' },
+    { id: 'rec', name: 'Receptions', tag: 'RATE RESET', fx: 'reset', sc: '1 pt / catch', ef: 'Each catch zeroes the opponent’s active drip rate. They keep the bank, rebuild from scratch.' },
+    { id: 'td', name: 'Touchdowns', tag: 'NUKE', fx: 'nuke', sc: '6 pts / TD', ef: 'Each TD wipes the opponent’s entire banked score to zero.' },
+  ],
+  WR: [
+    { id: 'recyd', name: 'Receiving Yards', tag: 'HOT STREAK', fx: 'streak', sc: '0.1 / yd · 2× hot', ef: '3 straight catches without the opponent scoring → drip doubles. Cold the instant they score.' },
+    { id: 'rec', name: 'Receptions', tag: 'ERASE', fx: 'erase', sc: '1 pt / catch', ef: 'Each catch erases the opponent’s drip from the last 10 clock-minutes.' },
+    { id: 'tgt', name: 'Targets', tag: 'CLOCK STOP', fx: 'stop', sc: '0.5 pts / target', ef: 'Every target stops the opponent’s drip clock. No erase — pure denial.' },
+    { id: 'td', name: 'Touchdowns', tag: 'STREAK TRIGGER', fx: 'streak', sc: '6 pts / TD', ef: 'A TD instantly triggers the hot streak (2×) regardless of catch count.' },
+  ],
+  TE: [
+    { id: 'tgt', name: 'Targets', tag: 'WIDE ERASE', fx: 'erase', sc: '1 pt / target', ef: 'Each reception erases the opponent’s drip from the last 15 min — wider than any WR.' },
+    { id: 'rec', name: 'Receptions', tag: 'ERASE', fx: 'erase', sc: '1.5 pts / catch', ef: 'Each catch erases the opponent’s drip from the last 10 clock-minutes.' },
+    { id: 'td', name: 'Touchdowns', tag: '8-PT NUKE', fx: 'nuke', sc: '8 pts / TD', ef: 'The strongest single play in the game. Wipes the opponent’s entire bank.' },
+  ],
+  K: [
+    { id: 'banker', name: 'Banker', tag: 'XP BONUS', fx: 'mult', sc: 'FG by distance', ef: 'Each XP made adds +1 pt to ALL your TDs for the week.' },
+    { id: 'neg', name: 'Negation', tag: 'SHUTDOWN', fx: 'nuke', sc: '0 pts', ef: '6+ kicks → the matched opponent scores 0 and all their effects are negated.' },
+  ],
+  DEF: [
+    { id: 'suppress', name: 'Suppress', tag: 'HALVING', fx: 'stop', sc: '0 pts', ef: 'Any opponent in the window scoring below your threshold gets halved.' },
+    { id: 'earn', name: 'Earn Points', tag: 'FLAT', fx: 'sys', sc: 'sk1 / int3 / fr2', ef: 'Normal flat head-to-head scoring. No suppress, no halving.' },
+  ],
+};
+
+export function metricById(pos: Pos, id: string | null | undefined): Metric | undefined {
+  if (!id) return undefined;
+  return (METRICS[pos] || []).find((m) => m.id === id);
+}
+
+/** A sensible default metric for auto-filled / opponent lineups. */
+export function defaultMetric(pos: Pos): Metric {
+  const list = METRICS[pos] || METRICS.WR;
+  return list[0];
+}
