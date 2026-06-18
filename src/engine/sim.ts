@@ -457,19 +457,24 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         effect = { type: 'nuke', text: `✕ SHUTDOWN — negated ${wiped.toFixed(1)}` };
       }
     } else if (oppIsDrip) {
-      // The matched opponent is a drip WR: its accrual reacts to my play type.
-      // Any catch erases its last-10-min drip and pauses it; any target pauses
-      // it; any TD wipes its entire drip bank.
-      if (play.kind === 'rec') {
-        const cutoff = play.clock - 600;
-        let erased = 0;
-        opp.hist = opp.hist.filter((h) => { if (h.clock >= cutoff) { erased += h.pts; return false; } return true; });
-        if (erased > 0) opp.bank = Math.max(0, opp.bank - erased);
+      // Drip opponent: a catch or target pauses it; my metric adds its counter
+      // — ERASE wipes a recent window, RATE RESET zeroes the rate (bank kept);
+      // any TD wipes the entire drip bank.
+      if (play.kind === 'rec' || play.kind === 'incomplete') {
         opp.paused = true;
-        effect = { type: 'erase', text: erased > 0 ? `ERASE −${erased.toFixed(1)} · drip stop` : 'DRIP STOP' };
-      } else if (play.kind === 'incomplete') {
-        opp.paused = true;
-        effect = { type: 'stop', text: 'DRIP STOP' };
+        if (play.kind === 'rec' && myFam === 'erase') {
+          const windowSecs = myPlayer.player.pos === 'TE' ? (myPlayer.metricId === 'tgt' ? 900 : 600) : 600;
+          const cutoff = play.clock - windowSecs;
+          let erased = 0;
+          opp.hist = opp.hist.filter((h) => { if (h.clock >= cutoff) { erased += h.pts; return false; } return true; });
+          if (erased > 0) opp.bank = Math.max(0, opp.bank - erased);
+          effect = { type: 'erase', text: erased > 0 ? `ERASE −${erased.toFixed(1)} · drip stop` : 'DRIP STOP' };
+        } else if (play.kind === 'rec' && myFam === 'reset') {
+          const had = opp.rate; opp.rate = 0; opp.streak = 0; opp.hot = false;
+          effect = { type: 'reset', text: had > 0 ? `RATE RESET ${had.toFixed(2)}→0 · drip stop` : 'DRIP STOP' };
+        } else {
+          effect = { type: 'stop', text: 'DRIP STOP' };
+        }
       }
       if (play.td) {
         const wiped = opp.bank;

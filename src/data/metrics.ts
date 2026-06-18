@@ -28,7 +28,7 @@ export const METRICS: Record<Pos, Metric[]> = {
     { id: 'recyd', name: 'Receiving Yards', tag: 'DRIP', fx: 'sys', sc: '0.01 / yd → rate (pts/min)', ef: 'Each catch permanently raises a drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. An opponent catch erases the last 10 min and pauses it; a target pauses it; a TD wipes the bank. Rate survives erases. 3 straight (no opponent score) goes hot → drip doubles; cold when they score.' },
     { id: 'rec', name: 'Receptions', tag: 'ERASE', fx: 'erase', sc: '1 pt / catch', ef: 'Each catch erases the opponent’s drip from the last 10 clock-minutes.' },
     { id: 'tgt', name: 'Targets', tag: 'CLOCK STOP', fx: 'stop', sc: '0.5 pts / target', ef: 'Every target stops the opponent’s drip clock. No erase — pure denial.' },
-    { id: 'td', name: 'Touchdowns', tag: 'STREAK TRIGGER', fx: 'streak', sc: '6 pts / TD', ef: 'A TD instantly triggers the hot streak (2×) regardless of catch count.' },
+    { id: 'td', name: 'Touchdowns', tag: 'NUKE', fx: 'nuke', sc: '6 pts / TD', ef: 'Each TD wipes the opponent’s entire banked score to zero.' },
   ],
   TE: [
     { id: 'tgt', name: 'Targets', tag: 'WIDE ERASE', fx: 'erase', sc: '1 pt / target', ef: 'Each reception erases the opponent’s drip from the last 15 min — wider than any WR.' },
