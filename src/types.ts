@@ -93,6 +93,7 @@ export interface PbpEvent {
   theirBank: number;        // running bank for their side after this event
   effect?: { type: EffectType; text: string };
   sig?: boolean;            // a "signature" play (drip economy: +5 coin to the acting side)
+  drip?: boolean;           // a per-minute drip-accrual tick (hidden unless the log is expanded to minutes)
   // for rate/drip bars
   youRate?: number;
   theirRate?: number;

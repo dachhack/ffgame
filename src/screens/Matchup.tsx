@@ -752,37 +752,41 @@ function actionText(play: string): string {
 // right, the clock down the middle. Chronological (newest at the bottom) so it
 // reads like a live ticker, auto-scrolling to keep the latest play in view.
 function TwoColLog({ events, youName, theirName, gameLabel }: { events: PbpEvent[]; youName: string; theirName: string; gameLabel: string }) {
+  const [minutes, setMinutes] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  // Compact view hides the per-minute drip ticks; "minutes" shows scoring accrue.
+  const filtered = minutes ? events : events.filter((e) => !e.drip);
   useEffect(() => {
     const el = scroller.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [events.length]);
+  }, [filtered.length]);
   const onScroll = () => {
     const el = scroller.current;
     if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 28;
   };
-  const rows = events.slice(-80); // chronological, last 80
-  const cell = (ev: PbpEvent, mine: boolean) => (
-    <div style={{ flex: 1, minWidth: 0, textAlign: mine ? 'right' : 'left' }}>
-      {ev.side === (mine ? 'you' : 'their') && (
-        <>
-          <div style={{ fontSize: 10.5, lineHeight: 1.35, color: 'var(--text)' }}>
-            {actionText(ev.play)}
-            {ev.delta > 0 && <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: mine ? 'var(--you)' : 'var(--opp)', marginLeft: 5 }}>+{ev.delta.toFixed(1)}</span>}
-          </div>
-          {ev.effect && (
-            <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: FX_COLOR[ev.effect.type] ?? 'var(--dim)', marginTop: 1 }}>{ev.effect.text}</div>
-          )}
-        </>
-      )}
-    </div>
-  );
+  const rows = filtered.slice(minutes ? -220 : -90); // chronological
+  const cell = (ev: PbpEvent, mine: boolean) => {
+    if (ev.side !== (mine ? 'you' : 'their')) return <div style={{ flex: 1 }} />;
+    const cum = mine ? ev.youBank : ev.theirBank;
+    return (
+      <div style={{ flex: 1, minWidth: 0, textAlign: mine ? 'right' : 'left', opacity: ev.drip ? 0.62 : 1 }}>
+        <div style={{ fontSize: 10.5, lineHeight: 1.35, color: 'var(--text)' }}>
+          {actionText(ev.play)}
+          {ev.delta > 0 && <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: mine ? 'var(--you)' : 'var(--opp)', marginLeft: 5 }}>+{ev.delta.toFixed(1)}</span>}
+          <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginLeft: 5 }}>={cum.toFixed(1)}</span>
+        </div>
+        {ev.effect && (
+          <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: FX_COLOR[ev.effect.type] ?? 'var(--dim)', marginTop: 1 }}>{ev.effect.text}</div>
+        )}
+      </div>
+    );
+  };
   return (
     <div style={{ marginTop: 5, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
         <span className="mono" style={{ flex: 1, textAlign: 'right', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{youName}</span>
-        <span className="mono" style={{ width: 44, textAlign: 'center', fontSize: 7.5, color: 'var(--faint)', letterSpacing: '0.1em' }}>PBP</span>
+        <button onClick={() => setMinutes((m) => !m)} className="mono" style={{ width: 64, textAlign: 'center', fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: minutes ? 'var(--you)' : 'var(--faint)', background: 'var(--surface)', border: `1px solid ${minutes ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 3, padding: '2px 0' }}>{minutes ? 'MINUTES' : 'PLAYS'}</button>
         <span className="mono" style={{ flex: 1, textAlign: 'left', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{theirName}</span>
       </div>
       <div ref={scroller} onScroll={onScroll} style={{ maxHeight: 210, overflow: 'auto' }}>
@@ -794,7 +798,7 @@ function TwoColLog({ events, youName, theirName, gameLabel }: { events: PbpEvent
           </div>
         ))}
       </div>
-      <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 6, textAlign: 'center' }}>{gameLabel}</div>
+      <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 6, textAlign: 'center' }}>{minutes ? 'MINUTE-BY-MINUTE · drip ticks shown · = cumulative' : 'PLAYS · tap MINUTES for drip accrual'} · {gameLabel}</div>
     </div>
   );
 }

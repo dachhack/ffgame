@@ -469,11 +469,33 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const theirNukeClocks = (opts.theirDripNukeClocks ?? []).slice().sort((a, b) => a - b);
   let yNukeI = 0, tNukeI = 0;
   let lastClock = 0;
-  const accrueSide = (s: SideState, poss: number[][], from: number, to: number, mult?: (c: number) => number) => {
-    if (s.paused || s.dead || s.rate <= 0 || to <= from) return;
-    let add = s.rate * (offSecs(poss, from, to) / 60) * (s.hot ? 2 : 1);
-    const m = mult?.(to); if (m && m !== 1) add *= m;
-    if (add > 0) { s.bank += add; s.hist.push({ clock: to, pts: add }); }
+  // Per-minute gain for a side over (t0,t1] without mutating it.
+  const minuteGain = (s: SideState, poss: number[][], t0: number, t1: number, mult?: (c: number) => number): number => {
+    if (s.paused || s.dead || s.rate <= 0 || t1 <= t0) return 0;
+    const secs = offSecs(poss, t0, t1);
+    if (secs <= 0) return 0;
+    let add = s.rate * (secs / 60) * (s.hot ? 2 : 1);
+    const m = mult?.(t1); if (m && m !== 1) add *= m;
+    return add;
+  };
+  // Accrue both drips across [from,to] one game-minute at a time, emitting a
+  // tagged drip event (with running banks) each minute either side gains points
+  // — so the log can show scoring tick up minute by minute.
+  const accrueRange = (from: number, to: number) => {
+    let t = from;
+    while (t < to) {
+      const next = Math.min(to, Math.floor(t / 60) * 60 + 60);
+      const ya = dripYou ? minuteGain(Y, youPoss, t, next, opts.youMult) : 0;
+      const ta = dripTheir ? minuteGain(T, theirPoss, t, next, opts.theirMult) : 0;
+      if (ya > 0) { Y.bank += ya; Y.hist.push({ clock: next, pts: ya }); }
+      if (ta > 0) { T.bank += ta; T.hist.push({ clock: next, pts: ta }); }
+      // Only surface a drip tick once it rounds to ≥0.1 — sub-0.1 still banks
+      // silently and shows up in the next tick's cumulative.
+      const yd = Math.round(ya * 10) / 10, td = Math.round(ta * 10) / 10;
+      if (yd > 0) events.push({ clock: next, side: 'you', play: `${you.player.team || 'NFL'}: ${Y.hot ? 'HOT drip' : 'drip'}`, delta: yd, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true });
+      if (td > 0) events.push({ clock: next, side: 'their', play: `${their.player.team || 'NFL'}: ${T.hot ? 'HOT drip' : 'drip'}`, delta: td, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true });
+      t = next;
+    }
   };
   const dripNuke = (s: SideState, side: 'you' | 'their', clock: number) => {
     if (s.rate <= 0) return;
@@ -489,14 +511,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     stops.sort((a, b) => a.clock - b.clock);
     let from = lastClock;
     for (const st of stops) {
-      if (dripYou) accrueSide(Y, youPoss, from, st.clock, opts.youMult);
-      if (dripTheir) accrueSide(T, theirPoss, from, st.clock, opts.theirMult);
+      accrueRange(from, st.clock);
       if (st.side === 'you' && dripYou) dripNuke(Y, 'you', st.clock);
       if (st.side === 'their' && dripTheir) dripNuke(T, 'their', st.clock);
       from = st.clock;
     }
-    if (dripYou) accrueSide(Y, youPoss, from, to, opts.youMult);
-    if (dripTheir) accrueSide(T, theirPoss, from, to, opts.theirMult);
+    accrueRange(from, to);
   };
 
   // TDs and banker-XPs per side, surfaced for the lineup-wide K banker bonus.
@@ -659,13 +679,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     });
   }
 
-  // Final drip accrual through the end of the game.
-  {
-    const yB = Y.bank, tB = T.bank;
-    accrue(GAME_SECONDS);
-    if (dripYou && Y.bank > yB + 0.05) events.push({ clock: GAME_SECONDS, side: 'you', play: `${you.player.team || 'NFL'}: drip`, delta: Math.round((Y.bank - yB) * 10) / 10, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, effect: undefined });
-    if (dripTheir && T.bank > tB + 0.05) events.push({ clock: GAME_SECONDS, side: 'their', play: `${their.player.team || 'NFL'}: drip`, delta: Math.round((T.bank - tB) * 10) / 10, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, effect: undefined });
-  }
+  // Final drip accrual through the end of the game (per-minute, like the rest).
+  accrue(GAME_SECONDS);
 
   // DEF SUPPRESS (HALVING) resolves globally in buildMatchup — it reaches every
   // opponent slot across every window — so it is not applied here.
