@@ -110,7 +110,15 @@ for (const w of WEEKS) {
 }
 
 // ── Emit: per-week JSON assets (lazy-loaded) + a tiny generated week index ──
-const weeksWithData = WEEKS.filter((w) => Object.keys(pbp[w]).length > 0);
+// A week ships as "real" only when ALL its expected games are present, so we
+// never field a partial week (some players real, some simulated).
+const expected = readFileSync(new URL('expected.txt', here), 'utf8').trim().split('\n').filter(Boolean);
+const expByWeek = {}, presentByWeek = {};
+for (const gid of expected) { const w = +gid.split('_')[1]; expByWeek[w] = (expByWeek[w] || 0) + 1; }
+for (const gid of games.keys()) { const w = +gid.split('_')[1]; presentByWeek[w] = (presentByWeek[w] || 0) + 1; }
+const weeksWithData = WEEKS.filter((w) => Object.keys(pbp[w]).length > 0 && (presentByWeek[w] || 0) >= (expByWeek[w] ?? Infinity));
+const incomplete = WEEKS.filter((w) => (presentByWeek[w] || 0) > 0 && (presentByWeek[w] || 0) < (expByWeek[w] ?? Infinity));
+if (incomplete.length) console.log(`skipped (incomplete): ${incomplete.map((w) => `w${w} ${presentByWeek[w]}/${expByWeek[w]}`).join(', ')}`);
 const pubDir = new URL('../../public/pbp/', here);
 mkdirSync(pubDir, { recursive: true });
 for (const w of weeksWithData) {
