@@ -2,7 +2,7 @@ import type { Player, WindowId, Pick, PbpEvent } from '../types';
 import { WINDOWS, METRICS, TOTAL_SLOTS } from '../data/metrics';
 import { teamRoster } from '../data/league';
 import { hashStr } from '../data/players';
-import { resolveSlot, projectedPoints, type SlotInput } from './sim';
+import { resolveSlot, projectedPoints, windowFgMult, type SlotInput } from './sim';
 import { REAL_WEEKS, realPointsFor } from '../data/realPbp';
 
 // Deterministic per-week assignment of a roster across the 5 windows. The
@@ -132,6 +132,19 @@ export function buildMatchup(
   let youTds = 0, theirTds = 0, youBankerXp = 0, theirBankerXp = 0;
 
   for (const w of WINDOWS) {
+    // Pre-pass: collect this window's filled slots per side, so a Field
+    // General QB can build a window-wide multiplier on its own side.
+    const youIns: SlotInput[] = [];
+    const theirIns: SlotInput[] = [];
+    for (let i = 0; i < w.slots; i++) {
+      const y = lookup(youPools, youPicks, slotKey(w.id, i));
+      const t = lookup(oppPools, oppPicks, slotKey(w.id, i));
+      if (y) youIns.push({ player: y.player, metricId: y.metricId });
+      if (t) theirIns.push({ player: t.player, metricId: t.metricId });
+    }
+    const youMult = windowFgMult(youIns, week);
+    const theirMult = windowFgMult(theirIns, week);
+
     const slots: ResolvedSlot[] = [];
     for (let i = 0; i < w.slots; i++) {
       const key = slotKey(w.id, i);
@@ -148,7 +161,7 @@ export function buildMatchup(
         const yIn: SlotInput = { player: you.player, metricId: you.metricId };
         const tIn: SlotInput = { player: their.player, metricId: their.metricId };
         gameLabel = `${you.player.team || 'NFL'} · ${their.player.team || 'NFL'}`;
-        const res = resolveSlot(yIn, tIn, week, gameLabel);
+        const res = resolveSlot(yIn, tIn, week, gameLabel, { youMult, theirMult });
         events = res.events;
         yF = res.youFinal;
         tF = res.theirFinal;

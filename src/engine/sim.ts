@@ -184,7 +184,7 @@ function buildPlays(p: Player, l: WeekLine, week: number): RawPlay[] {
 // Effect family of a metric → how it scores a single play and what it does.
 function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): number {
   if (pos === 'QB') {
-    if (metricId === 'fg') return play.kind === 'pass' ? play.yards * 0.03 : play.kind === 'rush' ? play.yards * 0.1 : 0;
+    if (metricId === 'fg') return 0; // Field General scores nothing — it multiplies your other window players (see windowFgMult / resolveSlot opts)
     if (metricId === 'pass') return play.kind === 'pass' ? play.yards * 0.04 + (play.td ? 4 : 0) : 0;
     if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0;
   }
@@ -309,11 +309,39 @@ function playsForPlayer(player: Player, week: number): { plays: RawPlay[]; real:
   return { plays: buildPlays(player, weekLine(player, week), week), real: false };
 }
 
+// Field General (QB): passing yards build a live, window-wide multiplier on
+// your OTHER players in the window — 1 + 0.003·(cumulative passing yds), so
+// 300 yds ≈ 1.9×. Given the window's slot inputs for one side, returns a
+// clock→multiplier function (or undefined if no FG QB is in the window).
+const FG_RATE = 0.003;
+export function windowFgMult(players: SlotInput[], week: number): ((clock: number) => number) | undefined {
+  const timelines: RawPlay[][] = [];
+  for (const p of players) {
+    if (p.player.pos === 'QB' && p.metricId === 'fg') {
+      const plays = realRawPlays(p.player.id, week) ?? buildPlays(p.player, weekLine(p.player, week), week);
+      const passes = plays.filter((x) => x.kind === 'pass').sort((a, b) => a.clock - b.clock);
+      if (passes.length) timelines.push(passes);
+    }
+  }
+  if (!timelines.length) return undefined;
+  return (clock: number) => {
+    let m = 1;
+    for (const passes of timelines) {
+      let cum = 0;
+      for (const x of passes) { if (x.clock <= clock) cum += x.yards; else break; }
+      m *= 1 + FG_RATE * cum;
+    }
+    return m;
+  };
+}
+
 /**
  * Resolve one slot: your player+metric vs their player+metric over a merged
  * play-by-play timeline. Returns the full event feed plus final banks.
+ * `opts.youMult` / `opts.theirMult` apply a per-clock multiplier to that
+ * side's scoring (used by the QB Field General window multiplier).
  */
-export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number } {
+export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number } {
   const yp = playsForPlayer(you.player, week);
   const tp = playsForPlayer(their.player, week);
   const yPlays = yp.plays;
@@ -345,6 +373,9 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     // negated by a K-neg shutdown scores nothing for the rest of the slot.
     let pts = scorePlay(play, myPlayer.player.pos, myPlayer.metricId, myFam === 'streak' && mine.hot);
     if (mine.dead) pts = 0;
+    // Field General: scale this side's scoring by the live window multiplier.
+    const fgMult = play.side === 'you' ? opts.youMult?.(play.clock) : opts.theirMult?.(play.clock);
+    if (fgMult && fgMult !== 1) pts *= fgMult;
 
     mine.bank += pts;
     if (pts > 0) mine.hist.push({ clock: play.clock, pts });
