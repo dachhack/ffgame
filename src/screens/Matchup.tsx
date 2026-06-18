@@ -825,7 +825,10 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
     );
   }
   const banks = banksAtClock(slot.events, clock);
-  const lead = banks.you - banks.their;
+  // A backup subbed into this slot replaces the starter's score — show that.
+  const youShown = slot.youSub ? slot.youFinal : banks.you;
+  const theirShown = slot.theirSub ? slot.theirFinal : banks.their;
+  const lead = youShown - theirShown;
   const final = phase === 'final' || done;
   const verdict = final
     ? (lead > 0.1 ? { t: 'WON', c: 'var(--you)' } : lead < -0.1 ? { t: 'LOST', c: 'var(--opp)' } : { t: 'TIE', c: 'var(--dim)' })
@@ -839,7 +842,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'stretch', gap: 6 }}>
-        <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={banks.you} onClick={onToggle} fx={lastEffect?.type} />
+        <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={slot.youSub?.name} />
         <div style={{ width: 64, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
           <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--bg)', background: verdict.c, padding: '4px 6px', borderRadius: 3, textAlign: 'center', lineHeight: 1.1 }}>{verdict.t}</span>
           {canSwap && !done && (
@@ -849,11 +852,16 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
             <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
           )}
         </div>
-        <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={banks.their} onClick={onToggle} fx={lastEffect?.type} />
+        <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={slot.theirSub?.name} />
       </div>
-      {slot.subInName && (
-        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', marginTop: 3 }}>
-          ⤴ BACKUP {slot.subInName} subs in at final · {(slot.subFromScore ?? 0).toFixed(1)} → {slot.youFinal.toFixed(1)}
+      {slot.youSub && (
+        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', marginTop: 3 }}>
+          ⤴ BACKUP {slot.youSub.name} subs in for {slot.you.player.name} · {slot.youSub.from.toFixed(1)} → {slot.youSub.score.toFixed(1)}
+        </div>
+      )}
+      {slot.theirSub && (
+        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--opp)', marginTop: 3, textAlign: 'right' }}>
+          {slot.their.player.name} ← BACKUP {slot.theirSub.name} ⤴ · {slot.theirSub.from.toFixed(1)} → {slot.theirSub.score.toFixed(1)}
         </div>
       )}
       {open && <TwoColLog events={visibleEvents} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} />}
@@ -891,11 +899,11 @@ function fmtStat(pos: Pos, s: StatLine): string {
   return '—';
 }
 
-function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, fx }: {
-  side: 'you' | 'their'; player: Player; week: number; clock: number; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string;
+function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, fx, subName }: {
+  side: 'you' | 'their'; player: Player; week: number; clock: number; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string;
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
-  const nuked = fx === 'nuke' && bank === 0;
+  const nuked = fx === 'nuke' && bank === 0 && !subName;
   const stat = useMemo(() => fmtStat(player.pos, statlineAt(player, week, clock)), [player, week, clock]);
   return (
     <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 10, cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
@@ -906,8 +914,10 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
           <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{player.team}</span>
         </div>
         <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3, letterSpacing: '0.04em' }}>{metricName} · {tag}</div>
-        {/* running statline */}
-        <div className="mono" style={{ fontSize: 9.5, color: 'var(--dimstrong)', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stat}</div>
+        {/* running statline (or the backup that's scoring this slot) */}
+        {subName
+          ? <div className="mono" style={{ fontSize: 9.5, color: accent, marginTop: 5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>⤴ {subName} scoring</div>
+          : <div className="mono" style={{ fontSize: 9.5, color: 'var(--dimstrong)', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stat}</div>}
       </div>
       <div style={{ flex: 'none', alignSelf: 'center' }}>
         <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, color: accent, lineHeight: 1, letterSpacing: '-0.02em', animation: nuked ? 'shake .5s' : undefined }}>{bank.toFixed(1)}</div>

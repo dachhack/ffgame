@@ -90,8 +90,10 @@ export interface ResolvedSlot {
   backup?: boolean;
   backupScore?: number;   // the score this backup would post
   backupUsed?: boolean;   // it was subbed into a starter slot
-  subInName?: string;     // a backup player's name subbed INTO this slot
-  subFromScore?: number;  // this slot's original score before the sub
+  // A backup subbed INTO this slot, per side (the backup's score replaces the
+  // starter's). Side-aware so a yours-vs-theirs slot can show each correctly.
+  youSub?: { name: string; score: number; from: number };
+  theirSub?: { name: string; score: number; from: number };
 }
 
 export interface ResolvedWindow {
@@ -280,7 +282,9 @@ function applyBackups(windows: ResolvedWindow[], side: 'you' | 'their', assign: 
   const getF = (s: ResolvedSlot) => (side === 'you' ? s.youFinal : s.theirFinal);
   const setF = (s: ResolvedSlot, v: number) => { if (side === 'you') s.youFinal = v; else s.theirFinal = v; };
   const sub = (b: ResolvedSlot, st: ResolvedSlot) => {
-    st.subInName = mine(b)!.player.name; st.subFromScore = getF(st); setF(st, b.backupScore ?? 0); b.backupUsed = true;
+    const info = { name: mine(b)!.player.name, score: b.backupScore ?? 0, from: getF(st) };
+    if (side === 'you') st.youSub = info; else st.theirSub = info;
+    setF(st, b.backupScore ?? 0); b.backupUsed = true;
   };
 
   const backups = all.filter((s) => mine(s) && !opp(s));

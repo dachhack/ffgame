@@ -358,7 +358,7 @@ export function statlineAt(player: Player, week: number, clock: number): StatLin
 // your OTHER players in the window — 1 + 0.003·(cumulative passing yds), so
 // 300 yds ≈ 1.9×. Given the window's slot inputs for one side, returns a
 // clock→multiplier function (or undefined if no FG QB is in the window).
-const FG_RATE = 0.003;
+const FG_RATE = 0.006;
 export function windowFgMult(players: SlotInput[], week: number): ((clock: number) => number) | undefined {
   const timelines: RawPlay[][] = [];
   for (const p of players) {
