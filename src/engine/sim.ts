@@ -190,6 +190,7 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
   }
   if (pos === 'RB') {
     if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 : 0; // drip, no TD
+    if (metricId === 'carries') return play.kind === 'rush' ? 0.5 : 0; // COMPRESSION
     if (metricId === 'rec') return play.catch ? 1 : 0;
     if (metricId === 'td') return play.td ? 6 : 0; // NUKE
   }
@@ -434,12 +435,17 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     mine.bank += pts;
     if (pts > 0) mine.hist.push({ clock: play.clock, pts });
 
-    if (pts > 0 && (oppFam === 'streak' || oppIsDrip)) { opp.streak = 0; opp.hot = false; }
+    if (pts > 0 && (oppFam === 'streak' || oppIsDrip || oppFam === 'compression')) { opp.streak = 0; opp.hot = false; }
 
     if (myFam === 'streak') {
       if (play.td) { mine.streak = 3; mine.hot = true; }
       else if (play.catch) { mine.streak += 1; if (mine.streak >= 3) mine.hot = true; }
     }
+
+    // COMPRESSION (RB Carries): each carry advances a grind streak. With no
+    // opponent score breaking it (see reset above), a 3+ carry streak trims
+    // the opponent's most-recent score by 25% per further carry.
+    if (myFam === 'compression' && play.kind === 'rush') mine.streak += 1;
 
     if (play.td && myPlayer.metricId === 'td') { if (play.side === 'you') youTds++; else theirTds++; }
     if (myPlayer.player.pos === 'K' && myPlayer.metricId === 'banker' && play.kind === 'xp') {
@@ -499,6 +505,19 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       if (last) { const cut = last.pts * 0.5; opp.bank = Math.max(0, opp.bank - cut); last.pts -= cut; effect = { type: 'reset', text: 'RATE RESET' }; }
     } else if (myFam === 'stop' && play.target && opp.hist.length) {
       effect = { type: 'stop', text: 'CLOCK STOP' };
+    }
+
+    // COMPRESSION grind: fires regardless of the opponent's family (including a
+    // drip opponent). A 3+ carry streak with no opponent score trims their
+    // most-recent banked score by 25% per carry.
+    if (myFam === 'compression' && play.kind === 'rush' && mine.streak >= 3 && opp.hist.length) {
+      const last = opp.hist[opp.hist.length - 1];
+      const cut = Math.round(last.pts * 0.25 * 10) / 10;
+      if (cut > 0) {
+        opp.bank = Math.max(0, opp.bank - cut);
+        last.pts -= cut;
+        if (!effect) effect = { type: 'reset', text: `COMPRESSION −${cut.toFixed(1)}` };
+      }
     }
 
     // streak / drip badges
