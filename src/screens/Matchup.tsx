@@ -7,13 +7,13 @@ import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
   windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock,
 } from '../engine/matchup';
-import { fmtClock } from '../engine/sim';
+import { fmtClock, statlineAt, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
-import type { Pick, Player, WindowId, PbpEvent } from '../types';
+import type { Pick, Player, Pos, WindowId, PbpEvent } from '../types';
 
 const YOU = 'happy-campers';
-const TICK_MS = 800;
-const TICK_SECONDS = 18;
+const TICK_MS = 700;
+const TICK_SECONDS = 20;
 
 export function Matchup({ week, initialPhase }: { week: number; initialPhase: Phase }) {
   const { navigate } = useStore();
@@ -24,8 +24,9 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const [phase, setPhase] = useState<Phase>(initialPhase);
   const [picks, setPicks] = useState<Record<string, Pick>>({});
   const [selSlot, setSelSlot] = useState<string | null>(null);
-  const [liveClock, setLiveClock] = useState(initialPhase === 'final' ? 3599 : 1700);
-  const [playing, setPlaying] = useState(true);
+  // Per-window playback: each window runs its own clock + play/pause.
+  const [winClocks, setWinClocks] = useState<Record<string, number>>({});
+  const [winPlaying, setWinPlaying] = useState<Record<string, boolean>>({});
   const [openPBP, setOpenPBP] = useState<Record<string, boolean>>({});
 
   // Lazy-load this week's real play-by-play (per-week JSON) before resolving.
@@ -43,15 +44,12 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const oppPicks = useMemo(() => defaultLineup(oppId, week), [oppId, week, ready]);
   const youDefault = useMemo(() => defaultLineup(YOU, week), [week, ready]);
 
-  // player -> its eligible window (your roster)
   const playerWindow = useMemo(() => {
     const m = new Map<string, WindowId>();
     (Object.keys(youPools) as WindowId[]).forEach((w) => youPools[w].forEach((p) => m.set(p.id, w)));
     return m;
   }, [youPools]);
 
-  // Effective picks: setup shows only what you've set; live/final fills empties
-  // from your projected-best default lineup so the sim is always complete.
   const effYouPicks = useMemo<Record<string, Pick>>(() => {
     if (phase === 'setup') return picks;
     return { ...youDefault, ...picks };
@@ -62,36 +60,67 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     [oppId, week, effYouPicks, oppPicks, ready],
   );
 
-  const maxClock = resolved.maxClock;
-  const effClock = phase === 'final' ? maxClock : liveClock;
+  // Each window's own end-of-game clock (latest event among its slots).
+  const winMax = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const rw of resolved.windows) {
+      let mx = 0;
+      for (const s of rw.slots) for (const e of s.events) if (e.clock > mx) mx = e.clock;
+      m[rw.window.id] = mx || GAME_SECONDS;
+    }
+    return m;
+  }, [resolved]);
 
-  // live ticker
+  // On entering live/final, seed each window's clock + play state.
   useEffect(() => {
-    if (phase !== 'live' || !playing) return;
+    if (phase === 'setup') return;
+    const clocks: Record<string, number> = {};
+    const playing: Record<string, boolean> = {};
+    for (const id of Object.keys(winMax)) {
+      clocks[id] = phase === 'final' ? winMax[id] : 0;
+      playing[id] = phase === 'live';
+    }
+    setWinClocks(clocks);
+    setWinPlaying(playing);
+  }, [phase, winMax]);
+
+  // Single ticker advances every playing window toward its own max.
+  useEffect(() => {
+    if (phase !== 'live') return;
     const id = setInterval(() => {
-      setLiveClock((c) => Math.min(maxClock, c + TICK_SECONDS));
+      setWinClocks((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const wid of Object.keys(winMax)) {
+          if (winPlaying[wid] && (prev[wid] ?? 0) < winMax[wid]) {
+            next[wid] = Math.min(winMax[wid], (prev[wid] ?? 0) + TICK_SECONDS);
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
     }, TICK_MS);
     return () => clearInterval(id);
-  }, [phase, playing, maxClock]);
+  }, [phase, winPlaying, winMax]);
 
-  // ── derived totals (respecting live clock) ──
+  // ── totals at each window's own clock ──
   const { youTotal, themTotal } = useMemo(() => {
-    // At FINAL, use the authoritative totals so end-of-game K/DST effects
-    // (suppress halving, banker bonus) are reflected; LIVE ticks off banks.
     if (phase === 'final') return { youTotal: resolved.youFinal, themTotal: resolved.theirFinal };
+    if (phase === 'setup') return { youTotal: 0, themTotal: 0 };
     let y = 0; let t = 0;
-    for (const w of resolved.windows) {
-      for (const s of w.slots) {
+    for (const rw of resolved.windows) {
+      const c = winClocks[rw.window.id] ?? 0;
+      for (const s of rw.slots) {
         if (!s.you || !s.their) continue;
-        if (phase === 'setup') continue;
-        const b = banksAtClock(s.events, effClock);
+        const b = banksAtClock(s.events, c);
         y += b.you; t += b.their;
       }
     }
     return { youTotal: Math.round(y * 10) / 10, themTotal: Math.round(t * 10) / 10 };
-  }, [resolved, effClock, phase]);
+  }, [resolved, winClocks, phase]);
 
   const filledCount = Object.values(picks).filter((p) => p.metricId).length;
+  const anyPlaying = Object.values(winPlaying).some(Boolean);
 
   // ── setup interactions ──
   function assignFromRoster(playerId: string) {
@@ -99,12 +128,10 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     const win = playerWindow.get(playerId);
     if (!win) return;
     const w = WINDOWS.find((x) => x.id === win)!;
-    // already placed? select it
     for (let i = 0; i < w.slots; i++) {
       const k = slotKey(win, i);
       if (picks[k]?.playerId === playerId) { setSelSlot(k); return; }
     }
-    // target = selected empty slot in window, else next open
     let target: string | null = null;
     if (selSlot && selSlot.startsWith(win + '#') && !picks[selSlot]) target = selSlot;
     if (!target) {
@@ -116,7 +143,6 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     if (!target) target = slotKey(win, 0);
     setPicks((prev) => {
       const next = { ...prev };
-      // remove player from any existing slot
       for (const k of Object.keys(next)) if (next[k].playerId === playerId) delete next[k];
       next[target!] = { playerId, metricId: null };
       return next;
@@ -133,11 +159,17 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     setSelSlot(key);
   }
 
-  function lockIn() { setPhase('live'); setSelSlot(null); setPlaying(true); setLiveClock(1700); }
-  function changePhase(p: Phase) { setPhase(p); setSelSlot(null); if (p === 'final') setLiveClock(maxClock); }
+  function lockIn() { setPhase('live'); setSelSlot(null); }
+  function changePhase(p: Phase) { setPhase(p); setSelSlot(null); }
+  function toggleAll() {
+    const v = !anyPlaying;
+    setWinPlaying(() => { const n: Record<string, boolean> = {}; for (const k of Object.keys(winMax)) n[k] = v; return n; });
+  }
+  function setWinPlay(wid: string, v: boolean) { setWinPlaying((p) => ({ ...p, [wid]: v })); }
+  function replayWin(wid: string) { setWinClocks((c) => ({ ...c, [wid]: 0 })); setWinPlaying((p) => ({ ...p, [wid]: true })); }
 
   const headline = phase === 'setup' ? 'Set Your Windows' : phase === 'live' ? 'Live Resolution' : `Week ${week} — Final`;
-  const subhead = `${you.name} vs ${opp.name} · drag or tap players into the 5 game windows, then seal a hidden metric for each.`;
+  const subhead = `${you.name} vs ${opp.name} · each window plays on its own clock — hit ▶ on any window, or run them all.`;
 
   if (!ready) {
     return (
@@ -190,10 +222,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ display: 'inline-block', width: 8, height: 8, background: '#FF4F62', borderRadius: '50%', animation: 'lpulse 1.2s ease infinite' }} />
               <span className="mono" style={{ color: '#FF4F62', fontWeight: 700, letterSpacing: '0.14em', fontSize: 11 }}>LIVE</span>
-              <span className="mono" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{fmtClock(liveClock)}</span>
-              <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>/ {fmtClock(maxClock)}</span>
-              <button onClick={() => setPlaying((p) => !p)} className="mono" style={{ fontSize: 12, color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 10px' }}>
-                {playing ? '❚❚' : '▶'}
+              <button onClick={toggleAll} className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px' }}>
+                {anyPlaying ? '❚❚ PAUSE ALL' : '▶ RUN ALL'}
               </button>
             </div>
           )}
@@ -206,10 +236,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
       </header>
 
       <div style={{ flex: 1, display: 'flex', gap: 14, padding: 14, overflow: 'hidden', minHeight: 0 }}>
-        {/* left roster */}
         <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} />
 
-        {/* center */}
         <main style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 18, marginBottom: 10 }}>
             <div>
@@ -227,8 +255,13 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               <WindowSection
                 key={rw.window.id}
                 rw={rw}
+                week={week}
                 phase={phase}
-                effClock={effClock}
+                clock={winClocks[rw.window.id] ?? 0}
+                maxClock={winMax[rw.window.id] ?? GAME_SECONDS}
+                playing={!!winPlaying[rw.window.id]}
+                onTogglePlay={() => setWinPlay(rw.window.id, !winPlaying[rw.window.id])}
+                onReplay={() => replayWin(rw.window.id)}
                 picks={picks}
                 selSlot={selSlot}
                 setSelSlot={setSelSlot}
@@ -244,7 +277,6 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
           <div style={{ height: 40 }} />
         </main>
 
-        {/* right roster */}
         <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} />
       </div>
     </>
@@ -305,8 +337,13 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed }: {
 // ── Window section ──────────────────────────────────────────────────────────
 function WindowSection(props: {
   rw: ReturnType<typeof buildMatchup>['windows'][number];
+  week: number;
   phase: Phase;
-  effClock: number;
+  clock: number;
+  maxClock: number;
+  playing: boolean;
+  onTogglePlay: () => void;
+  onReplay: () => void;
   picks: Record<string, Pick>;
   selSlot: string | null;
   setSelSlot: (k: string | null) => void;
@@ -317,22 +354,45 @@ function WindowSection(props: {
   youPools: Record<WindowId, Player[]>;
   onAssign: (id: string) => void;
 }) {
-  const { rw, phase, effClock, picks, selSlot, setSelSlot, pickMetricFor, clearSlot, openPBP, togglePBP, onAssign } = props;
+  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, picks, selSlot, setSelSlot, pickMetricFor, clearSlot, openPBP, togglePBP, onAssign } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
+  const done = clock >= maxClock;
+  const pct = Math.round((Math.min(clock, maxClock) / maxClock) * 100);
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: '1px solid var(--bd)', paddingBottom: 7, marginBottom: 9, gap: 12, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--bd)', paddingBottom: 7, marginBottom: 9, gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
           <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)' }}>{w.label}</span>
           <span style={{ fontSize: 10, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{w.sub}</span>
           <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{w.time}</span>
         </div>
-        <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: phase === 'setup' ? 'var(--dim)' : phase === 'final' ? 'var(--you)' : '#FF4F62' }}>
-          {phase === 'setup' ? `${setN}/${w.slots} SET` : phase === 'final' ? 'FINAL' : '● LIVE'}
-        </span>
+
+        {phase === 'setup' ? (
+          <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--dim)' }}>{setN}/{w.slots} SET</span>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            {/* per-window clock */}
+            <div style={{ width: 70, height: 3, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{ width: `${pct}%`, height: '100%', background: done ? 'var(--you)' : '#FF4F62', transition: 'width .3s linear' }} />
+            </div>
+            <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>{fmtClock(Math.min(clock, maxClock))}</span>
+            <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>/ {fmtClock(maxClock)}</span>
+            {phase === 'live' && (
+              done ? (
+                <button onClick={onReplay} className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 8px' }}>↺ REPLAY</button>
+              ) : (
+                <button onClick={onTogglePlay} className="mono" style={{ fontSize: 11, color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 9px' }}>{playing ? '❚❚' : '▶'}</button>
+              )
+            )}
+            <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: phase === 'final' || done ? 'var(--you)' : '#FF4F62' }}>
+              {phase === 'final' || done ? 'FINAL' : playing ? '● LIVE' : 'PAUSED'}
+            </span>
+          </div>
+        )}
       </div>
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {rw.slots.map((s) => {
           const key = slotKey(w.id, s.slotIndex);
@@ -346,7 +406,7 @@ function WindowSection(props: {
             );
           }
           return (
-            <ScoreRow key={key} slot={s} effClock={effClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} />
+            <ScoreRow key={key} slot={s} week={week} clock={clock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} />
           );
         })}
       </div>
@@ -422,9 +482,9 @@ function SetupRow(props: {
 }
 
 // ── Score row (live / final) ──
-function ScoreRow({ slot, effClock, open, onToggle, phase }: {
+function ScoreRow({ slot, week, clock, open, onToggle, phase, done }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
-  effClock: number; open: boolean; onToggle: () => void; phase: Phase;
+  week: number; clock: number; open: boolean; onToggle: () => void; phase: Phase; done: boolean;
 }) {
   if (!slot.you || !slot.their) {
     return (
@@ -433,13 +493,14 @@ function ScoreRow({ slot, effClock, open, onToggle, phase }: {
       </div>
     );
   }
-  const banks = banksAtClock(slot.events, effClock);
+  const banks = banksAtClock(slot.events, clock);
   const lead = banks.you - banks.their;
-  const verdict = phase === 'final'
+  const final = phase === 'final' || done;
+  const verdict = final
     ? (lead > 0.1 ? { t: 'WON', c: 'var(--you)' } : lead < -0.1 ? { t: 'LOST', c: 'var(--opp)' } : { t: 'TIE', c: 'var(--dim)' })
     : (lead > 2 ? { t: 'EDGE YOU', c: 'var(--you)' } : lead < -2 ? { t: 'EDGE THEM', c: 'var(--opp)' } : Math.abs(lead) > 0.1 ? { t: 'CLOSE', c: 'var(--warn)' } : { t: 'EVEN', c: 'var(--dim)' });
 
-  const visibleEvents = slot.events.filter((e) => e.clock <= effClock);
+  const visibleEvents = slot.events.filter((e) => e.clock <= clock);
   const lastEffect = [...visibleEvents].reverse().find((e) => e.effect)?.effect;
   const yMet = metricById(slot.you.player.pos, slot.you.metricId);
   const tMet = metricById(slot.their.player.pos, slot.their.metricId);
@@ -447,67 +508,117 @@ function ScoreRow({ slot, effClock, open, onToggle, phase }: {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'stretch', gap: 6 }}>
-        <ScoreCard side="you" player={slot.you.player} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={banks.you} onClick={onToggle} fx={lastEffect?.type} />
+        <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={banks.you} onClick={onToggle} fx={lastEffect?.type} />
         <div style={{ width: 64, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
           <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--bg)', background: verdict.c, padding: '4px 6px', borderRadius: 3, textAlign: 'center', lineHeight: 1.1 }}>{verdict.t}</span>
           {visibleEvents.length > 0 && (
-            <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'PBP ▾'}</button>
+            <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
           )}
         </div>
-        <ScoreCard side="their" player={slot.their.player} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={banks.their} onClick={onToggle} fx={lastEffect?.type} />
+        <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={banks.their} onClick={onToggle} fx={lastEffect?.type} />
       </div>
-      {open && <PbpDrawer events={visibleEvents} gameLabel={slot.gameLabel} />}
+      {open && <TwoColLog events={visibleEvents} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} />}
     </div>
   );
 }
 
-function ScoreCard({ side, player, metricName, tag, bank, onClick, fx }: {
-  side: 'you' | 'their'; player: Player; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string;
+function fmtStat(pos: Pos, s: StatLine): string {
+  if (pos === 'QB') {
+    const p = [`${s.passYds} pass yd`, `${s.passTds} TD`];
+    if (s.rushYds) p.push(`${s.rushYds} rush`);
+    return p.join(' · ');
+  }
+  if (pos === 'RB') {
+    const p = [`${s.carries} car`, `${s.rushYds} yd`];
+    if (s.rec) p.push(`${s.rec} rec`);
+    const td = s.rushTds + s.recTds; if (td) p.push(`${td} TD`);
+    return p.join(' · ');
+  }
+  if (pos === 'WR' || pos === 'TE') {
+    const p = [`${s.rec}/${s.targets} rec`, `${s.recYds} yd`];
+    if (s.recTds) p.push(`${s.recTds} TD`);
+    return p.join(' · ');
+  }
+  if (pos === 'K') return `${s.fg} FG · ${s.xp} XP`;
+  if (pos === 'DEF') {
+    const p: string[] = [];
+    if (s.sacks) p.push(`${s.sacks} sk`);
+    if (s.ints) p.push(`${s.ints} INT`);
+    if (s.fumrec) p.push(`${s.fumrec} FR`);
+    if (s.dtd) p.push(`${s.dtd} TD`);
+    if (s.safety) p.push(`${s.safety} SF`);
+    return p.length ? p.join(' · ') : 'no splash';
+  }
+  return '—';
+}
+
+function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, fx }: {
+  side: 'you' | 'their'; player: Player; week: number; clock: number; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string;
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
   const nuked = fx === 'nuke' && bank === 0;
-  const pct = Math.max(6, Math.min(100, bank * 3));
-  const card = (
+  const stat = useMemo(() => fmtStat(player.pos, statlineAt(player, week, clock)), [player, week, clock]);
+  return (
     <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 10, cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
       <div style={{ flex: 1, minWidth: 0, textAlign: side === 'you' ? 'left' : 'right' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexDirection: side === 'you' ? 'row' : 'row-reverse' }}>
           <PosPill pos={player.pos} />
           <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>
+          <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{player.team}</span>
         </div>
         <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3, letterSpacing: '0.04em' }}>{metricName} · {tag}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, flexDirection: side === 'you' ? 'row' : 'row-reverse' }}>
-          <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
-            <div style={{ width: `${pct}%`, height: '100%', background: accent, transition: 'width .4s ease', float: side === 'you' ? 'left' : 'right' }} />
-          </div>
-          <span className="mono" style={{ fontSize: 8, color: 'var(--dimstrong)' }}>{tag.split(' ')[0]}</span>
-        </div>
+        {/* running statline */}
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--dimstrong)', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stat}</div>
       </div>
-      <div style={{ flex: 'none' }}>
+      <div style={{ flex: 'none', alignSelf: 'center' }}>
         <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, color: accent, lineHeight: 1, letterSpacing: '-0.02em', animation: nuked ? 'shake .5s' : undefined }}>{bank.toFixed(1)}</div>
       </div>
     </div>
   );
-  return card;
 }
 
-function PbpDrawer({ events, gameLabel }: { events: PbpEvent[]; gameLabel: string }) {
-  const FX_COLOR: Record<string, string> = { nuke: 'var(--fx-nuke)', erase: 'var(--fx-erase)', streak: 'var(--fx-streak)', cold: 'var(--fx-stop)', mult: 'var(--fx-mult)', compression: 'var(--fx-compression)', reset: 'var(--fx-reset)', stop: 'var(--fx-stop)' };
-  const recent = [...events].reverse().slice(0, 40);
-  return (
-    <div style={{ marginTop: 5, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '9px 12px', maxHeight: 200, overflow: 'auto' }}>
-      <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', letterSpacing: '0.16em', fontWeight: 700, marginBottom: 5 }}>▼ PBP · {gameLabel}</div>
-      {recent.map((ev, i) => (
-        <div key={i} style={{ animation: i === 0 ? 'slidein .35s ease' : undefined, padding: '3px 0', borderBottom: '1px solid color-mix(in srgb, var(--bd) 50%, transparent)' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
-            <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', minWidth: 34 }}>{fmtClock(ev.clock)}</span>
-            <span style={{ fontSize: 10.5, lineHeight: 1.4, color: 'var(--text)', flex: 1 }}>{ev.play}</span>
-            {ev.delta > 0 && <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: ev.side === 'you' ? 'var(--you)' : 'var(--opp)' }}>{ev.side === 'you' ? '+' : '+'}{ev.delta.toFixed(1)}</span>}
+const FX_COLOR: Record<string, string> = { nuke: 'var(--fx-nuke)', erase: 'var(--fx-erase)', streak: 'var(--fx-streak)', cold: 'var(--fx-stop)', mult: 'var(--fx-mult)', compression: 'var(--fx-compression)', reset: 'var(--fx-reset)', stop: 'var(--fx-stop)' };
+
+// Strip the leading "TEAM:" / "TEAM TD:" / "TEAM D:" prefix — the column header
+// already names the player, so the log only needs the action.
+function actionText(play: string): string {
+  return play.replace(/^[A-Z]{2,3}( D| TD)?:\s*/, '');
+}
+
+// Two-column play-by-play: your player's plays on the left, theirs on the
+// right, the clock down the middle. Newest first so the latest tick is on top.
+function TwoColLog({ events, youName, theirName, gameLabel }: { events: PbpEvent[]; youName: string; theirName: string; gameLabel: string }) {
+  const rows = [...events].reverse().slice(0, 60);
+  const cell = (ev: PbpEvent, mine: boolean) => (
+    <div style={{ flex: 1, minWidth: 0, textAlign: mine ? 'right' : 'left', opacity: ev.side === (mine ? 'you' : 'their') ? 1 : 0.15 }}>
+      {ev.side === (mine ? 'you' : 'their') && (
+        <>
+          <div style={{ fontSize: 10.5, lineHeight: 1.35, color: 'var(--text)' }}>
+            {actionText(ev.play)}
+            {ev.delta > 0 && <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: mine ? 'var(--you)' : 'var(--opp)', marginLeft: 5 }}>+{ev.delta.toFixed(1)}</span>}
           </div>
           {ev.effect && (
-            <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: FX_COLOR[ev.effect.type] ?? 'var(--dim)', marginLeft: 41, marginTop: 2 }}>{ev.effect.text}</div>
+            <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: FX_COLOR[ev.effect.type] ?? 'var(--dim)', marginTop: 1 }}>{ev.effect.text}</div>
           )}
+        </>
+      )}
+    </div>
+  );
+  return (
+    <div style={{ marginTop: 5, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px', maxHeight: 240, overflow: 'auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <span className="mono" style={{ flex: 1, textAlign: 'right', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{youName}</span>
+        <span className="mono" style={{ width: 44, textAlign: 'center', fontSize: 7.5, color: 'var(--faint)', letterSpacing: '0.1em' }}>PBP</span>
+        <span className="mono" style={{ flex: 1, textAlign: 'left', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{theirName}</span>
+      </div>
+      {rows.map((ev, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '3px 0', borderTop: i === 0 ? undefined : '1px solid color-mix(in srgb, var(--bd) 45%, transparent)', animation: i === 0 ? 'slidein .3s ease' : undefined }}>
+          {cell(ev, true)}
+          <span className="mono" style={{ width: 44, flex: 'none', textAlign: 'center', fontSize: 8.5, color: 'var(--faint)', paddingTop: 1 }}>{fmtClock(ev.clock)}</span>
+          {cell(ev, false)}
         </div>
       ))}
+      <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 6, textAlign: 'center' }}>{gameLabel}</div>
     </div>
   );
 }

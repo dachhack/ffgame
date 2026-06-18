@@ -314,6 +314,37 @@ function playsForPlayer(player: Player, week: number): { plays: RawPlay[]; real:
   return { plays: buildPlays(player, weekLine(player, week), week), real: false };
 }
 
+// Running box-score line for a player up to a clock — drives the live statline
+// shown under each score card (real stats, independent of the metric scoring).
+export interface StatLine {
+  passYds: number; passTds: number;
+  carries: number; rushYds: number; rushTds: number;
+  targets: number; rec: number; recYds: number; recTds: number;
+  fg: number; xp: number;
+  sacks: number; ints: number; fumrec: number; dtd: number; safety: number;
+}
+export function statlineAt(player: Player, week: number, clock: number): StatLine {
+  const { plays } = playsForPlayer(player, week);
+  const s: StatLine = { passYds: 0, passTds: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, rec: 0, recYds: 0, recTds: 0, fg: 0, xp: 0, sacks: 0, ints: 0, fumrec: 0, dtd: 0, safety: 0 };
+  for (const p of plays) {
+    if (p.clock > clock) break; // plays are sorted ascending by clock
+    switch (p.kind) {
+      case 'pass': s.passYds += p.yards; if (p.td) s.passTds++; break;
+      case 'rush': s.carries++; s.rushYds += p.yards; if (p.td) s.rushTds++; break;
+      case 'rec': s.rec++; s.targets++; s.recYds += p.yards; if (p.td) s.recTds++; break;
+      case 'incomplete': s.targets++; break;
+      case 'fg': s.fg++; break;
+      case 'xp': s.xp++; break;
+      case 'sack': s.sacks++; break;
+      case 'int': s.ints++; break;
+      case 'fumrec': s.fumrec++; break;
+      case 'dst_td': s.dtd++; break;
+      case 'safety': s.safety++; break;
+    }
+  }
+  return s;
+}
+
 // Field General (QB): passing yards build a live, window-wide multiplier on
 // your OTHER players in the window — 1 + 0.003·(cumulative passing yds), so
 // 300 yds ≈ 1.9×. Given the window's slot inputs for one side, returns a
