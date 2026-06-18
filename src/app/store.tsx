@@ -20,11 +20,10 @@ interface Store {
   coins: number;
   /** Credit a week's drip coin once (no-op if that week was already credited). */
   creditWeek: (week: number, amount: number) => void;
-  inventory: Record<string, number>; // consumable powerup id -> qty owned
-  unlocks: string[];                  // permanently-unlocked powerup ids
-  /** Buy a powerup with coins. Returns false if unaffordable / already owned. */
+  inventory: Record<string, number>; // powerup id -> qty owned
+  /** Buy a powerup with coins. Returns false if unaffordable. */
   buyPowerup: (id: string) => boolean;
-  /** Consume one of a held consumable powerup. Returns false if none held. */
+  /** Consume one of a held powerup. Returns false if none held. */
   useConsumable: (id: string) => boolean;
 }
 
@@ -33,7 +32,7 @@ const Ctx = createContext<Store | null>(null);
 const THEME_KEY = 'gc-theme';
 const SAVE_KEY = 'gc-coins';
 
-interface SaveState { coins: number; weeks: number[]; inv: Record<string, number>; unlocks: string[]; }
+interface SaveState { coins: number; weeks: number[]; inv: Record<string, number>; }
 function loadState(): SaveState {
   try {
     const raw = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
@@ -41,9 +40,8 @@ function loadState(): SaveState {
       coins: raw.coins ?? 0,
       weeks: Array.isArray(raw.weeks) ? raw.weeks : [],
       inv: raw.inv && typeof raw.inv === 'object' ? raw.inv : {},
-      unlocks: Array.isArray(raw.unlocks) ? raw.unlocks : [],
     };
-  } catch { return { coins: 0, weeks: [], inv: {}, unlocks: [] }; }
+  } catch { return { coins: 0, weeks: [], inv: {} }; }
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -56,18 +54,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const initial = useRef(loadState());
   const [coins, setCoins] = useState<number>(initial.current.coins);
   const [inventory, setInventory] = useState<Record<string, number>>(initial.current.inv);
-  const [unlocks, setUnlocks] = useState<string[]>(initial.current.unlocks);
   const creditedWeeks = useRef<Set<number>>(new Set(initial.current.weeks));
 
-  // Persist coins + inventory + unlocks together. Pass next values explicitly so
-  // we don't race React's async state.
-  const persist = (next: { coins?: number; inv?: Record<string, number>; unlocks?: string[] }) => {
+  // Persist coins + inventory together. Pass next values explicitly so we don't
+  // race React's async state.
+  const persist = (next: { coins?: number; inv?: Record<string, number> }) => {
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({
         coins: next.coins ?? coins,
         weeks: [...creditedWeeks.current],
         inv: next.inv ?? inventory,
-        unlocks: next.unlocks ?? unlocks,
       }));
     } catch { /* ignore */ }
   };
@@ -86,15 +82,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const buyPowerup = (id: string): boolean => {
     const pu = powerupById(id);
     if (!pu || coins < pu.price) return false;
-    if (pu.kind === 'unlock' && unlocks.includes(id)) return false;
     const nextCoins = coins - pu.price;
-    if (pu.kind === 'unlock') {
-      const nextUnlocks = [...unlocks, id];
-      setUnlocks(nextUnlocks); setCoins(nextCoins); persist({ coins: nextCoins, unlocks: nextUnlocks });
-    } else {
-      const nextInv = { ...inventory, [id]: (inventory[id] ?? 0) + 1 };
-      setInventory(nextInv); setCoins(nextCoins); persist({ coins: nextCoins, inv: nextInv });
-    }
+    const nextInv = { ...inventory, [id]: (inventory[id] ?? 0) + 1 };
+    setInventory(nextInv); setCoins(nextCoins); persist({ coins: nextCoins, inv: nextInv });
     return true;
   };
 
@@ -106,8 +96,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, unlocks, buyPowerup, useConsumable }),
-    [theme, route, coins, inventory, unlocks],
+    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable }),
+    [theme, route, coins, inventory],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

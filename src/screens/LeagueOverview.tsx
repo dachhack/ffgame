@@ -3,7 +3,7 @@ import { useStore, LEAGUE_REF } from '../app/store';
 import { Brand, Header, ThemeSwitcher, UserChip, Avatar, PosPill } from '../app/ui';
 import { getTeam, teamRoster, gameForTeam, teamResults, freeAgents } from '../data/league';
 import { TOTAL_SLOTS } from '../data/metrics';
-import { POWERUPS, powerupById } from '../data/powerups';
+import { POWERUPS } from '../data/powerups';
 import { DEMO_WEEK, SLEEPER_HANDLE } from '../config';
 import type { FantasyTeam } from '../types';
 
@@ -160,13 +160,8 @@ export function LeagueOverview() {
 }
 
 function ShopModal({ onClose }: { onClose: () => void }) {
-  const { coins, inventory, unlocks, buyPowerup } = useStore();
+  const { coins, inventory, buyPowerup } = useStore();
   const [flash, setFlash] = useState<string | null>(null);
-  const owned = (id: string) => {
-    const pu = powerupById(id);
-    if (!pu) return 0;
-    return pu.kind === 'unlock' ? (unlocks.includes(id) ? 1 : 0) : (inventory[id] ?? 0);
-  };
   function buy(id: string) {
     if (buyPowerup(id)) { setFlash(id); setTimeout(() => setFlash((f) => (f === id ? null : f)), 600); }
   }
@@ -174,10 +169,8 @@ function ShopModal({ onClose }: { onClose: () => void }) {
     <Modal title="Power-Up Shop" sub={`◈ ${coins} DRIP COIN · +5 per signature play`} onClose={onClose} maxWidth={560}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 480, overflow: 'auto' }}>
         {POWERUPS.map((p) => {
-          const have = owned(p.id);
-          const isUnlockOwned = p.kind === 'unlock' && have > 0;
+          const have = inventory[p.id] ?? 0;
           const afford = coins >= p.price;
-          const disabled = isUnlockOwned || !afford;
           const timingTag = p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME';
           return (
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: 'var(--bg)', border: `1px solid ${flash === p.id ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, padding: '10px 12px', transition: 'border-color .3s' }}>
@@ -186,25 +179,25 @@ function ShopModal({ onClose }: { onClose: () => void }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                   <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{p.name}</span>
                   <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: p.timing === 'pre' ? 'var(--warn)' : 'var(--you)', border: `1px solid ${p.timing === 'pre' ? 'var(--warn)' : 'var(--you)'}`, borderRadius: 3, padding: '1px 4px' }}>{timingTag}</span>
-                  {p.kind === 'unlock' && <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }}>UNLOCK</span>}
+                  {p.kind === 'metric' && <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }}>METRIC · 1 WK</span>}
                 </div>
                 <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>{p.blurb}</div>
-                {have > 0 && <div className="mono" style={{ fontSize: 8.5, color: 'var(--you)', marginTop: 3, letterSpacing: '0.08em' }}>{isUnlockOwned ? '✓ UNLOCKED' : `OWNED ×${have}`}</div>}
+                {have > 0 && <div className="mono" style={{ fontSize: 8.5, color: 'var(--you)', marginTop: 3, letterSpacing: '0.08em' }}>OWNED ×{have}</div>}
               </div>
               <button
                 onClick={() => buy(p.id)}
-                disabled={disabled}
+                disabled={!afford}
                 className="mono"
-                style={{ flex: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', borderRadius: 4, padding: '8px 11px', border: 'none', cursor: disabled ? 'default' : 'pointer', color: disabled ? 'var(--faint)' : 'var(--bg)', background: disabled ? 'var(--surface)' : 'var(--you)', opacity: disabled ? 0.6 : 1 }}
+                style={{ flex: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', borderRadius: 4, padding: '8px 11px', border: 'none', cursor: afford ? 'pointer' : 'default', color: afford ? 'var(--bg)' : 'var(--faint)', background: afford ? 'var(--you)' : 'var(--surface)', opacity: afford ? 1 : 0.6 }}
               >
-                {isUnlockOwned ? 'OWNED' : `◈ ${p.price}`}
+                ◈ {p.price}
               </button>
             </div>
           );
         })}
       </div>
       <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.06em', marginTop: 12, lineHeight: 1.5 }}>
-        PRE-MATCH powerups apply during setup and lock once a window starts. REAL-TIME powerups can be applied during live play. Apply them from the matchup screen.
+        PRE-MATCH powerups apply during setup and lock once a window starts. REAL-TIME powerups can be applied during live play. METRIC unlocks last the current week only. Apply them from the matchup screen.
       </div>
     </Modal>
   );
