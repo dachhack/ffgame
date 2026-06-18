@@ -11,6 +11,7 @@ export type { SlotSwap };
 export interface AppliedWeek {
   extraSlots: Partial<Record<WindowId, number>>; // bonus slots per window (mirrored to opponent)
   swaps: Record<string, SlotSwap>;               // slotKey -> real-time swap (metric and/or player)
+  backups: Record<string, string>;               // backup slotKey -> target starter slotKey (manual best-ball)
 }
 
 export type Phase = 'setup' | 'live' | 'final';
@@ -42,6 +43,8 @@ interface Store {
   applyMetricSwap: (week: number, slotKey: string, atClock: number, toMetricId: string) => boolean;
   /** Real-time Player Swap on a slot, effective from `atClock` (consumes one). */
   applyPlayerSwap: (week: number, slotKey: string, atClock: number, toPlayerId: string) => boolean;
+  /** Manually point a backup slot at a starter to replace (empty target = auto). */
+  setBackupTarget: (week: number, backupKey: string, targetKey: string | null) => void;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -120,8 +123,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const consumeAndApply = (id: string, week: number, patch: (cur: AppliedWeek) => AppliedWeek): boolean => {
     if ((inventory[id] ?? 0) <= 0) return false;
     const nextInv = { ...inventory, [id]: inventory[id] - 1 };
-    const cur: AppliedWeek = applied[week] ?? { extraSlots: {}, swaps: {} };
-    const nextApplied = { ...applied, [week]: patch({ extraSlots: cur.extraSlots ?? {}, swaps: cur.swaps ?? {} }) };
+    const cur: AppliedWeek = applied[week] ?? { extraSlots: {}, swaps: {}, backups: {} };
+    const nextApplied = { ...applied, [week]: patch({ extraSlots: cur.extraSlots ?? {}, swaps: cur.swaps ?? {}, backups: cur.backups ?? {} }) };
     setInventory(nextInv); setApplied(nextApplied); persist({ inv: nextInv, applied: nextApplied });
     return true;
   };
@@ -135,8 +138,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const applyPlayerSwap = (week: number, slotKey: string, atClock: number, toPlayerId: string): boolean =>
     consumeAndApply('player-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, toPlayerId } } }));
 
+  const setBackupTarget = (week: number, backupKey: string, targetKey: string | null): void => {
+    const cur: AppliedWeek = applied[week] ?? { extraSlots: {}, swaps: {}, backups: {} };
+    const backups = { ...(cur.backups ?? {}) };
+    if (targetKey) backups[backupKey] = targetKey; else delete backups[backupKey];
+    const nextApplied = { ...applied, [week]: { extraSlots: cur.extraSlots ?? {}, swaps: cur.swaps ?? {}, backups } };
+    setApplied(nextApplied); persist({ applied: nextApplied });
+  };
+
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap }),
+    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget }),
     [theme, route, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

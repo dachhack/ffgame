@@ -143,6 +143,7 @@ export function buildMatchup(
   oppPicks: Record<string, Pick>,
   extraSlots: ExtraSlots = {},
   swaps: SlotSwaps = {},
+  backupAssign: Record<string, string> = {},
 ): ResolvedMatchup {
   const youPools = windowPools(youTeamId, week);
   const oppPools = windowPools(oppTeamId, week);
@@ -240,8 +241,8 @@ export function buildMatchup(
   // Unopposed players are BACKUPS (best-ball insurance): a backup doesn't score
   // in its own slot, but its highest score can replace your lowest starter's
   // score when it beats it. Applied per side, before suppress/sum.
-  applyBackups(windows, 'you');
-  applyBackups(windows, 'their');
+  applyBackups(windows, 'you', backupAssign);
+  applyBackups(windows, 'their', {});
 
   // DEF SUPPRESS (HALVING): your suppress DST halves every opposing slot (any
   // window) that scored at or below its threshold; their DST does the same to
@@ -284,12 +285,16 @@ export function signatureCoins(m: ResolvedMatchup, side: 'you' | 'their'): numbe
  * starter score when it beats it — greedily pairing the biggest backups with
  * the smallest beatable starters to maximize the side's total.
  */
-function applyBackups(windows: ResolvedWindow[], side: 'you' | 'their'): void {
+function applyBackups(windows: ResolvedWindow[], side: 'you' | 'their', assign: Record<string, string>): void {
   const all = windows.flatMap((w) => w.slots);
+  const keyOf = (s: ResolvedSlot) => slotKey(s.win, s.slotIndex);
   const mine = (s: ResolvedSlot) => (side === 'you' ? s.you : s.their);
   const opp = (s: ResolvedSlot) => (side === 'you' ? s.their : s.you);
   const getF = (s: ResolvedSlot) => (side === 'you' ? s.youFinal : s.theirFinal);
   const setF = (s: ResolvedSlot, v: number) => { if (side === 'you') s.youFinal = v; else s.theirFinal = v; };
+  const sub = (b: ResolvedSlot, st: ResolvedSlot) => {
+    st.subInName = mine(b)!.player.name; st.subFromScore = getF(st); setF(st, b.backupScore ?? 0); b.backupUsed = true;
+  };
 
   const backups = all.filter((s) => mine(s) && !opp(s));
   if (!backups.length) return;
@@ -297,21 +302,27 @@ function applyBackups(windows: ResolvedWindow[], side: 'you' | 'their'): void {
   for (const b of backups) { b.backup = true; b.backupScore = getF(b); setF(b, 0); }
 
   const starters = all.filter((s) => mine(s) && opp(s));
-  const backupsDesc = [...backups].sort((a, b) => (b.backupScore ?? 0) - (a.backupScore ?? 0));
-  const startersAsc = [...starters].sort((a, b) => getF(a) - getF(b));
+  const used = new Set<ResolvedSlot>();
+
+  // 1) Honor manual assignments (only valid when the backup outscores the target).
+  const autoBackups: ResolvedSlot[] = [];
+  for (const b of backups) {
+    const targetKey = assign[keyOf(b)];
+    const st = targetKey ? starters.find((s) => keyOf(s) === targetKey) : undefined;
+    if (st && !used.has(st) && (b.backupScore ?? 0) > getF(st)) { sub(b, st); used.add(st); }
+    else if (!targetKey) autoBackups.push(b); // unassigned → auto
+    // an assigned-but-invalid backup is left unused (respect the explicit choice)
+  }
+
+  // 2) Auto-maximize the rest: biggest backups vs smallest beatable starters.
+  const remStarters = starters.filter((s) => !used.has(s)).sort((a, b) => getF(a) - getF(b));
+  autoBackups.sort((a, b) => (b.backupScore ?? 0) - (a.backupScore ?? 0));
   let si = 0;
-  for (const b of backupsDesc) {
-    if (si >= startersAsc.length) break;
-    const st = startersAsc[si];
-    if ((b.backupScore ?? 0) > getF(st)) {
-      st.subInName = mine(b)!.player.name;
-      st.subFromScore = getF(st);
-      setF(st, b.backupScore ?? 0);
-      b.backupUsed = true;
-      si++;
-    } else {
-      break; // largest remaining backup can't beat the smallest remaining starter → none can
-    }
+  for (const b of autoBackups) {
+    if (si >= remStarters.length) break;
+    const st = remStarters[si];
+    if ((b.backupScore ?? 0) > getF(st)) { sub(b, st); si++; }
+    else break;
   }
 }
 

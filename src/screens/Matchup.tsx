@@ -16,9 +16,10 @@ const TICK_MS = 700;
 const TICK_SECONDS = 20;
 
 export function Matchup({ week, initialPhase }: { week: number; initialPhase: Phase }) {
-  const { navigate, coins, creditWeek, inventory, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap } = useStore();
+  const { navigate, coins, creditWeek, inventory, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget } = useStore();
   const extraSlots = applied[week]?.extraSlots ?? {};
   const swaps = applied[week]?.swaps ?? {};
+  const backupAssign = applied[week]?.backups ?? {};
   const oppId = gameForTeam(YOU, week)?.oppId ?? 'rock-tunnel';
   const you = getTeam(YOU)!;
   const opp = getTeam(oppId)!;
@@ -31,6 +32,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const [winPlaying, setWinPlaying] = useState<Record<string, boolean>>({});
   const [openPBP, setOpenPBP] = useState<Record<string, boolean>>({});
   const [swapTarget, setSwapTarget] = useState<{ key: string; win: WindowId } | null>(null);
+  const [backupMenu, setBackupMenu] = useState<{ key: string } | null>(null);
 
   // Lazy-load this week's real play-by-play (per-week JSON) before resolving.
   const [ready, setReady] = useState(() => !REAL_WEEKS.has(week) || isRealWeekLoaded(week));
@@ -60,9 +62,10 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   }, [phase, picks, youDefault]);
 
   const swapsKey = JSON.stringify(swaps);
+  const backupsKey = JSON.stringify(backupAssign);
   const resolved = useMemo(
-    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps),
-    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey],
+    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps, backupAssign),
+    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey],
   );
 
   // Drip coin: +5 per signature play your lineup makes this week (credited once).
@@ -308,6 +311,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 onApplyExtra={() => applyExtraSlot(week, rw.window.id)}
                 canSwap={canSwap}
                 onPowerup={(key) => setSwapTarget({ key, win: rw.window.id })}
+                onAssignBackup={(key) => setBackupMenu({ key })}
                 picks={picks}
                 selSlot={selSlot}
                 setSelSlot={setSelSlot}
@@ -349,7 +353,65 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
           />
         );
       })()}
+
+      {backupMenu && (() => {
+        const all = resolved.windows.flatMap((w) => w.slots);
+        const b = all.find((s) => slotKey(s.win, s.slotIndex) === backupMenu.key);
+        if (!b) return null;
+        const starters = all
+          .filter((s) => s.you && s.their)
+          .map((s) => ({ key: slotKey(s.win, s.slotIndex), name: s.you!.player.name, score: s.youFinal, win: s.win }));
+        return (
+          <BackupMenu
+            backupName={b.you?.player.name ?? '—'}
+            backupScore={b.backupScore ?? 0}
+            current={backupAssign[backupMenu.key]}
+            starters={starters}
+            onPick={(target) => { setBackupTarget(week, backupMenu.key, target); setBackupMenu(null); }}
+            onClose={() => setBackupMenu(null)}
+          />
+        );
+      })()}
     </>
+  );
+}
+
+// ── Backup assignment menu (manual best-ball) ──
+function BackupMenu({ backupName, backupScore, current, starters, onPick, onClose }: {
+  backupName: string; backupScore: number; current?: string;
+  starters: { key: string; name: string; score: number; win: WindowId }[];
+  onPick: (target: string | null) => void; onClose: () => void;
+}) {
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '60px 16px', overflow: 'auto' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
+          <div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Backup · {backupName} <span style={{ color: 'var(--warn)' }}>{backupScore.toFixed(1)}</span></div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>REPLACE A STARTER IT OUTSCORES (BEST-BALL)</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
+        </div>
+        <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 360, overflow: 'auto' }}>
+          <button onClick={() => onPick(null)} className="mono" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, background: !current ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${!current ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '8px 10px', color: 'var(--text)' }}>
+            <span style={{ fontSize: 11, fontWeight: 700 }}>AUTO — replace my lowest beatable starter</span>
+            {!current && <span style={{ fontSize: 9, color: 'var(--you)' }}>✓</span>}
+          </button>
+          {starters.map((s) => {
+            const beats = backupScore > s.score;
+            const sel = current === s.key;
+            return (
+              <button key={s.key} onClick={() => beats && onPick(s.key)} disabled={!beats} style={{ display: 'flex', alignItems: 'center', gap: 8, background: sel ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${sel ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '8px 10px', color: 'var(--text)', textAlign: 'left', opacity: beats ? 1 : 0.4, cursor: beats ? 'pointer' : 'default' }}>
+                <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', width: 34 }}>{s.win.toUpperCase()}</span>
+                <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, flex: 1 }}>{s.name}</span>
+                <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>{s.score.toFixed(1)}</span>
+                {sel ? <span style={{ fontSize: 9, color: 'var(--you)' }}>✓</span> : beats ? <span className="mono" style={{ fontSize: 8, color: 'var(--you)' }}>+{(backupScore - s.score).toFixed(1)}</span> : <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>—</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -465,6 +527,7 @@ function WindowSection(props: {
   onApplyExtra: () => void;
   canSwap: boolean;
   onPowerup: (key: string) => void;
+  onAssignBackup: (key: string) => void;
   picks: Record<string, Pick>;
   selSlot: string | null;
   setSelSlot: (k: string | null) => void;
@@ -475,7 +538,7 @@ function WindowSection(props: {
   youPools: Record<WindowId, Player[]>;
   onAssign: (id: string) => void;
 }) {
-  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, canSwap, onPowerup, picks, selSlot, setSelSlot, pickMetricFor, clearSlot, openPBP, togglePBP, onAssign } = props;
+  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, setSelSlot, pickMetricFor, clearSlot, openPBP, togglePBP, onAssign } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
@@ -539,7 +602,7 @@ function WindowSection(props: {
             );
           }
           return (
-            <ScoreRow key={key} slot={s} week={week} clock={clock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} canSwap={canSwap && !!s.you} onPowerup={() => onPowerup(key)} />
+            <ScoreRow key={key} slot={s} week={week} clock={clock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} canSwap={canSwap && !!s.you} onPowerup={() => onPowerup(key)} onAssignBackup={() => onAssignBackup(key)} />
           );
         })}
       </div>
@@ -615,10 +678,10 @@ function SetupRow(props: {
 }
 
 // ── Score row (live / final) ──
-function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onPowerup }: {
+function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onPowerup, onAssignBackup }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
   week: number; clock: number; open: boolean; onToggle: () => void; phase: Phase; done: boolean;
-  canSwap: boolean; onPowerup: () => void;
+  canSwap: boolean; onPowerup: () => void; onAssignBackup: () => void;
 }) {
   // Unopposed → BACKUP: doesn't score in its own slot; its score can replace a
   // starter (best-ball). Render a distinct backup row.
@@ -638,6 +701,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
           <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--warn)', lineHeight: 1 }}>{(slot.backupScore ?? 0).toFixed(1)}</div>
           <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: slot.backupUsed ? 'var(--you)' : 'var(--faint)', marginTop: 3 }}>{slot.backupUsed ? '✓ SUBBED IN' : 'BENCH'}</div>
         </div>
+        <button onClick={onAssignBackup} title="Choose which starter this backup replaces" className="mono" style={{ alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 8px' }}>ASSIGN ▾</button>
       </div>
     );
   }
