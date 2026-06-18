@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
 import { Brand, ThemeSwitcher, PosPill } from '../app/ui';
 import { getTeam, gameForTeam } from '../data/league';
 import { buildMatchup, defaultLineup, slotKey } from '../engine/matchup';
+import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
 import { metricById } from '../data/metrics';
 import { DEMO_WEEK } from '../config';
 
@@ -14,9 +15,18 @@ export function MatchupFinal({ week }: { week: number }) {
   const opp = getTeam(oppId)!;
   const you = getTeam(YOU)!;
 
-  const youPicks = useMemo(() => defaultLineup(YOU, week), [week]);
-  const oppPicks = useMemo(() => defaultLineup(oppId, week), [oppId, week]);
-  const m = useMemo(() => buildMatchup(YOU, oppId, week, youPicks, oppPicks), [oppId, week, youPicks, oppPicks]);
+  const [ready, setReady] = useState(() => !REAL_WEEKS.has(week) || isRealWeekLoaded(week));
+  useEffect(() => {
+    if (!REAL_WEEKS.has(week) || isRealWeekLoaded(week)) { setReady(true); return; }
+    setReady(false);
+    let alive = true;
+    loadRealWeek(week).then(() => { if (alive) setReady(true); });
+    return () => { alive = false; };
+  }, [week]);
+
+  const youPicks = useMemo(() => defaultLineup(YOU, week), [week, ready]);
+  const oppPicks = useMemo(() => defaultLineup(oppId, week), [oppId, week, ready]);
+  const m = useMemo(() => buildMatchup(YOU, oppId, week, youPicks, oppPicks), [oppId, week, youPicks, oppPicks, ready]);
 
   const won = m.youFinal >= m.theirFinal;
   const margin = Math.abs(m.youFinal - m.theirFinal).toFixed(1);
@@ -31,6 +41,14 @@ export function MatchupFinal({ week }: { week: number }) {
   const nextWeek = Math.min(14, week + 1);
   const nextOppId = gameForTeam(YOU, nextWeek)?.oppId;
   const nextOpp = nextOppId ? getTeam(nextOppId) : null;
+
+  if (!ready) {
+    return (
+      <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 240, color: 'var(--dim)', fontSize: 12, letterSpacing: '0.08em' }}>
+        LOADING WEEK {week}…
+      </div>
+    );
+  }
 
   return (
     <>

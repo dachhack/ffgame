@@ -1,7 +1,7 @@
 import type { Player, PlayerStats, Pos, PbpEvent, SlotResolution, EffectType } from '../types';
 import { hashStr } from '../data/players';
 import { metricById } from '../data/metrics';
-import { REAL_PBP, REAL_WEEKS } from '../data/realPbp';
+import { realPbpFor } from '../data/realPbp';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Deterministic simulation. Everything is seeded off (playerId, week) so a
@@ -253,9 +253,8 @@ export interface SlotInput {
 
 /** Real play-by-play for a player/week, if we've baked it; else null. */
 export function realRawPlays(playerId: string, week: number): RawPlay[] | null {
-  if (!REAL_WEEKS.has(week)) return null;
-  const ps = REAL_PBP[week]?.[playerId];
-  if (!ps || !ps.length) return null;
+  const ps = realPbpFor(week, playerId);
+  if (!ps) return null;
   return ps
     .map((p) => ({ clock: p.c, kind: p.k, yards: p.y, td: !!p.td, catch: !!p.ca, target: !!p.tg }))
     .sort((a, b) => a.clock - b.clock);

@@ -8,6 +8,7 @@ import {
   windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock,
 } from '../engine/matchup';
 import { fmtClock } from '../engine/sim';
+import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
 import type { Pick, Player, WindowId, PbpEvent } from '../types';
 
 const YOU = 'happy-campers';
@@ -27,10 +28,20 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const [playing, setPlaying] = useState(true);
   const [openPBP, setOpenPBP] = useState<Record<string, boolean>>({});
 
+  // Lazy-load this week's real play-by-play (per-week JSON) before resolving.
+  const [ready, setReady] = useState(() => !REAL_WEEKS.has(week) || isRealWeekLoaded(week));
+  useEffect(() => {
+    if (!REAL_WEEKS.has(week) || isRealWeekLoaded(week)) { setReady(true); return; }
+    setReady(false);
+    let alive = true;
+    loadRealWeek(week).then(() => { if (alive) setReady(true); });
+    return () => { alive = false; };
+  }, [week]);
+
   const youPools = useMemo(() => windowPools(YOU, week), [week]);
   const oppPools = useMemo(() => windowPools(oppId, week), [week, oppId]);
-  const oppPicks = useMemo(() => defaultLineup(oppId, week), [oppId, week]);
-  const youDefault = useMemo(() => defaultLineup(YOU, week), [week]);
+  const oppPicks = useMemo(() => defaultLineup(oppId, week), [oppId, week, ready]);
+  const youDefault = useMemo(() => defaultLineup(YOU, week), [week, ready]);
 
   // player -> its eligible window (your roster)
   const playerWindow = useMemo(() => {
@@ -48,7 +59,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
 
   const resolved = useMemo(
     () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks),
-    [oppId, week, effYouPicks, oppPicks],
+    [oppId, week, effYouPicks, oppPicks, ready],
   );
 
   const maxClock = resolved.maxClock;
@@ -124,6 +135,14 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
 
   const headline = phase === 'setup' ? 'Set Your Windows' : phase === 'live' ? 'Live Resolution' : `Week ${week} — Final`;
   const subhead = `${you.name} vs ${opp.name} · drag or tap players into the 5 game windows, then seal a hidden metric for each.`;
+
+  if (!ready) {
+    return (
+      <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 240, color: 'var(--dim)', fontSize: 12, letterSpacing: '0.08em' }}>
+        LOADING WEEK {week}…
+      </div>
+    );
+  }
 
   return (
     <>

@@ -3,7 +3,7 @@ import { WINDOWS, METRICS, TOTAL_SLOTS } from '../data/metrics';
 import { teamRoster } from '../data/league';
 import { hashStr } from '../data/players';
 import { resolveSlot, projectedPoints, type SlotInput } from './sim';
-import { REAL_WEEKS, REAL_POINTS } from '../data/realPbp';
+import { REAL_WEEKS, realPointsFor } from '../data/realPbp';
 
 // Deterministic per-week assignment of a roster across the 5 windows. The
 // wheel distributes players roughly in proportion to each window's slot count,
@@ -39,7 +39,7 @@ export function slotKey(win: WindowId, idx: number): string {
  * performers (benching anyone who didn't play) into the 8 slots in order.
  */
 function realLineup(teamId: string, week: number): Record<string, Pick> {
-  const pts = REAL_POINTS[week] || {};
+  const pts = realPointsFor(week);
   const ranked = teamRoster(teamId)
     .filter((p) => pts[p.id] !== undefined)
     .sort((a, b) => (pts[b.id] || 0) - (pts[a.id] || 0));
