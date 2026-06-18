@@ -2,7 +2,11 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, claude/youthful-albattani-s9kprl]
+    # Only the default branch may deploy to the github-pages environment
+    # (environment protection rules). Other branches racing this workflow get
+    # cancelled by the `pages` concurrency group and fail the deploy gate, so
+    # they're intentionally excluded.
+    branches: [claude/youthful-albattani-s9kprl]
   workflow_dispatch:
 
 permissions:
