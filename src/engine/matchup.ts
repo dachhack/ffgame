@@ -128,7 +128,7 @@ export function buildMatchup(
   let anyReal = false;
   let maxClock = 3300;
   // Lineup-wide tallies for the K banker bonus (each XP your banker kicker
-  // makes adds +1 to every TD across your lineup).
+  // makes adds +1 to each of your TDs scored under a TD-counting metric).
   let youTds = 0, theirTds = 0, youBankerXp = 0, theirBankerXp = 0;
 
   for (const w of WINDOWS) {
@@ -166,7 +166,8 @@ export function buildMatchup(
     windows.push({ window: w, slots });
   }
 
-  // K banker (XP BONUS): +1 to every one of your TDs per banker XP made.
+  // K banker (XP BONUS): +1 per banker XP to each of your TDs that was scored
+  // under a TD-counting metric (yardage metrics don't qualify).
   youFinal += youBankerXp * youTds;
   theirFinal += theirBankerXp * theirTds;
 

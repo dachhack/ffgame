@@ -358,8 +358,9 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       else if (play.catch) { mine.streak += 1; if (mine.streak >= 3) mine.hot = true; }
     }
 
-    // tallies for the K banker lineup-wide bonus
-    if (play.td) { if (play.side === 'you') youTds++; else theirTds++; }
+    // tallies for the K banker lineup-wide bonus: only TDs scored under a
+    // TD-counting metric ('td') qualify — yardage metrics (pass/rush/recyd) do not.
+    if (play.td && myPlayer.metricId === 'td') { if (play.side === 'you') youTds++; else theirTds++; }
     if (myPlayer.player.pos === 'K' && myPlayer.metricId === 'banker' && play.kind === 'xp') {
       if (play.side === 'you') youBankerXp++; else theirBankerXp++;
     }
