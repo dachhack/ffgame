@@ -189,7 +189,7 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
     if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0;
   }
   if (pos === 'RB') {
-    if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0;
+    if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 : 0; // drip, no TD
     if (metricId === 'rec') return play.catch ? 1 : 0;
     if (metricId === 'td') return play.td ? 6 : 0; // NUKE
   }
@@ -380,14 +380,16 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     mine.bank += pts;
     if (pts > 0) mine.hist.push({ clock: play.clock, pts });
 
-    // opponent's streak goes cold when I score
-    if (pts > 0 && oppFam === 'streak') { opp.streak = 0; opp.hot = false; }
+    // opponent's streak/compression resets when I score
+    if (pts > 0 && (oppFam === 'streak' || oppFam === 'compression')) { opp.streak = 0; opp.hot = false; }
 
     // my streak progression
     if (myFam === 'streak') {
       if (play.td) { mine.streak = 3; mine.hot = true; }
       else if (play.catch) { mine.streak += 1; if (mine.streak >= 3) mine.hot = true; }
     }
+    // my compression progression (RB rush): consecutive carries build the streak
+    if (myFam === 'compression' && play.kind === 'rush') mine.streak += 1;
 
     // tallies for the K banker lineup-wide bonus: only TDs scored under a
     // TD-counting metric ('td') qualify — yardage metrics (pass/rush/recyd) do not.
@@ -426,6 +428,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       if (last) { const cut = last.pts * 0.5; opp.bank = Math.max(0, opp.bank - cut); last.pts -= cut; effect = { type: 'reset', text: 'RATE RESET' }; }
     } else if (myFam === 'stop' && play.target && opp.hist.length) {
       effect = { type: 'stop', text: 'CLOCK STOP' };
+    } else if (myFam === 'compression' && play.kind === 'rush' && mine.streak >= 3 && opp.hist.length) {
+      // COMPRESSION: a sustained carry streak trims the opponent's most-recent score 25% per carry
+      const last = opp.hist[opp.hist.length - 1];
+      const cut = Math.round(last.pts * 0.25 * 10) / 10;
+      if (cut > 0) { opp.bank = Math.max(0, opp.bank - cut); last.pts -= cut; effect = { type: 'reset', text: `COMPRESSION −${cut.toFixed(1)}` }; }
     }
 
     // streak badges
