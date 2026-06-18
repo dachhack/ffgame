@@ -7,7 +7,7 @@ import { nflGameForTeam } from '../data/nflSlate';
 import { WINDOWS, METRICS, metricById } from '../data/metrics';
 import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
-  windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock, signatureCoins, slotsFor, totalSlotsWith,
+  windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock, signatureCoins, slotsFor, totalSlotsWith, byePlayers,
 } from '../engine/matchup';
 import { fmtClock, statlineAt, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
@@ -54,6 +54,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const oppPools = useMemo(() => windowPools(oppId, week), [week, oppId]);
   const oppPicks = useMemo(() => defaultLineup(oppId, week, extraSlots), [oppId, week, ready, extraKey]);
   const youDefault = useMemo(() => defaultLineup(YOU, week, extraSlots), [week, ready, extraKey]);
+  const byeYou = useMemo(() => byePlayers(YOU, week), [week]);
+  const byeTheir = useMemo(() => byePlayers(oppId, week), [week, oppId]);
 
   const playerWindow = useMemo(() => {
     const m = new Map<string, WindowId>();
@@ -290,7 +292,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
       </header>
 
       <div style={{ flex: 1, display: 'flex', gap: 14, padding: 14, overflow: 'hidden', minHeight: 0 }}>
-        <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={!rosterOpen.you} onToggle={() => toggleRoster('you')} />
+        <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={!rosterOpen.you} onToggle={() => toggleRoster('you')} bye={byeYou} />
 
         <main style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 18, marginBottom: 10 }}>
@@ -338,7 +340,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
           <div style={{ height: 40 }} />
         </main>
 
-        <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} collapsed={!rosterOpen.their} onToggle={() => toggleRoster('their')} />
+        <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} collapsed={!rosterOpen.their} onToggle={() => toggleRoster('their')} bye={byeTheir} />
       </div>
 
       {swapTarget && (() => {
@@ -473,7 +475,7 @@ function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMe
 }
 
 // ── Roster aside ──────────────────────────────────────────────────────────
-function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, onToggle }: {
+function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, onToggle, bye = [] }: {
   side: 'you' | 'their';
   pools: Record<WindowId, Player[]>;
   picks: Record<string, Pick>;
@@ -482,6 +484,7 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
   sealed?: boolean;
   collapsed: boolean;
   onToggle: () => void;
+  bye?: Player[];
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
   const assignedIds = new Set(Object.values(picks).map((p) => p.playerId));
@@ -510,6 +513,7 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
             <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{w.label}</span>
             <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{w.time}</span>
           </div>
+          {pools[w.id].length === 0 && <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', padding: '0 4px' }}>— none playing —</span>}
           {pools[w.id].map((p) => {
             const assigned = assignedIds.has(p.id);
             const interactive = side === 'you' && phase === 'setup';
@@ -533,6 +537,18 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
           })}
         </div>
       ))}
+      {bye.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, opacity: 0.5 }}>
+          <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)', fontWeight: 700, padding: '0 4px' }}>ON BYE · {bye.length}</span>
+          {bye.map((p) => (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 3, padding: '6px 9px' }}>
+              <PlayerImg playerId={p.id} team={p.team} pos={p.pos} size={16} />
+              <span className="grotesk" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+              <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>BYE</span>
+            </div>
+          ))}
+        </div>
+      )}
     </aside>
   );
 }

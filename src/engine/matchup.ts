@@ -1,30 +1,31 @@
 import type { Player, WindowId, Pick, PbpEvent } from '../types';
-import { WINDOWS, METRICS, TOTAL_SLOTS } from '../data/metrics';
+import { WINDOWS, METRICS } from '../data/metrics';
 import { teamRoster, getPlayer } from '../data/league';
+import { hashStr } from '../data/players';
 
 /** A real-time swap on a slot, effective from `atClock` (Player/Metric Swap). */
 export interface SlotSwap { atClock: number; toMetricId?: string; toPlayerId?: string; }
 export type SlotSwaps = Record<string, SlotSwap>; // slotKey -> swap
-import { hashStr } from '../data/players';
 import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, defEarnScore, EMPTY_PLAYER, type SlotInput } from './sim';
 import { REAL_WEEKS, realPointsFor } from '../data/realPbp';
+import { windowForTeam } from '../data/nflSlate';
 
-// Deterministic per-week assignment of a roster across the 5 windows. The
-// wheel distributes players roughly in proportion to each window's slot count,
-// guaranteeing every window has enough bodies to fill its slots.
-const WHEEL: WindowId[] = [
-  'tnf', 'early', 'early', 'early', 'late', 'late', 'snf', 'mnf',
-  'early', 'late', 'tnf', 'snf', 'mnf', 'early', 'late', 'mnf',
-];
-
+// A roster grouped into the 5 windows by each player's REAL NFL game time slot
+// that week (their team's kickoff). A player only appears in — and can only be
+// assigned to — the window their game falls in. Players on bye don't appear.
 export function windowPools(teamId: string, week: number): Record<WindowId, Player[]> {
-  const players = teamRoster(teamId);
-  const sorted = [...players].sort(
-    (a, b) => hashStr(`${a.id}|w${week}`) - hashStr(`${b.id}|w${week}`),
-  );
   const pools: Record<WindowId, Player[]> = { tnf: [], early: [], late: [], snf: [], mnf: [] };
-  sorted.forEach((p, i) => pools[WHEEL[i % WHEEL.length]].push(p));
+  for (const p of teamRoster(teamId)) {
+    const win = windowForTeam(week, p.team);
+    if (win) pools[win].push(p);
+  }
+  for (const w of Object.keys(pools) as WindowId[]) pools[w].sort((a, b) => projectedPoints(b, week) - projectedPoints(a, week));
   return pools;
+}
+
+/** Roster players whose NFL team is on bye this week (not assignable anywhere). */
+export function byePlayers(teamId: string, week: number): Player[] {
+  return teamRoster(teamId).filter((p) => !windowForTeam(week, p.team));
 }
 
 /** A deterministic hidden metric for an auto/opponent pick. */
@@ -52,35 +53,20 @@ export function totalSlotsWith(extra?: ExtraSlots): number {
 }
 
 /**
- * When real play-by-play is baked for the week, field the roster's real top-8
- * performers (benching anyone who didn't play) into the 8 slots in order.
+ * Seed a lineup honoring the real time-slot windows: within each window, field
+ * that window's eligible players (the ones whose NFL game falls in it), best
+ * first — by real fantasy points on a baked week, else by projection. Windows
+ * with no eligible roster player are left empty (realistic).
  */
-function realLineup(teamId: string, week: number, extra?: ExtraSlots): Record<string, Pick> {
-  const pts = realPointsFor(week);
-  const ranked = teamRoster(teamId)
-    .filter((p) => pts[p.id] !== undefined)
-    .sort((a, b) => (pts[b.id] || 0) - (pts[a.id] || 0));
-  const picks: Record<string, Pick> = {};
-  let idx = 0;
-  for (const w of WINDOWS) {
-    for (let i = 0; i < slotsFor(w.id, extra); i++) {
-      const p = ranked[idx++];
-      if (p) picks[slotKey(w.id, i)] = { playerId: p.id, metricId: pickMetric(p, week) };
-    }
-  }
-  return picks;
-}
-
-/** Best available player per slot, with a hidden metric — used to seed lineups. */
 export function defaultLineup(teamId: string, week: number, extra?: ExtraSlots): Record<string, Pick> {
-  if (REAL_WEEKS.has(week)) {
-    const rl = realLineup(teamId, week, extra);
-    if (Object.keys(rl).length >= TOTAL_SLOTS) return rl;
-  }
   const pools = windowPools(teamId, week);
+  const real = REAL_WEEKS.has(week);
+  const pts = real ? realPointsFor(week) : {};
   const picks: Record<string, Pick> = {};
   for (const w of WINDOWS) {
-    const ranked = [...pools[w.id]].sort((a, b) => projectedPoints(b, week) - projectedPoints(a, week));
+    const ranked = real
+      ? pools[w.id].filter((p) => pts[p.id] !== undefined).sort((a, b) => (pts[b.id] || 0) - (pts[a.id] || 0))
+      : pools[w.id]; // already projection-sorted
     for (let i = 0; i < slotsFor(w.id, extra); i++) {
       const p = ranked[i];
       if (p) picks[slotKey(w.id, i)] = { playerId: p.id, metricId: pickMetric(p, week) };
