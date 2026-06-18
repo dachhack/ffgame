@@ -2,7 +2,7 @@ import type { Player, WindowId, Pick, PbpEvent } from '../types';
 import { WINDOWS, METRICS, TOTAL_SLOTS } from '../data/metrics';
 import { teamRoster } from '../data/league';
 import { hashStr } from '../data/players';
-import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, defEarnScore, type SlotInput } from './sim';
+import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, defEarnScore, EMPTY_PLAYER, type SlotInput } from './sim';
 import { REAL_WEEKS, realPointsFor } from '../data/realPbp';
 
 // Deterministic per-week assignment of a roster across the 5 windows. The
@@ -181,10 +181,13 @@ export function buildMatchup(
       let gameLabel = w.label;
       let real = false;
 
-      if (you && their) {
-        const yIn: SlotInput = { player: you.player, metricId: you.metricId };
-        const tIn: SlotInput = { player: their.player, metricId: their.metricId };
-        gameLabel = `${you.player.team || 'NFL'} · ${their.player.team || 'NFL'}`;
+      // Resolve whenever at least one side is filled. An unopposed slot plays
+      // against the empty sentinel — the present player banks points with no
+      // opposing interactions (see EMPTY_PLAYER).
+      if (you || their) {
+        const yIn: SlotInput = you ? { player: you.player, metricId: you.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
+        const tIn: SlotInput = their ? { player: their.player, metricId: their.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
+        gameLabel = `${you?.player.team || 'BYE'} · ${their?.player.team || 'BYE'}`;
         const res = resolveSlot(yIn, tIn, week, gameLabel, { youMult, theirMult, youDripNukeClocks: theirTeTd, theirDripNukeClocks: youTeTd });
         events = res.events;
         yF = res.youFinal;

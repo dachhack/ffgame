@@ -307,8 +307,15 @@ export function hasRealPbp(playerId: string, week: number): boolean {
   return realRawPlays(playerId, week) !== null;
 }
 
+/** A sentinel "no opponent" player — an unopposed slot resolves against it. */
+export const EMPTY_PLAYER: Player = {
+  id: '__empty__', name: '—', full: 'No opponent', pos: 'WR', team: '',
+  stats: { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 },
+};
+
 /** Real plays when available, otherwise the deterministic simulation. */
 function playsForPlayer(player: Player, week: number): { plays: RawPlay[]; real: boolean } {
+  if (player.id === EMPTY_PLAYER.id) return { plays: [], real: false };
   const r = realRawPlays(player.id, week);
   if (r) return { plays: r, real: true };
   return { plays: buildPlays(player, weekLine(player, week), week), real: false };
