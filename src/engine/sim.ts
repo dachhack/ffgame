@@ -185,8 +185,8 @@ function buildPlays(p: Player, l: WeekLine, week: number): RawPlay[] {
 function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): number {
   if (pos === 'QB') {
     if (metricId === 'fg') return 0; // Field General scores nothing — it multiplies your other window players (see windowFgMult / resolveSlot opts)
-    if (metricId === 'pass') return play.kind === 'pass' ? play.yards * 0.04 + (play.td ? 4 : 0) : 0;
-    if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0;
+    if (metricId === 'pass') return play.kind === 'pass' ? play.yards * 0.04 : 0; // flat yards only — TDs are their own metric
+    if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 : 0;  // flat yards only
   }
   if (pos === 'RB') {
     if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 : 0; // drip, no TD
@@ -224,8 +224,10 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
     if (play.kind === 'safety') return 2;
     return 0;
   }
-  // fallback flat
-  return play.catch ? play.yards * 0.1 + (play.td ? 6 : 0) : (play.kind === 'rush' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0);
+  // Every valid (position, metric) pair is handled above (drip metrics resolve
+  // on their own path and never reach here). Anything else scores nothing,
+  // rather than silently bundling multiple stat types into one metric.
+  return 0;
 }
 
 type Family = 'nuke' | 'erase' | 'streak' | 'mult' | 'compression' | 'reset' | 'stop' | 'flat';
