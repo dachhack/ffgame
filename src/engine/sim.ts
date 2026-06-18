@@ -385,12 +385,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   let lastClock = 0;
   const accrue = (to: number) => {
     if (dripYou && !Y.paused && !Y.dead && Y.rate > 0) {
-      let add = Y.rate * (offSecs(youPoss, lastClock, to) / 60);
+      let add = Y.rate * (offSecs(youPoss, lastClock, to) / 60) * (Y.hot ? 2 : 1);
       const m = opts.youMult?.(to); if (m && m !== 1) add *= m;
       if (add > 0) { Y.bank += add; Y.hist.push({ clock: to, pts: add }); }
     }
     if (dripTheir && !T.paused && !T.dead && T.rate > 0) {
-      let add = T.rate * (offSecs(theirPoss, lastClock, to) / 60);
+      let add = T.rate * (offSecs(theirPoss, lastClock, to) / 60) * (T.hot ? 2 : 1);
       const m = opts.theirMult?.(to); if (m && m !== 1) add *= m;
       if (add > 0) { T.bank += add; T.hist.push({ clock: to, pts: add }); }
     }
@@ -411,13 +411,19 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const myPlayer = play.side === 'you' ? you : their;
     const iAmDrip = play.side === 'you' ? dripYou : dripTheir;
     const oppIsDrip = play.side === 'you' ? dripTheir : dripYou;
+    const myDripKind = play.side === 'you' ? youDripKind : theirDripKind;
 
-    // Scoring. Drip: a catch raises the rate and resumes the drip but scores
-    // nothing directly. Otherwise the metric's per-play points (× FG mult).
+    // Scoring. Drip: a catch/carry raises the rate and resumes the drip but
+    // scores nothing directly; 3 straight (no opponent score) goes hot → 2×
+    // accrual. Otherwise the metric's per-play points (× FG mult).
     let pts = 0;
     if (iAmDrip) {
-      const dk = play.side === 'you' ? youDripKind : theirDripKind;
-      if (play.kind === dk) { mine.rate += play.yards * 0.01; mine.paused = false; }
+      if (play.kind === myDripKind) {
+        mine.rate += play.yards * 0.01;
+        mine.paused = false;
+        mine.streak += 1;
+        if (mine.streak >= 3) mine.hot = true;
+      }
     } else {
       pts = scorePlay(play, myPlayer.player.pos, myPlayer.metricId, myFam === 'streak' && mine.hot);
       if (mine.dead) pts = 0;
@@ -428,7 +434,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     mine.bank += pts;
     if (pts > 0) mine.hist.push({ clock: play.clock, pts });
 
-    if (pts > 0 && oppFam === 'streak') { opp.streak = 0; opp.hot = false; }
+    if (pts > 0 && (oppFam === 'streak' || oppIsDrip)) { opp.streak = 0; opp.hot = false; }
 
     if (myFam === 'streak') {
       if (play.td) { mine.streak = 3; mine.hot = true; }
@@ -491,7 +497,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     }
 
     // streak / drip badges
-    if (!effect && iAmDrip && play.kind === 'rec') effect = { type: 'streak', text: `DRIP ↑ ${mine.rate.toFixed(2)}/min` };
+    if (!effect && iAmDrip && play.kind === myDripKind) effect = { type: 'streak', text: mine.hot ? `DRIP HOT 2× · ${mine.rate.toFixed(2)}/min` : `DRIP ↑ ${mine.rate.toFixed(2)}/min` };
     if (!effect && myFam === 'streak') {
       if (play.td) effect = { type: 'streak', text: 'TD → STREAK 2×' };
       else if (mine.hot && play.catch) effect = { type: 'streak', text: 'HOT STREAK · 2×' };
