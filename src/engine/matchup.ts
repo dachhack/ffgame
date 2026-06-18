@@ -2,7 +2,7 @@ import type { Player, WindowId, Pick, PbpEvent } from '../types';
 import { WINDOWS, METRICS, TOTAL_SLOTS } from '../data/metrics';
 import { teamRoster } from '../data/league';
 import { hashStr } from '../data/players';
-import { resolveSlot, projectedPoints, windowFgMult, type SlotInput } from './sim';
+import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, type SlotInput } from './sim';
 import { REAL_WEEKS, realPointsFor } from '../data/realPbp';
 
 // Deterministic per-week assignment of a roster across the 5 windows. The
@@ -144,6 +144,10 @@ export function buildMatchup(
     }
     const youMult = windowFgMult(youIns, week);
     const theirMult = windowFgMult(theirIns, week);
+    // TE TD nukes reach across the window: your TEs' TD clocks knock down the
+    // opponents' drips, and vice-versa.
+    const youTeTd = teTdNukeClocks(youIns, week);
+    const theirTeTd = teTdNukeClocks(theirIns, week);
 
     const slots: ResolvedSlot[] = [];
     for (let i = 0; i < w.slots; i++) {
@@ -161,7 +165,7 @@ export function buildMatchup(
         const yIn: SlotInput = { player: you.player, metricId: you.metricId };
         const tIn: SlotInput = { player: their.player, metricId: their.metricId };
         gameLabel = `${you.player.team || 'NFL'} · ${their.player.team || 'NFL'}`;
-        const res = resolveSlot(yIn, tIn, week, gameLabel, { youMult, theirMult });
+        const res = resolveSlot(yIn, tIn, week, gameLabel, { youMult, theirMult, youDripNukeClocks: theirTeTd, theirDripNukeClocks: youTeTd });
         events = res.events;
         yF = res.youFinal;
         tF = res.theirFinal;

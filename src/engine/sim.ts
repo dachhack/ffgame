@@ -338,6 +338,19 @@ export function windowFgMult(players: SlotInput[], week: number): ((clock: numbe
   };
 }
 
+// Clocks at which a side's TE Touchdown (8-PT NUKE) players score a TD. Each
+// such clock knocks every opposing drip rate down by 1.0 across the window.
+export function teTdNukeClocks(players: SlotInput[], week: number): number[] {
+  const clocks: number[] = [];
+  for (const p of players) {
+    if (p.player.pos === 'TE' && p.metricId === 'td') {
+      const plays = realRawPlays(p.player.id, week) ?? buildPlays(p.player, weekLine(p.player, week), week);
+      for (const x of plays) if (x.td) clocks.push(x.clock);
+    }
+  }
+  return clocks.sort((a, b) => a - b);
+}
+
 // Offensive seconds within (t0, t1] given a team's possession intervals.
 // No intervals (unknown) → full elapsed (drip ungated rather than dead).
 function offSecs(intervals: number[][], t0: number, t1: number): number {
@@ -354,7 +367,7 @@ function offSecs(intervals: number[][], t0: number, t1: number): number {
  * `opts.youMult` / `opts.theirMult` apply a per-clock multiplier to that
  * side's scoring (used by the QB Field General window multiplier).
  */
-export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number } {
+export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[] } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number } {
   const yp = playsForPlayer(you.player, week);
   const tp = playsForPlayer(their.player, week);
   const yPlays = yp.plays;
@@ -383,24 +396,49 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const dripTheir = theirDripKind !== null;
   const youPoss = dripYou ? realPossFor(week, you.player.team) : [];
   const theirPoss = dripTheir ? realPossFor(week, their.player.team) : [];
+  const events: PbpEvent[] = [];
+
+  // TE Touchdowns (8-PT NUKE) reach across the whole window: each opposing TE
+  // TD instantly knocks every one of your drip rates down by 1.0 pts/min (min
+  // 0). The clocks of those TDs arrive via opts; we step through them during
+  // accrual so the cut lands at the exact moment of the TD.
+  const DRIP_NUKE = 1.0;
+  const youNukeClocks = (opts.youDripNukeClocks ?? []).slice().sort((a, b) => a - b);
+  const theirNukeClocks = (opts.theirDripNukeClocks ?? []).slice().sort((a, b) => a - b);
+  let yNukeI = 0, tNukeI = 0;
   let lastClock = 0;
+  const accrueSide = (s: SideState, poss: number[][], from: number, to: number, mult?: (c: number) => number) => {
+    if (s.paused || s.dead || s.rate <= 0 || to <= from) return;
+    let add = s.rate * (offSecs(poss, from, to) / 60) * (s.hot ? 2 : 1);
+    const m = mult?.(to); if (m && m !== 1) add *= m;
+    if (add > 0) { s.bank += add; s.hist.push({ clock: to, pts: add }); }
+  };
+  const dripNuke = (s: SideState, side: 'you' | 'their', clock: number) => {
+    if (s.rate <= 0) return;
+    s.rate = Math.max(0, s.rate - DRIP_NUKE);
+    events.push({ clock, side, play: `${(side === 'you' ? you : their).player.team || 'NFL'}: drip nuked`, delta: 0, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, effect: { type: 'nuke', text: `DRIP NUKED −${DRIP_NUKE.toFixed(1)}/min → ${s.rate.toFixed(2)}` } });
+  };
   const accrue = (to: number) => {
-    if (dripYou && !Y.paused && !Y.dead && Y.rate > 0) {
-      let add = Y.rate * (offSecs(youPoss, lastClock, to) / 60) * (Y.hot ? 2 : 1);
-      const m = opts.youMult?.(to); if (m && m !== 1) add *= m;
-      if (add > 0) { Y.bank += add; Y.hist.push({ clock: to, pts: add }); }
+    // Gather this segment's drip-nuke clocks (a TE TD on the opposing side),
+    // sorted, and accrue between them so each cut lands at its own clock.
+    const stops: { clock: number; side: 'you' | 'their' }[] = [];
+    while (yNukeI < youNukeClocks.length && youNukeClocks[yNukeI] <= to) stops.push({ clock: youNukeClocks[yNukeI++], side: 'you' });
+    while (tNukeI < theirNukeClocks.length && theirNukeClocks[tNukeI] <= to) stops.push({ clock: theirNukeClocks[tNukeI++], side: 'their' });
+    stops.sort((a, b) => a.clock - b.clock);
+    let from = lastClock;
+    for (const st of stops) {
+      if (dripYou) accrueSide(Y, youPoss, from, st.clock, opts.youMult);
+      if (dripTheir) accrueSide(T, theirPoss, from, st.clock, opts.theirMult);
+      if (st.side === 'you' && dripYou) dripNuke(Y, 'you', st.clock);
+      if (st.side === 'their' && dripTheir) dripNuke(T, 'their', st.clock);
+      from = st.clock;
     }
-    if (dripTheir && !T.paused && !T.dead && T.rate > 0) {
-      let add = T.rate * (offSecs(theirPoss, lastClock, to) / 60) * (T.hot ? 2 : 1);
-      const m = opts.theirMult?.(to); if (m && m !== 1) add *= m;
-      if (add > 0) { T.bank += add; T.hist.push({ clock: to, pts: add }); }
-    }
+    if (dripYou) accrueSide(Y, youPoss, from, to, opts.youMult);
+    if (dripTheir) accrueSide(T, theirPoss, from, to, opts.theirMult);
   };
 
   // TDs and banker-XPs per side, surfaced for the lineup-wide K banker bonus.
   let youTds = 0, theirTds = 0, youBankerXp = 0, theirBankerXp = 0;
-
-  const events: PbpEvent[] = [];
 
   for (const play of merged) {
     accrue(play.clock);
