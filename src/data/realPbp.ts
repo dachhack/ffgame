@@ -12,7 +12,7 @@ export type RealPlayKind =
   | 'sack' | 'int' | 'fumrec' | 'dst_td' | 'safety'; // team defense
 export interface RealPlay { c: number; k: RealPlayKind; y: number; td: number; ca: number; tg: number; }
 
-interface WeekData { pbp: Record<string, RealPlay[]>; points: Record<string, number>; }
+interface WeekData { pbp: Record<string, RealPlay[]>; points: Record<string, number>; poss?: Record<string, number[][]>; }
 
 const cache = new Map<number, WeekData>();
 const inflight = new Map<number, Promise<void>>();
@@ -47,4 +47,10 @@ export function realPointsFor(week: number): Record<string, number> {
 export function realPbpFor(week: number, playerId: string): RealPlay[] | null {
   const ps = cache.get(week)?.pbp[playerId];
   return ps && ps.length ? ps : null;
+}
+
+/** A team's offensive possession intervals [startSec,endSec] for a loaded week
+ *  (for the possession-gated WR drip); empty if not loaded/known. */
+export function realPossFor(week: number, team: string): number[][] {
+  return cache.get(week)?.poss?.[team] ?? [];
 }

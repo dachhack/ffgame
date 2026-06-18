@@ -1,7 +1,7 @@
 import type { Player, PlayerStats, Pos, PbpEvent, SlotResolution, EffectType } from '../types';
 import { hashStr } from '../data/players';
 import { metricById } from '../data/metrics';
-import { realPbpFor, type RealPlayKind } from '../data/realPbp';
+import { realPbpFor, realPossFor, type RealPlayKind } from '../data/realPbp';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Deterministic simulation. Everything is seeded off (playerId, week) so a
@@ -248,6 +248,8 @@ interface SideState {
   hot: boolean;
   kicks: number;   // made kicks (for K neg shutdown)
   dead: boolean;   // negated by an opponent K-neg shutdown → scores 0
+  rate: number;    // WR drip rate (pts/min), grows per catch
+  paused: boolean; // drip paused until the WR's next catch
 }
 
 interface MergedPlay extends RawPlay {
@@ -335,6 +337,16 @@ export function windowFgMult(players: SlotInput[], week: number): ((clock: numbe
   };
 }
 
+// Offensive seconds within (t0, t1] given a team's possession intervals.
+// No intervals (unknown) → full elapsed (drip ungated rather than dead).
+function offSecs(intervals: number[][], t0: number, t1: number): number {
+  if (t1 <= t0) return 0;
+  if (!intervals.length) return t1 - t0;
+  let s = 0;
+  for (const [a, b] of intervals) { const lo = Math.max(a, t0), hi = Math.min(b, t1); if (hi > lo) s += hi - lo; }
+  return s;
+}
+
 /**
  * Resolve one slot: your player+metric vs their player+metric over a merged
  * play-by-play timeline. Returns the full event feed plus final banks.
@@ -352,10 +364,30 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     ...tPlays.map((p) => ({ ...p, side: 'their' as const })),
   ].sort((a, b) => a.clock - b.clock);
 
-  const Y: SideState = { bank: 0, hist: [], streak: 0, hot: false, kicks: 0, dead: false };
-  const T: SideState = { bank: 0, hist: [], streak: 0, hot: false, kicks: 0, dead: false };
+  const Y: SideState = { bank: 0, hist: [], streak: 0, hot: false, kicks: 0, dead: false, rate: 0, paused: false };
+  const T: SideState = { bank: 0, hist: [], streak: 0, hot: false, kicks: 0, dead: false, rate: 0, paused: false };
   const youFam = familyOf(you.player.pos, you.metricId);
   const theirFam = familyOf(their.player.pos, their.metricId);
+
+  // WR Receiving Yards is a possession-gated drip: a catch raises a permanent
+  // rate (yds × 0.01 pts/min) that accrues over the WR team's offensive time.
+  const dripYou = you.player.pos === 'WR' && you.metricId === 'recyd';
+  const dripTheir = their.player.pos === 'WR' && their.metricId === 'recyd';
+  const youPoss = dripYou ? realPossFor(week, you.player.team) : [];
+  const theirPoss = dripTheir ? realPossFor(week, their.player.team) : [];
+  let lastClock = 0;
+  const accrue = (to: number) => {
+    if (dripYou && !Y.paused && !Y.dead && Y.rate > 0) {
+      let add = Y.rate * (offSecs(youPoss, lastClock, to) / 60);
+      const m = opts.youMult?.(to); if (m && m !== 1) add *= m;
+      if (add > 0) { Y.bank += add; Y.hist.push({ clock: to, pts: add }); }
+    }
+    if (dripTheir && !T.paused && !T.dead && T.rate > 0) {
+      let add = T.rate * (offSecs(theirPoss, lastClock, to) / 60);
+      const m = opts.theirMult?.(to); if (m && m !== 1) add *= m;
+      if (add > 0) { T.bank += add; T.hist.push({ clock: to, pts: add }); }
+    }
+  };
 
   // TDs and banker-XPs per side, surfaced for the lineup-wide K banker bonus.
   let youTds = 0, theirTds = 0, youBankerXp = 0, theirBankerXp = 0;
@@ -363,36 +395,39 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const events: PbpEvent[] = [];
 
   for (const play of merged) {
+    accrue(play.clock);
+    lastClock = play.clock;
     const mine = play.side === 'you' ? Y : T;
     const opp = play.side === 'you' ? T : Y;
     const myFam = play.side === 'you' ? youFam : theirFam;
     const oppFam = play.side === 'you' ? theirFam : youFam;
     const myPlayer = play.side === 'you' ? you : their;
+    const iAmDrip = play.side === 'you' ? dripYou : dripTheir;
+    const oppIsDrip = play.side === 'you' ? dripTheir : dripYou;
 
-    // base points (hot streak doubling applies to recyd catches). A side
-    // negated by a K-neg shutdown scores nothing for the rest of the slot.
-    let pts = scorePlay(play, myPlayer.player.pos, myPlayer.metricId, myFam === 'streak' && mine.hot);
-    if (mine.dead) pts = 0;
-    // Field General: scale this side's scoring by the live window multiplier.
-    const fgMult = play.side === 'you' ? opts.youMult?.(play.clock) : opts.theirMult?.(play.clock);
-    if (fgMult && fgMult !== 1) pts *= fgMult;
+    // Scoring. Drip: a catch raises the rate and resumes the drip but scores
+    // nothing directly. Otherwise the metric's per-play points (× FG mult).
+    let pts = 0;
+    if (iAmDrip) {
+      if (play.kind === 'rec') { mine.rate += play.yards * 0.01; mine.paused = false; }
+    } else {
+      pts = scorePlay(play, myPlayer.player.pos, myPlayer.metricId, myFam === 'streak' && mine.hot);
+      if (mine.dead) pts = 0;
+      const fgMult = play.side === 'you' ? opts.youMult?.(play.clock) : opts.theirMult?.(play.clock);
+      if (fgMult && fgMult !== 1) pts *= fgMult;
+    }
 
     mine.bank += pts;
     if (pts > 0) mine.hist.push({ clock: play.clock, pts });
 
-    // opponent's streak/compression resets when I score
     if (pts > 0 && (oppFam === 'streak' || oppFam === 'compression')) { opp.streak = 0; opp.hot = false; }
 
-    // my streak progression
     if (myFam === 'streak') {
       if (play.td) { mine.streak = 3; mine.hot = true; }
       else if (play.catch) { mine.streak += 1; if (mine.streak >= 3) mine.hot = true; }
     }
-    // my compression progression (RB rush): consecutive carries build the streak
     if (myFam === 'compression' && play.kind === 'rush') mine.streak += 1;
 
-    // tallies for the K banker lineup-wide bonus: only TDs scored under a
-    // TD-counting metric ('td') qualify — yardage metrics (pass/rush/recyd) do not.
     if (play.td && myPlayer.metricId === 'td') { if (play.side === 'you') youTds++; else theirTds++; }
     if (myPlayer.player.pos === 'K' && myPlayer.metricId === 'banker' && play.kind === 'xp') {
       if (play.side === 'you') youBankerXp++; else theirBankerXp++;
@@ -400,14 +435,33 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
 
     let effect: { type: EffectType; text: string } | undefined;
 
-    // K NEG (SHUTDOWN): 6th made kick zeroes the matched opponent and negates
-    // the rest of their slot.
     if (myPlayer.player.pos === 'K' && myPlayer.metricId === 'neg' && (play.kind === 'fg' || play.kind === 'xp')) {
+      // K NEG (SHUTDOWN): 6th made kick zeroes + negates the matched opponent.
       mine.kicks++;
       if (mine.kicks >= 6 && !opp.dead) {
         const wiped = opp.bank;
-        opp.bank = 0; opp.hist = []; opp.dead = true;
+        opp.bank = 0; opp.hist = []; opp.dead = true; opp.paused = true;
         effect = { type: 'nuke', text: `✕ SHUTDOWN — negated ${wiped.toFixed(1)}` };
+      }
+    } else if (oppIsDrip) {
+      // The matched opponent is a drip WR: its accrual reacts to my play type.
+      // Any catch erases its last-10-min drip and pauses it; any target pauses
+      // it; any TD wipes its entire drip bank.
+      if (play.kind === 'rec') {
+        const cutoff = play.clock - 600;
+        let erased = 0;
+        opp.hist = opp.hist.filter((h) => { if (h.clock >= cutoff) { erased += h.pts; return false; } return true; });
+        if (erased > 0) opp.bank = Math.max(0, opp.bank - erased);
+        opp.paused = true;
+        effect = { type: 'erase', text: erased > 0 ? `ERASE −${erased.toFixed(1)} · drip stop` : 'DRIP STOP' };
+      } else if (play.kind === 'incomplete') {
+        opp.paused = true;
+        effect = { type: 'stop', text: 'DRIP STOP' };
+      }
+      if (play.td) {
+        const wiped = opp.bank;
+        opp.bank = 0; opp.hist = []; opp.paused = true;
+        effect = { type: 'nuke', text: `✕ TD — wiped drip ${wiped.toFixed(1)}` };
       }
     } else if (myFam === 'nuke' && play.td && opp.bank > 0) {
       const wiped = opp.bank;
@@ -423,25 +477,23 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       });
       if (erased > 0) { opp.bank = Math.max(0, opp.bank - erased); effect = { type: 'erase', text: `ERASE −${erased.toFixed(1)}` }; }
     } else if (myFam === 'reset' && play.catch) {
-      // RATE RESET: clip the opponent's most recent contribution (flavor)
       const last = opp.hist[opp.hist.length - 1];
       if (last) { const cut = last.pts * 0.5; opp.bank = Math.max(0, opp.bank - cut); last.pts -= cut; effect = { type: 'reset', text: 'RATE RESET' }; }
     } else if (myFam === 'stop' && play.target && opp.hist.length) {
       effect = { type: 'stop', text: 'CLOCK STOP' };
     } else if (myFam === 'compression' && play.kind === 'rush' && mine.streak >= 3 && opp.hist.length) {
-      // COMPRESSION: a sustained carry streak trims the opponent's most-recent score 25% per carry
       const last = opp.hist[opp.hist.length - 1];
       const cut = Math.round(last.pts * 0.25 * 10) / 10;
       if (cut > 0) { opp.bank = Math.max(0, opp.bank - cut); last.pts -= cut; effect = { type: 'reset', text: `COMPRESSION −${cut.toFixed(1)}` }; }
     }
 
-    // streak badges
+    // streak / drip badges
+    if (!effect && iAmDrip && play.kind === 'rec') effect = { type: 'streak', text: `DRIP ↑ ${mine.rate.toFixed(2)}/min` };
     if (!effect && myFam === 'streak') {
       if (play.td) effect = { type: 'streak', text: 'TD → STREAK 2×' };
       else if (mine.hot && play.catch) effect = { type: 'streak', text: 'HOT STREAK · 2×' };
     }
     if (!effect && oppFam === 'streak' && pts > 0) {
-      // note when I broke their streak
       effect = { type: 'cold', text: 'STREAK COLD' };
     }
 
@@ -454,6 +506,14 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       theirBank: Math.round(T.bank * 10) / 10,
       effect,
     });
+  }
+
+  // Final drip accrual through the end of the game.
+  {
+    const yB = Y.bank, tB = T.bank;
+    accrue(GAME_SECONDS);
+    if (dripYou && Y.bank > yB + 0.05) events.push({ clock: GAME_SECONDS, side: 'you', play: `${you.player.team || 'NFL'}: drip`, delta: Math.round((Y.bank - yB) * 10) / 10, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, effect: undefined });
+    if (dripTheir && T.bank > tB + 0.05) events.push({ clock: GAME_SECONDS, side: 'their', play: `${their.player.team || 'NFL'}: drip`, delta: Math.round((T.bank - tB) * 10) / 10, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, effect: undefined });
   }
 
   // DEF SUPPRESS (HALVING): a defense that holds its slot opponent below the
