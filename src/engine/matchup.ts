@@ -239,6 +239,10 @@ export function buildMatchup(
         youTds += res.youTds; theirTds += res.theirTds;
         youBankerXp += res.youBankerXp; theirBankerXp += res.theirBankerXp;
         youNegated = res.youDead; theirNegated = res.theirDead;
+        // A suppress DST scores its earn in the log, but banks 0 itself — those
+        // points are spent as the halving threshold (suppressSpent), not kept.
+        if (suppressSpentYou != null) yF = 0;
+        if (suppressSpentTheir != null) tF = 0;
       }
 
       slots.push({ win: w.id, slotIndex: i, you: displayYou, their, events, youFinal: yF, theirFinal: tF, gameLabel, real, suppressSpentYou, suppressSpentTheir, youNegated: youNegated || undefined, theirNegated: theirNegated || undefined });

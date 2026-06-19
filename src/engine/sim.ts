@@ -216,9 +216,9 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
     return 0;
   }
   if (pos === 'DEF') {
-    // 'suppress' (HALVING) scores 0 directly. 'earn' is flat: sk1 / int3 / fr2,
-    // plus def/ST TD 6 and safety 2.
-    if (metricId === 'suppress') return 0;
+    // Both 'earn' and 'suppress' score flat: sk1 / int3 / fr2, def/ST TD 6,
+    // safety 2. A suppress DST's points are zeroed out later (spent as the
+    // halving threshold) in buildMatchup — but they still show in its log.
     if (play.kind === 'sack') return 1;
     if (play.kind === 'int') return 3;
     if (play.kind === 'fumrec') return 2;
