@@ -1079,7 +1079,8 @@ function SetupRow(props: {
 }) {
   const { winId, week, pick, selected, inventory, onOpenPicker, onPickMetric, onDropPlayer } = props;
   const isMobile = useIsMobile();
-  const gridCols = isMobile ? '1fr 40px 1fr' : '1fr 64px 1fr';
+  const gridCols = '1fr 1fr'; // no center gutter — your spot vs the sealed opponent
+  const rowGap = isMobile ? 5 : 8;
   const player = pick ? getPlayer(pick.playerId) : null;
   const metric = player && pick?.metricId ? metricById(player.pos, pick.metricId) : null;
   // "Change metric" re-opens the picker for an already-set spot without dropping
@@ -1090,7 +1091,7 @@ function SetupRow(props: {
   const link: React.CSSProperties = { background: 'none', border: 'none', padding: 0, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em' };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: 6 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: rowGap }}>
       {player ? (
         <div
           onDragOver={(e) => e.preventDefault()}
@@ -1151,9 +1152,6 @@ function SetupRow(props: {
           <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.12em' }}>TAP TO PICK PLAYER</span>
         </div>
       )}
-      <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.14em' }}>VS</span>
-      </div>
       <div style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
         <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--dim)' }}>◆</span>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.16em', color: 'var(--faint)', fontWeight: 700 }}>SEALED · {winId.toUpperCase()}</span>
