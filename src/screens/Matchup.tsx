@@ -68,9 +68,9 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   // Rosters expand in setup (you need them to set lineups), collapse otherwise.
   const [rosterOpen, setRosterOpen] = useState<{ you: boolean; their: boolean }>(() => ({ you: initialPhase === 'setup', their: initialPhase === 'setup' }));
   const toggleRoster = (side: 'you' | 'their') => setRosterOpen((o) => ({ ...o, [side]: !o[side] }));
-  // On mobile the rosters are full-width blocks above the board — keep the
-  // opponent's closed by default so the board stays visible.
-  useEffect(() => { if (isMobile) setRosterOpen((o) => ({ you: o.you, their: false })); }, [isMobile]);
+  // On mobile the rosters are full-width blocks above the board, and selection is
+  // done by tapping a spot — so keep both collapsed by default.
+  useEffect(() => { if (isMobile) setRosterOpen({ you: false, their: false }); }, [isMobile]);
 
   // Lazy-load this week's real play-by-play (per-week JSON) before resolving.
   const [ready, setReady] = useState(() => !REAL_WEEKS.has(week) || isRealWeekLoaded(week));
