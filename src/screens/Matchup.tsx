@@ -1249,7 +1249,8 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
 }) {
   const ownKey = slotKey(slot.win, slot.slotIndex);
   const isMobile = useIsMobile();
-  const gridCols = isMobile ? '1fr 40px 1fr' : '1fr 64px 1fr';
+  const gridCols = isMobile ? '1fr 30px 1fr' : '1fr 64px 1fr';
+  const rowGap = isMobile ? 4 : 6;
   // Pre-kickoff (this window not yet started) is the only time the best-ball
   // backup target can be (re)assigned — it's a blind bet, locked once it's live.
   const preKick = phase === 'live' && clock === 0;
@@ -1298,7 +1299,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
 
     return (
       <div>
-        <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: 6 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: rowGap }}>
           {mineBackup ? card : blankBox}
           <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>{unoppCenter}</div>
           {mineBackup ? blankBox : card}
@@ -1351,10 +1352,6 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
   };
   const youShown = shownFor('you');
   const theirShown = shownFor('their');
-  const lead = youShown - theirShown;
-  const verdict = final
-    ? (lead > 0.1 ? { t: 'WON', c: 'var(--you)' } : lead < -0.1 ? { t: 'LOST', c: 'var(--opp)' } : { t: 'TIE', c: 'var(--dim)' })
-    : (lead > 2 ? { t: 'EDGE YOU', c: 'var(--you)' } : lead < -2 ? { t: 'EDGE THEM', c: 'var(--opp)' } : Math.abs(lead) > 0.1 ? { t: 'CLOSE', c: 'var(--warn)' } : { t: 'EVEN', c: 'var(--dim)' });
 
   const visibleEvents = slot.events.filter((e) => e.clock <= clock);
   const lastEffect = [...visibleEvents].reverse().find((e) => e.effect)?.effect;
@@ -1368,7 +1365,6 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
   const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, clock)} />;
   const centerKids = (
     <>
-      <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: verdict.c, padding: '4px 6px', borderRadius: 3, textAlign: 'center', lineHeight: 1.1 }}>{verdict.t}</span>
       {canSwap && !done && (
         <button onClick={onPowerup} title="Apply a real-time powerup (Metric / Player Swap)" className="mono" style={{ color: 'var(--on-accent)', background: 'var(--warn)', border: 'none', borderRadius: 4, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', padding: '5px 7px', boxShadow: '0 0 12px color-mix(in srgb, var(--warn) 55%, transparent)', animation: 'bpulse 1.5s ease infinite' }}>⚡ USE</button>
       )}
@@ -1380,7 +1376,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
 
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: 6 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: rowGap }}>
         {youCard}
         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>{centerKids}</div>
         {theirCard}
@@ -1469,7 +1465,7 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
   );
   const metricChip = (
     <div style={{ display: 'inline-flex', flexWrap: 'wrap', maxWidth: '100%', alignItems: 'baseline', gap: 5, marginTop: isMobile ? 2 : 5, padding: isMobile ? '1px 6px' : '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)` }}>
-      <span className="grotesk" style={{ fontSize: isMobile ? 11 : 13, fontWeight: 700, color: accent, letterSpacing: '0.01em', whiteSpace: isMobile ? 'normal' : 'nowrap', overflowWrap: 'anywhere' }}>{metricName}</span>
+      <span className="grotesk" style={{ fontSize: isMobile ? 11 : 13, fontWeight: 700, color: accent, letterSpacing: '0.01em', whiteSpace: isMobile ? 'normal' : 'nowrap' }}>{metricName}</span>
       <span className="mono" style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.1em', color: accent, opacity: 0.85, whiteSpace: 'nowrap' }}>{tag}</span>
     </div>
   );
@@ -1498,22 +1494,24 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
   const scoreBlock = (<>{bigNum}{coinEl && <div style={{ marginTop: 5 }}>{coinEl}</div>}</>);
 
   if (isMobile) {
-    // Name on top, big 64 headshot left, metric + coin/score stacked beside it,
-    // statline full-width at the bottom (mirrored for the opponent).
+    // Name on top, headshot on the outer side, metric + coin/score stacked
+    // beside it, statline pinned to the bottom (mirrored for the opponent). The
+    // metric area reserves two lines so the coin/score and statline rows line up
+    // across both cards regardless of how the metric label wraps.
     return (
       <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '7px 8px', display: 'flex', flexDirection: 'column', gap: 5, cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
         {nameRow}
         <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'flex-start', gap: 8 }}>
-          <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={64} />
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4, alignItems: side === 'you' ? 'flex-start' : 'flex-end' }}>
-            {metricChip}
+          <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={54} />
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3, alignItems: side === 'you' ? 'flex-start' : 'flex-end' }}>
+            <div style={{ minHeight: 34, display: 'flex', alignItems: 'flex-start', width: '100%', justifyContent: side === 'you' ? 'flex-start' : 'flex-end' }}>{metricChip}</div>
             <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'baseline', gap: 6 }}>
               {coinEl}
               {bigNum}
             </div>
           </div>
         </div>
-        {statLine}
+        <div style={{ marginTop: 'auto' }}>{statLine}</div>
       </div>
     );
   }
