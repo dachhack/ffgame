@@ -864,7 +864,10 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
             <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: accent, border: `1px solid ${accent}`, borderRadius: 3, padding: '1px 4px', flex: 'none' }}>{badge}</span>
             <InjuryBadge week={week} slug={be.player.id} />
           </div>
-          <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 4, textAlign: align }}>{bp?.name} · {bp?.tag}</div>
+          <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, marginTop: 5, padding: '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)` }}>
+            <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: accent, letterSpacing: '0.01em', whiteSpace: 'nowrap' }}>{bp?.name}</span>
+            <span className="mono" style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.1em', color: accent, opacity: 0.85, whiteSpace: 'nowrap' }}>{bp?.tag}</span>
+          </div>
           <div className="mono" style={{ fontSize: 8.5, color: 'var(--dimstrong)', marginTop: 4, textAlign: align, lineHeight: 1.5 }}>{directions}</div>
           {(status || (canSub && mineBackup)) && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, flexDirection: mineBackup ? 'row' : 'row-reverse' }}>
@@ -1034,7 +1037,11 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
           <InjuryBadge week={week} slug={player.id} />
           <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{player.team}</span>
         </div>
-        <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3, letterSpacing: '0.04em' }}>{metricName} · {tag}</div>
+        {/* The chosen metric — the key strategic call — made prominent. */}
+        <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, marginTop: 5, padding: '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)` }}>
+          <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: accent, letterSpacing: '0.01em', whiteSpace: 'nowrap' }}>{metricName}</span>
+          <span className="mono" style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.1em', color: accent, opacity: 0.85, whiteSpace: 'nowrap' }}>{tag}</span>
+        </div>
         {/* running statline (or the backup that's scoring this slot) */}
         {suppressSpent != null
           ? <div className="mono" style={{ fontSize: 9, color: 'var(--fx-stop)', marginTop: 5, fontWeight: 700 }}>✕ {suppressSpent.toFixed(1)} spent on SUPPRESS</div>
