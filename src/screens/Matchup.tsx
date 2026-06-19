@@ -65,6 +65,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const [swapTarget, setSwapTarget] = useState<{ key: string; win: WindowId } | null>(null);
   const [backupMenu, setBackupMenu] = useState<{ key: string } | null>(null);
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
+  const [invOpen, setInvOpen] = useState(false);
   // Rosters expand in setup (you need them to set lineups), collapse otherwise.
   const [rosterOpen, setRosterOpen] = useState<{ you: boolean; their: boolean }>(() => ({ you: initialPhase === 'setup', their: initialPhase === 'setup' }));
   const toggleRoster = (side: 'you' | 'their') => setRosterOpen((o) => ({ ...o, [side]: !o[side] }));
@@ -413,9 +414,17 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               </div>
               <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{headline}</div>
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, maxWidth: 520, lineHeight: 1.5 }}>{subhead}</div>
-              {phase === 'setup'
-                ? <InventoryCard inventory={inventory} armed={buffs} onArm={(id) => armBuff(week, id)} onDisarm={(id) => disarmBuff(week, id)} />
-                : <BuffStrip phase={phase} inventory={inventory} armed={buffs} bonuses={resolved.bonuses} onArm={(id) => armBuff(week, id)} />}
+              {phase === 'setup' ? (() => {
+                const ownedN = POWERUPS.filter((p) => (inventory[p.id] ?? 0) > 0 || buffs[p.id]).length;
+                const armedN = Object.keys(buffs).filter((id) => buffs[id]).length;
+                return (
+                  <button onClick={() => setInvOpen(true)} className="mono" style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 6, padding: '7px 11px' }}>
+                    ◈ POWER-UPS{ownedN > 0 ? ` · ${ownedN}` : ''}{armedN > 0 ? ` · ${armedN} ARMED` : ''}
+                  </button>
+                );
+              })() : (
+                <BuffStrip phase={phase} inventory={inventory} armed={buffs} bonuses={resolved.bonuses} onArm={(id) => armBuff(week, id)} />
+              )}
               <TargetPanel
                 phase={phase} week={week} inventory={inventory} aw={aw} windows={resolved.windows} oppPicks={oppPicks}
                 byes={byes} winClocks={winClocks}
@@ -532,6 +541,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
           />
         );
       })()}
+
+      {invOpen && <InventoryModal inventory={inventory} armed={buffs} onArm={(id) => armBuff(week, id)} onDisarm={(id) => disarmBuff(week, id)} onClose={() => setInvOpen(false)} />}
 
       {earnOpen && <EarningsModal earnings={earnings} onReset={() => { resetDripCoin(); setEarnOpen(false); }} onClose={() => setEarnOpen(false)} />}
     </>
@@ -820,18 +831,25 @@ const POWERUP_HINT: Record<string, string> = {
   'emp': 'Fire on a window during LIVE.',
 };
 
-// Setup inventory: explains every owned powerup and arms/disarms team buffs.
-function InventoryCard({ inventory, armed, onArm, onDisarm }: {
+// Setup inventory modal: explains every owned powerup and arms/disarms team buffs.
+function InventoryModal({ inventory, armed, onArm, onDisarm, onClose }: {
   inventory: Record<string, number>; armed: Record<string, boolean>;
-  onArm: (id: string) => void; onDisarm: (id: string) => void;
+  onArm: (id: string) => void; onDisarm: (id: string) => void; onClose: () => void;
 }) {
   const owned = POWERUPS.filter((p) => (inventory[p.id] ?? 0) > 0 || armed[p.id]);
-  if (!owned.length) return null;
   return (
-    <div style={{ marginTop: 8, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '9px 11px' }}>
-      <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginBottom: 8 }}>◈ POWER-UPS · INVENTORY</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {owned.map((p) => {
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '44px 16px', overflow: 'auto' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
+          <div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>◈ Power-Ups · Inventory</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>ARM TEAM BUFFS HERE · ARMED ONES HIGHLIGHT THEIR SPOTS</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
+        </div>
+        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '70vh', overflow: 'auto' }}>
+          {owned.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— no power-ups —<br />visit the Power-Up Shop in the league hub</div>}
+          {owned.map((p) => {
           const qty = inventory[p.id] ?? 0;
           const on = !!armed[p.id];
           const buff = isTeamBuff(p.id);
@@ -855,6 +873,7 @@ function InventoryCard({ inventory, armed, onArm, onDisarm }: {
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );
