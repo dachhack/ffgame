@@ -846,24 +846,27 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
         : 'Unopposed — their best-ball backup.';
 
     const playerCard = (
-      <div style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: `1px dashed ${accent}`, [mineBackup ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px' } as React.CSSProperties}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexDirection: mineBackup ? 'row' : 'row-reverse' }}>
-          <PlayerImg playerId={be.player.id} team={be.player.team} pos={be.player.pos} size={26} />
-          <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{be.player.name}</span>
-          <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: accent, border: `1px solid ${accent}`, borderRadius: 3, padding: '1px 4px', flex: 'none' }}>{badge}</span>
-          <InjuryBadge week={week} slug={be.player.id} />
-          <span className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: accent, lineHeight: 1, [mineBackup ? 'marginLeft' : 'marginRight']: 'auto' } as React.CSSProperties}>{liveBackup.toFixed(1)}</span>
-        </div>
-        <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 4, textAlign: align }}>{bp?.name} · {bp?.tag}</div>
-        <div className="mono" style={{ fontSize: 8.5, color: 'var(--dimstrong)', marginTop: 4, textAlign: align, lineHeight: 1.5 }}>{directions}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, flexDirection: mineBackup ? 'row' : 'row-reverse' }}>
-          {status && <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: resolved && slot.backupUsed ? 'var(--you)' : 'var(--faint)' }}>{status}</span>}
-          {canSub && mineBackup && (
-            <button onClick={onAssignBackup} title="Choose which starter this backup challenges" className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '4px 8px' }}>ASSIGN ▾</button>
-          )}
-          {bEvents.length > 0 && (
-            <button onClick={onToggle} className="mono" style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)', background: 'none', border: 'none', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
-          )}
+      <div style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: `1px dashed ${accent}`, [mineBackup ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', display: 'flex', flexDirection: mineBackup ? 'row' : 'row-reverse', gap: 11, alignItems: 'center' } as React.CSSProperties}>
+        {/* Big headshot — same size as the sealed setup slot. */}
+        <PlayerImg playerId={be.player.id} team={be.player.team} pos={be.player.pos} size={64} />
+        <div style={{ flex: 1, minWidth: 0, textAlign: align }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexDirection: mineBackup ? 'row' : 'row-reverse' }}>
+            <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{be.player.name}</span>
+            <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: accent, border: `1px solid ${accent}`, borderRadius: 3, padding: '1px 4px', flex: 'none' }}>{badge}</span>
+            <InjuryBadge week={week} slug={be.player.id} />
+            <span className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: accent, lineHeight: 1, [mineBackup ? 'marginLeft' : 'marginRight']: 'auto' } as React.CSSProperties}>{liveBackup.toFixed(1)}</span>
+          </div>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 4, textAlign: align }}>{bp?.name} · {bp?.tag}</div>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--dimstrong)', marginTop: 4, textAlign: align, lineHeight: 1.5 }}>{directions}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, flexDirection: mineBackup ? 'row' : 'row-reverse' }}>
+            {status && <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: resolved && slot.backupUsed ? 'var(--you)' : 'var(--faint)' }}>{status}</span>}
+            {canSub && mineBackup && (
+              <button onClick={onAssignBackup} title="Choose which starter this backup challenges" className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '4px 8px' }}>ASSIGN ▾</button>
+            )}
+            {slot.events.length > 0 && (
+              <button onClick={onToggle} className="mono" style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)', background: 'none', border: 'none', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -882,7 +885,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
           </div>
           {mineBackup ? blankBox : playerCard}
         </div>
-        {open && bEvents.length > 0 && (
+        {open && (
           <TwoColLog events={bEvents} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} />
         )}
       </div>
@@ -932,7 +935,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
           {canSwap && !done && (
             <button onClick={onPowerup} title="Apply a real-time powerup (Metric / Player Swap)" className="mono" style={{ color: 'var(--bg)', background: 'var(--warn)', border: 'none', borderRadius: 4, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', padding: '5px 7px', boxShadow: '0 0 12px color-mix(in srgb, var(--warn) 55%, transparent)', animation: 'bpulse 1.5s ease infinite' }}>⚡ USE</button>
           )}
-          {visibleEvents.length > 0 && (
+          {slot.events.length > 0 && (
             <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
           )}
         </div>
@@ -1010,10 +1013,11 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
   const nuked = fx === 'nuke' && bank === 0 && !subName && suppressSpent == null;
   const stat = useMemo(() => fmtStat(player.pos, statlineAt(player, week, clock)), [player, week, clock]);
   return (
-    <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 10, cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
+    <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 11, alignItems: 'center', cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
+      {/* Big headshot — same size as the sealed setup slot, kept through live & final. */}
+      <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={64} />
       <div style={{ flex: 1, minWidth: 0, textAlign: side === 'you' ? 'left' : 'right' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexDirection: side === 'you' ? 'row' : 'row-reverse' }}>
-          <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={26} />
           <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>
           <InjuryBadge week={week} slug={player.id} />
           <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{player.team}</span>
@@ -1103,6 +1107,9 @@ function TwoColLog({ events, youName, theirName, gameLabel }: { events: PbpEvent
         <span className="mono" style={{ flex: 1, textAlign: 'left', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{theirName}</span>
       </div>
       <div ref={scroller} onScroll={onScroll} style={{ maxHeight: 210, overflow: 'auto' }}>
+        {rows.length === 0 && (
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.1em', textAlign: 'center', padding: '14px 0' }}>— no plays yet at this point —</div>
+        )}
         {rows.map((ev, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '3px 0', borderTop: i === 0 ? undefined : '1px solid color-mix(in srgb, var(--bd) 45%, transparent)', animation: i === newestIdx ? 'slidein .3s ease' : undefined }}>
             {cum(ev, true)}
