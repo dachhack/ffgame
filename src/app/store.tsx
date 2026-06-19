@@ -52,6 +52,8 @@ interface Store {
   setBackupTarget: (week: number, backupKey: string, targetKey: string | null) => void;
   /** Arm a pre-match team buff (by powerup id) for a week (consumes one). */
   armBuff: (week: number, id: string) => boolean;
+  /** Disarm an armed buff for a week (refunds the consumable). */
+  disarmBuff: (week: number, id: string) => void;
   /** Stake one of your slots for Double or Nothing (consumes one). */
   setDoubleOrNothing: (week: number, slotKey: string) => boolean;
   /** Peek one slate slot's player OR metric via Spy (consumes one). */
@@ -165,6 +167,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const armBuff = (week: number, id: string): boolean =>
     applied[week]?.buffs?.[id] ? false : consumeAndApply(id, week, (cur) => ({ ...cur, buffs: { ...cur.buffs, [id]: true } }));
 
+  // Disarm a previously-armed buff: clear the flag and refund the consumable.
+  const disarmBuff = (week: number, id: string): void => {
+    const cur = applied[week];
+    if (!cur?.buffs?.[id]) return;
+    const buffs = { ...cur.buffs }; delete buffs[id];
+    const nextApplied = { ...applied, [week]: { ...cur, buffs } };
+    const nextInv = { ...inventory, [id]: (inventory[id] ?? 0) + 1 };
+    setApplied(nextApplied); setInventory(nextInv); persist({ applied: nextApplied, inv: nextInv });
+  };
+
   const setDoubleOrNothing = (week: number, slotKey: string): boolean =>
     consumeAndApply('double-or-nothing', week, (cur) => ({ ...cur, doubleOrNothing: slotKey }));
   const setSpy = (week: number, slotKey: string, reveal: 'player' | 'metric'): boolean =>
@@ -196,7 +208,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, setDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, resetDripCoin }),
+    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, resetDripCoin }),
     [theme, route, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
