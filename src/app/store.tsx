@@ -12,6 +12,7 @@ export interface AppliedWeek {
   extraSlots: Partial<Record<WindowId, number>>; // bonus slots per window (mirrored to opponent)
   swaps: Record<string, SlotSwap>;               // slotKey -> real-time swap (metric and/or player)
   backups: Record<string, string>;               // backup slotKey -> target starter slotKey (manual best-ball)
+  trickPlay?: boolean;                           // Trick Play armed: +50 if a non-QB starter throws a TD pass
 }
 
 export type Phase = 'setup' | 'live' | 'final';
@@ -45,6 +46,8 @@ interface Store {
   applyPlayerSwap: (week: number, slotKey: string, atClock: number, toPlayerId: string) => boolean;
   /** Manually point a backup slot at a starter to replace (empty target = auto). */
   setBackupTarget: (week: number, backupKey: string, targetKey: string | null) => void;
+  /** Arm the Trick Play team bonus for a week (consumes one). Returns success. */
+  applyTrickPlay: (week: number) => boolean;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -132,6 +135,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const applyExtraSlot = (week: number, win: WindowId): boolean =>
     consumeAndApply('extra-slot', week, (cur) => ({ ...cur, extraSlots: { ...cur.extraSlots, [win]: (cur.extraSlots[win] ?? 0) + 1 } }));
 
+  const applyTrickPlay = (week: number): boolean =>
+    applied[week]?.trickPlay ? false : consumeAndApply('trick-play', week, (cur) => ({ ...cur, trickPlay: true }));
+
   const applyMetricSwap = (week: number, slotKey: string, atClock: number, toMetricId: string): boolean =>
     consumeAndApply('metric-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, toMetricId } } }));
 
@@ -147,7 +153,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget }),
+    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, applyTrickPlay }),
     [theme, route, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

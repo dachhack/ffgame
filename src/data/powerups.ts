@@ -24,6 +24,9 @@ export const POWERUPS: Powerup[] = [
   { id: 'extra-slot', name: 'Extra Slot', blurb: 'Add a slot to any window — for you AND your opponent. Must be applied before any window starts.', kind: 'action', timing: 'pre', price: 80, icon: '➕' },
   { id: 'unlock-return', name: 'Return Yards', blurb: 'This week only: unlock the KR/PR Return Yards metric — 0.1/yd banked + a 0.003 drip multiplier.', kind: 'metric', timing: 'pre', price: 60, icon: '🏈' },
   { id: 'unlock-carries-wipe', name: 'WR/TE Carries', blurb: 'This week only: unlock a WR/TE carries metric that wipes the opposing player to 0 the moment it fires.', kind: 'metric', timing: 'pre', price: 70, icon: '💥' },
+  { id: 'unlock-combo-drip', name: 'Combo Drip', blurb: 'This week only: unlock a Rush + Receiving combo drip for one player — both carries AND catches feed a single drip rate (yds × 0.01 pts/min).', kind: 'metric', timing: 'pre', price: 65, icon: '🌀' },
+  { id: 'unlock-pass-td10', name: 'Air Raid', blurb: 'This week only: unlock a QB metric where passing TDs are worth 10 pts (plus 0.04 / passing yd). Flat — no nuke or erase.', kind: 'metric', timing: 'pre', price: 60, icon: '🚀' },
+  { id: 'trick-play', name: 'Trick Play', blurb: 'Arm before kickoff: if ANY non-QB in your starting spots throws a TD pass this week, your lineup banks a flat +50.', kind: 'action', timing: 'pre', price: 90, icon: '🎺' },
 ];
 
 export function powerupById(id: string): Powerup | undefined {

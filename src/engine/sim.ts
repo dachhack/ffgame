@@ -186,6 +186,7 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
   if (pos === 'QB') {
     if (metricId === 'fg') return 0; // Field General scores nothing — it multiplies your other window players (see windowFgMult / resolveSlot opts)
     if (metricId === 'pass') return play.kind === 'pass' ? play.yards * 0.04 + (play.td ? 4 : 0) : 0; // yards + TD points, but no nuke/erase (flat family)
+    if (metricId === 'passbig') return play.kind === 'pass' ? play.yards * 0.04 + (play.td ? 10 : 0) : 0; // Air Raid unlock: 10 pts / passing TD
     if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0;  // yards + TD points, flat
   }
   if (pos === 'RB') {
@@ -444,11 +445,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   // Drip metrics: WR Receiving Yards (built by catches) and RB Rush Yards
   // (built by carries). A drip play raises a permanent rate (yds × 0.01
   // pts/min) that accrues over the player's team offensive time.
-  const dripKindOf = (s: SlotInput): RealPlayKind | null =>
-    (s.player.pos === 'WR' && s.metricId === 'recyd') ? 'rec'
-      : (s.player.pos === 'RB' && s.metricId === 'rush') ? 'rush'
-        : (s.player.pos === 'TE' && s.metricId === 'recyd') ? 'rec'
-          : null;
+  const dripKindOf = (s: SlotInput): RealPlayKind[] | null =>
+    (s.metricId === 'combodrip') ? ['rush', 'rec']                          // Combo Drip unlock: carries AND catches
+      : (s.player.pos === 'WR' && s.metricId === 'recyd') ? ['rec']
+        : (s.player.pos === 'RB' && s.metricId === 'rush') ? ['rush']
+          : (s.player.pos === 'TE' && s.metricId === 'recyd') ? ['rec']
+            : null;
   // TE drip builds at half the rate (0.005/yd vs 0.01) but is immune to the
   // pauses and erases that WR/RB opponents lay on a drip (see oppIsDrip below).
   const dripRateOf = (s: SlotInput): number => (s.player.pos === 'TE' ? 0.005 : 0.01);
@@ -552,7 +554,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     let evMult: number | undefined; // FG multiplier shown on this play in the log
     const sideMult = (play.side === 'you' ? opts.youMult?.(play.clock) : opts.theirMult?.(play.clock)) ?? 1;
     if (iAmDrip) {
-      if (play.kind === myDripKind) {
+      if (myDripKind?.includes(play.kind)) {
         mine.rate += play.yards * myDripRate;
         mine.paused = false;
         mine.streak += 1;
@@ -680,7 +682,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     }
 
     // streak / drip badges
-    if (!effect && iAmDrip && play.kind === myDripKind) effect = { type: 'streak', text: mine.hot ? `DRIP HOT 2× · ${mine.rate.toFixed(2)}/min` : `DRIP ↑ ${mine.rate.toFixed(2)}/min` };
+    if (!effect && iAmDrip && myDripKind?.includes(play.kind)) effect = { type: 'streak', text: mine.hot ? `DRIP HOT 2× · ${mine.rate.toFixed(2)}/min` : `DRIP ↑ ${mine.rate.toFixed(2)}/min` };
     if (!effect && myFam === 'streak') {
       if (play.td) effect = { type: 'streak', text: 'TD → STREAK 2×' };
       else if (mine.hot && play.catch) effect = { type: 'streak', text: 'HOT STREAK · 2×' };

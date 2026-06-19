@@ -18,7 +18,8 @@ const TICK_MS = 700;
 const TICK_SECONDS = 20;
 
 export function Matchup({ week, initialPhase }: { week: number; initialPhase: Phase }) {
-  const { navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget } = useStore();
+  const { navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, applyTrickPlay } = useStore();
+  const trickPlay = applied[week]?.trickPlay ?? false;
   const extraSlots = applied[week]?.extraSlots ?? {};
   const swaps = applied[week]?.swaps ?? {};
   const backupAssign = applied[week]?.backups ?? {};
@@ -71,8 +72,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const swapsKey = JSON.stringify(swaps);
   const backupsKey = JSON.stringify(backupAssign);
   const resolved = useMemo(
-    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps, backupAssign),
-    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey],
+    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps, backupAssign, trickPlay),
+    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, trickPlay],
   );
 
   // Drip coin: +5 per signature play your lineup makes this week (credited once).
@@ -161,6 +162,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
         t += s.suppressSpentTheir != null ? 0 : b.their;
       }
     }
+    if (resolved.trickBonus) y += resolved.trickBonus.points; // Trick Play +50
     return { youTotal: Math.round(y * 10) / 10, themTotal: Math.round(t * 10) / 10 };
   }, [resolved, winClocks, phase]);
 
@@ -306,6 +308,15 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               </div>
               <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{headline}</div>
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, maxWidth: 520, lineHeight: 1.5 }}>{subhead}</div>
+              {/* Trick Play: arm in setup, then show the result */}
+              {phase === 'setup' && !trickPlay && (inventory['trick-play'] ?? 0) > 0 && (
+                <button onClick={() => applyTrickPlay(week)} className="mono" style={{ marginTop: 8, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px dashed var(--warn)', borderRadius: 4, padding: '5px 9px' }}>🎺 ARM TRICK PLAY (+50 on a non-QB TD pass)</button>
+              )}
+              {trickPlay && (
+                <div className="mono" style={{ marginTop: 8, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: resolved.trickBonus ? 'var(--fx-streak)' : 'var(--warn)', display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: `1px solid ${resolved.trickBonus ? 'var(--fx-streak)' : 'var(--warn)'}`, borderRadius: 4, padding: '5px 9px' }}>
+                  🎺 {resolved.trickBonus ? `TRICK PLAY HIT — ${resolved.trickBonus.player} threw a TD! +${resolved.trickBonus.points}` : 'TRICK PLAY ARMED — +50 if a non-QB starter throws a TD pass'}
+                </div>
+              )}
             </div>
             <div style={{ textAlign: 'right', flex: 'none' }}>
               <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>{phase === 'setup' ? 'SLOTS SET' : 'WEEK ' + week}</div>

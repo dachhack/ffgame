@@ -121,6 +121,13 @@ export interface ResolvedMatchup {
   theirFinal: number;
   real: boolean;
   maxClock: number;
+  trickBonus?: { player: string; points: number }; // Trick Play hit: a non-QB starter threw a TD
+}
+
+export const TRICK_PLAY_BONUS = 50;
+/** Deterministic ~6%/player-week chance a non-QB threw a TD pass (Trick Play). */
+export function threwTrickTd(playerId: string, week: number): boolean {
+  return hashStr(`${playerId}|trickpass|${week}`) % 100 < 6;
 }
 
 function lookup(pools: Record<WindowId, Player[]>, picks: Record<string, Pick>, key: string): { player: Player; metricId: string } | null {
@@ -147,6 +154,7 @@ export function buildMatchup(
   extraSlots: ExtraSlots = {},
   swaps: SlotSwaps = {},
   backupAssign: Record<string, string> = {},
+  trickPlay = false,
 ): ResolvedMatchup {
   const youPools = windowPools(youTeamId, week);
   const oppPools = windowPools(oppTeamId, week);
@@ -274,12 +282,28 @@ export function buildMatchup(
   youFinal += youBankerXp * youTds;
   theirFinal += theirBankerXp * theirTds;
 
+  // Trick Play: a flat +50 if any non-QB in your starting spots threw a TD pass.
+  let trickBonus: { player: string; points: number } | undefined;
+  if (trickPlay) {
+    for (const w of windows) {
+      for (const s of w.slots) {
+        if (s.you && s.you.player.pos !== 'QB' && threwTrickTd(s.you.player.id, week)) {
+          trickBonus = { player: s.you.player.name, points: TRICK_PLAY_BONUS };
+          break;
+        }
+      }
+      if (trickBonus) break;
+    }
+    if (trickBonus) youFinal += trickBonus.points;
+  }
+
   return {
     windows,
     youFinal: Math.round(youFinal * 10) / 10,
     theirFinal: Math.round(theirFinal * 10) / 10,
     real: anyReal,
     maxClock,
+    trickBonus,
   };
 }
 
