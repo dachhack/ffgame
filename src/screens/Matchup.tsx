@@ -1287,19 +1287,31 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
       </div>
     );
 
+    const unoppCenter = (
+      <>
+        <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 5px' }}>UNOPP</span>
+        {slot.events.length > 0 && (
+          <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
+        )}
+      </>
+    );
+
     return (
       <div>
-        <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: 6 }}>
-          {mineBackup ? card : blankBox}
-          {/* center column — same 64px as head-to-head: UNOPP, log */}
-          <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-            <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 5px' }}>UNOPP</span>
-            {slot.events.length > 0 && (
-              <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
-            )}
+        {isMobile ? (
+          // Mobile: just the player full width + a compact UNOPP/log row (no big
+          // empty "no opponent" box eating vertical space).
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {card}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>{unoppCenter}</div>
           </div>
-          {mineBackup ? blankBox : card}
-        </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: 6 }}>
+            {mineBackup ? card : blankBox}
+            <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>{unoppCenter}</div>
+            {mineBackup ? blankBox : card}
+          </div>
+        )}
         {/* Best-ball backup: assign (pre-kickoff) and/or show the chosen target, in this spot. */}
         {canSub && mineBackup && (preKick || backups[ownKey]) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
@@ -1361,21 +1373,35 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
   const incomingKey = Object.keys(backups).find((k) => backups[k] === ownKey);
   const incomingName = incomingKey ? slotName[incomingKey] : undefined;
 
+  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, clock)} />;
+  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, clock)} />;
+  const centerKids = (
+    <>
+      <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: verdict.c, padding: '4px 6px', borderRadius: 3, textAlign: 'center', lineHeight: 1.1 }}>{verdict.t}</span>
+      {canSwap && !done && (
+        <button onClick={onPowerup} title="Apply a real-time powerup (Metric / Player Swap)" className="mono" style={{ color: 'var(--on-accent)', background: 'var(--warn)', border: 'none', borderRadius: 4, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', padding: '5px 7px', boxShadow: '0 0 12px color-mix(in srgb, var(--warn) 55%, transparent)', animation: 'bpulse 1.5s ease infinite' }}>⚡ USE</button>
+      )}
+      {slot.events.length > 0 && (
+        <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
+      )}
+    </>
+  );
+
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: 6 }}>
-        <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, clock)} />
-        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-          <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: verdict.c, padding: '4px 6px', borderRadius: 3, textAlign: 'center', lineHeight: 1.1 }}>{verdict.t}</span>
-          {canSwap && !done && (
-            <button onClick={onPowerup} title="Apply a real-time powerup (Metric / Player Swap)" className="mono" style={{ color: 'var(--on-accent)', background: 'var(--warn)', border: 'none', borderRadius: 4, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', padding: '5px 7px', boxShadow: '0 0 12px color-mix(in srgb, var(--warn) 55%, transparent)', animation: 'bpulse 1.5s ease infinite' }}>⚡ USE</button>
-          )}
-          {slot.events.length > 0 && (
-            <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
-          )}
+      {isMobile ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {youCard}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>{centerKids}</div>
+          {theirCard}
         </div>
-        <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, clock)} />
-      </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: 6 }}>
+          {youCard}
+          <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>{centerKids}</div>
+          {theirCard}
+        </div>
+      )}
       {incomingName && !(phase === 'final' && slot.youSub) && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', marginTop: 3 }}>
           🛟 backup {incomingName} on standby{final ? ' — did not sub in' : ''}
