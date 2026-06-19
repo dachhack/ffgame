@@ -390,7 +390,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               <TargetPanel
                 phase={phase} week={week} inventory={inventory} aw={aw} windows={resolved.windows} oppPicks={oppPicks}
                 byes={byes} winClocks={winClocks}
-                onStake={(k) => setDoubleOrNothing(week, k)} onSpy={(k) => setSpy(week, k)} onByeSteal={(k, pid) => applyByeSteal(week, k, pid)}
+                onStake={(k) => setDoubleOrNothing(week, k)} onSpy={(k, r) => setSpy(week, k, r)} onByeSteal={(k, pid) => applyByeSteal(week, k, pid)}
                 onMulligan={(k, c, m) => applyMulligan(week, k, c, m)} onEmp={(w, c) => applyEmp(week, w, c)}
               />
             </div>
@@ -744,19 +744,23 @@ const TEAM_BUFFS = POWERUPS.filter((p) => p.timing === 'pre' && p.kind === 'acti
 // a compact panel of selectors, shown in the phase where each is usable.
 function TargetPanel(props: {
   phase: Phase; week: number; inventory: Record<string, number>;
-  aw?: { doubleOrNothing?: string; spy?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>> };
+  aw?: { doubleOrNothing?: string; spy?: { slotKey: string; reveal: 'player' | 'metric' }; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>> };
   windows: ReturnType<typeof buildMatchup>['windows']; oppPicks: Record<string, Pick>; byes: Player[]; winClocks: Record<string, number>;
-  onStake: (k: string) => void; onSpy: (k: string) => void; onByeSteal: (k: string, pid: string) => void;
+  onStake: (k: string) => void; onSpy: (k: string, reveal: 'player' | 'metric') => void; onByeSteal: (k: string, pid: string) => void;
   onMulligan: (k: string, atClock: number, m: string) => void; onEmp: (w: WindowId, clock: number) => void;
 }) {
   const { phase, inventory, aw, windows, oppPicks, byes, winClocks, onStake, onSpy, onByeSteal, onMulligan, onEmp } = props;
   const [byePid, setByePid] = useState(''); const [byeKey, setByeKey] = useState('');
   const [mulKey, setMulKey] = useState(''); const [mulMet, setMulMet] = useState('');
+  const [spySlot, setSpySlot] = useState('');
   const flat = windows.flatMap((w) => w.slots);
   const has = (id: string) => (inventory[id] ?? 0) > 0;
   const yourH2H = flat.filter((s) => s.you && s.their).map((s) => ({ key: slotKey(s.win, s.slotIndex), name: s.you!.player.name, win: s.win, pos: s.you!.player.pos }));
-  const oppSlots = flat.filter((s) => s.their).map((s) => ({ key: slotKey(s.win, s.slotIndex), name: s.their!.player.name, win: s.win }));
   const emptySlots = flat.filter((s) => !s.you).map((s) => ({ key: slotKey(s.win, s.slotIndex), win: s.win }));
+  // Every slot on the slate, by position only (no occupant revealed) — for Spy.
+  const allSlots = flat.map((s) => ({ key: slotKey(s.win, s.slotIndex), win: s.win, idx: s.slotIndex }));
+  // After rosters lock (live) and before any game kicks off.
+  const preKick = phase === 'live' && !Object.values(winClocks).some((c) => (c ?? 0) > 0);
   const rows: ReactNode[] = [];
   const Row = (label: string, body: ReactNode) => (
     <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -770,8 +774,6 @@ function TargetPanel(props: {
   if (phase === 'setup') {
     if (aw?.doubleOrNothing) rows.push(Row('⚖️ Double/Nothing', <span className="mono" style={{ fontSize: 9.5, color: 'var(--you)' }}>staked {yourH2H.find((s) => s.key === aw.doubleOrNothing)?.name ?? '—'}</span>));
     else if (has('double-or-nothing')) rows.push(Row('⚖️ Double/Nothing', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{yourH2H.map((s) => <button key={s.key} style={btn} onClick={() => onStake(s.key)}>{s.name}</button>)}</div>));
-    if (aw?.spy) { const m = metricById(getPlayer(oppPicks[aw.spy]?.playerId ?? '')?.pos ?? 'WR', oppPicks[aw.spy]?.metricId); rows.push(Row('👁️ Spy', <span className="mono" style={{ fontSize: 9.5, color: 'var(--opp)' }}>{oppSlots.find((s) => s.key === aw.spy)?.name ?? '—'} runs {m?.name ?? '—'}</span>)); }
-    else if (has('spy')) rows.push(Row('👁️ Spy', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{oppSlots.map((s) => <button key={s.key} style={btn} onClick={() => onSpy(s.key)}>{s.win.toUpperCase()} {s.name}</button>)}</div>));
     if (aw?.byeSteal) rows.push(Row('🪂 Bye Steal', <span className="mono" style={{ fontSize: 9.5, color: 'var(--you)' }}>fielded {getPlayer(aw.byeSteal.playerId)?.name ?? '—'}</span>));
     else if (has('bye-steal') && byes.length > 0 && emptySlots.length > 0) rows.push(Row('🪂 Bye Steal', <>
       <select style={sel} value={byePid} onChange={(e) => setByePid(e.target.value)}><option value="">player…</option>{byes.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.pos})</option>)}</select>
@@ -789,6 +791,26 @@ function TargetPanel(props: {
       <select style={sel} value={mulMet} onChange={(e) => setMulMet(e.target.value)} disabled={!slot}><option value="">metric…</option>{slot && METRICS[slot.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
       <button style={btn} disabled={!mulKey || !mulMet} onClick={() => { onMulligan(mulKey, winClocks[slot!.win] ?? 0, mulMet); setMulKey(''); setMulMet(''); }}>RE-ROLL</button>
     </>)); }
+  }
+  // Spy: live, after rosters lock and before kickoff. Pick any slate slot blind
+  // (no occupant shown), then reveal that opponent slot's player OR metric. The
+  // result persists once revealed.
+  if (aw?.spy) {
+    const sp = aw.spy;
+    const op = oppPicks[sp.slotKey];
+    const oppPlayer = op ? getPlayer(op.playerId) : null;
+    const s = allSlots.find((x) => x.key === sp.slotKey);
+    const label = s ? `${s.win.toUpperCase()} #${s.idx + 1}` : '—';
+    const val = sp.reveal === 'player'
+      ? (oppPlayer ? `${oppPlayer.name} (${oppPlayer.pos} · ${oppPlayer.team})` : '— no player —')
+      : (oppPlayer ? (metricById(oppPlayer.pos, op!.metricId)?.name ?? '—') : '— no player —');
+    rows.push(Row('👁️ Spy', <span className="mono" style={{ fontSize: 9.5, color: 'var(--opp)' }}>{label} {sp.reveal}: <b style={{ color: 'var(--text)' }}>{val}</b></span>));
+  } else if (has('spy') && preKick) {
+    rows.push(Row('👁️ Spy', <>
+      <select style={sel} value={spySlot} onChange={(e) => setSpySlot(e.target.value)}><option value="">slot…</option>{allSlots.map((s) => <option key={s.key} value={s.key}>{s.win.toUpperCase()} #{s.idx + 1}</option>)}</select>
+      <button style={btn} disabled={!spySlot} onClick={() => { onSpy(spySlot, 'player'); setSpySlot(''); }}>REVEAL PLAYER</button>
+      <button style={btn} disabled={!spySlot} onClick={() => { onSpy(spySlot, 'metric'); setSpySlot(''); }}>REVEAL METRIC</button>
+    </>));
   }
   if (!rows.length) return null;
   return (

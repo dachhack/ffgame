@@ -14,7 +14,7 @@ export interface AppliedWeek {
   backups: Record<string, string>;               // backup slotKey -> target starter slotKey (manual best-ball)
   buffs?: Record<string, true>;                  // armed pre-match team buffs, keyed by powerup id
   doubleOrNothing?: string;                      // your slotKey staked (×2 if it wins, 0 if it loses)
-  spy?: string;                                  // opponent slotKey whose hidden metric is revealed
+  spy?: { slotKey: string; reveal: 'player' | 'metric' }; // a slate slot peeked pre-kickoff (player OR metric)
   byeSteal?: { slotKey: string; playerId: string }; // a bye player fielded for a flat projected score
   emp?: Partial<Record<WindowId, number>>;       // window -> clock at which opponent drips froze (10 min)
 }
@@ -54,8 +54,8 @@ interface Store {
   armBuff: (week: number, id: string) => boolean;
   /** Stake one of your slots for Double or Nothing (consumes one). */
   setDoubleOrNothing: (week: number, slotKey: string) => boolean;
-  /** Reveal an opponent slot's hidden metric via Spy (consumes one). */
-  setSpy: (week: number, oppSlotKey: string) => boolean;
+  /** Peek one slate slot's player OR metric via Spy (consumes one). */
+  setSpy: (week: number, slotKey: string, reveal: 'player' | 'metric') => boolean;
   /** Field a bye player in a slot via Bye Steal (consumes one). */
   applyByeSteal: (week: number, slotKey: string, playerId: string) => boolean;
   /** Free mid-game metric re-roll via Mulligan — writes a swap, spends a Mulligan. */
@@ -167,8 +167,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const setDoubleOrNothing = (week: number, slotKey: string): boolean =>
     consumeAndApply('double-or-nothing', week, (cur) => ({ ...cur, doubleOrNothing: slotKey }));
-  const setSpy = (week: number, oppSlotKey: string): boolean =>
-    consumeAndApply('spy', week, (cur) => ({ ...cur, spy: oppSlotKey }));
+  const setSpy = (week: number, slotKey: string, reveal: 'player' | 'metric'): boolean =>
+    consumeAndApply('spy', week, (cur) => ({ ...cur, spy: { slotKey, reveal } }));
   const applyByeSteal = (week: number, slotKey: string, playerId: string): boolean =>
     consumeAndApply('bye-steal', week, (cur) => ({ ...cur, byeSteal: { slotKey, playerId } }));
   const applyMulligan = (week: number, slotKey: string, atClock: number, toMetricId: string): boolean =>
