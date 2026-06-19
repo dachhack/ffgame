@@ -103,6 +103,14 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, buffsKey, extrasKey],
   );
 
+  // Your player's name at each slot key — for showing a backup's chosen target
+  // (and the targeted starter's incoming backup) in both spots.
+  const slotName = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const w of resolved.windows) for (const s of w.slots) if (s.you) m[slotKey(s.win, s.slotIndex)] = s.you.player.name;
+    return m;
+  }, [resolved]);
+
   // Drip coin: weekly stipend + unopposed bounty + events of note + turnover swing.
   const turnoverCoin = buffs['turnover-boost'] ? 25 : 10;
   const earnings = useMemo(() => weekEarnings(resolved, 'you', week, turnoverCoin), [resolved, week, buffsKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -421,6 +429,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 inventory={inventory}
                 onAssign={assignFromRoster}
                 turnoverCoin={turnoverCoin}
+                backups={backupAssign}
+                slotName={slotName}
               />
             ))}
           </div>
@@ -848,8 +858,10 @@ function WindowSection(props: {
   inventory: Record<string, number>;
   onAssign: (id: string) => void;
   turnoverCoin: number;
+  backups: Record<string, string>;
+  slotName: Record<string, string>;
 }) {
-  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, setSelSlot, pickMetricFor, clearSlot, openPBP, togglePBP, onAssign, inventory, turnoverCoin } = props;
+  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, setSelSlot, pickMetricFor, clearSlot, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
@@ -985,7 +997,7 @@ function WindowSection(props: {
             );
           }
           return (
-            <ScoreRow key={key} slot={s} week={week} clock={clock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} canSwap={canSwap && !!s.you} onPowerup={() => onPowerup(key)} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} />
+            <ScoreRow key={key} slot={s} week={week} clock={clock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} canSwap={canSwap && !!s.you} onPowerup={() => onPowerup(key)} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} />
           );
         })}
       </div>
@@ -1125,11 +1137,16 @@ function SpotCoin({ amt, align }: { amt: number; align: 'left' | 'right' }) {
 }
 
 // ── Score row (live / final) ──
-function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onPowerup, onAssignBackup, turnoverCoin }: {
+function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onPowerup, onAssignBackup, turnoverCoin, backups, slotName }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
   week: number; clock: number; open: boolean; onToggle: () => void; phase: Phase; done: boolean;
   canSwap: boolean; onPowerup: () => void; onAssignBackup: () => void; turnoverCoin: number;
+  backups: Record<string, string>; slotName: Record<string, string>;
 }) {
+  const ownKey = slotKey(slot.win, slot.slotIndex);
+  // Pre-kickoff (this window not yet started) is the only time the best-ball
+  // backup target can be (re)assigned — it's a blind bet, locked once it's live.
+  const preKick = phase === 'live' && clock === 0;
   // Unopposed slot: render like a head-to-head row but with a blank box on the
   // empty side. The present player is a best-ball backup — all the directions
   // live in its own card. A player whose metric banks no points can't ever sub,
@@ -1168,18 +1185,28 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
       <div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px 1fr', alignItems: 'stretch', gap: 6 }}>
           {mineBackup ? card : blankBox}
-          {/* center column — same 64px as head-to-head: UNOPP, assign, log */}
+          {/* center column — same 64px as head-to-head: UNOPP, log */}
           <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
             <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 5px' }}>UNOPP</span>
-            {canSub && mineBackup && (
-              <button onClick={onAssignBackup} title="Choose which starter this backup challenges" className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 3, padding: '3px 5px' }}>ASSIGN</button>
-            )}
             {slot.events.length > 0 && (
               <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
             )}
           </div>
           {mineBackup ? blankBox : card}
         </div>
+        {/* Best-ball backup: assign (pre-kickoff) and/or show the chosen target, in this spot. */}
+        {canSub && mineBackup && (preKick || backups[ownKey]) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+            {preKick && (
+              <button onClick={onAssignBackup} title="Choose which starter this backup challenges (locks at kickoff)" className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 3, padding: '3px 6px' }}>
+                {backups[ownKey] ? '↻ REASSIGN' : '＋ ASSIGN BACKUP'}
+              </button>
+            )}
+            {backups[ownKey] && slotName[backups[ownKey]] && (
+              <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)' }}>⤴ backing up {slotName[backups[ownKey]]}</span>
+            )}
+          </div>
+        )}
         {(phase === 'final' || done) && <BuffFxRow side={mineBackup ? 'you' : 'their'} fx={mineBackup ? slot.youBuffFx : slot.theirBuffFx} />}
         {(phase === 'final' || done) && (
           <div style={{ display: 'flex', justifyContent: mineBackup ? 'flex-start' : 'flex-end', marginTop: 4 }}>
@@ -1229,6 +1256,9 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
   const lastEffect = [...visibleEvents].reverse().find((e) => e.effect)?.effect;
   const yMet = metricById(slot.you.player.pos, slot.you.metricId);
   const tMet = metricById(slot.their.player.pos, slot.their.metricId);
+  // A backup you've assigned to challenge THIS starter — shown in its spot too.
+  const incomingKey = Object.keys(backups).find((k) => backups[k] === ownKey);
+  const incomingName = incomingKey ? slotName[incomingKey] : undefined;
 
   return (
     <div>
@@ -1245,6 +1275,11 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
         </div>
         <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} />
       </div>
+      {incomingName && !(phase === 'final' && slot.youSub) && (
+        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', marginTop: 3 }}>
+          🛟 backup {incomingName} on standby{final ? ' — did not sub in' : ''}
+        </div>
+      )}
       {phase === 'final' && slot.youSub && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', marginTop: 3 }}>
           ⤴ BACKUP {slot.youSub.name} subs in for {slot.you.player.name} · {slot.youSub.from.toFixed(1)} → {slot.youSub.score.toFixed(1)}
