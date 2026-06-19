@@ -1,4 +1,4 @@
-import type { Player, WindowId, Pick, PbpEvent, Pos } from '../types';
+import type { Player, WindowId, Pick, PbpEvent, Pos, BuffFx } from '../types';
 import { WINDOWS, METRICS, metricById } from '../data/metrics';
 import { teamRoster, getPlayer } from '../data/league';
 import { hashStr } from '../data/players';
@@ -110,6 +110,9 @@ export interface ResolvedSlot {
   theirNegated?: boolean;
   byeStolen?: boolean;          // a bye player fielded here for a flat projection
   youStake?: 'won' | 'lost';    // Double or Nothing result on this slot (at FINAL)
+  // Powerup-driven scoring changes on this slot, per side — shown in the spot at FINAL.
+  youBuffFx?: BuffFx[];
+  theirBuffFx?: BuffFx[];
 }
 
 export interface ResolvedWindow {
@@ -212,6 +215,7 @@ export function buildMatchup(
       let real = false;
       let displayYou = you; // may reflect a real-time swap
       let youNegated = false, theirNegated = false;
+      let youBuffFx: BuffFx[] | undefined, theirBuffFx: BuffFx[] | undefined;
       // A suppress DST forgoes its earn points (spent as the kill-threshold).
       const suppressSpentYou = (you?.player.pos === 'DEF' && you.metricId === 'suppress') ? defEarnScore(you.player, week) : undefined;
       const suppressSpentTheir = (their?.player.pos === 'DEF' && their.metricId === 'suppress') ? defEarnScore(their.player, week) : undefined;
@@ -254,6 +258,7 @@ export function buildMatchup(
         youTds += res.youTds; theirTds += res.theirTds;
         youBankerXp += res.youBankerXp; theirBankerXp += res.theirBankerXp;
         youNegated = res.youDead; theirNegated = res.theirDead;
+        youBuffFx = res.youBuffFx; theirBuffFx = res.theirBuffFx;
         // A suppress DST scores its earn in the log, but banks 0 itself — those
         // points are spent as the halving threshold (suppressSpent), not kept.
         if (suppressSpentYou != null) yF = 0;
@@ -268,7 +273,7 @@ export function buildMatchup(
         if (bp) { displayYou = { player: bp, metricId: 'bye' }; yF = Math.round(projectedPoints(bp, week) * 10) / 10; byeStolen = true; }
       }
 
-      slots.push({ win: w.id, slotIndex: i, you: displayYou, their, events, youFinal: yF, theirFinal: tF, gameLabel, real, suppressSpentYou, suppressSpentTheir, youNegated: youNegated || undefined, theirNegated: theirNegated || undefined, byeStolen: byeStolen || undefined });
+      slots.push({ win: w.id, slotIndex: i, you: displayYou, their, events, youFinal: yF, theirFinal: tF, gameLabel, real, suppressSpentYou, suppressSpentTheir, youNegated: youNegated || undefined, theirNegated: theirNegated || undefined, byeStolen: byeStolen || undefined, youBuffFx, theirBuffFx });
     }
     windows.push({ window: w, slots });
   }

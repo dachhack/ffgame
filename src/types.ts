@@ -85,6 +85,15 @@ export interface League {
 
 export type EffectType = 'nuke' | 'erase' | 'streak' | 'cold' | 'mult' | 'compression' | 'reset' | 'stop';
 
+// A scoring change attributable to an armed/active powerup on one slot. `points`
+// is the magnitude of the swing; `vsOpp` flags an effect that removed points
+// from the OPPONENT (carry-wipe / counter-nuke) rather than adding to your bank.
+export interface BuffFx {
+  id: string;       // powerup id (look up name/icon via powerupById)
+  points: number;   // points this powerup added (own) or removed (vsOpp)
+  vsOpp?: boolean;
+}
+
 export interface PbpEvent {
   clock: number;            // game seconds elapsed (0..3300)
   side: 'you' | 'their';
@@ -93,6 +102,7 @@ export interface PbpEvent {
   youBank: number;          // running bank for your side after this event
   theirBank: number;        // running bank for their side after this event
   effect?: { type: EffectType; text: string };
+  buffNote?: string;        // an active powerup changed this play's score (e.g. "GARBAGE TIME ×2")
   sig?: boolean;            // a "signature" play (highlighted in the log)
   coin?: boolean;           // an EVENT OF NOTE that earns drip coin (nuke / shutdown / wipe / drip-HOT)
   coinAmt?: number;         // explicit coin bounty for this event (overrides the metric's per-note rate)
@@ -107,6 +117,8 @@ export interface SlotResolution {
   events: PbpEvent[];
   youFinal: number;
   theirFinal: number;
+  youBuffFx?: BuffFx[];      // powerup-driven scoring changes on your side this slot
+  theirBuffFx?: BuffFx[];
 }
 
 export interface Pick {

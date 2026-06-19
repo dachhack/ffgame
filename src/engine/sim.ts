@@ -1,4 +1,4 @@
-import type { Player, PlayerStats, Pos, PbpEvent, SlotResolution, EffectType } from '../types';
+import type { Player, PlayerStats, Pos, PbpEvent, SlotResolution, EffectType, BuffFx } from '../types';
 import { hashStr } from '../data/players';
 import { metricById } from '../data/metrics';
 import { realPbpFor, realPossFor, type RealPlayKind } from '../data/realPbp';
@@ -487,6 +487,19 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const theirPoss = dripTheir ? realPossFor(week, their.player.team) : [];
   const events: PbpEvent[] = [];
 
+  // Per-side ledger of scoring changes caused by armed/active powerups — surfaced
+  // at FINAL in each spot. `vsOpp` entries removed points from the opponent
+  // (carry-wipe / counter-nuke); the rest added to this side's own bank.
+  const youBuffFx: BuffFx[] = [];
+  const theirBuffFx: BuffFx[] = [];
+  const recBuff = (side: 'you' | 'their', id: string, points: number, vsOpp = false) => {
+    if (!(points > 0)) return;
+    const arr = side === 'you' ? youBuffFx : theirBuffFx;
+    const ex = arr.find((e) => e.id === id && !!e.vsOpp === vsOpp);
+    if (ex) ex.points = Math.round((ex.points + points) * 10) / 10;
+    else arr.push({ id, points: Math.round(points * 10) / 10, vsOpp });
+  };
+
   // TE Touchdowns (8-PT NUKE) reach across the whole window: each opposing TE
   // TD instantly knocks every one of your drip rates down by 1.0 pts/min (min
   // 0). The clocks of those TDs arrive via opts; we step through them during
@@ -496,43 +509,67 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const theirNukeClocks = (opts.theirDripNukeClocks ?? []).slice().sort((a, b) => a - b);
   let yNukeI = 0, tNukeI = 0;
   let lastClock = 0;
-  // Per-minute gain for a side over (t0,t1] without mutating it.
-  const minuteGain = (side: 'you' | 'their', t0: number, t1: number): number => {
+  // Per-minute gain for a side over (t0,t1] without mutating it. Returns the
+  // total plus the portion of it attributable to each scoring powerup, so the
+  // log can note it and the FINAL spot can tally it.
+  interface MinuteGain { total: number; ot: number; momentum: number; garbage: number; }
+  const ZERO_GAIN: MinuteGain = { total: 0, ot: 0, momentum: 0, garbage: 0 };
+  const minuteGain = (side: 'you' | 'their', t0: number, t1: number): MinuteGain => {
     const s = side === 'you' ? Y : T;
-    if (s.paused || s.dead || s.rate <= 0 || t1 <= t0) return 0;
+    if (s.paused || s.dead || s.rate <= 0 || t1 <= t0) return ZERO_GAIN;
     const poss = side === 'you' ? youPoss : theirPoss;
     const mult = side === 'you' ? opts.youMult : opts.theirMult;
     const buffs = side === 'you' ? youBuffs : theirBuffs;
     // EMP: this side's drip is frozen for a 10-minute window.
     const emp = side === 'you' ? opts.youEmpFreeze : opts.theirEmpFreeze;
-    if (emp && t0 < emp[1] && t1 > emp[0]) return 0;
+    if (emp && t0 < emp[1] && t1 > emp[0]) return ZERO_GAIN;
     // Overtime: minutes past regulation count as full possession (no game clock
     // to gate them), so the drip keeps ticking for the bonus window.
-    const secs = t0 >= GAME_SECONDS ? (buffs.has('overtime') ? t1 - t0 : 0) : offSecs(poss, t0, t1);
-    if (secs <= 0) return 0;
+    const isOT = t0 >= GAME_SECONDS;
+    const secs = isOT ? (buffs.has('overtime') ? t1 - t0 : 0) : offSecs(poss, t0, t1);
+    if (secs <= 0) return ZERO_GAIN;
     const hotMult = s.hot ? (buffs.has('momentum') ? 3 : 2) : 1; // Momentum: 3× when hot
-    let add = s.rate * (secs / 60) * hotMult;
-    if (buffs.has('garbage-time') && t1 > GARBAGE_FROM) add *= 2; // Garbage Time: final 5 min ×2
-    const m = mult?.(t1); if (m && m !== 1) add *= m;
-    return add;
+    const base = s.rate * (secs / 60);
+    let add = base * hotMult;
+    const garbageOn = buffs.has('garbage-time') && t1 > GARBAGE_FROM; // Garbage Time: final 5 min ×2
+    const garbagePre = garbageOn ? add : 0;
+    if (garbageOn) add *= 2;
+    const m = mult?.(t1); const fgm = m && m !== 1 ? m : 1; if (fgm !== 1) add *= fgm;
+    // Everything accrued past regulation only exists because of Overtime, so credit
+    // it wholly to OT; within regulation, split out Momentum's 3×-vs-2× and Garbage.
+    if (isOT) return { total: add, ot: add, momentum: 0, garbage: 0 };
+    // Sequential, non-overlapping split (baseline → +momentum → +garbage) so the
+    // bonuses sum to exactly the powerup-driven portion of `total`. Momentum is
+    // the extra 1× beyond a normal hot 2×; Garbage then doubles whatever's there.
+    const momentum = (s.hot && buffs.has('momentum')) ? base * fgm : 0;
+    return { total: add, ot: 0, momentum, garbage: garbagePre * fgm };
   };
   // Accrue both drips across [from,to] one game-minute at a time, emitting a
   // tagged drip event (with running banks) each minute either side gains points
   // — so the log can show scoring tick up minute by minute.
+  // A drip tick's powerup note (Momentum / Garbage Time / Overtime).
+  const dripBuffNote = (g: MinuteGain): string | undefined => {
+    const n: string[] = [];
+    if (g.momentum > 0) n.push('MOMENTUM 3×');
+    if (g.garbage > 0) n.push('GARBAGE TIME ×2');
+    if (g.ot > 0) n.push('OVERTIME');
+    return n.length ? n.join(' · ') : undefined;
+  };
   const accrueRange = (from: number, to: number) => {
     let t = from;
     while (t < to) {
       const next = Math.min(to, Math.floor(t / 60) * 60 + 60);
-      const ya = dripYou ? minuteGain('you', t, next) : 0;
-      const ta = dripTheir ? minuteGain('their', t, next) : 0;
-      if (ya > 0) { Y.bank += ya; Y.hist.push({ clock: next, pts: ya }); }
-      if (ta > 0) { T.bank += ta; T.hist.push({ clock: next, pts: ta }); }
+      const yg = dripYou ? minuteGain('you', t, next) : ZERO_GAIN;
+      const tg = dripTheir ? minuteGain('their', t, next) : ZERO_GAIN;
+      const ya = yg.total, ta = tg.total;
+      if (ya > 0) { Y.bank += ya; Y.hist.push({ clock: next, pts: ya }); recBuff('you', 'overtime', yg.ot); recBuff('you', 'momentum', yg.momentum); recBuff('you', 'garbage-time', yg.garbage); }
+      if (ta > 0) { T.bank += ta; T.hist.push({ clock: next, pts: ta }); recBuff('their', 'overtime', tg.ot); recBuff('their', 'momentum', tg.momentum); recBuff('their', 'garbage-time', tg.garbage); }
       // Only surface a drip tick once it rounds to ≥0.1 — sub-0.1 still banks
       // silently and shows up in the next tick's cumulative.
       const yd = Math.round(ya * 10) / 10, td = Math.round(ta * 10) / 10;
       const ym = opts.youMult?.(next), tm = opts.theirMult?.(next);
-      if (yd > 0) events.push({ clock: next, side: 'you', play: `${you.player.team || 'NFL'}: ${Y.hot ? 'HOT drip' : 'drip'}`, delta: yd, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true, mult: ym && ym !== 1 ? ym : undefined });
-      if (td > 0) events.push({ clock: next, side: 'their', play: `${their.player.team || 'NFL'}: ${T.hot ? 'HOT drip' : 'drip'}`, delta: td, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true, mult: tm && tm !== 1 ? tm : undefined });
+      if (yd > 0) events.push({ clock: next, side: 'you', play: `${you.player.team || 'NFL'}: ${Y.hot ? 'HOT drip' : 'drip'}`, delta: yd, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true, mult: ym && ym !== 1 ? ym : undefined, buffNote: dripBuffNote(yg) });
+      if (td > 0) events.push({ clock: next, side: 'their', play: `${their.player.team || 'NFL'}: ${T.hot ? 'HOT drip' : 'drip'}`, delta: td, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true, mult: tm && tm !== 1 ? tm : undefined, buffNote: dripBuffNote(tg) });
       t = next;
     }
   };
@@ -574,10 +611,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const nukeWipe = (wiped: number): string => {
       if (oppSide === 'you' && youBuffs.has('counter-nuke') && !cnUsed) {
         cnUsed = true; const back = mine.bank; mine.bank = 0; mine.hist = [];
+        recBuff('you', 'counter-nuke', back, true); // reflected the nuke back onto the attacker
         return back > 0 ? ` · ↩ COUNTER-NUKE −${back.toFixed(1)}` : ' · ↩ COUNTER-NUKE';
       }
       if (oppSide === 'you' && youBuffs.has('insurance') && !insUsed) {
         insUsed = true; opp.bank = Math.round(wiped * 0.5 * 10) / 10; opp.hist = [];
+        recBuff('you', 'insurance', opp.bank); // half your bank refunded instead of zeroed
         return ` · 🛟 INSURED ${opp.bank.toFixed(1)}`;
       }
       opp.bank = 0; opp.hist = [];
@@ -605,6 +644,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     let wentHot = false; // a drip crossed into HOT this tick — an event of note
     let coinAmt: number | undefined; // explicit coin bounty for this play (overrides the metric rate)
     let evMult: number | undefined; // FG multiplier shown on this play in the log
+    let buffNote: string | undefined; // an active powerup changed this play's score
     const sideMult = (play.side === 'you' ? opts.youMult?.(play.clock) : opts.theirMult?.(play.clock)) ?? 1;
     if (iAmDrip) {
       if (myDripKind?.includes(play.kind)) {
@@ -618,7 +658,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       if (mine.dead) pts = 0;
       if (sideMult !== 1 && pts > 0) { pts *= sideMult; evMult = sideMult; }
       // Garbage Time: points scored in the final 5 game-minutes count double.
-      if (pts > 0 && play.clock > GARBAGE_FROM && (play.side === 'you' ? youBuffs : theirBuffs).has('garbage-time')) pts *= 2;
+      if (pts > 0 && play.clock > GARBAGE_FROM && (play.side === 'you' ? youBuffs : theirBuffs).has('garbage-time')) { recBuff(play.side, 'garbage-time', pts); pts *= 2; buffNote = 'GARBAGE TIME ×2'; }
     }
     // Field General QB: scores nothing itself, but each pass grows the window
     // multiplier — surface it in the QB's own log so you can watch it build.
@@ -739,6 +779,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       const wiped = opp.bank;
       const suffix = nukeWipe(wiped); opp.paused = true;
       if (!effect) effect = { type: 'nuke', text: `✕ CARRY WIPE −${wiped.toFixed(1)}${suffix}` };
+      recBuff(play.side, 'unlock-carries-wipe', wiped, true); // wiped the opponent's bank
       coinAmt = 25; // the carry wipe pays its own bounty regardless of the primary metric
       sig = true;
     }
@@ -764,6 +805,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       youBank: Math.round(Y.bank * 10) / 10,
       theirBank: Math.round(T.bank * 10) / 10,
       effect,
+      buffNote,
       sig,
       // Event of note (earns drip coin): a bank-zeroing nuke/shutdown/wipe, or a drip going HOT.
       coin: effect?.type === 'nuke' || wentHot,
@@ -783,6 +825,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     events,
     youFinal: Math.round(Y.bank * 10) / 10,
     theirFinal: Math.round(T.bank * 10) / 10,
+    youBuffFx: youBuffFx.length ? youBuffFx : undefined,
+    theirBuffFx: theirBuffFx.length ? theirBuffFx : undefined,
     gameLabel,
     real,
     maxClock,

@@ -12,7 +12,7 @@ import {
 } from '../engine/matchup';
 import { fmtClock, statlineAt, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
-import type { Pick, Player, Pos, WindowId, PbpEvent } from '../types';
+import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx } from '../types';
 
 const YOU = 'happy-campers';
 const TICK_MS = 700;
@@ -181,31 +181,41 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const canSwap = phase === 'live' && ((inventory['metric-swap'] ?? 0) > 0 || (inventory['player-swap'] ?? 0) > 0);
 
   // ── setup interactions ──
+  // Keep each window's spots filled top-down: collapse any gap so a filled spot
+  // never sits below an empty one.
+  function compactPicks(p: Record<string, Pick>): Record<string, Pick> {
+    const out: Record<string, Pick> = {};
+    for (const w of WINDOWS) {
+      const n = slotsFor(w.id, extraSlots);
+      let idx = 0;
+      for (let i = 0; i < n; i++) {
+        const pk = p[slotKey(w.id, i)];
+        if (pk) out[slotKey(w.id, idx++)] = pk;
+      }
+    }
+    return out;
+  }
+
   function assignFromRoster(playerId: string) {
     if (phase !== 'setup') return;
     const win = playerWindow.get(playerId);
     if (!win) return;
     const nSlots = slotsFor(win, extraSlots);
+    // Already slotted in this window → just (re)select it.
     for (let i = 0; i < nSlots; i++) {
       const k = slotKey(win, i);
       if (picks[k]?.playerId === playerId) { setSelSlot(k); return; }
     }
-    let target: string | null = null;
-    if (selSlot && selSlot.startsWith(win + '#') && !picks[selSlot]) target = selSlot;
-    if (!target) {
-      for (let i = 0; i < nSlots; i++) {
-        const k = slotKey(win, i);
-        if (!picks[k]) { target = k; break; }
-      }
-    }
-    if (!target) target = slotKey(win, 0);
     setPicks((prev) => {
       const next = { ...prev };
       for (const k of Object.keys(next)) if (next[k].playerId === playerId) delete next[k];
-      next[target!] = { playerId, metricId: null };
-      return next;
+      // Always take the first open spot top-down (a full window replaces spot 0).
+      let target = slotKey(win, 0);
+      for (let i = 0; i < nSlots; i++) { const k = slotKey(win, i); if (!next[k]) { target = k; break; } }
+      next[target] = { playerId, metricId: null };
+      return compactPicks(next);
     });
-    setSelSlot(target);
+    setSelSlot(null);
   }
 
   function pickMetricFor(key: string, metricId: string) {
@@ -218,8 +228,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     setSelSlot(null);
   }
   function clearSlot(key: string) {
-    setPicks((prev) => { const n = { ...prev }; delete n[key]; return n; });
-    setSelSlot(key);
+    setPicks((prev) => { const n = { ...prev }; delete n[key]; return compactPicks(n); });
+    setSelSlot(null);
   }
 
   function lockIn() { setPhase('live'); setSelSlot(null); setRosterOpen({ you: false, their: false }); }
@@ -985,7 +995,7 @@ function SetupRow(props: {
           <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.12em' }}>DRAG / TAP PLAYER</span>
         </div>
       )}
-      <div style={{ width: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: 64, flex: '0 0 64px', minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.14em' }}>VS</span>
       </div>
       <div style={{ flex: 1, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
@@ -999,6 +1009,35 @@ function SetupRow(props: {
 // Metrics that bank no direct points (their value is purely an effect) — so an
 // unopposed player on one of these can never sub in as a best-ball backup.
 const ZERO_BANK_METRICS = new Set(['QB:fg', 'K:neg', 'DEF:suppress']);
+
+// At FINAL, the scoring changes a side's armed powerups made to this spot —
+// each rendered as a chip. `vsOpp` entries (carry-wipe / counter-nuke) struck
+// points off the opponent; the rest added to your own bank. Double or Nothing
+// is a slot-level stake, surfaced here too.
+function BuffFxRow({ side, fx, stake }: { side: 'you' | 'their'; fx?: BuffFx[]; stake?: 'won' | 'lost' }) {
+  const items: ReactNode[] = [];
+  for (const e of fx ?? []) {
+    if (!(e.points > 0)) continue;
+    const pu = powerupById(e.id);
+    const c = e.vsOpp ? 'var(--fx-nuke)' : 'var(--fx-streak)';
+    const txt = e.vsOpp ? `−${e.points.toFixed(1)} opp` : `+${e.points.toFixed(1)}`;
+    items.push(
+      <span key={e.id + (e.vsOpp ? '-o' : '')} className="mono" title={pu?.blurb} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 8, fontWeight: 700, letterSpacing: '0.04em', color: c, background: 'var(--surface)', border: `1px solid ${c}`, borderRadius: 3, padding: '2px 5px' }}>
+        {pu?.icon} {pu?.name?.toUpperCase()} {txt}
+      </span>,
+    );
+  }
+  if (stake) {
+    const c = stake === 'won' ? 'var(--fx-streak)' : 'var(--fx-nuke)';
+    items.push(
+      <span key="stake" className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 8, fontWeight: 700, letterSpacing: '0.04em', color: c, background: 'var(--surface)', border: `1px solid ${c}`, borderRadius: 3, padding: '2px 5px' }}>
+        ⚖️ DOUBLE OR NOTHING {stake === 'won' ? 'WON ×2' : 'LOST → 0'}
+      </span>,
+    );
+  }
+  if (!items.length) return null;
+  return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 3, justifyContent: side === 'you' ? 'flex-start' : 'flex-end' }}>{items}</div>;
+}
 
 // ── Score row (live / final) ──
 function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onPowerup, onAssignBackup }: {
@@ -1035,7 +1074,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
       />
     );
     const blankBox = (
-      <div style={{ flex: 1, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bd)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ flex: 1, minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bd)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)' }}>— NO OPPONENT —</span>
       </div>
     );
@@ -1056,6 +1095,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
           </div>
           {mineBackup ? blankBox : card}
         </div>
+        {(phase === 'final' || done) && <BuffFxRow side={mineBackup ? 'you' : 'their'} fx={mineBackup ? slot.youBuffFx : slot.theirBuffFx} />}
         {open && (
           <TwoColLog events={bEvents} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} youCoin={mineBackup ? metricCoin(be.player.pos, be.metricId) : 0} theirCoin={mineBackup ? 0 : metricCoin(be.player.pos, be.metricId)} />
         )}
@@ -1136,6 +1176,8 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
           {slot.their.player.name} ✕ NEGATED by K SHUTDOWN — scored 0
         </div>
       )}
+      {final && <BuffFxRow side="you" fx={slot.youBuffFx} stake={slot.youStake} />}
+      {final && <BuffFxRow side="their" fx={slot.theirBuffFx} />}
       {open && <TwoColLog events={visibleEvents} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} youCoin={metricCoin(slot.you.player.pos, slot.you.metricId)} theirCoin={metricCoin(slot.their.player.pos, slot.their.metricId)} />}
     </div>
   );
@@ -1267,6 +1309,9 @@ function TwoColLog({ events, youName, theirName, gameLabel, youCoin = 0, theirCo
         </div>
         {ev.effect && (
           <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: FX_COLOR[ev.effect.type] ?? 'var(--dim)', marginTop: 1 }}>{ev.effect.text}</div>
+        )}
+        {ev.buffNote && (
+          <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', marginTop: 1 }}>⚡ {ev.buffNote}</div>
         )}
       </div>
     );
