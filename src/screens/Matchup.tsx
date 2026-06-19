@@ -1501,10 +1501,12 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
       {!isMobile && <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{player.team}</span>}
     </div>
   );
+  // On mobile the chip is anchored to two lines (name over tag) so it's always
+  // the same height regardless of label length; desktop keeps it inline.
   const metricChip = (
-    <div style={{ display: 'inline-flex', flexWrap: 'wrap', maxWidth: '100%', alignItems: 'baseline', gap: 5, marginTop: isMobile ? 2 : 5, padding: isMobile ? '1px 6px' : '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)` }}>
-      <span className="grotesk" style={{ fontSize: isMobile ? 11 : 13, fontWeight: 700, color: accent, letterSpacing: '0.01em', whiteSpace: isMobile ? 'normal' : 'nowrap' }}>{metricName}</span>
-      <span className="mono" style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.1em', color: accent, opacity: 0.85, whiteSpace: 'nowrap' }}>{tag}</span>
+    <div style={{ display: 'inline-flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? (side === 'you' ? 'flex-start' : 'flex-end') : 'baseline', maxWidth: '100%', gap: isMobile ? 0 : 5, marginTop: isMobile ? 2 : 5, padding: isMobile ? '2px 7px' : '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)` }}>
+      <span className="grotesk" style={{ fontSize: isMobile ? 10.5 : 13, fontWeight: 700, color: accent, letterSpacing: '0.01em', lineHeight: 1.25, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{metricName}</span>
+      <span className="mono" style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.1em', color: accent, opacity: 0.85, whiteSpace: 'nowrap', lineHeight: 1.25 }}>{tag}</span>
     </div>
   );
   // Statline: single line, justified to the card's outer edge, ellipsis if long.
