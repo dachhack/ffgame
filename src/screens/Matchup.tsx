@@ -917,10 +917,15 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
         </div>
         <div style={{ flex: 'none', alignSelf: 'center', textAlign: 'center' }}>
           {isSuppress ? (
-            <>
-              <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, color: 'var(--dim)', lineHeight: 1, textDecoration: 'line-through' }}>{(suppressSpent ?? 0).toFixed(1)}</div>
-              <div className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-stop)', marginTop: 3 }}>SUPPRESS</div>
-            </>
+            // Earn accrues live; it's only spent (crossed out) once the game ends.
+            (done || phase === 'final') ? (
+              <>
+                <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, color: 'var(--dim)', lineHeight: 1, textDecoration: 'line-through' }}>{(suppressSpent ?? 0).toFixed(1)}</div>
+                <div className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-stop)', marginTop: 3 }}>SUPPRESS</div>
+              </>
+            ) : (
+              <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, color: 'var(--dim)', lineHeight: 1, letterSpacing: '-0.02em' }}>{liveBackup.toFixed(1)}</div>
+            )
           ) : (
             <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, color: accent, lineHeight: 1, letterSpacing: '-0.02em' }}>{liveBackup.toFixed(1)}</div>
           )}
@@ -938,7 +943,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
         <div style={{ display: 'flex', alignItems: 'stretch', gap: 6 }}>
           {mineBackup ? playerCard : blankBox}
           {/* center column — same 64px as head-to-head, with the LOG toggle */}
-          <div style={{ width: 64, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+          <div style={{ width: 64, flex: '0 0 64px', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
             <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 5px' }}>UNOPP</span>
             {slot.events.length > 0 && (
               <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
@@ -969,8 +974,10 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
     // in its own row.
     const sub = side === 'you' ? slot.youSub : slot.theirSub;
     if (phase === 'final' && sub) return sub.score;
-    if (side === 'you' && slot.youNegated) return 0;
-    if (side === 'their' && slot.theirNegated) return 0;
+    // Negation/halving are end-of-game outcomes — only resolve them at FINAL;
+    // during live the slot plays its own head-to-head (0 at kickoff).
+    if (final && side === 'you' && slot.youNegated) return 0;
+    if (final && side === 'their' && slot.theirNegated) return 0;
     if (final && side === 'you' && slot.youHalvedFrom != null) return slot.youFinal;
     if (final && side === 'their' && slot.theirHalvedFrom != null) return slot.theirFinal;
     return side === 'you' ? banks.you : banks.their;
@@ -990,8 +997,8 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'stretch', gap: 6 }}>
-        <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={slot.suppressSpentYou} negated={slot.youNegated} halvedFrom={final ? slot.youHalvedFrom : undefined} />
-        <div style={{ width: 64, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+        <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} />
+        <div style={{ width: 64, flex: '0 0 64px', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
           <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--bg)', background: verdict.c, padding: '4px 6px', borderRadius: 3, textAlign: 'center', lineHeight: 1.1 }}>{verdict.t}</span>
           {canSwap && !done && (
             <button onClick={onPowerup} title="Apply a real-time powerup (Metric / Player Swap)" className="mono" style={{ color: 'var(--bg)', background: 'var(--warn)', border: 'none', borderRadius: 4, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', padding: '5px 7px', boxShadow: '0 0 12px color-mix(in srgb, var(--warn) 55%, transparent)', animation: 'bpulse 1.5s ease infinite' }}>⚡ USE</button>
@@ -1000,7 +1007,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
             <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
           )}
         </div>
-        <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={slot.suppressSpentTheir} negated={slot.theirNegated} halvedFrom={final ? slot.theirHalvedFrom : undefined} />
+        <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} />
       </div>
       {phase === 'final' && slot.youSub && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', marginTop: 3 }}>
@@ -1013,12 +1020,12 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
         </div>
       )}
       {/* halving is shown in the big-number area of each ScoreCard above */}
-      {slot.youNegated && (
+      {final && slot.youNegated && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--fx-nuke)', marginTop: 3 }}>
           ✕ NEGATED by {slot.their.player.name}'s K SHUTDOWN — scored 0
         </div>
       )}
-      {slot.theirNegated && (
+      {final && slot.theirNegated && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--fx-nuke)', marginTop: 3, textAlign: 'right' }}>
           {slot.their.player.name} ✕ NEGATED by K SHUTDOWN — scored 0
         </div>
