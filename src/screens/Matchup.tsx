@@ -1057,7 +1057,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
           {mineBackup ? blankBox : card}
         </div>
         {open && (
-          <TwoColLog events={bEvents} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} />
+          <TwoColLog events={bEvents} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} youCoin={mineBackup ? metricCoin(be.player.pos, be.metricId) : 0} theirCoin={mineBackup ? 0 : metricCoin(be.player.pos, be.metricId)} />
         )}
       </div>
     );
@@ -1136,7 +1136,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
           {slot.their.player.name} ✕ NEGATED by K SHUTDOWN — scored 0
         </div>
       )}
-      {open && <TwoColLog events={visibleEvents} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} />}
+      {open && <TwoColLog events={visibleEvents} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} youCoin={metricCoin(slot.you.player.pos, slot.you.metricId)} theirCoin={metricCoin(slot.their.player.pos, slot.their.metricId)} />}
     </div>
   );
 }
@@ -1230,7 +1230,7 @@ function actionText(play: string): string {
 // Two-column play-by-play: your player's plays on the left, theirs on the
 // right, the clock down the middle. Chronological (newest at the bottom) so it
 // reads like a live ticker, auto-scrolling to keep the latest play in view.
-function TwoColLog({ events, youName, theirName, gameLabel }: { events: PbpEvent[]; youName: string; theirName: string; gameLabel: string }) {
+function TwoColLog({ events, youName, theirName, gameLabel, youCoin = 0, theirCoin = 0 }: { events: PbpEvent[]; youName: string; theirName: string; gameLabel: string; youCoin?: number; theirCoin?: number }) {
   const [minutes, setMinutes] = useState(false);
   const [top, setTop] = useState(false); // newest entries on top vs bottom
   const scroller = useRef<HTMLDivElement>(null);
@@ -1263,6 +1263,7 @@ function TwoColLog({ events, youName, theirName, gameLabel }: { events: PbpEvent
           {actionText(ev.play)}
           {ev.delta > 0 && <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: mine ? 'var(--you)' : 'var(--opp)', marginLeft: 5 }}>+{ev.delta.toFixed(1)}</span>}
           {ev.mult && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--fx-mult)', marginLeft: 4 }}>×{ev.mult.toFixed(2)}</span>}
+          {ev.coin && (mine ? youCoin : theirCoin) > 0 && <span className="mono" title="drip coin earned" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--fx-mult)', marginLeft: 5 }}>◈ +{mine ? youCoin : theirCoin}</span>}
         </div>
         {ev.effect && (
           <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: FX_COLOR[ev.effect.type] ?? 'var(--dim)', marginTop: 1 }}>{ev.effect.text}</div>
