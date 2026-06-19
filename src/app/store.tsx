@@ -64,6 +64,13 @@ interface Store {
   applyMulligan: (week: number, slotKey: string, atClock: number, toMetricId: string) => boolean;
   /** Fire EMP on a live window: freeze opponent drips from `clock` for 10 min. */
   applyEmp: (week: number, win: WindowId, clock: number) => boolean;
+  /** Back-outs (refund the consumable) before lock-in / kickoff. */
+  clearDoubleOrNothing: (week: number) => void;
+  clearSpy: (week: number) => void;
+  clearByeSteal: (week: number) => void;
+  removeExtraSlot: (week: number, win: WindowId) => void;
+  /** Refund an unlock-metric powerup when its spot drops the metric. */
+  refundUnlock: (id: string) => void;
   /** Dev/testing: top drip coin back up to the demo grant and clear all owned +
    *  applied powerups. */
   resetDripCoin: () => void;
@@ -188,6 +195,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const applyEmp = (week: number, win: WindowId, clock: number): boolean =>
     applied[week]?.emp?.[win] != null ? false : consumeAndApply('emp', week, (cur) => ({ ...cur, emp: { ...cur.emp, [win]: clock } }));
 
+  // ── Back-outs: clear an applied targeted powerup and refund the consumable. ──
+  const clearApplied = (week: number, refundId: string, mutate: (cur: AppliedWeek) => void): void => {
+    const cur = applied[week]; if (!cur) return;
+    const nc: AppliedWeek = { ...cur, extraSlots: { ...cur.extraSlots }, swaps: { ...cur.swaps }, backups: { ...cur.backups } };
+    mutate(nc);
+    const nextApplied = { ...applied, [week]: nc };
+    const nextInv = { ...inventory, [refundId]: (inventory[refundId] ?? 0) + 1 };
+    setApplied(nextApplied); setInventory(nextInv); persist({ applied: nextApplied, inv: nextInv });
+  };
+  const clearDoubleOrNothing = (week: number): void => { if (applied[week]?.doubleOrNothing) clearApplied(week, 'double-or-nothing', (c) => { delete c.doubleOrNothing; }); };
+  const clearSpy = (week: number): void => { if (applied[week]?.spy) clearApplied(week, 'spy', (c) => { delete c.spy; }); };
+  const clearByeSteal = (week: number): void => { if (applied[week]?.byeSteal) clearApplied(week, 'bye-steal', (c) => { delete c.byeSteal; }); };
+  const removeExtraSlot = (week: number, win: WindowId): void => {
+    const n = applied[week]?.extraSlots?.[win] ?? 0; if (n <= 0) return;
+    clearApplied(week, 'extra-slot', (c) => { if (n - 1 > 0) c.extraSlots[win] = n - 1; else delete c.extraSlots[win]; });
+  };
+  // Refund an unlock-metric powerup (when a player swaps off / clears that metric).
+  const refundUnlock = (id: string): void => { const nextInv = { ...inventory, [id]: (inventory[id] ?? 0) + 1 }; setInventory(nextInv); persist({ inv: nextInv }); };
+
   const applyMetricSwap = (week: number, slotKey: string, atClock: number, toMetricId: string): boolean =>
     consumeAndApply('metric-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, toMetricId } } }));
 
@@ -208,7 +234,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, resetDripCoin }),
+    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
     [theme, route, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

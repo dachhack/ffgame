@@ -40,7 +40,7 @@ function CoinPill({ amt }: { amt: number }) {
 }
 
 export function Matchup({ week, initialPhase }: { week: number; initialPhase: Phase }) {
-  const { navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, resetDripCoin } = useStore();
+  const { navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const buffs = applied[week]?.buffs ?? {};
   const buffsKey = JSON.stringify(buffs);
   const extraSlots = applied[week]?.extraSlots ?? {};
@@ -244,6 +244,14 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     return out;
   }
 
+  // Refund an unlock-metric powerup if this pick was using one (dropped a spot).
+  function refundUnlockFor(pk?: Pick) {
+    if (!pk?.metricId) return;
+    const pl = getPlayer(pk.playerId);
+    const m = pl ? metricById(pl.pos, pk.metricId) : null;
+    if (m?.lock) refundUnlock(m.lock);
+  }
+
   function assignFromRoster(playerId: string) {
     if (phase !== 'setup') return;
     const win = playerWindow.get(playerId);
@@ -272,16 +280,21 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     const m = player ? metricById(player.pos, metricId) : null;
     // A locked (unlock) metric consumes one of its powerup the first time it's set.
     if (m?.lock && pk?.metricId !== metricId && !useConsumable(m.lock)) return;
+    // Switching off a previously-picked unlock metric refunds it.
+    const prevM = player && pk?.metricId ? metricById(player.pos, pk.metricId) : null;
+    if (prevM?.lock && prevM.id !== metricId) refundUnlock(prevM.lock);
     setPicks((prev) => prev[key] ? { ...prev, [key]: { ...prev[key], metricId } } : prev);
     setSelSlot(null);
   }
   function clearSlot(key: string) {
+    refundUnlockFor(picks[key]);
     setPicks((prev) => { const n = { ...prev }; delete n[key]; return compactPicks(n); });
     setSelSlot(null);
   }
   // Assign a specific player to a specific spot (tap-a-spot picker), de-duped and
   // compacted so the window stays filled top-down.
   function assignToSlot(key: string, playerId: string) {
+    if (picks[key]?.playerId !== playerId) refundUnlockFor(picks[key]); // replacing a spot's player drops its unlock
     setPicks((prev) => {
       const next = { ...prev };
       for (const k of Object.keys(next)) if (next[k].playerId === playerId) delete next[k];
@@ -440,6 +453,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 byes={byes} winClocks={winClocks}
                 onSpy={(k, r) => setSpy(week, k, r)} onByeSteal={(k, pid) => applyByeSteal(week, k, pid)}
                 onMulligan={(k, c, m) => applyMulligan(week, k, c, m)} onEmp={(w, c) => applyEmp(week, w, c)}
+                onClearStake={() => clearDoubleOrNothing(week)} onClearBye={() => clearByeSteal(week)} onClearSpy={() => clearSpy(week)}
               />
             </div>
             <div style={{ textAlign: 'right', flex: 'none' }}>
@@ -463,6 +477,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 canApplyExtra={phase === 'setup' && extraSlotQty > 0}
                 extraSlotQty={extraSlotQty}
                 onApplyExtra={() => applyExtraSlot(week, rw.window.id)}
+                onRemoveExtra={() => removeExtraSlot(week, rw.window.id)}
                 canSwap={canSwap}
                 onPowerup={(key) => setSwapTarget({ key, win: rw.window.id })}
                 onAssignBackup={(key) => setBackupMenu({ key })}
@@ -906,8 +921,9 @@ function TargetPanel(props: {
   windows: ReturnType<typeof buildMatchup>['windows']; oppPicks: Record<string, Pick>; byes: Player[]; winClocks: Record<string, number>;
   onSpy: (k: string, reveal: 'player' | 'metric') => void; onByeSteal: (k: string, pid: string) => void;
   onMulligan: (k: string, atClock: number, m: string) => void; onEmp: (w: WindowId, clock: number) => void;
+  onClearStake: () => void; onClearBye: () => void; onClearSpy: () => void;
 }) {
-  const { phase, inventory, aw, windows, oppPicks, byes, winClocks, onSpy, onByeSteal, onMulligan, onEmp } = props;
+  const { phase, inventory, aw, windows, oppPicks, byes, winClocks, onSpy, onByeSteal, onMulligan, onEmp, onClearStake, onClearBye, onClearSpy } = props;
   const [byePid, setByePid] = useState(''); const [byeKey, setByeKey] = useState('');
   const [mulKey, setMulKey] = useState(''); const [mulMet, setMulMet] = useState('');
   const [spySlot, setSpySlot] = useState('');
@@ -928,10 +944,11 @@ function TargetPanel(props: {
   );
   const sel: React.CSSProperties = { background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 4, fontSize: 10, padding: '4px 6px', fontFamily: fonts.MONO };
   const btn: React.CSSProperties = { background: 'var(--surface)', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, fontSize: 9, fontWeight: 700, padding: '4px 8px' };
+  const undo: React.CSSProperties = { background: 'none', border: 'none', color: 'var(--opp)', fontWeight: 700, fontSize: 11, cursor: 'pointer', padding: '0 4px' };
 
   if (phase === 'setup') {
-    if (aw?.doubleOrNothing) rows.push(Row('⚖️ Double/Nothing', <span className="mono" style={{ fontSize: 9.5, color: 'var(--you)' }}>staked {yourH2H.find((s) => s.key === aw.doubleOrNothing)?.name ?? '—'}</span>));
-    if (aw?.byeSteal) rows.push(Row('🪂 Bye Steal', <span className="mono" style={{ fontSize: 9.5, color: 'var(--you)' }}>fielded {getPlayer(aw.byeSteal.playerId)?.name ?? '—'}</span>));
+    if (aw?.doubleOrNothing) rows.push(Row('⚖️ Double/Nothing', <><span className="mono" style={{ fontSize: 9.5, color: 'var(--you)' }}>staked {yourH2H.find((s) => s.key === aw.doubleOrNothing)?.name ?? '—'}</span><button style={undo} title="Undo (refund)" onClick={onClearStake}>✕</button></>));
+    if (aw?.byeSteal) rows.push(Row('🪂 Bye Steal', <><span className="mono" style={{ fontSize: 9.5, color: 'var(--you)' }}>fielded {getPlayer(aw.byeSteal.playerId)?.name ?? '—'}</span><button style={undo} title="Undo (refund)" onClick={onClearBye}>✕</button></>));
     else if (has('bye-steal') && byes.length > 0 && emptySlots.length > 0) rows.push(Row('🪂 Bye Steal', <>
       <select style={sel} value={byePid} onChange={(e) => setByePid(e.target.value)}><option value="">player…</option>{byes.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.pos})</option>)}</select>
       <select style={sel} value={byeKey} onChange={(e) => setByeKey(e.target.value)}><option value="">slot…</option>{emptySlots.map((s) => <option key={s.key} value={s.key}>{s.win.toUpperCase()} open</option>)}</select>
@@ -961,7 +978,7 @@ function TargetPanel(props: {
     const val = sp.reveal === 'player'
       ? (oppPlayer ? `${oppPlayer.name} (${oppPlayer.pos} · ${oppPlayer.team})` : '— no player —')
       : (oppPlayer ? (metricById(oppPlayer.pos, op!.metricId)?.name ?? '—') : '— no player —');
-    rows.push(Row('👁️ Spy', <span className="mono" style={{ fontSize: 9.5, color: 'var(--opp)' }}>{label} {sp.reveal}: <b style={{ color: 'var(--text)' }}>{val}</b></span>));
+    rows.push(Row('👁️ Spy', <><span className="mono" style={{ fontSize: 9.5, color: 'var(--opp)' }}>{label} {sp.reveal}: <b style={{ color: 'var(--text)' }}>{val}</b></span>{preKick && <button style={undo} title="Undo (refund)" onClick={onClearSpy}>✕</button>}</>));
   } else if (has('spy') && preKick) {
     rows.push(Row('👁️ Spy', <>
       <select style={sel} value={spySlot} onChange={(e) => setSpySlot(e.target.value)}><option value="">slot…</option>{allSlots.map((s) => <option key={s.key} value={s.key}>{s.win.toUpperCase()} #{s.idx + 1}</option>)}</select>
@@ -1023,6 +1040,7 @@ function WindowSection(props: {
   canApplyExtra: boolean;
   extraSlotQty: number;
   onApplyExtra: () => void;
+  onRemoveExtra: () => void;
   canSwap: boolean;
   onPowerup: (key: string) => void;
   onAssignBackup: (key: string) => void;
@@ -1042,7 +1060,7 @@ function WindowSection(props: {
   applyMode: string | null;
   onApplyToSpot: (key: string) => void;
 }) {
-  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, applyMode, onApplyToSpot } = props;
+  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, applyMode, onApplyToSpot } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
@@ -1099,6 +1117,11 @@ function WindowSection(props: {
                 style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px dashed var(--warn)', borderRadius: 4, padding: '4px 8px' }}
               >
                 ➕ ADD SLOT (◈ ×{extraSlotQty})
+              </button>
+            )}
+            {rw.slots.length > w.slots && (
+              <button onClick={onRemoveExtra} title="Remove the added slot (refund)" className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--opp)', background: 'var(--surface)', border: '1px solid var(--opp)', borderRadius: 4, padding: '4px 8px' }}>
+                ➖ REMOVE SLOT
               </button>
             )}
             <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--dim)' }}>{setN}/{rw.slots.length} SET</span>
