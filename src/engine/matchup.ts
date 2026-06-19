@@ -1,5 +1,5 @@
-import type { Player, WindowId, Pick, PbpEvent } from '../types';
-import { WINDOWS, METRICS } from '../data/metrics';
+import type { Player, WindowId, Pick, PbpEvent, Pos } from '../types';
+import { WINDOWS, METRICS, metricById } from '../data/metrics';
 import { teamRoster, getPlayer } from '../data/league';
 import { hashStr } from '../data/players';
 
@@ -338,6 +338,41 @@ export function signatureCoins(m: ResolvedMatchup, side: 'you' | 'their'): numbe
   let n = 0;
   for (const w of m.windows) for (const s of w.slots) for (const e of s.events) if (e.side === side && e.sig) n++;
   return n * COIN_PER_SIG;
+}
+
+// ── Drip-coin economy ────────────────────────────────────────────────────────
+export const WEEKLY_STIPEND = 50;     // flat, just for playing the week
+export const UNOPPOSED_COIN = 15;     // per unopposed player you field
+/**
+ * Coin paid per signature play, scaled by how risky the slot's metric is —
+ * the bigger the swing (nukes, multipliers, shutdowns), the bigger the payout.
+ * LOW 3 · MED 6 · HIGH 10.
+ */
+export function metricCoin(pos: Pos, metricId: string | null | undefined): number {
+  const m = metricById(pos, metricId);
+  if (!m) return 3;
+  if (metricId === 'suppress') return 10;             // field-wide halving = high risk
+  if (m.fx === 'nuke' || m.fx === 'mult') return 10;  // wipes / window multiplier
+  if (m.fx === 'erase' || m.fx === 'stop' || m.fx === 'reset' || m.fx === 'compression') return 6;
+  return 3;                                            // flat / accumulation drip
+}
+export function coinRisk(n: number): 'LOW' | 'MED' | 'HIGH' {
+  return n >= 10 ? 'HIGH' : n >= 6 ? 'MED' : 'LOW';
+}
+
+export interface WeekEarnings { stipend: number; unopposed: number; signature: number; total: number; }
+/** A side's full weekly drip-coin take: stipend + unopposed bounty + risk-weighted signature plays. */
+export function weekEarnings(m: ResolvedMatchup, side: 'you' | 'their'): WeekEarnings {
+  let unopposed = 0, signature = 0;
+  for (const w of m.windows) for (const s of w.slots) {
+    const me = side === 'you' ? s.you : s.their;
+    const opp = side === 'you' ? s.their : s.you;
+    if (!me) continue;
+    if (!opp) unopposed += UNOPPOSED_COIN;
+    const rate = metricCoin(me.player.pos, me.metricId);
+    for (const e of s.events) if (e.side === side && e.sig) signature += rate;
+  }
+  return { stipend: WEEKLY_STIPEND, unopposed, signature, total: WEEKLY_STIPEND + unopposed + signature };
 }
 
 /**

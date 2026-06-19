@@ -8,7 +8,7 @@ import { WINDOWS, METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById } from '../data/powerups';
 import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
-  windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock, signatureCoins, slotsFor, totalSlotsWith, byePlayers,
+  windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
 } from '../engine/matchup';
 import { fmtClock, statlineAt, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
@@ -82,8 +82,10 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, buffsKey, extrasKey],
   );
 
-  // Drip coin: +5 per signature play your lineup makes this week (credited once).
-  const weekCoins = useMemo(() => signatureCoins(resolved, 'you'), [resolved]);
+  // Drip coin: weekly stipend + unopposed bounty + risk-weighted signature plays.
+  const earnings = useMemo(() => weekEarnings(resolved, 'you'), [resolved]);
+  const weekCoins = earnings.total;
+  const [earnOpen, setEarnOpen] = useState(false);
   useEffect(() => {
     if (phase === 'live' || phase === 'final') creditWeek(week, weekCoins);
   }, [phase, week, weekCoins]);
@@ -260,11 +262,11 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, whiteSpace: 'nowrap' }}>
-          <div title={`Drip Coin — +5 per signature play your lineup makes${weekCoins > 0 ? ` (+${weekCoins} this week)` : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 9px' }}>
+          <button onClick={() => setEarnOpen(true)} title="Drip Coin — tap for earning opportunities" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 9px', cursor: 'pointer' }}>
             <span style={{ color: 'var(--fx-mult)', fontSize: 12 }}>◈</span>
-            <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{coins}</span>
-            {weekCoins > 0 && <span className="mono" style={{ fontSize: 8.5, color: 'var(--fx-streak)' }}>+{weekCoins}</span>}
-          </div>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{coins}</span>
+            {weekCoins > 0 && <span style={{ fontSize: 8.5, color: 'var(--fx-streak)' }}>+{weekCoins}</span>}
+          </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <Avatar name={you.name} accent="var(--you)" size={20} src={avatarUrl(you.ownerId)} />
             <span className="mono" style={{ color: 'var(--text)', fontSize: 14, fontWeight: 700 }}>{youTotal.toFixed(1)}</span>
@@ -411,7 +413,68 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
           />
         );
       })()}
+
+      {earnOpen && <EarningsModal earnings={earnings} onClose={() => setEarnOpen(false)} />}
     </>
+  );
+}
+
+// ── Drip-coin earning opportunities, by position (risk pays more) ──
+function EarningsModal({ earnings, onClose }: { earnings: { stipend: number; unopposed: number; signature: number; total: number }; onClose: () => void }) {
+  const order: Pos[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
+  const riskColor = (r: string) => (r === 'HIGH' ? 'var(--fx-nuke)' : r === 'MED' ? 'var(--warn)' : 'var(--dim)');
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '50px 16px', overflow: 'auto' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
+          <div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}><span style={{ color: 'var(--fx-mult)' }}>◈</span> Drip Coin — Earning</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>RISKIER METRICS PAY MORE PER SIGNATURE PLAY</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
+        </div>
+        <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 520, overflow: 'auto' }}>
+          {/* this week's running tally */}
+          <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px' }}>
+            <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 6 }}>THIS WEEK</div>
+            {[['Weekly stipend', earnings.stipend], ['Unopposed players', earnings.unopposed], ['Signature plays', earnings.signature]].map(([k, v]) => (
+              <div key={k as string} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--dim)', padding: '2px 0' }}>
+                <span>{k}</span><span className="mono" style={{ color: 'var(--fx-streak)', fontWeight: 700 }}>+{v}</span>
+              </div>
+            ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, color: 'var(--text)', padding: '5px 0 0', marginTop: 4, borderTop: '1px solid var(--bd)' }}>
+              <span>Total</span><span className="mono" style={{ color: 'var(--fx-mult)' }}>+{earnings.total}</span>
+            </div>
+          </div>
+          {/* always-on */}
+          <div className="mono" style={{ fontSize: 9.5, lineHeight: 1.6, color: 'var(--dim)' }}>
+            <div>◈ <b style={{ color: 'var(--text)' }}>+{WEEKLY_STIPEND}</b> flat every week, just for playing.</div>
+            <div>◈ <b style={{ color: 'var(--text)' }}>+{UNOPPOSED_COIN}</b> for each unopposed player you field.</div>
+          </div>
+          {/* per-position signature rates */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {order.map((pos) => (
+              <div key={pos}>
+                <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 3 }}>{pos}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {METRICS[pos].map((m) => {
+                    const coin = metricCoin(pos, m.id);
+                    const risk = coinRisk(coin);
+                    return (
+                      <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10.5, color: 'var(--text)', padding: '2px 0' }}>
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.lock ? '◈ ' : ''}{m.name}</span>
+                        <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: riskColor(risk), border: `1px solid ${riskColor(risk)}`, borderRadius: 2, padding: '0 4px' }}>{risk}</span>
+                        <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--fx-streak)', width: 44, textAlign: 'right' }}>+{coin}/play</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
