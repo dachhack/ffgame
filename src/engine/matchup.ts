@@ -108,6 +108,8 @@ export interface ResolvedSlot {
   // Zeroed for the rest of the game by an opposing K SHUTDOWN (negated).
   youNegated?: boolean;
   theirNegated?: boolean;
+  byeStolen?: boolean;          // a bye player fielded here for a flat projection
+  youStake?: 'won' | 'lost';    // Double or Nothing result on this slot (at FINAL)
 }
 
 export interface ResolvedWindow {
@@ -154,6 +156,7 @@ export function buildMatchup(
   swaps: SlotSwaps = {},
   backupAssign: Record<string, string> = {},
   buffs: Record<string, boolean> = {},
+  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>> } = {},
 ): ResolvedMatchup {
   const youPools = windowPools(youTeamId, week);
   const oppPools = windowPools(oppTeamId, week);
@@ -220,7 +223,8 @@ export function buildMatchup(
         const yIn: SlotInput = you ? { player: you.player, metricId: you.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
         const tIn: SlotInput = their ? { player: their.player, metricId: their.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
         gameLabel = `${you?.player.team || 'BYE'} · ${their?.player.team || 'BYE'}`;
-        const opts = { youMult, theirMult, youDripNukeClocks: theirTeTd, theirDripNukeClocks: youTeTd, youBuffs: youBuffSet, theirBuffs: theirBuffSet };
+        const empClock = extras.emp?.[w.id];
+        const opts = { youMult, theirMult, youDripNukeClocks: theirTeTd, theirDripNukeClocks: youTeTd, youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined };
         let res = resolveSlot(yIn, tIn, week, gameLabel, opts);
 
         // Real-time swap (Player/Metric Swap): keep your pre-swap banked points,
@@ -256,7 +260,15 @@ export function buildMatchup(
         if (suppressSpentTheir != null) tF = 0;
       }
 
-      slots.push({ win: w.id, slotIndex: i, you: displayYou, their, events, youFinal: yF, theirFinal: tF, gameLabel, real, suppressSpentYou, suppressSpentTheir, youNegated: youNegated || undefined, theirNegated: theirNegated || undefined });
+      // Bye Steal: an empty slot can be filled with a benched bye player for a
+      // flat projected score (no live game — it just banks its projection).
+      let byeStolen = false;
+      if (extras.byeSteal && extras.byeSteal.slotKey === key && !displayYou) {
+        const bp = getPlayer(extras.byeSteal.playerId);
+        if (bp) { displayYou = { player: bp, metricId: 'bye' }; yF = Math.round(projectedPoints(bp, week) * 10) / 10; byeStolen = true; }
+      }
+
+      slots.push({ win: w.id, slotIndex: i, you: displayYou, their, events, youFinal: yF, theirFinal: tF, gameLabel, real, suppressSpentYou, suppressSpentTheir, youNegated: youNegated || undefined, theirNegated: theirNegated || undefined, byeStolen: byeStolen || undefined });
     }
     windows.push({ window: w, slots });
   }
@@ -297,6 +309,17 @@ export function buildMatchup(
   award('trick-play', 50, (n) => `Trick Play — ${n} threw a TD pass`, (p) => p.pos !== 'QB' && threwTrickTd(p.id, week));
   award('pick-six', 25, (n) => `Pick Six — ${n} returned a TD`, (p) => p.pos === 'DEF' && hadDefTd(p, week));
   award('hail-mary', 15, (n) => `Hail Mary — ${n} hit a 40+ yd TD`, (p) => p.pos === 'QB' && hadLongPassTd(p, week));
+
+  // Double or Nothing: a staked head-to-head slot scores double if it wins, 0 if
+  // it loses. Applied as a delta on top of the slot's own (already-summed) score.
+  if (extras.doubleOrNothing) {
+    for (const w of windows) for (const s of w.slots) {
+      if (slotKey(s.win, s.slotIndex) !== extras.doubleOrNothing || !s.you || !s.their) continue;
+      const won = s.youFinal > s.theirFinal;
+      s.youStake = won ? 'won' : 'lost';
+      bonuses.push({ id: 'double-or-nothing', points: won ? s.youFinal : -s.youFinal, label: won ? `Double or Nothing — ${s.you.player.name} WON ×2` : `Double or Nothing — ${s.you.player.name} LOST → 0` });
+    }
+  }
   for (const b of bonuses) youFinal += b.points;
 
   return {

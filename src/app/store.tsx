@@ -13,6 +13,10 @@ export interface AppliedWeek {
   swaps: Record<string, SlotSwap>;               // slotKey -> real-time swap (metric and/or player)
   backups: Record<string, string>;               // backup slotKey -> target starter slotKey (manual best-ball)
   buffs?: Record<string, true>;                  // armed pre-match team buffs, keyed by powerup id
+  doubleOrNothing?: string;                      // your slotKey staked (×2 if it wins, 0 if it loses)
+  spy?: string;                                  // opponent slotKey whose hidden metric is revealed
+  byeSteal?: { slotKey: string; playerId: string }; // a bye player fielded for a flat projected score
+  emp?: Partial<Record<WindowId, number>>;       // window -> clock at which opponent drips froze (10 min)
 }
 
 export type Phase = 'setup' | 'live' | 'final';
@@ -48,6 +52,16 @@ interface Store {
   setBackupTarget: (week: number, backupKey: string, targetKey: string | null) => void;
   /** Arm a pre-match team buff (by powerup id) for a week (consumes one). */
   armBuff: (week: number, id: string) => boolean;
+  /** Stake one of your slots for Double or Nothing (consumes one). */
+  setDoubleOrNothing: (week: number, slotKey: string) => boolean;
+  /** Reveal an opponent slot's hidden metric via Spy (consumes one). */
+  setSpy: (week: number, oppSlotKey: string) => boolean;
+  /** Field a bye player in a slot via Bye Steal (consumes one). */
+  applyByeSteal: (week: number, slotKey: string, playerId: string) => boolean;
+  /** Free mid-game metric re-roll via Mulligan — writes a swap, spends a Mulligan. */
+  applyMulligan: (week: number, slotKey: string, atClock: number, toMetricId: string) => boolean;
+  /** Fire EMP on a live window: freeze opponent drips from `clock` for 10 min. */
+  applyEmp: (week: number, win: WindowId, clock: number) => boolean;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -138,6 +152,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const armBuff = (week: number, id: string): boolean =>
     applied[week]?.buffs?.[id] ? false : consumeAndApply(id, week, (cur) => ({ ...cur, buffs: { ...cur.buffs, [id]: true } }));
 
+  const setDoubleOrNothing = (week: number, slotKey: string): boolean =>
+    consumeAndApply('double-or-nothing', week, (cur) => ({ ...cur, doubleOrNothing: slotKey }));
+  const setSpy = (week: number, oppSlotKey: string): boolean =>
+    consumeAndApply('spy', week, (cur) => ({ ...cur, spy: oppSlotKey }));
+  const applyByeSteal = (week: number, slotKey: string, playerId: string): boolean =>
+    consumeAndApply('bye-steal', week, (cur) => ({ ...cur, byeSteal: { slotKey, playerId } }));
+  const applyMulligan = (week: number, slotKey: string, atClock: number, toMetricId: string): boolean =>
+    consumeAndApply('mulligan', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, toMetricId } } }));
+  const applyEmp = (week: number, win: WindowId, clock: number): boolean =>
+    applied[week]?.emp?.[win] != null ? false : consumeAndApply('emp', week, (cur) => ({ ...cur, emp: { ...cur.emp, [win]: clock } }));
+
   const applyMetricSwap = (week: number, slotKey: string, atClock: number, toMetricId: string): boolean =>
     consumeAndApply('metric-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, toMetricId } } }));
 
@@ -153,7 +178,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff }),
+    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, setDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp }),
     [theme, route, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

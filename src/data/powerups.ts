@@ -8,6 +8,10 @@
 export type PowerupTiming = 'pre' | 'live';
 export type PowerupKind = 'action' | 'metric';
 
+// What a powerup must be pointed at when applied (undefined = no target; it's a
+// whole-lineup buff armed with one click).
+export type PowerupTarget = 'slot-you' | 'slot-opp' | 'bye' | 'window';
+
 export interface Powerup {
   id: string;
   name: string;
@@ -16,6 +20,7 @@ export interface Powerup {
   timing: PowerupTiming;
   price: number;
   icon: string;
+  target?: PowerupTarget;
 }
 
 export const POWERUPS: Powerup[] = [
@@ -35,6 +40,11 @@ export const POWERUPS: Powerup[] = [
   { id: 'overtime', name: 'Overtime', blurb: 'Arm before kickoff: your drips keep accruing for 5 extra minutes after each game ends.', kind: 'action', timing: 'pre', price: 60, icon: '⏱️' },
   { id: 'counter-nuke', name: 'Counter-Nuke', blurb: 'Arm before kickoff: the first time an opponent nukes one of your slots, it is reflected back — their player is wiped instead.', kind: 'action', timing: 'pre', price: 95, icon: '↩️' },
   { id: 'insurance', name: 'Insurance', blurb: 'Arm before kickoff: the first time one of your slots is nuked, half its banked score is refunded instead of zeroed.', kind: 'action', timing: 'pre', price: 80, icon: '🛟' },
+  { id: 'double-or-nothing', name: 'Double or Nothing', blurb: 'Stake one of your slots before kickoff: at FINAL it scores double if it wins its head-to-head, or zero if it loses.', kind: 'action', timing: 'pre', price: 80, icon: '⚖️', target: 'slot-you' },
+  { id: 'spy', name: 'Spy', blurb: 'Before kickoff, reveal the hidden metric on one opponent slot.', kind: 'action', timing: 'pre', price: 40, icon: '👁️', target: 'slot-opp' },
+  { id: 'bye-steal', name: 'Bye Steal', blurb: 'Before kickoff, field one of your players who is on bye in an open slot for a flat projected score.', kind: 'action', timing: 'pre', price: 55, icon: '🪂', target: 'bye' },
+  { id: 'mulligan', name: 'Mulligan', blurb: 'Re-roll one slot’s metric mid-game for free — does not spend a Metric Swap.', kind: 'action', timing: 'live', price: 30, icon: '🎲', target: 'slot-you' },
+  { id: 'emp', name: 'EMP', blurb: 'Fire during a live window to freeze every opponent drip in that window for 10 minutes.', kind: 'action', timing: 'live', price: 65, icon: '💥', target: 'window' },
 ];
 
 export function powerupById(id: string): Powerup | undefined {

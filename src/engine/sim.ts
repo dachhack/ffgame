@@ -435,7 +435,7 @@ function offSecs(intervals: number[][], t0: number, t1: number): number {
  * `opts.youMult` / `opts.theirMult` apply a per-clock multiplier to that
  * side's scoring (used by the QB Field General window multiplier).
  */
-export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string> } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
+export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number] } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
   // Pre-match team buffs active on each side (Momentum / Garbage Time /
   // Floodgates / Overtime). Only the human side carries buffs in the demo.
   const youBuffs = opts.youBuffs ?? new Set<string>();
@@ -496,6 +496,9 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const poss = side === 'you' ? youPoss : theirPoss;
     const mult = side === 'you' ? opts.youMult : opts.theirMult;
     const buffs = side === 'you' ? youBuffs : theirBuffs;
+    // EMP: this side's drip is frozen for a 10-minute window.
+    const emp = side === 'you' ? opts.youEmpFreeze : opts.theirEmpFreeze;
+    if (emp && t0 < emp[1] && t1 > emp[0]) return 0;
     // Overtime: minutes past regulation count as full possession (no game clock
     // to gate them), so the drip keeps ticking for the bonus window.
     const secs = t0 >= GAME_SECONDS ? (buffs.has('overtime') ? t1 - t0 : 0) : offSecs(poss, t0, t1);

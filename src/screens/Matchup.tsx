@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
-import { Brand, ThemeSwitcher, PlayerImg, Avatar, Img, InjuryBadge } from '../app/ui';
+import { Brand, ThemeSwitcher, PlayerImg, Avatar, Img, InjuryBadge, fonts } from '../app/ui';
 import { avatarUrl, teamLogo } from '../data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange } from '../data/nflSlate';
 import { WINDOWS, METRICS, metricById } from '../data/metrics';
@@ -19,12 +19,16 @@ const TICK_MS = 700;
 const TICK_SECONDS = 20;
 
 export function Matchup({ week, initialPhase }: { week: number; initialPhase: Phase }) {
-  const { navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff } = useStore();
+  const { navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, setDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp } = useStore();
   const buffs = applied[week]?.buffs ?? {};
   const buffsKey = JSON.stringify(buffs);
   const extraSlots = applied[week]?.extraSlots ?? {};
   const swaps = applied[week]?.swaps ?? {};
   const backupAssign = applied[week]?.backups ?? {};
+  const aw = applied[week];
+  const extras = { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, emp: aw?.emp };
+  const extrasKey = JSON.stringify(extras);
+  const byes = useMemo(() => byePlayers(YOU, week), [week]);
   const oppId = gameForTeam(YOU, week)?.oppId ?? 'rock-tunnel';
   const you = getTeam(YOU)!;
   const opp = getTeam(oppId)!;
@@ -74,8 +78,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const swapsKey = JSON.stringify(swaps);
   const backupsKey = JSON.stringify(backupAssign);
   const resolved = useMemo(
-    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps, backupAssign, buffs),
-    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, buffsKey],
+    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps, backupAssign, buffs, extras),
+    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, buffsKey, extrasKey],
   );
 
   // Drip coin: +5 per signature play your lineup makes this week (credited once).
@@ -311,6 +315,12 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{headline}</div>
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, maxWidth: 520, lineHeight: 1.5 }}>{subhead}</div>
               <BuffStrip phase={phase} inventory={inventory} armed={buffs} bonuses={resolved.bonuses} onArm={(id) => armBuff(week, id)} />
+              <TargetPanel
+                phase={phase} week={week} inventory={inventory} aw={aw} windows={resolved.windows} oppPicks={oppPicks}
+                byes={byes} winClocks={winClocks}
+                onStake={(k) => setDoubleOrNothing(week, k)} onSpy={(k) => setSpy(week, k)} onByeSteal={(k, pid) => applyByeSteal(week, k, pid)}
+                onMulligan={(k, c, m) => applyMulligan(week, k, c, m)} onEmp={(w, c) => applyEmp(week, w, c)}
+              />
             </div>
             <div style={{ textAlign: 'right', flex: 'none' }}>
               <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>{phase === 'setup' ? 'SLOTS SET' : 'WEEK ' + week}</div>
@@ -576,16 +586,79 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
 }
 
 // Pre-match team buffs (armed bonuses like Trick Play / Pick Six / Hail Mary):
-// any 'pre' action powerup that isn't the per-window Extra Slot.
-const TEAM_BUFFS = POWERUPS.filter((p) => p.timing === 'pre' && p.kind === 'action' && p.id !== 'extra-slot');
+// any 'pre' action powerup that isn't the per-window Extra Slot — and not a
+// targeted powerup (those are applied via the TargetPanel, not one-click armed).
+const TEAM_BUFFS = POWERUPS.filter((p) => p.timing === 'pre' && p.kind === 'action' && p.id !== 'extra-slot' && !p.target);
+
+// Apply-by-target powerups (Double or Nothing, Spy, Bye Steal, Mulligan, EMP):
+// a compact panel of selectors, shown in the phase where each is usable.
+function TargetPanel(props: {
+  phase: Phase; week: number; inventory: Record<string, number>;
+  aw?: { doubleOrNothing?: string; spy?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>> };
+  windows: ReturnType<typeof buildMatchup>['windows']; oppPicks: Record<string, Pick>; byes: Player[]; winClocks: Record<string, number>;
+  onStake: (k: string) => void; onSpy: (k: string) => void; onByeSteal: (k: string, pid: string) => void;
+  onMulligan: (k: string, atClock: number, m: string) => void; onEmp: (w: WindowId, clock: number) => void;
+}) {
+  const { phase, inventory, aw, windows, oppPicks, byes, winClocks, onStake, onSpy, onByeSteal, onMulligan, onEmp } = props;
+  const [byePid, setByePid] = useState(''); const [byeKey, setByeKey] = useState('');
+  const [mulKey, setMulKey] = useState(''); const [mulMet, setMulMet] = useState('');
+  const flat = windows.flatMap((w) => w.slots);
+  const has = (id: string) => (inventory[id] ?? 0) > 0;
+  const yourH2H = flat.filter((s) => s.you && s.their).map((s) => ({ key: slotKey(s.win, s.slotIndex), name: s.you!.player.name, win: s.win, pos: s.you!.player.pos }));
+  const oppSlots = flat.filter((s) => s.their).map((s) => ({ key: slotKey(s.win, s.slotIndex), name: s.their!.player.name, win: s.win }));
+  const emptySlots = flat.filter((s) => !s.you).map((s) => ({ key: slotKey(s.win, s.slotIndex), win: s.win }));
+  const rows: ReactNode[] = [];
+  const Row = (label: string, body: ReactNode) => (
+    <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', minWidth: 96 }}>{label}</span>
+      {body}
+    </div>
+  );
+  const sel: React.CSSProperties = { background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 4, fontSize: 10, padding: '4px 6px', fontFamily: fonts.MONO };
+  const btn: React.CSSProperties = { background: 'var(--surface)', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, fontSize: 9, fontWeight: 700, padding: '4px 8px' };
+
+  if (phase === 'setup') {
+    if (aw?.doubleOrNothing) rows.push(Row('⚖️ Double/Nothing', <span className="mono" style={{ fontSize: 9.5, color: 'var(--you)' }}>staked {yourH2H.find((s) => s.key === aw.doubleOrNothing)?.name ?? '—'}</span>));
+    else if (has('double-or-nothing')) rows.push(Row('⚖️ Double/Nothing', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{yourH2H.map((s) => <button key={s.key} style={btn} onClick={() => onStake(s.key)}>{s.name}</button>)}</div>));
+    if (aw?.spy) { const m = metricById(getPlayer(oppPicks[aw.spy]?.playerId ?? '')?.pos ?? 'WR', oppPicks[aw.spy]?.metricId); rows.push(Row('👁️ Spy', <span className="mono" style={{ fontSize: 9.5, color: 'var(--opp)' }}>{oppSlots.find((s) => s.key === aw.spy)?.name ?? '—'} runs {m?.name ?? '—'}</span>)); }
+    else if (has('spy')) rows.push(Row('👁️ Spy', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{oppSlots.map((s) => <button key={s.key} style={btn} onClick={() => onSpy(s.key)}>{s.win.toUpperCase()} {s.name}</button>)}</div>));
+    if (aw?.byeSteal) rows.push(Row('🪂 Bye Steal', <span className="mono" style={{ fontSize: 9.5, color: 'var(--you)' }}>fielded {getPlayer(aw.byeSteal.playerId)?.name ?? '—'}</span>));
+    else if (has('bye-steal') && byes.length > 0 && emptySlots.length > 0) rows.push(Row('🪂 Bye Steal', <>
+      <select style={sel} value={byePid} onChange={(e) => setByePid(e.target.value)}><option value="">player…</option>{byes.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.pos})</option>)}</select>
+      <select style={sel} value={byeKey} onChange={(e) => setByeKey(e.target.value)}><option value="">slot…</option>{emptySlots.map((s) => <option key={s.key} value={s.key}>{s.win.toUpperCase()} open</option>)}</select>
+      <button style={btn} disabled={!byePid || !byeKey} onClick={() => { onByeSteal(byeKey, byePid); setByePid(''); setByeKey(''); }}>FIELD</button>
+    </>));
+  }
+  if (phase === 'live') {
+    if (has('emp')) rows.push(Row('💥 EMP', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{WINDOWS.map((w) => {
+      const fired = aw?.emp?.[w.id] != null;
+      return <button key={w.id} style={{ ...btn, opacity: fired ? 0.5 : 1 }} disabled={fired} onClick={() => onEmp(w.id, winClocks[w.id] ?? 0)}>{w.label}{fired ? ' ✓' : ''}</button>;
+    })}</div>));
+    if (has('mulligan')) { const slot = yourH2H.find((s) => s.key === mulKey); rows.push(Row('🎲 Mulligan', <>
+      <select style={sel} value={mulKey} onChange={(e) => { setMulKey(e.target.value); setMulMet(''); }}><option value="">slot…</option>{yourH2H.map((s) => <option key={s.key} value={s.key}>{s.win.toUpperCase()} {s.name}</option>)}</select>
+      <select style={sel} value={mulMet} onChange={(e) => setMulMet(e.target.value)} disabled={!slot}><option value="">metric…</option>{slot && METRICS[slot.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
+      <button style={btn} disabled={!mulKey || !mulMet} onClick={() => { onMulligan(mulKey, winClocks[slot!.win] ?? 0, mulMet); setMulKey(''); setMulMet(''); }}>RE-ROLL</button>
+    </>)); }
+  }
+  if (!rows.length) return null;
+  return (
+    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '9px 11px' }}>
+      <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)' }}>POWER-UPS</span>
+      {rows}
+    </div>
+  );
+}
 
 function BuffStrip({ phase, inventory, armed, bonuses, onArm }: {
   phase: Phase; inventory: Record<string, number>; armed: Record<string, true | boolean>;
   bonuses?: { id: string; label: string; points: number }[]; onArm: (id: string) => void;
 }) {
   const armable = phase === 'setup' ? TEAM_BUFFS.filter((p) => (inventory[p.id] ?? 0) > 0 && !armed[p.id]) : [];
+  // Show armed team buffs plus any bonus that paid out (e.g. Double or Nothing,
+  // which isn't a one-click buff but still produces a result chip).
   const armedIds = Object.keys(armed).filter((id) => armed[id] && powerupById(id));
-  if (!armable.length && !armedIds.length) return null;
+  const showIds = [...new Set([...armedIds, ...(bonuses ?? []).map((b) => b.id).filter((id) => powerupById(id))])];
+  if (!armable.length && !showIds.length) return null;
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
       {armable.map((p) => (
@@ -593,13 +666,14 @@ function BuffStrip({ phase, inventory, armed, bonuses, onArm }: {
           {p.icon} ARM {p.name.toUpperCase()}
         </button>
       ))}
-      {armedIds.map((id) => {
+      {showIds.map((id) => {
         const pu = powerupById(id)!;
         const hit = bonuses?.find((b) => b.id === id);
-        const c = hit ? 'var(--fx-streak)' : 'var(--warn)';
+        const c = hit ? (hit.points < 0 ? 'var(--opp)' : 'var(--fx-streak)') : 'var(--warn)';
+        const sign = hit ? (hit.points < 0 ? '' : '+') : '';
         return (
           <span key={id} className="mono" title={pu.blurb} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', color: c, background: 'var(--surface)', border: `1px solid ${c}`, borderRadius: 4, padding: '5px 9px' }}>
-            {pu.icon} {hit ? `${hit.label.toUpperCase()} +${hit.points}` : `${pu.name.toUpperCase()} ARMED`}
+            {pu.icon} {hit ? `${hit.label.toUpperCase()} ${sign}${hit.points}` : `${pu.name.toUpperCase()} ARMED`}
           </span>
         );
       })}
@@ -974,6 +1048,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
     // in its own row.
     const sub = side === 'you' ? slot.youSub : slot.theirSub;
     if (phase === 'final' && sub) return sub.score;
+    if (side === 'you' && slot.byeStolen) return slot.youFinal; // bye steal: flat projection
     // Negation/halving are end-of-game outcomes — only resolve them at FINAL;
     // during live the slot plays its own head-to-head (0 at kickoff).
     if (final && side === 'you' && slot.youNegated) return 0;
