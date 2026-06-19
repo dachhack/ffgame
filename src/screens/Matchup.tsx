@@ -1112,16 +1112,13 @@ function SetupRow(props: {
             </div>
           </div>
 
-          {/* sealed: metric summary + change controls, stacked (no collision) */}
+          {/* sealed: the chosen metric (kept hidden from the opponent) */}
           {!showPicker && (
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)' }}>{metric?.name}</span>
               <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 7, letterSpacing: '0.12em', color: 'var(--faint)' }}>
                 <span style={{ width: 5, height: 5, background: 'var(--you)', borderRadius: '50%', display: 'inline-block', animation: 'bpulse 2s ease infinite' }} /> HIDDEN
               </span>
-              <span style={{ flex: 1 }} />
-              <button onClick={() => setEditing(true)} className="mono" style={{ ...link, color: 'var(--warn)' }}>↻ METRIC</button>
-              <button onClick={onOpenPicker} className="mono" style={{ ...link, color: 'var(--opp)' }}>⇄ PLAYER</button>
             </div>
           )}
 
@@ -1140,6 +1137,14 @@ function SetupRow(props: {
                   </button>
                 );
               })}
+            </div>
+          )}
+
+          {/* change controls — pinned to the bottom of the spot */}
+          {!showPicker && (
+            <div style={{ display: 'flex', gap: 14, marginTop: 'auto', paddingTop: 4 }}>
+              <button onClick={() => setEditing(true)} className="mono" style={{ ...link, color: 'var(--warn)' }}>↻ METRIC</button>
+              <button onClick={onOpenPicker} className="mono" style={{ ...link, color: 'var(--opp)' }}>⇄ PLAYER</button>
             </div>
           )}
         </div>
