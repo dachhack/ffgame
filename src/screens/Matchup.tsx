@@ -1106,7 +1106,7 @@ function TwoColLog({ events, youName, theirName, gameLabel }: { events: PbpEvent
         </div>
         <span className="mono" style={{ flex: 1, textAlign: 'left', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{theirName}</span>
       </div>
-      <div ref={scroller} onScroll={onScroll} style={{ maxHeight: 210, overflow: 'auto' }}>
+      <div ref={scroller} onScroll={onScroll} style={{ maxHeight: 210, overflow: 'auto', paddingRight: 10, scrollbarGutter: 'stable', scrollbarWidth: 'thin' }}>
         {rows.length === 0 && (
           <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.1em', textAlign: 'center', padding: '14px 0' }}>— no plays yet at this point —</div>
         )}
