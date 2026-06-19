@@ -40,7 +40,7 @@ function CoinPill({ amt }: { amt: number }) {
 }
 
 export function Matchup({ week, initialPhase }: { week: number; initialPhase: Phase }) {
-  const { navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, setDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp } = useStore();
+  const { navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, setDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, resetDripCoin } = useStore();
   const buffs = applied[week]?.buffs ?? {};
   const buffsKey = JSON.stringify(buffs);
   const extraSlots = applied[week]?.extraSlots ?? {};
@@ -477,13 +477,13 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
         );
       })()}
 
-      {earnOpen && <EarningsModal earnings={earnings} onClose={() => setEarnOpen(false)} />}
+      {earnOpen && <EarningsModal earnings={earnings} onReset={() => { resetDripCoin(); setEarnOpen(false); }} onClose={() => setEarnOpen(false)} />}
     </>
   );
 }
 
 // ── Drip-coin earning opportunities, by position (risk pays more) ──
-function EarningsModal({ earnings, onClose }: { earnings: { stipend: number; unopposed: number; signature: number; turnover: number; total: number }; onClose: () => void }) {
+function EarningsModal({ earnings, onReset, onClose }: { earnings: { stipend: number; unopposed: number; signature: number; turnover: number; total: number }; onReset: () => void; onClose: () => void }) {
   const order: Pos[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
   const riskColor = (r: string) => (r === 'HIGH' ? 'var(--fx-nuke)' : r === 'MED' ? 'var(--warn)' : 'var(--dim)');
   return (
@@ -545,6 +545,10 @@ function EarningsModal({ earnings, onClose }: { earnings: { stipend: number; uno
               </div>
             ))}
           </div>
+          {/* Dev/testing reset: top coin back to the grant and wipe owned + applied powerups. */}
+          <button onClick={onReset} title="Reset drip coin to the demo grant and clear all owned + applied powerups" className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 2, padding: '9px 12px', background: 'var(--bg)', border: '1px dashed var(--warn)', borderRadius: 6, color: 'var(--warn)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em' }}>
+            ↻ REFRESH DRIP COIN & CLEAR POWERUPS
+          </button>
         </div>
       </div>
     </div>

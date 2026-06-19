@@ -62,6 +62,9 @@ interface Store {
   applyMulligan: (week: number, slotKey: string, atClock: number, toMetricId: string) => boolean;
   /** Fire EMP on a live window: freeze opponent drips from `clock` for 10 min. */
   applyEmp: (week: number, win: WindowId, clock: number) => boolean;
+  /** Dev/testing: top drip coin back up to the demo grant and clear all owned +
+   *  applied powerups. */
+  resetDripCoin: () => void;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -187,8 +190,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setApplied(nextApplied); persist({ applied: nextApplied });
   };
 
+  const resetDripCoin = (): void => {
+    setCoins(DEMO_GRANT); setInventory({}); setApplied({});
+    persist({ coins: DEMO_GRANT, inv: {}, applied: {} });
+  };
+
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, setDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp }),
+    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, setDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, resetDripCoin }),
     [theme, route, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
