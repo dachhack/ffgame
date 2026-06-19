@@ -1134,12 +1134,10 @@ function SetupRow(props: {
               {METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === pick?.metricId).map((m) => {
                 const cur = m.id === pick?.metricId;
                 return (
-                  <div key={m.id} style={{ display: 'flex', gap: 4 }}>
-                    <button onClick={() => { onPickMetric(m.id); setEditing(false); }} style={{ flex: 1, minWidth: 0, minHeight: 30, textAlign: 'left', background: cur ? 'color-mix(in srgb, var(--you) 14%, var(--bg))' : m.lock ? 'color-mix(in srgb, var(--warn) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${cur ? 'var(--you)' : m.lock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 3, padding: '4px 8px', display: 'flex', alignItems: 'center', color: 'var(--text)' }}>
-                      <span style={{ fontSize: 11.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.lock ? '◈ ' : ''}{m.name}</span>
-                    </button>
-                    <button onClick={() => setInfoMetric(m)} title="What does this metric do?" className="mono" style={{ flex: 'none', width: 28, minHeight: 30, borderRadius: 3, border: '1px solid var(--bd)', background: 'var(--bg)', color: 'var(--dim)', fontWeight: 700, fontSize: 13 }}>?</button>
-                  </div>
+                  <button key={m.id} onClick={() => { onPickMetric(m.id); setEditing(false); }} style={{ width: '100%', minHeight: 30, textAlign: 'left', background: cur ? 'color-mix(in srgb, var(--you) 14%, var(--bg))' : m.lock ? 'color-mix(in srgb, var(--warn) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${cur ? 'var(--you)' : m.lock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 3, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)' }}>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.lock ? '◈ ' : ''}{m.name}</span>
+                    <span role="button" title="What does this metric do?" onClick={(e) => { e.stopPropagation(); setInfoMetric(m); }} className="mono" style={{ flex: 'none', fontSize: 10, fontWeight: 700, color: 'var(--faint)', padding: '0 2px', cursor: 'help' }}>ⓘ info</span>
+                  </button>
                 );
               })}
             </div>
