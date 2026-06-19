@@ -5,6 +5,7 @@ import { Brand, ThemeSwitcher, PlayerImg, Avatar, Img, InjuryBadge } from '../ap
 import { avatarUrl, teamLogo } from '../data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange } from '../data/nflSlate';
 import { WINDOWS, METRICS, metricById } from '../data/metrics';
+import { POWERUPS, powerupById } from '../data/powerups';
 import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
   windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock, signatureCoins, slotsFor, totalSlotsWith, byePlayers,
@@ -18,8 +19,9 @@ const TICK_MS = 700;
 const TICK_SECONDS = 20;
 
 export function Matchup({ week, initialPhase }: { week: number; initialPhase: Phase }) {
-  const { navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, applyTrickPlay } = useStore();
-  const trickPlay = applied[week]?.trickPlay ?? false;
+  const { navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff } = useStore();
+  const buffs = applied[week]?.buffs ?? {};
+  const buffsKey = JSON.stringify(buffs);
   const extraSlots = applied[week]?.extraSlots ?? {};
   const swaps = applied[week]?.swaps ?? {};
   const backupAssign = applied[week]?.backups ?? {};
@@ -72,8 +74,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const swapsKey = JSON.stringify(swaps);
   const backupsKey = JSON.stringify(backupAssign);
   const resolved = useMemo(
-    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps, backupAssign, trickPlay),
-    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, trickPlay],
+    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps, backupAssign, buffs),
+    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, buffsKey],
   );
 
   // Drip coin: +5 per signature play your lineup makes this week (credited once).
@@ -162,7 +164,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
         t += s.suppressSpentTheir != null ? 0 : b.their;
       }
     }
-    if (resolved.trickBonus) y += resolved.trickBonus.points; // Trick Play +50
+    for (const b of resolved.bonuses ?? []) y += b.points; // armed-buff payouts
     return { youTotal: Math.round(y * 10) / 10, themTotal: Math.round(t * 10) / 10 };
   }, [resolved, winClocks, phase]);
 
@@ -308,15 +310,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               </div>
               <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{headline}</div>
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, maxWidth: 520, lineHeight: 1.5 }}>{subhead}</div>
-              {/* Trick Play: arm in setup, then show the result */}
-              {phase === 'setup' && !trickPlay && (inventory['trick-play'] ?? 0) > 0 && (
-                <button onClick={() => applyTrickPlay(week)} className="mono" style={{ marginTop: 8, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px dashed var(--warn)', borderRadius: 4, padding: '5px 9px' }}>🎺 ARM TRICK PLAY (+50 on a non-QB TD pass)</button>
-              )}
-              {trickPlay && (
-                <div className="mono" style={{ marginTop: 8, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: resolved.trickBonus ? 'var(--fx-streak)' : 'var(--warn)', display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: `1px solid ${resolved.trickBonus ? 'var(--fx-streak)' : 'var(--warn)'}`, borderRadius: 4, padding: '5px 9px' }}>
-                  🎺 {resolved.trickBonus ? `TRICK PLAY HIT — ${resolved.trickBonus.player} threw a TD! +${resolved.trickBonus.points}` : 'TRICK PLAY ARMED — +50 if a non-QB starter throws a TD pass'}
-                </div>
-              )}
+              <BuffStrip phase={phase} inventory={inventory} armed={buffs} bonuses={resolved.bonuses} onArm={(id) => armBuff(week, id)} />
             </div>
             <div style={{ textAlign: 'right', flex: 'none' }}>
               <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>{phase === 'setup' ? 'SLOTS SET' : 'WEEK ' + week}</div>
@@ -578,6 +572,38 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
         </div>
       )}
     </aside>
+  );
+}
+
+// Pre-match team buffs (armed bonuses like Trick Play / Pick Six / Hail Mary):
+// any 'pre' action powerup that isn't the per-window Extra Slot.
+const TEAM_BUFFS = POWERUPS.filter((p) => p.timing === 'pre' && p.kind === 'action' && p.id !== 'extra-slot');
+
+function BuffStrip({ phase, inventory, armed, bonuses, onArm }: {
+  phase: Phase; inventory: Record<string, number>; armed: Record<string, true | boolean>;
+  bonuses?: { id: string; label: string; points: number }[]; onArm: (id: string) => void;
+}) {
+  const armable = phase === 'setup' ? TEAM_BUFFS.filter((p) => (inventory[p.id] ?? 0) > 0 && !armed[p.id]) : [];
+  const armedIds = Object.keys(armed).filter((id) => armed[id] && powerupById(id));
+  if (!armable.length && !armedIds.length) return null;
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+      {armable.map((p) => (
+        <button key={p.id} onClick={() => onArm(p.id)} title={p.blurb} className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.05em', color: 'var(--warn)', background: 'var(--surface)', border: '1px dashed var(--warn)', borderRadius: 4, padding: '5px 9px' }}>
+          {p.icon} ARM {p.name.toUpperCase()}
+        </button>
+      ))}
+      {armedIds.map((id) => {
+        const pu = powerupById(id)!;
+        const hit = bonuses?.find((b) => b.id === id);
+        const c = hit ? 'var(--fx-streak)' : 'var(--warn)';
+        return (
+          <span key={id} className="mono" title={pu.blurb} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', color: c, background: 'var(--surface)', border: `1px solid ${c}`, borderRadius: 4, padding: '5px 9px' }}>
+            {pu.icon} {hit ? `${hit.label.toUpperCase()} +${hit.points}` : `${pu.name.toUpperCase()} ARMED`}
+          </span>
+        );
+      })}
+    </div>
   );
 }
 

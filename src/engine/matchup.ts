@@ -6,7 +6,7 @@ import { hashStr } from '../data/players';
 /** A real-time swap on a slot, effective from `atClock` (Player/Metric Swap). */
 export interface SlotSwap { atClock: number; toMetricId?: string; toPlayerId?: string; }
 export type SlotSwaps = Record<string, SlotSwap>; // slotKey -> swap
-import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, defEarnScore, EMPTY_PLAYER, type SlotInput } from './sim';
+import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, defEarnScore, hadDefTd, hadLongPassTd, EMPTY_PLAYER, type SlotInput } from './sim';
 import { REAL_WEEKS, realPointsFor } from '../data/realPbp';
 import { windowForTeam } from '../data/nflSlate';
 import { injuryFor } from '../data/injuries';
@@ -121,10 +121,9 @@ export interface ResolvedMatchup {
   theirFinal: number;
   real: boolean;
   maxClock: number;
-  trickBonus?: { player: string; points: number }; // Trick Play hit: a non-QB starter threw a TD
+  bonuses?: { id: string; label: string; points: number }[]; // armed-buff payouts that hit
 }
 
-export const TRICK_PLAY_BONUS = 50;
 /** Deterministic ~6%/player-week chance a non-QB threw a TD pass (Trick Play). */
 export function threwTrickTd(playerId: string, week: number): boolean {
   return hashStr(`${playerId}|trickpass|${week}`) % 100 < 6;
@@ -154,7 +153,7 @@ export function buildMatchup(
   extraSlots: ExtraSlots = {},
   swaps: SlotSwaps = {},
   backupAssign: Record<string, string> = {},
-  trickPlay = false,
+  buffs: Record<string, boolean> = {},
 ): ResolvedMatchup {
   const youPools = windowPools(youTeamId, week);
   const oppPools = windowPools(oppTeamId, week);
@@ -282,20 +281,19 @@ export function buildMatchup(
   youFinal += youBankerXp * youTds;
   theirFinal += theirBankerXp * theirTds;
 
-  // Trick Play: a flat +50 if any non-QB in your starting spots threw a TD pass.
-  let trickBonus: { player: string; points: number } | undefined;
-  if (trickPlay) {
-    for (const w of windows) {
-      for (const s of w.slots) {
-        if (s.you && s.you.player.pos !== 'QB' && threwTrickTd(s.you.player.id, week)) {
-          trickBonus = { player: s.you.player.name, points: TRICK_PLAY_BONUS };
-          break;
-        }
-      }
-      if (trickBonus) break;
-    }
-    if (trickBonus) youFinal += trickBonus.points;
-  }
+  // Armed pre-match team buffs: flat payouts when their condition hits among
+  // your starting spots. Each scans your filled slots for a triggering player.
+  const myPlayers = windows.flatMap((w) => w.slots).filter((s) => s.you).map((s) => s.you!.player);
+  const bonuses: { id: string; label: string; points: number }[] = [];
+  const award = (id: string, points: number, label: (name: string) => string, hit: (p: Player) => boolean) => {
+    if (!buffs[id]) return;
+    const p = myPlayers.find(hit);
+    if (p) bonuses.push({ id, points, label: label(p.name) });
+  };
+  award('trick-play', 50, (n) => `Trick Play — ${n} threw a TD pass`, (p) => p.pos !== 'QB' && threwTrickTd(p.id, week));
+  award('pick-six', 25, (n) => `Pick Six — ${n} returned a TD`, (p) => p.pos === 'DEF' && hadDefTd(p, week));
+  award('hail-mary', 15, (n) => `Hail Mary — ${n} hit a 40+ yd TD`, (p) => p.pos === 'QB' && hadLongPassTd(p, week));
+  for (const b of bonuses) youFinal += b.points;
 
   return {
     windows,
@@ -303,7 +301,7 @@ export function buildMatchup(
     theirFinal: Math.round(theirFinal * 10) / 10,
     real: anyReal,
     maxClock,
-    trickBonus,
+    bonuses: bonuses.length ? bonuses : undefined,
   };
 }
 

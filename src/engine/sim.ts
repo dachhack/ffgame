@@ -310,6 +310,15 @@ export function hasRealPbp(playerId: string, week: number): boolean {
   return realRawPlays(playerId, week) !== null;
 }
 
+/** Did this DST return an interception/fumble for a touchdown this week? (Pick Six) */
+export function hadDefTd(player: Player, week: number): boolean {
+  return playsForPlayer(player, week).plays.some((p) => p.kind === 'dst_td');
+}
+/** Did this QB throw a touchdown pass of at least `minYds` yards? (Hail Mary) */
+export function hadLongPassTd(player: Player, week: number, minYds = 40): boolean {
+  return playsForPlayer(player, week).plays.some((p) => p.kind === 'pass' && p.td && p.yards >= minYds);
+}
+
 /** A sentinel "no opponent" player — an unopposed slot resolves against it. */
 export const EMPTY_PLAYER: Player = {
   id: '__empty__', name: '—', full: 'No opponent', pos: 'WR', team: '',
