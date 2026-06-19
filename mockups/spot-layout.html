@@ -12,166 +12,233 @@
   }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--text);
-    font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
-    -webkit-font-smoothing:antialiased;padding:14px;}
+    font-family:system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;padding:14px;}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;}
   h1{font-size:16px;margin:0 0 2px;}
-  .sub{font-size:12px;color:var(--dim);margin:0 0 12px;}
-  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px;}
-  button,select{font-family:inherit;font-size:12px;font-weight:700;padding:7px 10px;border-radius:6px;
+  .sub{font-size:12px;color:var(--dim);margin:0 0 12px;max-width:560px;}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;}
+  button,select,input[type=text]{font-family:inherit;font-size:12px;font-weight:700;padding:6px 9px;border-radius:6px;
     border:1px solid var(--bdh);background:var(--surface);color:var(--text);cursor:pointer;}
+  input[type=text]{font-weight:400;}
   button.primary{background:var(--you);color:#fff;border-color:var(--you);}
-  .hint{font-size:11px;color:var(--dim);}
-  /* The matchup row: two cards + a center column, mirroring the app grid. */
+  .hint{font-size:11px;color:var(--dim);font-weight:400;}
+  /* selected-element control panel */
+  #panel{display:flex;flex-wrap:wrap;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--bd);
+    border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;}
+  #panel.off{opacity:.5;}
+  #panel label{display:flex;flex-direction:column;gap:2px;font-size:9px;letter-spacing:.06em;color:var(--dim);text-transform:uppercase;}
+  #panel input[type=range]{width:130px;}
   #stage{display:grid;gap:6px;align-items:stretch;margin:0 auto;
     background:repeating-linear-gradient(0deg,transparent,transparent 7px,rgba(0,0,0,.03) 7px,rgba(0,0,0,.03) 8px),
-               repeating-linear-gradient(90deg,transparent,transparent 7px,rgba(0,0,0,.03) 7px,rgba(0,0,0,.03) 8px);
-    padding:0;}
-  .card{position:relative;min-height:120px;background:var(--surface);border:1px solid var(--bd);border-radius:6px;overflow:hidden;}
+               repeating-linear-gradient(90deg,transparent,transparent 7px,rgba(0,0,0,.03) 7px,rgba(0,0,0,.03) 8px);}
+  .card{position:relative;min-height:120px;background:var(--surface);border:1px solid var(--bd);border-radius:6px;}
   .card.you{border-left:3px solid var(--you);}
   .card.their{border-right:3px solid var(--opp);}
   .center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;}
-  .verdict{font-size:8.5px;font-weight:700;letter-spacing:.08em;color:#fff;background:var(--you);
-    padding:4px 6px;border-radius:3px;}
+  .verdict{font-size:8.5px;font-weight:700;letter-spacing:.08em;color:#fff;background:var(--you);padding:4px 6px;border-radius:3px;}
   .log{font-size:7px;letter-spacing:.1em;color:var(--faint);}
-  /* Draggable elements */
-  .el{position:absolute;cursor:grab;touch-action:none;user-select:none;
-    border:1px dashed transparent;border-radius:4px;padding:1px;white-space:nowrap;}
+  .el{position:absolute;cursor:grab;touch-action:none;user-select:none;border:1px dashed transparent;border-radius:4px;}
   .el:hover{border-color:var(--bdh);}
-  .el.drag{cursor:grabbing;border-color:var(--you);box-shadow:0 4px 14px rgba(0,0,0,.18);z-index:5;}
-  .headshot{width:40px;height:40px;border-radius:9px;background:linear-gradient(135deg,#cfc7b2,#a99e83);
-    display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#5a5238;}
-  .name{font-size:13px;font-weight:700;}
+  .el.sel{border-color:var(--you);}
+  .el.drag{cursor:grabbing;box-shadow:0 4px 14px rgba(0,0,0,.18);z-index:5;}
+  .rz{position:absolute;right:-4px;bottom:-4px;width:12px;height:12px;border-radius:3px;background:var(--you);
+    border:2px solid #fff;cursor:nwse-resize;touch-action:none;display:none;}
+  .el.sel .rz{display:block;}
+  .headshot{border-radius:9px;background:linear-gradient(135deg,#cfc7b2,#a99e83);
+    display:flex;align-items:center;justify-content:center;font-weight:700;color:#5a5238;overflow:hidden;}
+  .name{font-weight:700;white-space:nowrap;}
   .metric{display:inline-flex;align-items:baseline;gap:5px;padding:2px 7px;border-radius:4px;}
-  .metric .mname{font-size:11px;font-weight:700;}
-  .metric .tag{font-size:7px;font-weight:700;letter-spacing:.1em;opacity:.85;}
-  .stat{font-size:9.5px;color:var(--dim);}
-  .score{font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1;}
-  .coin{display:inline-flex;align-items:center;gap:3px;font-size:9.5px;font-weight:700;color:var(--coin);}
-  .coin .disc{width:11px;height:11px;border-radius:50%;background:#F2C14E;border:1.3px solid #9A6B12;}
-  .you .name,.you .score{color:var(--you);} .you .metric{background:color-mix(in srgb,var(--you) 16%,transparent);border:1px solid color-mix(in srgb,var(--you) 45%,transparent);} .you .metric .mname,.you .metric .tag{color:var(--you);}
-  .their .name,.their .score{color:var(--opp);} .their .metric{background:color-mix(in srgb,var(--opp) 16%,transparent);border:1px solid color-mix(in srgb,var(--opp) 45%,transparent);} .their .metric .mname,.their .metric .tag{color:var(--opp);}
+  .metric .mname{font-weight:700;white-space:nowrap;}
+  .metric .tag{font-size:.62em;font-weight:700;letter-spacing:.1em;opacity:.85;white-space:nowrap;}
+  .stat{color:var(--dim);white-space:nowrap;}
+  .score{font-weight:700;letter-spacing:-.02em;line-height:1;white-space:nowrap;}
+  .coin{display:inline-flex;align-items:center;gap:3px;font-weight:700;color:var(--coin);white-space:nowrap;}
+  .coin .disc{width:.9em;height:.9em;border-radius:50%;background:#F2C14E;border:1.3px solid #9A6B12;flex:none;}
+  /* when a width is set we allow wrapping */
+  .el.wrap .name,.el.wrap .stat,.el.wrap .score{white-space:normal;word-break:break-word;}
+  .el.wrap.metric{flex-wrap:wrap;}
+  .el.wrap.metric .mname{white-space:normal;overflow-wrap:anywhere;}
+  .you .name,.you .score{color:var(--you);} .you .metric{background:color-mix(in srgb,var(--you) 16%,transparent);border:1px solid color-mix(in srgb,var(--you) 45%,transparent);color:var(--you);}
+  .their .name,.their .score{color:var(--opp);} .their .metric{background:color-mix(in srgb,var(--opp) 16%,transparent);border:1px solid color-mix(in srgb,var(--opp) 45%,transparent);color:var(--opp);}
   .their .name{color:var(--text);}
   #readout{margin-top:14px;font-size:11px;white-space:pre-wrap;background:var(--surface);border:1px solid var(--bd);
-    border-radius:6px;padding:10px;max-height:220px;overflow:auto;}
+    border-radius:6px;padding:10px;max-height:240px;overflow:auto;}
 </style>
 </head>
 <body>
   <h1>Drip League FF — Spot Layout Sandbox</h1>
-  <p class="sub">Drag any element to reposition it inside its card. Tweak the width, then hit <b>Copy layout</b> and paste it back to me — I'll match the app to it.</p>
+  <p class="sub">Tap an element to select it, then <b>drag the body to move</b> and <b>drag the green corner to resize</b>. Use the slider for font size. Set a width (or resize) on the metric chip to watch long labels wrap. Then <b>Copy layout</b> and paste it back to me.</p>
 
   <div class="toolbar">
     <label class="hint">Card width
       <select id="width">
-        <option value="150">Phone — 150px cards</option>
-        <option value="130">Narrow — 130px cards</option>
+        <option value="150">Phone — 150px</option>
+        <option value="130">Narrow — 130px</option>
         <option value="170">Large phone — 170px</option>
         <option value="300">Desktop — 300px</option>
       </select>
     </label>
-    <label class="hint"><input type="checkbox" id="snap" checked /> snap to 2px</label>
+    <label class="hint">Metric label
+      <select id="metricSel">
+        <option>Receiving Yards</option>
+        <option>Field General</option>
+        <option>Touchdowns</option>
+        <option>Receptions</option>
+        <option>Carries</option>
+        <option>Rush Yards</option>
+        <option>Combo Drip</option>
+        <option>Return Yards</option>
+        <option>Passing Yards</option>
+      </select>
+    </label>
+    <input type="text" id="metricCustom" placeholder="…or custom label" size="16" />
+    <label class="hint"><input type="checkbox" id="snap" checked /> snap 2px</label>
     <button id="reset">Reset</button>
     <button id="copy" class="primary">Copy layout</button>
     <span class="hint" id="status"></span>
   </div>
 
-  <div id="stage"></div>
+  <div id="panel" class="off">
+    <span id="selName" class="mono" style="font-weight:700;min-width:120px;">no element selected</span>
+    <label>font size <span id="fsVal" class="mono"></span>
+      <input type="range" id="fs" min="6" max="34" step="0.5" />
+    </label>
+    <label>width <span id="wVal" class="mono"></span>
+      <input type="range" id="w" min="0" max="300" step="2" />
+    </label>
+    <span class="hint">width 0 = auto (no wrap)</span>
+  </div>
 
+  <div id="stage"></div>
   <div id="readout" class="mono">positions will show here…</div>
 
 <script>
 const CARDS = [
-  { side:'you',  accent:'var(--you)', name:'D. Goedert', pos:'TE', team:'PHI', metric:'Receiving Yards', tag:'DRIP', stat:'0/0 rec · 0 rec yd', score:'0.0', coin:'+5' },
-  { side:'their',accent:'var(--opp)', name:'B. Robinson', pos:'RB', team:'ATL', metric:'Carries', tag:'COMPRESSION', stat:'1 car · 5 rush yd · 0/0 · 0 yd', score:'0.5', coin:'+25' },
+  { side:'you',  name:'D. Goedert', pos:'TE', metric:'Receiving Yards', tag:'DRIP', stat:'0/0 rec · 0 rec yd', score:'0.0', coin:'+5' },
+  { side:'their',name:'B. Robinson',pos:'RB', metric:'Carries', tag:'COMPRESSION', stat:'1 car · 5 rush yd · 0/0 · 0 yd', score:'0.5', coin:'+25' },
 ];
-// default element positions (x,y) per card, relative to the card box
-function defaults(side){
+const KEYS = ['headshot','name','metric','stat','score','coin'];
+const FS = { headshot:9, name:13, metric:11, stat:9.5, score:22, coin:9.5 }; // default font sizes
+function defaults(){
   return {
-    headshot:{x:6,  y:8},
-    name:    {x:52, y:8},
-    metric:  {x:52, y:30},
-    stat:    {x:6,  y:96},
-    score:   {x:104,y:14},
-    coin:    {x:104,y:44},
+    headshot:{x:6,  y:8,  w:40, fs:FS.headshot},
+    name:    {x:52, y:8,  w:0,  fs:FS.name},
+    metric:  {x:52, y:30, w:0,  fs:FS.metric},
+    stat:    {x:6,  y:96, w:0,  fs:FS.stat},
+    score:   {x:104,y:14, w:0,  fs:FS.score},
+    coin:    {x:104,y:46, w:0,  fs:FS.coin},
   };
 }
-const state = { you:defaults('you'), their:defaults('their') };
-const stage = document.getElementById('stage');
-const readout = document.getElementById('readout');
-const widthSel = document.getElementById('width');
-const snapEl = document.getElementById('snap');
+const state = { you:defaults(), their:defaults() };
+let sel = null; // {side,key}
 
-function elHTML(side,c){
-  return `
-    <div class="el headshot" data-k="headshot">${c.pos}</div>
-    <div class="el name" data-k="name">${c.name}</div>
-    <div class="el metric" data-k="metric"><span class="mname">${c.metric}</span><span class="tag">${c.tag}</span></div>
-    <div class="el stat" data-k="stat">${c.stat}</div>
-    <div class="el score" data-k="score">${c.score}</div>
-    <div class="el coin" data-k="coin"><span class="disc"></span>${c.coin}</div>`;
+const $ = id => document.getElementById(id);
+const stage=$('stage'), readout=$('readout'), widthSel=$('width');
+const snapEl=$('snap'), panel=$('panel'), fsR=$('fs'), wR=$('w');
+
+function metricFor(side){
+  const custom = $('metricCustom').value.trim();
+  if(custom) return custom;
+  return side==='you' ? $('metricSel').value : CARDS[1].metric;
 }
 
-function render(){
-  const w = +widthSel.value;
-  const center = w < 200 ? 40 : 64;
-  stage.style.gridTemplateColumns = `${w}px ${center}px ${w}px`;
-  stage.style.width = (w*2 + center + 12) + 'px';
-  stage.innerHTML = '';
-  const you = document.createElement('div'); you.className='card you'; you.dataset.side='you'; you.innerHTML = elHTML('you',CARDS[0]);
-  const ctr = document.createElement('div'); ctr.className='center';
-  ctr.innerHTML = `<span class="verdict">EVEN</span><span class="log">LOG ▾</span>`;
-  const their = document.createElement('div'); their.className='card their'; their.dataset.side='their'; their.innerHTML = elHTML('their',CARDS[1]);
-  stage.append(you,ctr,their);
-  for(const card of [you,their]){
-    const side = card.dataset.side;
-    card.querySelectorAll('.el').forEach(el=>{
-      const p = state[side][el.dataset.k];
-      el.style.left = p.x+'px'; el.style.top = p.y+'px';
-      attachDrag(el, card, side);
+function build(card, side, c){
+  card.innerHTML='';
+  const make=(k,html)=>{ const e=document.createElement('div'); e.className='el '+k; e.dataset.k=k; e.innerHTML=html+'<i class="rz"></i>'; return e; };
+  const els={
+    headshot: make('headshot', `<span class="hsTxt">${c.pos}</span>`),
+    name:     make('name', c.name),
+    metric:   make('metric', `<span class="mname">${metricFor(side)}</span><span class="tag">${c.tag}</span>`),
+    stat:     make('stat', c.stat),
+    score:    make('score', c.score),
+    coin:     make('coin', `<span class="disc"></span>${c.coin}`),
+  };
+  KEYS.forEach(k=>{ card.appendChild(els[k]); wire(els[k],card,side,k); });
+}
+
+function apply(){
+  for(const side of ['you','their']){
+    const card=document.querySelector(`.card.${side}`);
+    KEYS.forEach(k=>{
+      const el=card.querySelector('.el.'+k), p=state[side][k];
+      el.style.left=p.x+'px'; el.style.top=p.y+'px';
+      el.classList.toggle('sel', sel&&sel.side===side&&sel.key===k);
+      if(k==='headshot'){ el.style.width=p.w+'px'; el.style.height=p.w+'px'; el.querySelector('.hsTxt').style.fontSize=Math.max(7,p.w*0.22)+'px'; }
+      else {
+        el.style.fontSize=p.fs+'px';
+        if(p.w>0){ el.style.width=p.w+'px'; el.classList.add('wrap'); }
+        else { el.style.width='auto'; el.classList.remove('wrap'); }
+      }
     });
   }
   dump();
 }
 
-function attachDrag(el, card, side){
-  el.addEventListener('pointerdown', e=>{
-    e.preventDefault();
-    el.setPointerCapture(e.pointerId);
-    el.classList.add('drag');
-    const cardRect = card.getBoundingClientRect();
-    const start = state[side][el.dataset.k];
-    const ox = e.clientX - cardRect.left - start.x;
-    const oy = e.clientY - cardRect.top - start.y;
-    const move = ev=>{
-      const r = card.getBoundingClientRect();
-      let x = ev.clientX - r.left - ox;
-      let y = ev.clientY - r.top - oy;
-      if(snapEl.checked){ x = Math.round(x/2)*2; y = Math.round(y/2)*2; }
-      x = Math.max(-4, Math.min(x, r.width - 8));
-      y = Math.max(-4, Math.min(y, r.height - 8));
-      state[side][el.dataset.k] = {x:Math.round(x), y:Math.round(y)};
-      el.style.left = x+'px'; el.style.top = y+'px';
-      dump();
-    };
-    const up = ev=>{ el.classList.remove('drag'); el.releasePointerCapture(e.pointerId);
-      el.removeEventListener('pointermove',move); el.removeEventListener('pointerup',up); };
-    el.addEventListener('pointermove',move);
-    el.addEventListener('pointerup',up);
+function render(){
+  const w=+widthSel.value, center=w<200?40:64;
+  stage.style.gridTemplateColumns=`${w}px ${center}px ${w}px`;
+  stage.style.width=(w*2+center+12)+'px';
+  stage.innerHTML='';
+  const you=document.createElement('div'); you.className='card you';
+  const ctr=document.createElement('div'); ctr.className='center'; ctr.innerHTML=`<span class="verdict">EVEN</span><span class="log">LOG ▾</span>`;
+  const their=document.createElement('div'); their.className='card their';
+  stage.append(you,ctr,their);
+  build(you,'you',CARDS[0]); build(their,'their',CARDS[1]);
+  apply(); syncPanel();
+}
+
+function wire(el,card,side,k){
+  el.addEventListener('pointerdown',e=>{
+    if(e.target.classList.contains('rz')) return; // resize handled separately
+    e.preventDefault(); el.setPointerCapture(e.pointerId); el.classList.add('drag');
+    select(side,k);
+    const r0=card.getBoundingClientRect(), s=state[side][k];
+    const ox=e.clientX-r0.left-s.x, oy=e.clientY-r0.top-s.y;
+    const move=ev=>{ const r=card.getBoundingClientRect();
+      let x=ev.clientX-r.left-ox, y=ev.clientY-r.top-oy;
+      if(snapEl.checked){x=Math.round(x/2)*2;y=Math.round(y/2)*2;}
+      x=Math.max(-4,Math.min(x,r.width-8)); y=Math.max(-4,Math.min(y,r.height-8));
+      state[side][k]={...state[side][k],x:Math.round(x),y:Math.round(y)}; el.style.left=x+'px'; el.style.top=y+'px'; dump(); };
+    const up=()=>{el.classList.remove('drag');el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);};
+    el.addEventListener('pointermove',move); el.addEventListener('pointerup',up);
+  });
+  const rz=el.querySelector('.rz');
+  rz.addEventListener('pointerdown',e=>{
+    e.preventDefault(); e.stopPropagation(); rz.setPointerCapture(e.pointerId); select(side,k);
+    const startX=e.clientX, startY=e.clientY, s={...state[side][k]};
+    const baseW = s.w>0 ? s.w : el.getBoundingClientRect().width;
+    const move=ev=>{ let w=Math.max(16,baseW+(ev.clientX-startX));
+      if(snapEl.checked) w=Math.round(w/2)*2;
+      if(k==='headshot'){ state[side][k]={...s,w:Math.round(w)}; }
+      else { state[side][k]={...s,w:Math.round(w)}; }
+      apply(); };
+    const up=()=>{rz.removeEventListener('pointermove',move);rz.removeEventListener('pointerup',up);};
+    rz.addEventListener('pointermove',move); rz.addEventListener('pointerup',up);
   });
 }
 
+function select(side,key){ sel={side,key}; apply(); syncPanel(); }
+function syncPanel(){
+  if(!sel){ panel.classList.add('off'); $('selName').textContent='no element selected'; return; }
+  panel.classList.remove('off');
+  const p=state[sel.side][sel.key];
+  $('selName').textContent=`${sel.side.toUpperCase()} · ${sel.key}`;
+  fsR.value=p.fs; $('fsVal').textContent=p.fs+'px'; fsR.disabled=(sel.key==='headshot');
+  wR.value=p.w;  $('wVal').textContent=(p.w>0?p.w+'px':'auto');
+}
+fsR.oninput=()=>{ if(!sel)return; state[sel.side][sel.key].fs=+fsR.value; $('fsVal').textContent=fsR.value+'px'; apply(); };
+wR.oninput =()=>{ if(!sel)return; state[sel.side][sel.key].w=+wR.value; $('wVal').textContent=(+wR.value>0?wR.value+'px':'auto'); apply(); };
+
 function dump(){
-  const fmt = s => Object.entries(state[s]).map(([k,v])=>`  ${k.padEnd(9)} x:${String(v.x).padStart(4)}  y:${String(v.y).padStart(4)}`).join('\n');
-  readout.textContent = `card width: ${widthSel.value}px\n\nYOU\n${fmt('you')}\n\nTHEIR\n${fmt('their')}`;
+  const fmt=s=>KEYS.map(k=>{const v=state[s][k];return `  ${k.padEnd(9)} x:${String(v.x).padStart(4)} y:${String(v.y).padStart(4)} w:${String(v.w).padStart(4)} fs:${v.fs}`;}).join('\n');
+  readout.textContent=`card width: ${widthSel.value}px   metric: "${metricFor('you')}"\n\nYOU\n${fmt('you')}\n\nTHEIR\n${fmt('their')}`;
 }
 
-document.getElementById('reset').onclick=()=>{ state.you=defaults('you'); state.their=defaults('their'); render(); };
-document.getElementById('copy').onclick=async()=>{
-  try{ await navigator.clipboard.writeText(readout.textContent); status('copied!'); }
-  catch{ status('select the box below & copy manually'); }
-};
+$('reset').onclick=()=>{ Object.assign(state,{you:defaults(),their:defaults()}); sel=null; render(); };
+$('copy').onclick=async()=>{ try{await navigator.clipboard.writeText(readout.textContent);st('copied!');}catch{st('select the box & copy');} };
 widthSel.onchange=render;
-function status(m){ const s=document.getElementById('status'); s.textContent=m; setTimeout(()=>s.textContent='',2000); }
+$('metricSel').onchange=render; $('metricCustom').oninput=render;
+function st(m){$('status').textContent=m;setTimeout(()=>$('status').textContent='',2000);}
 
 render();
 </script>
