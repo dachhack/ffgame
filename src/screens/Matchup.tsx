@@ -1298,20 +1298,11 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
 
     return (
       <div>
-        {isMobile ? (
-          // Mobile: just the player full width + a compact UNOPP/log row (no big
-          // empty "no opponent" box eating vertical space).
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {card}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>{unoppCenter}</div>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: 6 }}>
-            {mineBackup ? card : blankBox}
-            <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>{unoppCenter}</div>
-            {mineBackup ? blankBox : card}
-          </div>
-        )}
+        <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: 6 }}>
+          {mineBackup ? card : blankBox}
+          <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>{unoppCenter}</div>
+          {mineBackup ? blankBox : card}
+        </div>
         {/* Best-ball backup: assign (pre-kickoff) and/or show the chosen target, in this spot. */}
         {canSub && mineBackup && (preKick || backups[ownKey]) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
@@ -1389,19 +1380,11 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
 
   return (
     <div>
-      {isMobile ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {youCard}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>{centerKids}</div>
-          {theirCard}
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: 6 }}>
-          {youCard}
-          <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>{centerKids}</div>
-          {theirCard}
-        </div>
-      )}
+      <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: 6 }}>
+        {youCard}
+        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>{centerKids}</div>
+        {theirCard}
+      </div>
       {incomingName && !(phase === 'final' && slot.youSub) && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', marginTop: 3 }}>
           🛟 backup {incomingName} on standby{final ? ' — did not sub in' : ''}
@@ -1476,9 +1459,9 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
   const nuked = fx === 'nuke' && bank === 0 && !subName && suppressSpent == null;
   const stat = useMemo(() => fmtStat(player.pos, statlineAt(player, week, clock)), [player, week, clock]);
   return (
-    <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 11, alignItems: 'center', cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
+    <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: isMobile ? '7px 8px' : '9px 11px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: isMobile ? 7 : 11, alignItems: 'center', cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
       {/* Big headshot — same size as the sealed setup slot, kept through live & final. */}
-      <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={isMobile ? 44 : 64} />
+      <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={isMobile ? 38 : 64} />
       <div style={{ flex: 1, minWidth: 0, textAlign: side === 'you' ? 'left' : 'right' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexDirection: side === 'you' ? 'row' : 'row-reverse' }}>
           <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>
@@ -1486,9 +1469,10 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
           <InjuryBadge week={week} slug={player.id} />
           <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{player.team}</span>
         </div>
-        {/* The chosen metric — the key strategic call — made prominent. */}
-        <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, marginTop: 5, padding: '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)` }}>
-          <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: accent, letterSpacing: '0.01em', whiteSpace: 'nowrap' }}>{metricName}</span>
+        {/* The chosen metric — the key strategic call — made prominent. Caps at the
+            column width and wraps on mobile so it never spills into the score. */}
+        <div style={{ display: 'inline-flex', flexWrap: 'wrap', maxWidth: '100%', alignItems: 'baseline', gap: 5, marginTop: 4, padding: isMobile ? '2px 6px' : '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)` }}>
+          <span className="grotesk" style={{ fontSize: isMobile ? 11 : 13, fontWeight: 700, color: accent, letterSpacing: '0.01em', whiteSpace: isMobile ? 'normal' : 'nowrap', overflowWrap: 'anywhere' }}>{metricName}</span>
           <span className="mono" style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.1em', color: accent, opacity: 0.85, whiteSpace: 'nowrap' }}>{tag}</span>
         </div>
         {/* running statline (or the backup that's scoring this slot) */}
@@ -1510,7 +1494,7 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
             <div className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-stop)', marginTop: 3 }}>÷2 SUPPRESSED</div>
           </>
         ) : (
-          <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, color: negated ? 'var(--fx-nuke)' : accent, lineHeight: 1, letterSpacing: '-0.02em', textDecoration: negated ? 'line-through' : undefined, animation: nuked ? 'shake .5s' : undefined }}>{bank.toFixed(1)}</div>
+          <div className="grotesk" style={{ fontSize: isMobile ? 21 : 26, fontWeight: 700, color: negated ? 'var(--fx-nuke)' : accent, lineHeight: 1, letterSpacing: '-0.02em', textDecoration: negated ? 'line-through' : undefined, animation: nuked ? 'shake .5s' : undefined }}>{bank.toFixed(1)}</div>
         )}
         {coin != null && (
           <div className="mono" title="drip coin earned so far this window" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 5, fontSize: 9, fontWeight: 700, color: coin < 0 ? 'var(--opp)' : '#F2C14E' }}>
