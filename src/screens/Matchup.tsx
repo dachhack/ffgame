@@ -946,7 +946,7 @@ function SetupRow(props: {
   const showPicker = !!player && !pick?.metricId;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'stretch', gap: 6 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px 1fr', alignItems: 'stretch', gap: 6 }}>
       {player ? (
         <div
           onDragOver={(e) => e.preventDefault()}
@@ -989,16 +989,16 @@ function SetupRow(props: {
           onClick={onSelect}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); onDropPlayer(e.dataTransfer.getData('text/plain')); }}
-          style={{ flex: 1, minHeight: 78, background: selected ? 'var(--surface)' : 'transparent', border: `1px dashed ${selected ? 'var(--you)' : 'var(--bdh)'}`, borderLeft: `3px dashed ${selected ? 'var(--you)' : 'var(--bdh)'}`, borderRadius: 4, padding: '16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' }}
+          style={{ minWidth: 0, minHeight: 78, background: selected ? 'var(--surface)' : 'transparent', border: `1px dashed ${selected ? 'var(--you)' : 'var(--bdh)'}`, borderLeft: `3px dashed ${selected ? 'var(--you)' : 'var(--bdh)'}`, borderRadius: 4, padding: '16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' }}
         >
           <span className="grotesk" style={{ fontSize: 20, color: 'var(--faint)' }}>+</span>
           <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.12em' }}>DRAG / TAP PLAYER</span>
         </div>
       )}
-      <div style={{ width: 64, flex: '0 0 64px', minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.14em' }}>VS</span>
       </div>
-      <div style={{ flex: 1, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+      <div style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
         <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--dim)' }}>◆</span>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.16em', color: 'var(--faint)', fontWeight: 700 }}>SEALED · {winId.toUpperCase()}</span>
       </div>
@@ -1081,10 +1081,10 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
 
     return (
       <div>
-        <div style={{ display: 'flex', alignItems: 'stretch', gap: 6 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px 1fr', alignItems: 'stretch', gap: 6 }}>
           {mineBackup ? card : blankBox}
           {/* center column — same 64px as head-to-head: UNOPP, assign, log */}
-          <div style={{ width: 64, flex: '0 0 64px', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+          <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
             <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 5px' }}>UNOPP</span>
             {canSub && mineBackup && (
               <button onClick={onAssignBackup} title="Choose which starter this backup challenges" className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 3, padding: '3px 5px' }}>ASSIGN</button>
@@ -1142,9 +1142,9 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'stretch', gap: 6 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px 1fr', alignItems: 'stretch', gap: 6 }}>
         <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} />
-        <div style={{ width: 64, flex: '0 0 64px', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
           <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--bg)', background: verdict.c, padding: '4px 6px', borderRadius: 3, textAlign: 'center', lineHeight: 1.1 }}>{verdict.t}</span>
           {canSwap && !done && (
             <button onClick={onPowerup} title="Apply a real-time powerup (Metric / Player Swap)" className="mono" style={{ color: 'var(--bg)', background: 'var(--warn)', border: 'none', borderRadius: 4, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', padding: '5px 7px', boxShadow: '0 0 12px color-mix(in srgb, var(--warn) 55%, transparent)', animation: 'bpulse 1.5s ease infinite' }}>⚡ USE</button>
