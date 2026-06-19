@@ -1131,9 +1131,9 @@ function SetupRow(props: {
               {METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === pick?.metricId).map((m) => {
                 const cur = m.id === pick?.metricId;
                 return (
-                  <button key={m.id} title={m.ef} onClick={() => { onPickMetric(m.id); setEditing(false); }} style={{ width: '100%', textAlign: 'left', background: cur ? 'color-mix(in srgb, var(--you) 14%, var(--bg))' : m.lock ? 'color-mix(in srgb, var(--warn) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${cur ? 'var(--you)' : m.lock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 3, padding: '5px 8px', display: 'flex', justifyContent: 'space-between', gap: 8, color: 'var(--text)' }}>
-                    <span style={{ fontSize: 11, fontWeight: 700 }}>{m.lock ? '◈ ' : ''}{m.name}</span>
-                    <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{m.sc}</span>
+                  <button key={m.id} title={m.ef} onClick={() => { onPickMetric(m.id); setEditing(false); }} style={{ width: '100%', minHeight: 30, textAlign: 'left', background: cur ? 'color-mix(in srgb, var(--you) 14%, var(--bg))' : m.lock ? 'color-mix(in srgb, var(--warn) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${cur ? 'var(--you)' : m.lock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 3, padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, color: 'var(--text)' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.lock ? '◈ ' : ''}{m.name}</span>
+                    <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', flex: 'none', whiteSpace: 'nowrap' }}>{m.sc}</span>
                   </button>
                 );
               })}
