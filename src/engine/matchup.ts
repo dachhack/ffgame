@@ -169,6 +169,10 @@ export function buildMatchup(
   // halved. The DST banks 0; it spends its points as the threshold. With more
   // than one suppress DST per side, the highest threshold applies.
   let youSuppress = 0, theirSuppress = 0;
+  // Armed pre-match buffs that modify scoring (Momentum / Garbage Time /
+  // Floodgates / Overtime). Only the human side carries buffs in the demo.
+  const youBuffSet = new Set(Object.keys(buffs).filter((k) => buffs[k]));
+  const theirBuffSet = new Set<string>();
 
   for (const w of WINDOWS) {
     const nSlots = slotsFor(w.id, extraSlots);
@@ -216,7 +220,7 @@ export function buildMatchup(
         const yIn: SlotInput = you ? { player: you.player, metricId: you.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
         const tIn: SlotInput = their ? { player: their.player, metricId: their.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
         gameLabel = `${you?.player.team || 'BYE'} · ${their?.player.team || 'BYE'}`;
-        const opts = { youMult, theirMult, youDripNukeClocks: theirTeTd, theirDripNukeClocks: youTeTd };
+        const opts = { youMult, theirMult, youDripNukeClocks: theirTeTd, theirDripNukeClocks: youTeTd, youBuffs: youBuffSet, theirBuffs: theirBuffSet };
         let res = resolveSlot(yIn, tIn, week, gameLabel, opts);
 
         // Real-time swap (Player/Metric Swap): keep your pre-swap banked points,

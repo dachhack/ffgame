@@ -435,7 +435,14 @@ function offSecs(intervals: number[][], t0: number, t1: number): number {
  * `opts.youMult` / `opts.theirMult` apply a per-clock multiplier to that
  * side's scoring (used by the QB Field General window multiplier).
  */
-export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[] } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
+export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string> } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
+  // Pre-match team buffs active on each side (Momentum / Garbage Time /
+  // Floodgates / Overtime). Only the human side carries buffs in the demo.
+  const youBuffs = opts.youBuffs ?? new Set<string>();
+  const theirBuffs = opts.theirBuffs ?? new Set<string>();
+  const GARBAGE_FROM = GAME_SECONDS - 300; // final 5 minutes
+  const youOT = youBuffs.has('overtime') ? 300 : 0;
+  const theirOT = theirBuffs.has('overtime') ? 300 : 0;
   const yp = playsForPlayer(you.player, week);
   const tp = playsForPlayer(their.player, week);
   const yPlays = yp.plays;
@@ -483,11 +490,19 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   let yNukeI = 0, tNukeI = 0;
   let lastClock = 0;
   // Per-minute gain for a side over (t0,t1] without mutating it.
-  const minuteGain = (s: SideState, poss: number[][], t0: number, t1: number, mult?: (c: number) => number): number => {
+  const minuteGain = (side: 'you' | 'their', t0: number, t1: number): number => {
+    const s = side === 'you' ? Y : T;
     if (s.paused || s.dead || s.rate <= 0 || t1 <= t0) return 0;
-    const secs = offSecs(poss, t0, t1);
+    const poss = side === 'you' ? youPoss : theirPoss;
+    const mult = side === 'you' ? opts.youMult : opts.theirMult;
+    const buffs = side === 'you' ? youBuffs : theirBuffs;
+    // Overtime: minutes past regulation count as full possession (no game clock
+    // to gate them), so the drip keeps ticking for the bonus window.
+    const secs = t0 >= GAME_SECONDS ? (buffs.has('overtime') ? t1 - t0 : 0) : offSecs(poss, t0, t1);
     if (secs <= 0) return 0;
-    let add = s.rate * (secs / 60) * (s.hot ? 2 : 1);
+    const hotMult = s.hot ? (buffs.has('momentum') ? 3 : 2) : 1; // Momentum: 3× when hot
+    let add = s.rate * (secs / 60) * hotMult;
+    if (buffs.has('garbage-time') && t1 > GARBAGE_FROM) add *= 2; // Garbage Time: final 5 min ×2
     const m = mult?.(t1); if (m && m !== 1) add *= m;
     return add;
   };
@@ -498,8 +513,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     let t = from;
     while (t < to) {
       const next = Math.min(to, Math.floor(t / 60) * 60 + 60);
-      const ya = dripYou ? minuteGain(Y, youPoss, t, next, opts.youMult) : 0;
-      const ta = dripTheir ? minuteGain(T, theirPoss, t, next, opts.theirMult) : 0;
+      const ya = dripYou ? minuteGain('you', t, next) : 0;
+      const ta = dripTheir ? minuteGain('their', t, next) : 0;
       if (ya > 0) { Y.bank += ya; Y.hist.push({ clock: next, pts: ya }); }
       if (ta > 0) { T.bank += ta; T.hist.push({ clock: next, pts: ta }); }
       // Only surface a drip tick once it rounds to ≥0.1 — sub-0.1 still banks
@@ -573,6 +588,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       pts = scorePlay(play, myPlayer.player.pos, myPlayer.metricId, myFam === 'streak' && mine.hot);
       if (mine.dead) pts = 0;
       if (sideMult !== 1 && pts > 0) { pts *= sideMult; evMult = sideMult; }
+      // Garbage Time: points scored in the final 5 game-minutes count double.
+      if (pts > 0 && play.clock > GARBAGE_FROM && (play.side === 'you' ? youBuffs : theirBuffs).has('garbage-time')) pts *= 2;
     }
     // Field General QB: scores nothing itself, but each pass grows the window
     // multiplier — surface it in the QB's own log so you can watch it build.
@@ -623,7 +640,10 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       // (its rate and bank shrug off their catches/targets). TDs still wipe it.
       const teDripImmune = oppPlayer.player.pos === 'TE'
         && (myPlayer.player.pos === 'WR' || myPlayer.player.pos === 'RB');
-      if (!teDripImmune && (play.kind === 'rec' || play.kind === 'incomplete')) {
+      // Floodgates: the drip owner (the non-acting side) shrugs off all opponent
+      // pauses/erases this week. The owner is `opp` here; its buffs gate immunity.
+      const ownerFloodgates = (play.side === 'you' ? theirBuffs : youBuffs).has('floodgates');
+      if (!teDripImmune && !ownerFloodgates && (play.kind === 'rec' || play.kind === 'incomplete')) {
         if (eraseTrigger) {
           opp.paused = true;
           const cutoff = play.clock - eraseWindow;
@@ -715,7 +735,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   }
 
   // Final drip accrual through the end of the game (per-minute, like the rest).
-  accrue(GAME_SECONDS);
+  // Overtime extends the window 5 minutes for whichever side armed it.
+  accrue(GAME_SECONDS + Math.max(youOT, theirOT));
 
   // DEF SUPPRESS (HALVING) resolves globally in buildMatchup — it reaches every
   // opponent slot across every window — so it is not applied here.
