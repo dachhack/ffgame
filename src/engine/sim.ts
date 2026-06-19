@@ -318,6 +318,16 @@ export function hadDefTd(player: Player, week: number): boolean {
 export function hadLongPassTd(player: Player, week: number, minYds = 40): boolean {
   return playsForPlayer(player, week).plays.some((p) => p.kind === 'pass' && p.td && p.yards >= minYds);
 }
+/**
+ * Turnovers COMMITTED by this player this week (interception thrown / fumble
+ * lost) — for the turnover coin penalty. Stathead's PBP doesn't attribute these
+ * to the offensive player yet (QBs carry only pass/rush; lost fumbles aren't
+ * tagged to the fumbler), so this is dormant (returns 0) until that data lands.
+ * Once a play carries a `to`/turnover flag, count it here. See docs/mcp-requests.md.
+ */
+export function turnoversCommitted(_player: Player, _week: number): number {
+  return 0; // TODO: count int-thrown / fumble-lost plays once the MCP exposes them
+}
 
 /** A sentinel "no opponent" player — an unopposed slot resolves against it. */
 export const EMPTY_PLAYER: Player = {

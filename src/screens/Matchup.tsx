@@ -82,8 +82,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, buffsKey, extrasKey],
   );
 
-  // Drip coin: weekly stipend + unopposed bounty + risk-weighted signature plays.
-  const earnings = useMemo(() => weekEarnings(resolved, 'you'), [resolved]);
+  // Drip coin: weekly stipend + unopposed bounty + events of note + turnover swing.
+  const earnings = useMemo(() => weekEarnings(resolved, 'you', week, buffs['turnover-boost'] ? 25 : 10), [resolved, week, buffsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const weekCoins = earnings.total;
   const [earnOpen, setEarnOpen] = useState(false);
   useEffect(() => {
@@ -420,7 +420,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
 }
 
 // ── Drip-coin earning opportunities, by position (risk pays more) ──
-function EarningsModal({ earnings, onClose }: { earnings: { stipend: number; unopposed: number; signature: number; total: number }; onClose: () => void }) {
+function EarningsModal({ earnings, onClose }: { earnings: { stipend: number; unopposed: number; signature: number; turnover: number; total: number }; onClose: () => void }) {
   const order: Pos[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
   const riskColor = (r: string) => (r === 'HIGH' ? 'var(--fx-nuke)' : r === 'MED' ? 'var(--warn)' : 'var(--dim)');
   return (
@@ -437,9 +437,9 @@ function EarningsModal({ earnings, onClose }: { earnings: { stipend: number; uno
           {/* this week's running tally */}
           <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px' }}>
             <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 6 }}>THIS WEEK</div>
-            {[['Weekly stipend', earnings.stipend], ['Unopposed players', earnings.unopposed], ['Signature plays', earnings.signature]].map(([k, v]) => (
-              <div key={k as string} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--dim)', padding: '2px 0' }}>
-                <span>{k}</span><span className="mono" style={{ color: 'var(--fx-streak)', fontWeight: 700 }}>+{v}</span>
+            {([['Weekly stipend', earnings.stipend], ['Unopposed players', earnings.unopposed], ['Events of note', earnings.signature], ['Turnovers', earnings.turnover]] as [string, number][]).map(([k, v]) => (
+              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--dim)', padding: '2px 0' }}>
+                <span>{k}</span><span className="mono" style={{ color: v < 0 ? 'var(--opp)' : 'var(--fx-streak)', fontWeight: 700 }}>{v < 0 ? '' : '+'}{v}</span>
               </div>
             ))}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, color: 'var(--text)', padding: '5px 0 0', marginTop: 4, borderTop: '1px solid var(--bd)' }}>
@@ -451,6 +451,7 @@ function EarningsModal({ earnings, onClose }: { earnings: { stipend: number; uno
             <div>◈ <b style={{ color: 'var(--text)' }}>+{WEEKLY_STIPEND}</b> flat every week, just for playing.</div>
             <div>◈ <b style={{ color: 'var(--text)' }}>+{UNOPPOSED_COIN}</b> for each unopposed player you field.</div>
             <div style={{ marginTop: 5 }}>Then coin only on <b style={{ color: 'var(--text)' }}>events of note</b> — a nuke / shutdown / wipe, a drip going HOT, or a DST suppress firing. Routine yards, catches and carries don't pay.</div>
+            <div style={{ marginTop: 5 }}>◈ <b style={{ color: 'var(--opp)' }}>−10</b> to the opponent for each INT thrown / fumble lost by your players (their giveaways pay you). <span style={{ color: 'var(--faint)' }}>Awaiting per-player turnover data from Stathead.</span></div>
           </div>
           {/* per-position signature rates */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

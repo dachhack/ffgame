@@ -6,7 +6,7 @@ import { hashStr } from '../data/players';
 /** A real-time swap on a slot, effective from `atClock` (Player/Metric Swap). */
 export interface SlotSwap { atClock: number; toMetricId?: string; toPlayerId?: string; }
 export type SlotSwaps = Record<string, SlotSwap>; // slotKey -> swap
-import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, defEarnScore, hadDefTd, hadLongPassTd, EMPTY_PLAYER, type SlotInput } from './sim';
+import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, defEarnScore, hadDefTd, hadLongPassTd, turnoversCommitted, EMPTY_PLAYER, type SlotInput } from './sim';
 import { REAL_WEEKS, realPointsFor } from '../data/realPbp';
 import { windowForTeam } from '../data/nflSlate';
 import { injuryFor } from '../data/injuries';
@@ -344,39 +344,50 @@ export function signatureCoins(m: ResolvedMatchup, side: 'you' | 'their'): numbe
 export const WEEKLY_STIPEND = 50;     // flat, just for playing the week
 export const UNOPPOSED_COIN = 15;     // per unopposed player you field
 export const SUPPRESS_COIN = 10;      // a DST's suppress firing (field-wide halving)
+export const TURNOVER_COIN = 10;      // coin moved per turnover committed (25 with the powerup)
 /**
  * Coin a metric earns PER EVENT OF NOTE (not per routine play). Only big-swing
- * metrics produce these: a nuke/shutdown/wipe pays HIGH 10, a drip going HOT
- * pays MED 5. Everything else earns nothing from signatures (0) — coin comes
- * from the weekly stipend + unopposed bounty instead.
+ * metrics produce these — everything else earns 0 from signatures (the weekly
+ * stipend + unopposed bounty carry the baseline).
  */
 export function metricCoin(pos: Pos, metricId: string | null | undefined): number {
   const m = metricById(pos, metricId);
   if (!m) return 0;
-  if (metricId === 'suppress') return SUPPRESS_COIN;
-  if (m.fx === 'nuke') return 10;                 // TD nuke / carry wipe / K shutdown
+  if (metricId === 'suppress') return SUPPRESS_COIN;                  // suppress firing
+  if (metricId === 'neg') return 50;                                 // K SHUTDOWN — the big one
+  if (metricId === 'carries' && m.fx === 'nuke') return 25;          // WR/TE carry wipe
+  if (m.fx === 'nuke') return 10;                                    // TD nuke
   // Accumulation drips earn when they go HOT (RB Rush, WR/TE Receiving, Combo).
   if (metricId === 'combodrip' || metricId === 'recyd' || (pos === 'RB' && metricId === 'rush')) return 5;
-  return 0;                                       // routine play — no coin
+  return 0;                                                          // routine play — no coin
 }
 export function coinRisk(n: number): 'HIGH' | 'MED' | 'NONE' {
   return n >= 10 ? 'HIGH' : n > 0 ? 'MED' : 'NONE';
 }
 
-export interface WeekEarnings { stipend: number; unopposed: number; signature: number; total: number; }
-/** A side's full weekly drip-coin take: stipend + unopposed bounty + coin from events of note. */
-export function weekEarnings(m: ResolvedMatchup, side: 'you' | 'their'): WeekEarnings {
-  let unopposed = 0, signature = 0;
+export interface WeekEarnings { stipend: number; unopposed: number; signature: number; turnover: number; total: number; }
+/**
+ * A side's full weekly drip-coin take: stipend + unopposed bounty + coin from
+ * events of note + the turnover transfer. A player who throws an INT or loses a
+ * fumble forfeits `turnoverCoin` to the opponent — so YOUR giveaways cost you
+ * and the opponent's giveaways pay you. (Dormant until the MCP exposes
+ * per-player turnovers — see turnoversCommitted.)
+ */
+export function weekEarnings(m: ResolvedMatchup, side: 'you' | 'their', week: number, turnoverCoin = TURNOVER_COIN): WeekEarnings {
+  let unopposed = 0, signature = 0, turnover = 0;
   for (const w of m.windows) for (const s of w.slots) {
     const me = side === 'you' ? s.you : s.their;
     const opp = side === 'you' ? s.their : s.you;
-    if (!me) continue;
-    if (!opp) unopposed += UNOPPOSED_COIN;
-    if (me.metricId === 'suppress') signature += SUPPRESS_COIN; // suppress firing is the event
-    const rate = metricCoin(me.player.pos, me.metricId);
-    if (rate > 0) for (const e of s.events) if (e.side === side && e.coin) signature += rate;
+    if (me) {
+      if (!opp) unopposed += UNOPPOSED_COIN;
+      if (me.metricId === 'suppress') signature += SUPPRESS_COIN;
+      const rate = metricCoin(me.player.pos, me.metricId);
+      if (rate > 0) for (const e of s.events) if (e.side === side && e.coin) signature += rate;
+      turnover -= turnoverCoin * turnoversCommitted(me.player, week); // your giveaway → you lose
+    }
+    if (opp) turnover += turnoverCoin * turnoversCommitted(opp.player, week); // their giveaway → you gain
   }
-  return { stipend: WEEKLY_STIPEND, unopposed, signature, total: WEEKLY_STIPEND + unopposed + signature };
+  return { stipend: WEEKLY_STIPEND, unopposed, signature, turnover, total: WEEKLY_STIPEND + unopposed + signature + turnover };
 }
 
 /**
