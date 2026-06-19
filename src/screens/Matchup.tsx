@@ -12,7 +12,7 @@ import {
 } from '../engine/matchup';
 import { fmtClock, statlineAt, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
-import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx } from '../types';
+import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
 const YOU = 'happy-campers';
 const TICK_MS = 700;
@@ -1086,11 +1086,13 @@ function SetupRow(props: {
   // "Change metric" re-opens the picker for an already-set spot without dropping
   // the player. Reset whenever the slot's player changes (incl. top-down shifts).
   const [editing, setEditing] = useState(false);
+  const [infoMetric, setInfoMetric] = useState<Metric | null>(null);
   useEffect(() => { setEditing(false); }, [pick?.playerId]);
   const showPicker = !!player && (!pick?.metricId || editing);
   const link: React.CSSProperties = { background: 'none', border: 'none', padding: 0, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em' };
 
   return (
+    <>
     <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: rowGap }}>
       {player ? (
         <div
@@ -1132,10 +1134,12 @@ function SetupRow(props: {
               {METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === pick?.metricId).map((m) => {
                 const cur = m.id === pick?.metricId;
                 return (
-                  <button key={m.id} title={m.ef} onClick={() => { onPickMetric(m.id); setEditing(false); }} style={{ width: '100%', minHeight: 30, textAlign: 'left', background: cur ? 'color-mix(in srgb, var(--you) 14%, var(--bg))' : m.lock ? 'color-mix(in srgb, var(--warn) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${cur ? 'var(--you)' : m.lock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 3, padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, color: 'var(--text)' }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.lock ? '◈ ' : ''}{m.name}</span>
-                    <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', flex: 'none', whiteSpace: 'nowrap' }}>{m.sc}</span>
-                  </button>
+                  <div key={m.id} style={{ display: 'flex', gap: 4 }}>
+                    <button onClick={() => { onPickMetric(m.id); setEditing(false); }} style={{ flex: 1, minWidth: 0, minHeight: 30, textAlign: 'left', background: cur ? 'color-mix(in srgb, var(--you) 14%, var(--bg))' : m.lock ? 'color-mix(in srgb, var(--warn) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${cur ? 'var(--you)' : m.lock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 3, padding: '4px 8px', display: 'flex', alignItems: 'center', color: 'var(--text)' }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.lock ? '◈ ' : ''}{m.name}</span>
+                    </button>
+                    <button onClick={() => setInfoMetric(m)} title="What does this metric do?" className="mono" style={{ flex: 'none', width: 28, minHeight: 30, borderRadius: 3, border: '1px solid var(--bd)', background: 'var(--bg)', color: 'var(--dim)', fontWeight: 700, fontSize: 13 }}>?</button>
+                  </div>
                 );
               })}
             </div>
@@ -1155,6 +1159,37 @@ function SetupRow(props: {
       <div style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
         <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--dim)' }}>◆</span>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.16em', color: 'var(--faint)', fontWeight: 700 }}>SEALED · {winId.toUpperCase()}</span>
+      </div>
+    </div>
+    {infoMetric && <MetricInfo metric={infoMetric} onClose={() => setInfoMetric(null)} />}
+    </>
+  );
+}
+
+// Definition + mechanics card for a metric (the "?" on each pick).
+function MetricInfo({ metric, onClose }: { metric: Metric; onClose: () => void }) {
+  const c = FX_COLOR[metric.fx] ?? 'var(--you)';
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 75, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '50px 16px', overflow: 'auto' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
+          <div style={{ minWidth: 0 }}>
+            <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{metric.lock ? '◈ ' : ''}{metric.name}</div>
+            <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: c, marginTop: 4 }}>{metric.tag}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
+        </div>
+        <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 4 }}>SCORING</div>
+            <div className="mono" style={{ fontSize: 12, color: 'var(--text)' }}>{metric.sc}</div>
+          </div>
+          <div>
+            <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 4 }}>MECHANICS</div>
+            <div style={{ fontSize: 12.5, lineHeight: 1.5, color: 'var(--dim)' }}>{metric.ef}</div>
+          </div>
+          {metric.lock && <div className="mono" style={{ fontSize: 9.5, color: 'var(--warn)', fontWeight: 700 }}>◈ Unlock metric — requires the matching power-up.</div>}
+        </div>
       </div>
     </div>
   );
