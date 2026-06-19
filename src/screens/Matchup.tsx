@@ -1001,7 +1001,11 @@ function SetupRow(props: {
   const { winId, week, pick, selected, inventory, onSelect, onPickMetric, onClear, onDropPlayer } = props;
   const player = pick ? getPlayer(pick.playerId) : null;
   const metric = player && pick?.metricId ? metricById(player.pos, pick.metricId) : null;
-  const showPicker = !!player && !pick?.metricId;
+  // "Change metric" re-opens the picker for an already-set spot without dropping
+  // the player. Reset whenever the slot's player changes (incl. top-down shifts).
+  const [editing, setEditing] = useState(false);
+  useEffect(() => { setEditing(false); }, [pick?.playerId]);
+  const showPicker = !!player && (!pick?.metricId || editing);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px 1fr', alignItems: 'stretch', gap: 6 }}>
@@ -1021,16 +1025,29 @@ function SetupRow(props: {
               <InjuryBadge week={week} slug={player.id} />
             </div>
             <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>{player.pos} · {player.team}</span>
-            {!showPicker && <button onClick={onClear} className="mono" style={{ background: 'none', border: 'none', fontSize: 8, letterSpacing: '0.14em', color: 'var(--opp)', padding: 0, marginTop: 5, textAlign: 'left' }}>CHANGE ✕</button>}
+            {!!pick?.metricId && !editing && (
+              <div style={{ display: 'flex', gap: 9, marginTop: 5 }}>
+                <button onClick={(e) => { e.stopPropagation(); setEditing(true); }} className="mono" style={{ background: 'none', border: 'none', fontSize: 8, letterSpacing: '0.12em', color: 'var(--warn)', padding: 0 }}>↻ METRIC</button>
+                <button onClick={(e) => { e.stopPropagation(); onClear(); }} className="mono" style={{ background: 'none', border: 'none', fontSize: 8, letterSpacing: '0.12em', color: 'var(--opp)', padding: 0 }}>✕ PLAYER</button>
+              </div>
+            )}
           </div>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, alignItems: 'flex-end', justifyContent: 'center' }}>
             {showPicker ? (
-              METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0).map((m) => (
-                <button key={m.id} title={m.ef} onClick={() => onPickMetric(m.id)} style={{ width: '100%', textAlign: 'left', background: m.lock ? 'color-mix(in srgb, var(--warn) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${m.lock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 3, padding: '4px 7px', display: 'flex', justifyContent: 'space-between', gap: 6, color: 'var(--text)' }}>
-                  <span style={{ fontSize: 11, fontWeight: 700 }}>{m.lock ? '◈ ' : ''}{m.name}</span>
-                  <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{m.sc}</span>
-                </button>
-              ))
+              <>
+                {editing && (
+                  <button onClick={(e) => { e.stopPropagation(); setEditing(false); }} className="mono" style={{ width: '100%', textAlign: 'center', background: 'none', border: '1px dashed var(--bd)', borderRadius: 3, padding: '2px', fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)' }}>✕ KEEP {metric?.name?.toUpperCase()}</button>
+                )}
+                {METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === pick?.metricId).map((m) => {
+                  const cur = m.id === pick?.metricId;
+                  return (
+                    <button key={m.id} title={m.ef} onClick={() => { onPickMetric(m.id); setEditing(false); }} style={{ width: '100%', textAlign: 'left', background: cur ? 'color-mix(in srgb, var(--you) 14%, var(--bg))' : m.lock ? 'color-mix(in srgb, var(--warn) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${cur ? 'var(--you)' : m.lock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 3, padding: '4px 7px', display: 'flex', justifyContent: 'space-between', gap: 6, color: 'var(--text)' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700 }}>{m.lock ? '◈ ' : ''}{m.name}</span>
+                      <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{m.sc}</span>
+                    </button>
+                  );
+                })}
+              </>
             ) : (
               <div onClick={onSelect} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
                 <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', textAlign: 'right' }}>{metric?.name}</span>
