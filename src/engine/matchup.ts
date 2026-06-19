@@ -355,7 +355,6 @@ export function metricCoin(pos: Pos, metricId: string | null | undefined): numbe
   if (!m) return 0;
   if (metricId === 'suppress') return SUPPRESS_COIN;                  // suppress firing
   if (metricId === 'neg') return 50;                                 // K SHUTDOWN — the big one
-  if (metricId === 'carries' && m.fx === 'nuke') return 25;          // WR/TE carry wipe
   if (m.fx === 'nuke') return 10;                                    // TD nuke
   // Accumulation drips earn when they go HOT (RB Rush, WR/TE Receiving, Combo).
   if (metricId === 'combodrip' || metricId === 'recyd' || (pos === 'RB' && metricId === 'rush')) return 5;
@@ -381,8 +380,10 @@ export function weekEarnings(m: ResolvedMatchup, side: 'you' | 'their', week: nu
     if (me) {
       if (!opp) unopposed += UNOPPOSED_COIN;
       if (me.metricId === 'suppress') signature += SUPPRESS_COIN;
+      // Coin per event of note: the carry-wipe plus-up carries its own bounty
+      // (e.coinAmt); everything else pays the primary metric's per-note rate.
       const rate = metricCoin(me.player.pos, me.metricId);
-      if (rate > 0) for (const e of s.events) if (e.side === side && e.coin) signature += rate;
+      for (const e of s.events) if (e.side === side && e.coin) signature += e.coinAmt ?? rate;
       turnover -= turnoverCoin * turnoversCommitted(me.player, week); // your giveaway → you lose
     }
     if (opp) turnover += turnoverCoin * turnoversCommitted(opp.player, week); // their giveaway → you gain

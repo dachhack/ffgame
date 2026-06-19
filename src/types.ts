@@ -95,6 +95,7 @@ export interface PbpEvent {
   effect?: { type: EffectType; text: string };
   sig?: boolean;            // a "signature" play (highlighted in the log)
   coin?: boolean;           // an EVENT OF NOTE that earns drip coin (nuke / shutdown / wipe / drip-HOT)
+  coinAmt?: number;         // explicit coin bounty for this event (overrides the metric's per-note rate)
   drip?: boolean;           // a per-minute drip-accrual tick (hidden unless the log is expanded to minutes)
   mult?: number;            // QB Field General multiplier in effect for this play (×N), for the log
   // for rate/drip bars

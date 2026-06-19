@@ -201,13 +201,11 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
     if (metricId === 'rec') return play.catch ? 1 : 0;
     if (metricId === 'tgt') return play.target ? 0.5 : 0;
     if (metricId === 'td') return play.td ? 6 : 0;
-    if (metricId === 'carries') return play.kind === 'rush' ? 1 : 0; // WIPE (the wipe is applied in resolveSlot)
   }
   if (pos === 'TE') {
     if (metricId === 'tgt') return play.target ? 1 : 0;
     if (metricId === 'rec') return play.catch ? 1.5 : 0;
     if (metricId === 'td') return play.td ? 8 : 0; // NUKE
-    if (metricId === 'carries') return play.kind === 'rush' ? 1 : 0; // WIPE
   }
   if (pos === 'K') {
     // 'neg' (SHUTDOWN) scores 0 directly — it's a pure effect. 'banker' scores
@@ -605,6 +603,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     let pts = 0;
     let sig = false; // a signature play this tick (highlighted)
     let wentHot = false; // a drip crossed into HOT this tick — an event of note
+    let coinAmt: number | undefined; // explicit coin bounty for this play (overrides the metric rate)
     let evMult: number | undefined; // FG multiplier shown on this play in the log
     const sideMult = (play.side === 'you' ? opts.youMult?.(play.clock) : opts.theirMult?.(play.clock)) ?? 1;
     if (iAmDrip) {
@@ -731,12 +730,16 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       }
     }
 
-    // WR/TE Carries (WIPE, unlock): a carry instantly zeroes the opponent —
-    // fires against any opponent (drip included), like compression.
-    if ((myPlayer.player.pos === 'WR' || myPlayer.player.pos === 'TE') && myPlayer.metricId === 'carries' && play.kind === 'rush' && opp.bank > 0) {
+    // WR/TE Carries (WIPE) — now an automatic PLUS-UP rather than a selectable
+    // metric. When that side has armed the unlock, every WR/TE carry instantly
+    // zeroes the opponent ON TOP of whatever metric the slot is scoring. Fires
+    // against any opponent (drip included), like compression.
+    const myBuffs = play.side === 'you' ? youBuffs : theirBuffs;
+    if ((myPlayer.player.pos === 'WR' || myPlayer.player.pos === 'TE') && myBuffs.has('unlock-carries-wipe') && play.kind === 'rush' && opp.bank > 0) {
       const wiped = opp.bank;
       const suffix = nukeWipe(wiped); opp.paused = true;
       if (!effect) effect = { type: 'nuke', text: `✕ CARRY WIPE −${wiped.toFixed(1)}${suffix}` };
+      coinAmt = 25; // the carry wipe pays its own bounty regardless of the primary metric
       sig = true;
     }
 
@@ -764,6 +767,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       sig,
       // Event of note (earns drip coin): a bank-zeroing nuke/shutdown/wipe, or a drip going HOT.
       coin: effect?.type === 'nuke' || wentHot,
+      coinAmt,
     });
   }
 
