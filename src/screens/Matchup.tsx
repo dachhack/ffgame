@@ -1249,8 +1249,8 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
 }) {
   const ownKey = slotKey(slot.win, slot.slotIndex);
   const isMobile = useIsMobile();
-  const gridCols = isMobile ? '1fr 30px 1fr' : '1fr 64px 1fr';
-  const rowGap = isMobile ? 4 : 6;
+  const gridCols = '1fr 1fr'; // no center gutter — cards fill the width; controls go below
+  const rowGap = isMobile ? 5 : 8;
   // Pre-kickoff (this window not yet started) is the only time the best-ball
   // backup target can be (re)assigned — it's a blind bet, locked once it's live.
   const preKick = phase === 'live' && clock === 0;
@@ -1301,9 +1301,9 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
       <div>
         <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: rowGap }}>
           {mineBackup ? card : blankBox}
-          <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>{unoppCenter}</div>
           {mineBackup ? blankBox : card}
         </div>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 14, marginTop: 4 }}>{unoppCenter}</div>
         {/* Best-ball backup: assign (pre-kickoff) and/or show the chosen target, in this spot. */}
         {canSub && mineBackup && (preKick || backups[ownKey]) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
@@ -1378,9 +1378,11 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: rowGap }}>
         {youCard}
-        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>{centerKids}</div>
         {theirCard}
       </div>
+      {(slot.events.length > 0 || (canSwap && !done)) && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 14, marginTop: 4 }}>{centerKids}</div>
+      )}
       {incomingName && !(phase === 'final' && slot.youSub) && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', marginTop: 3 }}>
           🛟 backup {incomingName} on standby{final ? ' — did not sub in' : ''}
@@ -1499,12 +1501,12 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
     // metric area reserves two lines so the coin/score and statline rows line up
     // across both cards regardless of how the metric label wraps.
     return (
-      <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '7px 8px', display: 'flex', flexDirection: 'column', gap: 5, cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
+      <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 3, cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
         {nameRow}
-        <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'flex-start', gap: 8 }}>
-          <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={54} />
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3, alignItems: side === 'you' ? 'flex-start' : 'flex-end' }}>
-            <div style={{ minHeight: 34, display: 'flex', alignItems: 'flex-start', width: '100%', justifyContent: side === 'you' ? 'flex-start' : 'flex-end' }}>{metricChip}</div>
+        <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'center', gap: 8 }}>
+          <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={46} />
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2, alignItems: side === 'you' ? 'flex-start' : 'flex-end' }}>
+            <div style={{ minHeight: 18, display: 'flex', alignItems: 'center', width: '100%', justifyContent: side === 'you' ? 'flex-start' : 'flex-end' }}>{metricChip}</div>
             <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'baseline', gap: 6 }}>
               {coinEl}
               {bigNum}
