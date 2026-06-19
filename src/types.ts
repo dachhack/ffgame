@@ -93,7 +93,8 @@ export interface PbpEvent {
   youBank: number;          // running bank for your side after this event
   theirBank: number;        // running bank for their side after this event
   effect?: { type: EffectType; text: string };
-  sig?: boolean;            // a "signature" play (drip economy: +5 coin to the acting side)
+  sig?: boolean;            // a "signature" play (highlighted in the log)
+  coin?: boolean;           // an EVENT OF NOTE that earns drip coin (nuke / shutdown / wipe / drip-HOT)
   drip?: boolean;           // a per-minute drip-accrual tick (hidden unless the log is expanded to minutes)
   mult?: number;            // QB Field General multiplier in effect for this play (×N), for the log
   // for rate/drip bars

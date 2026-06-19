@@ -594,7 +594,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     // scores nothing directly; 3 straight (no opponent score) goes hot → 2×
     // accrual. Otherwise the metric's per-play points (× FG mult).
     let pts = 0;
-    let sig = false; // a signature play this tick → +5 drip coin to the acting side
+    let sig = false; // a signature play this tick (highlighted)
+    let wentHot = false; // a drip crossed into HOT this tick — an event of note
     let evMult: number | undefined; // FG multiplier shown on this play in the log
     const sideMult = (play.side === 'you' ? opts.youMult?.(play.clock) : opts.theirMult?.(play.clock)) ?? 1;
     if (iAmDrip) {
@@ -602,7 +603,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         mine.rate += play.yards * myDripRate;
         mine.paused = false;
         mine.streak += 1;
-        if (mine.streak >= 3 && !mine.hot) { mine.hot = true; sig = true; } // drip goes HOT
+        if (mine.streak >= 3 && !mine.hot) { mine.hot = true; sig = true; wentHot = true; } // drip goes HOT
       }
     } else {
       pts = scorePlay(play, myPlayer.player.pos, myPlayer.metricId, myFam === 'streak' && mine.hot);
@@ -751,6 +752,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       theirBank: Math.round(T.bank * 10) / 10,
       effect,
       sig,
+      // Event of note (earns drip coin): a bank-zeroing nuke/shutdown/wipe, or a drip going HOT.
+      coin: effect?.type === 'nuke' || wentHot,
     });
   }
 

@@ -343,25 +343,28 @@ export function signatureCoins(m: ResolvedMatchup, side: 'you' | 'their'): numbe
 // ── Drip-coin economy ────────────────────────────────────────────────────────
 export const WEEKLY_STIPEND = 50;     // flat, just for playing the week
 export const UNOPPOSED_COIN = 15;     // per unopposed player you field
+export const SUPPRESS_COIN = 10;      // a DST's suppress firing (field-wide halving)
 /**
- * Coin paid per signature play, scaled by how risky the slot's metric is —
- * the bigger the swing (nukes, multipliers, shutdowns), the bigger the payout.
- * LOW 3 · MED 6 · HIGH 10.
+ * Coin a metric earns PER EVENT OF NOTE (not per routine play). Only big-swing
+ * metrics produce these: a nuke/shutdown/wipe pays HIGH 10, a drip going HOT
+ * pays MED 5. Everything else earns nothing from signatures (0) — coin comes
+ * from the weekly stipend + unopposed bounty instead.
  */
 export function metricCoin(pos: Pos, metricId: string | null | undefined): number {
   const m = metricById(pos, metricId);
-  if (!m) return 3;
-  if (metricId === 'suppress') return 10;             // field-wide halving = high risk
-  if (m.fx === 'nuke' || m.fx === 'mult') return 10;  // wipes / window multiplier
-  if (m.fx === 'erase' || m.fx === 'stop' || m.fx === 'reset' || m.fx === 'compression') return 6;
-  return 3;                                            // flat / accumulation drip
+  if (!m) return 0;
+  if (metricId === 'suppress') return SUPPRESS_COIN;
+  if (m.fx === 'nuke') return 10;                 // TD nuke / carry wipe / K shutdown
+  // Accumulation drips earn when they go HOT (RB Rush, WR/TE Receiving, Combo).
+  if (metricId === 'combodrip' || metricId === 'recyd' || (pos === 'RB' && metricId === 'rush')) return 5;
+  return 0;                                       // routine play — no coin
 }
-export function coinRisk(n: number): 'LOW' | 'MED' | 'HIGH' {
-  return n >= 10 ? 'HIGH' : n >= 6 ? 'MED' : 'LOW';
+export function coinRisk(n: number): 'HIGH' | 'MED' | 'NONE' {
+  return n >= 10 ? 'HIGH' : n > 0 ? 'MED' : 'NONE';
 }
 
 export interface WeekEarnings { stipend: number; unopposed: number; signature: number; total: number; }
-/** A side's full weekly drip-coin take: stipend + unopposed bounty + risk-weighted signature plays. */
+/** A side's full weekly drip-coin take: stipend + unopposed bounty + coin from events of note. */
 export function weekEarnings(m: ResolvedMatchup, side: 'you' | 'their'): WeekEarnings {
   let unopposed = 0, signature = 0;
   for (const w of m.windows) for (const s of w.slots) {
@@ -369,8 +372,9 @@ export function weekEarnings(m: ResolvedMatchup, side: 'you' | 'their'): WeekEar
     const opp = side === 'you' ? s.their : s.you;
     if (!me) continue;
     if (!opp) unopposed += UNOPPOSED_COIN;
+    if (me.metricId === 'suppress') signature += SUPPRESS_COIN; // suppress firing is the event
     const rate = metricCoin(me.player.pos, me.metricId);
-    for (const e of s.events) if (e.side === side && e.sig) signature += rate;
+    if (rate > 0) for (const e of s.events) if (e.side === side && e.coin) signature += rate;
   }
   return { stipend: WEEKLY_STIPEND, unopposed, signature, total: WEEKLY_STIPEND + unopposed + signature };
 }

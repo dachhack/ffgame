@@ -429,7 +429,7 @@ function EarningsModal({ earnings, onClose }: { earnings: { stipend: number; uno
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}><span style={{ color: 'var(--fx-mult)' }}>◈</span> Drip Coin — Earning</div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>RISKIER METRICS PAY MORE PER SIGNATURE PLAY</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>COIN IS EARNED ON EVENTS OF NOTE — RISKIER PLAYS PAY MORE</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
         </div>
@@ -450,6 +450,7 @@ function EarningsModal({ earnings, onClose }: { earnings: { stipend: number; uno
           <div className="mono" style={{ fontSize: 9.5, lineHeight: 1.6, color: 'var(--dim)' }}>
             <div>◈ <b style={{ color: 'var(--text)' }}>+{WEEKLY_STIPEND}</b> flat every week, just for playing.</div>
             <div>◈ <b style={{ color: 'var(--text)' }}>+{UNOPPOSED_COIN}</b> for each unopposed player you field.</div>
+            <div style={{ marginTop: 5 }}>Then coin only on <b style={{ color: 'var(--text)' }}>events of note</b> — a nuke / shutdown / wipe, a drip going HOT, or a DST suppress firing. Routine yards, catches and carries don't pay.</div>
           </div>
           {/* per-position signature rates */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -460,11 +461,19 @@ function EarningsModal({ earnings, onClose }: { earnings: { stipend: number; uno
                   {METRICS[pos].map((m) => {
                     const coin = metricCoin(pos, m.id);
                     const risk = coinRisk(coin);
+                    const trigger = m.id === 'suppress' ? 'on suppress' : m.fx === 'nuke' ? 'on nuke' : coin > 0 ? 'on HOT' : '';
                     return (
-                      <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10.5, color: 'var(--text)', padding: '2px 0' }}>
+                      <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10.5, color: coin > 0 ? 'var(--text)' : 'var(--faint)', padding: '2px 0' }}>
                         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.lock ? '◈ ' : ''}{m.name}</span>
-                        <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: riskColor(risk), border: `1px solid ${riskColor(risk)}`, borderRadius: 2, padding: '0 4px' }}>{risk}</span>
-                        <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--fx-streak)', width: 44, textAlign: 'right' }}>+{coin}/play</span>
+                        {coin > 0 ? (
+                          <>
+                            <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: riskColor(risk), border: `1px solid ${riskColor(risk)}`, borderRadius: 2, padding: '0 4px' }}>{risk}</span>
+                            <span className="mono" style={{ fontSize: 9, color: 'var(--dim)', width: 58, textAlign: 'right' }}>{trigger}</span>
+                            <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--fx-streak)', width: 30, textAlign: 'right' }}>+{coin}</span>
+                          </>
+                        ) : (
+                          <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 96, textAlign: 'right' }}>— no coin —</span>
+                        )}
                       </div>
                     );
                   })}
