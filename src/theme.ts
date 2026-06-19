@@ -1,7 +1,7 @@
 // Design tokens from the Gridiron Clash handoff. Three interchangeable themes,
 // applied as CSS custom properties on the app root. Default = "prime".
 
-export type ThemeName = 'tactical' | 'neon' | 'prime' | 'daylight' | 'arctic' | 'slate';
+export type ThemeName = 'tactical' | 'neon' | 'prime' | 'daylight' | 'arctic' | 'slate' | 'dusk';
 
 export interface Theme {
   bg: string;
@@ -101,6 +101,22 @@ export const THEMES: Record<ThemeName, Theme> = {
       TE: { bg: '#F6E8D6', fg: '#9A6A22', bd: '#E5CFAE' },
       K: { bg: '#FAD9DE', fg: '#C23250', bd: '#EEB1BD' },
       DEF: { bg: '#E4E7EC', fg: '#54606E', bd: '#CAD0D8' },
+    },
+  },
+  // Daylight's palette (green primary, red/blue accents) on a warm dark backdrop
+  // — the dark twin of the light "daylight" theme.
+  dusk: {
+    bg: '#211D15', surface: '#2C2820', sh: '#393327', bd: '#3A352A', bdh: '#4B4536',
+    text: '#F3EFE2', dim: '#A79C87', faint: '#6E6655', mid: '#C6BCA6', dimstrong: '#DED6C2',
+    you: '#46C386', opp: '#ED5A50', warn: '#5C9CEF', onAccent: '#211D15',
+    fx: { nuke: '#ED5A50', erase: '#ED5A50', reset: '#E0954A', streak: '#B69AE3', mult: '#5C9CEF', compression: '#5FC489', stop: '#A89E89', sys: '#7A7263' },
+    pos: {
+      QB: { bg: '#15263A', fg: '#7AB5FF', bd: '#243C5C' },
+      RB: { bg: '#16301F', fg: '#67D79A', bd: '#27512F' },
+      WR: { bg: '#221A38', fg: '#B69AE3', bd: '#3A2F5A' },
+      TE: { bg: '#2C2210', fg: '#E5B257', bd: '#4C3B1D' },
+      K: { bg: '#341C18', fg: '#ED6A60', bd: '#552F2A' },
+      DEF: { bg: '#201E18', fg: '#B5AC96', bd: '#332F27' },
     },
   },
   // Cool dark slate-blue, teal accent.

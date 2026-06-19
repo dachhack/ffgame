@@ -99,6 +99,7 @@ export function ThemeSwitcher() {
     { id: 'tactical', label: 'T' },
     { id: 'neon', label: 'N' },
     { id: 'slate', label: 'S' },
+    { id: 'dusk', label: 'U' },
     { id: 'daylight', label: 'D' },
     { id: 'arctic', label: 'A' },
   ];
