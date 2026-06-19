@@ -33,6 +33,8 @@ export const POWERUPS: Powerup[] = [
   { id: 'garbage-time', name: 'Garbage Time', blurb: 'Arm before kickoff: any points your players score in the final 5 game-minutes count double.', kind: 'action', timing: 'pre', price: 75, icon: '🗑️' },
   { id: 'floodgates', name: 'Floodgates', blurb: 'Arm before kickoff: your drips are immune to opponent pauses and erases all week (TD wipes still apply).', kind: 'action', timing: 'pre', price: 85, icon: '🌊' },
   { id: 'overtime', name: 'Overtime', blurb: 'Arm before kickoff: your drips keep accruing for 5 extra minutes after each game ends.', kind: 'action', timing: 'pre', price: 60, icon: '⏱️' },
+  { id: 'counter-nuke', name: 'Counter-Nuke', blurb: 'Arm before kickoff: the first time an opponent nukes one of your slots, it is reflected back — their player is wiped instead.', kind: 'action', timing: 'pre', price: 95, icon: '↩️' },
+  { id: 'insurance', name: 'Insurance', blurb: 'Arm before kickoff: the first time one of your slots is nuked, half its banked score is refunded instead of zeroed.', kind: 'action', timing: 'pre', price: 80, icon: '🛟' },
 ];
 
 export function powerupById(id: string): Powerup | undefined {

@@ -550,12 +550,29 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
 
   // TDs and banker-XPs per side, surfaced for the lineup-wide K banker bonus.
   let youTds = 0, theirTds = 0, youBankerXp = 0, theirBankerXp = 0;
+  // Counter-Nuke / Insurance fire once per slot, on the human side only.
+  let cnUsed = false, insUsed = false;
 
   for (const play of merged) {
     accrue(play.clock);
     lastClock = play.clock;
     const mine = play.side === 'you' ? Y : T;
     const opp = play.side === 'you' ? T : Y;
+    const oppSide: 'you' | 'their' = play.side === 'you' ? 'their' : 'you';
+    // A big bank wipe of the victim (`opp`). Counter-Nuke (reflect onto the
+    // attacker) and Insurance (keep half) protect YOUR slot the first time.
+    const nukeWipe = (wiped: number): string => {
+      if (oppSide === 'you' && youBuffs.has('counter-nuke') && !cnUsed) {
+        cnUsed = true; const back = mine.bank; mine.bank = 0; mine.hist = [];
+        return back > 0 ? ` · ↩ COUNTER-NUKE −${back.toFixed(1)}` : ' · ↩ COUNTER-NUKE';
+      }
+      if (oppSide === 'you' && youBuffs.has('insurance') && !insUsed) {
+        insUsed = true; opp.bank = Math.round(wiped * 0.5 * 10) / 10; opp.hist = [];
+        return ` · 🛟 INSURED ${opp.bank.toFixed(1)}`;
+      }
+      opp.bank = 0; opp.hist = [];
+      return '';
+    };
     const myFam = play.side === 'you' ? youFam : theirFam;
     const oppFam = play.side === 'you' ? theirFam : youFam;
     const myPlayer = play.side === 'you' ? you : their;
@@ -665,13 +682,13 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       // a yardage metric scores its points but does not nuke the opponent.
       if (play.td && myFam === 'nuke') {
         const wiped = opp.bank;
-        opp.bank = 0; opp.hist = []; opp.paused = true;
-        effect = { type: 'nuke', text: `✕ TD — wiped drip ${wiped.toFixed(1)}` }; sig = true;
+        const suffix = nukeWipe(wiped); opp.paused = true;
+        effect = { type: 'nuke', text: `✕ TD — wiped drip ${wiped.toFixed(1)}${suffix}` }; sig = true;
       }
     } else if (myFam === 'nuke' && play.td && opp.bank > 0) {
       const wiped = opp.bank;
-      opp.bank = 0; opp.hist = [];
-      effect = { type: 'nuke', text: `✕ NUKE — wiped ${wiped.toFixed(1)}` }; sig = true;
+      const suffix = nukeWipe(wiped);
+      effect = { type: 'nuke', text: `✕ NUKE — wiped ${wiped.toFixed(1)}${suffix}` }; sig = true;
     } else if (eraseTrigger) {
       const cutoff = play.clock - eraseWindow;
       let erased = 0;
@@ -705,8 +722,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     // fires against any opponent (drip included), like compression.
     if ((myPlayer.player.pos === 'WR' || myPlayer.player.pos === 'TE') && myPlayer.metricId === 'carries' && play.kind === 'rush' && opp.bank > 0) {
       const wiped = opp.bank;
-      opp.bank = 0; opp.hist = []; opp.paused = true;
-      if (!effect) effect = { type: 'nuke', text: `✕ CARRY WIPE −${wiped.toFixed(1)}` };
+      const suffix = nukeWipe(wiped); opp.paused = true;
+      if (!effect) effect = { type: 'nuke', text: `✕ CARRY WIPE −${wiped.toFixed(1)}${suffix}` };
       sig = true;
     }
 
