@@ -130,7 +130,7 @@ export function MatchupFinal({ week }: { week: number }) {
                     </div>
                   </div>
                   <span className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--you)', textAlign: 'right' }}>{s.youFinal.toFixed(1)}</span>
-                  <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--bg)', background: c, padding: '3px 5px', borderRadius: 3, textAlign: 'center' }}>{tie ? 'TIE' : sw ? 'WON' : 'LOST'}</span>
+                  <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: c, padding: '3px 5px', borderRadius: 3, textAlign: 'center' }}>{tie ? 'TIE' : sw ? 'WON' : 'LOST'}</span>
                   <span className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--opp)', textAlign: 'left' }}>{s.theirFinal.toFixed(1)}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, justifyContent: 'flex-end' }}>
                     <div style={{ minWidth: 0, textAlign: 'right' }}>
@@ -151,7 +151,7 @@ export function MatchupFinal({ week }: { week: number }) {
                 <div className="mono" style={{ fontSize: 9, letterSpacing: '0.16em', color: 'var(--faint)' }}>NEXT UP · WEEK {nextWeek}</div>
                 <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginTop: 4 }}>vs {nextOpp.name}</div>
               </div>
-              <button onClick={() => navigate({ name: 'matchup', week: nextWeek, phase: 'setup' })} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--bg)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4 }}>
+              <button onClick={() => navigate({ name: 'matchup', week: nextWeek, phase: 'setup' })} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4 }}>
                 SET WEEK {nextWeek} →
               </button>
             </div>

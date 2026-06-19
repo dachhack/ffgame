@@ -95,9 +95,12 @@ export function Avatar({ name, accent = 'var(--you)', size = 30, src }: { name: 
 export function ThemeSwitcher() {
   const { theme, setTheme } = useStore();
   const opts: { id: ThemeName; label: string }[] = [
+    { id: 'prime', label: 'P' },
     { id: 'tactical', label: 'T' },
     { id: 'neon', label: 'N' },
-    { id: 'prime', label: 'P' },
+    { id: 'slate', label: 'S' },
+    { id: 'daylight', label: 'D' },
+    { id: 'arctic', label: 'A' },
   ];
   return (
     <div style={{ display: 'flex', gap: 3, flex: 'none' }}>

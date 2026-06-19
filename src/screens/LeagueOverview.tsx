@@ -87,7 +87,7 @@ export function LeagueOverview() {
                   <button
                     onClick={() => navigate({ name: 'matchup', week: DEMO_WEEK, phase: 'setup' })}
                     className="mono"
-                    style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--bg)', background: 'var(--you)', padding: '8px 13px', borderRadius: 4, border: 'none', boxShadow: '0 0 18px color-mix(in srgb, var(--you) 28%, transparent)' }}
+                    style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', padding: '8px 13px', borderRadius: 4, border: 'none', boxShadow: '0 0 18px color-mix(in srgb, var(--you) 28%, transparent)' }}
                   >
                     SET MATCHUP →
                   </button>
@@ -139,7 +139,7 @@ export function LeagueOverview() {
                       <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                         <Avatar name={t.name} accent={isYou ? 'var(--you)' : 'var(--dim)'} size={22} src={avatarUrl(t.ownerId)} />
                         <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: isYou ? 'var(--you)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
-                        {isYou && <span className="mono" style={{ fontSize: 8, color: 'var(--bg)', background: 'var(--you)', padding: '1px 4px', borderRadius: 2, letterSpacing: '0.1em' }}>YOU</span>}
+                        {isYou && <span className="mono" style={{ fontSize: 8, color: 'var(--on-accent)', background: 'var(--you)', padding: '1px 4px', borderRadius: 2, letterSpacing: '0.1em' }}>YOU</span>}
                       </span>
                       <span className="mono" style={{ fontSize: 11, color: 'var(--mid)', textAlign: 'right' }}>{t.wins}-{t.losses}</span>
                       <span className="mono" style={{ fontSize: 11, color: 'var(--mid)', textAlign: 'right' }}>{t.pf.toFixed(0)}</span>
@@ -329,7 +329,7 @@ function WaiverModal({ onClose }: { onClose: () => void }) {
               <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 30 }}>{p.team}</span>
               <span className="mono" style={{ fontSize: 11, color: trend.c, width: 24, textAlign: 'center' }}>{trend.t}</span>
               <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 36, textAlign: 'right' }}>{faab}%</span>
-              <button className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--bg)', background: 'var(--you)', border: 'none', borderRadius: 3, padding: '6px 9px' }}>CLAIM</button>
+              <button className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 3, padding: '6px 9px' }}>CLAIM</button>
             </div>
           );
         })}

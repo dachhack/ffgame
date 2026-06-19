@@ -89,7 +89,7 @@ export function LeagueHub() {
                 <span
                   className="mono"
                   style={{
-                    fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--bg)', background: 'var(--you)',
+                    fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--on-accent)', background: 'var(--you)',
                     padding: '9px 14px', borderRadius: 4, boxShadow: '0 0 20px color-mix(in srgb, var(--you) 30%, transparent)',
                   }}
                 >

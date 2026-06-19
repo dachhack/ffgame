@@ -9,15 +9,18 @@ import { MatchupFinal } from './screens/MatchupFinal';
 export function App() {
   const { theme, route } = useStore();
   const vars = themeVars(THEMES[theme]) as Record<string, string>;
+  const light = theme === 'daylight' || theme === 'arctic';
 
   useEffect(() => {
     document.body.style.background = THEMES[theme].bg;
-  }, [theme]);
+    document.documentElement.style.colorScheme = light ? 'light' : 'dark';
+  }, [theme, light]);
 
   return (
     <div
       style={{
         ...(vars as React.CSSProperties),
+        colorScheme: light ? 'light' : 'dark',
         minHeight: '100vh',
         background: 'var(--bg)',
         color: 'var(--text)',
