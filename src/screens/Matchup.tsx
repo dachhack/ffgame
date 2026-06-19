@@ -376,13 +376,17 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
         const all = resolved.windows.flatMap((w) => w.slots);
         const b = all.find((s) => slotKey(s.win, s.slotIndex) === backupMenu.key);
         if (!b) return null;
+        // Only what's legitimately known when you sub: live points so far (not
+        // the finals). At kickoff these are all 0 — it's a blind commitment.
+        const liveOf = (s: typeof b) => banksAtClock(s.events, winClocks[s.win] ?? 0).you;
         const starters = all
           .filter((s) => s.you && s.their)
-          .map((s) => ({ key: slotKey(s.win, s.slotIndex), name: s.you!.player.name, score: s.youFinal, win: s.win }));
+          .map((s) => ({ key: slotKey(s.win, s.slotIndex), name: s.you!.player.name, score: liveOf(s), win: s.win }));
         return (
           <BackupMenu
             backupName={b.you?.player.name ?? '—'}
-            backupScore={b.backupScore ?? 0}
+            backupScore={liveOf(b)}
+            live={phase !== 'final'}
             current={backupAssign[backupMenu.key]}
             starters={starters}
             onPick={(target) => { setBackupTarget(week, backupMenu.key, target); setBackupMenu(null); }}
@@ -395,35 +399,38 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
 }
 
 // ── Backup assignment menu (manual best-ball) ──
-function BackupMenu({ backupName, backupScore, current, starters, onPick, onClose }: {
-  backupName: string; backupScore: number; current?: string;
+function BackupMenu({ backupName, backupScore, live, current, starters, onPick, onClose }: {
+  backupName: string; backupScore: number; live: boolean; current?: string;
   starters: { key: string; name: string; score: number; win: WindowId }[];
   onPick: (target: string | null) => void; onClose: () => void;
 }) {
+  const scoreTag = live ? 'so far' : 'final';
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '60px 16px', overflow: 'auto' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Backup · {backupName} <span style={{ color: 'var(--warn)' }}>{backupScore.toFixed(1)}</span></div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>PICK A STARTER IT REPLACES AT FINAL (IF IT OUTSCORES)</div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Backup · {backupName} <span style={{ color: 'var(--warn)' }}>{backupScore.toFixed(1)}</span> <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', fontWeight: 400 }}>{scoreTag}</span></div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>CHALLENGE A STARTER — SUBS IN AT FINAL ONLY IF IT OUTSCORES THEM</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
         </div>
         <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 360, overflow: 'auto' }}>
-          <button onClick={() => onPick(null)} className="mono" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, background: !current ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${!current ? 'var(--bd)' : 'var(--bd)'}`, borderRadius: 4, padding: '8px 10px', color: 'var(--text)' }}>
+          <div className="mono" style={{ fontSize: 9, lineHeight: 1.55, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px', marginBottom: 4 }}>
+            It's a blind bet — you won't know final scores yet. Numbers below are points {scoreTag}. Pick the starter you think {backupName} will beat; the swap only happens at FINAL if it actually does.
+          </div>
+          <button onClick={() => onPick(null)} className="mono" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, background: !current ? 'var(--sh)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px', color: 'var(--text)' }}>
             <span style={{ fontSize: 11, fontWeight: 700 }}>Keep on bench — don't sub</span>
             {!current && <span style={{ fontSize: 9, color: 'var(--dim)' }}>✓</span>}
           </button>
           {starters.map((s) => {
-            const beats = backupScore > s.score;
             const sel = current === s.key;
             return (
-              <button key={s.key} onClick={() => beats && onPick(s.key)} disabled={!beats} style={{ display: 'flex', alignItems: 'center', gap: 8, background: sel ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${sel ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '8px 10px', color: 'var(--text)', textAlign: 'left', opacity: beats ? 1 : 0.4, cursor: beats ? 'pointer' : 'default' }}>
+              <button key={s.key} onClick={() => onPick(s.key)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: sel ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${sel ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '8px 10px', color: 'var(--text)', textAlign: 'left', cursor: 'pointer' }}>
                 <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', width: 34 }}>{s.win.toUpperCase()}</span>
                 <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, flex: 1 }}>{s.name}</span>
-                <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>{s.score.toFixed(1)}</span>
-                {sel ? <span style={{ fontSize: 9, color: 'var(--you)' }}>✓</span> : beats ? <span className="mono" style={{ fontSize: 8, color: 'var(--you)' }}>+{(backupScore - s.score).toFixed(1)}</span> : <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>—</span>}
+                <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }} title={`points ${scoreTag}`}>{s.score.toFixed(1)}</span>
+                {sel && <span style={{ fontSize: 9, color: 'var(--you)' }}>✓</span>}
               </button>
             );
           })}
@@ -803,51 +810,77 @@ function SetupRow(props: {
   );
 }
 
+// Metrics that bank no direct points (their value is purely an effect) — so an
+// unopposed player on one of these can never sub in as a best-ball backup.
+const ZERO_BANK_METRICS = new Set(['QB:fg', 'K:neg', 'DEF:suppress']);
+
 // ── Score row (live / final) ──
 function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onPowerup, onAssignBackup }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
   week: number; clock: number; open: boolean; onToggle: () => void; phase: Phase; done: boolean;
   canSwap: boolean; onPowerup: () => void; onAssignBackup: () => void;
 }) {
-  // Unopposed → BACKUP: doesn't score in its own slot; its score can replace a
-  // starter (best-ball). Render a distinct backup row.
+  // Unopposed slot: render like a head-to-head row but with a blank box on the
+  // empty side. The present player is a best-ball backup — all the directions
+  // live in its own card. A player whose metric banks no points can't ever sub,
+  // so it isn't offered the backup option.
   if (slot.backup && (slot.you || slot.their)) {
     const mineBackup = !!slot.you;                 // your backup vs opponent's
     const be = (slot.you ?? slot.their)!;
     const bp = metricById(be.player.pos, be.metricId);
     const accent = mineBackup ? 'var(--warn)' : 'var(--opp)';
-    // Accrue live with this backup's own game clock; lock to the exact final
+    const canSub = !ZERO_BANK_METRICS.has(`${be.player.pos}:${be.metricId}`);
+    // Accrue live with this player's own game clock; lock to the exact final
     // once its game ends. Best-ball subbing only resolves in the Final view.
     const live = banksAtClock(slot.events, clock);
     const liveBackup = done ? (slot.backupScore ?? 0) : (mineBackup ? live.you : live.their);
     const resolved = phase === 'final';
-    const status = resolved ? (slot.backupUsed ? '✓ SUBBED IN' : 'NOT USED') : '● LIVE';
+    const status = canSub ? (resolved ? (slot.backupUsed ? '✓ SUBBED IN' : 'NOT USED') : '● LIVE') : '';
     const bEvents = slot.events.filter((e) => e.clock <= clock);
-    const info = (
-      <>
+    const align: 'left' | 'right' = mineBackup ? 'left' : 'right';
+    const badge = canSub ? (mineBackup ? 'BACKUP' : 'OPP BACKUP') : (mineBackup ? 'UNOPPOSED' : 'OPP UNOPP');
+    const directions = !canSub
+      ? `${bp?.name} banks no direct points, so it can't sub for a starter.`
+      : mineBackup
+        ? 'Unopposed — best-ball backup. Assign a starter to challenge; it subs in at FINAL only if it outscores them.'
+        : 'Unopposed — their best-ball backup.';
+
+    const playerCard = (
+      <div style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: `1px dashed ${accent}`, [mineBackup ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px' } as React.CSSProperties}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexDirection: mineBackup ? 'row' : 'row-reverse' }}>
-          <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{be.player.name}</span>
-          <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: accent, border: `1px solid ${accent}`, borderRadius: 3, padding: '1px 4px' }}>{mineBackup ? 'BACKUP' : 'OPP BACKUP'}</span>
+          <PlayerImg playerId={be.player.id} team={be.player.team} pos={be.player.pos} size={26} />
+          <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{be.player.name}</span>
+          <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: accent, border: `1px solid ${accent}`, borderRadius: 3, padding: '1px 4px', flex: 'none' }}>{badge}</span>
           <InjuryBadge week={week} slug={be.player.id} />
+          <span className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: accent, lineHeight: 1, [mineBackup ? 'marginLeft' : 'marginRight']: 'auto' } as React.CSSProperties}>{liveBackup.toFixed(1)}</span>
         </div>
-        <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3, textAlign: mineBackup ? 'left' : 'right' }}>{bp?.name} · unopposed — {mineBackup ? 'replaces an assigned starter at FINAL if it scores more' : 'their best-ball insurance'}</div>
-      </>
+        <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 4, textAlign: align }}>{bp?.name} · {bp?.tag}</div>
+        <div className="mono" style={{ fontSize: 8.5, color: 'var(--dimstrong)', marginTop: 4, textAlign: align, lineHeight: 1.5 }}>{directions}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, flexDirection: mineBackup ? 'row' : 'row-reverse' }}>
+          {status && <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: resolved && slot.backupUsed ? 'var(--you)' : 'var(--faint)' }}>{status}</span>}
+          {canSub && mineBackup && (
+            <button onClick={onAssignBackup} title="Choose which starter this backup challenges" className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '4px 8px' }}>ASSIGN ▾</button>
+          )}
+          {bEvents.length > 0 && (
+            <button onClick={onToggle} className="mono" style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)', background: 'none', border: 'none', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
+          )}
+        </div>
+      </div>
     );
+    const blankBox = (
+      <div style={{ flex: 1, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bd)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)' }}>— NO OPPONENT —</span>
+      </div>
+    );
+
     return (
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', border: `1px dashed ${accent}`, [mineBackup ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', flexDirection: mineBackup ? 'row' : 'row-reverse' } as React.CSSProperties}>
-          <PlayerImg playerId={be.player.id} team={be.player.team} pos={be.player.pos} size={26} />
-          <div style={{ flex: 1, minWidth: 0 }}>{info}</div>
-          <div style={{ textAlign: mineBackup ? 'right' : 'left' }}>
-            <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: accent, lineHeight: 1 }}>{liveBackup.toFixed(1)}</div>
-            <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: resolved && slot.backupUsed ? 'var(--you)' : 'var(--faint)', marginTop: 3 }}>{status}</div>
+        <div style={{ display: 'flex', alignItems: 'stretch', gap: 6 }}>
+          {mineBackup ? playerCard : blankBox}
+          <div style={{ width: 64, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)' }}>UNOPP</span>
           </div>
-          {bEvents.length > 0 && (
-            <button onClick={onToggle} className="mono" style={{ alignSelf: 'center', fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)', background: 'none', border: 'none', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
-          )}
-          {mineBackup && (
-            <button onClick={onAssignBackup} title="Choose which starter this backup replaces" className="mono" style={{ alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 8px' }}>ASSIGN ▾</button>
-          )}
+          {mineBackup ? blankBox : playerCard}
         </div>
         {open && bEvents.length > 0 && (
           <TwoColLog events={bEvents} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} />
