@@ -1479,36 +1479,39 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
     : subName
       ? <div className="mono" style={{ fontSize: 9.5, color: accent, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>⤴ {subName} scoring</div>
       : <div className="mono" style={{ fontSize: 9.5, color: 'var(--dimstrong)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>{stat}</div>;
-  const scoreBlock = (
-    <>
-      {suppressSpent != null ? (
-        <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--dim)', lineHeight: 1, textDecoration: 'line-through' }}>{suppressSpent.toFixed(1)}</div>
-      ) : halvedFrom != null ? (
-        <>
-          <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--faint)', lineHeight: 1, textDecoration: 'line-through' }}>{halvedFrom.toFixed(1)}</div>
-          <div className="grotesk" style={{ fontSize: isMobile ? 21 : 26, fontWeight: 700, color: 'var(--fx-stop)', lineHeight: 1, letterSpacing: '-0.02em', marginTop: 2 }}>{bank.toFixed(1)}</div>
-          <div className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-stop)', marginTop: 3 }}>÷2 SUPPRESSED</div>
-        </>
-      ) : (
-        <div className="grotesk" style={{ fontSize: isMobile ? 21 : 26, fontWeight: 700, color: negated ? 'var(--fx-nuke)' : accent, lineHeight: 1, letterSpacing: '-0.02em', textDecoration: negated ? 'line-through' : undefined, animation: nuked ? 'shake .5s' : undefined }}>{bank.toFixed(1)}</div>
-      )}
-      {coin != null && (
-        <div className="mono" title="drip coin earned so far this window" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: isMobile ? 2 : 5, fontSize: 9, fontWeight: 700, color: coin < 0 ? 'var(--opp)' : '#F2C14E' }}>
-          <CoinIcon size={10} /> {coin < 0 ? '' : '+'}{coin}
-        </div>
-      )}
-    </>
+  const bigNum = suppressSpent != null ? (
+    <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--dim)', lineHeight: 1, textDecoration: 'line-through' }}>{suppressSpent.toFixed(1)}</div>
+  ) : halvedFrom != null ? (
+    <div style={{ textAlign: 'center' }}>
+      <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--faint)', lineHeight: 1, textDecoration: 'line-through' }}>{halvedFrom.toFixed(1)}</div>
+      <div className="grotesk" style={{ fontSize: isMobile ? 24 : 26, fontWeight: 700, color: 'var(--fx-stop)', lineHeight: 1, letterSpacing: '-0.02em', marginTop: 2 }}>{bank.toFixed(1)}</div>
+      <div className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-stop)', marginTop: 3 }}>÷2 SUPPRESSED</div>
+    </div>
+  ) : (
+    <div className="grotesk" style={{ fontSize: isMobile ? 24 : 26, fontWeight: 700, color: negated ? 'var(--fx-nuke)' : accent, lineHeight: 1, letterSpacing: '-0.02em', textDecoration: negated ? 'line-through' : undefined, animation: nuked ? 'shake .5s' : undefined }}>{bank.toFixed(1)}</div>
   );
+  const coinEl = coin == null ? null : (
+    <div className="mono" title="drip coin earned so far this window" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, color: coin < 0 ? 'var(--opp)' : '#F2C14E' }}>
+      <CoinIcon size={10} /> {coin < 0 ? '' : '+'}{coin}
+    </div>
+  );
+  const scoreBlock = (<>{bigNum}{coinEl && <div style={{ marginTop: 5 }}>{coinEl}</div>}</>);
 
   if (isMobile) {
-    // Statline gets its own full-width row so names/stats have room and stay on
-    // one line, justified to the outer edge.
+    // Name on top, big 64 headshot left, metric + coin/score stacked beside it,
+    // statline full-width at the bottom (mirrored for the opponent).
     return (
-      <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '5px 7px', display: 'flex', flexDirection: 'column', gap: 3, cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
-        <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'center', gap: 7 }}>
-          <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={34} />
-          <div style={{ flex: 1, minWidth: 0, textAlign: edge }}>{nameRow}{metricChip}</div>
-          <div style={{ flex: 'none', textAlign: 'center' }}>{scoreBlock}</div>
+      <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '7px 8px', display: 'flex', flexDirection: 'column', gap: 5, cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
+        {nameRow}
+        <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'flex-start', gap: 8 }}>
+          <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={64} />
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4, alignItems: side === 'you' ? 'flex-start' : 'flex-end' }}>
+            {metricChip}
+            <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'baseline', gap: 6 }}>
+              {coinEl}
+              {bigNum}
+            </div>
+          </div>
         </div>
         {statLine}
       </div>
