@@ -267,9 +267,9 @@ const TEAM_ABBR = (p: Player) => p.team || 'NFL';
 function playText(p: Player, play: RawPlay): string {
   const t = TEAM_ABBR(p);
   if (play.td) {
-    if (play.kind === 'rush') return `${t} TD: ${p.name} ${play.yards}yd rush`;
-    if (play.kind === 'rec') return `${t} TD: ${p.name} ${play.yards}yd catch`;
-    return `${t} TD: ${p.name} ${play.yards}yd`;
+    if (play.kind === 'rush') return `${t}: ${p.name} ${play.yards}yd rush TD`;
+    if (play.kind === 'rec') return `${t}: ${p.name} ${play.yards}yd catch TD`;
+    return `${t}: ${p.name} ${play.yards}yd TD`;
   }
   if (play.kind === 'pass') return `${t}: ${p.name} ${play.yards}yd pass`;
   if (play.kind === 'rush') return `${t}: ${p.name} +${play.yards} rush`;
@@ -281,7 +281,7 @@ function playText(p: Player, play: RawPlay): string {
   if (play.kind === 'sack') return `${t} D: sack`;
   if (play.kind === 'int') return `${t} D: interception`;
   if (play.kind === 'fumrec') return `${t} D: fumble recovered`;
-  if (play.kind === 'dst_td') return `${t} D: TD`;
+  if (play.kind === 'dst_td') return `${t} D: defensive TD`;
   if (play.kind === 'safety') return `${t} D: safety`;
   return `${t}: ${p.name} incomplete`;
 }

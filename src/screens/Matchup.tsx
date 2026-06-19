@@ -1014,70 +1014,25 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
     const mineBackup = !!slot.you;                 // your backup vs opponent's
     const be = (slot.you ?? slot.their)!;
     const bp = metricById(be.player.pos, be.metricId);
-    const accent = mineBackup ? 'var(--warn)' : 'var(--opp)';
     const canSub = !ZERO_BANK_METRICS.has(`${be.player.pos}:${be.metricId}`);
     // A suppress DST is unopposed but not a useless backup — its earn score is a
     // field-wide halving threshold. Show that earn crossed out.
     const suppressSpent = mineBackup ? slot.suppressSpentYou : slot.suppressSpentTheir;
     const isSuppress = suppressSpent != null;
-    // Accrue live with this player's own game clock; lock to the exact final
-    // once its game ends. Best-ball subbing only resolves in the Final view.
+    // The unopposed slot renders with the SAME ScoreCard as a head-to-head slot
+    // (headshot, metric chip, statline, big score) plus an UNOPPOSED chip — a
+    // blank box sits on the empty side.
     const live = banksAtClock(slot.events, clock);
     const liveBackup = done ? (slot.backupScore ?? 0) : (mineBackup ? live.you : live.their);
-    const resolved = phase === 'final';
-    const status = canSub ? (resolved ? (slot.backupUsed ? '✓ SUBBED IN' : 'NOT USED') : '● LIVE') : '';
     const bEvents = slot.events.filter((e) => e.clock <= clock);
-    const align: 'left' | 'right' = mineBackup ? 'left' : 'right';
-    const badge = canSub ? (mineBackup ? 'BACKUP' : 'OPP BACKUP') : (mineBackup ? 'UNOPPOSED' : 'OPP UNOPP');
-    const directions = isSuppress
-      ? `Banks 0 itself — its ${(suppressSpent ?? 0).toFixed(1)} earn halves every opposing slot (any window) scoring at or below it.`
-      : !canSub
-        ? `${bp?.name} banks no direct points, so it can't sub for a starter.`
-        : mineBackup
-          ? 'Unopposed — best-ball backup. Assign a starter to challenge; it subs in at FINAL only if it outscores them.'
-          : 'Unopposed — their best-ball backup.';
-
-    // Mirror the head-to-head ScoreCard exactly so the score column lines up:
-    // big headshot, content, then the score as a separate far-edge item.
-    const playerCard = (
-      <div style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: `1px dashed ${accent}`, [mineBackup ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', display: 'flex', flexDirection: mineBackup ? 'row' : 'row-reverse', gap: 11, alignItems: 'center' } as React.CSSProperties}>
-        <PlayerImg playerId={be.player.id} team={be.player.team} pos={be.player.pos} size={64} />
-        <div style={{ flex: 1, minWidth: 0, textAlign: align }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexDirection: mineBackup ? 'row' : 'row-reverse' }}>
-            <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{be.player.name}</span>
-            <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: accent, border: `1px solid ${accent}`, borderRadius: 3, padding: '1px 4px', flex: 'none' }}>{badge}</span>
-            <InjuryBadge week={week} slug={be.player.id} />
-          </div>
-          <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, marginTop: 5, padding: '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)` }}>
-            <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: accent, letterSpacing: '0.01em', whiteSpace: 'nowrap' }}>{bp?.name}</span>
-            <span className="mono" style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.1em', color: accent, opacity: 0.85, whiteSpace: 'nowrap' }}>{bp?.tag}</span>
-          </div>
-          <div className="mono" style={{ fontSize: 8.5, color: 'var(--dimstrong)', marginTop: 4, textAlign: align, lineHeight: 1.5 }}>{directions}</div>
-          {(status || (canSub && mineBackup)) && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, flexDirection: mineBackup ? 'row' : 'row-reverse' }}>
-              {status && <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: resolved && slot.backupUsed ? 'var(--you)' : 'var(--faint)' }}>{status}</span>}
-              {canSub && mineBackup && (
-                <button onClick={onAssignBackup} title="Choose which starter this backup challenges" className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '4px 8px' }}>ASSIGN ▾</button>
-              )}
-            </div>
-          )}
-        </div>
-        <div style={{ flex: 'none', alignSelf: 'center', textAlign: 'center' }}>
-          {isSuppress ? (
-            // Earn accrues live; it's only spent (crossed out) once the game ends.
-            (done || phase === 'final') ? (
-              <>
-                <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, color: 'var(--dim)', lineHeight: 1, textDecoration: 'line-through' }}>{(suppressSpent ?? 0).toFixed(1)}</div>
-                <div className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-stop)', marginTop: 3 }}>SUPPRESS</div>
-              </>
-            ) : (
-              <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, color: 'var(--dim)', lineHeight: 1, letterSpacing: '-0.02em' }}>{liveBackup.toFixed(1)}</div>
-            )
-          ) : (
-            <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, color: accent, lineHeight: 1, letterSpacing: '-0.02em' }}>{liveBackup.toFixed(1)}</div>
-          )}
-        </div>
-      </div>
+    const chip = canSub ? (mineBackup ? 'BACKUP' : 'OPP BACKUP') : (mineBackup ? 'UNOPPOSED' : 'OPP UNOPP');
+    const showSuppress = isSuppress && (done || phase === 'final') ? (suppressSpent ?? undefined) : undefined;
+    const card = (
+      <ScoreCard
+        side={mineBackup ? 'you' : 'their'} player={be.player} week={week} clock={clock}
+        metricName={bp?.name ?? ''} tag={bp?.tag ?? ''} bank={liveBackup} onClick={onToggle}
+        chip={chip} suppressSpent={showSuppress}
+      />
     );
     const blankBox = (
       <div style={{ flex: 1, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bd)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1088,15 +1043,18 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
     return (
       <div>
         <div style={{ display: 'flex', alignItems: 'stretch', gap: 6 }}>
-          {mineBackup ? playerCard : blankBox}
-          {/* center column — same 64px as head-to-head, with the LOG toggle */}
+          {mineBackup ? card : blankBox}
+          {/* center column — same 64px as head-to-head: UNOPP, assign, log */}
           <div style={{ width: 64, flex: '0 0 64px', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
             <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 5px' }}>UNOPP</span>
+            {canSub && mineBackup && (
+              <button onClick={onAssignBackup} title="Choose which starter this backup challenges" className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 3, padding: '3px 5px' }}>ASSIGN</button>
+            )}
             {slot.events.length > 0 && (
               <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
             )}
           </div>
-          {mineBackup ? blankBox : playerCard}
+          {mineBackup ? blankBox : card}
         </div>
         {open && (
           <TwoColLog events={bEvents} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} />
@@ -1213,8 +1171,8 @@ function fmtStat(pos: Pos, s: StatLine): string {
   return '—';
 }
 
-function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, fx, subName, suppressSpent, negated, halvedFrom }: {
-  side: 'you' | 'their'; player: Player; week: number; clock: number; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; suppressSpent?: number; negated?: boolean; halvedFrom?: number;
+function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, fx, subName, suppressSpent, negated, halvedFrom, chip }: {
+  side: 'you' | 'their'; player: Player; week: number; clock: number; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string;
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
   const nuked = fx === 'nuke' && bank === 0 && !subName && suppressSpent == null;
@@ -1226,6 +1184,7 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
       <div style={{ flex: 1, minWidth: 0, textAlign: side === 'you' ? 'left' : 'right' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexDirection: side === 'you' ? 'row' : 'row-reverse' }}>
           <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>
+          {chip && <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: accent, border: `1px solid ${accent}`, borderRadius: 3, padding: '1px 4px', flex: 'none' }}>{chip}</span>}
           <InjuryBadge week={week} slug={player.id} />
           <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{player.team}</span>
         </div>
