@@ -8,7 +8,7 @@ import { WINDOWS, METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById } from '../data/powerups';
 import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
-  windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
+  windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
 } from '../engine/matchup';
 import { fmtClock, statlineAt, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
@@ -17,6 +17,27 @@ import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx } from '../types';
 const YOU = 'happy-campers';
 const TICK_MS = 700;
 const TICK_SECONDS = 20;
+
+// Drip coin — an actual minted-coin glyph (gold disc with the ◈ house mark),
+// so coin reads as currency wherever it appears instead of a bare symbol.
+function CoinIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden style={{ display: 'inline-block', verticalAlign: 'text-bottom', flex: 'none' }}>
+      <circle cx="8" cy="8" r="7" fill="#F2C14E" stroke="#9A6B12" strokeWidth="1.4" />
+      <circle cx="8" cy="8" r="5.1" fill="none" stroke="#C9952B" strokeWidth="0.9" />
+      <path d="M8 4.6 L10.4 8 L8 11.4 L5.6 8 Z" fill="#9A6B12" />
+    </svg>
+  );
+}
+
+// A prominent coin-earn pill for the play-by-play log.
+function CoinPill({ amt }: { amt: number }) {
+  return (
+    <span className="mono" title="drip coin earned" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9.5, fontWeight: 700, color: '#F2C14E', background: 'color-mix(in srgb, #F2C14E 16%, transparent)', border: '1px solid color-mix(in srgb, #F2C14E 50%, transparent)', borderRadius: 4, padding: '0 4px', marginLeft: 5, verticalAlign: 'middle' }}>
+      <CoinIcon size={10} /> +{amt}
+    </span>
+  );
+}
 
 export function Matchup({ week, initialPhase }: { week: number; initialPhase: Phase }) {
   const { navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, setDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp } = useStore();
@@ -83,7 +104,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   );
 
   // Drip coin: weekly stipend + unopposed bounty + events of note + turnover swing.
-  const earnings = useMemo(() => weekEarnings(resolved, 'you', week, buffs['turnover-boost'] ? 25 : 10), [resolved, week, buffsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const turnoverCoin = buffs['turnover-boost'] ? 25 : 10;
+  const earnings = useMemo(() => weekEarnings(resolved, 'you', week, turnoverCoin), [resolved, week, buffsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const weekCoins = earnings.total;
   const [earnOpen, setEarnOpen] = useState(false);
   useEffect(() => {
@@ -173,6 +195,13 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     for (const b of resolved.bonuses ?? []) y += b.points; // armed-buff payouts
     return { youTotal: Math.round(y * 10) / 10, themTotal: Math.round(t * 10) / 10 };
   }, [resolved, winClocks, phase]);
+
+  // Every window has played out to its own end — the board is effectively final.
+  const allWindowsDone = useMemo(() => {
+    const ids = Object.keys(winMax);
+    return ids.length > 0 && ids.every((id) => (winClocks[id] ?? 0) >= (winMax[id] ?? Infinity));
+  }, [winClocks, winMax]);
+  const boardFinal = phase === 'final' || (phase === 'live' && allWindowsDone);
 
   const filledCount = Object.values(picks).filter((p) => p.metricId).length;
   const totalSlots = totalSlotsWith(extraSlots);
@@ -273,7 +302,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, whiteSpace: 'nowrap' }}>
           <button onClick={() => setEarnOpen(true)} title="Drip Coin — tap for earning opportunities" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 9px', cursor: 'pointer' }}>
-            <span style={{ color: 'var(--fx-mult)', fontSize: 12 }}>◈</span>
+            <CoinIcon size={13} />
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{coins}</span>
             {weekCoins > 0 && <span style={{ fontSize: 8.5, color: 'var(--fx-streak)' }}>+{weekCoins}</span>}
           </button>
@@ -317,6 +346,29 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
         <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={!rosterOpen.you} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} />
 
         <main style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
+          {boardFinal && (() => {
+            const won = youTotal > themTotal, tie = Math.abs(youTotal - themTotal) < 0.1;
+            const c = tie ? 'var(--dim)' : won ? 'var(--you)' : 'var(--opp)';
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderTop: `3px solid ${c}`, borderRadius: 6, padding: '14px 18px', marginBottom: 14 }}>
+                <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', color: c }}>WEEK {week} {tie ? 'TIED' : won ? '— YOU WON' : '— YOU LOST'}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div className="grotesk" style={{ fontSize: 38, fontWeight: 700, lineHeight: 1, color: 'var(--you)' }}>{youTotal.toFixed(1)}</div>
+                    <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)', marginTop: 4 }}>{you.name.toUpperCase()}</div>
+                  </div>
+                  <span className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>VS</span>
+                  <div style={{ textAlign: 'center' }}>
+                    <div className="grotesk" style={{ fontSize: 38, fontWeight: 700, lineHeight: 1, color: 'var(--opp)' }}>{themTotal.toFixed(1)}</div>
+                    <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)', marginTop: 4 }}>{opp.name.slice(0, 16).toUpperCase()}</div>
+                  </div>
+                </div>
+                <button onClick={() => navigate({ name: 'final', week })} className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--bg)', background: 'var(--you)', border: 'none', padding: '7px 12px', borderRadius: 4, marginTop: 2 }}>
+                  WEEK RESULT →
+                </button>
+              </div>
+            );
+          })()}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 18, marginBottom: 10 }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5, flexWrap: 'wrap' }}>
@@ -368,6 +420,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 youPools={youPools}
                 inventory={inventory}
                 onAssign={assignFromRoster}
+                turnoverCoin={turnoverCoin}
               />
             ))}
           </div>
@@ -438,7 +491,7 @@ function EarningsModal({ earnings, onClose }: { earnings: { stipend: number; uno
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}><span style={{ color: 'var(--fx-mult)' }}>◈</span> Drip Coin — Earning</div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6 }}><CoinIcon size={15} /> Drip Coin — Earning</div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>COIN IS EARNED ON EVENTS OF NOTE — RISKIER PLAYS PAY MORE</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
@@ -790,8 +843,9 @@ function WindowSection(props: {
   youPools: Record<WindowId, Player[]>;
   inventory: Record<string, number>;
   onAssign: (id: string) => void;
+  turnoverCoin: number;
 }) {
-  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, setSelSlot, pickMetricFor, clearSlot, openPBP, togglePBP, onAssign, inventory } = props;
+  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, setSelSlot, pickMetricFor, clearSlot, openPBP, togglePBP, onAssign, inventory, turnoverCoin } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
@@ -927,7 +981,7 @@ function WindowSection(props: {
             );
           }
           return (
-            <ScoreRow key={key} slot={s} week={week} clock={clock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} canSwap={canSwap && !!s.you} onPowerup={() => onPowerup(key)} onAssignBackup={() => onAssignBackup(key)} />
+            <ScoreRow key={key} slot={s} week={week} clock={clock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} canSwap={canSwap && !!s.you} onPowerup={() => onPowerup(key)} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} />
           );
         })}
       </div>
@@ -1039,11 +1093,21 @@ function BuffFxRow({ side, fx, stake }: { side: 'you' | 'their'; fx?: BuffFx[]; 
   return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 3, justifyContent: side === 'you' ? 'flex-start' : 'flex-end' }}>{items}</div>;
 }
 
+// Drip coin a spot earned, shown as a stat at FINAL.
+function SpotCoin({ amt, align }: { amt: number; align: 'left' | 'right' }) {
+  const neg = amt < 0;
+  return (
+    <span className="mono" title="drip coin this spot earned" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9, fontWeight: 700, color: neg ? 'var(--opp)' : '#F2C14E', justifyContent: align === 'left' ? 'flex-start' : 'flex-end' }}>
+      <CoinIcon size={11} /> {neg ? '' : '+'}{amt} earned
+    </span>
+  );
+}
+
 // ── Score row (live / final) ──
-function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onPowerup, onAssignBackup }: {
+function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onPowerup, onAssignBackup, turnoverCoin }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
   week: number; clock: number; open: boolean; onToggle: () => void; phase: Phase; done: boolean;
-  canSwap: boolean; onPowerup: () => void; onAssignBackup: () => void;
+  canSwap: boolean; onPowerup: () => void; onAssignBackup: () => void; turnoverCoin: number;
 }) {
   // Unopposed slot: render like a head-to-head row but with a blank box on the
   // empty side. The present player is a best-ball backup — all the directions
@@ -1096,6 +1160,11 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
           {mineBackup ? blankBox : card}
         </div>
         {(phase === 'final' || done) && <BuffFxRow side={mineBackup ? 'you' : 'their'} fx={mineBackup ? slot.youBuffFx : slot.theirBuffFx} />}
+        {(phase === 'final' || done) && (
+          <div style={{ display: 'flex', justifyContent: mineBackup ? 'flex-start' : 'flex-end', marginTop: 4 }}>
+            <SpotCoin amt={slotCoin(slot, mineBackup ? 'you' : 'their', week, turnoverCoin)} align={mineBackup ? 'left' : 'right'} />
+          </div>
+        )}
         {open && (
           <TwoColLog events={bEvents} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} youCoin={mineBackup ? metricCoin(be.player.pos, be.metricId) : 0} theirCoin={mineBackup ? 0 : metricCoin(be.player.pos, be.metricId)} />
         )}
@@ -1178,6 +1247,12 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
       )}
       {final && <BuffFxRow side="you" fx={slot.youBuffFx} stake={slot.youStake} />}
       {final && <BuffFxRow side="their" fx={slot.theirBuffFx} />}
+      {final && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+          <SpotCoin amt={slotCoin(slot, 'you', week, turnoverCoin)} align="left" />
+          <SpotCoin amt={slotCoin(slot, 'their', week, turnoverCoin)} align="right" />
+        </div>
+      )}
       {open && <TwoColLog events={visibleEvents} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} youCoin={metricCoin(slot.you.player.pos, slot.you.metricId)} theirCoin={metricCoin(slot.their.player.pos, slot.their.metricId)} />}
     </div>
   );
@@ -1190,14 +1265,17 @@ function fmtStat(pos: Pos, s: StatLine): string {
     return p.join(' · ');
   }
   if (pos === 'RB') {
-    const p = [`${s.carries} car`, `${s.rushYds} yd`];
-    if (s.rec) p.push(`${s.rec} rec`);
-    const td = s.rushTds + s.recTds; if (td) p.push(`${td} TD`);
+    // Full line: rushing AND receiving, every week. TDs split when both happen.
+    const p = [`${s.carries} car`, `${s.rushYds} rush yd`, `${s.rec}/${s.targets} rec`, `${s.recYds} rec yd`];
+    const td = s.rushTds + s.recTds;
+    if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
     return p.join(' · ');
   }
   if (pos === 'WR' || pos === 'TE') {
-    const p = [`${s.rec}/${s.targets} rec`, `${s.recYds} yd`];
-    if (s.recTds) p.push(`${s.recTds} TD`);
+    const p = [`${s.rec}/${s.targets} rec`, `${s.recYds} rec yd`];
+    if (s.carries) p.push(`${s.carries} car`, `${s.rushYds} rush yd`); // jet sweeps / end-arounds
+    const td = s.rushTds + s.recTds;
+    if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
     return p.join(' · ');
   }
   if (pos === 'K') return `${s.fg} FG · ${s.xp} XP`;
@@ -1240,7 +1318,7 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
           ? <div className="mono" style={{ fontSize: 9, color: 'var(--fx-stop)', marginTop: 5, fontWeight: 700 }}>✕ {suppressSpent.toFixed(1)} spent on SUPPRESS</div>
           : subName
             ? <div className="mono" style={{ fontSize: 9.5, color: accent, marginTop: 5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>⤴ {subName} scoring</div>
-            : <div className="mono" style={{ fontSize: 9.5, color: 'var(--dimstrong)', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stat}</div>}
+            : <div className="mono" style={{ fontSize: 9.5, color: 'var(--dimstrong)', marginTop: 5, lineHeight: 1.4 }}>{stat}</div>}
       </div>
       <div style={{ flex: 'none', alignSelf: 'center', textAlign: 'center' }}>
         {suppressSpent != null ? (
@@ -1305,7 +1383,7 @@ function TwoColLog({ events, youName, theirName, gameLabel, youCoin = 0, theirCo
           {actionText(ev.play)}
           {ev.delta > 0 && <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: mine ? 'var(--you)' : 'var(--opp)', marginLeft: 5 }}>+{ev.delta.toFixed(1)}</span>}
           {ev.mult && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--fx-mult)', marginLeft: 4 }}>×{ev.mult.toFixed(2)}</span>}
-          {ev.coin && (mine ? youCoin : theirCoin) > 0 && <span className="mono" title="drip coin earned" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--fx-mult)', marginLeft: 5 }}>◈ +{mine ? youCoin : theirCoin}</span>}
+          {ev.coin && (ev.coinAmt ?? (mine ? youCoin : theirCoin)) > 0 && <CoinPill amt={ev.coinAmt ?? (mine ? youCoin : theirCoin)} />}
         </div>
         {ev.effect && (
           <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: FX_COLOR[ev.effect.type] ?? 'var(--dim)', marginTop: 1 }}>{ev.effect.text}</div>

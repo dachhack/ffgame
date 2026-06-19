@@ -35,15 +35,15 @@ const POS_TACTICAL: Theme['pos'] = {
 
 export const THEMES: Record<ThemeName, Theme> = {
   tactical: {
-    bg: '#161510', surface: '#1F1D17', sh: '#262420', bd: '#26241B', bdh: '#34322A',
-    text: '#F2F0E5', dim: '#8C8A7D', faint: '#5A584F', mid: '#A09E91', dimstrong: '#D8D6CB',
+    bg: '#24221A', surface: '#2F2C23', sh: '#38352B', bd: '#3A3830', bdh: '#494638',
+    text: '#F4F2E8', dim: '#9C9A8C', faint: '#6C6A5E', mid: '#ADAB9E', dimstrong: '#DEDCD1',
     you: '#36E59B', opp: '#FF5266', warn: '#FFB23B',
     fx: { nuke: '#FF4F62', erase: '#FF4F62', reset: '#FF9043', streak: '#B89AFF', mult: '#6AB6FF', compression: '#7FE38A', stop: '#B5B3A6', sys: '#8C8A7D' },
     pos: POS_TACTICAL,
   },
   neon: {
-    bg: '#14111F', surface: '#1D1B2A', sh: '#26233A', bd: '#2A2840', bdh: '#3A3854',
-    text: '#EFECFA', dim: '#9290B0', faint: '#615F7A', mid: '#B3B0C9', dimstrong: '#CDCAE0',
+    bg: '#221E33', surface: '#2C2941', sh: '#363250', bd: '#3A3858', bdh: '#4A4870',
+    text: '#F1EEFB', dim: '#A29FC0', faint: '#726F8C', mid: '#BFBCD6', dimstrong: '#D6D3E8',
     you: '#34E5D9', opp: '#FF3D88', warn: '#FFD24A',
     fx: { nuke: '#FF3D88', erase: '#FF3D88', reset: '#FF7E5C', streak: '#C29BFF', mult: '#34E5D9', compression: '#7FE38A', stop: '#B0AEC6', sys: '#9290B0' },
     pos: {
@@ -56,8 +56,8 @@ export const THEMES: Record<ThemeName, Theme> = {
     },
   },
   prime: {
-    bg: '#16140E', surface: '#1F1C14', sh: '#2A271C', bd: '#2A271C', bdh: '#3B362A',
-    text: '#F2EEDF', dim: '#9F9582', faint: '#615A4B', mid: '#BFB5A0', dimstrong: '#D9D1BC',
+    bg: '#252116', surface: '#302C20', sh: '#3B3527', bd: '#3C3729', bdh: '#4D4737',
+    text: '#F4F0E2', dim: '#ABA18D', faint: '#6F6857', mid: '#C7BDA8', dimstrong: '#DFD7C3',
     you: '#E2B254', opp: '#FF6E5C', warn: '#5BAEFF',
     fx: { nuke: '#FF6E5C', erase: '#FF6E5C', reset: '#E29D4E', streak: '#B69AE3', mult: '#5BAEFF', compression: '#6FCC8A', stop: '#A89E89', sys: '#7A7263' },
     pos: {
