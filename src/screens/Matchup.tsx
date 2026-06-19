@@ -66,6 +66,11 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const [backupMenu, setBackupMenu] = useState<{ key: string } | null>(null);
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   const [invOpen, setInvOpen] = useState(false);
+  const [pendingApply, setPendingApply] = useState<string | null>(null); // a targeted powerup awaiting a spot tap
+  function applyToSpot(key: string) {
+    if (pendingApply === 'double-or-nothing') setDoubleOrNothing(week, key);
+    setPendingApply(null);
+  }
   // Rosters expand in setup (you need them to set lineups), collapse otherwise.
   const [rosterOpen, setRosterOpen] = useState<{ you: boolean; their: boolean }>(() => ({ you: initialPhase === 'setup', their: initialPhase === 'setup' }));
   const toggleRoster = (side: 'you' | 'their') => setRosterOpen((o) => ({ ...o, [side]: !o[side] }));
@@ -414,7 +419,12 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               </div>
               <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{headline}</div>
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, maxWidth: 520, lineHeight: 1.5 }}>{subhead}</div>
-              {phase === 'setup' ? (() => {
+              {phase === 'setup' ? (pendingApply ? (
+                <div className="mono" style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))', border: '1px solid var(--warn)', borderRadius: 6, padding: '7px 11px' }}>
+                  <span>{powerupById(pendingApply)?.icon} Tap a spot to apply {powerupById(pendingApply)?.name}</span>
+                  <button onClick={() => setPendingApply(null)} className="mono" style={{ background: 'none', border: 'none', color: 'var(--dim)', fontWeight: 700, fontSize: 9, letterSpacing: '0.1em' }}>CANCEL</button>
+                </div>
+              ) : (() => {
                 const ownedN = POWERUPS.filter((p) => (inventory[p.id] ?? 0) > 0 || buffs[p.id]).length;
                 const armedN = Object.keys(buffs).filter((id) => buffs[id]).length;
                 return (
@@ -422,13 +432,13 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                     ◈ POWER-UPS{ownedN > 0 ? ` · ${ownedN}` : ''}{armedN > 0 ? ` · ${armedN} ARMED` : ''}
                   </button>
                 );
-              })() : (
+              })()) : (
                 <BuffStrip phase={phase} inventory={inventory} armed={buffs} bonuses={resolved.bonuses} onArm={(id) => armBuff(week, id)} />
               )}
               <TargetPanel
                 phase={phase} week={week} inventory={inventory} aw={aw} windows={resolved.windows} oppPicks={oppPicks}
                 byes={byes} winClocks={winClocks}
-                onStake={(k) => setDoubleOrNothing(week, k)} onSpy={(k, r) => setSpy(week, k, r)} onByeSteal={(k, pid) => applyByeSteal(week, k, pid)}
+                onSpy={(k, r) => setSpy(week, k, r)} onByeSteal={(k, pid) => applyByeSteal(week, k, pid)}
                 onMulligan={(k, c, m) => applyMulligan(week, k, c, m)} onEmp={(w, c) => applyEmp(week, w, c)}
               />
             </div>
@@ -469,6 +479,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 backups={backupAssign}
                 slotName={slotName}
                 armed={buffs}
+                applyMode={pendingApply}
+                onApplyToSpot={applyToSpot}
               />
             ))}
           </div>
@@ -542,7 +554,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
         );
       })()}
 
-      {invOpen && <InventoryModal inventory={inventory} armed={buffs} onArm={(id) => armBuff(week, id)} onDisarm={(id) => disarmBuff(week, id)} onClose={() => setInvOpen(false)} />}
+      {invOpen && <InventoryModal inventory={inventory} armed={buffs} onArm={(id) => armBuff(week, id)} onDisarm={(id) => disarmBuff(week, id)} onApply={(id) => { setPendingApply(id); setInvOpen(false); }} onClose={() => setInvOpen(false)} />}
 
       {earnOpen && <EarningsModal earnings={earnings} onReset={() => { resetDripCoin(); setEarnOpen(false); }} onClose={() => setEarnOpen(false)} />}
     </>
@@ -831,10 +843,13 @@ const POWERUP_HINT: Record<string, string> = {
   'emp': 'Fire on a window during LIVE.',
 };
 
+// Power-ups that target one of YOUR spots (vs. whole-field buffs that just arm).
+const SPOT_APPLY = new Set(['double-or-nothing']);
+
 // Setup inventory modal: explains every owned powerup and arms/disarms team buffs.
-function InventoryModal({ inventory, armed, onArm, onDisarm, onClose }: {
+function InventoryModal({ inventory, armed, onArm, onDisarm, onApply, onClose }: {
   inventory: Record<string, number>; armed: Record<string, boolean>;
-  onArm: (id: string) => void; onDisarm: (id: string) => void; onClose: () => void;
+  onArm: (id: string) => void; onDisarm: (id: string) => void; onApply: (id: string) => void; onClose: () => void;
 }) {
   const owned = POWERUPS.filter((p) => (inventory[p.id] ?? 0) > 0 || armed[p.id]);
   return (
@@ -865,11 +880,15 @@ function InventoryModal({ inventory, armed, onArm, onDisarm, onClose }: {
                 <div style={{ fontSize: 10, lineHeight: 1.45, color: 'var(--dim)', marginTop: 2 }}>{p.blurb}</div>
                 {!buff && POWERUP_HINT[p.id] && <div className="mono" style={{ fontSize: 8.5, color: 'var(--warn)', marginTop: 3 }}>↳ {POWERUP_HINT[p.id]}</div>}
               </div>
-              {buff && (
+              {buff ? (
                 <button onClick={() => (on ? onDisarm(p.id) : onArm(p.id))} disabled={!on && qty <= 0} className="mono" style={{ flex: 'none', alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', border: `1px solid ${on ? 'var(--opp)' : 'var(--you)'}`, color: on ? 'var(--opp)' : 'var(--on-accent)', background: on ? 'var(--surface)' : 'var(--you)' }}>
                   {on ? 'DISARM' : 'ARM'}
                 </button>
-              )}
+              ) : SPOT_APPLY.has(p.id) ? (
+                <button onClick={() => onApply(p.id)} disabled={qty <= 0} className="mono" style={{ flex: 'none', alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', border: '1px solid var(--warn)', color: 'var(--on-accent)', background: 'var(--warn)' }}>
+                  APPLY
+                </button>
+              ) : null}
             </div>
           );
         })}
@@ -885,10 +904,10 @@ function TargetPanel(props: {
   phase: Phase; week: number; inventory: Record<string, number>;
   aw?: { doubleOrNothing?: string; spy?: { slotKey: string; reveal: 'player' | 'metric' }; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>> };
   windows: ReturnType<typeof buildMatchup>['windows']; oppPicks: Record<string, Pick>; byes: Player[]; winClocks: Record<string, number>;
-  onStake: (k: string) => void; onSpy: (k: string, reveal: 'player' | 'metric') => void; onByeSteal: (k: string, pid: string) => void;
+  onSpy: (k: string, reveal: 'player' | 'metric') => void; onByeSteal: (k: string, pid: string) => void;
   onMulligan: (k: string, atClock: number, m: string) => void; onEmp: (w: WindowId, clock: number) => void;
 }) {
-  const { phase, inventory, aw, windows, oppPicks, byes, winClocks, onStake, onSpy, onByeSteal, onMulligan, onEmp } = props;
+  const { phase, inventory, aw, windows, oppPicks, byes, winClocks, onSpy, onByeSteal, onMulligan, onEmp } = props;
   const [byePid, setByePid] = useState(''); const [byeKey, setByeKey] = useState('');
   const [mulKey, setMulKey] = useState(''); const [mulMet, setMulMet] = useState('');
   const [spySlot, setSpySlot] = useState('');
@@ -912,7 +931,6 @@ function TargetPanel(props: {
 
   if (phase === 'setup') {
     if (aw?.doubleOrNothing) rows.push(Row('⚖️ Double/Nothing', <span className="mono" style={{ fontSize: 9.5, color: 'var(--you)' }}>staked {yourH2H.find((s) => s.key === aw.doubleOrNothing)?.name ?? '—'}</span>));
-    else if (has('double-or-nothing')) rows.push(Row('⚖️ Double/Nothing', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{yourH2H.map((s) => <button key={s.key} style={btn} onClick={() => onStake(s.key)}>{s.name}</button>)}</div>));
     if (aw?.byeSteal) rows.push(Row('🪂 Bye Steal', <span className="mono" style={{ fontSize: 9.5, color: 'var(--you)' }}>fielded {getPlayer(aw.byeSteal.playerId)?.name ?? '—'}</span>));
     else if (has('bye-steal') && byes.length > 0 && emptySlots.length > 0) rows.push(Row('🪂 Bye Steal', <>
       <select style={sel} value={byePid} onChange={(e) => setByePid(e.target.value)}><option value="">player…</option>{byes.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.pos})</option>)}</select>
@@ -1021,8 +1039,10 @@ function WindowSection(props: {
   backups: Record<string, string>;
   slotName: Record<string, string>;
   armed: Record<string, boolean>;
+  applyMode: string | null;
+  onApplyToSpot: (key: string) => void;
 }) {
-  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed } = props;
+  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, applyMode, onApplyToSpot } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
@@ -1152,6 +1172,7 @@ function WindowSection(props: {
             return (
               <SetupRow
                 key={key} slotKeyStr={key} winId={w.id} week={week} pick={picks[key]} selected={selSlot === key} inventory={inventory} armed={armed}
+                applyMode={applyMode} onApplyToSpot={() => onApplyToSpot(key)}
                 onOpenPicker={() => onOpenPicker(key, w.id)} onPickMetric={(m) => pickMetricFor(key, m)}
                 onDropPlayer={(id) => onAssign(id)}
               />
@@ -1169,9 +1190,10 @@ function WindowSection(props: {
 // ── Setup row ──
 function SetupRow(props: {
   slotKeyStr: string; winId: WindowId; week: number; pick?: Pick; selected: boolean; inventory: Record<string, number>; armed: Record<string, boolean>;
+  applyMode: string | null; onApplyToSpot: () => void;
   onOpenPicker: () => void; onPickMetric: (m: string) => void; onDropPlayer: (id: string) => void;
 }) {
-  const { winId, week, pick, selected, inventory, armed, onOpenPicker, onPickMetric, onDropPlayer } = props;
+  const { winId, week, pick, selected, inventory, armed, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onDropPlayer } = props;
   const isMobile = useIsMobile();
   const gridCols = '1fr 1fr'; // no center gutter — your spot vs the sealed opponent
   const rowGap = isMobile ? 5 : 8;
@@ -1179,6 +1201,13 @@ function SetupRow(props: {
   const metric = player && pick?.metricId ? metricById(player.pos, pick.metricId) : null;
   // Armed team buffs that act on THIS spot — surfaced as a highlight on the card.
   const spotBuffs = player ? Object.keys(armed).filter((id) => armed[id] && buffAppliesToSpot(id, player.pos, pick?.metricId ?? null)) : [];
+  // Apply mode: a targeted powerup is awaiting a spot. Double or Nothing can be
+  // staked on any filled spot.
+  const applyEligible = applyMode === 'double-or-nothing' && !!player;
+  const applyHi = !!applyMode && applyEligible;
+  const applyDim = !!applyMode && !applyEligible;
+  const cardTap = applyMode ? (applyEligible ? onApplyToSpot : () => {}) : onOpenPicker;
+  const applyPu = applyMode ? powerupById(applyMode) : null;
   // "Change metric" re-opens the picker for an already-set spot without dropping
   // the player. Reset whenever the slot's player changes (incl. top-down shifts).
   const [editing, setEditing] = useState(false);
@@ -1194,10 +1223,15 @@ function SetupRow(props: {
         <div
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); onDropPlayer(e.dataTransfer.getData('text/plain')); }}
-          style={{ minWidth: 0, background: selected ? 'var(--sh)' : 'var(--surface)', border: `1px solid ${selected ? 'var(--you)' : 'var(--bd)'}`, borderLeft: '3px solid var(--you)', borderRadius: 4, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 7 }}
+          style={{ position: 'relative', minWidth: 0, background: applyHi ? 'color-mix(in srgb, var(--warn) 12%, var(--surface))' : selected ? 'var(--sh)' : 'var(--surface)', border: `1px ${applyHi ? 'dashed var(--warn)' : `solid ${selected ? 'var(--you)' : 'var(--bd)'}`}`, borderLeft: applyHi ? '3px dashed var(--warn)' : '3px solid var(--you)', borderRadius: 4, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 7, opacity: applyDim ? 0.45 : 1 }}
         >
+          {applyHi && (
+            <div onClick={onApplyToSpot} style={{ position: 'absolute', inset: 0, zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--warn) 14%, transparent)', borderRadius: 4, cursor: 'pointer' }}>
+              <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 9px' }}>{applyPu?.icon} TAP TO APPLY</span>
+            </div>
+          )}
           {/* identity row — tap to swap the player */}
-          <div onClick={onOpenPicker} style={{ cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
+          <div onClick={cardTap} style={{ cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
             <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={isMobile ? 40 : 48} />
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
@@ -1255,10 +1289,10 @@ function SetupRow(props: {
         </div>
       ) : (
         <div
-          onClick={onOpenPicker}
+          onClick={applyMode ? undefined : onOpenPicker}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); onDropPlayer(e.dataTransfer.getData('text/plain')); }}
-          style={{ minWidth: 0, minHeight: 78, background: selected ? 'var(--surface)' : 'transparent', border: `1px dashed ${selected ? 'var(--you)' : 'var(--bdh)'}`, borderLeft: `3px dashed ${selected ? 'var(--you)' : 'var(--bdh)'}`, borderRadius: 4, padding: '16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' }}
+          style={{ minWidth: 0, minHeight: 78, background: selected ? 'var(--surface)' : 'transparent', border: `1px dashed ${selected ? 'var(--you)' : 'var(--bdh)'}`, borderLeft: `3px dashed ${selected ? 'var(--you)' : 'var(--bdh)'}`, borderRadius: 4, padding: '16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', opacity: applyMode ? 0.4 : 1 }}
         >
           <span className="grotesk" style={{ fontSize: 20, color: 'var(--faint)' }}>+</span>
           <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.12em' }}>TAP TO PICK PLAYER</span>
