@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
-import { Brand, ThemeSwitcher, PlayerImg, Avatar, Img, InjuryBadge, fonts } from '../app/ui';
+import { Brand, ThemeSwitcher, PlayerImg, Avatar, Img, InjuryBadge, fonts, useIsMobile } from '../app/ui';
 import { avatarUrl, teamLogo } from '../data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange } from '../data/nflSlate';
 import { WINDOWS, METRICS, metricById } from '../data/metrics';
@@ -54,6 +54,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const you = getTeam(YOU)!;
   const opp = getTeam(oppId)!;
 
+  const isMobile = useIsMobile();
   const [phase, setPhase] = useState<Phase>(initialPhase);
   const [picks, setPicks] = useState<Record<string, Pick>>({});
   const [selSlot, setSelSlot] = useState<string | null>(null);
@@ -66,6 +67,9 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   // Rosters expand in setup (you need them to set lineups), collapse otherwise.
   const [rosterOpen, setRosterOpen] = useState<{ you: boolean; their: boolean }>(() => ({ you: initialPhase === 'setup', their: initialPhase === 'setup' }));
   const toggleRoster = (side: 'you' | 'their') => setRosterOpen((o) => ({ ...o, [side]: !o[side] }));
+  // On mobile the rosters are full-width blocks above the board — keep the
+  // opponent's closed by default so the board stays visible.
+  useEffect(() => { if (isMobile) setRosterOpen((o) => ({ you: o.you, their: false })); }, [isMobile]);
 
   // Lazy-load this week's real play-by-play (per-week JSON) before resolving.
   const [ready, setReady] = useState(() => !REAL_WEEKS.has(week) || isRealWeekLoaded(week));
@@ -291,8 +295,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
 
   return (
     <>
-      <header style={{ height: 60, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 18px', position: 'sticky', top: 0, zIndex: 40, gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+      <header style={{ height: isMobile ? 'auto' : 60, minHeight: 52, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 6, padding: isMobile ? '7px 10px' : '0 18px', position: 'sticky', top: 0, zIndex: 40, gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flexWrap: 'wrap' }}>
           <Brand onClick={() => navigate({ name: 'league' })} />
           <div style={{ display: 'flex', gap: 2, padding: 3, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4 }}>
             {(['setup', 'live', 'final'] as Phase[]).map((p) => (
@@ -308,7 +312,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, whiteSpace: 'nowrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14, whiteSpace: 'nowrap', flexWrap: 'wrap' }}>
           <button onClick={() => setEarnOpen(true)} title="Drip Coin — tap for earning opportunities" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 9px', cursor: 'pointer' }}>
             <CoinIcon size={13} />
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{coins}</span>
@@ -350,10 +354,21 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
         </div>
       </header>
 
-      <div style={{ flex: 1, display: 'flex', gap: 14, padding: 14, overflow: 'hidden', minHeight: 0 }}>
-        <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={!rosterOpen.you} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 10 : 14, padding: isMobile ? 10 : 14, overflow: isMobile ? 'auto' : 'hidden', minHeight: 0 }}>
+        {!isMobile && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={!rosterOpen.you} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} />}
 
-        <main style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
+        {isMobile && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => toggleRoster('you')} className="mono" style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.you ? 'var(--you)' : 'var(--bd)'}`, color: rosterOpen.you ? 'var(--you)' : 'var(--dim)' }}>{rosterOpen.you ? '▾' : '▸'} YOUR ROSTER</button>
+              <button onClick={() => toggleRoster('their')} className="mono" style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.their ? 'var(--opp)' : 'var(--bd)'}`, color: rosterOpen.their ? 'var(--opp)' : 'var(--dim)' }}>{rosterOpen.their ? '▾' : '▸'} THEIR ROSTER</button>
+            </div>
+            {rosterOpen.you && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={false} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} fluid />}
+            {rosterOpen.their && <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} collapsed={false} onToggle={() => toggleRoster('their')} bye={byeTheir} week={week} fluid />}
+          </div>
+        )}
+
+        <main style={{ flex: 1, overflow: isMobile ? 'visible' : 'auto', minWidth: 0 }}>
           {boardFinal && (() => {
             const won = youTotal > themTotal, tie = Math.abs(youTotal - themTotal) < 0.1;
             const c = tie ? 'var(--dim)' : won ? 'var(--you)' : 'var(--opp)';
@@ -437,7 +452,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
           <div style={{ height: 40 }} />
         </main>
 
-        <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} collapsed={!rosterOpen.their} onToggle={() => toggleRoster('their')} bye={byeTheir} week={week} />
+        {!isMobile && <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} collapsed={!rosterOpen.their} onToggle={() => toggleRoster('their')} bye={byeTheir} week={week} />}
       </div>
 
       {swapTarget && (() => {
@@ -654,7 +669,7 @@ function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMe
 }
 
 // ── Roster aside ──────────────────────────────────────────────────────────
-function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, onToggle, bye = [], week }: {
+function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, onToggle, bye = [], week, fluid }: {
   side: 'you' | 'their';
   pools: Record<WindowId, Player[]>;
   picks: Record<string, Pick>;
@@ -665,12 +680,13 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
   onToggle: () => void;
   bye?: Player[];
   week: number;
+  fluid?: boolean; // mobile: full-width block instead of a fixed side rail
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
   const assignedIds = new Set(Object.values(picks).map((p) => p.playerId));
   const total = (Object.values(pools) as Player[][]).reduce((n, a) => n + a.length, 0);
 
-  if (collapsed) {
+  if (collapsed && !fluid) {
     return (
       <aside style={{ width: 26, flex: 'none' }} className="hide-narrow">
         <button onClick={onToggle} title={`Show ${side === 'you' ? 'your' : 'their'} roster`} className="mono" style={{ width: 26, height: '100%', minHeight: 120, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '8px 0', background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, color: accent, cursor: 'pointer' } as React.CSSProperties}>
@@ -682,7 +698,9 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
   }
 
   return (
-    <aside style={{ width: side === 'you' ? 170 : 196, flex: 'none', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} className="hide-narrow">
+    <aside style={fluid
+      ? { width: '100%', flex: 'none', overflow: 'auto', maxHeight: '44vh', display: 'flex', flexDirection: 'column', gap: 12, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: 10 }
+      : { width: side === 'you' ? 170 : 196, flex: 'none', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} className={fluid ? undefined : 'hide-narrow'}>
       <button onClick={onToggle} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.2em', color: accent, fontWeight: 700 }}>{side === 'you' ? '◂' : '▸'} {side === 'you' ? 'YOUR' : 'THEIR'} ROSTER</span>
         <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{total}</span>
@@ -1033,6 +1051,8 @@ function SetupRow(props: {
   onSelect: () => void; onPickMetric: (m: string) => void; onClear: () => void; onDropPlayer: (id: string) => void;
 }) {
   const { winId, week, pick, selected, inventory, onSelect, onPickMetric, onClear, onDropPlayer } = props;
+  const isMobile = useIsMobile();
+  const gridCols = isMobile ? '1fr 40px 1fr' : '1fr 64px 1fr';
   const player = pick ? getPlayer(pick.playerId) : null;
   const metric = player && pick?.metricId ? metricById(player.pos, pick.metricId) : null;
   // "Change metric" re-opens the picker for an already-set spot without dropping
@@ -1042,7 +1062,7 @@ function SetupRow(props: {
   const showPicker = !!player && (!pick?.metricId || editing);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px 1fr', alignItems: 'stretch', gap: 6 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: 6 }}>
       {player ? (
         <div
           onDragOver={(e) => e.preventDefault()}
@@ -1051,7 +1071,7 @@ function SetupRow(props: {
         >
           {/* Big player picture — fills the slot height once a metric is sealed. */}
           <div onClick={onSelect} style={{ cursor: 'pointer', flex: 'none', display: 'flex', alignItems: showPicker ? 'flex-start' : 'center' }}>
-            <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={showPicker ? 46 : 64} />
+            <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={showPicker ? (isMobile ? 38 : 46) : (isMobile ? 48 : 64)} />
           </div>
           <div onClick={onSelect} style={{ cursor: 'pointer', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -1156,6 +1176,8 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
   backups: Record<string, string>; slotName: Record<string, string>;
 }) {
   const ownKey = slotKey(slot.win, slot.slotIndex);
+  const isMobile = useIsMobile();
+  const gridCols = isMobile ? '1fr 40px 1fr' : '1fr 64px 1fr';
   // Pre-kickoff (this window not yet started) is the only time the best-ball
   // backup target can be (re)assigned — it's a blind bet, locked once it's live.
   const preKick = phase === 'live' && clock === 0;
@@ -1195,7 +1217,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
 
     return (
       <div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px 1fr', alignItems: 'stretch', gap: 6 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: 6 }}>
           {mineBackup ? card : blankBox}
           {/* center column — same 64px as head-to-head: UNOPP, log */}
           <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
@@ -1269,7 +1291,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
 
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px 1fr', alignItems: 'stretch', gap: 6 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: 6 }}>
         <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, clock)} />
         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
           <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: verdict.c, padding: '4px 6px', borderRadius: 3, textAlign: 'center', lineHeight: 1.1 }}>{verdict.t}</span>
@@ -1352,12 +1374,13 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
   side: 'you' | 'their'; player: Player; week: number; clock: number; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string; coin?: number;
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
+  const isMobile = useIsMobile();
   const nuked = fx === 'nuke' && bank === 0 && !subName && suppressSpent == null;
   const stat = useMemo(() => fmtStat(player.pos, statlineAt(player, week, clock)), [player, week, clock]);
   return (
     <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 11, alignItems: 'center', cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
       {/* Big headshot — same size as the sealed setup slot, kept through live & final. */}
-      <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={64} />
+      <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={isMobile ? 44 : 64} />
       <div style={{ flex: 1, minWidth: 0, textAlign: side === 'you' ? 'left' : 'right' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexDirection: side === 'you' ? 'row' : 'row-reverse' }}>
           <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>

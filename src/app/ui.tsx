@@ -1,10 +1,24 @@
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useState, useEffect, type CSSProperties, type ReactNode } from 'react';
 import type { Pos, ThemeName } from '../theme';
 import { THEMES } from '../theme';
 import { useStore } from './store';
 import { headshot, teamLogo } from '../data/media';
 import { injuryFor } from '../data/injuries';
 import { APP_VERSION, DATA_SOURCE } from './version';
+
+/** True when the viewport is at/below `maxWidth` — drives the mobile layout. */
+export function useIsMobile(maxWidth = 760): boolean {
+  const [m, setM] = useState(() => typeof window !== 'undefined' && window.matchMedia(`(max-width:${maxWidth}px)`).matches);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia(`(max-width:${maxWidth}px)`);
+    const on = () => setM(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, [maxWidth]);
+  return m;
+}
 
 const INJURY_COLOR: Record<string, string> = { O: '#FF4F62', IR: '#C2304A', D: '#FF8A3D', Q: '#E8B23A' };
 const INJURY_LABEL: Record<string, string> = { O: 'Out', IR: 'Injured Reserve', D: 'Doubtful', Q: 'Questionable' };
@@ -158,16 +172,18 @@ export function Brand({ onClick }: { onClick?: () => void }) {
 }
 
 export function Header({ left, right }: { left: ReactNode; right?: ReactNode }) {
+  const isMobile = useIsMobile();
   return (
     <header
       style={{
-        height: 60, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 18px',
+        height: isMobile ? 'auto' : 60, minHeight: 52, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 6,
+        padding: isMobile ? '7px 10px' : '0 18px',
         position: 'sticky', top: 0, zIndex: 40, gap: 12,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>{left}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, whiteSpace: 'nowrap', flex: 'none' }}>{right}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flexWrap: 'wrap' }}>{left}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14, whiteSpace: 'nowrap', flexWrap: 'wrap' }}>{right}</div>
     </header>
   );
 }

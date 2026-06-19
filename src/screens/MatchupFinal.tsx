@@ -52,7 +52,7 @@ export function MatchupFinal({ week }: { week: number }) {
 
   return (
     <>
-      <header style={{ height: 60, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 18px', position: 'sticky', top: 0, zIndex: 40, gap: 12 }}>
+      <header style={{ minHeight: 56, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 6, padding: '8px 14px', position: 'sticky', top: 0, zIndex: 40, gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Brand onClick={() => navigate({ name: 'league' })} />
           <ThemeSwitcher />
