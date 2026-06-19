@@ -451,7 +451,7 @@ function EarningsModal({ earnings, onClose }: { earnings: { stipend: number; uno
             <div>◈ <b style={{ color: 'var(--text)' }}>+{WEEKLY_STIPEND}</b> flat every week, just for playing.</div>
             <div>◈ <b style={{ color: 'var(--text)' }}>+{UNOPPOSED_COIN}</b> for each unopposed player you field.</div>
             <div style={{ marginTop: 5 }}>Then coin only on <b style={{ color: 'var(--text)' }}>events of note</b> — a nuke / shutdown / wipe, a drip going HOT, or a DST suppress firing. Routine yards, catches and carries don't pay.</div>
-            <div style={{ marginTop: 5 }}>◈ <b style={{ color: 'var(--opp)' }}>−10</b> to the opponent for each INT thrown / fumble lost by your players (their giveaways pay you). <span style={{ color: 'var(--faint)' }}>Awaiting per-player turnover data from Stathead.</span></div>
+            <div style={{ marginTop: 5 }}>◈ <b style={{ color: 'var(--opp)' }}>−10</b> to the opponent for each INT thrown / fumble lost by your players (their giveaways pay you). <b style={{ color: 'var(--text)' }}>🦅 Ball Hawk</b> raises it to 25.</div>
           </div>
           {/* per-position signature rates */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

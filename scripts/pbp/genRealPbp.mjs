@@ -85,24 +85,31 @@ for (const rows of games.values()) {
     const pt = d.play_type;
     const c = clockOf(Number(d.qtr), d.time);
     const td = Number(d.touchdown) === 1;
+    // Turnovers committed by the offense (for the turnover coin penalty): INT
+    // thrown → passer; fumble lost → rusher (run) / receiver (caught) / passer
+    // (sack-strip on an uncaught pass). No fumbler id in the dumps, so attribute
+    // by play role. `to: 1` marks the committing player's play.
+    const intc = Number(d.interception) === 1;
+    const fumLost = Number(d.fumble_lost) === 1;
 
     // Passer (QB) — completed pass adds passing yards; incomplete/sack = 0.
     if (pt === 'pass' && isSet(d.passer_player_id) && byGsis.has(d.passer_player_id)) {
       const caught = isSet(d.yards_after_catch);
       const y = caught ? Number(d.yards_gained) || 0 : 0;
-      push(week, byGsis.get(d.passer_player_id).slug, { c, k: 'pass', y, td: caught && td ? 1 : 0, ca: 0, tg: 0 });
+      const to = intc || (fumLost && !caught) ? 1 : 0;
+      push(week, byGsis.get(d.passer_player_id).slug, { c, k: 'pass', y, td: caught && td ? 1 : 0, ca: 0, tg: 0, ...(to ? { to } : {}) });
       playCount++;
     }
     // Rusher — only true rushing plays (excludes kneels/spikes).
     if (pt === 'run' && isSet(d.rusher_player_id) && byGsis.has(d.rusher_player_id)) {
-      push(week, byGsis.get(d.rusher_player_id).slug, { c, k: 'rush', y: Number(d.yards_gained) || 0, td: td ? 1 : 0, ca: 0, tg: 0 });
+      push(week, byGsis.get(d.rusher_player_id).slug, { c, k: 'rush', y: Number(d.yards_gained) || 0, td: td ? 1 : 0, ca: 0, tg: 0, ...(fumLost ? { to: 1 } : {}) });
       playCount++;
     }
     // Receiver — reception vs incomplete target.
     if (pt === 'pass' && isSet(d.receiver_player_id) && byGsis.has(d.receiver_player_id)) {
       const caught = isSet(d.yards_after_catch);
       push(week, byGsis.get(d.receiver_player_id).slug, caught
-        ? { c, k: 'rec', y: Number(d.yards_gained) || 0, td: td ? 1 : 0, ca: 1, tg: 1 }
+        ? { c, k: 'rec', y: Number(d.yards_gained) || 0, td: td ? 1 : 0, ca: 1, tg: 1, ...(fumLost ? { to: 1 } : {}) }
         : { c, k: 'incomplete', y: 0, td: 0, ca: 0, tg: 1 });
       playCount++;
     }

@@ -88,6 +88,7 @@ interface RawPlay {
   td: boolean;
   catch: boolean;   // a reception happened
   target: boolean;  // the player was targeted
+  turnover?: boolean; // the player committed a turnover on this play (INT thrown / fumble lost)
 }
 
 function spreadClocks(n: number, r: () => number): number[] {
@@ -302,7 +303,7 @@ export function realRawPlays(playerId: string, week: number): RawPlay[] | null {
   const ps = realPbpFor(week, playerId);
   if (!ps) return null;
   return ps
-    .map((p) => ({ clock: p.c, kind: p.k, yards: p.y, td: !!p.td, catch: !!p.ca, target: !!p.tg }))
+    .map((p) => ({ clock: p.c, kind: p.k, yards: p.y, td: !!p.td, catch: !!p.ca, target: !!p.tg, turnover: !!p.to }))
     .sort((a, b) => a.clock - b.clock);
 }
 
@@ -320,13 +321,11 @@ export function hadLongPassTd(player: Player, week: number, minYds = 40): boolea
 }
 /**
  * Turnovers COMMITTED by this player this week (interception thrown / fumble
- * lost) — for the turnover coin penalty. Stathead's PBP doesn't attribute these
- * to the offensive player yet (QBs carry only pass/rush; lost fumbles aren't
- * tagged to the fumbler), so this is dormant (returns 0) until that data lands.
- * Once a play carries a `to`/turnover flag, count it here. See docs/mcp-requests.md.
+ * lost) — for the turnover coin penalty. Read from baked real PBP (INT → passer,
+ * fumble lost → rusher/receiver/passer by play role). Synthetic weeks have none.
  */
-export function turnoversCommitted(_player: Player, _week: number): number {
-  return 0; // TODO: count int-thrown / fumble-lost plays once the MCP exposes them
+export function turnoversCommitted(player: Player, week: number): number {
+  return playsForPlayer(player, week).plays.filter((p) => p.turnover).length;
 }
 
 /** A sentinel "no opponent" player — an unopposed slot resolves against it. */
@@ -751,6 +750,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       effect = { type: 'cold', text: 'STREAK COLD' };
     }
     if (!effect && isFG && play.kind === 'pass') effect = { type: 'mult', text: `FIELD GENERAL ×${sideMult.toFixed(2)}` };
+    if (play.turnover) effect = { type: 'nuke', text: '✕ TURNOVER → opp' }; // giveaway: coin to the opponent
 
     events.push({
       clock: play.clock,

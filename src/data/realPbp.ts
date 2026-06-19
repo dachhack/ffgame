@@ -10,7 +10,7 @@ export type RealPlayKind =
   | 'pass' | 'rush' | 'rec' | 'incomplete'      // skill
   | 'fg' | 'fgmiss' | 'xp' | 'xpmiss'           // kicker
   | 'sack' | 'int' | 'fumrec' | 'dst_td' | 'safety'; // team defense
-export interface RealPlay { c: number; k: RealPlayKind; y: number; td: number; ca: number; tg: number; }
+export interface RealPlay { c: number; k: RealPlayKind; y: number; td: number; ca: number; tg: number; to?: number; }
 
 interface WeekData { pbp: Record<string, RealPlay[]>; points: Record<string, number>; poss?: Record<string, number[][]>; }
 
