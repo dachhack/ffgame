@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Drip League FF — Spot Layout Sandbox</title>
+<style>
+  :root{
+    --bg:#EFEADd; --surface:#FBF9F2; --bd:#DAD3C2; --bdh:#C5BCA6;
+    --text:#241F16; --dim:#6E6857; --faint:#998F79;
+    --you:#1C8A57; --opp:#CC3A38; --coin:#C9952B;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
+    -webkit-font-smoothing:antialiased;padding:14px;}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;}
+  h1{font-size:16px;margin:0 0 2px;}
+  .sub{font-size:12px;color:var(--dim);margin:0 0 12px;}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px;}
+  button,select{font-family:inherit;font-size:12px;font-weight:700;padding:7px 10px;border-radius:6px;
+    border:1px solid var(--bdh);background:var(--surface);color:var(--text);cursor:pointer;}
+  button.primary{background:var(--you);color:#fff;border-color:var(--you);}
+  .hint{font-size:11px;color:var(--dim);}
+  /* The matchup row: two cards + a center column, mirroring the app grid. */
+  #stage{display:grid;gap:6px;align-items:stretch;margin:0 auto;
+    background:repeating-linear-gradient(0deg,transparent,transparent 7px,rgba(0,0,0,.03) 7px,rgba(0,0,0,.03) 8px),
+               repeating-linear-gradient(90deg,transparent,transparent 7px,rgba(0,0,0,.03) 7px,rgba(0,0,0,.03) 8px);
+    padding:0;}
+  .card{position:relative;min-height:120px;background:var(--surface);border:1px solid var(--bd);border-radius:6px;overflow:hidden;}
+  .card.you{border-left:3px solid var(--you);}
+  .card.their{border-right:3px solid var(--opp);}
+  .center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;}
+  .verdict{font-size:8.5px;font-weight:700;letter-spacing:.08em;color:#fff;background:var(--you);
+    padding:4px 6px;border-radius:3px;}
+  .log{font-size:7px;letter-spacing:.1em;color:var(--faint);}
+  /* Draggable elements */
+  .el{position:absolute;cursor:grab;touch-action:none;user-select:none;
+    border:1px dashed transparent;border-radius:4px;padding:1px;white-space:nowrap;}
+  .el:hover{border-color:var(--bdh);}
+  .el.drag{cursor:grabbing;border-color:var(--you);box-shadow:0 4px 14px rgba(0,0,0,.18);z-index:5;}
+  .headshot{width:40px;height:40px;border-radius:9px;background:linear-gradient(135deg,#cfc7b2,#a99e83);
+    display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#5a5238;}
+  .name{font-size:13px;font-weight:700;}
+  .metric{display:inline-flex;align-items:baseline;gap:5px;padding:2px 7px;border-radius:4px;}
+  .metric .mname{font-size:11px;font-weight:700;}
+  .metric .tag{font-size:7px;font-weight:700;letter-spacing:.1em;opacity:.85;}
+  .stat{font-size:9.5px;color:var(--dim);}
+  .score{font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1;}
+  .coin{display:inline-flex;align-items:center;gap:3px;font-size:9.5px;font-weight:700;color:var(--coin);}
+  .coin .disc{width:11px;height:11px;border-radius:50%;background:#F2C14E;border:1.3px solid #9A6B12;}
+  .you .name,.you .score{color:var(--you);} .you .metric{background:color-mix(in srgb,var(--you) 16%,transparent);border:1px solid color-mix(in srgb,var(--you) 45%,transparent);} .you .metric .mname,.you .metric .tag{color:var(--you);}
+  .their .name,.their .score{color:var(--opp);} .their .metric{background:color-mix(in srgb,var(--opp) 16%,transparent);border:1px solid color-mix(in srgb,var(--opp) 45%,transparent);} .their .metric .mname,.their .metric .tag{color:var(--opp);}
+  .their .name{color:var(--text);}
+  #readout{margin-top:14px;font-size:11px;white-space:pre-wrap;background:var(--surface);border:1px solid var(--bd);
+    border-radius:6px;padding:10px;max-height:220px;overflow:auto;}
+</style>
+</head>
+<body>
+  <h1>Drip League FF — Spot Layout Sandbox</h1>
+  <p class="sub">Drag any element to reposition it inside its card. Tweak the width, then hit <b>Copy layout</b> and paste it back to me — I'll match the app to it.</p>
+
+  <div class="toolbar">
+    <label class="hint">Card width
+      <select id="width">
+        <option value="150">Phone — 150px cards</option>
+        <option value="130">Narrow — 130px cards</option>
+        <option value="170">Large phone — 170px</option>
+        <option value="300">Desktop — 300px</option>
+      </select>
+    </label>
+    <label class="hint"><input type="checkbox" id="snap" checked /> snap to 2px</label>
+    <button id="reset">Reset</button>
+    <button id="copy" class="primary">Copy layout</button>
+    <span class="hint" id="status"></span>
+  </div>
+
+  <div id="stage"></div>
+
+  <div id="readout" class="mono">positions will show here…</div>
+
+<script>
+const CARDS = [
+  { side:'you',  accent:'var(--you)', name:'D. Goedert', pos:'TE', team:'PHI', metric:'Receiving Yards', tag:'DRIP', stat:'0/0 rec · 0 rec yd', score:'0.0', coin:'+5' },
+  { side:'their',accent:'var(--opp)', name:'B. Robinson', pos:'RB', team:'ATL', metric:'Carries', tag:'COMPRESSION', stat:'1 car · 5 rush yd · 0/0 · 0 yd', score:'0.5', coin:'+25' },
+];
+// default element positions (x,y) per card, relative to the card box
+function defaults(side){
+  return {
+    headshot:{x:6,  y:8},
+    name:    {x:52, y:8},
+    metric:  {x:52, y:30},
+    stat:    {x:6,  y:96},
+    score:   {x:104,y:14},
+    coin:    {x:104,y:44},
+  };
+}
+const state = { you:defaults('you'), their:defaults('their') };
+const stage = document.getElementById('stage');
+const readout = document.getElementById('readout');
+const widthSel = document.getElementById('width');
+const snapEl = document.getElementById('snap');
+
+function elHTML(side,c){
+  return `
+    <div class="el headshot" data-k="headshot">${c.pos}</div>
+    <div class="el name" data-k="name">${c.name}</div>
+    <div class="el metric" data-k="metric"><span class="mname">${c.metric}</span><span class="tag">${c.tag}</span></div>
+    <div class="el stat" data-k="stat">${c.stat}</div>
+    <div class="el score" data-k="score">${c.score}</div>
+    <div class="el coin" data-k="coin"><span class="disc"></span>${c.coin}</div>`;
+}
+
+function render(){
+  const w = +widthSel.value;
+  const center = w < 200 ? 40 : 64;
+  stage.style.gridTemplateColumns = `${w}px ${center}px ${w}px`;
+  stage.style.width = (w*2 + center + 12) + 'px';
+  stage.innerHTML = '';
+  const you = document.createElement('div'); you.className='card you'; you.dataset.side='you'; you.innerHTML = elHTML('you',CARDS[0]);
+  const ctr = document.createElement('div'); ctr.className='center';
+  ctr.innerHTML = `<span class="verdict">EVEN</span><span class="log">LOG ▾</span>`;
+  const their = document.createElement('div'); their.className='card their'; their.dataset.side='their'; their.innerHTML = elHTML('their',CARDS[1]);
+  stage.append(you,ctr,their);
+  for(const card of [you,their]){
+    const side = card.dataset.side;
+    card.querySelectorAll('.el').forEach(el=>{
+      const p = state[side][el.dataset.k];
+      el.style.left = p.x+'px'; el.style.top = p.y+'px';
+      attachDrag(el, card, side);
+    });
+  }
+  dump();
+}
+
+function attachDrag(el, card, side){
+  el.addEventListener('pointerdown', e=>{
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    el.classList.add('drag');
+    const cardRect = card.getBoundingClientRect();
+    const start = state[side][el.dataset.k];
+    const ox = e.clientX - cardRect.left - start.x;
+    const oy = e.clientY - cardRect.top - start.y;
+    const move = ev=>{
+      const r = card.getBoundingClientRect();
+      let x = ev.clientX - r.left - ox;
+      let y = ev.clientY - r.top - oy;
+      if(snapEl.checked){ x = Math.round(x/2)*2; y = Math.round(y/2)*2; }
+      x = Math.max(-4, Math.min(x, r.width - 8));
+      y = Math.max(-4, Math.min(y, r.height - 8));
+      state[side][el.dataset.k] = {x:Math.round(x), y:Math.round(y)};
+      el.style.left = x+'px'; el.style.top = y+'px';
+      dump();
+    };
+    const up = ev=>{ el.classList.remove('drag'); el.releasePointerCapture(e.pointerId);
+      el.removeEventListener('pointermove',move); el.removeEventListener('pointerup',up); };
+    el.addEventListener('pointermove',move);
+    el.addEventListener('pointerup',up);
+  });
+}
+
+function dump(){
+  const fmt = s => Object.entries(state[s]).map(([k,v])=>`  ${k.padEnd(9)} x:${String(v.x).padStart(4)}  y:${String(v.y).padStart(4)}`).join('\n');
+  readout.textContent = `card width: ${widthSel.value}px\n\nYOU\n${fmt('you')}\n\nTHEIR\n${fmt('their')}`;
+}
+
+document.getElementById('reset').onclick=()=>{ state.you=defaults('you'); state.their=defaults('their'); render(); };
+document.getElementById('copy').onclick=async()=>{
+  try{ await navigator.clipboard.writeText(readout.textContent); status('copied!'); }
+  catch{ status('select the box below & copy manually'); }
+};
+widthSel.onchange=render;
+function status(m){ const s=document.getElementById('status'); s.textContent=m; setTimeout(()=>s.textContent='',2000); }
+
+render();
+</script>
+</body>
+</html>
