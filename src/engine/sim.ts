@@ -603,27 +603,32 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         effect = { type: 'nuke', text: `✕ SHUTDOWN — negated ${wiped.toFixed(1)}` }; sig = true;
       }
     } else if (oppIsDrip) {
-      // Drip opponent: a catch or target pauses it; my metric adds its counter
-      // — ERASE wipes a recent window, RATE RESET zeroes the rate (bank kept);
-      // any TD wipes the entire drip bank.
+      // Drip opponent: only a DENIAL metric pauses/erases it — ERASE wipes a
+      // recent window, RATE RESET zeroes the rate (bank kept), CLOCK STOP just
+      // pauses. A plain accumulation metric (Receiving/Rush Yards) does NOT
+      // deny — the opponent's drip runs right through its catches. Any TD wipes
+      // the entire drip bank (handled below).
       // A TE drip is immune to the pause/erase/reset that a WR or RB lays on it
       // (its rate and bank shrug off their catches/targets). TDs still wipe it.
       const teDripImmune = oppPlayer.player.pos === 'TE'
         && (myPlayer.player.pos === 'WR' || myPlayer.player.pos === 'RB');
       if (!teDripImmune && (play.kind === 'rec' || play.kind === 'incomplete')) {
-        opp.paused = true;
         if (eraseTrigger) {
+          opp.paused = true;
           const cutoff = play.clock - eraseWindow;
           let erased = 0;
           opp.hist = opp.hist.filter((h) => { if (h.clock >= cutoff) { erased += h.pts; return false; } return true; });
           if (erased > 0) { opp.bank = Math.max(0, opp.bank - erased); sig = true; }
           effect = { type: 'erase', text: erased > 0 ? `ERASE −${erased.toFixed(1)} · drip stop` : 'DRIP STOP' };
         } else if (play.kind === 'rec' && myFam === 'reset') {
+          opp.paused = true;
           const had = opp.rate; opp.rate = 0; opp.streak = 0; opp.hot = false;
           effect = { type: 'reset', text: had > 0 ? `RATE RESET ${had.toFixed(2)}→0 · drip stop` : 'DRIP STOP' }; if (had > 0) sig = true;
-        } else {
+        } else if (myFam === 'stop') {
+          opp.paused = true;
           effect = { type: 'stop', text: 'DRIP STOP' };
         }
+        // non-denial metric (accumulation drip / flat): no pause, no effect
       }
       // Only the dedicated TD (nuke) metric wipes a drip. A flat QB/RB TD under
       // a yardage metric scores its points but does not nuke the opponent.
