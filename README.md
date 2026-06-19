@@ -1,4 +1,4 @@
-# Gridiron Clash
+# Drip League FF
 
 A **real-time fantasy football game** of hidden picks and live effect resolution — and a working web demo seeded with the real **PeakedInDynasty** 2025 season.
 

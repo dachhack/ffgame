@@ -157,7 +157,7 @@ export function LeagueOverview() {
               Player stats, injuries &amp; 2025 NFL play-by-play built off{' '}
               <a href={DATA_SOURCE.url} target="_blank" rel="noreferrer" style={{ color: 'var(--you)', fontWeight: 700, textDecoration: 'none' }}>{DATA_SOURCE.name} ↗</a>.
             </span>
-            <span>Gridiron Clash {APP_VERSION}</span>
+            <span>Drip League FF {APP_VERSION}</span>
           </div>
         </div>
       </main>

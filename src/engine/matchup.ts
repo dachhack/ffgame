@@ -401,7 +401,7 @@ export function weekEarnings(m: ResolvedMatchup, side: 'you' | 'their', week: nu
  * except the global weekly stipend (unopposed bounty + suppress + events of note
  * + the turnover swing). Surfaced as a per-spot stat at FINAL.
  */
-export function slotCoin(slot: ResolvedSlot, side: 'you' | 'their', week: number, turnoverCoin = TURNOVER_COIN): number {
+export function slotCoin(slot: ResolvedSlot, side: 'you' | 'their', week: number, turnoverCoin = TURNOVER_COIN, upToClock = Infinity): number {
   const me = side === 'you' ? slot.you : slot.their;
   const opp = side === 'you' ? slot.their : slot.you;
   let c = 0;
@@ -409,7 +409,7 @@ export function slotCoin(slot: ResolvedSlot, side: 'you' | 'their', week: number
     if (!opp) c += UNOPPOSED_COIN;
     if (me.metricId === 'suppress') c += SUPPRESS_COIN;
     const rate = metricCoin(me.player.pos, me.metricId);
-    for (const e of slot.events) if (e.side === side && e.coin) c += e.coinAmt ?? rate;
+    for (const e of slot.events) if (e.side === side && e.coin && e.clock <= upToClock) c += e.coinAmt ?? rate;
     c -= turnoverCoin * turnoversCommitted(me.player, week); // your giveaway → you lose
   }
   if (opp) c += turnoverCoin * turnoversCommitted(opp.player, week); // their giveaway → you gain

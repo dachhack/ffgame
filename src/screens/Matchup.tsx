@@ -1126,16 +1126,6 @@ function BuffFxRow({ side, fx, stake }: { side: 'you' | 'their'; fx?: BuffFx[]; 
   return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 3, justifyContent: side === 'you' ? 'flex-start' : 'flex-end' }}>{items}</div>;
 }
 
-// Drip coin a spot earned, shown as a stat at FINAL.
-function SpotCoin({ amt, align }: { amt: number; align: 'left' | 'right' }) {
-  const neg = amt < 0;
-  return (
-    <span className="mono" title="drip coin this spot earned" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9, fontWeight: 700, color: neg ? 'var(--opp)' : '#F2C14E', justifyContent: align === 'left' ? 'flex-start' : 'flex-end' }}>
-      <CoinIcon size={11} /> {neg ? '' : '+'}{amt} earned
-    </span>
-  );
-}
-
 // ── Score row (live / final) ──
 function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onPowerup, onAssignBackup, turnoverCoin, backups, slotName }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
@@ -1172,7 +1162,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
       <ScoreCard
         side={mineBackup ? 'you' : 'their'} player={be.player} week={week} clock={clock}
         metricName={bp?.name ?? ''} tag={bp?.tag ?? ''} bank={liveBackup} onClick={onToggle}
-        chip={chip} suppressSpent={showSuppress}
+        chip={chip} suppressSpent={showSuppress} coin={slotCoin(slot, mineBackup ? 'you' : 'their', week, turnoverCoin, clock)}
       />
     );
     const blankBox = (
@@ -1208,11 +1198,6 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
           </div>
         )}
         {(phase === 'final' || done) && <BuffFxRow side={mineBackup ? 'you' : 'their'} fx={mineBackup ? slot.youBuffFx : slot.theirBuffFx} />}
-        {(phase === 'final' || done) && (
-          <div style={{ display: 'flex', justifyContent: mineBackup ? 'flex-start' : 'flex-end', marginTop: 4 }}>
-            <SpotCoin amt={slotCoin(slot, mineBackup ? 'you' : 'their', week, turnoverCoin)} align={mineBackup ? 'left' : 'right'} />
-          </div>
-        )}
         {open && (
           <TwoColLog events={bEvents} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} youCoin={mineBackup ? metricCoin(be.player.pos, be.metricId) : 0} theirCoin={mineBackup ? 0 : metricCoin(be.player.pos, be.metricId)} />
         )}
@@ -1263,7 +1248,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px 1fr', alignItems: 'stretch', gap: 6 }}>
-        <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} />
+        <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, clock)} />
         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
           <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: verdict.c, padding: '4px 6px', borderRadius: 3, textAlign: 'center', lineHeight: 1.1 }}>{verdict.t}</span>
           {canSwap && !done && (
@@ -1273,7 +1258,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
             <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
           )}
         </div>
-        <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} />
+        <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, clock)} />
       </div>
       {incomingName && !(phase === 'final' && slot.youSub) && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', marginTop: 3 }}>
@@ -1303,12 +1288,6 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
       )}
       {final && <BuffFxRow side="you" fx={slot.youBuffFx} stake={slot.youStake} />}
       {final && <BuffFxRow side="their" fx={slot.theirBuffFx} />}
-      {final && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-          <SpotCoin amt={slotCoin(slot, 'you', week, turnoverCoin)} align="left" />
-          <SpotCoin amt={slotCoin(slot, 'their', week, turnoverCoin)} align="right" />
-        </div>
-      )}
       {open && <TwoColLog events={visibleEvents} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} youCoin={metricCoin(slot.you.player.pos, slot.you.metricId)} theirCoin={metricCoin(slot.their.player.pos, slot.their.metricId)} />}
     </div>
   );
@@ -1347,8 +1326,8 @@ function fmtStat(pos: Pos, s: StatLine): string {
   return '—';
 }
 
-function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, fx, subName, suppressSpent, negated, halvedFrom, chip }: {
-  side: 'you' | 'their'; player: Player; week: number; clock: number; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string;
+function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, fx, subName, suppressSpent, negated, halvedFrom, chip, coin }: {
+  side: 'you' | 'their'; player: Player; week: number; clock: number; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string; coin?: number;
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
   const nuked = fx === 'nuke' && bank === 0 && !subName && suppressSpent == null;
@@ -1389,6 +1368,11 @@ function ScoreCard({ side, player, week, clock, metricName, tag, bank, onClick, 
           </>
         ) : (
           <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, color: negated ? 'var(--fx-nuke)' : accent, lineHeight: 1, letterSpacing: '-0.02em', textDecoration: negated ? 'line-through' : undefined, animation: nuked ? 'shake .5s' : undefined }}>{bank.toFixed(1)}</div>
+        )}
+        {coin != null && (
+          <div className="mono" title="drip coin earned so far this window" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 5, fontSize: 9, fontWeight: 700, color: coin < 0 ? 'var(--opp)' : '#F2C14E' }}>
+            <CoinIcon size={10} /> {coin < 0 ? '' : '+'}{coin}
+          </div>
         )}
       </div>
     </div>

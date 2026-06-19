@@ -158,7 +158,7 @@ export function MatchupFinal({ week }: { week: number }) {
           )}
           <div style={{ height: 30 }} />
           <div className="mono" style={{ textAlign: 'center', fontSize: 10, color: 'var(--faint)' }}>
-            Gridiron Clash · {opp.name} matchup · simulated from real 2025 stats · DEMO_WEEK {DEMO_WEEK}
+            Drip League FF · {opp.name} matchup · simulated from real 2025 stats · DEMO_WEEK {DEMO_WEEK}
           </div>
         </div>
       </main>

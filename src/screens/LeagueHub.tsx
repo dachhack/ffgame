@@ -154,7 +154,7 @@ export function LeagueHub() {
           </button>
 
           <div style={{ marginTop: 28, fontFamily: GROTESK, fontSize: 11, color: 'var(--faint)', textAlign: 'center', lineHeight: 1.7 }}>
-            Gridiron Clash demo · real PeakedInDynasty 2025 data · simulated live scoring
+            Drip League FF demo · real PeakedInDynasty 2025 data · simulated live scoring
           </div>
         </div>
       </main>
