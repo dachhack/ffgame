@@ -64,6 +64,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const [openPBP, setOpenPBP] = useState<Record<string, boolean>>({});
   const [swapTarget, setSwapTarget] = useState<{ key: string; win: WindowId } | null>(null);
   const [backupMenu, setBackupMenu] = useState<{ key: string } | null>(null);
+  const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   // Rosters expand in setup (you need them to set lineups), collapse otherwise.
   const [rosterOpen, setRosterOpen] = useState<{ you: boolean; their: boolean }>(() => ({ you: initialPhase === 'setup', their: initialPhase === 'setup' }));
   const toggleRoster = (side: 'you' | 'their') => setRosterOpen((o) => ({ ...o, [side]: !o[side] }));
@@ -272,6 +273,17 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     setPicks((prev) => { const n = { ...prev }; delete n[key]; return compactPicks(n); });
     setSelSlot(null);
   }
+  // Assign a specific player to a specific spot (tap-a-spot picker), de-duped and
+  // compacted so the window stays filled top-down.
+  function assignToSlot(key: string, playerId: string) {
+    setPicks((prev) => {
+      const next = { ...prev };
+      for (const k of Object.keys(next)) if (next[k].playerId === playerId) delete next[k];
+      next[key] = { playerId, metricId: null };
+      return compactPicks(next);
+    });
+    setSelSlot(null);
+  }
 
   function lockIn() { setPhase('live'); setSelSlot(null); setRosterOpen({ you: false, their: false }); }
   function changePhase(p: Phase) { setPhase(p); setSelSlot(null); setRosterOpen({ you: p === 'setup', their: p === 'setup' }); }
@@ -435,9 +447,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 onAssignBackup={(key) => setBackupMenu({ key })}
                 picks={picks}
                 selSlot={selSlot}
-                setSelSlot={setSelSlot}
                 pickMetricFor={pickMetricFor}
-                clearSlot={clearSlot}
+                onOpenPicker={(key, win) => { setPickerSlot({ key, win }); setSelSlot(key); }}
                 openPBP={openPBP}
                 togglePBP={(k) => setOpenPBP((o) => ({ ...o, [k]: !o[k] }))}
                 youPools={youPools}
@@ -498,6 +509,23 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
             starters={starters}
             onPick={(target) => { setBackupTarget(week, backupMenu.key, target); setBackupMenu(null); }}
             onClose={() => setBackupMenu(null)}
+          />
+        );
+      })()}
+
+      {pickerSlot && (() => {
+        const { key, win } = pickerSlot;
+        const n = slotsFor(win, extraSlots);
+        const slotted = new Set<string>();
+        for (let i = 0; i < n; i++) { const pid = picks[slotKey(win, i)]?.playerId; if (pid) slotted.add(pid); }
+        const current = picks[key]?.playerId;
+        const avail = (youPools[win] || []).filter((p) => !slotted.has(p.id) || p.id === current);
+        return (
+          <PlayerPicker
+            win={win} week={week} players={avail} currentId={current}
+            onPick={(pid) => { assignToSlot(key, pid); setPickerSlot(null); }}
+            onRemove={() => { clearSlot(key); setPickerSlot(null); }}
+            onClose={() => setPickerSlot(null)}
           />
         );
       })()}
@@ -889,9 +917,8 @@ function WindowSection(props: {
   onAssignBackup: (key: string) => void;
   picks: Record<string, Pick>;
   selSlot: string | null;
-  setSelSlot: (k: string | null) => void;
   pickMetricFor: (k: string, m: string) => void;
-  clearSlot: (k: string) => void;
+  onOpenPicker: (key: string, win: WindowId) => void;
   openPBP: Record<string, boolean>;
   togglePBP: (k: string) => void;
   youPools: Record<WindowId, Player[]>;
@@ -901,7 +928,7 @@ function WindowSection(props: {
   backups: Record<string, string>;
   slotName: Record<string, string>;
 }) {
-  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, setSelSlot, pickMetricFor, clearSlot, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName } = props;
+  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
@@ -1031,7 +1058,7 @@ function WindowSection(props: {
             return (
               <SetupRow
                 key={key} slotKeyStr={key} winId={w.id} week={week} pick={picks[key]} selected={selSlot === key} inventory={inventory}
-                onSelect={() => setSelSlot(key)} onPickMetric={(m) => pickMetricFor(key, m)} onClear={() => clearSlot(key)}
+                onOpenPicker={() => onOpenPicker(key, w.id)} onPickMetric={(m) => pickMetricFor(key, m)}
                 onDropPlayer={(id) => onAssign(id)}
               />
             );
@@ -1048,9 +1075,9 @@ function WindowSection(props: {
 // ── Setup row ──
 function SetupRow(props: {
   slotKeyStr: string; winId: WindowId; week: number; pick?: Pick; selected: boolean; inventory: Record<string, number>;
-  onSelect: () => void; onPickMetric: (m: string) => void; onClear: () => void; onDropPlayer: (id: string) => void;
+  onOpenPicker: () => void; onPickMetric: (m: string) => void; onDropPlayer: (id: string) => void;
 }) {
-  const { winId, week, pick, selected, inventory, onSelect, onPickMetric, onClear, onDropPlayer } = props;
+  const { winId, week, pick, selected, inventory, onOpenPicker, onPickMetric, onDropPlayer } = props;
   const isMobile = useIsMobile();
   const gridCols = isMobile ? '1fr 40px 1fr' : '1fr 64px 1fr';
   const player = pick ? getPlayer(pick.playerId) : null;
@@ -1060,6 +1087,7 @@ function SetupRow(props: {
   const [editing, setEditing] = useState(false);
   useEffect(() => { setEditing(false); }, [pick?.playerId]);
   const showPicker = !!player && (!pick?.metricId || editing);
+  const link: React.CSSProperties = { background: 'none', border: 'none', padding: 0, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em' };
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: 6 }}>
@@ -1067,61 +1095,60 @@ function SetupRow(props: {
         <div
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); onDropPlayer(e.dataTransfer.getData('text/plain')); }}
-          style={{ flex: 1, minWidth: 0, minHeight: showPicker ? 92 : 80, background: selected ? 'var(--sh)' : 'var(--surface)', border: `1px solid ${selected ? 'var(--you)' : 'var(--bd)'}`, borderLeft: '3px solid var(--you)', borderRadius: 4, padding: '8px 10px', display: 'flex', gap: 11, alignItems: 'stretch' }}
+          style={{ minWidth: 0, background: selected ? 'var(--sh)' : 'var(--surface)', border: `1px solid ${selected ? 'var(--you)' : 'var(--bd)'}`, borderLeft: '3px solid var(--you)', borderRadius: 4, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 7 }}
         >
-          {/* Big player picture — fills the slot height once a metric is sealed. */}
-          <div onClick={onSelect} style={{ cursor: 'pointer', flex: 'none', display: 'flex', alignItems: showPicker ? 'flex-start' : 'center' }}>
-            <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={showPicker ? (isMobile ? 38 : 46) : (isMobile ? 48 : 64)} />
-          </div>
-          <div onClick={onSelect} style={{ cursor: 'pointer', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span className="grotesk" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap' }}>{player.name}</span>
-              <InjuryBadge week={week} slug={player.id} />
+          {/* identity row — tap to swap the player */}
+          <div onClick={onOpenPicker} style={{ cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
+            <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={isMobile ? 40 : 48} />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>
+                <InjuryBadge week={week} slug={player.id} />
+              </div>
+              <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{player.pos} · {player.team}</span>
             </div>
-            <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>{player.pos} · {player.team}</span>
-            {!!pick?.metricId && !editing && (
-              <div style={{ display: 'flex', gap: 9, marginTop: 5 }}>
-                <button onClick={(e) => { e.stopPropagation(); setEditing(true); }} className="mono" style={{ background: 'none', border: 'none', fontSize: 8, letterSpacing: '0.12em', color: 'var(--warn)', padding: 0 }}>↻ METRIC</button>
-                <button onClick={(e) => { e.stopPropagation(); onClear(); }} className="mono" style={{ background: 'none', border: 'none', fontSize: 8, letterSpacing: '0.12em', color: 'var(--opp)', padding: 0 }}>✕ PLAYER</button>
-              </div>
-            )}
           </div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, alignItems: 'flex-end', justifyContent: 'center' }}>
-            {showPicker ? (
-              <>
-                {editing && (
-                  <button onClick={(e) => { e.stopPropagation(); setEditing(false); }} className="mono" style={{ width: '100%', textAlign: 'center', background: 'none', border: '1px dashed var(--bd)', borderRadius: 3, padding: '2px', fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)' }}>✕ KEEP {metric?.name?.toUpperCase()}</button>
-                )}
-                {METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === pick?.metricId).map((m) => {
-                  const cur = m.id === pick?.metricId;
-                  return (
-                    <button key={m.id} title={m.ef} onClick={() => { onPickMetric(m.id); setEditing(false); }} style={{ width: '100%', textAlign: 'left', background: cur ? 'color-mix(in srgb, var(--you) 14%, var(--bg))' : m.lock ? 'color-mix(in srgb, var(--warn) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${cur ? 'var(--you)' : m.lock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 3, padding: '4px 7px', display: 'flex', justifyContent: 'space-between', gap: 6, color: 'var(--text)' }}>
-                      <span style={{ fontSize: 11, fontWeight: 700 }}>{m.lock ? '◈ ' : ''}{m.name}</span>
-                      <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{m.sc}</span>
-                    </button>
-                  );
-                })}
-              </>
-            ) : (
-              <div onClick={onSelect} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', textAlign: 'right' }}>{metric?.name}</span>
-                <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 7, letterSpacing: '0.14em', color: 'var(--faint)' }}>
-                  <span style={{ width: 5, height: 5, background: 'var(--you)', borderRadius: '50%', display: 'inline-block', animation: 'bpulse 2s ease infinite' }} />
-                  HIDDEN
-                </div>
-              </div>
-            )}
-          </div>
+
+          {/* sealed: metric summary + change controls, stacked (no collision) */}
+          {!showPicker && (
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+              <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)' }}>{metric?.name}</span>
+              <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 7, letterSpacing: '0.12em', color: 'var(--faint)' }}>
+                <span style={{ width: 5, height: 5, background: 'var(--you)', borderRadius: '50%', display: 'inline-block', animation: 'bpulse 2s ease infinite' }} /> HIDDEN
+              </span>
+              <span style={{ flex: 1 }} />
+              <button onClick={() => setEditing(true)} className="mono" style={{ ...link, color: 'var(--warn)' }}>↻ METRIC</button>
+              <button onClick={onOpenPicker} className="mono" style={{ ...link, color: 'var(--opp)' }}>⇄ PLAYER</button>
+            </div>
+          )}
+
+          {/* metric picker — full card width, stacks cleanly */}
+          {showPicker && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {editing && (
+                <button onClick={() => setEditing(false)} className="mono" style={{ width: '100%', textAlign: 'center', background: 'none', border: '1px dashed var(--bd)', borderRadius: 3, padding: '3px', fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)' }}>✕ KEEP {metric?.name?.toUpperCase()}</button>
+              )}
+              {METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === pick?.metricId).map((m) => {
+                const cur = m.id === pick?.metricId;
+                return (
+                  <button key={m.id} title={m.ef} onClick={() => { onPickMetric(m.id); setEditing(false); }} style={{ width: '100%', textAlign: 'left', background: cur ? 'color-mix(in srgb, var(--you) 14%, var(--bg))' : m.lock ? 'color-mix(in srgb, var(--warn) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${cur ? 'var(--you)' : m.lock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 3, padding: '5px 8px', display: 'flex', justifyContent: 'space-between', gap: 8, color: 'var(--text)' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700 }}>{m.lock ? '◈ ' : ''}{m.name}</span>
+                    <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{m.sc}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       ) : (
         <div
-          onClick={onSelect}
+          onClick={onOpenPicker}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); onDropPlayer(e.dataTransfer.getData('text/plain')); }}
           style={{ minWidth: 0, minHeight: 78, background: selected ? 'var(--surface)' : 'transparent', border: `1px dashed ${selected ? 'var(--you)' : 'var(--bdh)'}`, borderLeft: `3px dashed ${selected ? 'var(--you)' : 'var(--bdh)'}`, borderRadius: 4, padding: '16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' }}
         >
           <span className="grotesk" style={{ fontSize: 20, color: 'var(--faint)' }}>+</span>
-          <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.12em' }}>DRAG / TAP PLAYER</span>
+          <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.12em' }}>TAP TO PICK PLAYER</span>
         </div>
       )}
       <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1130,6 +1157,51 @@ function SetupRow(props: {
       <div style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
         <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--dim)' }}>◆</span>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.16em', color: 'var(--faint)', fontWeight: 700 }}>SEALED · {winId.toUpperCase()}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Player picker (tap a spot in setup) — choose from this window's roster ──
+function PlayerPicker({ win, week, players, currentId, onPick, onRemove, onClose }: {
+  win: WindowId; week: number; players: Player[]; currentId?: string;
+  onPick: (id: string) => void; onRemove: () => void; onClose: () => void;
+}) {
+  const label = WINDOWS.find((w) => w.id === win)?.label ?? win.toUpperCase();
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflow: 'auto' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
+          <div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{label} · Pick a player</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>YOUR PLAYERS WHOSE GAME FALLS IN THIS WINDOW</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
+        </div>
+        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 440, overflow: 'auto' }}>
+          {players.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', textAlign: 'center', padding: '16px 0' }}>— no eligible players in this window —</div>}
+          {players.map((p) => {
+            const sel = p.id === currentId;
+            return (
+              <button key={p.id} onClick={() => onPick(p.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, background: sel ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${sel ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '8px 10px', color: 'var(--text)', textAlign: 'left', cursor: 'pointer' }}>
+                <PlayerImg playerId={p.id} team={p.team} pos={p.pos} size={34} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                    <InjuryBadge week={week} slug={p.id} />
+                  </div>
+                  <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
+                </div>
+                {sel && <span className="mono" style={{ fontSize: 8, color: 'var(--you)', flex: 'none' }}>CURRENT ✓</span>}
+              </button>
+            );
+          })}
+        </div>
+        {currentId && (
+          <div style={{ padding: '0 12px 12px' }}>
+            <button onClick={onRemove} className="mono" style={{ width: '100%', background: 'var(--bg)', border: '1px dashed var(--opp)', borderRadius: 4, padding: '8px', color: 'var(--opp)', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em' }}>✕ REMOVE FROM SPOT</button>
+          </div>
+        )}
       </div>
     </div>
   );
