@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ThemeName } from '../theme';
 import type { WindowId } from '../types';
 import { LEAGUE, YOU_TEAM_ID } from '../data/league';
@@ -69,17 +69,23 @@ const Ctx = createContext<Store | null>(null);
 const THEME_KEY = 'gc-theme';
 const SAVE_KEY = 'gc-coins';
 
-interface SaveState { coins: number; weeks: number[]; inv: Record<string, number>; applied: Record<number, AppliedWeek>; }
+// One-time demo grant so the powerup shop is testable. Applied once per browser
+// (existing testers get topped up too); spend it down freely after that.
+const DEMO_GRANT = 2500;
+
+interface SaveState { coins: number; weeks: number[]; inv: Record<string, number>; applied: Record<number, AppliedWeek>; granted: boolean; }
 function loadState(): SaveState {
   try {
     const raw = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
+    const granted = raw.granted === true;
     return {
-      coins: raw.coins ?? 0,
+      coins: (raw.coins ?? 0) + (granted ? 0 : DEMO_GRANT),
       weeks: Array.isArray(raw.weeks) ? raw.weeks : [],
       inv: raw.inv && typeof raw.inv === 'object' ? raw.inv : {},
       applied: raw.applied && typeof raw.applied === 'object' ? raw.applied : {},
+      granted: true,
     };
-  } catch { return { coins: 0, weeks: [], inv: {}, applied: {} }; }
+  } catch { return { coins: DEMO_GRANT, weeks: [], inv: {}, applied: {}, granted: true }; }
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -104,9 +110,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         weeks: [...creditedWeeks.current],
         inv: next.inv ?? inventory,
         applied: next.applied ?? applied,
+        granted: true,
       }));
     } catch { /* ignore */ }
   };
+
+  // Persist the one-time demo grant on first mount so a reload doesn't re-grant.
+  useEffect(() => { persist({ coins: initial.current.coins }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setTheme = (t: ThemeName) => {
     setThemeState(t);
