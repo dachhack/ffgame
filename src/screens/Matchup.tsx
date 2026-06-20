@@ -49,7 +49,6 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const aw = applied[week];
   const extras = { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, emp: aw?.emp };
   const extrasKey = JSON.stringify(extras);
-  const byes = useMemo(() => byePlayers(YOU, week), [week]);
   const oppId = gameForTeam(YOU, week)?.oppId ?? 'rock-tunnel';
   const you = getTeam(YOU)!;
   const opp = getTeam(oppId)!;
@@ -67,9 +66,10 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   const [invOpen, setInvOpen] = useState(false);
   const [pendingApply, setPendingApply] = useState<string | null>(null); // a targeted powerup awaiting a spot tap
+  const [byeStealSlot, setByeStealSlot] = useState<string | null>(null); // empty slot chosen for Bye Steal, awaiting a player
   function applyToSpot(key: string) {
-    if (pendingApply === 'double-or-nothing') setDoubleOrNothing(week, key);
-    setPendingApply(null);
+    if (pendingApply === 'double-or-nothing') { setDoubleOrNothing(week, key); setPendingApply(null); }
+    else if (pendingApply === 'bye-steal') setByeStealSlot(key); // keep pending until a bye player is chosen
   }
   // Rosters expand in setup (you need them to set lineups), collapse otherwise.
   const [rosterOpen, setRosterOpen] = useState<{ you: boolean; their: boolean }>(() => ({ you: initialPhase === 'setup', their: initialPhase === 'setup' }));
@@ -450,8 +450,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               )}
               <TargetPanel
                 phase={phase} week={week} inventory={inventory} aw={aw} windows={resolved.windows} oppPicks={oppPicks}
-                byes={byes} winClocks={winClocks}
-                onSpy={(k, r) => setSpy(week, k, r)} onByeSteal={(k, pid) => applyByeSteal(week, k, pid)}
+                winClocks={winClocks}
+                onSpy={(k, r) => setSpy(week, k, r)}
                 onMulligan={(k, c, m) => applyMulligan(week, k, c, m)} onEmp={(w, c) => applyEmp(week, w, c)}
                 onClearStake={() => clearDoubleOrNothing(week)} onClearBye={() => clearByeSteal(week)} onClearSpy={() => clearSpy(week)}
               />
@@ -568,6 +568,16 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
           />
         );
       })()}
+
+      {byeStealSlot && (
+        <PlayerPicker
+          win={byeStealSlot.split('#')[0] as WindowId} week={week} players={byeYou}
+          title="Field a bye player" subtitle="ON BYE — FIELD ONE FOR A FLAT PROJECTED SCORE"
+          onPick={(pid) => { applyByeSteal(week, byeStealSlot, pid); setByeStealSlot(null); setPendingApply(null); }}
+          onRemove={() => {}}
+          onClose={() => { setByeStealSlot(null); setPendingApply(null); }}
+        />
+      )}
 
       {invOpen && <InventoryModal inventory={inventory} armed={buffs} onArm={(id) => armBuff(week, id)} onDisarm={(id) => disarmBuff(week, id)} onApply={(id) => { setPendingApply(id); setInvOpen(false); }} onClose={() => setInvOpen(false)} />}
 
@@ -859,7 +869,7 @@ const POWERUP_HINT: Record<string, string> = {
 };
 
 // Power-ups that target one of YOUR spots (vs. whole-field buffs that just arm).
-const SPOT_APPLY = new Set(['double-or-nothing']);
+const SPOT_APPLY = new Set(['double-or-nothing', 'bye-steal']);
 
 // Setup inventory modal: explains every owned powerup and arms/disarms team buffs.
 function InventoryModal({ inventory, armed, onArm, onDisarm, onApply, onClose }: {
@@ -918,19 +928,17 @@ function InventoryModal({ inventory, armed, onArm, onDisarm, onApply, onClose }:
 function TargetPanel(props: {
   phase: Phase; week: number; inventory: Record<string, number>;
   aw?: { doubleOrNothing?: string; spy?: { slotKey: string; reveal: 'player' | 'metric' }; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>> };
-  windows: ReturnType<typeof buildMatchup>['windows']; oppPicks: Record<string, Pick>; byes: Player[]; winClocks: Record<string, number>;
-  onSpy: (k: string, reveal: 'player' | 'metric') => void; onByeSteal: (k: string, pid: string) => void;
+  windows: ReturnType<typeof buildMatchup>['windows']; oppPicks: Record<string, Pick>; winClocks: Record<string, number>;
+  onSpy: (k: string, reveal: 'player' | 'metric') => void;
   onMulligan: (k: string, atClock: number, m: string) => void; onEmp: (w: WindowId, clock: number) => void;
   onClearStake: () => void; onClearBye: () => void; onClearSpy: () => void;
 }) {
-  const { phase, inventory, aw, windows, oppPicks, byes, winClocks, onSpy, onByeSteal, onMulligan, onEmp, onClearStake, onClearBye, onClearSpy } = props;
-  const [byePid, setByePid] = useState(''); const [byeKey, setByeKey] = useState('');
+  const { phase, inventory, aw, windows, oppPicks, winClocks, onSpy, onMulligan, onEmp, onClearStake, onClearBye, onClearSpy } = props;
   const [mulKey, setMulKey] = useState(''); const [mulMet, setMulMet] = useState('');
   const [spySlot, setSpySlot] = useState('');
   const flat = windows.flatMap((w) => w.slots);
   const has = (id: string) => (inventory[id] ?? 0) > 0;
   const yourH2H = flat.filter((s) => s.you && s.their).map((s) => ({ key: slotKey(s.win, s.slotIndex), name: s.you!.player.name, win: s.win, pos: s.you!.player.pos }));
-  const emptySlots = flat.filter((s) => !s.you).map((s) => ({ key: slotKey(s.win, s.slotIndex), win: s.win }));
   // Every slot on the slate, by position only (no occupant revealed) — for Spy.
   const allSlots = flat.map((s) => ({ key: slotKey(s.win, s.slotIndex), win: s.win, idx: s.slotIndex }));
   // After rosters lock (live) and before any game kicks off.
@@ -949,11 +957,6 @@ function TargetPanel(props: {
   if (phase === 'setup') {
     if (aw?.doubleOrNothing) rows.push(Row('⚖️ Double/Nothing', <><span className="mono" style={{ fontSize: 9.5, color: 'var(--you)' }}>staked {yourH2H.find((s) => s.key === aw.doubleOrNothing)?.name ?? '—'}</span><button style={undo} title="Undo (refund)" onClick={onClearStake}>✕</button></>));
     if (aw?.byeSteal) rows.push(Row('🪂 Bye Steal', <><span className="mono" style={{ fontSize: 9.5, color: 'var(--you)' }}>fielded {getPlayer(aw.byeSteal.playerId)?.name ?? '—'}</span><button style={undo} title="Undo (refund)" onClick={onClearBye}>✕</button></>));
-    else if (has('bye-steal') && byes.length > 0 && emptySlots.length > 0) rows.push(Row('🪂 Bye Steal', <>
-      <select style={sel} value={byePid} onChange={(e) => setByePid(e.target.value)}><option value="">player…</option>{byes.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.pos})</option>)}</select>
-      <select style={sel} value={byeKey} onChange={(e) => setByeKey(e.target.value)}><option value="">slot…</option>{emptySlots.map((s) => <option key={s.key} value={s.key}>{s.win.toUpperCase()} open</option>)}</select>
-      <button style={btn} disabled={!byePid || !byeKey} onClick={() => { onByeSteal(byeKey, byePid); setByePid(''); setByeKey(''); }}>FIELD</button>
-    </>));
   }
   if (phase === 'live') {
     if (has('emp')) rows.push(Row('💥 EMP', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{WINDOWS.map((w) => {
@@ -1224,12 +1227,13 @@ function SetupRow(props: {
   const metric = player && pick?.metricId ? metricById(player.pos, pick.metricId) : null;
   // Armed team buffs that act on THIS spot — surfaced as a highlight on the card.
   const spotBuffs = player ? Object.keys(armed).filter((id) => armed[id] && buffAppliesToSpot(id, player.pos, pick?.metricId ?? null)) : [];
-  // Apply mode: a targeted powerup is awaiting a spot. Double or Nothing can be
-  // staked on any filled spot.
-  const applyEligible = applyMode === 'double-or-nothing' && !!player;
-  const applyHi = !!applyMode && applyEligible;
-  const applyDim = !!applyMode && !applyEligible;
-  const cardTap = applyMode ? (applyEligible ? onApplyToSpot : () => {}) : onOpenPicker;
+  // Apply mode: a targeted powerup is awaiting a spot. Double or Nothing → a
+  // filled spot; Bye Steal → an empty spot.
+  const fillEligible = applyMode === 'double-or-nothing' && !!player;
+  const emptyEligible = applyMode === 'bye-steal' && !player;
+  const applyHi = fillEligible;
+  const applyDim = !!applyMode && !fillEligible && !emptyEligible;
+  const cardTap = applyMode ? (fillEligible ? onApplyToSpot : () => {}) : onOpenPicker;
   const applyPu = applyMode ? powerupById(applyMode) : null;
   // "Change metric" re-opens the picker for an already-set spot without dropping
   // the player. Reset whenever the slot's player changes (incl. top-down shifts).
@@ -1312,13 +1316,13 @@ function SetupRow(props: {
         </div>
       ) : (
         <div
-          onClick={applyMode ? undefined : onOpenPicker}
+          onClick={applyMode ? (emptyEligible ? onApplyToSpot : undefined) : onOpenPicker}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); onDropPlayer(e.dataTransfer.getData('text/plain')); }}
-          style={{ minWidth: 0, minHeight: 78, background: selected ? 'var(--surface)' : 'transparent', border: `1px dashed ${selected ? 'var(--you)' : 'var(--bdh)'}`, borderLeft: `3px dashed ${selected ? 'var(--you)' : 'var(--bdh)'}`, borderRadius: 4, padding: '16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', opacity: applyMode ? 0.4 : 1 }}
+          style={{ minWidth: 0, minHeight: 78, background: emptyEligible ? 'color-mix(in srgb, var(--warn) 12%, transparent)' : selected ? 'var(--surface)' : 'transparent', border: `1px dashed ${emptyEligible ? 'var(--warn)' : selected ? 'var(--you)' : 'var(--bdh)'}`, borderLeft: `3px dashed ${emptyEligible ? 'var(--warn)' : selected ? 'var(--you)' : 'var(--bdh)'}`, borderRadius: 4, padding: '16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', opacity: applyDim ? 0.4 : 1 }}
         >
-          <span className="grotesk" style={{ fontSize: 20, color: 'var(--faint)' }}>+</span>
-          <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.12em' }}>TAP TO PICK PLAYER</span>
+          <span className="grotesk" style={{ fontSize: 20, color: emptyEligible ? 'var(--warn)' : 'var(--faint)' }}>{emptyEligible ? applyPu?.icon : '+'}</span>
+          <span className="mono" style={{ fontSize: 10, color: emptyEligible ? 'var(--warn)' : 'var(--faint)', letterSpacing: '0.12em', fontWeight: emptyEligible ? 700 : 400 }}>{emptyEligible ? 'TAP TO FIELD BYE' : 'TAP TO PICK PLAYER'}</span>
         </div>
       )}
       <div style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
@@ -1361,8 +1365,8 @@ function MetricInfo({ metric, onClose }: { metric: Metric; onClose: () => void }
 }
 
 // ── Player picker (tap a spot in setup) — choose from this window's roster ──
-function PlayerPicker({ win, week, players, currentId, onPick, onRemove, onClose }: {
-  win: WindowId; week: number; players: Player[]; currentId?: string;
+function PlayerPicker({ win, week, players, currentId, title = 'Pick a player', subtitle = 'YOUR PLAYERS WHOSE GAME FALLS IN THIS WINDOW', onPick, onRemove, onClose }: {
+  win: WindowId; week: number; players: Player[]; currentId?: string; title?: string; subtitle?: string;
   onPick: (id: string) => void; onRemove: () => void; onClose: () => void;
 }) {
   const label = WINDOWS.find((w) => w.id === win)?.label ?? win.toUpperCase();
@@ -1371,8 +1375,8 @@ function PlayerPicker({ win, week, players, currentId, onPick, onRemove, onClose
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{label} · Pick a player</div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>YOUR PLAYERS WHOSE GAME FALLS IN THIS WINDOW</div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{label} · {title}</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{subtitle}</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
         </div>
