@@ -1,6 +1,6 @@
 import type { Player, Pos, PbpEvent, SlotResolution, EffectType, BuffFx } from '../types';
 import { metricById } from '../data/metrics';
-import { realPbpFor, realPossFor, REAL_WEEKS, type RealPlayKind } from '../data/realPbp';
+import { realPbpFor, realPossFor, realWallFor, REAL_WEEKS, type RealPlayKind } from '../data/realPbp';
 import { returnPlaysFor } from '../data/returns';
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -409,12 +409,25 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const events: PbpEvent[] = [];
 
   // REAL CLOCK: drip accrues per real wall-clock minute of ACTIVE play instead
-  // of per game-clock minute (applied per segment in minuteGain). Every play
-  // already carries its real wall-clock time `t`, so each side maps game clock →
-  // wall clock from its own timeline via realTimeAt — no separate baked curve
-  // needed. A game-minute that crosses a quarter/half boundary drops the
-  // standard break, so drip pauses there.
+  // of per game-clock minute (applied per segment in minuteGain). Each game has a
+  // baked active-wall timeline (cumulative real wall-seconds in play vs game
+  // clock, with quarter/half breaks excluded). activeWallAt(c) interpolates it,
+  // so drip stretches with the real pace of each stretch and hard-pauses at every
+  // quarter and the half — no estimates.
   const realResolve = !!opts.realResolve;
+  const wallFn = (player: Player): ((c: number) => number) | null => {
+    if (!realResolve) return null;
+    const arr = realWallFor(week, player.team);
+    if (!arr || arr.length < 2) return null;
+    return (c: number) => {
+      if (c <= 0) return arr[0];
+      const i = Math.floor(c / 60);
+      if (i >= arr.length - 1) return arr[arr.length - 1] + (c - (arr.length - 1) * 60); // extend ~1:1 past last sample
+      return arr[i] + (arr[i + 1] - arr[i]) * ((c - i * 60) / 60);
+    };
+  };
+  const yWallAt = dripYou ? wallFn(you.player) : null;
+  const tWallAt = dripTheir ? wallFn(their.player) : null;
 
   // Per-side ledger of scoring changes caused by armed/active powerups — surfaced
   // at FINAL in each spot. `vsOpp` entries removed points from the opponent
@@ -456,19 +469,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     // to gate them), so the drip keeps ticking for the bonus window.
     const isOT = t0 >= GAME_SECONDS;
     let secs = isOT ? (buffs.has('overtime') ? t1 - t0 : 0) : offSecs(poss, t0, t1);
-    // REAL CLOCK: stretch THIS game-minute's possession seconds into real
-    // wall-clock-active seconds, from the player's own play timestamps. Slow
-    // (clock-stopping) stretches drip more than hurry-up; a minute crossing a
-    // quarter/half boundary drops the standard break, so drip pauses there.
-    if (realResolve && secs > 0 && !isOT) {
-      const pl = side === 'you' ? you.player : their.player;
-      const mId = side === 'you' ? you.metricId : their.metricId;
-      let dwall = realTimeAt(pl, week, t1, mId) - realTimeAt(pl, week, t0, mId);
-      if (t0 < 900 && t1 >= 900) dwall -= 120;   // end of Q1
-      if (t0 < 1800 && t1 >= 1800) dwall -= 780;  // halftime
-      if (t0 < 2700 && t1 >= 2700) dwall -= 120;  // end of Q3
-      secs *= Math.min(4, Math.max(0, dwall / (t1 - t0)));
-    }
+    // REAL CLOCK: convert THIS game-minute's possession seconds into real
+    // wall-clock-active seconds via the game's baked active-wall timeline (breaks
+    // already excluded), so drip runs on the real clock and pauses at quarter/half.
+    const wf = side === 'you' ? yWallAt : tWallAt;
+    if (wf && secs > 0 && !isOT) secs *= Math.max(0, (wf(t1) - wf(t0)) / (t1 - t0));
     if (secs <= 0) return ZERO_GAIN;
     const hotMult = s.hot ? (buffs.has('momentum') ? 3 : 2) : 1; // Momentum: 3× when hot
     const base = s.rate * (secs / 60);
