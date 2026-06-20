@@ -17,9 +17,11 @@ was removed from `src/engine/sim.ts`:
 - Coverage check: of 184 rostered skill players, only `brandon-aiyuk`,
   `philip-rivers`, `deshaun-watson` never appear in any week (all genuinely did
   not play in 2025 → correctly zero). K & DST fully covered (31 each/week).
-- Still NOT real (cosmetic, flagged): the hardcoded `47:12:00` "LOCKS IN"
-  countdown in `Matchup`/`LeagueHub`/`LeagueOverview` — a static demo placeholder
-  (the 2025 season is historical, so there's no live lock deadline).
+- The old hardcoded `47:12:00` "LOCKS IN" countdown is replaced by a real
+  datetime: `weekLockLabel(week)` in `nflSlate.ts` returns the actual date + time
+  one hour before the week's first game kicks off (e.g. "Thu, Sep 4 · 7:15 PM
+  ET"), used in `Matchup`/`LeagueHub`/`LeagueOverview`. First game = earliest
+  window with games (TNF); kickoff parsed from the window's `time` label.
 
 ## Real PBP enabled (v0.9.7.6) — was silently synthetic
 `src/data/realWeeks.ts` had `REAL_WEEKS = new Set([])` even though

@@ -6,6 +6,7 @@ import { TOTAL_SLOTS } from '../data/metrics';
 import { POWERUPS } from '../data/powerups';
 import { avatarUrl } from '../data/media';
 import { DEMO_WEEK, SLEEPER_HANDLE } from '../config';
+import { weekLockLabel } from '../data/nflSlate';
 import { APP_VERSION, DATA_SOURCE } from '../app/version';
 import type { FantasyTeam } from '../types';
 
@@ -83,7 +84,7 @@ export function LeagueOverview() {
                   <TeamMini team={opp} accent="var(--opp)" right />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid var(--bd)' }}>
-                  <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>0/{TOTAL_SLOTS} SLOTS SET · LOCKS 47:12:00</span>
+                  <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>0/{TOTAL_SLOTS} SLOTS SET · LOCKS {weekLockLabel(DEMO_WEEK)}</span>
                   <button
                     onClick={() => navigate({ name: 'matchup', week: DEMO_WEEK, phase: 'setup' })}
                     className="mono"

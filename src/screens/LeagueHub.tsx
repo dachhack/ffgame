@@ -3,6 +3,7 @@ import { Brand, Header, ThemeSwitcher, UserChip, Avatar, fonts } from '../app/ui
 import { getTeam, gameForTeam } from '../data/league';
 import { TOTAL_SLOTS } from '../data/metrics';
 import { DEMO_WEEK, SLEEPER_HANDLE } from '../config';
+import { weekLockLabel } from '../data/nflSlate';
 
 const { MONO, GROTESK } = fonts;
 
@@ -84,7 +85,7 @@ export function LeagueHub() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                 <div style={{ textAlign: 'right' }}>
                   <div className="mono" style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--faint)' }}>LOCKS IN</div>
-                  <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: 'var(--warn)' }}>47:12:00</div>
+                  <div className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--warn)' }}>{weekLockLabel(DEMO_WEEK)}</div>
                 </div>
                 <span
                   className="mono"
