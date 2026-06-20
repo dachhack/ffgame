@@ -494,6 +494,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 backups={backupAssign}
                 slotName={slotName}
                 armed={buffs}
+                aw={aw}
                 applyMode={pendingApply}
                 onApplyToSpot={applyToSpot}
               />
@@ -1060,10 +1061,11 @@ function WindowSection(props: {
   backups: Record<string, string>;
   slotName: Record<string, string>;
   armed: Record<string, boolean>;
+  aw?: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string } };
   applyMode: string | null;
   onApplyToSpot: (key: string) => void;
 }) {
-  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, applyMode, onApplyToSpot } = props;
+  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
@@ -1198,6 +1200,7 @@ function WindowSection(props: {
             return (
               <SetupRow
                 key={key} slotKeyStr={key} winId={w.id} week={week} pick={picks[key]} selected={selSlot === key} inventory={inventory} armed={armed}
+                appliedPu={[...(aw?.doubleOrNothing === key ? ['double-or-nothing'] : []), ...(aw?.byeSteal?.slotKey === key ? ['bye-steal'] : [])]}
                 applyMode={applyMode} onApplyToSpot={() => onApplyToSpot(key)}
                 onOpenPicker={() => onOpenPicker(key, w.id)} onPickMetric={(m) => pickMetricFor(key, m)}
                 onDropPlayer={(id) => onAssign(id)}
@@ -1216,17 +1219,21 @@ function WindowSection(props: {
 // ── Setup row ──
 function SetupRow(props: {
   slotKeyStr: string; winId: WindowId; week: number; pick?: Pick; selected: boolean; inventory: Record<string, number>; armed: Record<string, boolean>;
+  appliedPu: string[];
   applyMode: string | null; onApplyToSpot: () => void;
   onOpenPicker: () => void; onPickMetric: (m: string) => void; onDropPlayer: (id: string) => void;
 }) {
-  const { winId, week, pick, selected, inventory, armed, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onDropPlayer } = props;
+  const { winId, week, pick, selected, inventory, armed, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onDropPlayer } = props;
   const isMobile = useIsMobile();
   const gridCols = '1fr 1fr'; // no center gutter — your spot vs the sealed opponent
   const rowGap = isMobile ? 5 : 8;
   const player = pick ? getPlayer(pick.playerId) : null;
   const metric = player && pick?.metricId ? metricById(player.pos, pick.metricId) : null;
   // Armed team buffs that act on THIS spot — surfaced as a highlight on the card.
-  const spotBuffs = player ? Object.keys(armed).filter((id) => armed[id] && buffAppliesToSpot(id, player.pos, pick?.metricId ?? null)) : [];
+  const spotBuffs = [
+    ...(player ? Object.keys(armed).filter((id) => armed[id] && buffAppliesToSpot(id, player.pos, pick?.metricId ?? null)) : []),
+    ...appliedPu,
+  ];
   // Apply mode: a targeted powerup is awaiting a spot. Double or Nothing → a
   // filled spot; Bye Steal → an empty spot.
   const fillEligible = applyMode === 'double-or-nothing' && !!player;
