@@ -171,7 +171,7 @@ export function LeagueOverview() {
   );
 }
 
-function ShopModal({ onClose }: { onClose: () => void }) {
+export function ShopModal({ onClose }: { onClose: () => void }) {
   const { coins, inventory, buyPowerup } = useStore();
   const [flash, setFlash] = useState<string | null>(null);
   function buy(id: string) {

@@ -12,6 +12,7 @@ import {
 } from '../engine/matchup';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
+import { ShopModal } from './LeagueOverview';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
 const YOU = 'happy-campers';
@@ -115,6 +116,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const [backupMenu, setBackupMenu] = useState<{ key: string } | null>(null);
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   const [puView, setPuView] = useState<'active' | 'apply' | null>(null);
+  const [shopOpen, setShopOpen] = useState(false);
   const [scoutWin, setScoutWin] = useState<WindowId | null>(null); // sealed opponent spot tapped — show candidate pool
   const [pendingApply, setPendingApply] = useState<string | null>(null); // a targeted powerup awaiting a spot tap
   const [byeStealSlot, setByeStealSlot] = useState<string | null>(null); // empty slot chosen for Bye Steal, awaiting a player
@@ -583,6 +585,9 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                   <button onClick={() => setPuView('apply')} className="mono" style={{ flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 6, padding: '7px 9px' }}>
                     ✦ APPLY{appliable.length > 0 ? ` · ${appliable.length}` : ''}
                   </button>
+                  <button onClick={() => setShopOpen(true)} className="mono" style={{ flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 9px' }}>
+                    🛒 SHOP
+                  </button>
                 </div>
               )}
               <TargetPanel aw={aw} oppPicks={oppPicks} preKick={preKickPhase} onClearSpy={() => clearSpy(week)} />
@@ -750,6 +755,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
 
       {puView === 'active' && <ActivePowerupsModal effects={activeEffects} onClose={() => setPuView(null)} />}
       {puView === 'apply' && <ApplyPowerupsModal items={appliable} inventory={inventory} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); setPuView(null); }} onClose={() => setPuView(null)} />}
+      {shopOpen && <ShopModal onClose={() => setShopOpen(false)} />}
 
       {earnOpen && <EarningsModal earnings={earnings} onReset={() => { resetDripCoin(); setEarnOpen(false); }} onClose={() => setEarnOpen(false)} />}
     </>
