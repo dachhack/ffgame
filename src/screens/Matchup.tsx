@@ -487,12 +487,12 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                   <button onClick={() => setPendingApply(null)} className="mono" style={{ background: 'none', border: 'none', color: 'var(--dim)', fontWeight: 700, fontSize: 9, letterSpacing: '0.1em' }}>CANCEL</button>
                 </div>
               ) : (
-                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                  <button onClick={() => setPuView('active')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--you)', borderRadius: 6, padding: '7px 11px' }}>
-                    ◈ ACTIVE POWER-UPS{activeEffects.length > 0 ? ` · ${activeEffects.length}` : ''}
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'nowrap' }}>
+                  <button onClick={() => setPuView('active')} className="mono" style={{ flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--you)', borderRadius: 6, padding: '7px 9px' }}>
+                    ◈ ACTIVE{activeEffects.length > 0 ? ` · ${activeEffects.length}` : ''}
                   </button>
-                  <button onClick={() => setPuView('apply')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 6, padding: '7px 11px' }}>
-                    ✦ APPLY POWER-UPS{appliable.length > 0 ? ` · ${appliable.length}` : ''}
+                  <button onClick={() => setPuView('apply')} className="mono" style={{ flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 6, padding: '7px 9px' }}>
+                    ✦ APPLY{appliable.length > 0 ? ` · ${appliable.length}` : ''}
                   </button>
                 </div>
               )}
