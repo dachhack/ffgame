@@ -18,6 +18,45 @@ const YOU = 'happy-campers';
 const TICK_MS = 700;
 const TICK_SECONDS = 20;
 
+// Window kickoff time-of-day, parsed from a window's `time` string ("Sun 1:00p")
+// to seconds-since-midnight (ET) — the base for the wall-clock header.
+function kickoffSecOfDay(timeStr: string): number {
+  const t = timeStr.split(' ')[1] ?? timeStr;
+  const m = /(\d+):(\d+)\s*([ap])/i.exec(t);
+  if (!m) return 13 * 3600;
+  let h = (+m[1]) % 12;
+  if (m[3].toLowerCase() === 'p') h += 12;
+  return h * 3600 + (+m[2]) * 60;
+}
+// Seconds-of-day → "1:14 PM" (wraps past midnight).
+function fmtTimeOfDay(secOfDay: number): string {
+  const t = ((Math.floor(secOfDay) % 86400) + 86400) % 86400;
+  const h = Math.floor(t / 3600);
+  const mm = Math.floor((t % 3600) / 60);
+  const ap = h >= 12 ? 'PM' : 'AM';
+  const h12 = ((h + 11) % 12) + 1;
+  return `${h12}:${String(mm).padStart(2, '0')} ${ap}`;
+}
+
+// The "TEAM vs TEAM" + each game's current clock line that sits below a slot and
+// heads its play-by-play log. Either side may be absent (unopposed / backup).
+function GameLine({ youTeam, theirTeam, youClock, theirClock }: { youTeam?: string; theirTeam?: string; youClock?: number; theirClock?: number }) {
+  const cell = (team?: string, clk?: number) => team ? (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      <Img src={teamLogo(team)} size={13} radius={2} fallback={<span />} />
+      <span style={{ color: 'var(--dimstrong)', fontWeight: 700 }}>{team}</span>
+      {clk != null && <span style={{ color: 'var(--faint)' }}>{fmtClock(clk)}</span>}
+    </span>
+  ) : <span style={{ color: 'var(--faint)' }}>—</span>;
+  return (
+    <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 9, letterSpacing: '0.04em', padding: '6px 0 1px' }}>
+      {cell(youTeam, youClock)}
+      <span style={{ color: 'var(--faint)', fontWeight: 700 }}>vs</span>
+      {cell(theirTeam, theirClock)}
+    </div>
+  );
+}
+
 // Drip coin — an actual minted-coin glyph (gold disc with the ◈ house mark),
 // so coin reads as currency wherever it appears instead of a bare symbol.
 function CoinIcon({ size = 12 }: { size?: number }) {
@@ -84,6 +123,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     else if (pendingApply === 'bye-steal') setByeStealSlot(key); // keep pending until a bye player is chosen
     else if (pendingApply === 'spy') setSpySlot(key); // keep pending until a reveal is chosen
     else if (pendingApply === 'mulligan') setMulliganSlot(key); // keep pending until a metric is chosen
+    else if (pendingApply === 'metric-swap' || pendingApply === 'player-swap') { setSwapTarget({ key, win: key.split('#')[0] as WindowId }); setPendingApply(null); } // open the swap menu on the tapped live spot
   }
   function applyToWindow(win: WindowId) {
     if (pendingApply === 'emp') { applyEmp(week, win, winClocks[win] ?? 0); setPendingApply(null); }
@@ -267,7 +307,6 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const totalSlots = totalSlotsWith(extraSlots);
   const anyPlaying = Object.values(winPlaying).some(Boolean);
   const extraSlotQty = inventory['extra-slot'] ?? 0;
-  const canSwap = phase === 'live' && ((inventory['metric-swap'] ?? 0) > 0 || (inventory['player-swap'] ?? 0) > 0);
 
   // ── Power-up windows: every window has its own lock/live timeline. A 'pre'
   // power-up can be applied until the first window starts; a 'live' one only
@@ -556,6 +595,13 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 clock={winClocks[rw.window.id] ?? 0}
                 maxClock={winTarget[rw.window.id] ?? GAME_SECONDS}
                 wallClock={wallClock}
+                wallSeconds={(() => {
+                  const c = winClocks[rw.window.id] ?? 0;
+                  // Real seconds elapsed at the current feed position: direct in
+                  // wall modes; in game mode, scale the game position into the
+                  // window's real-time span so the wall clock still advances.
+                  return wallClock ? c : ((winMax[rw.window.id] ? c / winMax[rw.window.id] : 0) * (winRealMax[rw.window.id] ?? 0));
+                })()}
                 playing={!!winPlaying[rw.window.id]}
                 onTogglePlay={() => setWinPlay(rw.window.id, !winPlaying[rw.window.id])}
                 onReplay={() => replayWin(rw.window.id)}
@@ -563,8 +609,6 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 extraSlotQty={extraSlotQty}
                 onApplyExtra={() => applyExtraSlot(week, rw.window.id)}
                 onRemoveExtra={() => removeExtraSlot(week, rw.window.id)}
-                canSwap={canSwap}
-                onPowerup={(key) => setSwapTarget({ key, win: rw.window.id })}
                 onAssignBackup={(key) => setBackupMenu({ key })}
                 picks={picks}
                 selSlot={selSlot}
@@ -975,8 +1019,8 @@ function buffAppliesToSpot(id: string, pos: Pos, metricId: string | null): boole
 // Short "how to use" hints for the non-armable powerups in the inventory card.
 const POWERUP_HINT: Record<string, string> = {
   'extra-slot': 'Tap ➕ ADD SLOT on a window header.',
-  'metric-swap': 'Use ⚡ on a spot during LIVE.',
-  'player-swap': 'Use ⚡ on a spot during LIVE.',
+  'metric-swap': 'Tap ✦ APPLY, then a live spot.',
+  'player-swap': 'Tap ✦ APPLY, then a live spot.',
   'unlock-return': 'Pick the ◈ metric on a spot.',
   'unlock-combo-drip': 'Pick the ◈ metric on a spot.',
   'unlock-pass-td10': 'Pick the ◈ metric on a spot.',
@@ -989,7 +1033,7 @@ const POWERUP_HINT: Record<string, string> = {
 
 // Targeted power-ups applied by tapping a spot/window (vs. whole-field buffs
 // that just arm). Each enters apply-mode, then the tap finishes it.
-const SPOT_APPLY = new Set(['double-or-nothing', 'bye-steal', 'spy', 'mulligan', 'emp']);
+const SPOT_APPLY = new Set(['double-or-nothing', 'bye-steal', 'spy', 'mulligan', 'emp', 'metric-swap', 'player-swap']);
 
 // Shared modal shell for the two power-up cards.
 function PuShell({ title, subtitle, accent, onClose, children }: { title: string; subtitle: string; accent: string; onClose: () => void; children: ReactNode }) {
@@ -1201,6 +1245,7 @@ function WindowSection(props: {
   clock: number;
   maxClock: number;
   wallClock: boolean;
+  wallSeconds: number;
   playing: boolean;
   onTogglePlay: () => void;
   onReplay: () => void;
@@ -1208,9 +1253,7 @@ function WindowSection(props: {
   extraSlotQty: number;
   onApplyExtra: () => void;
   onRemoveExtra: () => void;
-  canSwap: boolean;
   armed: Record<string, boolean>;
-  onPowerup: (key: string) => void;
   onAssignBackup: (key: string) => void;
   picks: Record<string, Pick>;
   selSlot: string | null;
@@ -1231,7 +1274,7 @@ function WindowSection(props: {
   onApplyToWindow: (win: WindowId) => void;
   onScout: (win: WindowId) => void;
 }) {
-  const { rw, week, phase, clock, maxClock, wallClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout } = props;
+  const { rw, week, phase, clock, maxClock, wallClock, wallSeconds, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
@@ -1242,9 +1285,10 @@ function WindowSection(props: {
   const spotEligible = (s: typeof rw.slots[number]) => {
     if (applyMode === 'spy') return !!s.their;             // reveal the opponent here
     if (applyMode === 'mulligan') return !!s.you && !done; // re-roll your metric
+    if (applyMode === 'metric-swap' || applyMode === 'player-swap') return !!s.you && !done; // swap this live spot
     return false;
   };
-  const spotApplyMode = applyMode === 'spy' || applyMode === 'mulligan';
+  const spotApplyMode = applyMode === 'spy' || applyMode === 'mulligan' || applyMode === 'metric-swap' || applyMode === 'player-swap';
   const [slateOpen, setSlateOpen] = useState(false);
   // The real NFL games feeding this window: map each window player's team to its
   // actual away@home matchup that week, and list the players involved.
@@ -1312,8 +1356,8 @@ function WindowSection(props: {
             <div style={{ width: 70, height: 3, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' }}>
               <div style={{ width: `${pct}%`, height: '100%', background: done ? 'var(--you)' : '#FF4F62', transition: 'width .3s linear' }} />
             </div>
-            <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>{fmtClock(Math.min(clock, maxClock))}</span>
-            <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>/ {fmtClock(maxClock)}</span>
+            <span className="mono" title="Wall-clock time of day (ET) at the current feed position" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>{fmtTimeOfDay(kickoffSecOfDay(w.time) + wallSeconds)}</span>
+            <span className="mono" style={{ fontSize: 8, fontWeight: 700, color: 'var(--faint)', letterSpacing: '0.08em' }}>ET</span>
             {phase === 'live' && (
               done ? (
                 <button onClick={onReplay} className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 8px' }}>↺ REPLAY</button>
@@ -1391,7 +1435,7 @@ function WindowSection(props: {
           // both sides share it.
           const youClock = wallClock && s.you ? clockAtRealTime(s.you.player, week, clock, s.you.metricId ?? undefined) : clock;
           const theirClock = wallClock && s.their ? clockAtRealTime(s.their.player, week, clock, s.their.metricId ?? undefined) : clock;
-          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} canSwap={canSwap && !!s.you} onPowerup={() => onPowerup(key)} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} />;
+          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} />;
           if (!spotApplyMode) return row;
           const elig = spotEligible(s);
           return (
@@ -1399,7 +1443,7 @@ function WindowSection(props: {
               {row}
               {elig && (
                 <div onClick={() => onApplyToSpot(key)} style={{ position: 'absolute', inset: 0, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--warn) 14%, transparent)', border: '1px dashed var(--warn)', borderRadius: 4, cursor: 'pointer' }}>
-                  <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 9px' }}>{powerupById(applyMode!)?.icon} TAP TO {applyMode === 'spy' ? 'SPY' : 'MULLIGAN'}</span>
+                  <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 9px' }}>{powerupById(applyMode!)?.icon} TAP TO {applyMode === 'spy' ? 'SPY' : applyMode === 'mulligan' ? 'MULLIGAN' : 'SWAP'}</span>
                 </div>
               )}
             </div>
@@ -1693,10 +1737,10 @@ function BuffFxRow({ side, fx, stake }: { side: 'you' | 'their'; fx?: BuffFx[]; 
 }
 
 // ── Score row (live / final) ──
-function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, done, canSwap, onPowerup, onAssignBackup, turnoverCoin, backups, slotName }: {
+function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
   week: number; youClock: number; theirClock: number; open: boolean; onToggle: () => void; phase: Phase; done: boolean;
-  canSwap: boolean; onPowerup: () => void; onAssignBackup: () => void; turnoverCoin: number;
+  onAssignBackup: () => void; turnoverCoin: number;
   backups: Record<string, string>; slotName: Record<string, string>;
 }) {
   const ownKey = slotKey(slot.win, slot.slotIndex);
@@ -1772,7 +1816,10 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
         )}
         {(phase === 'final' || done) && <BuffFxRow side={mineBackup ? 'you' : 'their'} fx={mineBackup ? slot.youBuffFx : slot.theirBuffFx} />}
         {open && (
-          <TwoColLog events={bEvents} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} youCoin={mineBackup ? metricCoin(be.player.pos, be.metricId) : 0} theirCoin={mineBackup ? 0 : metricCoin(be.player.pos, be.metricId)} />
+          <>
+            <GameLine youTeam={mineBackup ? be.player.team : undefined} theirTeam={mineBackup ? undefined : be.player.team} youClock={mineBackup ? bclock : undefined} theirClock={mineBackup ? undefined : bclock} />
+            <TwoColLog events={bEvents} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} youCoin={mineBackup ? metricCoin(be.player.pos, be.metricId) : 0} theirCoin={mineBackup ? 0 : metricCoin(be.player.pos, be.metricId)} />
+          </>
         )}
       </div>
     );
@@ -1819,9 +1866,6 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
   const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} />;
   const centerKids = (
     <>
-      {canSwap && !done && (
-        <button onClick={onPowerup} title="Apply a real-time powerup (Metric / Player Swap)" className="mono" style={{ color: 'var(--on-accent)', background: 'var(--warn)', border: 'none', borderRadius: 4, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', padding: '5px 7px', boxShadow: '0 0 12px color-mix(in srgb, var(--warn) 55%, transparent)', animation: 'bpulse 1.5s ease infinite' }}>⚡ USE</button>
-      )}
       {slot.events.length > 0 && (
         <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
       )}
@@ -1834,7 +1878,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
         {youCard}
         {theirCard}
       </div>
-      {(slot.events.length > 0 || (canSwap && !done)) && (
+      {slot.events.length > 0 && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 14, marginTop: 4 }}>{centerKids}</div>
       )}
       {incomingName && !(phase === 'final' && slot.youSub) && (
@@ -1865,7 +1909,12 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
       )}
       {final && <BuffFxRow side="you" fx={slot.youBuffFx} stake={slot.youStake} />}
       {final && <BuffFxRow side="their" fx={slot.theirBuffFx} />}
-      {open && <TwoColLog events={visibleEvents} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} youCoin={metricCoin(slot.you.player.pos, slot.you.metricId)} theirCoin={metricCoin(slot.their.player.pos, slot.their.metricId)} />}
+      {open && (
+        <>
+          <GameLine youTeam={slot.you.player.team} theirTeam={slot.their.player.team} youClock={youClock} theirClock={theirClock} />
+          <TwoColLog events={visibleEvents} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} youCoin={metricCoin(slot.you.player.pos, slot.you.metricId)} theirCoin={metricCoin(slot.their.player.pos, slot.their.metricId)} />
+        </>
+      )}
     </div>
   );
 }

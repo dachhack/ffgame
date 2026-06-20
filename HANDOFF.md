@@ -1,6 +1,25 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-06-20 · Build `v0.9.5.10`_
+_Last updated: 2026-06-20 · Build `v0.9.7.2`_
+
+## Live board layout (v0.9.7.2)
+- **Window header clock**: shows the **wall-clock time of day** (ET), e.g.
+  "1:14 PM", instead of the old `game / 60:00`. `WindowSection` takes a
+  `wallSeconds` prop (real seconds elapsed at the current feed position —
+  `winClocks` directly in real modes, or game-position scaled into the window's
+  real span in game mode). Base time-of-day is parsed from `w.time`
+  (`kickoffSecOfDay` / `fmtTimeOfDay` helpers in Matchup.tsx). Progress bar +
+  ▶/❚❚ + FINAL chip are unchanged.
+- **Per-slot game line**: the `GameLine` component (`TEAM vs TEAM` + each game's
+  current game clock) renders as the header of a slot's expandable log — in both
+  the head-to-head and unopposed/backup `open` blocks. Each side shows its own
+  team logo + `fmtClock(youClock/theirClock)` (clocks differ per game in real
+  modes).
+- **Real-time power-ups folded into ✦ APPLY**: the per-slot `⚡ USE` chip is
+  gone. `metric-swap` / `player-swap` are now in `SPOT_APPLY`, so they list in
+  the Apply card with an APPLY button → `pendingApply` → tap a live spot
+  (`spotEligible` = `s.you && !done`) → opens the existing `SwapMenu` via
+  `applyToSpot`. `ScoreRow`/`WindowSection` no longer take `canSwap`/`onPowerup`.
 
 ## What this is
 Drip League FF (formerly "Gridiron Clash") — a Vite + React 18 + TypeScript
