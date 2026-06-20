@@ -1972,10 +1972,14 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   const bigNum = suppressSpent != null ? (
     <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--dim)', lineHeight: 1, textDecoration: 'line-through' }}>{suppressSpent.toFixed(1)}</div>
   ) : halvedFrom != null ? (
-    <div style={{ textAlign: 'center' }}>
-      <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--faint)', lineHeight: 1, textDecoration: 'line-through' }}>{halvedFrom.toFixed(1)}</div>
-      <div className="grotesk" style={{ fontSize: isMobile ? 24 : 26, fontWeight: 700, color: 'var(--fx-stop)', lineHeight: 1, letterSpacing: '-0.02em', marginTop: 2 }}>{bank.toFixed(1)}</div>
-      <div className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-stop)', marginTop: 3 }}>÷2 SUPPRESSED</div>
+    // Crossed-out original + ÷2 SUPPRESSED sit BESIDE the final number (toward
+    // the card's center) so the chip stays the same height as a normal score.
+    <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row-reverse' : 'row', alignItems: 'center', gap: 6 }}>
+      <div className="grotesk" style={{ fontSize: isMobile ? 24 : 26, fontWeight: 700, color: 'var(--fx-stop)', lineHeight: 1, letterSpacing: '-0.02em' }}>{bank.toFixed(1)}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: side === 'you' ? 'flex-end' : 'flex-start', lineHeight: 1.15 }}>
+        <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--faint)', textDecoration: 'line-through' }}>{halvedFrom.toFixed(1)}</span>
+        <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-stop)' }}>÷2 SUPPRESSED</span>
+      </div>
     </div>
   ) : (
     <div className="grotesk" style={{ fontSize: isMobile ? 24 : 26, fontWeight: 700, color: negated ? 'var(--fx-nuke)' : accent, lineHeight: 1, letterSpacing: '-0.02em', textDecoration: negated ? 'line-through' : undefined, animation: nuked ? 'shake .5s' : undefined }}>{bank.toFixed(1)}</div>
