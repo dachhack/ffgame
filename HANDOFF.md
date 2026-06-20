@@ -1,6 +1,17 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-06-20 · Build `v0.9.7.2`_
+_Last updated: 2026-06-20 · Build `v0.9.7.6`_
+
+## Real PBP enabled (v0.9.7.6) — was silently synthetic
+`src/data/realWeeks.ts` had `REAL_WEEKS = new Set([])` even though
+`public/pbp/w1–w14.json` (real 2025 nflverse play-by-play, with real game clock
+`c`, real wall-clock `t`, and `play_id`) were committed. With the set empty the
+loader never fetched them and the whole engine ran on `buildPlays` (synthetic).
+Set to `{1..14}` so `realRawPlays` actually returns real plays (player ids are
+`normName(name)`-slugs, matching the pbp keys). The re-bake generator
+(`scripts/pbp/genRealPbp.mjs`) should populate this; it did not, so it's set by
+hand for now. The log now prints **both** the game clock and the real wall-clock
+time per event (`TwoColLog` `realOf`/`realOrder`).
 
 ## Live board layout (v0.9.7.2)
 - **Window header clock**: shows the **wall-clock time of day** (ET), e.g.

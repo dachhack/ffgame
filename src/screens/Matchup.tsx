@@ -1768,18 +1768,18 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
   const isMobile = useIsMobile();
   const gridCols = '1fr 1fr'; // no center gutter — cards fill the width; controls go below
   const rowGap = isMobile ? 5 : 8;
-  // REAL CLOCK mode: the log reads in real-time order with wall-clock stamps,
-  // matching how effects resolve on that axis. GAME CLOCK + REAL FEED keep the
-  // game-clock order/stamps (REAL FEED only changes the reveal pace, not order).
-  const buildLog = (events: PbpEvent[]): { events: PbpEvent[]; clockOf?: (ev: PbpEvent) => string } => {
-    if (!realClock) return { events };
+  // The log always shows BOTH the game clock and the real wall-clock time per
+  // event (real time from each side's own player). REAL CLOCK additionally
+  // orders/interleaves by real time (matching its effect axis); GAME CLOCK and
+  // REAL FEED keep the natural game-clock order.
+  const buildLog = (events: PbpEvent[]): { events: PbpEvent[]; realOf: (ev: PbpEvent) => string } => {
     const rt = new Map<PbpEvent, number>();
     for (const ev of events) {
       const p = ev.side === 'you' ? slot.you : slot.their;
       rt.set(ev, p ? realTimeAt(p.player, week, ev.clock, p.metricId ?? undefined) : ev.clock);
     }
-    const ordered = [...events].sort((a, b) => (rt.get(a) ?? 0) - (rt.get(b) ?? 0));
-    return { events: ordered, clockOf: (ev) => fmtTimeShort(kickoffSec + (rt.get(ev) ?? 0)) };
+    const ordered = realClock ? [...events].sort((a, b) => (rt.get(a) ?? 0) - (rt.get(b) ?? 0)) : events;
+    return { events: ordered, realOf: (ev) => fmtTimeShort(kickoffSec + (rt.get(ev) ?? 0)) };
   };
   // Pre-kickoff (this window not yet started) is the only time the best-ball
   // backup target can be (re)assigned — it's a blind bet, locked once it's live.
@@ -1854,7 +1854,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
           return (
             <>
               <GameLine youTeam={mineBackup ? be.player.team : undefined} theirTeam={mineBackup ? undefined : be.player.team} youClock={mineBackup ? bclock : undefined} theirClock={mineBackup ? undefined : bclock} />
-              <TwoColLog events={log.events} clockOf={log.clockOf} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} youCoin={mineBackup ? metricCoin(be.player.pos, be.metricId) : 0} theirCoin={mineBackup ? 0 : metricCoin(be.player.pos, be.metricId)} />
+              <TwoColLog events={log.events} realOf={log.realOf} realOrder={realClock} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} youCoin={mineBackup ? metricCoin(be.player.pos, be.metricId) : 0} theirCoin={mineBackup ? 0 : metricCoin(be.player.pos, be.metricId)} />
             </>
           );
         })()}
@@ -1951,7 +1951,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
         return (
           <>
             <GameLine youTeam={slot.you.player.team} theirTeam={slot.their.player.team} youClock={youClock} theirClock={theirClock} />
-            <TwoColLog events={log.events} clockOf={log.clockOf} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} youCoin={metricCoin(slot.you.player.pos, slot.you.metricId)} theirCoin={metricCoin(slot.their.player.pos, slot.their.metricId)} />
+            <TwoColLog events={log.events} realOf={log.realOf} realOrder={realClock} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} youCoin={metricCoin(slot.you.player.pos, slot.you.metricId)} theirCoin={metricCoin(slot.their.player.pos, slot.their.metricId)} />
           </>
         );
       })()}
@@ -2091,7 +2091,7 @@ function actionText(play: string): string {
 // Two-column play-by-play: your player's plays on the left, theirs on the
 // right, the clock down the middle. Chronological (newest at the bottom) so it
 // reads like a live ticker, auto-scrolling to keep the latest play in view.
-function TwoColLog({ events, youName, theirName, gameLabel, youCoin = 0, theirCoin = 0, clockOf }: { events: PbpEvent[]; youName: string; theirName: string; gameLabel: string; youCoin?: number; theirCoin?: number; clockOf?: (ev: PbpEvent) => string }) {
+function TwoColLog({ events, youName, theirName, gameLabel, youCoin = 0, theirCoin = 0, realOf, realOrder }: { events: PbpEvent[]; youName: string; theirName: string; gameLabel: string; youCoin?: number; theirCoin?: number; realOf?: (ev: PbpEvent) => string; realOrder?: boolean }) {
   const [minutes, setMinutes] = useState(false);
   const [top, setTop] = useState(false); // newest entries on top vs bottom
   const scroller = useRef<HTMLDivElement>(null);
@@ -2156,13 +2156,16 @@ function TwoColLog({ events, youName, theirName, gameLabel, youCoin = 0, theirCo
           <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '3px 0', borderTop: i === 0 ? undefined : '1px solid color-mix(in srgb, var(--bd) 45%, transparent)', animation: i === newestIdx ? 'slidein .3s ease' : undefined }}>
             {cum(ev, true)}
             {cell(ev, true)}
-            <span className="mono" title={clockOf ? 'real wall-clock time' : 'game clock'} style={{ width: 46, flex: 'none', textAlign: 'center', fontSize: 8.5, color: 'var(--faint)', paddingTop: 1 }}>{clockOf ? clockOf(ev) : fmtClock(ev.clock)}</span>
+            <div className="mono" title="game clock · real wall-clock time" style={{ width: 50, flex: 'none', textAlign: 'center', paddingTop: 1, lineHeight: 1.15 }}>
+              <div style={{ fontSize: 8.5, color: 'var(--faint)' }}>{fmtClock(ev.clock)}</div>
+              {realOf && <div style={{ fontSize: 8, fontWeight: 700, color: 'var(--dimstrong)' }}>{realOf(ev)}</div>}
+            </div>
             {cell(ev, false)}
             {cum(ev, false)}
           </div>
         ))}
       </div>
-      <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 6, textAlign: 'center' }}>cumulative totals on the edges · {minutes ? 'minute-by-minute drip' : 'plays'} · {clockOf ? 'real clock' : 'game clock'} · {gameLabel}</div>
+      <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 6, textAlign: 'center' }}>cumulative totals on the edges · {minutes ? 'minute-by-minute drip' : 'plays'} · game + real clock · {realOrder ? 'real-time order' : 'game-clock order'} · {gameLabel}</div>
     </div>
   );
 }
