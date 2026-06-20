@@ -4,6 +4,9 @@
 // second — no synthesized timing. Keyed by league player slug, weeks 1-14.
 //
 // Usage: node scripts/pbp/genReturns.mjs
+// NOTE: this emits returns with game clocks only. Re-run scripts/pbp/genRealtime.mjs
+// AFTER this to re-stamp each return with its real wall-clock time `t` (for
+// real-time power-up gating) — otherwise returns.ts loses the `t` column.
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const here = new URL('.', import.meta.url);

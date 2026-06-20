@@ -42,9 +42,12 @@ for (const fn of readdirSync(RTDUMP)) {
   }
 }
 
-// Per game: real seconds since the first snap, as a sorted, c-deduped point set.
+// Per game: real seconds since the first snap, as a sorted, c-deduped point set;
+// plus a Set of its clocks (to identify which game a player's plays belong to).
 const clockRt = new Map();  // game_id -> [[c, rt], ...] sorted by c
-const teamGame = {};        // week -> team -> game_id
+const clockSet = new Map(); // game_id -> Set<clock>
+const teamGame = {};        // week -> team -> game_id  (fallback only)
+const gamesByWeek = {};     // week -> [game_id, ...]
 for (const [gid, rows] of rowsByGame) {
   const start = Math.min(...rows.map((r) => r.tod));
   const byC = new Map(); // c -> min rt (earliest real time seen at that clock)
@@ -53,11 +56,36 @@ for (const [gid, rows] of rowsByGame) {
     if (!byC.has(r.c) || rt < byC.get(r.c)) byC.set(r.c, rt);
   }
   clockRt.set(gid, [...byC.entries()].map(([c, rt]) => [c, rt]).sort((a, b) => a[0] - b[0]));
+  clockSet.set(gid, new Set(byC.keys()));
   const [, ww, away, home] = gid.split('_');
   const w = +ww;
   (teamGame[w] ||= {})[away] = gid;
   teamGame[w][home] = gid;
+  (gamesByWeek[w] ||= []).push(gid);
 }
+
+// Which game does a player's week belong to? A player's set of play clocks
+// almost-uniquely identifies their game, so we pick the week's game with the
+// most clock overlap (robust to mid-season trades, where the crosswalk team is
+// the player's LATER team). Fall back to the crosswalk team's game when the
+// clock signal is too weak (very few plays) to be sure.
+const byClocks = (week, clocks) => {
+  let best = null, bestN = 0, secondN = 0;
+  for (const gid of gamesByWeek[week] || []) {
+    const cs = clockSet.get(gid);
+    let n = 0; for (const c of clocks) if (cs.has(c)) n++;
+    if (n > bestN) { secondN = bestN; best = gid; bestN = n; }
+    else if (n > secondN) secondN = n;
+  }
+  return { gid: best, score: bestN, second: secondN, n: clocks.length };
+};
+const crosswalk = JSON.parse(readFileSync(new URL('crosswalk.json', here), 'utf8'));
+const resolveGame = (slug, week, clocks) => {
+  const c = byClocks(week, clocks);
+  if (c.gid && c.score >= 3 && c.score >= 0.6 * c.n && c.score > c.second) return c.gid;
+  const tm = teamOf(slug, crosswalk);
+  return (tm && teamGame[week]?.[tm]) || c.gid || undefined;
+};
 
 // Linear interpolation of real time at a game clock along a game's curve.
 const rtAt = (pts, c) => {
@@ -73,10 +101,8 @@ const rtAt = (pts, c) => {
   return rl + (c - cl);
 };
 
-const crosswalk = JSON.parse(readFileSync(new URL('crosswalk.json', here), 'utf8'));
-const gameFor = (slug, week) => { const tm = teamOf(slug, crosswalk); return tm ? teamGame[week]?.[tm] : undefined; };
-
 // ── Enrich public/pbp/wN.json ──
+const slugWeekGame = {}; // `${slug}|${week}` -> game_id (reused for returns)
 let hit = 0, miss = 0, noGame = 0;
 const weeks = [];
 for (let w = 1; w <= 18; w++) {
@@ -85,7 +111,8 @@ for (let w = 1; w <= 18; w++) {
   weeks.push(w);
   const data = JSON.parse(readFileSync(url, 'utf8'));
   for (const [slug, plays] of Object.entries(data.pbp)) {
-    const gid = gameFor(slug, w);
+    const gid = resolveGame(slug, w, plays.map((p) => p.c));
+    if (gid) slugWeekGame[`${slug}|${w}`] = gid;
     const pts = gid && clockRt.get(gid);
     for (const p of plays) {
       const t = pts ? rtAt(pts, p.c) : null;
@@ -103,7 +130,9 @@ if (m) {
   const RET = JSON.parse(m[1]);
   for (const [slug, byWeek] of Object.entries(RET)) {
     for (const [wk, tuples] of Object.entries(byWeek)) {
-      const gid = gameFor(slug, +wk);
+      // A returner's returns are in the same game as their other plays that week;
+      // reuse that, else identify the game from the return clocks themselves.
+      const gid = slugWeekGame[`${slug}|${wk}`] || resolveGame(slug, +wk, tuples.map((tp) => tp[0]));
       const pts = gid && clockRt.get(gid);
       byWeek[wk] = tuples.map((tp) => {
         const [c, y, td] = tp;
