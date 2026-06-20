@@ -1,57 +1,74 @@
-// Build src/data/returns.ts from real 2025 KR + PR play-by-play dumps with
-// EXACT game clocks (_ret_kr.jsonl / _ret_pr.jsonl, pulled from the StatHead
-// MCP with qtr+time). Each return becomes one play at its real game-elapsed
-// second — no synthesized timing. Keyed by league player slug, weeks 1-14.
+// Build src/data/returns.ts from the per-game raw play-by-play in scripts/pbp/raw/
+// (the same dumps genRealPbp.mjs reads). Each kick/punt return becomes one play
+// at its EXACT game-elapsed second, stamped with its real wall-clock time `t`
+// (seconds since the game's first snap, from time_of_day) and nflverse `pid`
+// (play_id) — so returns gate on real time just like the main play-by-play.
+// Keyed by league player slug, weeks 1-14. No synthesized timing.
 //
-// Usage: node scripts/pbp/genReturns.mjs
-// NOTE: this emits returns with game clocks only. Re-run scripts/pbp/genRealtime.mjs
-// AFTER this to re-stamp each return with its real wall-clock time `t` (for
-// real-time power-up gating) — otherwise returns.ts loses the `t` column.
-import { readFileSync, writeFileSync } from 'node:fs';
+// Usage: node scripts/pbp/genReturns.mjs   (run AFTER pulling raw/)
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 const here = new URL('.', import.meta.url);
+const RAW = join(new URL(here).pathname, 'raw');
 const crosswalk = JSON.parse(readFileSync(new URL('crosswalk.json', here), 'utf8'));
 const byGsis = new Map();
 for (const [slug, info] of Object.entries(crosswalk)) byGsis.set(info.gsis, slug);
 
 const WEEKS = 14;
-// Same clock convention as genRealPbp.mjs: game-elapsed seconds from qtr + the
-// MM:SS remaining in that quarter, capped at 3599.
+// Same clock convention as genRealPbp.mjs.
 function clockOf(qtr, mmss) {
   const [m, s] = String(mmss).split(':').map(Number);
   return Math.max(0, Math.min(3599, (qtr - 1) * 900 + (900 - (m * 60 + s))));
 }
+const isSet = (v) => v !== '' && v !== null && v !== undefined;
 
-// slug -> week -> [ [clock, yards, td], ... ]
+// slug -> week -> [ [clock, yards, td, t, pid], ... ]
 const acc = {};
-const add = (file) => {
-  const text = readFileSync(new URL(file, here), 'utf8');
-  for (const line of text.split('\n')) {
+for (const fn of readdirSync(RAW)) {
+  if (!fn.endsWith('.jsonl')) continue;
+  const rows = [];
+  for (const line of readFileSync(join(RAW, fn), 'utf8').split('\n')) {
     const t = line.trim();
     if (!t.startsWith('{')) continue;
-    const d = JSON.parse(t);
-    if (d.week < 1 || d.week > WEEKS) continue;
-    const slug = byGsis.get(d.id);
-    if (!slug) continue; // returner not in the league pool — skip
-    const c = clockOf(d.qtr, d.time);
-    ((acc[slug] ||= {})[d.week] ||= []).push([c, d.y, d.td]);
+    try { rows.push(JSON.parse(t)); } catch { /* skip */ }
   }
-};
-add('_ret_kr.jsonl');
-add('_ret_pr.jsonl');
+  // Per-game real-time baseline = earliest time_of_day in the game.
+  let start = Infinity;
+  for (const d of rows) { const ms = Date.parse(d.time_of_day); if (Number.isFinite(ms) && ms < start) start = ms; }
+  for (const d of rows) {
+    const week = Number(d.week);
+    if (!(week >= 1 && week <= WEEKS)) continue;
+    if (d.play_type !== 'kickoff' && d.play_type !== 'punt') continue;
+    const rid = d.play_type === 'kickoff' ? d.kickoff_returner_player_id : d.punt_returner_player_id;
+    if (!isSet(rid)) continue;
+    const slug = byGsis.get(rid);
+    if (!slug) continue; // returner not in the league pool
+    const c = clockOf(Number(d.qtr), d.time);
+    const y = Number(d.return_yards) || 0;
+    const td = Number(d.return_touchdown) === 1 ? 1 : 0;
+    const ms = Date.parse(d.time_of_day);
+    const rt = Number.isFinite(ms) && Number.isFinite(start) ? Math.max(0, Math.round((ms - start) / 1000)) : null;
+    const pid = isSet(d.play_id) ? Number(d.play_id) : null;
+    ((acc[slug] ||= {})[week] ||= []).push([c, y, td, rt, pid]);
+  }
+}
 
-// Sort each week's returns by clock; drop weeks with no net production so the
-// table stays lean (a player with only 0-yard fair catches isn't selectable
-// value, but keep them if they have any non-zero yard or TD).
+// Sort each week's returns by clock; drop weeks with no net production (only
+// 0-yard fair catches and no TD) so the table stays lean. Tuple shape:
+// [clock, yards, td(0|1), t?, pid?] — trailing nulls trimmed.
 const out = {};
 for (const [slug, weeks] of Object.entries(acc)) {
   const w = {};
   for (const [wk, plays] of Object.entries(weeks)) {
     plays.sort((a, b) => a[0] - b[0]);
-    const hasValue = plays.some((p) => p[1] !== 0 || p[2] !== 0);
-    if (!hasValue) continue;
-    // emit [clock, yards] or [clock, yards, 1] for return TDs
-    w[wk] = plays.map((p) => (p[2] ? [p[0], p[1], 1] : [p[0], p[1]]));
+    if (!plays.some((p) => p[1] !== 0 || p[2] !== 0)) continue;
+    w[wk] = plays.map(([c, y, td, rt, pid]) => {
+      const tup = [c, y, td];
+      if (rt != null) tup.push(rt);
+      if (pid != null) { if (rt == null) tup.push(0); tup.push(pid); }
+      return tup;
+    });
   }
   if (Object.keys(w).length) out[slug] = w;
 }
@@ -59,9 +76,10 @@ for (const [slug, weeks] of Object.entries(acc)) {
 const body =
   '// AUTO-GENERATED by scripts/pbp/genReturns.mjs — do not edit by hand.\n' +
   '// Real 2025 kick + punt returns per league player, per week (1-14), each at\n' +
-  '// its EXACT game-elapsed second. Shape: slug -> { week: [[clock, yards] |\n' +
-  '// [clock, yards, 1(returnTD)], ...] }. Powers the Return Yards metric.\n' +
-  'export type ReturnPlay = [clock: number, yards: number, td?: 1];\n' +
+  '// its EXACT game-elapsed second. Shape: slug -> { week: [[clock, yards,\n' +
+  '// td(0|1), realTimeSec?, play_id?], ...] }. `realTimeSec` = seconds since the\n' +
+  '// game’s first snap (real-time power-up gating). Powers the Return Yards metric.\n' +
+  'export type ReturnPlay = [clock: number, yards: number, td?: 0 | 1, t?: number, pid?: number];\n' +
   'export const RETURN_PLAYS: Record<string, Record<number, ReturnPlay[]>> = ' +
   JSON.stringify(out) + ';\n\n' +
   '/** Exact-timed return plays for a player slug in a week ([] if none). */\n' +

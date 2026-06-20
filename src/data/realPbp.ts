@@ -14,9 +14,10 @@ export type RealPlayKind =
 // `c` is the game-elapsed clock (seconds). `t` is the REAL wall-clock time of
 // the play, in seconds since the game's first snap (baked from nflverse
 // time_of_day) — used to gate real-time power-ups so a delayed feed can't be
-// exploited. `t` is optional: weeks baked before real-time support, return
-// plays, and synthesized data omit it and callers fall back to `c`.
-export interface RealPlay { c: number; t?: number; k: RealPlayKind; y: number; td: number; ca: number; tg: number; to?: number; }
+// exploited. `pid` is the nflverse play_id (stable per-game key, for future
+// live-feed gating). `t`/`pid` are optional: data baked before real-time
+// support, return plays, and synthesized data omit them and callers fall back.
+export interface RealPlay { c: number; t?: number; pid?: number; k: RealPlayKind; y: number; td: number; ca: number; tg: number; to?: number; }
 
 interface WeekData { pbp: Record<string, RealPlay[]>; points: Record<string, number>; poss?: Record<string, number[][]>; }
 

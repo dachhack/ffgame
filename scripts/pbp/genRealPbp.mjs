@@ -103,7 +103,7 @@ for (const rows of games.values()) {
     const pt = d.play_type;
     const c = clockOf(Number(d.qtr), d.time);
     const rt = rtOf(d);
-    const T = rt != null ? { t: rt } : {}; // spread into each play so real time rides along with the game clock
+    const T = { ...(rt != null ? { t: rt } : {}), ...(d.play_id != null ? { pid: Number(d.play_id) } : {}) }; // real time + play_id ride along with the game clock
     const td = Number(d.touchdown) === 1;
     // Turnovers committed by the offense (for the turnover coin penalty). INT
     // thrown → passer. Fumble lost → the exact fumbler via `fumbled_1_player_id`
@@ -200,8 +200,12 @@ writeFileSync(new URL('kdst_registry.json', here), JSON.stringify({ kickers, dst
 
 // ── Emit: per-week JSON assets (lazy-loaded) + a tiny generated week index ──
 // A week ships as "real" only when ALL its expected games are present, so we
-// never field a partial week (some players real, some simulated).
-const expected = readFileSync(new URL('expected.txt', here), 'utf8').trim().split('\n').filter(Boolean);
+// never field a partial week (some players real, some simulated). expected.txt
+// is optional (it's regenerable from a full pull); without it, every week that
+// has data ships — fine when raw/ came from a complete per-week pull.
+let expected = [];
+try { expected = readFileSync(new URL('expected.txt', here), 'utf8').trim().split('\n').filter(Boolean); }
+catch { console.log('no expected.txt — shipping every week that has data'); }
 const expByWeek = {}, presentByWeek = {};
 for (const gid of expected) { const w = +gid.split('_')[1]; expByWeek[w] = (expByWeek[w] || 0) + 1; }
 for (const gid of games.keys()) { const w = +gid.split('_')[1]; presentByWeek[w] = (presentByWeek[w] || 0) + 1; }

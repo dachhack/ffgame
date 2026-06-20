@@ -124,33 +124,37 @@ a delayed feed can't be used to scoop a TD you already saw on TV. Wiring:
   `clockAtRealTime` are the identity and scoring is byte-identical to before.
   The real-time axis only changes outcomes once a delayed feed exists.
 
-### Baking real `t` — the enrichment pass (`genRealtime.mjs`)
-`time_of_day` (UTC wall-clock per play) is exposed by the Stathead MCP
-`get_play_by_play`. Rather than re-pull + re-attribute the whole season (the
-full raw is gone and re-attribution risks drifting from validated scoring), we
-**enrich** the committed assets in place: stamp each baked play and return with
-`t` (seconds since its game's first snap), leaving scoring untouched.
-- `scripts/pbp/genRealtime.mjs` reads lightweight dumps from
-  `scripts/pbp/rtdump/*.jsonl` (rows of `game_id,qtr,time,time_of_day`), builds a
-  per-game game-clock→real-time curve, then maps every play in
-  `public/pbp/wN.json` and every tuple in `src/data/returns.ts` through it
-  (linear interp on the player's game, found via crosswalk team + the week's
-  `game_id`s). Returns tuples become `[clock, yards, td, t]`.
-- Acquire the dumps with the MCP (auto-saves over-cap results to
-  `tool-results/*.txt`; harvest those + small inline pages into `rtdump/`):
-  per week 1-14, `get_play_by_play season=2025 week=W
-  fields="game_id,qtr,time,time_of_day" output_format=jsonl limit=1000` at
-  offsets 0/1000/2000. Then `node scripts/pbp/genRealtime.mjs`.
-- `genRealPbp.mjs` also bakes `t` straight from `time_of_day` if a full raw
-  re-pull is ever done; `genRealtime.mjs` is the lighter, lower-risk path used
-  to bake the shipped data.
+### Baking real `t` + `pid` — canonical pipeline (v0.9.6.2)
+Every baked play (`public/pbp/wN.json`) and return (`src/data/returns.ts`)
+carries `t` (real seconds since its game's first snap, from nflverse
+`time_of_day`) and `pid` (nflverse `play_id`, a stable per-game key for future
+live-feed gating). Both are baked **natively from a full re-pull** — each play
+gets its OWN exact `time_of_day` (no interpolation, no same-second approximation).
+- **Pull** (Stathead MCP `get_play_by_play` now returns a full week per call;
+  over-cap results auto-save to `tool-results/*.txt`): for each week 1-14,
+  `season=2025 week=W output_format=jsonl limit=4000` with the full field set
+  incl. `play_id` + `time_of_day`. Split the saved results into per-game
+  `scripts/pbp/raw/<game_id>.jsonl` (one game per file).
+- **Generate:** `node scripts/pbp/genRealPbp.mjs` → `public/pbp/wN.json`
+  (+ `realWeeks.ts`, `kdst_registry.json`); `node scripts/pbp/genReturns.mjs` →
+  `returns.ts`. Both read `raw/` and bake `t`+`pid`. `raw/` and `expected.txt`
+  are gitignored/regenerable; the shipped output is the committed artifact.
+- **Verified:** re-attribution reproduces the prior validated scoring exactly
+  (0/2878 player-weeks changed); returns match except 2 legit returns the old
+  `_ret` dumps had missed. 100% `t`+`pid` coverage on all 32,728 plays + 388
+  returns.
+- The engine still falls back to the game clock wherever `t` is absent
+  (`realTimeAt`/`clockAtRealTime` become the identity), so older/synthetic data
+  keeps working.
 
 ## Suggested next steps / open threads
 - Decide whether **Scout** should cost something (a power-up / drip coin) or
   stay free intel — asked, not yet answered.
 - Consider showing the candidate count on the sealed box itself.
-- `scripts/pbp/_ret_*.jsonl` and `_returns_*` are committed source dumps; fine
-  to keep, but they're only needed to regenerate `returns.ts`.
+- PBP source dumps (`raw/`, `rtdump/`, `expected.txt`) are gitignored/
+  regenerable; only the baked `public/pbp/*.json` + `returns.ts` are committed.
+  The old per-team/`_ret_*` dumps and `genRealtime.mjs` enrichment pass were
+  removed once the canonical full-pull pipeline landed.
 - Mobile passes are ongoing; keep testing `ScoreCard` at narrow widths.
 
 ## Gotchas
