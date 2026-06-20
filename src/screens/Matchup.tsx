@@ -65,6 +65,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const [backupMenu, setBackupMenu] = useState<{ key: string } | null>(null);
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   const [puView, setPuView] = useState<'active' | 'apply' | null>(null);
+  const [scoutWin, setScoutWin] = useState<WindowId | null>(null); // sealed opponent spot tapped — show candidate pool
   const [pendingApply, setPendingApply] = useState<string | null>(null); // a targeted powerup awaiting a spot tap
   const [byeStealSlot, setByeStealSlot] = useState<string | null>(null); // empty slot chosen for Bye Steal, awaiting a player
   const [spySlot, setSpySlot] = useState<string | null>(null); // slate slot tapped for Spy, awaiting reveal choice
@@ -539,6 +540,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 applyMode={pendingApply}
                 onApplyToSpot={applyToSpot}
                 onApplyToWindow={applyToWindow}
+                onScout={(win) => setScoutWin(win)}
               />
             ))}
           </div>
@@ -642,6 +644,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
           />
         );
       })()}
+
+      {scoutWin && <ScoutModal win={scoutWin} week={week} pool={oppPools[scoutWin] ?? []} oppName={opp.name} onClose={() => setScoutWin(null)} />}
 
       {puView === 'active' && <ActivePowerupsModal effects={activeEffects} onClose={() => setPuView(null)} />}
       {puView === 'apply' && <ApplyPowerupsModal items={appliable} inventory={inventory} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); setPuView(null); }} onClose={() => setPuView(null)} />}
@@ -1108,8 +1112,9 @@ function WindowSection(props: {
   applyMode: string | null;
   onApplyToSpot: (key: string) => void;
   onApplyToWindow: (win: WindowId) => void;
+  onScout: (win: WindowId) => void;
 }) {
-  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow } = props;
+  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
@@ -1259,7 +1264,7 @@ function WindowSection(props: {
                 appliedPu={[...(aw?.doubleOrNothing === key ? ['double-or-nothing'] : []), ...(aw?.byeSteal?.slotKey === key ? ['bye-steal'] : [])]}
                 applyMode={applyMode} onApplyToSpot={() => onApplyToSpot(key)}
                 onOpenPicker={() => onOpenPicker(key, w.id)} onPickMetric={(m) => pickMetricFor(key, m)}
-                onDropPlayer={(id) => onAssign(id)}
+                onDropPlayer={(id) => onAssign(id)} onScout={() => onScout(w.id)}
               />
             );
           }
@@ -1287,9 +1292,9 @@ function SetupRow(props: {
   slotKeyStr: string; winId: WindowId; week: number; pick?: Pick; selected: boolean; inventory: Record<string, number>; armed: Record<string, boolean>;
   appliedPu: string[];
   applyMode: string | null; onApplyToSpot: () => void;
-  onOpenPicker: () => void; onPickMetric: (m: string) => void; onDropPlayer: (id: string) => void;
+  onOpenPicker: () => void; onPickMetric: (m: string) => void; onDropPlayer: (id: string) => void; onScout: () => void;
 }) {
-  const { winId, week, pick, selected, inventory, armed, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onDropPlayer } = props;
+  const { winId, week, pick, selected, inventory, armed, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onDropPlayer, onScout } = props;
   const isMobile = useIsMobile();
   const gridCols = '1fr 1fr'; // no center gutter — your spot vs the sealed opponent
   const rowGap = isMobile ? 5 : 8;
@@ -1399,9 +1404,10 @@ function SetupRow(props: {
           <span className="mono" style={{ fontSize: 10, color: emptyEligible ? 'var(--warn)' : 'var(--faint)', letterSpacing: '0.12em', fontWeight: emptyEligible ? 700 : 400 }}>{emptyEligible ? 'TAP TO FIELD BYE' : 'TAP TO PICK PLAYER'}</span>
         </div>
       )}
-      <div style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+      <div onClick={onScout} title="Scout the opponent's possible players for this window" style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' }}>
         <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--dim)' }}>◆</span>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.16em', color: 'var(--faint)', fontWeight: 700 }}>SEALED · {winId.toUpperCase()}</span>
+        <span className="mono" style={{ fontSize: 7.5, letterSpacing: '0.12em', color: 'var(--opp)', fontWeight: 700 }}>🔍 SCOUT</span>
       </div>
     </div>
     {infoMetric && <MetricInfo metric={infoMetric} onClose={() => setInfoMetric(null)} />}
@@ -1478,6 +1484,51 @@ function PlayerPicker({ win, week, players, currentId, title = 'Pick a player', 
             <button onClick={onRemove} className="mono" style={{ width: '100%', background: 'var(--bg)', border: '1px dashed var(--opp)', borderRadius: 4, padding: '8px', color: 'var(--opp)', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em' }}>✕ REMOVE FROM SPOT</button>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── Scout (tap a sealed opponent spot) — the candidate pool only ──
+// Lists every opponent player whose game falls in this window: who they COULD
+// field here. The actual pick stays sealed — the full pool is shown (no
+// removal of slotted players), so nothing leaks by commission or omission.
+function ScoutModal({ win, week, pool, oppName, onClose }: {
+  win: WindowId; week: number; pool: Player[]; oppName: string; onClose: () => void;
+}) {
+  const label = WINDOWS.find((w) => w.id === win)?.label ?? win.toUpperCase();
+  const posOrder: Pos[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
+  const sorted = [...pool].sort((a, b) => (posOrder.indexOf(a.pos) - posOrder.indexOf(b.pos)) || a.name.localeCompare(b.name));
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflow: 'auto' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, borderTop: '3px solid var(--opp)', boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
+          <div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>🔍 Scout · {label}</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>WHO {oppName.toUpperCase()} COULD FIELD HERE — PICK STAYS SEALED</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
+        </div>
+        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 440, overflow: 'auto' }}>
+          {sorted.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', textAlign: 'center', padding: '16px 0' }}>— no opponent players in this window —</div>}
+          {sorted.map((p) => (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px' }}>
+              <PlayerImg playerId={p.id} team={p.team} pos={p.pos} size={34} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>{p.name}</span>
+                  <InjuryBadge week={week} slug={p.id} />
+                </div>
+                <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: '0 12px 12px' }}>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', textAlign: 'center', lineHeight: 1.5 }}>
+            ◆ {sorted.length} candidate{sorted.length === 1 ? '' : 's'} · any could be in any of {oppName}'s {label} spots
+          </div>
+        </div>
       </div>
     </div>
   );
