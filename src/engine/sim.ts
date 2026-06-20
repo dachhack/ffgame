@@ -409,22 +409,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const events: PbpEvent[] = [];
 
   // REAL CLOCK: drip accrues per real wall-clock minute of ACTIVE play instead
-  // of per game-clock minute. Each side's game→wall "density" =
-  // (real game span − quarter/half breaks) / game clock, so a ~3-hour real game
-  // accrues more drip than the 60-min game clock, with break time excluded.
-  // (Drip then naturally pauses at the half in the real-ordered feed, since no
-  // game minutes fall inside that real gap.)
+  // of per game-clock minute (applied per segment in minuteGain). Every play
+  // already carries its real wall-clock time `t`, so each side maps game clock →
+  // wall clock from its own timeline via realTimeAt — no separate baked curve
+  // needed. A game-minute that crosses a quarter/half boundary drops the
+  // standard break, so drip pauses there.
   const realResolve = !!opts.realResolve;
-  const breaksBefore = (c: number) => (c > 900 ? 120 : 0) + (c > 1800 ? 780 : 0) + (c > 2700 ? 120 : 0);
-  const wallDensity = (player: Player, metricId: string, plays: RawPlay[], drip: boolean): number => {
-    if (!realResolve || !drip || !plays.length) return 1;
-    const last = plays[plays.length - 1].clock;
-    if (last <= 0) return 1;
-    const active = realTimeAt(player, week, last, metricId) - breaksBefore(last);
-    return active > 0 ? Math.min(4, Math.max(1, active / last)) : 1; // clamp vs sparse-data outliers
-  };
-  const yDensity = wallDensity(you.player, you.metricId, yPlays, dripYou);
-  const tDensity = wallDensity(their.player, their.metricId, tPlays, dripTheir);
 
   // Per-side ledger of scoring changes caused by armed/active powerups — surfaced
   // at FINAL in each spot. `vsOpp` entries removed points from the opponent
@@ -466,8 +456,19 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     // to gate them), so the drip keeps ticking for the bonus window.
     const isOT = t0 >= GAME_SECONDS;
     let secs = isOT ? (buffs.has('overtime') ? t1 - t0 : 0) : offSecs(poss, t0, t1);
-    // REAL CLOCK: stretch possession game-seconds to wall-clock-active seconds.
-    if (realResolve && secs > 0) secs *= side === 'you' ? yDensity : tDensity;
+    // REAL CLOCK: stretch THIS game-minute's possession seconds into real
+    // wall-clock-active seconds, from the player's own play timestamps. Slow
+    // (clock-stopping) stretches drip more than hurry-up; a minute crossing a
+    // quarter/half boundary drops the standard break, so drip pauses there.
+    if (realResolve && secs > 0 && !isOT) {
+      const pl = side === 'you' ? you.player : their.player;
+      const mId = side === 'you' ? you.metricId : their.metricId;
+      let dwall = realTimeAt(pl, week, t1, mId) - realTimeAt(pl, week, t0, mId);
+      if (t0 < 900 && t1 >= 900) dwall -= 120;   // end of Q1
+      if (t0 < 1800 && t1 >= 1800) dwall -= 780;  // halftime
+      if (t0 < 2700 && t1 >= 2700) dwall -= 120;  // end of Q3
+      secs *= Math.min(4, Math.max(0, dwall / (t1 - t0)));
+    }
     if (secs <= 0) return ZERO_GAIN;
     const hotMult = s.hot ? (buffs.has('momentum') ? 3 : 2) : 1; // Momentum: 3× when hot
     const base = s.rate * (secs / 60);
