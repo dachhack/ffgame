@@ -37,6 +37,15 @@ function fmtTimeOfDay(secOfDay: number): string {
   const h12 = ((h + 11) % 12) + 1;
   return `${h12}:${String(mm).padStart(2, '0')} ${ap}`;
 }
+// Compact time-of-day for the narrow log clock column — "1:14p".
+function fmtTimeShort(secOfDay: number): string {
+  const t = ((Math.floor(secOfDay) % 86400) + 86400) % 86400;
+  const h = Math.floor(t / 3600);
+  const mm = Math.floor((t % 3600) / 60);
+  const ap = h >= 12 ? 'p' : 'a';
+  const h12 = ((h + 11) % 12) + 1;
+  return `${h12}:${String(mm).padStart(2, '0')}${ap}`;
+}
 
 // The "TEAM vs TEAM" + each game's current clock line that sits below a slot and
 // heads its play-by-play log. Either side may be absent (unopposed / backup).
@@ -1444,7 +1453,7 @@ function WindowSection(props: {
           // both sides share it.
           const youClock = wallClock && s.you ? clockAtRealTime(s.you.player, week, clock, s.you.metricId ?? undefined) : clock;
           const theirClock = wallClock && s.their ? clockAtRealTime(s.their.player, week, clock, s.their.metricId ?? undefined) : clock;
-          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} />;
+          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} wallClock={wallClock} kickoffSec={kickoffSecOfDay(w.time)} />;
           if (!spotApplyMode) return row;
           const elig = spotEligible(s);
           return (
@@ -1746,16 +1755,30 @@ function BuffFxRow({ side, fx, stake }: { side: 'you' | 'their'; fx?: BuffFx[]; 
 }
 
 // ── Score row (live / final) ──
-function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName }: {
+function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName, wallClock, kickoffSec }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
   week: number; youClock: number; theirClock: number; open: boolean; onToggle: () => void; phase: Phase; done: boolean;
   onAssignBackup: () => void; turnoverCoin: number;
   backups: Record<string, string>; slotName: Record<string, string>;
+  wallClock: boolean; kickoffSec: number;
 }) {
   const ownKey = slotKey(slot.win, slot.slotIndex);
   const isMobile = useIsMobile();
   const gridCols = '1fr 1fr'; // no center gutter — cards fill the width; controls go below
   const rowGap = isMobile ? 5 : 8;
+  // When the feed runs on the real clock (head-to-head scoring is real-time),
+  // the log reads in real-time order with wall-clock time stamps. Each event's
+  // real time comes from its own side's player; game mode keeps the game clock.
+  const buildLog = (events: PbpEvent[]): { events: PbpEvent[]; clockOf?: (ev: PbpEvent) => string } => {
+    if (!wallClock) return { events };
+    const rt = new Map<PbpEvent, number>();
+    for (const ev of events) {
+      const p = ev.side === 'you' ? slot.you : slot.their;
+      rt.set(ev, p ? realTimeAt(p.player, week, ev.clock, p.metricId ?? undefined) : ev.clock);
+    }
+    const ordered = [...events].sort((a, b) => (rt.get(a) ?? 0) - (rt.get(b) ?? 0));
+    return { events: ordered, clockOf: (ev) => fmtTimeShort(kickoffSec + (rt.get(ev) ?? 0)) };
+  };
   // Pre-kickoff (this window not yet started) is the only time the best-ball
   // backup target can be (re)assigned — it's a blind bet, locked once it's live.
   const preKick = phase === 'live' && youClock === 0 && theirClock === 0;
@@ -1824,12 +1847,15 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
           </div>
         )}
         {(phase === 'final' || done) && <BuffFxRow side={mineBackup ? 'you' : 'their'} fx={mineBackup ? slot.youBuffFx : slot.theirBuffFx} />}
-        {open && (
-          <>
-            <GameLine youTeam={mineBackup ? be.player.team : undefined} theirTeam={mineBackup ? undefined : be.player.team} youClock={mineBackup ? bclock : undefined} theirClock={mineBackup ? undefined : bclock} />
-            <TwoColLog events={bEvents} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} youCoin={mineBackup ? metricCoin(be.player.pos, be.metricId) : 0} theirCoin={mineBackup ? 0 : metricCoin(be.player.pos, be.metricId)} />
-          </>
-        )}
+        {open && (() => {
+          const log = buildLog(bEvents);
+          return (
+            <>
+              <GameLine youTeam={mineBackup ? be.player.team : undefined} theirTeam={mineBackup ? undefined : be.player.team} youClock={mineBackup ? bclock : undefined} theirClock={mineBackup ? undefined : bclock} />
+              <TwoColLog events={log.events} clockOf={log.clockOf} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} youCoin={mineBackup ? metricCoin(be.player.pos, be.metricId) : 0} theirCoin={mineBackup ? 0 : metricCoin(be.player.pos, be.metricId)} />
+            </>
+          );
+        })()}
       </div>
     );
   }
@@ -1918,12 +1944,15 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
       )}
       {final && <BuffFxRow side="you" fx={slot.youBuffFx} stake={slot.youStake} />}
       {final && <BuffFxRow side="their" fx={slot.theirBuffFx} />}
-      {open && (
-        <>
-          <GameLine youTeam={slot.you.player.team} theirTeam={slot.their.player.team} youClock={youClock} theirClock={theirClock} />
-          <TwoColLog events={visibleEvents} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} youCoin={metricCoin(slot.you.player.pos, slot.you.metricId)} theirCoin={metricCoin(slot.their.player.pos, slot.their.metricId)} />
-        </>
-      )}
+      {open && (() => {
+        const log = buildLog(visibleEvents);
+        return (
+          <>
+            <GameLine youTeam={slot.you.player.team} theirTeam={slot.their.player.team} youClock={youClock} theirClock={theirClock} />
+            <TwoColLog events={log.events} clockOf={log.clockOf} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} youCoin={metricCoin(slot.you.player.pos, slot.you.metricId)} theirCoin={metricCoin(slot.their.player.pos, slot.their.metricId)} />
+          </>
+        );
+      })()}
     </div>
   );
 }
@@ -2060,7 +2089,7 @@ function actionText(play: string): string {
 // Two-column play-by-play: your player's plays on the left, theirs on the
 // right, the clock down the middle. Chronological (newest at the bottom) so it
 // reads like a live ticker, auto-scrolling to keep the latest play in view.
-function TwoColLog({ events, youName, theirName, gameLabel, youCoin = 0, theirCoin = 0 }: { events: PbpEvent[]; youName: string; theirName: string; gameLabel: string; youCoin?: number; theirCoin?: number }) {
+function TwoColLog({ events, youName, theirName, gameLabel, youCoin = 0, theirCoin = 0, clockOf }: { events: PbpEvent[]; youName: string; theirName: string; gameLabel: string; youCoin?: number; theirCoin?: number; clockOf?: (ev: PbpEvent) => string }) {
   const [minutes, setMinutes] = useState(false);
   const [top, setTop] = useState(false); // newest entries on top vs bottom
   const scroller = useRef<HTMLDivElement>(null);
@@ -2125,13 +2154,13 @@ function TwoColLog({ events, youName, theirName, gameLabel, youCoin = 0, theirCo
           <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '3px 0', borderTop: i === 0 ? undefined : '1px solid color-mix(in srgb, var(--bd) 45%, transparent)', animation: i === newestIdx ? 'slidein .3s ease' : undefined }}>
             {cum(ev, true)}
             {cell(ev, true)}
-            <span className="mono" style={{ width: 42, flex: 'none', textAlign: 'center', fontSize: 8.5, color: 'var(--faint)', paddingTop: 1 }}>{fmtClock(ev.clock)}</span>
+            <span className="mono" title={clockOf ? 'real wall-clock time' : 'game clock'} style={{ width: 46, flex: 'none', textAlign: 'center', fontSize: 8.5, color: 'var(--faint)', paddingTop: 1 }}>{clockOf ? clockOf(ev) : fmtClock(ev.clock)}</span>
             {cell(ev, false)}
             {cum(ev, false)}
           </div>
         ))}
       </div>
-      <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 6, textAlign: 'center' }}>cumulative totals on the edges · {minutes ? 'minute-by-minute drip' : 'plays'} · {gameLabel}</div>
+      <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 6, textAlign: 'center' }}>cumulative totals on the edges · {minutes ? 'minute-by-minute drip' : 'plays'} · {clockOf ? 'real clock' : 'game clock'} · {gameLabel}</div>
     </div>
   );
 }
