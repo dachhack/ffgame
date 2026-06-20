@@ -363,7 +363,7 @@ function offSecs(intervals: number[][], t0: number, t1: number): number {
  * `opts.youMult` / `opts.theirMult` apply a per-clock multiplier to that
  * side's scoring (used by the QB Field General window multiplier).
  */
-export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number] } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
+export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; realResolve?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
   // Pre-match team buffs active on each side (Momentum / Garbage Time /
   // Floodgates / Overtime). Only the human side carries buffs in the demo.
   const youBuffs = opts.youBuffs ?? new Set<string>();
@@ -408,6 +408,24 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const theirPoss = dripTheir ? realPossFor(week, their.player.team) : [];
   const events: PbpEvent[] = [];
 
+  // REAL CLOCK: drip accrues per real wall-clock minute of ACTIVE play instead
+  // of per game-clock minute. Each side's game→wall "density" =
+  // (real game span − quarter/half breaks) / game clock, so a ~3-hour real game
+  // accrues more drip than the 60-min game clock, with break time excluded.
+  // (Drip then naturally pauses at the half in the real-ordered feed, since no
+  // game minutes fall inside that real gap.)
+  const realResolve = !!opts.realResolve;
+  const breaksBefore = (c: number) => (c > 900 ? 120 : 0) + (c > 1800 ? 780 : 0) + (c > 2700 ? 120 : 0);
+  const wallDensity = (player: Player, metricId: string, plays: RawPlay[], drip: boolean): number => {
+    if (!realResolve || !drip || !plays.length) return 1;
+    const last = plays[plays.length - 1].clock;
+    if (last <= 0) return 1;
+    const active = realTimeAt(player, week, last, metricId) - breaksBefore(last);
+    return active > 0 ? Math.min(4, Math.max(1, active / last)) : 1; // clamp vs sparse-data outliers
+  };
+  const yDensity = wallDensity(you.player, you.metricId, yPlays, dripYou);
+  const tDensity = wallDensity(their.player, their.metricId, tPlays, dripTheir);
+
   // Per-side ledger of scoring changes caused by armed/active powerups — surfaced
   // at FINAL in each spot. `vsOpp` entries removed points from the opponent
   // (carry-wipe / counter-nuke); the rest added to this side's own bank.
@@ -447,7 +465,9 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     // Overtime: minutes past regulation count as full possession (no game clock
     // to gate them), so the drip keeps ticking for the bonus window.
     const isOT = t0 >= GAME_SECONDS;
-    const secs = isOT ? (buffs.has('overtime') ? t1 - t0 : 0) : offSecs(poss, t0, t1);
+    let secs = isOT ? (buffs.has('overtime') ? t1 - t0 : 0) : offSecs(poss, t0, t1);
+    // REAL CLOCK: stretch possession game-seconds to wall-clock-active seconds.
+    if (realResolve && secs > 0) secs *= side === 'you' ? yDensity : tDensity;
     if (secs <= 0) return ZERO_GAIN;
     const hotMult = s.hot ? (buffs.has('momentum') ? 3 : 2) : 1; // Momentum: 3× when hot
     const base = s.rate * (secs / 60);

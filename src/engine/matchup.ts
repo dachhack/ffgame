@@ -240,7 +240,7 @@ export function buildMatchup(
         // that's real-time ahead/behind hits at the right wall-clock moment.
         const nukeClocks = (nukes: { c: number; rt: number }[], recv: SlotInput) =>
           realResolve ? nukes.map((n) => clockAtRealTime(recv.player, week, n.rt, recv.metricId)) : nukes.map((n) => n.c);
-        const opts = { youMult, theirMult, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined };
+        const opts = { youMult, theirMult, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined, realResolve };
         let res = resolveSlot(yIn, tIn, week, gameLabel, opts);
 
         // Real-time swap (Player/Metric Swap): keep your pre-swap banked points,
