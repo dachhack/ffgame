@@ -47,23 +47,16 @@ function fmtTimeShort(secOfDay: number): string {
   return `${h12}:${String(mm).padStart(2, '0')}${ap}`;
 }
 
-// The "TEAM vs TEAM" + each game's current clock line that sits below a slot and
-// heads its play-by-play log. Either side may be absent (unopposed / backup).
-function GameLine({ youTeam, theirTeam, youClock, theirClock }: { youTeam?: string; theirTeam?: string; youClock?: number; theirClock?: number }) {
-  const cell = (team?: string, clk?: number) => team ? (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-      <Img src={teamLogo(team)} size={13} radius={2} fallback={<span />} />
-      <span style={{ color: 'var(--dimstrong)', fontWeight: 700 }}>{team}</span>
-      {clk != null && <span style={{ color: 'var(--faint)' }}>{fmtClock(clk)}</span>}
-    </span>
-  ) : <span style={{ color: 'var(--faint)' }}>—</span>;
-  return (
-    <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 9, letterSpacing: '0.04em', padding: '6px 0 1px' }}>
-      {cell(youTeam, youClock)}
-      <span style={{ color: 'var(--faint)', fontWeight: 700 }}>vs</span>
-      {cell(theirTeam, theirClock)}
-    </div>
-  );
+// Real game clock from game-elapsed seconds (0..3600): "Q2 4:58", "HALF",
+// "FINAL". Quarters are 15:00 each; halftime sits at the end of Q2.
+function fmtGameClock(c: number): string {
+  if (c >= 3595) return 'FINAL';
+  const q = Math.min(4, Math.floor(c / 900) + 1);
+  const rem = 900 - (c - (q - 1) * 900); // seconds left in the quarter
+  if (q === 2 && rem <= 1) return 'HALF';
+  const m = Math.floor(rem / 60);
+  const s = Math.round(rem % 60);
+  return `Q${q} ${m}:${String(s).padStart(2, '0')}`;
 }
 
 // Drip coin — an actual minted-coin glyph (gold disc with the ◈ house mark),
@@ -1794,10 +1787,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
         {open && (() => {
           const log = buildLog(bEvents);
           return (
-            <>
-              <GameLine youTeam={mineBackup ? be.player.team : undefined} theirTeam={mineBackup ? undefined : be.player.team} youClock={mineBackup ? bclock : undefined} theirClock={mineBackup ? undefined : bclock} />
-              <TwoColLog events={log.events} realOf={log.realOf} realOrder={realClock} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} youCoin={mineBackup ? metricCoin(be.player.pos, be.metricId) : 0} theirCoin={mineBackup ? 0 : metricCoin(be.player.pos, be.metricId)} />
-            </>
+            <TwoColLog events={log.events} realOf={log.realOf} realOrder={realClock} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} youCoin={mineBackup ? metricCoin(be.player.pos, be.metricId) : 0} theirCoin={mineBackup ? 0 : metricCoin(be.player.pos, be.metricId)} />
           );
         })()}
       </div>
@@ -1891,10 +1881,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
       {open && (() => {
         const log = buildLog(visibleEvents);
         return (
-          <>
-            <GameLine youTeam={slot.you.player.team} theirTeam={slot.their.player.team} youClock={youClock} theirClock={theirClock} />
-            <TwoColLog events={log.events} realOf={log.realOf} realOrder={realClock} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} youCoin={metricCoin(slot.you.player.pos, slot.you.metricId)} theirCoin={metricCoin(slot.their.player.pos, slot.their.metricId)} />
-          </>
+          <TwoColLog events={log.events} realOf={log.realOf} realOrder={realClock} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} youCoin={metricCoin(slot.you.player.pos, slot.you.metricId)} theirCoin={metricCoin(slot.their.player.pos, slot.their.metricId)} />
         );
       })()}
     </div>
@@ -1952,6 +1939,18 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
       {!isMobile && <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{player.team}</span>}
     </div>
   );
+  // The player's REAL NFL game this week + its real game clock (quarter +
+  // countdown, HALF / FINAL) — shown under the name on each card.
+  const g = nflGameForTeam(week, player.team);
+  const gameLine = g ? (
+    <div className="mono" title="real NFL game · real game clock" style={{ display: 'flex', alignItems: 'center', gap: 5, flexDirection: side === 'you' ? 'row' : 'row-reverse', fontSize: 8.5, letterSpacing: '0.02em', marginTop: 2 }}>
+      <Img src={teamLogo(g.away)} size={12} radius={2} fallback={<span />} />
+      <span style={{ fontWeight: 700, color: 'var(--dimstrong)' }}>{g.away}@{g.home}</span>
+      <Img src={teamLogo(g.home)} size={12} radius={2} fallback={<span />} />
+      <span style={{ color: 'var(--faint)' }}>·</span>
+      <span style={{ color: 'var(--faint)', fontWeight: 700 }}>{fmtGameClock(clock)}</span>
+    </div>
+  ) : null;
   // On mobile the chip is anchored to two lines (name over tag) so it's always
   // the same height regardless of label length; desktop keeps it inline.
   const metricChip = (
@@ -1991,6 +1990,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
     return (
       <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 3, cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
         {nameRow}
+        {gameLine}
         <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'center', gap: 8 }}>
           <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={46} />
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2, alignItems: side === 'you' ? 'flex-end' : 'flex-start' }}>
@@ -2011,6 +2011,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
       <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={64} />
       <div style={{ flex: 1, minWidth: 0, textAlign: edge }}>
         {nameRow}
+        {gameLine}
         <div style={{ marginTop: 5 }}>{statLine}</div>
       </div>
       <div style={{ flex: 'none', maxWidth: '48%', alignSelf: 'center', display: 'flex', flexDirection: 'column', alignItems: side === 'you' ? 'flex-end' : 'flex-start', gap: 5 }}>
