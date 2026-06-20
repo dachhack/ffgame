@@ -124,22 +124,26 @@ a delayed feed can't be used to scoop a TD you already saw on TV. Wiring:
   `clockAtRealTime` are the identity and scoring is byte-identical to before.
   The real-time axis only changes outcomes once a delayed feed exists.
 
-### Baking real `t` into the 14 weeks (TODO — data step)
+### Baking real `t` — the enrichment pass (`genRealtime.mjs`)
 `time_of_day` (UTC wall-clock per play) is exposed by the Stathead MCP
-`get_play_by_play`. `genRealPbp.mjs` already bakes `t` from it (per-game
-baseline = earliest `time_of_day`); it just needs raw dumps that include the
-`time_of_day` column. The committed `_t_*.jsonl` are week-1-only and predate
-`time_of_day`, and the full-season raw is not in the repo — so this must be
-re-pulled. **Do it from a LOCAL Claude Code session** (cloud sessions can't
-route ~32k play rows through context; local sessions auto-save tool results to
-disk, which `sweep.mjs` already harvests):
-1. For each 2025 game (or per team), call `get_play_by_play` with
-   `fields=...,time_of_day` (same field set as before + `time_of_day`),
-   `output_format=jsonl`, paging until complete.
-2. `node scripts/pbp/sweep.mjs <tool-results-dir>` → fills `scripts/pbp/raw/`.
-3. `node scripts/pbp/genRealPbp.mjs` → rewrites `public/pbp/wN.json` with `t`.
-4. (Optional) extend `genReturns.mjs` to bake `t` on return plays too; until
-   then returns fall back to the game clock.
+`get_play_by_play`. Rather than re-pull + re-attribute the whole season (the
+full raw is gone and re-attribution risks drifting from validated scoring), we
+**enrich** the committed assets in place: stamp each baked play and return with
+`t` (seconds since its game's first snap), leaving scoring untouched.
+- `scripts/pbp/genRealtime.mjs` reads lightweight dumps from
+  `scripts/pbp/rtdump/*.jsonl` (rows of `game_id,qtr,time,time_of_day`), builds a
+  per-game game-clock→real-time curve, then maps every play in
+  `public/pbp/wN.json` and every tuple in `src/data/returns.ts` through it
+  (linear interp on the player's game, found via crosswalk team + the week's
+  `game_id`s). Returns tuples become `[clock, yards, td, t]`.
+- Acquire the dumps with the MCP (auto-saves over-cap results to
+  `tool-results/*.txt`; harvest those + small inline pages into `rtdump/`):
+  per week 1-14, `get_play_by_play season=2025 week=W
+  fields="game_id,qtr,time,time_of_day" output_format=jsonl limit=1000` at
+  offsets 0/1000/2000. Then `node scripts/pbp/genRealtime.mjs`.
+- `genRealPbp.mjs` also bakes `t` straight from `time_of_day` if a full raw
+  re-pull is ever done; `genRealtime.mjs` is the lighter, lower-risk path used
+  to bake the shipped data.
 
 ## Suggested next steps / open threads
 - Decide whether **Scout** should cost something (a power-up / drip coin) or

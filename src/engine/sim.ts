@@ -344,8 +344,8 @@ export const EMPTY_PLAYER: Player = {
  *  game-elapsed second. Feeds the Return Yards metric. No synthesized timing. */
 function returnPlays(player: Player, week: number): RawPlay[] {
   if (player.pos !== 'WR' && player.pos !== 'RB') return [];
-  return returnPlaysFor(player.id, week).map(([clock, yards, td]) => ({
-    clock, kind: 'return' as RealPlayKind, yards, td: td === 1, catch: false, target: false,
+  return returnPlaysFor(player.id, week).map(([clock, yards, td, t]) => ({
+    clock, t, kind: 'return' as RealPlayKind, yards, td: td === 1, catch: false, target: false,
   }));
 }
 
