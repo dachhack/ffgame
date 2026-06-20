@@ -11,7 +11,12 @@ export type RealPlayKind =
   | 'return'                                     // kick/punt return yards
   | 'fg' | 'fgmiss' | 'xp' | 'xpmiss'           // kicker
   | 'sack' | 'int' | 'fumrec' | 'dst_td' | 'safety'; // team defense
-export interface RealPlay { c: number; k: RealPlayKind; y: number; td: number; ca: number; tg: number; to?: number; }
+// `c` is the game-elapsed clock (seconds). `t` is the REAL wall-clock time of
+// the play, in seconds since the game's first snap (baked from nflverse
+// time_of_day) — used to gate real-time power-ups so a delayed feed can't be
+// exploited. `t` is optional: weeks baked before real-time support, return
+// plays, and synthesized data omit it and callers fall back to `c`.
+export interface RealPlay { c: number; t?: number; k: RealPlayKind; y: number; td: number; ca: number; tg: number; to?: number; }
 
 interface WeekData { pbp: Record<string, RealPlay[]>; points: Record<string, number>; poss?: Record<string, number[][]>; }
 

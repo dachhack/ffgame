@@ -3,10 +3,15 @@ import { WINDOWS, METRICS, metricById } from '../data/metrics';
 import { teamRoster, getPlayer } from '../data/league';
 import { hashStr } from '../data/players';
 
-/** A real-time swap on a slot, effective from `atClock` (Player/Metric Swap). */
-export interface SlotSwap { atClock: number; toMetricId?: string; toPlayerId?: string; }
+/** A real-time swap on a slot (Player/Metric Swap/Mulligan). It takes effect
+ *  from `atRt` — the REAL wall-clock time of activation (seconds from the
+ *  player's first snap) — so plays already final in real time stay on the old
+ *  config even if the feed clock lagged. `atClock` is the game-clock the feed
+ *  showed at activation, kept for display and as a fallback when a player has
+ *  no real timestamps baked. */
+export interface SlotSwap { atClock: number; atRt?: number; toMetricId?: string; toPlayerId?: string; }
 export type SlotSwaps = Record<string, SlotSwap>; // slotKey -> swap
-import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, defEarnScore, hadDefTd, hadLongPassTd, turnoversCommitted, EMPTY_PLAYER, type SlotInput } from './sim';
+import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, defEarnScore, hadDefTd, hadLongPassTd, turnoversCommitted, clockAtRealTime, EMPTY_PLAYER, type SlotInput } from './sim';
 import { REAL_WEEKS, realPointsFor } from '../data/realPbp';
 import { windowForTeam } from '../data/nflSlate';
 import { injuryFor } from '../data/injuries';
@@ -239,7 +244,10 @@ export function buildMatchup(
           const swapped = getPlayer(swap.toPlayerId ?? '') ?? you!.player;
           const newYIn: SlotInput = { player: swap.toPlayerId ? swapped : you!.player, metricId: swap.toMetricId ?? you!.metricId };
           const sres = resolveSlot(newYIn, tIn, week, gameLabel, opts);
-          const C = swap.atClock;
+          // Cut over on the REAL-TIME stamp: map it back to this game's clock
+          // along the pre-swap player's timeline. With no baked timestamps this
+          // resolves to swap.atClock (identity), so behavior is unchanged.
+          const C = swap.atRt != null ? clockAtRealTime(you!.player, week, swap.atRt, you!.metricId ?? undefined) : swap.atClock;
           const base = banksAtClock(res.events, C);
           const after = banksAtClock(sres.events, C);
           const youFinal = Math.max(0, base.you + Math.max(0, sres.youFinal - after.you));

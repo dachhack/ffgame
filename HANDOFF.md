@@ -107,6 +107,40 @@ fires for weeks/players with **no** real data (beyond week 14). If asked to make
 the app *only ever* use real data, gate weeks 15+ out of selection rather than
 touching real-week paths.
 
+## Real play time — real-time power-up gating (v0.9.6.0)
+Real-time power-ups (Metric Swap / Player Swap / Mulligan) are now gated on the
+**real wall-clock time** a play happened, not the game clock the feed shows — so
+a delayed feed can't be used to scoop a TD you already saw on TV. Wiring:
+- `RealPlay.t?` (in `src/data/realPbp.ts`) and `RawPlay.t?` (in `sim.ts`) carry
+  real seconds since the game's first snap. `sim.ts` exposes `realTimeAt()` /
+  `clockAtRealTime()` to convert between a player's game-clock and real-time
+  positions (linear interp between plays).
+- `SlotSwap.atRt` (in `matchup.ts`) stamps activation with real time; the
+  swap-split in `buildMatchup` maps `atRt` back to a cut-over game clock via the
+  pre-swap player's timeline. Store actions (`applyMetricSwap` /
+  `applyPlayerSwap` / `applyMulligan`) and the `Matchup.tsx` call sites pass it.
+- **Graceful fallback:** when `t` is absent (data baked before this, return
+  plays, synthesized weeks) `t` falls back to the game clock, so `realTimeAt` /
+  `clockAtRealTime` are the identity and scoring is byte-identical to before.
+  The real-time axis only changes outcomes once a delayed feed exists.
+
+### Baking real `t` into the 14 weeks (TODO — data step)
+`time_of_day` (UTC wall-clock per play) is exposed by the Stathead MCP
+`get_play_by_play`. `genRealPbp.mjs` already bakes `t` from it (per-game
+baseline = earliest `time_of_day`); it just needs raw dumps that include the
+`time_of_day` column. The committed `_t_*.jsonl` are week-1-only and predate
+`time_of_day`, and the full-season raw is not in the repo — so this must be
+re-pulled. **Do it from a LOCAL Claude Code session** (cloud sessions can't
+route ~32k play rows through context; local sessions auto-save tool results to
+disk, which `sweep.mjs` already harvests):
+1. For each 2025 game (or per team), call `get_play_by_play` with
+   `fields=...,time_of_day` (same field set as before + `time_of_day`),
+   `output_format=jsonl`, paging until complete.
+2. `node scripts/pbp/sweep.mjs <tool-results-dir>` → fills `scripts/pbp/raw/`.
+3. `node scripts/pbp/genRealPbp.mjs` → rewrites `public/pbp/wN.json` with `t`.
+4. (Optional) extend `genReturns.mjs` to bake `t` on return plays too; until
+   then returns fall back to the game clock.
+
 ## Suggested next steps / open threads
 - Decide whether **Scout** should cost something (a power-up / drip coin) or
   stay free intel — asked, not yet answered.

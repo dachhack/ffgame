@@ -44,10 +44,10 @@ interface Store {
   applied: Record<number, AppliedWeek>; // week -> applied powerup effects
   /** Apply an Extra Slot to a window for a week (consumes one). Returns success. */
   applyExtraSlot: (week: number, win: WindowId) => boolean;
-  /** Real-time Metric Swap on a slot, effective from `atClock` (consumes one). */
-  applyMetricSwap: (week: number, slotKey: string, atClock: number, toMetricId: string) => boolean;
-  /** Real-time Player Swap on a slot, effective from `atClock` (consumes one). */
-  applyPlayerSwap: (week: number, slotKey: string, atClock: number, toPlayerId: string) => boolean;
+  /** Real-time Metric Swap on a slot, effective from real time `atRt` (consumes one). */
+  applyMetricSwap: (week: number, slotKey: string, atClock: number, atRt: number, toMetricId: string) => boolean;
+  /** Real-time Player Swap on a slot, effective from real time `atRt` (consumes one). */
+  applyPlayerSwap: (week: number, slotKey: string, atClock: number, atRt: number, toPlayerId: string) => boolean;
   /** Manually point a backup slot at a starter to replace (empty target = auto). */
   setBackupTarget: (week: number, backupKey: string, targetKey: string | null) => void;
   /** Arm a pre-match team buff (by powerup id) for a week (consumes one). */
@@ -61,7 +61,7 @@ interface Store {
   /** Field a bye player in a slot via Bye Steal (consumes one). */
   applyByeSteal: (week: number, slotKey: string, playerId: string) => boolean;
   /** Free mid-game metric re-roll via Mulligan — writes a swap, spends a Mulligan. */
-  applyMulligan: (week: number, slotKey: string, atClock: number, toMetricId: string) => boolean;
+  applyMulligan: (week: number, slotKey: string, atClock: number, atRt: number, toMetricId: string) => boolean;
   /** Fire EMP on a live window: freeze opponent drips from `clock` for 10 min. */
   applyEmp: (week: number, win: WindowId, clock: number) => boolean;
   /** Back-outs (refund the consumable) before lock-in / kickoff. */
@@ -190,8 +190,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     consumeAndApply('spy', week, (cur) => ({ ...cur, spy: { slotKey, reveal } }));
   const applyByeSteal = (week: number, slotKey: string, playerId: string): boolean =>
     consumeAndApply('bye-steal', week, (cur) => ({ ...cur, byeSteal: { slotKey, playerId } }));
-  const applyMulligan = (week: number, slotKey: string, atClock: number, toMetricId: string): boolean =>
-    consumeAndApply('mulligan', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, toMetricId } } }));
+  const applyMulligan = (week: number, slotKey: string, atClock: number, atRt: number, toMetricId: string): boolean =>
+    consumeAndApply('mulligan', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, atRt, toMetricId } } }));
   const applyEmp = (week: number, win: WindowId, clock: number): boolean =>
     applied[week]?.emp?.[win] != null ? false : consumeAndApply('emp', week, (cur) => ({ ...cur, emp: { ...cur.emp, [win]: clock } }));
 
@@ -214,11 +214,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Refund an unlock-metric powerup (when a player swaps off / clears that metric).
   const refundUnlock = (id: string): void => { const nextInv = { ...inventory, [id]: (inventory[id] ?? 0) + 1 }; setInventory(nextInv); persist({ inv: nextInv }); };
 
-  const applyMetricSwap = (week: number, slotKey: string, atClock: number, toMetricId: string): boolean =>
-    consumeAndApply('metric-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, toMetricId } } }));
+  const applyMetricSwap = (week: number, slotKey: string, atClock: number, atRt: number, toMetricId: string): boolean =>
+    consumeAndApply('metric-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, atRt, toMetricId } } }));
 
-  const applyPlayerSwap = (week: number, slotKey: string, atClock: number, toPlayerId: string): boolean =>
-    consumeAndApply('player-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, toPlayerId } } }));
+  const applyPlayerSwap = (week: number, slotKey: string, atClock: number, atRt: number, toPlayerId: string): boolean =>
+    consumeAndApply('player-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, atRt, toPlayerId } } }));
 
   const setBackupTarget = (week: number, backupKey: string, targetKey: string | null): void => {
     const cur: AppliedWeek = applied[week] ?? { extraSlots: {}, swaps: {}, backups: {} };

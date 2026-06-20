@@ -74,6 +74,24 @@ for (const [gid, rows] of games) {
   flush();
 }
 
+// ── Real play time: per-game wall-clock baseline (first parseable time_of_day),
+// so each play's `t` is integer seconds since that game's first snap. Drives
+// real-time power-up gating (a delayed feed can't scoop a play already final in
+// real time). When a game's rows have no time_of_day, `t` is simply omitted and
+// the engine falls back to the game clock. ──
+const gameStart = new Map(); // game_id -> epoch ms of earliest time_of_day
+for (const [gid, rows] of games) {
+  let min = Infinity;
+  for (const d of rows) { const ms = Date.parse(d.time_of_day); if (Number.isFinite(ms) && ms < min) min = ms; }
+  if (Number.isFinite(min)) gameStart.set(gid, min);
+}
+// Real-time offset (seconds since first snap) for a play row, or null.
+const rtOf = (d) => {
+  const base = gameStart.get(d.game_id);
+  const ms = Date.parse(d.time_of_day);
+  return base != null && Number.isFinite(ms) ? Math.max(0, Math.round((ms - base) / 1000)) : null;
+};
+
 // ── Attribute plays ──
 const fmtName = (s) => String(s).replace(/^([A-Z])\.(?=\S)/, '$1. '); // "B.Aubrey" -> "B. Aubrey"
 const kickerName = {}; // team abbr -> display name of its kicker
@@ -84,6 +102,8 @@ for (const rows of games.values()) {
     if (!pbp[week]) continue;
     const pt = d.play_type;
     const c = clockOf(Number(d.qtr), d.time);
+    const rt = rtOf(d);
+    const T = rt != null ? { t: rt } : {}; // spread into each play so real time rides along with the game clock
     const td = Number(d.touchdown) === 1;
     // Turnovers committed by the offense (for the turnover coin penalty). INT
     // thrown → passer. Fumble lost → the exact fumbler via `fumbled_1_player_id`
@@ -100,13 +120,13 @@ for (const rows of games.values()) {
       const caught = isSet(d.yards_after_catch);
       const y = caught ? Number(d.yards_gained) || 0 : 0;
       const to = intc || fumbledBy(d.passer_player_id, !caught) ? 1 : 0;
-      push(week, byGsis.get(d.passer_player_id).slug, { c, k: 'pass', y, td: caught && td ? 1 : 0, ca: 0, tg: 0, ...(to ? { to: 1 } : {}) });
+      push(week, byGsis.get(d.passer_player_id).slug, { c, ...T, k:'pass', y, td: caught && td ? 1 : 0, ca: 0, tg: 0, ...(to ? { to: 1 } : {}) });
       playCount++;
     }
     // Rusher — only true rushing plays (excludes kneels/spikes).
     if (pt === 'run' && isSet(d.rusher_player_id) && byGsis.has(d.rusher_player_id)) {
       const to = fumbledBy(d.rusher_player_id, true) ? 1 : 0;
-      push(week, byGsis.get(d.rusher_player_id).slug, { c, k: 'rush', y: Number(d.yards_gained) || 0, td: td ? 1 : 0, ca: 0, tg: 0, ...(to ? { to: 1 } : {}) });
+      push(week, byGsis.get(d.rusher_player_id).slug, { c, ...T, k:'rush', y: Number(d.yards_gained) || 0, td: td ? 1 : 0, ca: 0, tg: 0, ...(to ? { to: 1 } : {}) });
       playCount++;
     }
     // Receiver — reception vs incomplete target.
@@ -114,31 +134,31 @@ for (const rows of games.values()) {
       const caught = isSet(d.yards_after_catch);
       const to = caught && fumbledBy(d.receiver_player_id, true) ? 1 : 0;
       push(week, byGsis.get(d.receiver_player_id).slug, caught
-        ? { c, k: 'rec', y: Number(d.yards_gained) || 0, td: td ? 1 : 0, ca: 1, tg: 1, ...(to ? { to: 1 } : {}) }
-        : { c, k: 'incomplete', y: 0, td: 0, ca: 0, tg: 1 });
+        ? { c, ...T, k:'rec', y: Number(d.yards_gained) || 0, td: td ? 1 : 0, ca: 1, tg: 1, ...(to ? { to: 1 } : {}) }
+        : { c, ...T, k:'incomplete', y: 0, td: 0, ca: 0, tg: 1 });
       playCount++;
     }
 
     // ── Kicker — FG (by distance) and XP, keyed by the kicking team ("dal-k") ──
     if (pt === 'field_goal' && isSet(d.kicker_player_id)) {
       const slug = `${String(d.posteam).toLowerCase()}-k`;
-      push(week, slug, { c, k: d.field_goal_result === 'made' ? 'fg' : 'fgmiss', y: Number(d.kick_distance) || 0, td: 0, ca: 0, tg: 0 });
+      push(week, slug, { c, ...T, k:d.field_goal_result === 'made' ? 'fg' : 'fgmiss', y: Number(d.kick_distance) || 0, td: 0, ca: 0, tg: 0 });
       if (isSet(d.kicker_player_name)) kickerName[d.posteam] = fmtName(d.kicker_player_name);
       playCount++;
     }
     if (pt === 'extra_point' && isSet(d.kicker_player_id)) {
       const slug = `${String(d.posteam).toLowerCase()}-k`;
-      push(week, slug, { c, k: d.extra_point_result === 'good' ? 'xp' : 'xpmiss', y: 0, td: 0, ca: 0, tg: 0 });
+      push(week, slug, { c, ...T, k:d.extra_point_result === 'good' ? 'xp' : 'xpmiss', y: 0, td: 0, ca: 0, tg: 0 });
       if (isSet(d.kicker_player_name)) kickerName[d.posteam] = fmtName(d.kicker_player_name);
     }
     // ── Team defense — sacks, takeaways, def/ST TDs, safeties, keyed by defteam ("dal-dst") ──
     if (isSet(d.defteam)) {
       const slug = `${String(d.defteam).toLowerCase()}-dst`;
-      if (Number(d.sack) === 1) push(week, slug, { c, k: 'sack', y: 0, td: 0, ca: 0, tg: 0 });
-      if (Number(d.interception) === 1) push(week, slug, { c, k: 'int', y: 0, td: 0, ca: 0, tg: 0 });
-      if (Number(d.fumble_lost) === 1 && d.fumble_recovery_1_team === d.defteam) push(week, slug, { c, k: 'fumrec', y: 0, td: 0, ca: 0, tg: 0 });
-      if (Number(d.safety) === 1) push(week, slug, { c, k: 'safety', y: 0, td: 0, ca: 0, tg: 0 });
-      if (isSet(d.td_team) && d.td_team === d.defteam) push(week, slug, { c, k: 'dst_td', y: 0, td: 0, ca: 0, tg: 0 });
+      if (Number(d.sack) === 1) push(week, slug, { c, ...T, k:'sack', y: 0, td: 0, ca: 0, tg: 0 });
+      if (Number(d.interception) === 1) push(week, slug, { c, ...T, k:'int', y: 0, td: 0, ca: 0, tg: 0 });
+      if (Number(d.fumble_lost) === 1 && d.fumble_recovery_1_team === d.defteam) push(week, slug, { c, ...T, k:'fumrec', y: 0, td: 0, ca: 0, tg: 0 });
+      if (Number(d.safety) === 1) push(week, slug, { c, ...T, k:'safety', y: 0, td: 0, ca: 0, tg: 0 });
+      if (isSet(d.td_team) && d.td_team === d.defteam) push(week, slug, { c, ...T, k:'dst_td', y: 0, td: 0, ca: 0, tg: 0 });
     }
   }
 }

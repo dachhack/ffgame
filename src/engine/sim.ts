@@ -84,6 +84,9 @@ export function projectedPoints(p: Player, week: number): number {
 
 interface RawPlay {
   clock: number;
+  t?: number;       // real wall-clock time of the play, in seconds since the
+                    // game's first snap (from MCP time_of_day). Absent on
+                    // synthesized/return plays → callers fall back to `clock`.
   kind: RealPlayKind;
   yards: number;
   td: boolean;
@@ -306,7 +309,7 @@ export function realRawPlays(playerId: string, week: number): RawPlay[] | null {
   const ps = realPbpFor(week, playerId);
   if (!ps) return null;
   return ps
-    .map((p) => ({ clock: p.c, kind: p.k, yards: p.y, td: !!p.td, catch: !!p.ca, target: !!p.tg, turnover: !!p.to }))
+    .map((p) => ({ clock: p.c, t: p.t, kind: p.k, yards: p.y, td: !!p.td, catch: !!p.ca, target: !!p.tg, turnover: !!p.to }))
     .sort((a, b) => a.clock - b.clock);
 }
 
@@ -356,6 +359,41 @@ function playsForPlayer(player: Player, week: number, metricId?: string): { play
   const ret = metricId === 'retyd' ? returnPlays(player, week) : [];
   const plays = ret.length ? [...base, ...ret].sort((a, b) => a.clock - b.clock) : base;
   return { plays, real: !!r };
+}
+
+// ── Real-time ↔ game-clock mapping ────────────────────────────────────────────
+// Real-time power-ups (Metric/Player Swap, Mulligan) are gated on the REAL
+// wall-clock time a play happened — not the game clock the feed displays — so a
+// delayed feed can't be used to scoop a play you already saw on TV. Each play
+// carries `t` (real seconds since the first snap); these two helpers convert
+// between a game-clock position and its real-time position along a player's
+// own timeline, interpolating between plays. When real timestamps are absent
+// (`t` falls back to `clock`) both functions are the identity, so behavior is
+// unchanged until real play time is baked.
+function clockRtPoints(player: Player, week: number, metricId?: string): { c: number; t: number }[] {
+  return playsForPlayer(player, week, metricId).plays.map((p) => ({ c: p.clock, t: p.t ?? p.clock }));
+}
+function interp(pts: { c: number; t: number }[], x: number, from: 'c' | 't'): number {
+  const to = from === 'c' ? 't' : 'c';
+  if (!pts.length) return x;
+  if (x <= pts[0][from]) return pts[0][from] > 0 ? (x / pts[0][from]) * pts[0][to] : 0;
+  for (let i = 1; i < pts.length; i++) {
+    if (x <= pts[i][from]) {
+      const a = pts[i - 1], b = pts[i];
+      const span = b[from] - a[from];
+      return span > 0 ? a[to] + ((x - a[from]) / span) * (b[to] - a[to]) : a[to];
+    }
+  }
+  const last = pts[pts.length - 1];
+  return last[to] + (x - last[from]); // 1:1 past the final play
+}
+/** The real wall-clock time (seconds from first snap) at a game-clock position. */
+export function realTimeAt(player: Player, week: number, clock: number, metricId?: string): number {
+  return Math.round(interp(clockRtPoints(player, week, metricId), clock, 'c'));
+}
+/** The game-clock position corresponding to a real wall-clock time. */
+export function clockAtRealTime(player: Player, week: number, rt: number, metricId?: string): number {
+  return Math.round(interp(clockRtPoints(player, week, metricId), rt, 't'));
 }
 
 // Running box-score line for a player up to a clock — drives the live statline

@@ -10,7 +10,7 @@ import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
   windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
 } from '../engine/matchup';
-import { fmtClock, statlineAt, GAME_SECONDS, type StatLine } from '../engine/sim';
+import { fmtClock, statlineAt, realTimeAt, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
@@ -565,6 +565,9 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
         );
         const bench = (youPools[swapTarget.win] || []).filter((p) => !slottedIds.has(p.id));
         const atClock = winClocks[swapTarget.win] ?? 0;
+        // Stamp activation with the REAL time at the feed's current position, so
+        // the swap can't retroactively grab a play already final in real time.
+        const atRt = realTimeAt(curPlayer, week, atClock, cur!.metricId ?? undefined);
         return (
           <SwapMenu
             player={curPlayer}
@@ -573,8 +576,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
             bench={bench}
             metricQty={inventory['metric-swap'] ?? 0}
             playerQty={inventory['player-swap'] ?? 0}
-            onMetric={(m) => { applyMetricSwap(week, swapTarget.key, atClock, m); setSwapTarget(null); }}
-            onPlayer={(pid) => { applyPlayerSwap(week, swapTarget.key, atClock, pid); setSwapTarget(null); }}
+            onMetric={(m) => { applyMetricSwap(week, swapTarget.key, atClock, atRt, m); setSwapTarget(null); }}
+            onPlayer={(pid) => { applyPlayerSwap(week, swapTarget.key, atClock, atRt, pid); setSwapTarget(null); }}
             onClose={() => setSwapTarget(null)}
           />
         );
@@ -642,10 +645,11 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
         const p = slot?.you?.player;
         if (!p) return null;
         const atClock = winClocks[slot!.win] ?? 0;
+        const atRt = realTimeAt(p, week, atClock, slot!.you!.metricId ?? undefined);
         return (
           <MulliganModal
             player={p} curMetric={slot!.you!.metricId} inventory={inventory}
-            onPick={(m) => { applyMulligan(week, mulliganSlot, atClock, m); setMulliganSlot(null); setPendingApply(null); }}
+            onPick={(m) => { applyMulligan(week, mulliganSlot, atClock, atRt, m); setMulliganSlot(null); setPendingApply(null); }}
             onClose={() => { setMulliganSlot(null); setPendingApply(null); }}
           />
         );
@@ -787,7 +791,7 @@ function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMe
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>⚡ Power-Up · {player.name}</div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>APPLIES FROM {fmtClock(atClock)} · NOT RETROACTIVE</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>LOCKS IN AT {fmtClock(atClock)} (REAL TIME) · PLAYS ALREADY FINAL DON’T COUNT</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
         </div>
@@ -1110,7 +1114,7 @@ function MulliganModal({ player, curMetric, inventory, onPick, onClose }: {
 }) {
   const options = METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === curMetric);
   return (
-    <PuShell title="🎲 Mulligan — Re-roll" subtitle={`PICK A NEW METRIC FOR ${player.name.toUpperCase()} · APPLIES GOING FORWARD`} accent="var(--warn)" onClose={onClose}>
+    <PuShell title="🎲 Mulligan — Re-roll" subtitle={`PICK A NEW METRIC FOR ${player.name.toUpperCase()} · COUNTS ONLY PLAYS AFTER NOW (REAL TIME)`} accent="var(--warn)" onClose={onClose}>
       {options.map((m) => {
         const cur = m.id === curMetric;
         return (
