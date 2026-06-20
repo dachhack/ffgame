@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
-import { Brand, ThemeSwitcher, PlayerImg, Avatar, Img, InjuryBadge, fonts, useIsMobile } from '../app/ui';
+import { Brand, ThemeSwitcher, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile } from '../app/ui';
 import { avatarUrl, teamLogo } from '../data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange } from '../data/nflSlate';
 import { WINDOWS, METRICS, metricById } from '../data/metrics';
@@ -67,9 +67,16 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const [puView, setPuView] = useState<'active' | 'apply' | null>(null);
   const [pendingApply, setPendingApply] = useState<string | null>(null); // a targeted powerup awaiting a spot tap
   const [byeStealSlot, setByeStealSlot] = useState<string | null>(null); // empty slot chosen for Bye Steal, awaiting a player
+  const [spySlot, setSpySlot] = useState<string | null>(null); // slate slot tapped for Spy, awaiting reveal choice
+  const [mulliganSlot, setMulliganSlot] = useState<string | null>(null); // your slot tapped for Mulligan, awaiting metric
   function applyToSpot(key: string) {
     if (pendingApply === 'double-or-nothing') { setDoubleOrNothing(week, key); setPendingApply(null); }
     else if (pendingApply === 'bye-steal') setByeStealSlot(key); // keep pending until a bye player is chosen
+    else if (pendingApply === 'spy') setSpySlot(key); // keep pending until a reveal is chosen
+    else if (pendingApply === 'mulligan') setMulliganSlot(key); // keep pending until a metric is chosen
+  }
+  function applyToWindow(win: WindowId) {
+    if (pendingApply === 'emp') { applyEmp(week, win, winClocks[win] ?? 0); setPendingApply(null); }
   }
   // Rosters expand in setup (you need them to set lineups), collapse otherwise.
   const [rosterOpen, setRosterOpen] = useState<{ you: boolean; their: boolean }>(() => ({ you: initialPhase === 'setup', their: initialPhase === 'setup' }));
@@ -258,7 +265,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     const buff = isTeamBuff(p.id);
     let ok = false; let deadline = '';
     if (p.timing === 'pre') {
-      if (p.id === 'spy') { ok = phase === 'setup' || preKickPhase; deadline = 'Before kickoff'; }
+      if (p.id === 'spy') { ok = preKickPhase; deadline = 'After lock, before kickoff'; }
       else { ok = phase === 'setup'; deadline = 'Before lock-in'; }
     } else {
       ok = liveWins.length > 0;
@@ -475,7 +482,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, maxWidth: 520, lineHeight: 1.5 }}>{subhead}</div>
               {pendingApply ? (
                 <div className="mono" style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))', border: '1px solid var(--warn)', borderRadius: 6, padding: '7px 11px' }}>
-                  <span>{powerupById(pendingApply)?.icon} Tap a spot to apply {powerupById(pendingApply)?.name}</span>
+                  <span>{powerupById(pendingApply)?.icon} Tap a {powerupById(pendingApply)?.target === 'window' ? 'window' : 'spot'} to apply {powerupById(pendingApply)?.name}</span>
                   <button onClick={() => setPendingApply(null)} className="mono" style={{ background: 'none', border: 'none', color: 'var(--dim)', fontWeight: 700, fontSize: 9, letterSpacing: '0.1em' }}>CANCEL</button>
                 </div>
               ) : (
@@ -489,13 +496,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 </div>
               )}
               {phase !== 'setup' && <BuffStrip phase={phase} inventory={inventory} armed={buffs} bonuses={resolved.bonuses} onArm={(id) => armBuff(week, id)} />}
-              <TargetPanel
-                phase={phase} week={week} inventory={inventory} aw={aw} windows={resolved.windows} oppPicks={oppPicks}
-                winClocks={winClocks}
-                onSpy={(k, r) => setSpy(week, k, r)}
-                onMulligan={(k, c, m) => applyMulligan(week, k, c, m)} onEmp={(w, c) => applyEmp(week, w, c)}
-                onClearStake={() => clearDoubleOrNothing(week)} onClearBye={() => clearByeSteal(week)} onClearSpy={() => clearSpy(week)}
-              />
+              <TargetPanel aw={aw} oppPicks={oppPicks} preKick={preKickPhase} onClearSpy={() => clearSpy(week)} />
             </div>
             <div style={{ textAlign: 'right', flex: 'none' }}>
               <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>{phase === 'setup' ? 'SLOTS SET' : 'WEEK ' + week}</div>
@@ -538,6 +539,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 aw={aw}
                 applyMode={pendingApply}
                 onApplyToSpot={applyToSpot}
+                onApplyToWindow={applyToWindow}
               />
             ))}
           </div>
@@ -620,6 +622,27 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
           onClose={() => { setByeStealSlot(null); setPendingApply(null); }}
         />
       )}
+
+      {spySlot && (
+        <SpyRevealModal
+          onPick={(reveal) => { setSpy(week, spySlot, reveal); setSpySlot(null); setPendingApply(null); }}
+          onClose={() => { setSpySlot(null); setPendingApply(null); }}
+        />
+      )}
+
+      {mulliganSlot && (() => {
+        const slot = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === mulliganSlot);
+        const p = slot?.you?.player;
+        if (!p) return null;
+        const atClock = winClocks[slot!.win] ?? 0;
+        return (
+          <MulliganModal
+            player={p} curMetric={slot!.you!.metricId} inventory={inventory}
+            onPick={(m) => { applyMulligan(week, mulliganSlot, atClock, m); setMulliganSlot(null); setPendingApply(null); }}
+            onClose={() => { setMulliganSlot(null); setPendingApply(null); }}
+          />
+        );
+      })()}
 
       {puView === 'active' && <ActivePowerupsModal effects={activeEffects} onClose={() => setPuView(null)} />}
       {puView === 'apply' && <ApplyPowerupsModal items={appliable} inventory={inventory} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); setPuView(null); }} onClose={() => setPuView(null)} />}
@@ -911,8 +934,9 @@ const POWERUP_HINT: Record<string, string> = {
   'emp': 'Fire on a window during LIVE.',
 };
 
-// Power-ups that target one of YOUR spots (vs. whole-field buffs that just arm).
-const SPOT_APPLY = new Set(['double-or-nothing', 'bye-steal']);
+// Targeted power-ups applied by tapping a spot/window (vs. whole-field buffs
+// that just arm). Each enters apply-mode, then the tap finishes it.
+const SPOT_APPLY = new Set(['double-or-nothing', 'bye-steal', 'spy', 'mulligan', 'emp']);
 
 // Shared modal shell for the two power-up cards.
 function PuShell({ title, subtitle, accent, onClose, children }: { title: string; subtitle: string; accent: string; onClose: () => void; children: ReactNode }) {
@@ -992,77 +1016,61 @@ function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose }: {
   );
 }
 
-// Apply-by-target powerups (Double or Nothing, Spy, Bye Steal, Mulligan, EMP):
-// a compact panel of selectors, shown in the phase where each is usable.
-function TargetPanel(props: {
-  phase: Phase; week: number; inventory: Record<string, number>;
-  aw?: { doubleOrNothing?: string; spy?: { slotKey: string; reveal: 'player' | 'metric' }; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>> };
-  windows: ReturnType<typeof buildMatchup>['windows']; oppPicks: Record<string, Pick>; winClocks: Record<string, number>;
-  onSpy: (k: string, reveal: 'player' | 'metric') => void;
-  onMulligan: (k: string, atClock: number, m: string) => void; onEmp: (w: WindowId, clock: number) => void;
-  onClearStake: () => void; onClearBye: () => void; onClearSpy: () => void;
-}) {
-  const { phase, inventory, aw, windows, oppPicks, winClocks, onSpy, onMulligan, onEmp, onClearStake, onClearBye, onClearSpy } = props;
-  const [mulKey, setMulKey] = useState(''); const [mulMet, setMulMet] = useState('');
-  const [spySlot, setSpySlot] = useState('');
-  const flat = windows.flatMap((w) => w.slots);
-  const has = (id: string) => (inventory[id] ?? 0) > 0;
-  const yourH2H = flat.filter((s) => s.you && s.their).map((s) => ({ key: slotKey(s.win, s.slotIndex), name: s.you!.player.name, win: s.win, pos: s.you!.player.pos }));
-  // Every slot on the slate, by position only (no occupant revealed) — for Spy.
-  const allSlots = flat.map((s) => ({ key: slotKey(s.win, s.slotIndex), win: s.win, idx: s.slotIndex }));
-  // After rosters lock (live) and before any game kicks off.
-  const preKick = phase === 'live' && !Object.values(winClocks).some((c) => (c ?? 0) > 0);
-  const rows: ReactNode[] = [];
-  const Row = (label: string, body: ReactNode) => (
-    <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-      <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', minWidth: 96 }}>{label}</span>
-      {body}
-    </div>
-  );
-  const sel: React.CSSProperties = { background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 4, fontSize: 10, padding: '4px 6px', fontFamily: fonts.MONO };
-  const btn: React.CSSProperties = { background: 'var(--surface)', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, fontSize: 9, fontWeight: 700, padding: '4px 8px' };
-  const undo: React.CSSProperties = { background: 'none', border: 'none', color: 'var(--opp)', fontWeight: 700, fontSize: 11, cursor: 'pointer', padding: '0 4px' };
-
-  if (phase === 'setup') {
-    if (aw?.doubleOrNothing) rows.push(Row('⚖️ Double/Nothing', <><span className="mono" style={{ fontSize: 9.5, color: 'var(--you)' }}>staked {yourH2H.find((s) => s.key === aw.doubleOrNothing)?.name ?? '—'}</span><button style={undo} title="Undo (refund)" onClick={onClearStake}>✕</button></>));
-    if (aw?.byeSteal) rows.push(Row('🪂 Bye Steal', <><span className="mono" style={{ fontSize: 9.5, color: 'var(--you)' }}>fielded {getPlayer(aw.byeSteal.playerId)?.name ?? '—'}</span><button style={undo} title="Undo (refund)" onClick={onClearBye}>✕</button></>));
-  }
-  if (phase === 'live') {
-    if (has('emp')) rows.push(Row('💥 EMP', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{WINDOWS.map((w) => {
-      const fired = aw?.emp?.[w.id] != null;
-      return <button key={w.id} style={{ ...btn, opacity: fired ? 0.5 : 1 }} disabled={fired} onClick={() => onEmp(w.id, winClocks[w.id] ?? 0)}>{w.label}{fired ? ' ✓' : ''}</button>;
-    })}</div>));
-    if (has('mulligan')) { const slot = yourH2H.find((s) => s.key === mulKey); rows.push(Row('🎲 Mulligan', <>
-      <select style={sel} value={mulKey} onChange={(e) => { setMulKey(e.target.value); setMulMet(''); }}><option value="">slot…</option>{yourH2H.map((s) => <option key={s.key} value={s.key}>{s.win.toUpperCase()} {s.name}</option>)}</select>
-      <select style={sel} value={mulMet} onChange={(e) => setMulMet(e.target.value)} disabled={!slot}><option value="">metric…</option>{slot && METRICS[slot.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
-      <button style={btn} disabled={!mulKey || !mulMet} onClick={() => { onMulligan(mulKey, winClocks[slot!.win] ?? 0, mulMet); setMulKey(''); setMulMet(''); }}>RE-ROLL</button>
-    </>)); }
-  }
-  // Spy: live, after rosters lock and before kickoff. Pick any slate slot blind
-  // (no occupant shown), then reveal that opponent slot's player OR metric. The
-  // result persists once revealed.
-  if (aw?.spy) {
-    const sp = aw.spy;
-    const op = oppPicks[sp.slotKey];
-    const oppPlayer = op ? getPlayer(op.playerId) : null;
-    const s = allSlots.find((x) => x.key === sp.slotKey);
-    const label = s ? `${s.win.toUpperCase()} #${s.idx + 1}` : '—';
-    const val = sp.reveal === 'player'
-      ? (oppPlayer ? `${oppPlayer.name} (${oppPlayer.pos} · ${oppPlayer.team})` : '— no player —')
-      : (oppPlayer ? (metricById(oppPlayer.pos, op!.metricId)?.name ?? '—') : '— no player —');
-    rows.push(Row('👁️ Spy', <><span className="mono" style={{ fontSize: 9.5, color: 'var(--opp)' }}>{label} {sp.reveal}: <b style={{ color: 'var(--text)' }}>{val}</b></span>{preKick && <button style={undo} title="Undo (refund)" onClick={onClearSpy}>✕</button>}</>));
-  } else if (has('spy') && preKick) {
-    rows.push(Row('👁️ Spy', <>
-      <select style={sel} value={spySlot} onChange={(e) => setSpySlot(e.target.value)}><option value="">slot…</option>{allSlots.map((s) => <option key={s.key} value={s.key}>{s.win.toUpperCase()} #{s.idx + 1}</option>)}</select>
-      <button style={btn} disabled={!spySlot} onClick={() => { onSpy(spySlot, 'player'); setSpySlot(''); }}>REVEAL PLAYER</button>
-      <button style={btn} disabled={!spySlot} onClick={() => { onSpy(spySlot, 'metric'); setSpySlot(''); }}>REVEAL METRIC</button>
-    </>));
-  }
-  if (!rows.length) return null;
+// Spy: after tapping a slate slot, choose what to reveal about the opponent there.
+function SpyRevealModal({ onPick, onClose }: { onPick: (r: 'player' | 'metric') => void; onClose: () => void }) {
   return (
-    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '9px 11px' }}>
-      <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)' }}>POWER-UPS</span>
-      {rows}
+    <PuShell title="👁️ Spy — Reveal" subtitle="UNCOVER ONE THING ABOUT THE OPPONENT IN THIS SLOT" accent="var(--warn)" onClose={onClose}>
+      {([['player', 'Reveal Player', 'See who the opponent slotted here.'], ['metric', 'Reveal Metric', 'See which metric the opponent chose here.']] as const).map(([r, label, blurb]) => (
+        <button key={r} onClick={() => onPick(r)} className="mono" style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 3, padding: '10px 12px', borderRadius: 5, border: '1px solid var(--warn)', background: 'var(--bg)', cursor: 'pointer' }}>
+          <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{label}</span>
+          <span style={{ fontSize: 10, color: 'var(--dim)' }}>{blurb}</span>
+        </button>
+      ))}
+    </PuShell>
+  );
+}
+
+// Mulligan: after tapping your slot, pick the metric to re-roll into (free swap).
+function MulliganModal({ player, curMetric, inventory, onPick, onClose }: {
+  player: Player; curMetric: string; inventory: Record<string, number>; onPick: (m: string) => void; onClose: () => void;
+}) {
+  const options = METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === curMetric);
+  return (
+    <PuShell title="🎲 Mulligan — Re-roll" subtitle={`PICK A NEW METRIC FOR ${player.name.toUpperCase()} · APPLIES GOING FORWARD`} accent="var(--warn)" onClose={onClose}>
+      {options.map((m) => {
+        const cur = m.id === curMetric;
+        return (
+          <button key={m.id} onClick={() => onPick(m.id)} disabled={cur} className="mono" style={{ textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', borderRadius: 5, border: `1px solid ${cur ? 'var(--bd)' : 'var(--warn)'}`, background: cur ? 'color-mix(in srgb, var(--text) 4%, var(--bg))' : 'var(--bg)', cursor: cur ? 'default' : 'pointer', opacity: cur ? 0.6 : 1 }}>
+            <span className="grotesk" style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{m.lock ? '◈ ' : ''}{m.name}</span>
+            {cur && <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>CURRENT</span>}
+          </button>
+        );
+      })}
+    </PuShell>
+  );
+}
+
+// Spy intel: once a Spy reveal lands, surface what it uncovered (the opponent's
+// player or chosen metric in that slot). Applying Spy now happens by tapping a
+// slot in apply-mode; this panel is just the payoff readout.
+function TargetPanel({ aw, oppPicks, preKick, onClearSpy }: {
+  aw?: { spy?: { slotKey: string; reveal: 'player' | 'metric' } };
+  oppPicks: Record<string, Pick>; preKick: boolean; onClearSpy: () => void;
+}) {
+  if (!aw?.spy) return null;
+  const sp = aw.spy;
+  const op = oppPicks[sp.slotKey];
+  const oppPlayer = op ? getPlayer(op.playerId) : null;
+  const [win, idx] = sp.slotKey.split('#');
+  const label = `${win.toUpperCase()} #${Number(idx) + 1}`;
+  const val = sp.reveal === 'player'
+    ? (oppPlayer ? `${oppPlayer.name} (${oppPlayer.pos} · ${oppPlayer.team})` : '— no player —')
+    : (oppPlayer ? (metricById(oppPlayer.pos, op!.metricId)?.name ?? '—') : '— no player —');
+  return (
+    <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '9px 11px' }}>
+      <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)' }}>👁️ SPY INTEL</span>
+      <span className="mono" style={{ fontSize: 9.5, color: 'var(--opp)' }}>{label} {sp.reveal}: <b style={{ color: 'var(--text)' }}>{val}</b></span>
+      {preKick && <button style={{ background: 'none', border: 'none', color: 'var(--opp)', fontWeight: 700, fontSize: 11, cursor: 'pointer', padding: '0 4px' }} title="Undo (refund)" onClick={onClearSpy}>✕</button>}
     </div>
   );
 }
@@ -1129,15 +1137,25 @@ function WindowSection(props: {
   backups: Record<string, string>;
   slotName: Record<string, string>;
   armed: Record<string, boolean>;
-  aw?: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string } };
+  aw?: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>> };
   applyMode: string | null;
   onApplyToSpot: (key: string) => void;
+  onApplyToWindow: (win: WindowId) => void;
 }) {
-  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot } = props;
+  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
   const pct = Math.round((Math.min(clock, maxClock) / maxClock) * 100);
+  // Live apply-mode: EMP targets the whole live window; Spy/Mulligan target a
+  // single spot. Highlight what's eligible and dim the rest.
+  const empEligible = applyMode === 'emp' && phase === 'live' && clock > 0 && !done && aw?.emp?.[w.id] == null;
+  const spotEligible = (s: typeof rw.slots[number]) => {
+    if (applyMode === 'spy') return !!s.their;             // reveal the opponent here
+    if (applyMode === 'mulligan') return !!s.you && !done; // re-roll your metric
+    return false;
+  };
+  const spotApplyMode = applyMode === 'spy' || applyMode === 'mulligan';
   const [slateOpen, setSlateOpen] = useState(false);
   // The real NFL games feeding this window: map each window player's team to its
   // actual away@home matchup that week, and list the players involved.
@@ -1217,6 +1235,9 @@ function WindowSection(props: {
             <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: phase === 'final' || done ? 'var(--you)' : '#FF4F62' }}>
               {phase === 'final' || done ? 'FINAL' : playing ? '● LIVE' : 'PAUSED'}
             </span>
+            {empEligible && (
+              <button onClick={() => onApplyToWindow(w.id)} className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '4px 9px', boxShadow: '0 0 12px color-mix(in srgb, var(--warn) 55%, transparent)', animation: 'bpulse 1.5s ease infinite' }}>💥 TAP TO EMP</button>
+            )}
           </div>
         )}
       </div>
@@ -1275,8 +1296,18 @@ function WindowSection(props: {
               />
             );
           }
+          const row = <ScoreRow key={key} slot={s} week={week} clock={clock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} canSwap={canSwap && !!s.you} onPowerup={() => onPowerup(key)} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} />;
+          if (!spotApplyMode) return row;
+          const elig = spotEligible(s);
           return (
-            <ScoreRow key={key} slot={s} week={week} clock={clock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} canSwap={canSwap && !!s.you} onPowerup={() => onPowerup(key)} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} />
+            <div key={key} style={{ position: 'relative', opacity: elig ? 1 : 0.4, borderRadius: 4 }}>
+              {row}
+              {elig && (
+                <div onClick={() => onApplyToSpot(key)} style={{ position: 'absolute', inset: 0, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--warn) 14%, transparent)', border: '1px dashed var(--warn)', borderRadius: 4, cursor: 'pointer' }}>
+                  <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 9px' }}>{powerupById(applyMode!)?.icon} TAP TO {applyMode === 'spy' ? 'SPY' : 'MULLIGAN'}</span>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
