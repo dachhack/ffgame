@@ -1011,7 +1011,9 @@ function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose }: {
               <button onClick={() => onArm(p.id)} disabled={qty <= 0} className="mono" style={{ flex: 'none', alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', border: '1px solid var(--you)', color: 'var(--on-accent)', background: 'var(--you)' }}>ARM</button>
             ) : action === 'apply' ? (
               <button onClick={() => onApply(p.id)} disabled={qty <= 0} className="mono" style={{ flex: 'none', alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', border: '1px solid var(--warn)', color: 'var(--on-accent)', background: 'var(--warn)' }}>APPLY</button>
-            ) : null}
+            ) : (
+              <span className="mono" title="No arming needed — ready to use" style={{ flex: 'none', alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', border: '1px solid var(--ok, #3fb950)', color: 'var(--ok, #3fb950)', background: 'transparent' }}>READY</span>
+            )}
           </div>
         );
       })}
