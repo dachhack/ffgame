@@ -82,7 +82,7 @@ function CoinPill({ amt }: { amt: number }) {
 }
 
 export function Matchup({ week, initialPhase }: { week: number; initialPhase: Phase }) {
-  const { navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
+  const { navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const buffs = applied[week]?.buffs ?? {};
   const buffsKey = JSON.stringify(buffs);
   const extraSlots = applied[week]?.extraSlots ?? {};
@@ -369,6 +369,19 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     return out;
   }
 
+  // Double or Nothing is staked on a slot but conceptually on a PLAYER. After a
+  // pick change, keep the stake on that player: follow them to their new slot
+  // when the lineup compacts, or refund the powerup if they were removed.
+  function reconcileDoN(prev: Record<string, Pick>, next: Record<string, Pick>) {
+    const key = aw?.doubleOrNothing;
+    if (!key) return;
+    const stakedId = prev[key]?.playerId;
+    if (!stakedId) return; // unknown / already orphaned
+    const newKey = Object.keys(next).find((k) => next[k].playerId === stakedId);
+    if (!newKey) clearDoubleOrNothing(week);                 // staked player removed → refund
+    else if (newKey !== key) remapDoubleOrNothing(week, newKey); // shifted by compaction → follow
+  }
+
   // Refund an unlock-metric powerup if this pick was using one (dropped a spot).
   function refundUnlockFor(pk?: Pick) {
     if (!pk?.metricId) return;
@@ -387,15 +400,15 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
       const k = slotKey(win, i);
       if (picks[k]?.playerId === playerId) { setSelSlot(k); return; }
     }
-    setPicks((prev) => {
-      const next = { ...prev };
-      for (const k of Object.keys(next)) if (next[k].playerId === playerId) delete next[k];
-      // Always take the first open spot top-down (a full window replaces spot 0).
-      let target = slotKey(win, 0);
-      for (let i = 0; i < nSlots; i++) { const k = slotKey(win, i); if (!next[k]) { target = k; break; } }
-      next[target] = { playerId, metricId: null };
-      return compactPicks(next);
-    });
+    const n = { ...picks };
+    for (const k of Object.keys(n)) if (n[k].playerId === playerId) delete n[k];
+    // Always take the first open spot top-down (a full window replaces spot 0).
+    let target = slotKey(win, 0);
+    for (let i = 0; i < nSlots; i++) { const k = slotKey(win, i); if (!n[k]) { target = k; break; } }
+    n[target] = { playerId, metricId: null };
+    const next = compactPicks(n);
+    reconcileDoN(picks, next);
+    setPicks(next);
     setSelSlot(null);
   }
 
@@ -413,19 +426,22 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   }
   function clearSlot(key: string) {
     refundUnlockFor(picks[key]);
-    setPicks((prev) => { const n = { ...prev }; delete n[key]; return compactPicks(n); });
+    const n = { ...picks }; delete n[key];
+    const next = compactPicks(n);
+    reconcileDoN(picks, next);
+    setPicks(next);
     setSelSlot(null);
   }
   // Assign a specific player to a specific spot (tap-a-spot picker), de-duped and
   // compacted so the window stays filled top-down.
   function assignToSlot(key: string, playerId: string) {
     if (picks[key]?.playerId !== playerId) refundUnlockFor(picks[key]); // replacing a spot's player drops its unlock
-    setPicks((prev) => {
-      const next = { ...prev };
-      for (const k of Object.keys(next)) if (next[k].playerId === playerId) delete next[k];
-      next[key] = { playerId, metricId: null };
-      return compactPicks(next);
-    });
+    const n = { ...picks };
+    for (const k of Object.keys(n)) if (n[k].playerId === playerId) delete n[k];
+    n[key] = { playerId, metricId: null };
+    const next = compactPicks(n);
+    reconcileDoN(picks, next);
+    setPicks(next);
     setSelSlot(null);
   }
 

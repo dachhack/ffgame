@@ -56,6 +56,9 @@ interface Store {
   disarmBuff: (week: number, id: string) => void;
   /** Stake one of your slots for Double or Nothing (consumes one). */
   setDoubleOrNothing: (week: number, slotKey: string) => boolean;
+  /** Move the Double-or-Nothing stake to a new slot (no consume) — follows its
+   *  player when the lineup compacts. */
+  remapDoubleOrNothing: (week: number, slotKey: string) => void;
   /** Peek one slate slot's player OR metric via Spy (consumes one). */
   setSpy: (week: number, slotKey: string, reveal: 'player' | 'metric') => boolean;
   /** Field a bye player in a slot via Bye Steal (consumes one). */
@@ -186,6 +189,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const setDoubleOrNothing = (week: number, slotKey: string): boolean =>
     consumeAndApply('double-or-nothing', week, (cur) => ({ ...cur, doubleOrNothing: slotKey }));
+  const remapDoubleOrNothing = (week: number, slotKey: string): void => {
+    const cur = applied[week];
+    if (!cur?.doubleOrNothing || cur.doubleOrNothing === slotKey) return;
+    const nextApplied = { ...applied, [week]: { ...cur, doubleOrNothing: slotKey } };
+    setApplied(nextApplied); persist({ applied: nextApplied });
+  };
   const setSpy = (week: number, slotKey: string, reveal: 'player' | 'metric'): boolean =>
     consumeAndApply('spy', week, (cur) => ({ ...cur, spy: { slotKey, reveal } }));
   const applyByeSteal = (week: number, slotKey: string, playerId: string): boolean =>
@@ -234,7 +243,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    () => ({ theme, setTheme, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
     [theme, route, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
