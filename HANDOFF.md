@@ -166,26 +166,34 @@ gets its OWN exact `time_of_day` (no interpolation, no same-second approximation
   (`realTimeAt`/`clockAtRealTime` become the identity), so older/synthetic data
   keeps working.
 
-## Playback clock modes (v0.9.7.1)
+## Playback clock modes (v0.9.7.5)
 The live board's `⏱` button (by `RUN ALL`) cycles three playback clock modes,
-held in `clockMode: 'game' | 'feed' | 'real'` on `Matchup`:
-- **GAME CLOCK** (`game`): every game in a window advances in lockstep on
-  game-elapsed seconds — the original behavior.
-- **REAL FEED** (`feed`): plays arrive on the real wall clock (each game runs at
-  its own real pace via each play's baked `t`, so games desync), but scoring
-  still **resolves on the game clock**.
-- **REAL CLOCK** (`real`): real feed AND cross-game effects resolve in real-time
-  order (see below).
+held in `clockMode: 'game' | 'feed' | 'real'` on `Matchup`. Two axes are in
+play: the **reveal** (which plays are visible now) and the **resolve/order**
+(how the log orders+interleaves and how effects resolve):
+- **GAME CLOCK** (`game`): lockstep game-clock reveal; log + effects on the game
+  clock — the original behavior.
+- **REAL FEED** (`feed`): real wall-clock **reveal** (each game runs at its own
+  real pace via each play's baked `t`, so games desync), but the log still
+  **orders/interleaves on the game clock** (game-clock stamps) and effects
+  resolve on the game clock.
+- **REAL CLOCK** (`real`): real reveal AND the log **orders/interleaves on the
+  real clock** (wall-clock stamps via `fmtTimeShort`) and effects resolve in
+  real-time order.
 
 Wiring:
-- `wallClock = clockMode !== 'game'` drives the real-time reveal:
+- `wallClock = clockMode !== 'game'` drives the real-time **reveal**:
   `winTarget = wallClock ? winRealMax : winMax` (ticker/seed/done/winLife);
   `winClocks[win]` is the window position (game secs, or real secs since kickoff).
   Per side, `clockAtRealTime(player, week, pos)` maps the window's real position
   back to that player's game clock; `ScoreRow` takes `youClock`/`theirClock`
   (banks, statline, log filter, coin all per-side). Totals sum each side at its
   own clock. Changing modes re-seeds positions to 0.
-- `realResolve = clockMode === 'real'` is passed to `buildMatchup`. The only
+- `realClock = realResolve = clockMode === 'real'` drives **order + resolve**:
+  passed to `ScoreRow.buildLog`, which (only in `real`) sorts each slot's log by
+  per-event real time (`realTimeAt(sidePlayer, …)`) and stamps wall-clock time;
+  `feed`/`game` keep the natural game-clock order. Same flag → `buildMatchup`:
+  the only
   genuinely cross-game scoring effect is the **TE-TD drip nuke**
   (`teTdNukeClocks` now returns `{c, rt}` per nuke). Game-resolve fires it at its
   own game clock; real-resolve lands it on the RECEIVING player's game clock at

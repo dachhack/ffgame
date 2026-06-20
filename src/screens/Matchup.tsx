@@ -511,15 +511,15 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
                 <button
                   onClick={() => setClockMode((m) => (m === 'game' ? 'feed' : m === 'feed' ? 'real' : 'game'))}
-                  title={'Playback clock (tap to cycle):\n• GAME CLOCK — every game in a window moves in lockstep on game time\n• REAL FEED — plays arrive on the real wall clock (games desync), score still resolves on game time\n• REAL CLOCK — real feed AND cross-game effects (TE-TD drip nuke) resolve in real-time order'}
+                  title={'Playback clock (tap to cycle):\n• GAME CLOCK — every game in a window moves in lockstep on game time\n• REAL FEED — plays reveal on the real wall clock (games desync), but the log orders/interleaves and effects resolve on the game clock\n• REAL CLOCK — plays order/interleave and effects resolve on the real clock (cross-game effects land in real-time order)'}
                   className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: wallClock ? 'var(--on-accent)' : 'var(--dim)', background: clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--surface)', border: `1px solid ${clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '6px 10px' }}>
                   ⏱ {clockMode === 'real' ? 'REAL CLOCK' : clockMode === 'feed' ? 'REAL FEED' : 'GAME CLOCK'}
                 </button>
                 <span className="mono" style={{ fontSize: 8, lineHeight: 1.3, color: 'var(--faint)', letterSpacing: '0.02em', maxWidth: 220 }}>
                   {clockMode === 'real'
-                    ? 'Real clock — feed + cross-game effects resolve live'
+                    ? 'Real clock — log order & effects resolve by real time'
                     : clockMode === 'feed'
-                    ? 'Real feed — games desync; score on game time'
+                    ? 'Real feed — reveals live; order & effects on game clock'
                     : 'Game clock — all games lockstep on game time'}
                 </span>
               </div>
@@ -613,6 +613,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 clock={winClocks[rw.window.id] ?? 0}
                 maxClock={winTarget[rw.window.id] ?? GAME_SECONDS}
                 wallClock={wallClock}
+                realClock={realResolve}
                 wallSeconds={(() => {
                   const c = winClocks[rw.window.id] ?? 0;
                   // Real seconds elapsed at the current feed position: direct in
@@ -1263,6 +1264,7 @@ function WindowSection(props: {
   clock: number;
   maxClock: number;
   wallClock: boolean;
+  realClock: boolean;
   wallSeconds: number;
   playing: boolean;
   onTogglePlay: () => void;
@@ -1292,7 +1294,7 @@ function WindowSection(props: {
   onApplyToWindow: (win: WindowId) => void;
   onScout: (win: WindowId) => void;
 }) {
-  const { rw, week, phase, clock, maxClock, wallClock, wallSeconds, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout } = props;
+  const { rw, week, phase, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
@@ -1453,7 +1455,7 @@ function WindowSection(props: {
           // both sides share it.
           const youClock = wallClock && s.you ? clockAtRealTime(s.you.player, week, clock, s.you.metricId ?? undefined) : clock;
           const theirClock = wallClock && s.their ? clockAtRealTime(s.their.player, week, clock, s.their.metricId ?? undefined) : clock;
-          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} wallClock={wallClock} kickoffSec={kickoffSecOfDay(w.time)} />;
+          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={kickoffSecOfDay(w.time)} />;
           if (!spotApplyMode) return row;
           const elig = spotEligible(s);
           return (
@@ -1755,22 +1757,22 @@ function BuffFxRow({ side, fx, stake }: { side: 'you' | 'their'; fx?: BuffFx[]; 
 }
 
 // ── Score row (live / final) ──
-function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName, wallClock, kickoffSec }: {
+function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName, realClock, kickoffSec }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
   week: number; youClock: number; theirClock: number; open: boolean; onToggle: () => void; phase: Phase; done: boolean;
   onAssignBackup: () => void; turnoverCoin: number;
   backups: Record<string, string>; slotName: Record<string, string>;
-  wallClock: boolean; kickoffSec: number;
+  realClock: boolean; kickoffSec: number;
 }) {
   const ownKey = slotKey(slot.win, slot.slotIndex);
   const isMobile = useIsMobile();
   const gridCols = '1fr 1fr'; // no center gutter — cards fill the width; controls go below
   const rowGap = isMobile ? 5 : 8;
-  // When the feed runs on the real clock (head-to-head scoring is real-time),
-  // the log reads in real-time order with wall-clock time stamps. Each event's
-  // real time comes from its own side's player; game mode keeps the game clock.
+  // REAL CLOCK mode: the log reads in real-time order with wall-clock stamps,
+  // matching how effects resolve on that axis. GAME CLOCK + REAL FEED keep the
+  // game-clock order/stamps (REAL FEED only changes the reveal pace, not order).
   const buildLog = (events: PbpEvent[]): { events: PbpEvent[]; clockOf?: (ev: PbpEvent) => string } => {
-    if (!wallClock) return { events };
+    if (!realClock) return { events };
     const rt = new Map<PbpEvent, number>();
     for (const ev of events) {
       const p = ev.side === 'you' ? slot.you : slot.their;
