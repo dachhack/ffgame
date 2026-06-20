@@ -1735,6 +1735,7 @@ function fmtStat(pos: Pos, s: StatLine): string {
     const p = [`${s.carries} car`, `${s.rushYds} rush yd`, `${s.rec}/${s.targets} rec`, `${s.recYds} rec yd`];
     const td = s.rushTds + s.recTds;
     if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
+    if (s.retYds) p.push(`${s.retYds} ret yd${s.retTds ? ` · ${s.retTds} ret TD` : ''}`);
     return p.join(' · ');
   }
   if (pos === 'WR' || pos === 'TE') {
@@ -1742,6 +1743,7 @@ function fmtStat(pos: Pos, s: StatLine): string {
     if (s.carries) p.push(`${s.carries} car`, `${s.rushYds} rush yd`); // jet sweeps / end-arounds
     const td = s.rushTds + s.recTds;
     if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
+    if (s.retYds) p.push(`${s.retYds} ret yd${s.retTds ? ` · ${s.retTds} ret TD` : ''}`);
     return p.join(' · ');
   }
   if (pos === 'K') return `${s.fg} FG · ${s.xp} XP`;

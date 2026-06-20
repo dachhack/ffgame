@@ -2,6 +2,7 @@ import type { Player, PlayerStats, Pos, PbpEvent, SlotResolution, EffectType, Bu
 import { hashStr } from '../data/players';
 import { metricById } from '../data/metrics';
 import { realPbpFor, realPossFor, type RealPlayKind } from '../data/realPbp';
+import { returnsFor } from '../data/returns';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Deterministic simulation. Everything is seeded off (playerId, week) so a
@@ -184,6 +185,8 @@ function buildPlays(p: Player, l: WeekLine, week: number): RawPlay[] {
 
 // Effect family of a metric → how it scores a single play and what it does.
 function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): number {
+  // Return Yards (unlock-return) — flat, position-agnostic: 0.1/yd + 6/return TD.
+  if (metricId === 'retyd') return play.kind === 'return' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0;
   if (pos === 'QB') {
     if (metricId === 'fg') return 0; // Field General scores nothing — it multiplies your other window players (see windowFgMult / resolveSlot opts)
     if (metricId === 'pass') return play.kind === 'pass' ? play.yards * 0.04 + (play.td ? 4 : 0) : 0; // yards + TD points, but no nuke/erase (flat family)
@@ -268,11 +271,13 @@ function playText(p: Player, play: RawPlay): string {
   if (play.td) {
     if (play.kind === 'rush') return `${t}: ${p.name} ${play.yards}yd rush TD`;
     if (play.kind === 'rec') return `${t}: ${p.name} ${play.yards}yd catch TD`;
+    if (play.kind === 'return') return `${t}: ${p.name} ${play.yards}yd return TD`;
     return `${t}: ${p.name} ${play.yards}yd TD`;
   }
   if (play.kind === 'pass') return `${t}: ${p.name} ${play.yards}yd pass`;
   if (play.kind === 'rush') return `${t}: ${p.name} +${play.yards} rush`;
   if (play.kind === 'rec') return `${t}: ${p.name} +${play.yards} catch`;
+  if (play.kind === 'return') return `${t}: ${p.name} +${play.yards} return`;
   if (play.kind === 'fg') return `${t}: ${p.name} ${play.yards}yd FG good`;
   if (play.kind === 'fgmiss') return `${t}: ${p.name} ${play.yards}yd FG miss`;
   if (play.kind === 'xp') return `${t}: ${p.name} XP good`;
@@ -332,12 +337,36 @@ export const EMPTY_PLAYER: Player = {
   stats: { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 },
 };
 
-/** Real plays when available, otherwise the deterministic simulation. */
+/** Real kick/punt return yards (from baked 2025 data) spread into a few plays
+ *  across the game — feeds the Return Yards metric. Yardage/TDs are real; the
+ *  in-game timing is approximated (returns aren't in the per-play feed). */
+function returnPlays(player: Player, week: number): RawPlay[] {
+  if (player.pos !== 'WR' && player.pos !== 'RB') return [];
+  const { yds, tds } = returnsFor(player.id, week);
+  if (yds === 0 && tds === 0) return [];
+  const r = rng(hashStr(`${player.id}|ret${week}`));
+  const n = Math.max(1, Math.min(6, Math.round(Math.abs(yds) / 28) || 1));
+  const clocks = spreadClocks(n, r);
+  const plays: RawPlay[] = [];
+  let rem = yds; let tdLeft = tds;
+  for (let i = 0; i < n; i++) {
+    const y = i === n - 1 ? rem : Math.round(rem / (n - i));
+    rem -= y;
+    const td = tdLeft > 0 && (i === n - 1 || r() < 0.3); if (td) tdLeft--;
+    plays.push({ clock: clocks[i], kind: 'return', yards: y, td, catch: false, target: false });
+  }
+  return plays;
+}
+
+/** Real plays when available, otherwise the deterministic simulation. Return
+ *  yards (a separate real dataset) are appended in both cases. */
 function playsForPlayer(player: Player, week: number): { plays: RawPlay[]; real: boolean } {
   if (player.id === EMPTY_PLAYER.id) return { plays: [], real: false };
   const r = realRawPlays(player.id, week);
-  if (r) return { plays: r, real: true };
-  return { plays: buildPlays(player, weekLine(player, week), week), real: false };
+  const base = r ?? buildPlays(player, weekLine(player, week), week);
+  const ret = returnPlays(player, week);
+  const plays = ret.length ? [...base, ...ret].sort((a, b) => a.clock - b.clock) : base;
+  return { plays, real: !!r };
 }
 
 // Running box-score line for a player up to a clock — drives the live statline
@@ -346,12 +375,13 @@ export interface StatLine {
   passYds: number; passTds: number;
   carries: number; rushYds: number; rushTds: number;
   targets: number; rec: number; recYds: number; recTds: number;
+  retYds: number; retTds: number;
   fg: number; xp: number;
   sacks: number; ints: number; fumrec: number; dtd: number; safety: number;
 }
 export function statlineAt(player: Player, week: number, clock: number): StatLine {
   const { plays } = playsForPlayer(player, week);
-  const s: StatLine = { passYds: 0, passTds: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, rec: 0, recYds: 0, recTds: 0, fg: 0, xp: 0, sacks: 0, ints: 0, fumrec: 0, dtd: 0, safety: 0 };
+  const s: StatLine = { passYds: 0, passTds: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, rec: 0, recYds: 0, recTds: 0, retYds: 0, retTds: 0, fg: 0, xp: 0, sacks: 0, ints: 0, fumrec: 0, dtd: 0, safety: 0 };
   for (const p of plays) {
     if (p.clock > clock) break; // plays are sorted ascending by clock
     switch (p.kind) {
@@ -359,6 +389,7 @@ export function statlineAt(player: Player, week: number, clock: number): StatLin
       case 'rush': s.carries++; s.rushYds += p.yards; if (p.td) s.rushTds++; break;
       case 'rec': s.rec++; s.targets++; s.recYds += p.yards; if (p.td) s.recTds++; break;
       case 'incomplete': s.targets++; break;
+      case 'return': s.retYds += p.yards; if (p.td) s.retTds++; break;
       case 'fg': s.fg++; break;
       case 'xp': s.xp++; break;
       case 'sack': s.sacks++; break;

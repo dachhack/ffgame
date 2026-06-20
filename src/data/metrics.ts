@@ -26,6 +26,7 @@ export const METRICS: Record<Pos, Metric[]> = {
     { id: 'rec', name: 'Receptions', tag: 'RATE RESET', fx: 'reset', sc: '1 pt / catch', ef: 'Each catch zeroes the opponent’s active drip rate. They keep the bank, rebuild from scratch.' },
     { id: 'td', name: 'Touchdowns', tag: 'NUKE', fx: 'nuke', sc: '6 pts / TD', ef: 'Each TD wipes the opponent’s entire banked score to zero.' },
     { id: 'combodrip', name: 'Combo Drip', tag: 'RUSH+REC DRIP', fx: 'sys', sc: '0.01 / yd → rate (pts/min)', ef: 'Unlock (1 wk): carries AND catches both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; a TD wipes the bank.', lock: 'unlock-combo-drip' },
+    { id: 'retyd', name: 'Return Yards', tag: 'FLAT', fx: 'sys', sc: '0.1 / yd + 6 / return TD', ef: 'Unlock (1 wk): flat points on this player’s real kick + punt return yards (0.1/yd, 6 per return TD). Purely additive — no nuke, no erase, no interaction.', lock: 'unlock-return' },
   ],
   WR: [
     { id: 'recyd', name: 'Receiving Yards', tag: 'DRIP', fx: 'sys', sc: '0.01 / yd → rate (pts/min)', ef: 'Each catch permanently raises a drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. An opponent catch erases the last 10 min and pauses it; a target pauses it; a TD wipes the bank. Rate survives erases. 3 straight (no opponent score) goes hot → drip doubles; cold when they score.' },
@@ -33,6 +34,7 @@ export const METRICS: Record<Pos, Metric[]> = {
     { id: 'tgt', name: 'Targets', tag: 'CLOCK STOP', fx: 'stop', sc: '0.5 pts / target', ef: 'Every target stops the opponent’s drip clock. No erase — pure denial.' },
     { id: 'td', name: 'Touchdowns', tag: 'NUKE', fx: 'nuke', sc: '6 pts / TD', ef: 'Each TD wipes the opponent’s entire banked score to zero.' },
     { id: 'combodrip', name: 'Combo Drip', tag: 'RUSH+REC DRIP', fx: 'sys', sc: '0.01 / yd → rate (pts/min)', ef: 'Unlock (1 wk): catches AND carries both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; a TD wipes the bank.', lock: 'unlock-combo-drip' },
+    { id: 'retyd', name: 'Return Yards', tag: 'FLAT', fx: 'sys', sc: '0.1 / yd + 6 / return TD', ef: 'Unlock (1 wk): flat points on this player’s real kick + punt return yards (0.1/yd, 6 per return TD). Purely additive — no nuke, no erase, no interaction.', lock: 'unlock-return' },
   ],
   TE: [
     { id: 'recyd', name: 'Receiving Yards', tag: 'DRIP', fx: 'sys', sc: '0.005 / yd → rate (pts/min)', ef: 'Each catch raises a drip rate (yds × 0.005 pts/min) — half a WR’s — that accrues while your team has the ball. Immune to WR/RB pauses and erases: only a TD (or K shutdown) stops it. 3 straight (no opponent score) goes hot → drip doubles.' },
