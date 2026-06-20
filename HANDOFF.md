@@ -147,6 +147,24 @@ gets its OWN exact `time_of_day` (no interpolation, no same-second approximation
   (`realTimeAt`/`clockAtRealTime` become the identity), so older/synthetic data
   keeps working.
 
+## Wall-clock playback toggle (v0.9.7.0)
+The live board can play each window on the **game clock** (default — all games in
+a window advance in lockstep on game-elapsed seconds) or the **real wall clock**
+(each game runs at its own real pace via each play's baked `t`, so one game pulls
+minutes ahead of another). Toggle: `⏱ GAME/WALL CLOCK` button by `RUN ALL`.
+- `wallClock` state in `Matchup`; `winTarget = wallClock ? winRealMax : winMax`
+  drives the ticker / seed / done / winLife. `winClocks[win]` is the window's
+  position (game-elapsed secs, or real secs since kickoff in wall mode).
+- Per side, `clockAtRealTime(player, week, pos)` maps the window's real position
+  back to that player's game clock; `ScoreRow` takes `youClock`/`theirClock`
+  (banks, statline, log filter, coin all per-side). Game mode = both equal `pos`,
+  so behavior is unchanged. Totals sum each side at its own clock.
+- Toggling re-seeds positions to 0 (clean replay on the new axis, no unit mixing).
+- Approximation: cross-game scoring effects (TE-TD drip nukes, K shutdown) are
+  still baked on the game-clock timeline; wall mode samples each side's banked
+  total at its own real position rather than re-ordering effect interactions by
+  absolute wall time. Good enough to *see* how games desync; not a scoring rewrite.
+
 ## Suggested next steps / open threads
 - Decide whether **Scout** should cost something (a power-up / drip coin) or
   stay free intel — asked, not yet answered.

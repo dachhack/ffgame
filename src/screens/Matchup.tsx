@@ -10,7 +10,7 @@ import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
   windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
 } from '../engine/matchup';
-import { fmtClock, statlineAt, realTimeAt, GAME_SECONDS, type StatLine } from '../engine/sim';
+import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
@@ -57,9 +57,13 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const [phase, setPhase] = useState<Phase>(initialPhase);
   const [picks, setPicks] = useState<Record<string, Pick>>({});
   const [selSlot, setSelSlot] = useState<string | null>(null);
-  // Per-window playback: each window runs its own clock + play/pause.
+  // Per-window playback: each window runs its own clock + play/pause. The clock
+  // is game-elapsed seconds by default, or REAL wall-clock seconds since kickoff
+  // when wallClock is on — then each game in the window advances at its own real
+  // pace (one game can pull minutes ahead of another), keyed off each play's `t`.
   const [winClocks, setWinClocks] = useState<Record<string, number>>({});
   const [winPlaying, setWinPlaying] = useState<Record<string, boolean>>({});
+  const [wallClock, setWallClock] = useState(false);
   const [openPBP, setOpenPBP] = useState<Record<string, boolean>>({});
   const [swapTarget, setSwapTarget] = useState<{ key: string; win: WindowId } | null>(null);
   const [backupMenu, setBackupMenu] = useState<{ key: string } | null>(null);
@@ -150,29 +154,50 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     return m;
   }, [resolved]);
 
-  // On entering live/final, seed each window's clock + play state.
+  // Each window's real-time length: the latest real `t` (seconds since kickoff)
+  // reached by any of its games — the wall-clock counterpart of winMax.
+  const winRealMax = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const rw of resolved.windows) {
+      const cap = winMax[rw.window.id] ?? GAME_SECONDS;
+      let mx = 0;
+      for (const s of rw.slots) for (const p of [s.you, s.their]) {
+        if (!p) continue;
+        const r = realTimeAt(p.player, week, cap, p.metricId ?? undefined);
+        if (r > mx) mx = r;
+      }
+      m[rw.window.id] = mx || cap;
+    }
+    return m;
+  }, [resolved, winMax, week]);
+  // The playback ceiling for the active mode (game-elapsed vs real wall-clock).
+  const winTarget = wallClock ? winRealMax : winMax;
+
+  // On entering live/final — or switching clock mode — seed each window's
+  // position + play state. (Toggling modes re-seeds to 0 so playback replays
+  // cleanly on the new axis rather than mixing units.)
   useEffect(() => {
     if (phase === 'setup') return;
     const clocks: Record<string, number> = {};
     const playing: Record<string, boolean> = {};
-    for (const id of Object.keys(winMax)) {
-      clocks[id] = phase === 'final' ? winMax[id] : 0;
+    for (const id of Object.keys(winTarget)) {
+      clocks[id] = phase === 'final' ? winTarget[id] : 0;
       playing[id] = false; // live starts paused — hit ▶ per window or RUN ALL
     }
     setWinClocks(clocks);
     setWinPlaying(playing);
-  }, [phase, winMax]);
+  }, [phase, winTarget]);
 
-  // Single ticker advances every playing window toward its own max.
+  // Single ticker advances every playing window toward its own (mode) max.
   useEffect(() => {
     if (phase !== 'live') return;
     const id = setInterval(() => {
       setWinClocks((prev) => {
         let changed = false;
         const next = { ...prev };
-        for (const wid of Object.keys(winMax)) {
-          if (winPlaying[wid] && (prev[wid] ?? 0) < winMax[wid]) {
-            next[wid] = Math.min(winMax[wid], (prev[wid] ?? 0) + TICK_SECONDS);
+        for (const wid of Object.keys(winTarget)) {
+          if (winPlaying[wid] && (prev[wid] ?? 0) < winTarget[wid]) {
+            next[wid] = Math.min(winTarget[wid], (prev[wid] ?? 0) + TICK_SECONDS);
             changed = true;
           }
         }
@@ -180,7 +205,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
       });
     }, TICK_MS);
     return () => clearInterval(id);
-  }, [phase, winPlaying, winMax]);
+  }, [phase, winPlaying, winTarget]);
 
   // Auto-open a window's slot logs while it's in progress, auto-collapse them
   // when it finishes (or the board goes FINAL). Fires only on the transition,
@@ -193,7 +218,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
       for (const rw of resolved.windows) {
         const id = rw.window.id;
         const c = winClocks[id] ?? 0;
-        const active = phase === 'live' && c > 0 && c < (winMax[id] ?? Infinity);
+        const active = phase === 'live' && c > 0 && c < (winTarget[id] ?? Infinity);
         if (active !== (prevActive.current[id] ?? false)) {
           if (!changed) { next = { ...prev }; changed = true; }
           for (const s of rw.slots) next[slotKey(id, s.slotIndex)] = active;
@@ -213,21 +238,24 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
       const c = winClocks[rw.window.id] ?? 0;
       for (const s of rw.slots) {
         if (!s.you || !s.their) continue;
-        const b = banksAtClock(s.events, c);
+        // In wall-clock mode each side is sampled at ITS game's clock for the
+        // window's real-time position; in game mode both share the one clock.
+        const yc = wallClock ? clockAtRealTime(s.you.player, week, c, s.you.metricId ?? undefined) : c;
+        const tc = wallClock ? clockAtRealTime(s.their.player, week, c, s.their.metricId ?? undefined) : c;
         // A suppress DST's earn shows in its log but banks 0 (spent on halving).
-        y += s.suppressSpentYou != null ? 0 : b.you;
-        t += s.suppressSpentTheir != null ? 0 : b.their;
+        y += s.suppressSpentYou != null ? 0 : banksAtClock(s.events, yc).you;
+        t += s.suppressSpentTheir != null ? 0 : banksAtClock(s.events, tc).their;
       }
     }
     for (const b of resolved.bonuses ?? []) y += b.points; // armed-buff payouts
     return { youTotal: Math.round(y * 10) / 10, themTotal: Math.round(t * 10) / 10 };
-  }, [resolved, winClocks, phase]);
+  }, [resolved, winClocks, phase, wallClock, week]);
 
   // Every window has played out to its own end — the board is effectively final.
   const allWindowsDone = useMemo(() => {
-    const ids = Object.keys(winMax);
-    return ids.length > 0 && ids.every((id) => (winClocks[id] ?? 0) >= (winMax[id] ?? Infinity));
-  }, [winClocks, winMax]);
+    const ids = Object.keys(winTarget);
+    return ids.length > 0 && ids.every((id) => (winClocks[id] ?? 0) >= (winTarget[id] ?? Infinity));
+  }, [winClocks, winTarget]);
   const boardFinal = phase === 'final' || (phase === 'live' && allWindowsDone);
 
   const filledCount = Object.values(picks).filter((p) => p.metricId).length;
@@ -241,12 +269,12 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   // while a window is still running (not yet closed). ──
   const winLife = useMemo(() => {
     const out: Record<string, 'pending' | 'live' | 'closed'> = {};
-    for (const id of Object.keys(winMax)) {
+    for (const id of Object.keys(winTarget)) {
       const c = winClocks[id] ?? 0;
-      out[id] = c <= 0 ? 'pending' : c >= winMax[id] ? 'closed' : 'live';
+      out[id] = c <= 0 ? 'pending' : c >= winTarget[id] ? 'closed' : 'live';
     }
     return out;
-  }, [winClocks, winMax]);
+  }, [winClocks, winTarget]);
   const anyStarted = Object.values(winLife).some((s) => s !== 'pending');
   const liveWins = WINDOWS.filter((w) => winLife[w.id] === 'live');
   const preKickPhase = phase === 'live' && !anyStarted; // locked in, no game kicked yet
@@ -427,6 +455,9 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               <button onClick={toggleAll} className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px' }}>
                 {anyPlaying ? '❚❚ PAUSE ALL' : '▶ RUN ALL'}
               </button>
+              <button onClick={() => setWallClock((v) => !v)} title="Switch playback between game-clock (all games in lockstep) and real wall-clock (each game runs at its own real pace)" className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: wallClock ? 'var(--on-accent)' : 'var(--dim)', background: wallClock ? 'var(--you)' : 'var(--surface)', border: `1px solid ${wallClock ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '6px 10px' }}>
+                ⏱ {wallClock ? 'WALL CLOCK' : 'GAME CLOCK'}
+              </button>
             </div>
           )}
           {phase === 'final' && (
@@ -515,7 +546,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 week={week}
                 phase={phase}
                 clock={winClocks[rw.window.id] ?? 0}
-                maxClock={winMax[rw.window.id] ?? GAME_SECONDS}
+                maxClock={winTarget[rw.window.id] ?? GAME_SECONDS}
+                wallClock={wallClock}
                 playing={!!winPlaying[rw.window.id]}
                 onTogglePlay={() => setWinPlay(rw.window.id, !winPlaying[rw.window.id])}
                 onReplay={() => replayWin(rw.window.id)}
@@ -1160,6 +1192,7 @@ function WindowSection(props: {
   phase: Phase;
   clock: number;
   maxClock: number;
+  wallClock: boolean;
   playing: boolean;
   onTogglePlay: () => void;
   onReplay: () => void;
@@ -1190,7 +1223,7 @@ function WindowSection(props: {
   onApplyToWindow: (win: WindowId) => void;
   onScout: (win: WindowId) => void;
 }) {
-  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout } = props;
+  const { rw, week, phase, clock, maxClock, wallClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
@@ -1345,7 +1378,12 @@ function WindowSection(props: {
               />
             );
           }
-          const row = <ScoreRow key={key} slot={s} week={week} clock={clock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} canSwap={canSwap && !!s.you} onPowerup={() => onPowerup(key)} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} />;
+          // Per-side clocks: in wall-clock mode `clock` is the window's real
+          // position, mapped back to each player's own game clock; in game mode
+          // both sides share it.
+          const youClock = wallClock && s.you ? clockAtRealTime(s.you.player, week, clock, s.you.metricId ?? undefined) : clock;
+          const theirClock = wallClock && s.their ? clockAtRealTime(s.their.player, week, clock, s.their.metricId ?? undefined) : clock;
+          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} canSwap={canSwap && !!s.you} onPowerup={() => onPowerup(key)} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} />;
           if (!spotApplyMode) return row;
           const elig = spotEligible(s);
           return (
@@ -1647,9 +1685,9 @@ function BuffFxRow({ side, fx, stake }: { side: 'you' | 'their'; fx?: BuffFx[]; 
 }
 
 // ── Score row (live / final) ──
-function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onPowerup, onAssignBackup, turnoverCoin, backups, slotName }: {
+function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, done, canSwap, onPowerup, onAssignBackup, turnoverCoin, backups, slotName }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
-  week: number; clock: number; open: boolean; onToggle: () => void; phase: Phase; done: boolean;
+  week: number; youClock: number; theirClock: number; open: boolean; onToggle: () => void; phase: Phase; done: boolean;
   canSwap: boolean; onPowerup: () => void; onAssignBackup: () => void; turnoverCoin: number;
   backups: Record<string, string>; slotName: Record<string, string>;
 }) {
@@ -1659,7 +1697,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
   const rowGap = isMobile ? 5 : 8;
   // Pre-kickoff (this window not yet started) is the only time the best-ball
   // backup target can be (re)assigned — it's a blind bet, locked once it's live.
-  const preKick = phase === 'live' && clock === 0;
+  const preKick = phase === 'live' && youClock === 0 && theirClock === 0;
   // Unopposed slot: render like a head-to-head row but with a blank box on the
   // empty side. The present player is a best-ball backup — all the directions
   // live in its own card. A player whose metric banks no points can't ever sub,
@@ -1676,16 +1714,17 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
     // The unopposed slot renders with the SAME ScoreCard as a head-to-head slot
     // (headshot, metric chip, statline, big score) plus an UNOPPOSED chip — a
     // blank box sits on the empty side.
-    const live = banksAtClock(slot.events, clock);
+    const bclock = mineBackup ? youClock : theirClock; // unopposed: only the present side's clock matters
+    const live = banksAtClock(slot.events, bclock);
     const liveBackup = done ? (slot.backupScore ?? 0) : (mineBackup ? live.you : live.their);
-    const bEvents = slot.events.filter((e) => e.clock <= clock);
+    const bEvents = slot.events.filter((e) => e.clock <= bclock);
     const chip = canSub ? (mineBackup ? 'BACKUP' : 'OPP BACKUP') : (mineBackup ? 'UNOPPOSED' : 'OPP UNOPP');
     const showSuppress = isSuppress && (done || phase === 'final') ? (suppressSpent ?? undefined) : undefined;
     const card = (
       <ScoreCard
-        side={mineBackup ? 'you' : 'their'} player={be.player} week={week} clock={clock} metricId={be.metricId}
+        side={mineBackup ? 'you' : 'their'} player={be.player} week={week} clock={bclock} metricId={be.metricId}
         metricName={bp?.name ?? ''} tag={bp?.tag ?? ''} bank={liveBackup} onClick={onToggle}
-        chip={chip} suppressSpent={showSuppress} coin={slotCoin(slot, mineBackup ? 'you' : 'their', week, turnoverCoin, clock)}
+        chip={chip} suppressSpent={showSuppress} coin={slotCoin(slot, mineBackup ? 'you' : 'their', week, turnoverCoin, bclock)}
       />
     );
     const blankBox = (
@@ -1737,7 +1776,8 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
       </div>
     );
   }
-  const banks = banksAtClock(slot.events, clock);
+  // Each side sampled at its own clock (equal in game mode; per-game in wall mode).
+  const banks = { you: banksAtClock(slot.events, youClock).you, their: banksAtClock(slot.events, theirClock).their };
   const final = phase === 'final' || done;
   // Displayed score per side: a sub replaces it; at final, suppress-halving and
   // K-negation show the reduced value (with the original revealed below).
@@ -1759,7 +1799,7 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
   const youShown = shownFor('you');
   const theirShown = shownFor('their');
 
-  const visibleEvents = slot.events.filter((e) => e.clock <= clock);
+  const visibleEvents = slot.events.filter((e) => e.clock <= (e.side === 'you' ? youClock : theirClock));
   const lastEffect = [...visibleEvents].reverse().find((e) => e.effect)?.effect;
   const yMet = metricById(slot.you.player.pos, slot.you.metricId);
   const tMet = metricById(slot.their.player.pos, slot.their.metricId);
@@ -1767,8 +1807,8 @@ function ScoreRow({ slot, week, clock, open, onToggle, phase, done, canSwap, onP
   const incomingKey = Object.keys(backups).find((k) => backups[k] === ownKey);
   const incomingName = incomingKey ? slotName[incomingKey] : undefined;
 
-  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={clock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, clock)} />;
-  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={clock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, clock)} />;
+  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} />;
+  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} />;
   const centerKids = (
     <>
       {canSwap && !done && (
