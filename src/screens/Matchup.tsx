@@ -529,6 +529,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 picks={picks}
                 selSlot={selSlot}
                 pickMetricFor={pickMetricFor}
+                onClearSlot={clearSlot}
                 onOpenPicker={(key, win) => { setPickerSlot({ key, win }); setSelSlot(key); }}
                 openPBP={openPBP}
                 togglePBP={(k) => setOpenPBP((o) => ({ ...o, [k]: !o[k] }))}
@@ -1169,6 +1170,7 @@ function WindowSection(props: {
   picks: Record<string, Pick>;
   selSlot: string | null;
   pickMetricFor: (k: string, m: string) => void;
+  onClearSlot: (key: string) => void;
   onOpenPicker: (key: string, win: WindowId) => void;
   openPBP: Record<string, boolean>;
   togglePBP: (k: string) => void;
@@ -1184,7 +1186,7 @@ function WindowSection(props: {
   onApplyToWindow: (win: WindowId) => void;
   onScout: (win: WindowId) => void;
 }) {
-  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout } = props;
+  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
@@ -1334,6 +1336,7 @@ function WindowSection(props: {
                 appliedPu={[...(aw?.doubleOrNothing === key ? ['double-or-nothing'] : []), ...(aw?.byeSteal?.slotKey === key ? ['bye-steal'] : [])]}
                 applyMode={applyMode} onApplyToSpot={() => onApplyToSpot(key)}
                 onOpenPicker={() => onOpenPicker(key, w.id)} onPickMetric={(m) => pickMetricFor(key, m)}
+                onClearSlot={() => onClearSlot(key)}
                 onDropPlayer={(id) => onAssign(id)} onScout={() => onScout(w.id)}
               />
             );
@@ -1362,9 +1365,9 @@ function SetupRow(props: {
   slotKeyStr: string; winId: WindowId; week: number; pick?: Pick; selected: boolean; inventory: Record<string, number>; armed: Record<string, boolean>;
   appliedPu: string[];
   applyMode: string | null; onApplyToSpot: () => void;
-  onOpenPicker: () => void; onPickMetric: (m: string) => void; onDropPlayer: (id: string) => void; onScout: () => void;
+  onOpenPicker: () => void; onPickMetric: (m: string) => void; onClearSlot: () => void; onDropPlayer: (id: string) => void; onScout: () => void;
 }) {
-  const { winId, week, pick, selected, inventory, armed, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onDropPlayer, onScout } = props;
+  const { winId, week, pick, selected, inventory, armed, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout } = props;
   const isMobile = useIsMobile();
   const gridCols = '1fr 1fr'; // no center gutter — your spot vs the sealed opponent
   const rowGap = isMobile ? 5 : 8;
@@ -1440,8 +1443,10 @@ function SetupRow(props: {
           {/* metric picker — full card width, stacks cleanly */}
           {showPicker && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {editing && (
+              {editing ? (
                 <button onClick={() => setEditing(false)} className="mono" style={{ width: '100%', textAlign: 'center', background: 'none', border: '1px dashed var(--bd)', borderRadius: 3, padding: '3px', fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)' }}>✕ KEEP {metric?.name?.toUpperCase()}</button>
+              ) : (
+                <button onClick={onClearSlot} className="mono" style={{ width: '100%', textAlign: 'center', background: 'none', border: '1px dashed var(--opp)', borderRadius: 3, padding: '3px', fontSize: 8, letterSpacing: '0.1em', color: 'var(--opp)' }}>✕ REMOVE PLAYER</button>
               )}
               {METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === pick?.metricId).map((m) => {
                 const cur = m.id === pick?.metricId;
