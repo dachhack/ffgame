@@ -9,10 +9,7 @@ npm-debug.log*
 
 *.tsbuildinfo
 
-# Build-time PBP dumps pulled from the Stathead MCP and consumed by the
-# generators in scripts/pbp/. Regenerable (re-pull) and not shipped — the baked
-# output lives in public/pbp/wN.json + src/data/returns.ts.
-#   raw/    — per-game full play-by-play (genRealPbp.mjs + genReturns.mjs)
-#   rtdump/ — legacy lightweight time_of_day dumps
-scripts/pbp/raw/
+# Build-time PBP dumps from the Stathead MCP. scripts/pbp/raw/ (per-game full
+# play-by-play) IS committed — it's the canonical source genRealPbp.mjs +
+# genReturns.mjs bake from. rtdump/ is the legacy lightweight dump, not needed.
 scripts/pbp/rtdump/

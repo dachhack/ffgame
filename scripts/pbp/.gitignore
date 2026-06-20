@@ -1,3 +1,5 @@
-raw/
+# raw/ (per-game season PBP) and expected.txt are committed — canonical source.
 *.txt
+!expected.txt
 kdst_registry.json
+rtdump/
