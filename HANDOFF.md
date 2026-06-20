@@ -1,6 +1,25 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-06-20 · Build `v0.9.7.6`_
+_Last updated: 2026-06-20 · Build `v0.9.8.0`_
+
+## Zero synthetic player data (v0.9.8.0)
+All player production is now real 2025 nflverse PBP — the synthetic simulation
+was removed from `src/engine/sim.ts`:
+- Deleted `rng`, `sampleCount`, `spreadClocks`, `weekLine`, `WeekLine`, and
+  `buildPlays` (the procedural per-game generator). `playsForPlayer` and the
+  `teTdNukeClocks`/`defEarnScore`/`windowFgMult` call sites now use
+  `realRawPlays(...) ?? []` — a real week with no baked entry for a player is a
+  genuine DNP (zero), never fabricated. `real` flag = `REAL_WEEKS.has(week) ||
+  !!r`, so the REAL PBP badge lights up.
+- `projectedPoints` now returns a deterministic per-game projection from the
+  player's REAL season totals (`p.stats`, from `statsRaw.ts` nflverse CSVs) — no
+  RNG. Used only for default-lineup ranking + bye-steal flat score.
+- Coverage check: of 184 rostered skill players, only `brandon-aiyuk`,
+  `philip-rivers`, `deshaun-watson` never appear in any week (all genuinely did
+  not play in 2025 → correctly zero). K & DST fully covered (31 each/week).
+- Still NOT real (cosmetic, flagged): the hardcoded `47:12:00` "LOCKS IN"
+  countdown in `Matchup`/`LeagueHub`/`LeagueOverview` — a static demo placeholder
+  (the 2025 season is historical, so there's no live lock deadline).
 
 ## Real PBP enabled (v0.9.7.6) — was silently synthetic
 `src/data/realWeeks.ts` had `REAL_WEEKS = new Set([])` even though

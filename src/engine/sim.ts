@@ -1,15 +1,14 @@
-import type { Player, PlayerStats, Pos, PbpEvent, SlotResolution, EffectType, BuffFx } from '../types';
-import { hashStr } from '../data/players';
+import type { Player, Pos, PbpEvent, SlotResolution, EffectType, BuffFx } from '../types';
 import { metricById } from '../data/metrics';
-import { realPbpFor, realPossFor, type RealPlayKind } from '../data/realPbp';
+import { realPbpFor, realPossFor, REAL_WEEKS, type RealPlayKind } from '../data/realPbp';
 import { returnPlaysFor } from '../data/returns';
 
 // ─────────────────────────────────────────────────────────────────────────
-// Deterministic simulation. Everything is seeded off (playerId, week) so a
-// given matchup always plays out identically — no server, no randomness at
-// runtime. Real 2025 season totals set each player's baseline; weekly
-// variance gives boom/bust texture; metric effects (NUKE / ERASE / HOT
-// STREAK) resolve over a merged play-by-play timeline.
+// Real-data resolution. Every player's week is driven by baked real 2025
+// play-by-play (game clock, real wall-clock time, yards, TDs). A player with
+// no baked plays that week genuinely did not produce (DNP -> zero) — there is
+// no synthetic generation. Metric effects (NUKE / ERASE / HOT STREAK) resolve
+// over a merged play-by-play timeline.
 //
 // Simplifications for the demo (documented honestly):
 //   • Field General (QB MULTIPLIER) scores a light direct drip instead of a
@@ -21,65 +20,17 @@ import { returnPlaysFor } from '../data/returns';
 
 const GAME_SECONDS = 3300; // clock caps at 55:00, matching the prototype
 
-/** mulberry32 PRNG. */
-function rng(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-export interface WeekLine {
-  passYds: number; passTds: number;
-  carries: number; rushYds: number; rushTds: number;
-  targets: number; receptions: number; recYds: number; recTds: number;
-}
-
-/** Sample a small count from an expected per-game rate. */
-function sampleCount(expected: number, r: () => number): number {
-  // simple thinned Poisson-ish: each "slot" hits with prob
-  let n = 0;
-  let p = expected;
-  while (p > 0) {
-    if (r() < Math.min(1, p)) n++;
-    p -= 1;
-  }
-  return n;
-}
-
-/** Per-week box line for a player, from season averages + seeded variance. */
-export function weekLine(p: Player, week: number): WeekLine {
-  const s: PlayerStats = p.stats;
+/** Projected weekly points from REAL season production (per-game average) —
+ *  deterministic, no synthetic variance. Ranks the default lineup and prices
+ *  a bye-steal's flat score. */
+export function projectedPoints(p: Player, _week: number): number {
+  const s = p.stats;
   const g = Math.max(1, s.games);
-  const r = rng(hashStr(`${p.id}|wk${week}`));
-  // volume multiplier: centered ~1, occasional boom/bust
-  const v = 0.55 + r() * 1.0 + (r() < 0.12 ? 0.35 : 0); // ~0.55..1.9
-  const yv = (base: number) => Math.round((base / g) * v);
-  return {
-    passYds: yv(s.passYds),
-    passTds: sampleCount((s.passTds / g) * v, r),
-    carries: yv(s.carries),
-    rushYds: yv(s.rushYds),
-    rushTds: sampleCount((s.rushTds / g) * v, r),
-    targets: yv(s.targets),
-    receptions: Math.min(yv(s.receptions), yv(s.targets)),
-    recYds: yv(s.recYds),
-    recTds: sampleCount((s.recTds / g) * v, r),
-  };
-}
-
-/** Projected fantasy-ish weekly points (used for default lineup ranking). */
-export function projectedPoints(p: Player, week: number): number {
-  const l = weekLine(p, week);
   return (
-    l.passYds * 0.04 + l.passTds * 4 +
-    l.rushYds * 0.1 + l.rushTds * 6 +
-    l.recYds * 0.1 + l.recTds * 6 + l.receptions * 1 +
-    l.rushYds * 0 // noop, keeps formatting
-  );
+    s.passYds * 0.04 + s.passTds * 4 +
+    s.rushYds * 0.1 + s.rushTds * 6 +
+    s.recYds * 0.1 + s.recTds * 6 + s.receptions * 1
+  ) / g;
 }
 
 interface RawPlay {
@@ -93,97 +44,6 @@ interface RawPlay {
   catch: boolean;   // a reception happened
   target: boolean;  // the player was targeted
   turnover?: boolean; // the player committed a turnover on this play (INT thrown / fumble lost)
-}
-
-function spreadClocks(n: number, r: () => number): number[] {
-  const cs: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const base = (GAME_SECONDS * (i + 0.5)) / n;
-    cs.push(Math.round(Math.max(60, Math.min(GAME_SECONDS - 30, base + (r() - 0.5) * (GAME_SECONDS / n) * 0.8))));
-  }
-  return cs.sort((a, b) => a - b);
-}
-
-/** Turn a week line into discrete plays for a player. */
-function buildPlays(p: Player, l: WeekLine, week: number): RawPlay[] {
-  const r = rng(hashStr(`${p.id}|plays${week}`));
-  const plays: RawPlay[] = [];
-
-  if (p.pos === 'QB') {
-    const n = Math.max(5, Math.min(12, Math.round(l.passYds / 26)));
-    const clocks = spreadClocks(n, r);
-    let remaining = l.passYds;
-    let tdsLeft = l.passTds;
-    for (let i = 0; i < n; i++) {
-      const share = i === n - 1 ? remaining : Math.round((remaining / (n - i)) * (0.6 + r() * 0.8));
-      remaining = Math.max(0, remaining - share);
-      const td = tdsLeft > 0 && (r() < tdsLeft / (n - i));
-      if (td) tdsLeft--;
-      plays.push({ clock: clocks[i], kind: 'pass', yards: share, td, catch: false, target: false });
-    }
-    // QB scrambles
-    if (l.rushYds > 15) {
-      const rn = Math.min(3, Math.max(1, Math.round(l.rushYds / 30)));
-      const rc = spreadClocks(rn, r);
-      let rem = l.rushYds; let rtd = l.rushTds;
-      for (let i = 0; i < rn; i++) {
-        const y = i === rn - 1 ? rem : Math.round(rem / (rn - i));
-        rem = Math.max(0, rem - y);
-        const td = rtd > 0 && r() < 0.5; if (td) rtd--;
-        plays.push({ clock: rc[i], kind: 'rush', yards: y, td, catch: false, target: false });
-      }
-    }
-  } else if (p.pos === 'RB') {
-    const carryChunks = Math.max(3, Math.min(8, Math.round(l.carries / 4)));
-    const cc = spreadClocks(carryChunks, r);
-    let rem = l.rushYds; let rtd = l.rushTds;
-    for (let i = 0; i < carryChunks; i++) {
-      const y = i === carryChunks - 1 ? rem : Math.round((rem / (carryChunks - i)) * (0.5 + r()));
-      rem = Math.max(0, rem - y);
-      const td = rtd > 0 && r() < rtd / (carryChunks - i); if (td) rtd--;
-      plays.push({ clock: cc[i], kind: 'rush', yards: y, td, catch: false, target: false });
-    }
-    // receptions
-    const rec = l.receptions;
-    if (rec > 0) {
-      const rcc = spreadClocks(rec, r);
-      let remr = l.recYds; let rectd = l.recTds;
-      for (let i = 0; i < rec; i++) {
-        const y = i === rec - 1 ? remr : Math.round(remr / (rec - i));
-        remr = Math.max(0, remr - y);
-        const td = rectd > 0 && r() < 0.4; if (td) rectd--;
-        plays.push({ clock: rcc[i], kind: 'rec', yards: y, td, catch: true, target: true });
-      }
-    }
-  } else if (p.pos === 'K') {
-    // Fallback only (real weeks supply actual kicks): a few FGs + XPs.
-    for (const c of spreadClocks(3, r)) plays.push({ clock: c, kind: 'fg', yards: 28 + Math.round(r() * 27), td: false, catch: false, target: false });
-    for (const c of spreadClocks(2, r)) plays.push({ clock: c, kind: 'xp', yards: 0, td: false, catch: false, target: false });
-  } else if (p.pos === 'DEF') {
-    // Fallback only: a couple sacks and a takeaway.
-    for (const c of spreadClocks(2, r)) plays.push({ clock: c, kind: 'sack', yards: 0, td: false, catch: false, target: false });
-    if (r() < 0.6) plays.push({ clock: spreadClocks(1, r)[0], kind: 'int', yards: 0, td: false, catch: false, target: false });
-  } else {
-    // WR / TE / other receivers
-    const rec = Math.max(1, l.receptions);
-    const rcc = spreadClocks(rec, r);
-    let remr = l.recYds; let rectd = l.recTds;
-    for (let i = 0; i < rec; i++) {
-      const y = i === rec - 1 ? remr : Math.round((remr / (rec - i)) * (0.5 + r()));
-      remr = Math.max(0, remr - y);
-      const td = rectd > 0 && r() < rectd / (rec - i); if (td) rectd--;
-      plays.push({ clock: rcc[i], kind: 'rec', yards: Math.max(0, y), td, catch: true, target: true });
-    }
-    // incompletions (targets without a catch)
-    const incompletions = Math.max(0, l.targets - rec);
-    if (incompletions > 0) {
-      const ic = spreadClocks(incompletions, r);
-      for (let i = 0; i < incompletions; i++) {
-        plays.push({ clock: ic[i], kind: 'incomplete', yards: 0, td: false, catch: false, target: true });
-      }
-    }
-  }
-  return plays.sort((a, b) => a.clock - b.clock);
 }
 
 // Effect family of a metric → how it scores a single play and what it does.
@@ -328,7 +188,7 @@ export function hadLongPassTd(player: Player, week: number, minYds = 40): boolea
 /**
  * Turnovers COMMITTED by this player this week (interception thrown / fumble
  * lost) — for the turnover coin penalty. Read from baked real PBP (INT → passer,
- * fumble lost → rusher/receiver/passer by play role). Synthetic weeks have none.
+ * fumble lost → rusher/receiver/passer by play role).
  */
 export function turnoversCommitted(player: Player, week: number): number {
   return playsForPlayer(player, week).plays.filter((p) => p.turnover).length;
@@ -355,10 +215,10 @@ function returnPlays(player: Player, week: number): RawPlay[] {
 function playsForPlayer(player: Player, week: number, metricId?: string): { plays: RawPlay[]; real: boolean } {
   if (player.id === EMPTY_PLAYER.id) return { plays: [], real: false };
   const r = realRawPlays(player.id, week);
-  const base = r ?? buildPlays(player, weekLine(player, week), week);
+  const base = r ?? []; // real week w/ no entry = genuine DNP (zero); no synthesis
   const ret = metricId === 'retyd' ? returnPlays(player, week) : [];
   const plays = ret.length ? [...base, ...ret].sort((a, b) => a.clock - b.clock) : base;
-  return { plays, real: !!r };
+  return { plays, real: REAL_WEEKS.has(week) || !!r };
 }
 
 // ── Real-time ↔ game-clock mapping ────────────────────────────────────────────
@@ -438,7 +298,7 @@ export function windowFgMult(players: SlotInput[], week: number): ((clock: numbe
   const timelines: RawPlay[][] = [];
   for (const p of players) {
     if (p.player.pos === 'QB' && p.metricId === 'fg') {
-      const plays = realRawPlays(p.player.id, week) ?? buildPlays(p.player, weekLine(p.player, week), week);
+      const plays = realRawPlays(p.player.id, week) ?? [];
       const passes = plays.filter((x) => x.kind === 'pass').sort((a, b) => a.clock - b.clock);
       if (passes.length) timelines.push(passes);
     }
@@ -459,7 +319,7 @@ export function windowFgMult(players: SlotInput[], week: number): ((clock: numbe
 // safety2) — used as the SUPPRESS kill-threshold. A suppress DST forgoes these
 // points (it banks 0) and spends them as the bar every opponent slot must clear.
 export function defEarnScore(player: Player, week: number): number {
-  const plays = realRawPlays(player.id, week) ?? buildPlays(player, weekLine(player, week), week);
+  const plays = realRawPlays(player.id, week) ?? [];
   let s = 0;
   for (const p of plays) {
     if (p.kind === 'sack') s += 1;
@@ -480,7 +340,7 @@ export function teTdNukeClocks(players: SlotInput[], week: number): { c: number;
   const out: { c: number; rt: number }[] = [];
   for (const p of players) {
     if (p.player.pos === 'TE' && p.metricId === 'td') {
-      const plays = realRawPlays(p.player.id, week) ?? buildPlays(p.player, weekLine(p.player, week), week);
+      const plays = realRawPlays(p.player.id, week) ?? [];
       for (const x of plays) if (x.td) out.push({ c: x.clock, rt: realTimeAt(p.player, week, x.clock, p.metricId) });
     }
   }
