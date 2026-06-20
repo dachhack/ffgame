@@ -147,23 +147,34 @@ gets its OWN exact `time_of_day` (no interpolation, no same-second approximation
   (`realTimeAt`/`clockAtRealTime` become the identity), so older/synthetic data
   keeps working.
 
-## Wall-clock playback toggle (v0.9.7.0)
-The live board can play each window on the **game clock** (default — all games in
-a window advance in lockstep on game-elapsed seconds) or the **real wall clock**
-(each game runs at its own real pace via each play's baked `t`, so one game pulls
-minutes ahead of another). Toggle: `⏱ GAME/WALL CLOCK` button by `RUN ALL`.
-- `wallClock` state in `Matchup`; `winTarget = wallClock ? winRealMax : winMax`
-  drives the ticker / seed / done / winLife. `winClocks[win]` is the window's
-  position (game-elapsed secs, or real secs since kickoff in wall mode).
-- Per side, `clockAtRealTime(player, week, pos)` maps the window's real position
+## Playback clock modes (v0.9.7.1)
+The live board's `⏱` button (by `RUN ALL`) cycles three playback clock modes,
+held in `clockMode: 'game' | 'feed' | 'real'` on `Matchup`:
+- **GAME CLOCK** (`game`): every game in a window advances in lockstep on
+  game-elapsed seconds — the original behavior.
+- **REAL FEED** (`feed`): plays arrive on the real wall clock (each game runs at
+  its own real pace via each play's baked `t`, so games desync), but scoring
+  still **resolves on the game clock**.
+- **REAL CLOCK** (`real`): real feed AND cross-game effects resolve in real-time
+  order (see below).
+
+Wiring:
+- `wallClock = clockMode !== 'game'` drives the real-time reveal:
+  `winTarget = wallClock ? winRealMax : winMax` (ticker/seed/done/winLife);
+  `winClocks[win]` is the window position (game secs, or real secs since kickoff).
+  Per side, `clockAtRealTime(player, week, pos)` maps the window's real position
   back to that player's game clock; `ScoreRow` takes `youClock`/`theirClock`
-  (banks, statline, log filter, coin all per-side). Game mode = both equal `pos`,
-  so behavior is unchanged. Totals sum each side at its own clock.
-- Toggling re-seeds positions to 0 (clean replay on the new axis, no unit mixing).
-- Approximation: cross-game scoring effects (TE-TD drip nukes, K shutdown) are
-  still baked on the game-clock timeline; wall mode samples each side's banked
-  total at its own real position rather than re-ordering effect interactions by
-  absolute wall time. Good enough to *see* how games desync; not a scoring rewrite.
+  (banks, statline, log filter, coin all per-side). Totals sum each side at its
+  own clock. Changing modes re-seeds positions to 0.
+- `realResolve = clockMode === 'real'` is passed to `buildMatchup`. The only
+  genuinely cross-game scoring effect is the **TE-TD drip nuke**
+  (`teTdNukeClocks` now returns `{c, rt}` per nuke). Game-resolve fires it at its
+  own game clock; real-resolve lands it on the RECEIVING player's game clock at
+  the nuke's real time (`clockAtRealTime(recv, rt)`), so a nuke from a real-time
+  desynced game hits at the right wall-clock moment. Per-play points and per-game
+  mechanics (drip rate, garbage-time, FG mult, OT) are unchanged — no rebalance;
+  only nuke-affected slots can differ between `feed` and `real`. `MatchupFinal`
+  always uses game-resolve (canonical).
 
 ## Suggested next steps / open threads
 - Decide whether **Scout** should cost something (a power-up / drip coin) or

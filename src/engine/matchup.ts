@@ -165,6 +165,7 @@ export function buildMatchup(
   backupAssign: Record<string, string> = {},
   buffs: Record<string, boolean> = {},
   extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>> } = {},
+  realResolve = false, // resolve cross-game effects (TE-TD drip nuke) in real-time order
 ): ResolvedMatchup {
   const youPools = windowPools(youTeamId, week);
   const oppPools = windowPools(oppTeamId, week);
@@ -233,7 +234,13 @@ export function buildMatchup(
         const tIn: SlotInput = their ? { player: their.player, metricId: their.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
         gameLabel = `${you?.player.team || 'BYE'} · ${their?.player.team || 'BYE'}`;
         const empClock = extras.emp?.[w.id];
-        const opts = { youMult, theirMult, youDripNukeClocks: theirTeTd, theirDripNukeClocks: youTeTd, youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined };
+        // Cross-game TE-TD drip nukes: game-resolve fires them at their own game
+        // clock (window in lockstep); real-resolve lands each on the RECEIVING
+        // player's game clock at the nuke's real time, so a nuke from a game
+        // that's real-time ahead/behind hits at the right wall-clock moment.
+        const nukeClocks = (nukes: { c: number; rt: number }[], recv: SlotInput) =>
+          realResolve ? nukes.map((n) => clockAtRealTime(recv.player, week, n.rt, recv.metricId)) : nukes.map((n) => n.c);
+        const opts = { youMult, theirMult, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined };
         let res = resolveSlot(yIn, tIn, week, gameLabel, opts);
 
         // Real-time swap (Player/Metric Swap): keep your pre-swap banked points,

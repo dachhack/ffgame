@@ -472,16 +472,19 @@ export function defEarnScore(player: Player, week: number): number {
 }
 
 // Clocks at which a side's TE Touchdown (8-PT NUKE) players score a TD. Each
-// such clock knocks every opposing drip rate down by 1.0 across the window.
-export function teTdNukeClocks(players: SlotInput[], week: number): number[] {
-  const clocks: number[] = [];
+// such clock knocks every opposing drip rate down by 1.0 across the window. Each
+// nuke carries both its game clock `c` and real wall-clock time `rt` (seconds
+// since its game's first snap) so real-resolve can land it on the receiving
+// player's timeline by real time rather than game clock.
+export function teTdNukeClocks(players: SlotInput[], week: number): { c: number; rt: number }[] {
+  const out: { c: number; rt: number }[] = [];
   for (const p of players) {
     if (p.player.pos === 'TE' && p.metricId === 'td') {
       const plays = realRawPlays(p.player.id, week) ?? buildPlays(p.player, weekLine(p.player, week), week);
-      for (const x of plays) if (x.td) clocks.push(x.clock);
+      for (const x of plays) if (x.td) out.push({ c: x.clock, rt: realTimeAt(p.player, week, x.clock, p.metricId) });
     }
   }
-  return clocks.sort((a, b) => a - b);
+  return out.sort((a, b) => a.c - b.c);
 }
 
 // Offensive seconds within (t0, t1] given a team's possession intervals.

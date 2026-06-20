@@ -63,7 +63,12 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   // pace (one game can pull minutes ahead of another), keyed off each play's `t`.
   const [winClocks, setWinClocks] = useState<Record<string, number>>({});
   const [winPlaying, setWinPlaying] = useState<Record<string, boolean>>({});
-  const [wallClock, setWallClock] = useState(false);
+  // Playback clock mode: 'game' = all games lockstep on game clock; 'feed' =
+  // real-time reveal but scoring still resolves on game clock; 'real' = real-time
+  // reveal AND cross-game effects (TE-TD drip nuke) resolve in real-time order.
+  const [clockMode, setClockMode] = useState<'game' | 'feed' | 'real'>('game');
+  const wallClock = clockMode !== 'game';   // real wall-clock reveal (each game its own pace)
+  const realResolve = clockMode === 'real'; // resolve cross-game effects by real time
   const [openPBP, setOpenPBP] = useState<Record<string, boolean>>({});
   const [swapTarget, setSwapTarget] = useState<{ key: string; win: WindowId } | null>(null);
   const [backupMenu, setBackupMenu] = useState<{ key: string } | null>(null);
@@ -122,8 +127,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const swapsKey = JSON.stringify(swaps);
   const backupsKey = JSON.stringify(backupAssign);
   const resolved = useMemo(
-    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps, backupAssign, buffs, extras),
-    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, buffsKey, extrasKey],
+    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps, backupAssign, buffs, extras, realResolve),
+    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, buffsKey, extrasKey, realResolve],
   );
 
   // Your player's name at each slot key — for showing a backup's chosen target
@@ -455,8 +460,11 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               <button onClick={toggleAll} className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px' }}>
                 {anyPlaying ? '❚❚ PAUSE ALL' : '▶ RUN ALL'}
               </button>
-              <button onClick={() => setWallClock((v) => !v)} title="Switch playback between game-clock (all games in lockstep) and real wall-clock (each game runs at its own real pace)" className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: wallClock ? 'var(--on-accent)' : 'var(--dim)', background: wallClock ? 'var(--you)' : 'var(--surface)', border: `1px solid ${wallClock ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '6px 10px' }}>
-                ⏱ {wallClock ? 'WALL CLOCK' : 'GAME CLOCK'}
+              <button
+                onClick={() => setClockMode((m) => (m === 'game' ? 'feed' : m === 'feed' ? 'real' : 'game'))}
+                title={'Playback clock (tap to cycle):\n• GAME CLOCK — every game in a window moves in lockstep on game time\n• REAL FEED — plays arrive on the real wall clock (games desync), score still resolves on game time\n• REAL CLOCK — real feed AND cross-game effects (TE-TD drip nuke) resolve in real-time order'}
+                className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: wallClock ? 'var(--on-accent)' : 'var(--dim)', background: clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--surface)', border: `1px solid ${clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '6px 10px' }}>
+                ⏱ {clockMode === 'real' ? 'REAL CLOCK' : clockMode === 'feed' ? 'REAL FEED' : 'GAME CLOCK'}
               </button>
             </div>
           )}
