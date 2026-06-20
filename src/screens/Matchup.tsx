@@ -5,7 +5,7 @@ import { Brand, ThemeSwitcher, PlayerImg, Avatar, Img, InjuryBadge, fonts, useIs
 import { avatarUrl, teamLogo } from '../data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange } from '../data/nflSlate';
 import { WINDOWS, METRICS, metricById } from '../data/metrics';
-import { POWERUPS, powerupById } from '../data/powerups';
+import { POWERUPS, powerupById, type Powerup } from '../data/powerups';
 import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
   windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
@@ -64,7 +64,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const [swapTarget, setSwapTarget] = useState<{ key: string; win: WindowId } | null>(null);
   const [backupMenu, setBackupMenu] = useState<{ key: string } | null>(null);
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
-  const [invOpen, setInvOpen] = useState(false);
+  const [puView, setPuView] = useState<'active' | 'apply' | null>(null);
   const [pendingApply, setPendingApply] = useState<string | null>(null); // a targeted powerup awaiting a spot tap
   const [byeStealSlot, setByeStealSlot] = useState<string | null>(null); // empty slot chosen for Bye Steal, awaiting a player
   function applyToSpot(key: string) {
@@ -227,6 +227,47 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const anyPlaying = Object.values(winPlaying).some(Boolean);
   const extraSlotQty = inventory['extra-slot'] ?? 0;
   const canSwap = phase === 'live' && ((inventory['metric-swap'] ?? 0) > 0 || (inventory['player-swap'] ?? 0) > 0);
+
+  // ── Power-up windows: every window has its own lock/live timeline. A 'pre'
+  // power-up can be applied until the first window starts; a 'live' one only
+  // while a window is still running (not yet closed). ──
+  const winLife = useMemo(() => {
+    const out: Record<string, 'pending' | 'live' | 'closed'> = {};
+    for (const id of Object.keys(winMax)) {
+      const c = winClocks[id] ?? 0;
+      out[id] = c <= 0 ? 'pending' : c >= winMax[id] ? 'closed' : 'live';
+    }
+    return out;
+  }, [winClocks, winMax]);
+  const anyStarted = Object.values(winLife).some((s) => s !== 'pending');
+  const liveWins = WINDOWS.filter((w) => winLife[w.id] === 'live');
+  const preKickPhase = phase === 'live' && !anyStarted; // locked in, no game kicked yet
+
+  // Everything currently in effect, with a back-out where the store supports it.
+  const activeEffects: { key: string; icon: string; name: string; detail: string; onRemove?: () => void }[] = [];
+  for (const id of Object.keys(buffs)) if (buffs[id]) { const p = powerupById(id); if (p) activeEffects.push({ key: 'b-' + id, icon: p.icon, name: p.name, detail: 'Armed · whole field', onRemove: phase === 'setup' ? () => disarmBuff(week, id) : undefined }); }
+  if (aw?.doubleOrNothing) { const s = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === aw.doubleOrNothing); activeEffects.push({ key: 'don', icon: '⚖️', name: 'Double or Nothing', detail: 'Staked ' + (s?.you?.player.name ?? '—'), onRemove: phase === 'setup' ? () => clearDoubleOrNothing(week) : undefined }); }
+  if (aw?.byeSteal) activeEffects.push({ key: 'bye', icon: '🪂', name: 'Bye Steal', detail: 'Fielded ' + (getPlayer(aw.byeSteal.playerId)?.name ?? '—'), onRemove: phase === 'setup' ? () => clearByeSteal(week) : undefined });
+  if (aw?.spy) { const sp = aw.spy; activeEffects.push({ key: 'spy', icon: '👁️', name: 'Spy', detail: `Revealed a slot’s ${sp.reveal}`, onRemove: preKickPhase ? () => clearSpy(week) : undefined }); }
+  for (const [win, n] of Object.entries(aw?.extraSlots ?? {})) if ((n ?? 0) > 0) { const wl = WINDOWS.find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'x-' + win, icon: '➕', name: 'Extra Slot', detail: `+${n} on ${wl}`, onRemove: phase === 'setup' ? () => removeExtraSlot(week, win as WindowId) : undefined }); }
+  for (const [win, c] of Object.entries(aw?.emp ?? {})) if (c != null) { const wl = WINDOWS.find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'emp-' + win, icon: '💥', name: 'EMP', detail: `Fired on ${wl}` }); }
+
+  // Owned power-ups you can still apply right now, scoped to open windows. 'pre'
+  // power-ups lock at the first kickoff; 'live' ones need a running window.
+  const appliable = POWERUPS.filter((p) => (inventory[p.id] ?? 0) > 0).map((p) => {
+    const buff = isTeamBuff(p.id);
+    let ok = false; let deadline = '';
+    if (p.timing === 'pre') {
+      if (p.id === 'spy') { ok = phase === 'setup' || preKickPhase; deadline = 'Before kickoff'; }
+      else { ok = phase === 'setup'; deadline = 'Before lock-in'; }
+    } else {
+      ok = liveWins.length > 0;
+      deadline = liveWins.length ? `Live now: ${liveWins.map((w) => w.label).join(', ')}` : 'When a window goes live';
+    }
+    if (buff && buffs[p.id]) ok = false; // already armed → lives in Active
+    const action: 'arm' | 'apply' | 'hint' = buff ? 'arm' : SPOT_APPLY.has(p.id) ? 'apply' : 'hint';
+    return { p, ok, deadline, action };
+  }).filter((x) => x.ok);
 
   // ── setup interactions ──
   // Keep each window's spots filled top-down: collapse any gap so a filled spot
@@ -432,22 +473,22 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               </div>
               <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{headline}</div>
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, maxWidth: 520, lineHeight: 1.5 }}>{subhead}</div>
-              {phase === 'setup' ? (pendingApply ? (
+              {pendingApply ? (
                 <div className="mono" style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))', border: '1px solid var(--warn)', borderRadius: 6, padding: '7px 11px' }}>
                   <span>{powerupById(pendingApply)?.icon} Tap a spot to apply {powerupById(pendingApply)?.name}</span>
                   <button onClick={() => setPendingApply(null)} className="mono" style={{ background: 'none', border: 'none', color: 'var(--dim)', fontWeight: 700, fontSize: 9, letterSpacing: '0.1em' }}>CANCEL</button>
                 </div>
-              ) : (() => {
-                const ownedN = POWERUPS.filter((p) => (inventory[p.id] ?? 0) > 0 || buffs[p.id]).length;
-                const armedN = Object.keys(buffs).filter((id) => buffs[id]).length;
-                return (
-                  <button onClick={() => setInvOpen(true)} className="mono" style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 6, padding: '7px 11px' }}>
-                    ◈ POWER-UPS{ownedN > 0 ? ` · ${ownedN}` : ''}{armedN > 0 ? ` · ${armedN} ARMED` : ''}
+              ) : (
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  <button onClick={() => setPuView('active')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--you)', borderRadius: 6, padding: '7px 11px' }}>
+                    ◈ ACTIVE POWER-UPS{activeEffects.length > 0 ? ` · ${activeEffects.length}` : ''}
                   </button>
-                );
-              })()) : (
-                <BuffStrip phase={phase} inventory={inventory} armed={buffs} bonuses={resolved.bonuses} onArm={(id) => armBuff(week, id)} />
+                  <button onClick={() => setPuView('apply')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 6, padding: '7px 11px' }}>
+                    ✦ APPLY POWER-UPS{appliable.length > 0 ? ` · ${appliable.length}` : ''}
+                  </button>
+                </div>
               )}
+              {phase !== 'setup' && <BuffStrip phase={phase} inventory={inventory} armed={buffs} bonuses={resolved.bonuses} onArm={(id) => armBuff(week, id)} />}
               <TargetPanel
                 phase={phase} week={week} inventory={inventory} aw={aw} windows={resolved.windows} oppPicks={oppPicks}
                 winClocks={winClocks}
@@ -580,7 +621,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
         />
       )}
 
-      {invOpen && <InventoryModal inventory={inventory} armed={buffs} onArm={(id) => armBuff(week, id)} onDisarm={(id) => disarmBuff(week, id)} onApply={(id) => { setPendingApply(id); setInvOpen(false); }} onClose={() => setInvOpen(false)} />}
+      {puView === 'active' && <ActivePowerupsModal effects={activeEffects} onClose={() => setPuView(null)} />}
+      {puView === 'apply' && <ApplyPowerupsModal items={appliable} inventory={inventory} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); setPuView(null); }} onClose={() => setPuView(null)} />}
 
       {earnOpen && <EarningsModal earnings={earnings} onReset={() => { resetDripCoin(); setEarnOpen(false); }} onClose={() => setEarnOpen(false)} />}
     </>
@@ -872,55 +914,81 @@ const POWERUP_HINT: Record<string, string> = {
 // Power-ups that target one of YOUR spots (vs. whole-field buffs that just arm).
 const SPOT_APPLY = new Set(['double-or-nothing', 'bye-steal']);
 
-// Setup inventory modal: explains every owned powerup and arms/disarms team buffs.
-function InventoryModal({ inventory, armed, onArm, onDisarm, onApply, onClose }: {
-  inventory: Record<string, number>; armed: Record<string, boolean>;
-  onArm: (id: string) => void; onDisarm: (id: string) => void; onApply: (id: string) => void; onClose: () => void;
-}) {
-  const owned = POWERUPS.filter((p) => (inventory[p.id] ?? 0) > 0 || armed[p.id]);
+// Shared modal shell for the two power-up cards.
+function PuShell({ title, subtitle, accent, onClose, children }: { title: string; subtitle: string; accent: string; onClose: () => void; children: ReactNode }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '44px 16px', overflow: 'auto' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)', borderTop: `3px solid ${accent}`, borderTopLeftRadius: 8, borderTopRightRadius: 8 }}>
           <div>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>◈ Power-Ups · Inventory</div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>ARM TEAM BUFFS HERE · ARMED ONES HIGHLIGHT THEIR SPOTS</div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{title}</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{subtitle}</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
         </div>
-        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '70vh', overflow: 'auto' }}>
-          {owned.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— no power-ups —<br />visit the Power-Up Shop in the league hub</div>}
-          {owned.map((p) => {
-          const qty = inventory[p.id] ?? 0;
-          const on = !!armed[p.id];
-          const buff = isTeamBuff(p.id);
-          return (
-            <div key={p.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '7px 8px', borderRadius: 5, background: on ? 'color-mix(in srgb, var(--you) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}` }}>
-              <span style={{ fontSize: 17, flex: 'none', lineHeight: 1.1 }}>{p.icon}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{p.name}</span>
-                  {qty > 0 && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--dim)' }}>×{qty}</span>}
-                  {on && <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 3, padding: '1px 4px' }}>ARMED</span>}
-                </div>
-                <div style={{ fontSize: 10, lineHeight: 1.45, color: 'var(--dim)', marginTop: 2 }}>{p.blurb}</div>
-                {!buff && POWERUP_HINT[p.id] && <div className="mono" style={{ fontSize: 8.5, color: 'var(--warn)', marginTop: 3 }}>↳ {POWERUP_HINT[p.id]}</div>}
-              </div>
-              {buff ? (
-                <button onClick={() => (on ? onDisarm(p.id) : onArm(p.id))} disabled={!on && qty <= 0} className="mono" style={{ flex: 'none', alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', border: `1px solid ${on ? 'var(--opp)' : 'var(--you)'}`, color: on ? 'var(--opp)' : 'var(--on-accent)', background: on ? 'var(--surface)' : 'var(--you)' }}>
-                  {on ? 'DISARM' : 'ARM'}
-                </button>
-              ) : SPOT_APPLY.has(p.id) ? (
-                <button onClick={() => onApply(p.id)} disabled={qty <= 0} className="mono" style={{ flex: 'none', alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', border: '1px solid var(--warn)', color: 'var(--on-accent)', background: 'var(--warn)' }}>
-                  APPLY
-                </button>
-              ) : null}
-            </div>
-          );
-        })}
-        </div>
+        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '70vh', overflow: 'auto' }}>{children}</div>
       </div>
     </div>
+  );
+}
+
+// ACTIVE: everything currently in effect this week, with a back-out where the
+// power-up can still be unwound (before its window locks / kicks off).
+function ActivePowerupsModal({ effects, onClose }: {
+  effects: { key: string; icon: string; name: string; detail: string; onRemove?: () => void }[]; onClose: () => void;
+}) {
+  return (
+    <PuShell title="◈ Active Power-Ups" subtitle="WHAT'S CURRENTLY IN EFFECT — BACK ANY OUT BEFORE IT LOCKS" accent="var(--you)" onClose={onClose}>
+      {effects.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— nothing active —<br />arm or apply power-ups from ✦ APPLY</div>}
+      {effects.map((e) => (
+        <div key={e.key} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 8px', borderRadius: 5, background: 'color-mix(in srgb, var(--you) 9%, var(--bg))', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))' }}>
+          <span style={{ fontSize: 17, flex: 'none', lineHeight: 1.1 }}>{e.icon}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{e.name}</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 2 }}>{e.detail}</div>
+          </div>
+          {e.onRemove ? (
+            <button onClick={e.onRemove} className="mono" style={{ flex: 'none', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', border: '1px solid var(--opp)', color: 'var(--opp)', background: 'var(--surface)' }}>REMOVE</button>
+          ) : (
+            <span className="mono" style={{ flex: 'none', fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 5px' }}>LOCKED</span>
+          )}
+        </div>
+      ))}
+    </PuShell>
+  );
+}
+
+// APPLY: only the power-ups you can still use right now, per the open windows.
+function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose }: {
+  items: { p: Powerup; deadline: string; action: 'arm' | 'apply' | 'hint' }[]; inventory: Record<string, number>;
+  onArm: (id: string) => void; onApply: (id: string) => void; onClose: () => void;
+}) {
+  return (
+    <PuShell title="✦ Apply Power-Ups" subtitle="USABLE NOW — APPLY EACH BEFORE ITS WINDOW CLOSES" accent="var(--warn)" onClose={onClose}>
+      {items.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— nothing to apply right now —<br />power-ups appear here while their window is open</div>}
+      {items.map(({ p, deadline, action }) => {
+        const qty = inventory[p.id] ?? 0;
+        return (
+          <div key={p.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '7px 8px', borderRadius: 5, background: 'var(--bg)', border: '1px solid var(--bd)' }}>
+            <span style={{ fontSize: 17, flex: 'none', lineHeight: 1.1 }}>{p.icon}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{p.name}</span>
+                {qty > 0 && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--dim)' }}>×{qty}</span>}
+                <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid color-mix(in srgb, var(--warn) 50%, transparent)', borderRadius: 3, padding: '1px 4px' }}>{deadline}</span>
+              </div>
+              <div style={{ fontSize: 10, lineHeight: 1.45, color: 'var(--dim)', marginTop: 2 }}>{p.blurb}</div>
+              {action === 'hint' && POWERUP_HINT[p.id] && <div className="mono" style={{ fontSize: 8.5, color: 'var(--warn)', marginTop: 3 }}>↳ {POWERUP_HINT[p.id]}</div>}
+            </div>
+            {action === 'arm' ? (
+              <button onClick={() => onArm(p.id)} disabled={qty <= 0} className="mono" style={{ flex: 'none', alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', border: '1px solid var(--you)', color: 'var(--on-accent)', background: 'var(--you)' }}>ARM</button>
+            ) : action === 'apply' ? (
+              <button onClick={() => onApply(p.id)} disabled={qty <= 0} className="mono" style={{ flex: 'none', alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', border: '1px solid var(--warn)', color: 'var(--on-accent)', background: 'var(--warn)' }}>APPLY</button>
+            ) : null}
+          </div>
+        );
+      })}
+    </PuShell>
   );
 }
 
