@@ -163,7 +163,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if ((inventory[id] ?? 0) <= 0) return false;
     const nextInv = { ...inventory, [id]: inventory[id] - 1 };
     const cur: AppliedWeek = applied[week] ?? { extraSlots: {}, swaps: {}, backups: {} };
-    const nextApplied = { ...applied, [week]: patch({ extraSlots: cur.extraSlots ?? {}, swaps: cur.swaps ?? {}, backups: cur.backups ?? {} }) };
+    const nextApplied = { ...applied, [week]: patch({ ...cur, extraSlots: cur.extraSlots ?? {}, swaps: cur.swaps ?? {}, backups: cur.backups ?? {} }) };
     setInventory(nextInv); setApplied(nextApplied); persist({ inv: nextInv, applied: nextApplied });
     return true;
   };
