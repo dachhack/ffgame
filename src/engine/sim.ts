@@ -2,7 +2,7 @@ import type { Player, PlayerStats, Pos, PbpEvent, SlotResolution, EffectType, Bu
 import { hashStr } from '../data/players';
 import { metricById } from '../data/metrics';
 import { realPbpFor, realPossFor, type RealPlayKind } from '../data/realPbp';
-import { returnsFor } from '../data/returns';
+import { returnPlaysFor } from '../data/returns';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Deterministic simulation. Everything is seeded off (playerId, week) so a
@@ -337,34 +337,23 @@ export const EMPTY_PLAYER: Player = {
   stats: { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 },
 };
 
-/** Real kick/punt return yards (from baked 2025 data) spread into a few plays
- *  across the game — feeds the Return Yards metric. Yardage/TDs are real; the
- *  in-game timing is approximated (returns aren't in the per-play feed). */
+/** Real kick/punt returns (from baked 2025 play-by-play) — each at its EXACT
+ *  game-elapsed second. Feeds the Return Yards metric. No synthesized timing. */
 function returnPlays(player: Player, week: number): RawPlay[] {
   if (player.pos !== 'WR' && player.pos !== 'RB') return [];
-  const { yds, tds } = returnsFor(player.id, week);
-  if (yds === 0 && tds === 0) return [];
-  const r = rng(hashStr(`${player.id}|ret${week}`));
-  const n = Math.max(1, Math.min(6, Math.round(Math.abs(yds) / 28) || 1));
-  const clocks = spreadClocks(n, r);
-  const plays: RawPlay[] = [];
-  let rem = yds; let tdLeft = tds;
-  for (let i = 0; i < n; i++) {
-    const y = i === n - 1 ? rem : Math.round(rem / (n - i));
-    rem -= y;
-    const td = tdLeft > 0 && (i === n - 1 || r() < 0.3); if (td) tdLeft--;
-    plays.push({ clock: clocks[i], kind: 'return', yards: y, td, catch: false, target: false });
-  }
-  return plays;
+  return returnPlaysFor(player.id, week).map(([clock, yards, td]) => ({
+    clock, kind: 'return' as RealPlayKind, yards, td: td === 1, catch: false, target: false,
+  }));
 }
 
 /** Real plays when available, otherwise the deterministic simulation. Return
- *  yards (a separate real dataset) are appended in both cases. */
-function playsForPlayer(player: Player, week: number): { plays: RawPlay[]; real: boolean } {
+ *  plays are folded in only when the player is actually scoring Return Yards —
+ *  otherwise they must not perturb another metric's mechanics. */
+function playsForPlayer(player: Player, week: number, metricId?: string): { plays: RawPlay[]; real: boolean } {
   if (player.id === EMPTY_PLAYER.id) return { plays: [], real: false };
   const r = realRawPlays(player.id, week);
   const base = r ?? buildPlays(player, weekLine(player, week), week);
-  const ret = returnPlays(player, week);
+  const ret = metricId === 'retyd' ? returnPlays(player, week) : [];
   const plays = ret.length ? [...base, ...ret].sort((a, b) => a.clock - b.clock) : base;
   return { plays, real: !!r };
 }
@@ -379,8 +368,8 @@ export interface StatLine {
   fg: number; xp: number;
   sacks: number; ints: number; fumrec: number; dtd: number; safety: number;
 }
-export function statlineAt(player: Player, week: number, clock: number): StatLine {
-  const { plays } = playsForPlayer(player, week);
+export function statlineAt(player: Player, week: number, clock: number, metricId?: string): StatLine {
+  const { plays } = playsForPlayer(player, week, metricId);
   const s: StatLine = { passYds: 0, passTds: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, rec: 0, recYds: 0, recTds: 0, retYds: 0, retTds: 0, fg: 0, xp: 0, sacks: 0, ints: 0, fumrec: 0, dtd: 0, safety: 0 };
   for (const p of plays) {
     if (p.clock > clock) break; // plays are sorted ascending by clock
@@ -481,8 +470,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const GARBAGE_FROM = GAME_SECONDS - 300; // final 5 minutes
   const youOT = youBuffs.has('overtime') ? 300 : 0;
   const theirOT = theirBuffs.has('overtime') ? 300 : 0;
-  const yp = playsForPlayer(you.player, week);
-  const tp = playsForPlayer(their.player, week);
+  const yp = playsForPlayer(you.player, week, you.metricId);
+  const tp = playsForPlayer(their.player, week, their.metricId);
   const yPlays = yp.plays;
   const tPlays = tp.plays;
   const real = yp.real || tp.real;
