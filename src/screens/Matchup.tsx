@@ -358,9 +358,6 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     return { p, ok, deadline, action };
   }).filter((x) => x.ok);
 
-  // Desktop setup: list power-ups in a side rail instead of behind modal buttons.
-  const showRail = !isMobile && phase === 'setup';
-
   // ── setup interactions ──
   // Keep each window's spots filled top-down: collapse any gap so a filled spot
   // never sits below an empty one.
@@ -585,7 +582,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                   <span>{powerupById(pendingApply)?.icon} Tap a {powerupById(pendingApply)?.target === 'window' ? 'window' : 'spot'} to apply {powerupById(pendingApply)?.name}</span>
                   <button onClick={() => setPendingApply(null)} className="mono" style={{ background: 'none', border: 'none', color: 'var(--dim)', fontWeight: 700, fontSize: 9, letterSpacing: '0.1em' }}>CANCEL</button>
                 </div>
-              ) : showRail ? null : (
+              ) : (
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'nowrap' }}>
                   <button onClick={() => setPuView('active')} className="mono" style={{ flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--you)', borderRadius: 6, padding: '7px 9px' }}>
                     ◈ ACTIVE{activeEffects.length > 0 ? ` · ${activeEffects.length}` : ''}
@@ -653,8 +650,6 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
           </div>
           <div style={{ height: 40 }} />
         </main>
-
-        {showRail && <PowerupRail effects={activeEffects} items={appliable} inventory={inventory} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); }} />}
 
         {!isMobile && <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} collapsed={!rosterOpen.their} onToggle={() => toggleRoster('their')} bye={byeTheir} week={week} />}
       </div>
@@ -1134,68 +1129,6 @@ function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose }: {
   );
 }
 
-// Desktop setup side rail: the same Active + Apply power-up lists as the modals,
-// laid out inline beside the spot cards so they're always visible.
-function PowerupRail({ effects, items, inventory, onArm, onApply }: {
-  effects: { key: string; icon: string; name: string; detail: string; onRemove?: () => void }[];
-  items: { p: Powerup; deadline: string; action: 'arm' | 'apply' | 'hint' }[];
-  inventory: Record<string, number>;
-  onArm: (id: string) => void; onApply: (id: string) => void;
-}) {
-  return (
-    <aside style={{ width: 224, flex: 'none', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <section style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--you)', padding: '0 2px' }}>◈ ACTIVE{effects.length > 0 ? ` · ${effects.length}` : ''}</div>
-        {effects.length === 0 && <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.5, padding: '4px 2px' }}>— nothing active —<br />arm or apply below</div>}
-        {effects.map((e) => (
-          <div key={e.key} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 7px', borderRadius: 5, background: 'color-mix(in srgb, var(--you) 9%, var(--bg))', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))' }}>
-            <span style={{ fontSize: 15, flex: 'none', lineHeight: 1.1 }}>{e.icon}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="grotesk" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</div>
-              <div className="mono" style={{ fontSize: 8.5, color: 'var(--dim)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.detail}</div>
-            </div>
-            {e.onRemove ? (
-              <button onClick={e.onRemove} className="mono" style={{ flex: 'none', fontSize: 8, fontWeight: 700, letterSpacing: '0.04em', borderRadius: 4, padding: '5px 7px', cursor: 'pointer', border: '1px solid var(--opp)', color: 'var(--opp)', background: 'var(--surface)' }}>REMOVE</button>
-            ) : (
-              <span className="mono" style={{ flex: 'none', fontSize: 7, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 4px' }}>LOCKED</span>
-            )}
-          </div>
-        ))}
-      </section>
-
-      <section style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--warn)', padding: '0 2px' }}>✦ APPLY{items.length > 0 ? ` · ${items.length}` : ''}</div>
-        {items.length === 0 && <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.5, padding: '4px 2px' }}>— nothing to apply —<br />right now</div>}
-        {items.map(({ p, deadline, action }) => {
-          const qty = inventory[p.id] ?? 0;
-          return (
-            <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '6px 7px', borderRadius: 5, background: 'var(--bg)', border: '1px solid var(--bd)' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
-                <span style={{ fontSize: 15, flex: 'none', lineHeight: 1.1 }}>{p.icon}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                    <span className="grotesk" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>{p.name}</span>
-                    {qty > 0 && <span className="mono" style={{ fontSize: 8, fontWeight: 700, color: 'var(--dim)' }}>×{qty}</span>}
-                  </div>
-                  <div style={{ fontSize: 9, lineHeight: 1.4, color: 'var(--dim)', marginTop: 2 }}>{p.blurb}</div>
-                  {action === 'hint' && POWERUP_HINT[p.id] && <div className="mono" style={{ fontSize: 8, color: 'var(--warn)', marginTop: 3, lineHeight: 1.4 }}>↳ {POWERUP_HINT[p.id]}</div>}
-                </div>
-                {action === 'arm' ? (
-                  <button onClick={() => onArm(p.id)} disabled={qty <= 0} className="mono" style={{ flex: 'none', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', borderRadius: 4, padding: '5px 8px', cursor: 'pointer', border: '1px solid var(--you)', color: 'var(--on-accent)', background: 'var(--you)' }}>ARM</button>
-                ) : action === 'apply' ? (
-                  <button onClick={() => onApply(p.id)} disabled={qty <= 0} className="mono" style={{ flex: 'none', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', borderRadius: 4, padding: '5px 8px', cursor: 'pointer', border: '1px solid var(--warn)', color: 'var(--on-accent)', background: 'var(--warn)' }}>APPLY</button>
-                ) : (
-                  <span className="mono" title="No arming needed — ready to use" style={{ flex: 'none', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', borderRadius: 4, padding: '5px 8px', border: '1px solid var(--ok, #3fb950)', color: 'var(--ok, #3fb950)', background: 'transparent' }}>READY</span>
-                )}
-              </div>
-              <span className="mono" style={{ alignSelf: 'flex-start', fontSize: 7, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', border: '1px solid color-mix(in srgb, var(--warn) 50%, transparent)', borderRadius: 3, padding: '1px 4px' }}>{deadline}</span>
-            </div>
-          );
-        })}
-      </section>
-    </aside>
-  );
-}
 
 // Spy: after tapping a slate slot, choose what to reveal about the opponent there.
 function SpyRevealModal({ onPick, onClose }: { onPick: (r: 'player' | 'metric') => void; onClose: () => void }) {
@@ -1493,6 +1426,9 @@ function SetupRow(props: {
     ...(player ? Object.keys(armed).filter((id) => armed[id] && buffAppliesToSpot(id, player.pos, pick?.metricId ?? null)) : []),
     ...appliedPu,
   ];
+  const buffChips = spotBuffs.map((id) => { const pu = powerupById(id); return (
+    <span key={id} title={pu?.blurb} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 8, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 40%, transparent)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>{pu?.icon} {pu?.name}</span>
+  ); });
   // Apply mode: a targeted powerup is awaiting a spot. Double or Nothing → a
   // filled spot; Bye Steal → an empty spot.
   const fillEligible = applyMode === 'double-or-nothing' && !!player;
@@ -1523,24 +1459,30 @@ function SetupRow(props: {
               <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 9px' }}>{applyPu?.icon} TAP TO APPLY</span>
             </div>
           )}
-          {/* identity row — tap to swap the player */}
-          <div onClick={cardTap} style={{ cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
-            <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={isMobile ? 40 : 48} />
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-                <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>
-                <InjuryBadge week={week} slug={player.id} />
+          {/* identity row — tap to swap the player; on desktop the spot's
+              power-ups sit to the right of the headshot (below it on mobile). */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
+            <div onClick={cardTap} style={{ cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center', minWidth: 0, flex: 1 }}>
+              <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={isMobile ? 40 : 48} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                  <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>
+                  <InjuryBadge week={week} slug={player.id} />
+                </div>
+                <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{player.pos} · {player.team}</span>
               </div>
-              <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{player.pos} · {player.team}</span>
             </div>
+            {!isMobile && spotBuffs.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, flexWrap: 'wrap', flex: 'none', maxWidth: '48%' }}>
+                {buffChips}
+              </div>
+            )}
           </div>
 
-          {/* armed power-ups acting on this spot */}
-          {spotBuffs.length > 0 && (
+          {/* mobile: armed power-ups acting on this spot, below the headshot */}
+          {isMobile && spotBuffs.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-              {spotBuffs.map((id) => { const pu = powerupById(id); return (
-                <span key={id} title={pu?.blurb} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 8, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 40%, transparent)', borderRadius: 3, padding: '1px 5px' }}>{pu?.icon} {pu?.name}</span>
-              ); })}
+              {buffChips}
             </div>
           )}
 
