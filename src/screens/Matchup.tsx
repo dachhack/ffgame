@@ -499,12 +499,21 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               <button onClick={toggleAll} className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px' }}>
                 {anyPlaying ? '❚❚ PAUSE ALL' : '▶ RUN ALL'}
               </button>
-              <button
-                onClick={() => setClockMode((m) => (m === 'game' ? 'feed' : m === 'feed' ? 'real' : 'game'))}
-                title={'Playback clock (tap to cycle):\n• GAME CLOCK — every game in a window moves in lockstep on game time\n• REAL FEED — plays arrive on the real wall clock (games desync), score still resolves on game time\n• REAL CLOCK — real feed AND cross-game effects (TE-TD drip nuke) resolve in real-time order'}
-                className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: wallClock ? 'var(--on-accent)' : 'var(--dim)', background: clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--surface)', border: `1px solid ${clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '6px 10px' }}>
-                ⏱ {clockMode === 'real' ? 'REAL CLOCK' : clockMode === 'feed' ? 'REAL FEED' : 'GAME CLOCK'}
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                <button
+                  onClick={() => setClockMode((m) => (m === 'game' ? 'feed' : m === 'feed' ? 'real' : 'game'))}
+                  title={'Playback clock (tap to cycle):\n• GAME CLOCK — every game in a window moves in lockstep on game time\n• REAL FEED — plays arrive on the real wall clock (games desync), score still resolves on game time\n• REAL CLOCK — real feed AND cross-game effects (TE-TD drip nuke) resolve in real-time order'}
+                  className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: wallClock ? 'var(--on-accent)' : 'var(--dim)', background: clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--surface)', border: `1px solid ${clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '6px 10px' }}>
+                  ⏱ {clockMode === 'real' ? 'REAL CLOCK' : clockMode === 'feed' ? 'REAL FEED' : 'GAME CLOCK'}
+                </button>
+                <span className="mono" style={{ fontSize: 8, lineHeight: 1.3, color: 'var(--faint)', letterSpacing: '0.02em', maxWidth: 220 }}>
+                  {clockMode === 'real'
+                    ? 'Real clock — feed + cross-game effects resolve live'
+                    : clockMode === 'feed'
+                    ? 'Real feed — games desync; score on game time'
+                    : 'Game clock — all games lockstep on game time'}
+                </span>
+              </div>
             </div>
           )}
           {phase === 'final' && (
