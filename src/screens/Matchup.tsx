@@ -495,7 +495,6 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                   </button>
                 </div>
               )}
-              {phase !== 'setup' && <BuffStrip phase={phase} inventory={inventory} armed={buffs} bonuses={resolved.bonuses} onArm={(id) => armBuff(week, id)} />}
               <TargetPanel aw={aw} oppPicks={oppPicks} preKick={preKickPhase} onClearSpy={() => clearSpy(week)} />
             </div>
             <div style={{ textAlign: 'right', flex: 'none' }}>
@@ -535,6 +534,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 turnoverCoin={turnoverCoin}
                 backups={backupAssign}
                 slotName={slotName}
+                armed={buffs}
                 aw={aw}
                 applyMode={pendingApply}
                 onApplyToSpot={applyToSpot}
@@ -903,6 +903,21 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
 const TEAM_BUFFS = POWERUPS.filter((p) => p.timing === 'pre' && p.kind === 'action' && p.id !== 'extra-slot' && !p.target);
 const isTeamBuff = (id: string) => TEAM_BUFFS.some((b) => b.id === id);
 
+// Which armed team buffs are relevant to a given spot — drives the on-spot
+// highlight so you can see what a powerup applies to in your lineup.
+function buffAppliesToSpot(id: string, pos: Pos, metricId: string | null): boolean {
+  const drip = metricId === 'combodrip' || metricId === 'recyd' || (pos === 'RB' && metricId === 'rush');
+  switch (id) {
+    case 'unlock-carries-wipe': return pos === 'WR' || pos === 'TE';
+    case 'hail-mary': return pos === 'QB';
+    case 'pick-six': return pos === 'DEF';
+    case 'trick-play': return pos !== 'QB';
+    case 'momentum': case 'floodgates': case 'overtime': return drip;
+    case 'garbage-time': case 'counter-nuke': case 'insurance': case 'turnover-boost': return true;
+    default: return false;
+  }
+}
+
 // Short "how to use" hints for the non-armable powerups in the inventory card.
 const POWERUP_HINT: Record<string, string> = {
   'extra-slot': 'Tap ➕ ADD SLOT on a window header.',
@@ -1059,38 +1074,6 @@ function TargetPanel({ aw, oppPicks, preKick, onClearSpy }: {
   );
 }
 
-function BuffStrip({ phase, inventory, armed, bonuses, onArm }: {
-  phase: Phase; inventory: Record<string, number>; armed: Record<string, true | boolean>;
-  bonuses?: { id: string; label: string; points: number }[]; onArm: (id: string) => void;
-}) {
-  const armable = phase === 'setup' ? TEAM_BUFFS.filter((p) => (inventory[p.id] ?? 0) > 0 && !armed[p.id]) : [];
-  // Show armed team buffs plus any bonus that paid out (e.g. Double or Nothing,
-  // which isn't a one-click buff but still produces a result chip).
-  const armedIds = Object.keys(armed).filter((id) => armed[id] && powerupById(id));
-  const showIds = [...new Set([...armedIds, ...(bonuses ?? []).map((b) => b.id).filter((id) => powerupById(id))])];
-  if (!armable.length && !showIds.length) return null;
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-      {armable.map((p) => (
-        <button key={p.id} onClick={() => onArm(p.id)} title={p.blurb} className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.05em', color: 'var(--warn)', background: 'var(--surface)', border: '1px dashed var(--warn)', borderRadius: 4, padding: '5px 9px' }}>
-          {p.icon} ARM {p.name.toUpperCase()}
-        </button>
-      ))}
-      {showIds.map((id) => {
-        const pu = powerupById(id)!;
-        const hit = bonuses?.find((b) => b.id === id);
-        const c = hit ? (hit.points < 0 ? 'var(--opp)' : 'var(--fx-streak)') : 'var(--warn)';
-        const sign = hit ? (hit.points < 0 ? '' : '+') : '';
-        return (
-          <span key={id} className="mono" title={pu.blurb} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', color: c, background: 'var(--surface)', border: `1px solid ${c}`, borderRadius: 4, padding: '5px 9px' }}>
-            {pu.icon} {hit ? `${hit.label.toUpperCase()} ${sign}${hit.points}` : `${pu.name.toUpperCase()} ARMED`}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
 // ── Window section ──────────────────────────────────────────────────────────
 function WindowSection(props: {
   rw: ReturnType<typeof buildMatchup>['windows'][number];
@@ -1106,6 +1089,7 @@ function WindowSection(props: {
   onApplyExtra: () => void;
   onRemoveExtra: () => void;
   canSwap: boolean;
+  armed: Record<string, boolean>;
   onPowerup: (key: string) => void;
   onAssignBackup: (key: string) => void;
   picks: Record<string, Pick>;
@@ -1125,7 +1109,7 @@ function WindowSection(props: {
   onApplyToSpot: (key: string) => void;
   onApplyToWindow: (win: WindowId) => void;
 }) {
-  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, aw, applyMode, onApplyToSpot, onApplyToWindow } = props;
+  const { rw, week, phase, clock, maxClock, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, canSwap, onPowerup, onAssignBackup, picks, selSlot, pickMetricFor, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow } = props;
   const w = rw.window;
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
@@ -1271,7 +1255,7 @@ function WindowSection(props: {
           if (phase === 'setup') {
             return (
               <SetupRow
-                key={key} slotKeyStr={key} winId={w.id} week={week} pick={picks[key]} selected={selSlot === key} inventory={inventory}
+                key={key} slotKeyStr={key} winId={w.id} week={week} pick={picks[key]} selected={selSlot === key} inventory={inventory} armed={armed}
                 appliedPu={[...(aw?.doubleOrNothing === key ? ['double-or-nothing'] : []), ...(aw?.byeSteal?.slotKey === key ? ['bye-steal'] : [])]}
                 applyMode={applyMode} onApplyToSpot={() => onApplyToSpot(key)}
                 onOpenPicker={() => onOpenPicker(key, w.id)} onPickMetric={(m) => pickMetricFor(key, m)}
@@ -1300,20 +1284,23 @@ function WindowSection(props: {
 
 // ── Setup row ──
 function SetupRow(props: {
-  slotKeyStr: string; winId: WindowId; week: number; pick?: Pick; selected: boolean; inventory: Record<string, number>;
+  slotKeyStr: string; winId: WindowId; week: number; pick?: Pick; selected: boolean; inventory: Record<string, number>; armed: Record<string, boolean>;
   appliedPu: string[];
   applyMode: string | null; onApplyToSpot: () => void;
   onOpenPicker: () => void; onPickMetric: (m: string) => void; onDropPlayer: (id: string) => void;
 }) {
-  const { winId, week, pick, selected, inventory, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onDropPlayer } = props;
+  const { winId, week, pick, selected, inventory, armed, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onDropPlayer } = props;
   const isMobile = useIsMobile();
   const gridCols = '1fr 1fr'; // no center gutter — your spot vs the sealed opponent
   const rowGap = isMobile ? 5 : 8;
   const player = pick ? getPlayer(pick.playerId) : null;
   const metric = player && pick?.metricId ? metricById(player.pos, pick.metricId) : null;
-  // Spot-specific applied power-ups (Double or Nothing / Bye Steal) surface here.
-  // Field-wide armed buffs are NOT shown per-card — they live in the Active card.
-  const spotBuffs = appliedPu;
+  // Power-ups acting on THIS spot: armed team buffs that apply here, plus any
+  // spot-specific applied powerup (Double or Nothing / Bye Steal).
+  const spotBuffs = [
+    ...(player ? Object.keys(armed).filter((id) => armed[id] && buffAppliesToSpot(id, player.pos, pick?.metricId ?? null)) : []),
+    ...appliedPu,
+  ];
   // Apply mode: a targeted powerup is awaiting a spot. Double or Nothing → a
   // filled spot; Bye Steal → an empty spot.
   const fillEligible = applyMode === 'double-or-nothing' && !!player;
@@ -1759,7 +1746,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // On mobile the chip is anchored to two lines (name over tag) so it's always
   // the same height regardless of label length; desktop keeps it inline.
   const metricChip = (
-    <div style={{ display: 'inline-flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? (side === 'you' ? 'flex-start' : 'flex-end') : 'baseline', maxWidth: '100%', gap: isMobile ? 0 : 5, marginTop: isMobile ? 2 : 5, padding: isMobile ? '2px 7px' : '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)` }}>
+    <div style={{ display: 'inline-flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? (side === 'you' ? 'flex-end' : 'flex-start') : 'baseline', maxWidth: '100%', gap: isMobile ? 0 : 5, marginTop: isMobile ? 2 : 0, padding: isMobile ? '2px 7px' : '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)` }}>
       <span className="grotesk" style={{ fontSize: isMobile ? 10.5 : 13, fontWeight: 700, color: accent, letterSpacing: '0.01em', lineHeight: 1.25, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{metricName}</span>
       <span className="mono" style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.1em', color: accent, opacity: 0.85, whiteSpace: 'nowrap', lineHeight: 1.25 }}>{tag}</span>
     </div>
@@ -1786,7 +1773,6 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
       <CoinIcon size={10} /> {coin < 0 ? '' : '+'}{coin}
     </div>
   );
-  const scoreBlock = (<>{bigNum}{coinEl && <div style={{ marginTop: 5 }}>{coinEl}</div>}</>);
 
   if (isMobile) {
     // Name on top, headshot on the outer side, metric + coin/score stacked
@@ -1798,8 +1784,8 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
         {nameRow}
         <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'center', gap: 8 }}>
           <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={46} />
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2, alignItems: side === 'you' ? 'flex-start' : 'flex-end' }}>
-            <div style={{ minHeight: 18, display: 'flex', alignItems: 'center', width: '100%', justifyContent: side === 'you' ? 'flex-start' : 'flex-end' }}>{metricChip}</div>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2, alignItems: side === 'you' ? 'flex-end' : 'flex-start' }}>
+            <div style={{ minHeight: 18, display: 'flex', alignItems: 'center', width: '100%', justifyContent: side === 'you' ? 'flex-end' : 'flex-start' }}>{metricChip}</div>
             <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'baseline', gap: 6 }}>
               {coinEl}
               {bigNum}
@@ -1816,10 +1802,13 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
       <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={64} />
       <div style={{ flex: 1, minWidth: 0, textAlign: edge }}>
         {nameRow}
-        {metricChip}
         <div style={{ marginTop: 5 }}>{statLine}</div>
       </div>
-      <div style={{ flex: 'none', alignSelf: 'center', textAlign: 'center' }}>{scoreBlock}</div>
+      <div style={{ flex: 'none', maxWidth: '48%', alignSelf: 'center', display: 'flex', flexDirection: 'column', alignItems: side === 'you' ? 'flex-end' : 'flex-start', gap: 5 }}>
+        {metricChip}
+        {bigNum}
+        {coinEl}
+      </div>
     </div>
   );
 }
