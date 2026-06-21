@@ -2174,6 +2174,7 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
   const [detail, setDetail] = useState<PbpEvent | null>(null); // a play tapped for its PBP details
   const fs = (n: number) => bigText ? Math.round(n * 1.35 * 10) / 10 : n; // font size
   const fw = (n: number) => bigText ? Math.round(n * 1.35) : n;            // fixed widths/heights
+  const badgeFs = bigText ? 9.5 : 8; // effect/power-up badge size — readable but tuned to fit one line
   const [minutes, setMinutes] = useState(false);
   const [top, setTop] = useState(false); // newest entries on top vs bottom
   const scroller = useRef<HTMLDivElement>(null);
@@ -2194,7 +2195,7 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
 
   // Running cumulative for a side at the far edge (outside the action column).
   const cum = (ev: PbpEvent, mine: boolean) => (
-    <span className="mono" style={{ width: fw(28), flex: 'none', textAlign: mine ? 'left' : 'right', fontSize: fs(9), fontWeight: 700, color: ev.side === (mine ? 'you' : 'their') ? (mine ? 'var(--you)' : 'var(--opp)') : 'var(--faint)', opacity: 0.85 }}>
+    <span className="mono" style={{ width: fw(26), flex: 'none', textAlign: mine ? 'left' : 'right', fontSize: fs(9), fontWeight: 700, color: ev.side === (mine ? 'you' : 'their') ? (mine ? 'var(--you)' : 'var(--opp)') : 'var(--faint)', opacity: 0.85 }}>
       {(mine ? ev.youBank : ev.theirBank).toFixed(1)}
     </span>
   );
@@ -2216,13 +2217,14 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
             {coinAmt > 0 && <CoinPill amt={coinAmt} />}
           </div>
         )}
-        {/* Effect / power-up badges: fixed compact size so they fit on one line;
-            wrap stays on as a safety so they never spill into the totals. */}
+        {/* Effect / power-up badges: now short enough to sit on one line at a
+            readable size; wrap stays on as a safety so they never spill into the
+            totals. */}
         {ev.effect && (
-          <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.02em', color: FX_COLOR[ev.effect.type] ?? 'var(--dim)', marginTop: 1, overflowWrap: 'anywhere' }}>{ev.effect.text}</div>
+          <div className="mono" style={{ fontSize: badgeFs, fontWeight: 700, letterSpacing: '0.02em', color: FX_COLOR[ev.effect.type] ?? 'var(--dim)', marginTop: 1, overflowWrap: 'anywhere' }}>{ev.effect.text}</div>
         )}
         {ev.buffNote && (
-          <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.02em', color: 'var(--warn)', marginTop: 1, overflowWrap: 'anywhere' }}>⚡ {ev.buffNote}</div>
+          <div className="mono" style={{ fontSize: badgeFs, fontWeight: 700, letterSpacing: '0.02em', color: 'var(--warn)', marginTop: 1, overflowWrap: 'anywhere' }}>⚡ {ev.buffNote}</div>
         )}
       </div>
     );
@@ -2244,7 +2246,7 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
           <div key={i} onClick={() => setDetail(ev)} title="tap for play details" style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '3px 0', borderTop: i === 0 ? undefined : '1px solid color-mix(in srgb, var(--bd) 45%, transparent)', animation: i === newestIdx ? 'slidein .3s ease' : undefined, cursor: 'pointer' }}>
             {cum(ev, true)}
             {cell(ev, true)}
-            <div className="mono" title="game clock · real wall-clock time" style={{ width: fw(40), flex: 'none', textAlign: 'center', paddingTop: 1, lineHeight: 1.15 }}>
+            <div className="mono" title="game clock · real wall-clock time" style={{ width: fw(36), flex: 'none', textAlign: 'center', paddingTop: 1, lineHeight: 1.15 }}>
               <div style={{ fontSize: fs(8.5), color: 'var(--faint)' }}>{fmtClock(ev.clock)}</div>
               {realOf && <div style={{ fontSize: fs(8), fontWeight: 700, color: 'var(--dimstrong)' }}>{realOf(ev)}</div>}
             </div>
