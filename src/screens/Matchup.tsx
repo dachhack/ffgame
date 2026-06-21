@@ -11,7 +11,7 @@ import {
   windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
 } from '../engine/matchup';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type StatLine } from '../engine/sim';
-import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
+import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
@@ -326,6 +326,22 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const anyStarted = Object.values(winLife).some((s) => s !== 'pending');
   const liveWins = WINDOWS.filter((w) => winLife[w.id] === 'live');
   const preKickPhase = phase === 'live' && !anyStarted; // locked in, no game kicked yet
+
+  // On lock-in, prompt to assign a backup for each UNOPPOSED player (your player
+  // with no head-to-head opponent) — they're best-ball backups that can sub in.
+  // Each such spot is auto-prompted once; assigning or dismissing won't re-pop it.
+  const backupPrompted = useRef<Set<string>>(new Set());
+  useEffect(() => { if (phase !== 'live') backupPrompted.current = new Set(); }, [phase]);
+  useEffect(() => {
+    if (phase !== 'live' || anyStarted || backupMenu) return;
+    const next = resolved.windows.flatMap((w) => w.slots).find((s) => {
+      if (!s.backup || !s.you) return false;
+      const k = slotKey(s.win, s.slotIndex);
+      if (ZERO_BANK_METRICS.has(`${s.you.player.pos}:${s.you.metricId}`)) return false; // can't sub (scores 0)
+      return !backupAssign[k] && !backupPrompted.current.has(k);
+    });
+    if (next) { const k = slotKey(next.win, next.slotIndex); backupPrompted.current.add(k); setBackupMenu({ key: k }); }
+  }, [phase, anyStarted, backupMenu, resolved, backupAssign]);
 
   // Everything currently in effect, with a back-out where the store supports it.
   const activeEffects: { key: string; icon: string; name: string; detail: string; onRemove?: () => void }[] = [];
@@ -1829,7 +1845,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
         {open && (() => {
           const log = buildLog(bEvents);
           return (
-            <TwoColLog events={log.events} realOf={log.realOf} realOrder={realClock} gameLabel={slot.gameLabel} youCoin={mineBackup ? metricCoin(be.player.pos, be.metricId) : 0} theirCoin={mineBackup ? 0 : metricCoin(be.player.pos, be.metricId)} />
+            <TwoColLog events={log.events} realOf={log.realOf} realOrder={realClock} gameLabel={slot.gameLabel} youPlayer={mineBackup ? be.player : undefined} theirPlayer={mineBackup ? undefined : be.player} week={week} youCoin={mineBackup ? metricCoin(be.player.pos, be.metricId) : 0} theirCoin={mineBackup ? 0 : metricCoin(be.player.pos, be.metricId)} />
           );
         })()}
       </div>
@@ -1923,7 +1939,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
       {open && (() => {
         const log = buildLog(visibleEvents);
         return (
-          <TwoColLog events={log.events} realOf={log.realOf} realOrder={realClock} gameLabel={slot.gameLabel} youCoin={metricCoin(slot.you.player.pos, slot.you.metricId)} theirCoin={metricCoin(slot.their.player.pos, slot.their.metricId)} />
+          <TwoColLog events={log.events} realOf={log.realOf} realOrder={realClock} gameLabel={slot.gameLabel} youPlayer={slot.you.player} theirPlayer={slot.their.player} week={week} youCoin={metricCoin(slot.you.player.pos, slot.you.metricId)} theirCoin={metricCoin(slot.their.player.pos, slot.their.metricId)} />
         );
       })()}
     </div>
@@ -2082,9 +2098,10 @@ function actionText(play: string): string {
 // Two-column play-by-play: your player's plays on the left, theirs on the
 // right, the clock down the middle. Chronological (newest at the bottom) so it
 // reads like a live ticker, auto-scrolling to keep the latest play in view.
-function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, realOrder }: { events: PbpEvent[]; gameLabel: string; youCoin?: number; theirCoin?: number; realOf?: (ev: PbpEvent) => string; realOrder?: boolean }) {
+function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, realOrder, youPlayer, theirPlayer, week }: { events: PbpEvent[]; gameLabel: string; youCoin?: number; theirCoin?: number; realOf?: (ev: PbpEvent) => string; realOrder?: boolean; youPlayer?: Player; theirPlayer?: Player; week: number }) {
   // Larger-text mode enlarges this fine-print log (the smallest text in the app).
   const { bigText } = useStore();
+  const [detail, setDetail] = useState<PbpEvent | null>(null); // a play tapped for its PBP details
   const fs = (n: number) => bigText ? Math.round(n * 1.35 * 10) / 10 : n; // font size
   const fw = (n: number) => bigText ? Math.round(n * 1.35) : n;            // fixed widths/heights
   const [minutes, setMinutes] = useState(false);
@@ -2144,7 +2161,7 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
           <div className="mono" style={{ fontSize: fs(9), color: 'var(--faint)', letterSpacing: '0.1em', textAlign: 'center', padding: '14px 0' }}>— no plays yet at this point —</div>
         )}
         {rows.map((ev, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '3px 0', borderTop: i === 0 ? undefined : '1px solid color-mix(in srgb, var(--bd) 45%, transparent)', animation: i === newestIdx ? 'slidein .3s ease' : undefined }}>
+          <div key={i} onClick={() => setDetail(ev)} title="tap for play details" style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '3px 0', borderTop: i === 0 ? undefined : '1px solid color-mix(in srgb, var(--bd) 45%, transparent)', animation: i === newestIdx ? 'slidein .3s ease' : undefined, cursor: 'pointer' }}>
             {cum(ev, true)}
             {cell(ev, true)}
             <div className="mono" title="game clock · real wall-clock time" style={{ width: fw(50), flex: 'none', textAlign: 'center', paddingTop: 1, lineHeight: 1.15 }}>
@@ -2156,7 +2173,59 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
           </div>
         ))}
       </div>
-      <div className="mono" style={{ fontSize: fs(7.5), color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 6, textAlign: 'center' }}>cumulative totals on the edges · {minutes ? 'minute-by-minute drip' : 'plays'} · game + real clock · {realOrder ? 'real-time order' : 'game-clock order'} · {gameLabel}</div>
+      <div className="mono" style={{ fontSize: fs(7.5), color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 6, textAlign: 'center' }}>cumulative totals on the edges · {minutes ? 'minute-by-minute drip' : 'plays'} · game + real clock · {realOrder ? 'real-time order' : 'game-clock order'} · {gameLabel} · tap a play for details</div>
+      {detail && <PlayDetailModal ev={detail} player={detail.side === 'you' ? youPlayer : theirPlayer} week={week} realStamp={realOf?.(detail)} onClose={() => setDetail(null)} />}
+    </div>
+  );
+}
+
+// Detail card for a single play tapped in the log — surfaces the underlying real
+// PBP record (kind, yards, TD, catch/target, turnover, nflverse play_id) plus the
+// game/real clock and the points it banked.
+const PLAY_KIND_LABEL: Record<string, string> = {
+  pass: 'Pass', rush: 'Rush', rec: 'Reception', incomplete: 'Incompletion', return: 'Return',
+  fg: 'Field goal', fgmiss: 'FG miss', xp: 'Extra point', xpmiss: 'XP miss',
+  sack: 'Sack', int: 'Interception', fumrec: 'Fumble recovery', dst_td: 'Defensive TD', safety: 'Safety',
+};
+function PlayDetailModal({ ev, player, week, realStamp, onClose }: { ev: PbpEvent; player?: Player; week: number; realStamp?: string; onClose: () => void }) {
+  const raw = player ? (realPbpFor(week, player.id)?.find((p) => p.c === ev.clock) ?? null) : null;
+  const g = player ? nflGameForTeam(week, player.team) : undefined;
+  const accent = ev.side === 'you' ? 'var(--you)' : 'var(--opp)';
+  const Row = ({ k, v }: { k: string; v: ReactNode }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '5px 0', borderTop: '1px solid color-mix(in srgb, var(--bd) 50%, transparent)' }}>
+      <span className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--faint)' }}>{k}</span>
+      <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text)', textAlign: 'right' }}>{v}</span>
+    </div>
+  );
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 80, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '60px 16px', overflow: 'auto' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, background: 'var(--surface)', border: '1px solid var(--bdh)', borderTop: `3px solid ${accent}`, borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
+          <div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{player?.name ?? 'Play'}{player && <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', fontWeight: 400 }}> · {player.pos} {player.team}</span>}</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.04em' }}>{actionText(ev.play)}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
+        </div>
+        <div style={{ padding: '6px 16px 14px' }}>
+          {g && <Row k="GAME" v={`${g.away} @ ${g.home}`} />}
+          <Row k="GAME CLOCK" v={fmtGameClock(ev.clock)} />
+          {realStamp && <Row k="REAL CLOCK" v={realStamp} />}
+          {raw ? <>
+            <Row k="PLAY" v={PLAY_KIND_LABEL[raw.k] ?? raw.k} />
+            {(raw.k === 'pass' || raw.k === 'rush' || raw.k === 'rec' || raw.k === 'return' || raw.k === 'fg' || raw.k === 'fgmiss') && <Row k="YARDS" v={`${raw.y}`} />}
+            {raw.td ? <Row k="TOUCHDOWN" v="yes" /> : null}
+            {raw.ca ? <Row k="RECEPTION" v="caught" /> : null}
+            {raw.tg && !raw.ca ? <Row k="TARGET" v="incomplete" /> : null}
+            {raw.to ? <Row k="TURNOVER" v="lost" /> : null}
+            {raw.pid != null && <Row k="NFLVERSE PLAY_ID" v={`${raw.pid}`} />}
+          </> : <Row k="TYPE" v={ev.drip ? 'drip accrual (per-minute)' : 'scoring event'} />}
+          <Row k="POINTS THIS PLAY" v={<span style={{ color: ev.delta > 0 ? accent : 'var(--dim)' }}>{ev.delta > 0 ? `+${ev.delta.toFixed(1)}` : ev.delta.toFixed(1)}{ev.mult ? ` ×${ev.mult.toFixed(2)}` : ''}</span>} />
+          <Row k="RUNNING BANK" v={`${(ev.side === 'you' ? ev.youBank : ev.theirBank).toFixed(1)}`} />
+          {ev.effect && <Row k="EFFECT" v={<span style={{ color: FX_COLOR[ev.effect.type] ?? 'var(--dim)' }}>{ev.effect.text}</span>} />}
+          {ev.buffNote && <Row k="POWER-UP" v={<span style={{ color: 'var(--warn)' }}>{ev.buffNote}</span>} />}
+        </div>
+      </div>
     </div>
   );
 }
