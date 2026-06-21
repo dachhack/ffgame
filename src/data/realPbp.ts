@@ -19,7 +19,7 @@ export type RealPlayKind =
 // support, return plays, and synthesized data omit them and callers fall back.
 export interface RealPlay { c: number; t?: number; pid?: number; k: RealPlayKind; y: number; td: number; ca: number; tg: number; to?: number; }
 
-interface WeekData { pbp: Record<string, RealPlay[]>; points: Record<string, number>; poss?: Record<string, number[][]>; wall?: Record<string, number[]>; ends?: Record<string, number>; }
+interface WeekData { pbp: Record<string, RealPlay[]>; points: Record<string, number>; poss?: Record<string, number[][]>; wall?: Record<string, number[]>; ends?: Record<string, number>; kick?: Record<string, number>; }
 
 const cache = new Map<number, WeekData>();
 const inflight = new Map<number, Promise<void>>();
@@ -66,6 +66,12 @@ export function realPossFor(week: number, team: string): number[][] {
  *  for a loaded week, or 0 if not loaded/known. */
 export function realGameEndClock(week: number, team: string): number {
   return cache.get(week)?.ends?.[team] ?? 0;
+}
+
+/** A team's real kickoff (first snap, floored to 5 min) as epoch ms for a loaded
+ *  week, or null if not loaded/known. */
+export function realKickoff(week: number, team: string): number | null {
+  return cache.get(week)?.kick?.[team] ?? null;
 }
 
 /** A game's ACTIVE-WALL timeline (cumulative real wall-seconds in play, breaks

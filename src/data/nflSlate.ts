@@ -2,6 +2,7 @@
 // from the nflverse schedule. window: tnf/early/late/snf/mnf.
 import type { WindowId } from '../types';
 import { WINDOWS } from './metrics';
+import { realKickoff } from './realPbp';
 export interface NflGame { away: string; home: string; aScore: number; hScore: number; win: WindowId; }
 export const NFL_SLATE: Record<number, NflGame[]> = {
   1: [{ away: "DAL", home: "PHI", aScore: 20, hScore: 24, win: "tnf" }, { away: "KC", home: "LAC", aScore: 21, hScore: 27, win: "tnf" }, { away: "TB", home: "ATL", aScore: 23, hScore: 20, win: "early" }, { away: "CIN", home: "CLE", aScore: 17, hScore: 16, win: "early" }, { away: "MIA", home: "IND", aScore: 8, hScore: 33, win: "early" }, { away: "CAR", home: "JAX", aScore: 10, hScore: 26, win: "early" }, { away: "LV", home: "NE", aScore: 20, hScore: 13, win: "early" }, { away: "ARI", home: "NO", aScore: 20, hScore: 13, win: "early" }, { away: "PIT", home: "NYJ", aScore: 34, hScore: 32, win: "early" }, { away: "NYG", home: "WAS", aScore: 6, hScore: 21, win: "early" }, { away: "TEN", home: "DEN", aScore: 12, hScore: 20, win: "late" }, { away: "SF", home: "SEA", aScore: 17, hScore: 13, win: "late" }, { away: "DET", home: "GB", aScore: 13, hScore: 27, win: "late" }, { away: "HOU", home: "LA", aScore: 9, hScore: 14, win: "late" }, { away: "BAL", home: "BUF", aScore: 40, hScore: 41, win: "snf" }, { away: "MIN", home: "CHI", aScore: 27, hScore: 24, win: "mnf" }],
@@ -89,10 +90,50 @@ function fmtTimeOfDay(sod: number): string {
 function firstGameWindow(week: number) {
   return WINDOWS.find((w) => gamesInWindow(week, w.id).length > 0) ?? WINDOWS[0];
 }
+
+// ── Real kickoff times (when the week's play-by-play is loaded) ───────────────
+// epoch ms → ET seconds-of-day.
+function etSod(ms: number): number {
+  const h = +new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }).format(ms) % 24;
+  const m = +new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', minute: '2-digit' }).format(ms);
+  return h * 3600 + m * 60;
+}
+// seconds-of-day → compact slot label e.g. "1:00p" (matches the window labels).
+function fmtSodShort(sod: number): string {
+  const x = ((Math.floor(sod) % 86400) + 86400) % 86400;
+  const h = Math.floor(x / 3600), mm = Math.floor((x % 3600) / 60);
+  return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, '0')}${h >= 12 ? 'p' : 'a'}`;
+}
+/** Earliest real kickoff (epoch ms) among a window's games, or null if unknown
+ *  (week not loaded). */
+export function windowKickoffMs(week: number, win: WindowId): number | null {
+  let min: number | null = null;
+  for (const g of gamesInWindow(week, win)) {
+    const k = realKickoff(week, g.home) ?? realKickoff(week, g.away);
+    if (k != null && (min == null || k < min)) min = k;
+  }
+  return min;
+}
+/** A window's kickoff as ET seconds-of-day — the real first-snap time when the
+ *  week is loaded, else the scheduled slot time. Base for the live wall clock. */
+export function windowKickoffSod(week: number, win: WindowId): number {
+  const ms = windowKickoffMs(week, win);
+  if (ms != null) return etSod(ms);
+  const w = WINDOWS.find((x) => x.id === win);
+  return w ? slotKickoffSod(w.time) : 13 * 3600;
+}
+/** A window's compact kickoff label e.g. "1:00p" — real when loaded, else slot. */
+export function windowTimeLabel(week: number, win: WindowId): string {
+  const ms = windowKickoffMs(week, win);
+  if (ms != null) return fmtSodShort(etSod(ms));
+  const w = WINDOWS.find((x) => x.id === win);
+  return w ? (w.time.split(' ').slice(1).join(' ')) : '';
+}
 /** Lineup-lock label: the actual date + time one hour before the week's first
- *  game kicks off, e.g. "Thu, Sep 4 · 7:15 PM ET". */
+ *  game kicks off, e.g. "Thu, Sep 4 · 7:15 PM ET". Uses the real kickoff when
+ *  the week is loaded, else the scheduled slot time. */
 export function weekLockLabel(week: number): string {
   const w = firstGameWindow(week);
-  const lockSod = slotKickoffSod(w.time) - 3600;
+  const lockSod = windowKickoffSod(week, w.id) - 3600;
   return `${windowDateLabel(week, w.id)} · ${fmtTimeOfDay(lockSod)} ET`;
 }

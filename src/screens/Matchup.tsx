@@ -3,7 +3,7 @@ import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, ThemeSwitcher, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile } from '../app/ui';
 import { avatarUrl, teamLogo } from '../data/media';
-import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel } from '../data/nflSlate';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod } from '../data/nflSlate';
 import { WINDOWS, METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById, type Powerup } from '../data/powerups';
 import { getTeam, getPlayer, gameForTeam } from '../data/league';
@@ -20,14 +20,6 @@ const TICK_SECONDS = 20;
 
 // Window kickoff time-of-day, parsed from a window's `time` string ("Sun 1:00p")
 // to seconds-since-midnight (ET) — the base for the wall-clock header.
-function kickoffSecOfDay(timeStr: string): number {
-  const t = timeStr.split(' ')[1] ?? timeStr;
-  const m = /(\d+):(\d+)\s*([ap])/i.exec(t);
-  if (!m) return 13 * 3600;
-  let h = (+m[1]) % 12;
-  if (m[3].toLowerCase() === 'p') h += 12;
-  return h * 3600 + (+m[2]) * 60;
-}
 // Seconds-of-day → "1:14 PM" (wraps past midnight).
 function fmtTimeOfDay(secOfDay: number): string {
   const t = ((Math.floor(secOfDay) % 86400) + 86400) % 86400;
@@ -1351,7 +1343,7 @@ function WindowSection(props: {
           <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)' }}>{w.label}</span>
           <span style={{ fontSize: 10, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{w.sub}</span>
           <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--dimstrong)' }}>{windowDateLabel(week, w.id)}</span>
-          <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{w.time.split(' ').slice(1).join(' ')}</span>
+          <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{windowTimeLabel(week, w.id)}</span>
           {slate.length > 0 && (
             <button onClick={() => setSlateOpen((o) => !o)} title="NFL game slate for this window" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: slateOpen ? 'var(--text)' : 'var(--dim)', background: 'var(--surface)', border: `1px solid ${slateOpen ? 'var(--bdh)' : 'var(--bd)'}`, borderRadius: 11, padding: '3px 8px' }}>
               <span style={{ display: 'flex', gap: 1 }}>{slateTeams.slice(0, 8).map((t) => <Img key={t} src={teamLogo(t)} size={13} radius={2} fallback={<span />} />)}</span>
@@ -1385,7 +1377,7 @@ function WindowSection(props: {
             <div style={{ width: 70, height: 3, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' }}>
               <div style={{ width: `${pct}%`, height: '100%', background: done ? 'var(--you)' : '#FF4F62', transition: 'width .3s linear' }} />
             </div>
-            <span className="mono" title="Wall-clock time of day (ET) at the current feed position" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>{fmtTimeOfDay(kickoffSecOfDay(w.time) + wallSeconds)}</span>
+            <span className="mono" title="Wall-clock time of day (ET) at the current feed position" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>{fmtTimeOfDay(windowKickoffSod(week, w.id) + wallSeconds)}</span>
             <span className="mono" style={{ fontSize: 8, fontWeight: 700, color: 'var(--faint)', letterSpacing: '0.08em' }}>ET</span>
             {phase === 'live' && (
               done ? (
@@ -1410,7 +1402,7 @@ function WindowSection(props: {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
               <div>
                 <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{w.label} · Game Slate</div>
-                <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{slate.length} {slate.length === 1 ? 'GAME' : 'GAMES'} · {windowDateLabel(week, w.id).toUpperCase()} · {w.time.split(' ').slice(1).join(' ').toUpperCase()}</div>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{slate.length} {slate.length === 1 ? 'GAME' : 'GAMES'} · {windowDateLabel(week, w.id).toUpperCase()} · {windowTimeLabel(week, w.id).toUpperCase()}</div>
               </div>
               <button onClick={() => setSlateOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
             </div>
@@ -1428,7 +1420,7 @@ function WindowSection(props: {
                       {teamLine(g.away)}
                       <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--faint)', flex: 'none' }}>@</span>
                       {teamLine(g.home)}
-                      <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--dim)', flex: 'none', marginLeft: 6 }}>{w.time.split(' ').slice(1).join(' ')}</span>
+                      <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--dim)', flex: 'none', marginLeft: 6 }}>{windowTimeLabel(week, w.id)}</span>
                     </div>
                     {(g.you.length > 0 || g.their.length > 0) && (
                       <div style={{ fontSize: 9.5, lineHeight: 1.5, marginTop: 6, paddingTop: 6, borderTop: '1px solid color-mix(in srgb, var(--bd) 60%, transparent)' }}>
@@ -1464,7 +1456,7 @@ function WindowSection(props: {
           // both sides share it.
           const youClock = wallClock && s.you ? clockAtRealTime(s.you.player, week, clock, s.you.metricId ?? undefined) : clock;
           const theirClock = wallClock && s.their ? clockAtRealTime(s.their.player, week, clock, s.their.metricId ?? undefined) : clock;
-          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={kickoffSecOfDay(w.time)} youTwin={twinLinked.has(key)} />;
+          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={windowKickoffSod(week, w.id)} youTwin={twinLinked.has(key)} />;
           if (!spotApplyMode) return row;
           const elig = spotEligible(s);
           return (
