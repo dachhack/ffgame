@@ -2086,12 +2086,15 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
       <span className="mono" style={{ fontSize: fs(7), fontWeight: 700, letterSpacing: '0.1em', color: accent, opacity: 0.85, whiteSpace: 'nowrap', lineHeight: 1.25 }}>{tag}</span>
     </div>
   );
-  // Statline: single line, justified to the card's outer edge, ellipsis if long.
+  // Statline: justified to the card's outer edge. Mobile uses a small fixed size
+  // (not bumped by bigText) and wraps rather than ellipsing — so it never truncates.
   const statLine = suppressSpent != null
     ? <div className="mono" style={{ fontSize: fs(9), color: 'var(--fx-stop)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>✕ {suppressSpent.toFixed(1)} spent on SUPPRESS</div>
     : subName
       ? <div className="mono" style={{ fontSize: fs(9.5), color: accent, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>⤴ {subName} scoring</div>
-      : <div className="mono" style={{ fontSize: fs(9.5), color: 'var(--dimstrong)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>{stat}</div>;
+      : <div className="mono" style={isMobile
+          ? { fontSize: 8.5, lineHeight: 1.3, color: 'var(--dimstrong)', whiteSpace: 'normal', textAlign: edge }
+          : { fontSize: fs(9.5), color: 'var(--dimstrong)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>{stat}</div>;
   const bigNum = suppressSpent != null ? (
     <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--dim)', lineHeight: 1, textDecoration: 'line-through' }}>{suppressSpent.toFixed(1)}</div>
   ) : halvedFrom != null ? (
