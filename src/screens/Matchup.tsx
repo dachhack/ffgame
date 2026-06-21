@@ -1988,7 +1988,32 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
   );
 }
 
-function fmtStat(pos: Pos, s: StatLine): string {
+function fmtStat(pos: Pos, s: StatLine, compact = false): string {
+  // Compact (mobile): collapse "N car · M rush yd" → "N-M ru" and
+  // "R/T rec · Y rec yd" → "R/T-Y rec" so the line fits without ellipsing.
+  if (compact) {
+    if (pos === 'QB') {
+      const p = [`${s.passYds} pass`, `${s.passTds} TD`];
+      if (s.rushYds) p.push(`${s.rushYds} ru`);
+      return p.join(' · ');
+    }
+    if (pos === 'RB') {
+      const p = [`${s.carries}-${s.rushYds} ru`, `${s.rec}/${s.targets}-${s.recYds} rec`];
+      const td = s.rushTds + s.recTds;
+      if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
+      if (s.retYds) p.push(`${s.retYds} ret${s.retTds ? `·${s.retTds}TD` : ''}`);
+      return p.join(' · ');
+    }
+    if (pos === 'WR' || pos === 'TE') {
+      const p = [`${s.rec}/${s.targets}-${s.recYds} rec`];
+      if (s.carries) p.push(`${s.carries}-${s.rushYds} ru`);
+      const td = s.rushTds + s.recTds;
+      if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
+      if (s.retYds) p.push(`${s.retYds} ret${s.retTds ? `·${s.retTds}TD` : ''}`);
+      return p.join(' · ');
+    }
+    // K / DEF lines are already short — fall through to the full format.
+  }
   if (pos === 'QB') {
     const p = [`${s.passYds} pass yd`, `${s.passTds} TD`];
     if (s.rushYds) p.push(`${s.rushYds} rush`);
@@ -2031,7 +2056,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   const { bigText } = useStore();
   const fs = (n: number) => bigText ? Math.round(n * 1.3 * 10) / 10 : n; // larger-text mode bumps the small card labels
   const nuked = fx === 'nuke' && bank === 0 && !subName && suppressSpent == null;
-  const stat = useMemo(() => fmtStat(player.pos, statlineAt(player, week, clock, metricId)), [player, week, clock, metricId]);
+  const stat = useMemo(() => fmtStat(player.pos, statlineAt(player, week, clock, metricId), isMobile), [player, week, clock, metricId, isMobile]);
   const edge = side === 'you' ? 'left' : 'right';
   const nameRow = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexDirection: side === 'you' ? 'row' : 'row-reverse' }}>
