@@ -2200,14 +2200,21 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
   );
   const cell = (ev: PbpEvent, mine: boolean) => {
     if (ev.side !== (mine ? 'you' : 'their')) return <div style={{ flex: 1 }} />;
+    const accent = mine ? 'var(--you)' : 'var(--opp)';
+    const coinAmt = ev.coin ? (ev.coinAmt ?? (mine ? youCoin : theirCoin)) : 0;
+    const hasScore = ev.delta > 0 || !!ev.mult || coinAmt > 0;
     return (
       <div style={{ flex: 1, minWidth: 0, textAlign: mine ? 'right' : 'left', opacity: ev.drip ? 0.62 : 1 }}>
-        <div style={{ fontSize: fs(10.5), lineHeight: 1.35, color: 'var(--text)' }}>
-          {actionText(ev.play)}
-          {ev.delta > 0 && <span className="mono" style={{ fontSize: fs(9.5), fontWeight: 700, color: mine ? 'var(--you)' : 'var(--opp)', marginLeft: 5 }}>+{ev.delta.toFixed(1)}</span>}
-          {ev.mult && <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, color: 'var(--fx-mult)', marginLeft: 4 }}>×{ev.mult.toFixed(2)}</span>}
-          {ev.coin && (ev.coinAmt ?? (mine ? youCoin : theirCoin)) > 0 && <CoinPill amt={ev.coinAmt ?? (mine ? youCoin : theirCoin)} />}
-        </div>
+        {/* Line 1: the play itself — on its own line so it fits before scoring. */}
+        <div style={{ fontSize: fs(10.5), lineHeight: 1.3, color: 'var(--text)', overflowWrap: 'anywhere' }}>{actionText(ev.play)}</div>
+        {/* Line 2: scoring — delta · multiplier · coin. */}
+        {hasScore && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 4, marginTop: 1, justifyContent: mine ? 'flex-end' : 'flex-start' }}>
+            {ev.delta > 0 && <span className="mono" style={{ fontSize: fs(9.5), fontWeight: 700, color: accent }}>+{ev.delta.toFixed(1)}</span>}
+            {ev.mult && <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, color: 'var(--fx-mult)' }}>×{ev.mult.toFixed(2)}</span>}
+            {coinAmt > 0 && <CoinPill amt={coinAmt} />}
+          </div>
+        )}
         {ev.effect && (
           <div className="mono" style={{ fontSize: fs(8), fontWeight: 700, letterSpacing: '0.08em', color: FX_COLOR[ev.effect.type] ?? 'var(--dim)', marginTop: 1 }}>{ev.effect.text}</div>
         )}
@@ -2231,7 +2238,7 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
           <div className="mono" style={{ fontSize: fs(9), color: 'var(--faint)', letterSpacing: '0.1em', textAlign: 'center', padding: '14px 0' }}>— no plays yet at this point —</div>
         )}
         {rows.map((ev, i) => (
-          <div key={i} onClick={() => setDetail(ev)} title="tap for play details" style={{ display: 'flex', alignItems: 'flex-start', gap: 4, padding: '3px 0', borderTop: i === 0 ? undefined : '1px solid color-mix(in srgb, var(--bd) 45%, transparent)', animation: i === newestIdx ? 'slidein .3s ease' : undefined, cursor: 'pointer' }}>
+          <div key={i} onClick={() => setDetail(ev)} title="tap for play details" style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '3px 0', borderTop: i === 0 ? undefined : '1px solid color-mix(in srgb, var(--bd) 45%, transparent)', animation: i === newestIdx ? 'slidein .3s ease' : undefined, cursor: 'pointer' }}>
             {cum(ev, true)}
             {cell(ev, true)}
             <div className="mono" title="game clock · real wall-clock time" style={{ width: fw(40), flex: 'none', textAlign: 'center', paddingTop: 1, lineHeight: 1.15 }}>
