@@ -80,7 +80,7 @@ function CoinPill({ amt }: { amt: number }) {
 }
 
 export function Matchup({ week, initialPhase }: { week: number; initialPhase: Phase }) {
-  const { youTeamId: YOU, navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
+  const { youTeamId: YOU, navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const buffs = applied[week]?.buffs ?? {};
   const buffsKey = JSON.stringify(buffs);
   const extraSlots = applied[week]?.extraSlots ?? {};
@@ -95,7 +95,10 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
 
   const isMobile = useIsMobile();
   const [phase, setPhase] = useState<Phase>(initialPhase);
-  const [picks, setPicks] = useState<Record<string, Pick>>({});
+  // Seed from any persisted lineup edits so the FINAL screen replays the exact
+  // lineup you fielded (Matchup remounts per week, so this initializer is fresh).
+  const [picks, setPicks] = useState<Record<string, Pick>>(() => applied[week]?.lineup ?? {});
+  useEffect(() => { setLineup(week, picks); }, [picks]); // eslint-disable-line react-hooks/exhaustive-deps -- persist lineup edits; setLineup isn't memoized
   const [selSlot, setSelSlot] = useState<string | null>(null);
   // Per-window playback: each window runs its own clock + play/pause. The clock
   // is game-elapsed seconds by default, or REAL wall-clock seconds since kickoff

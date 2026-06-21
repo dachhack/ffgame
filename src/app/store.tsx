@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ThemeName } from '../theme';
-import type { WindowId } from '../types';
+import type { WindowId, Pick } from '../types';
 import { LEAGUE, YOU_TEAM_ID } from '../data/league';
 import { powerupById } from '../data/powerups';
 import { DEMO_WEEK } from '../config';
@@ -18,6 +18,7 @@ export interface AppliedWeek {
   spy?: { slotKey: string; reveal: 'player' | 'metric' }; // a slate slot peeked pre-kickoff (player OR metric)
   byeSteal?: { slotKey: string; playerId: string }; // a bye player fielded for a flat projected score
   emp?: Partial<Record<WindowId, number>>;       // window -> clock at which opponent drips froze (10 min)
+  lineup?: Record<string, Pick>;                 // your lineup edits (deltas over the default) — so FINAL replays your actual lineup
 }
 
 export type Phase = 'setup' | 'live' | 'final';
@@ -61,6 +62,9 @@ interface Store {
   applyPlayerSwap: (week: number, slotKey: string, atClock: number, atRt: number, toPlayerId: string) => boolean;
   /** Manually point a backup slot at a starter to replace (empty target = auto). */
   setBackupTarget: (week: number, backupKey: string, targetKey: string | null) => void;
+  /** Persist your lineup edits for a week (deltas over the default) so the FINAL
+   *  screen can replay the exact lineup you fielded. */
+  setLineup: (week: number, lineup: Record<string, Pick>) => void;
   /** Arm a pre-match team buff (by powerup id) for a week (consumes one). */
   armBuff: (week: number, id: string) => boolean;
   /** Disarm an armed buff for a week (refunds the consumable). */
@@ -281,13 +285,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setApplied(nextApplied); persist({ applied: nextApplied });
   };
 
+  const setLineup = (week: number, lineup: Record<string, Pick>): void => {
+    const cur: AppliedWeek = applied[week] ?? { extraSlots: {}, swaps: {}, backups: {} };
+    const nextApplied = { ...applied, [week]: { ...cur, extraSlots: cur.extraSlots ?? {}, swaps: cur.swaps ?? {}, backups: cur.backups ?? {}, lineup } };
+    setApplied(nextApplied); persist({ applied: nextApplied });
+  };
+
   const resetDripCoin = (): void => {
     setCoins(DEMO_GRANT); setInventory({}); setApplied({});
     persist({ coins: DEMO_GRANT, inv: {}, applied: {} });
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate: setRoute, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate: setRoute, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
     [theme, bigText, fullStats, route, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
