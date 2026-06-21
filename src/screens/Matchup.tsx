@@ -113,7 +113,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const realResolve = clockMode === 'real'; // resolve cross-game effects by real time
   const [openPBP, setOpenPBP] = useState<Record<string, boolean>>({});
   const [swapTarget, setSwapTarget] = useState<{ key: string; win: WindowId } | null>(null);
-  const [backupMenu, setBackupMenu] = useState<{ key: string } | null>(null);
+  const [backupMenu, setBackupMenu] = useState<{ key: string; required?: boolean } | null>(null);
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   const [puView, setPuView] = useState<'active' | 'apply' | null>(null);
   const [shopOpen, setShopOpen] = useState(false);
@@ -329,7 +329,9 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
 
   // On lock-in, prompt to assign a backup for each UNOPPOSED player (your player
   // with no head-to-head opponent) — they're best-ball backups that can sub in.
-  // Each such spot is auto-prompted once; assigning or dismissing won't re-pop it.
+  // The prompt is a REQUIRED interrupt: it can't be dismissed, so you can't reach
+  // the live screen without making a call (pick a starter to challenge, or keep on
+  // bench). Each spot is prompted once and chains through multiples.
   const backupPrompted = useRef<Set<string>>(new Set());
   useEffect(() => { if (phase !== 'live') backupPrompted.current = new Set(); }, [phase]);
   useEffect(() => {
@@ -340,7 +342,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
       if (ZERO_BANK_METRICS.has(`${s.you.player.pos}:${s.you.metricId}`)) return false; // can't sub (scores 0)
       return !backupAssign[k] && !backupPrompted.current.has(k);
     });
-    if (next) { const k = slotKey(next.win, next.slotIndex); backupPrompted.current.add(k); setBackupMenu({ key: k }); }
+    if (next) { const k = slotKey(next.win, next.slotIndex); backupPrompted.current.add(k); setBackupMenu({ key: k, required: true }); }
   }, [phase, anyStarted, backupMenu, resolved, backupAssign]);
 
   // Everything currently in effect, with a back-out where the store supports it.
@@ -739,6 +741,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
             backupName={b.you?.player.name ?? '—'}
             backupScore={liveOf(b)}
             live={phase !== 'final'}
+            required={backupMenu.required}
             current={backupAssign[backupMenu.key]}
             starters={starters}
             onPick={(target) => { setBackupTarget(week, backupMenu.key, target); setBackupMenu(null); }}
@@ -881,21 +884,21 @@ function EarningsModal({ earnings, onReset, onClose }: { earnings: { stipend: nu
 }
 
 // ── Backup assignment menu (manual best-ball) ──
-function BackupMenu({ backupName, backupScore, live, current, starters, onPick, onClose }: {
-  backupName: string; backupScore: number; live: boolean; current?: string;
+function BackupMenu({ backupName, backupScore, live, required, current, starters, onPick, onClose }: {
+  backupName: string; backupScore: number; live: boolean; required?: boolean; current?: string;
   starters: { key: string; name: string; score: number; win: WindowId }[];
   onPick: (target: string | null) => void; onClose: () => void;
 }) {
   const scoreTag = live ? 'so far' : 'final';
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '60px 16px', overflow: 'auto' }}>
+    <div onClick={required ? undefined : onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '60px 16px', overflow: 'auto' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Backup · {backupName} <span style={{ color: 'var(--warn)' }}>{backupScore.toFixed(1)}</span> <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', fontWeight: 400 }}>{scoreTag}</span></div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>CHALLENGE A STARTER — SUBS IN AT FINAL ONLY IF IT OUTSCORES THEM</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{required ? 'UNOPPOSED — CHOOSE BEFORE KICKOFF: CHALLENGE A STARTER OR KEEP ON BENCH' : 'CHALLENGE A STARTER — SUBS IN AT FINAL ONLY IF IT OUTSCORES THEM'}</div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
+          {!required && <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>}
         </div>
         <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 360, overflow: 'auto' }}>
           <div className="mono" style={{ fontSize: 9, lineHeight: 1.55, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px', marginBottom: 4 }}>
