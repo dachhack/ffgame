@@ -501,8 +501,8 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
 
   return (
     <>
-      <header style={{ height: isMobile ? 'auto' : 60, minHeight: 52, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 6, padding: isMobile ? '7px 10px' : '0 18px', position: 'sticky', top: 0, zIndex: 40, gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flexWrap: 'wrap' }}>
+      <header style={{ height: 'auto', minHeight: isMobile ? 52 : 60, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 8, padding: isMobile ? '7px 10px' : '8px 16px', position: 'sticky', top: 0, zIndex: 40, gap: isMobile ? 12 : 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
           <Brand onClick={() => navigate({ name: 'league' })} />
           <div style={{ display: 'flex', gap: 2, padding: 3, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4 }}>
             {(['setup', 'live', 'final'] as Phase[]).map((p) => (
@@ -518,7 +518,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14, whiteSpace: 'nowrap', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 10, whiteSpace: 'nowrap', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
           <button onClick={() => setEarnOpen(true)} title="Drip Coin — tap for earning opportunities" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 9px', cursor: 'pointer' }}>
             <CoinIcon size={13} />
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{coins}</span>

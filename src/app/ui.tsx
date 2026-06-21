@@ -226,14 +226,14 @@ export function Header({ left, right }: { left: ReactNode; right?: ReactNode }) 
   return (
     <header
       style={{
-        height: isMobile ? 'auto' : 60, minHeight: 52, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 6,
-        padding: isMobile ? '7px 10px' : '0 18px',
-        position: 'sticky', top: 0, zIndex: 40, gap: 12,
+        height: 'auto', minHeight: isMobile ? 52 : 60, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 8,
+        padding: isMobile ? '7px 10px' : '8px 16px',
+        position: 'sticky', top: 0, zIndex: 40, gap: isMobile ? 12 : 10,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flexWrap: 'wrap' }}>{left}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14, whiteSpace: 'nowrap', flexWrap: 'wrap' }}>{right}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 10, minWidth: 0, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>{left}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 12, whiteSpace: 'nowrap', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>{right}</div>
     </header>
   );
 }
