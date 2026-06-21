@@ -131,26 +131,28 @@ const TEAM_ABBR = (p: Player) => p.team || 'NFL';
 
 function playText(p: Player, play: RawPlay): string {
   const t = TEAM_ABBR(p);
+  // The player is named on the score card right above the log, so play rows omit
+  // the name and show just the action (the team prefix is stripped by actionText).
   if (play.td) {
-    if (play.kind === 'rush') return `${t}: ${p.name} ${play.yards}yd rush TD`;
-    if (play.kind === 'rec') return `${t}: ${p.name} ${play.yards}yd catch TD`;
-    if (play.kind === 'return') return `${t}: ${p.name} ${play.yards}yd return TD`;
-    return `${t}: ${p.name} ${play.yards}yd TD`;
+    if (play.kind === 'rush') return `${t}: ${play.yards}yd rush TD`;
+    if (play.kind === 'rec') return `${t}: ${play.yards}yd catch TD`;
+    if (play.kind === 'return') return `${t}: ${play.yards}yd return TD`;
+    return `${t}: ${play.yards}yd TD`;
   }
-  if (play.kind === 'pass') return `${t}: ${p.name} ${play.yards}yd pass`;
-  if (play.kind === 'rush') return `${t}: ${p.name} +${play.yards} rush`;
-  if (play.kind === 'rec') return `${t}: ${p.name} +${play.yards} catch`;
-  if (play.kind === 'return') return `${t}: ${p.name} +${play.yards} return`;
-  if (play.kind === 'fg') return `${t}: ${p.name} ${play.yards}yd FG good`;
-  if (play.kind === 'fgmiss') return `${t}: ${p.name} ${play.yards}yd FG miss`;
-  if (play.kind === 'xp') return `${t}: ${p.name} XP good`;
-  if (play.kind === 'xpmiss') return `${t}: ${p.name} XP miss`;
+  if (play.kind === 'pass') return `${t}: ${play.yards}yd pass`;
+  if (play.kind === 'rush') return `${t}: +${play.yards} rush`;
+  if (play.kind === 'rec') return `${t}: +${play.yards} catch`;
+  if (play.kind === 'return') return `${t}: +${play.yards} return`;
+  if (play.kind === 'fg') return `${t}: ${play.yards}yd FG good`;
+  if (play.kind === 'fgmiss') return `${t}: ${play.yards}yd FG miss`;
+  if (play.kind === 'xp') return `${t}: XP good`;
+  if (play.kind === 'xpmiss') return `${t}: XP miss`;
   if (play.kind === 'sack') return `${t} D: sack`;
   if (play.kind === 'int') return `${t} D: interception`;
   if (play.kind === 'fumrec') return `${t} D: fumble recovered`;
   if (play.kind === 'dst_td') return `${t} D: defensive TD`;
   if (play.kind === 'safety') return `${t} D: safety`;
-  return `${t}: ${p.name} incomplete`;
+  return `${t}: incomplete`;
 }
 
 function fmtClock(s: number): string {
