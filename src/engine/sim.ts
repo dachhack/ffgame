@@ -179,6 +179,49 @@ export function hasRealPbp(playerId: string, week: number): boolean {
   return realRawPlays(playerId, week) !== null;
 }
 
+// A projected "average game" play sequence built from a player's SEASON per-game
+// stats — historical performance, with no knowledge of the actual week. The AI
+// opponent evaluates its lineup against these (never the week's real box score),
+// so it plans on expectation and the game then plays out on the real data.
+export function projectedPlays(player: Player): RawPlay[] {
+  const s = player.stats;
+  const g = Math.max(1, s.games);
+  const per = (x: number) => x / g;
+  const pass: RawPlay[] = [], rush: RawPlay[] = [], rec: RawPlay[] = [];
+  const mk = (kind: RealPlayKind, yards: number, td: boolean, catch_: boolean, target: boolean, turnover?: boolean): RawPlay =>
+    ({ clock: 0, kind, yards, td, catch: catch_, target, ...(turnover ? { turnover } : {}) });
+  // Passing: spread projected yards over ~completions; first N are TDs, then INTs.
+  const passYds = per(s.passYds), passTds = Math.round(per(s.passTds)), ints = Math.round(per(s.ints));
+  if (passYds > 0) {
+    const n = Math.max(passTds + 1, Math.round(passYds / 9));
+    for (let i = 0; i < n; i++) pass.push(mk('pass', passYds / n, i < passTds, false, false));
+    for (let i = 0; i < ints; i++) pass.push(mk('pass', 0, false, false, false, true));
+  }
+  // Rushing.
+  const carries = Math.round(per(s.carries)), rushYds = per(s.rushYds), rushTds = Math.round(per(s.rushTds));
+  if (carries > 0 || rushYds > 0) {
+    const n = Math.max(rushTds + 1, carries || 1);
+    for (let i = 0; i < n; i++) rush.push(mk('rush', rushYds / n, i < rushTds, false, false));
+  }
+  // Receiving: catches carry yards; the rest of the targets are incompletions.
+  const tgts = Math.round(per(s.targets)), recs = Math.round(per(s.receptions)), recYds = per(s.recYds), recTds = Math.round(per(s.recTds));
+  for (let i = 0; i < tgts; i++) {
+    const isCatch = i < recs;
+    rec.push(mk(isCatch ? 'rec' : 'incomplete', isCatch ? recYds / Math.max(1, recs) : 0, isCatch && i < recTds, isCatch, true));
+  }
+  // Round-robin interleave the three kinds, then spread evenly across regulation
+  // so drips build gradually over the game.
+  const out: RawPlay[] = [];
+  for (let i = 0; out.length < pass.length + rush.length + rec.length; i++) {
+    if (i < pass.length) out.push(pass[i]);
+    if (i < rush.length) out.push(rush[i]);
+    if (i < rec.length) out.push(rec[i]);
+  }
+  const N = out.length || 1;
+  out.forEach((pl, i) => { pl.clock = Math.round(150 + ((3100 - 150) * (i + 1)) / (N + 1)); });
+  return out;
+}
+
 /** Did this DST return an interception/fumble for a touchdown this week? (Pick Six) */
 export function hadDefTd(player: Player, week: number): boolean {
   return playsForPlayer(player, week).plays.some((p) => p.kind === 'dst_td');
@@ -214,8 +257,9 @@ function returnPlays(player: Player, week: number): RawPlay[] {
 /** Real plays when available, otherwise the deterministic simulation. Return
  *  plays are folded in only when the player is actually scoring Return Yards —
  *  otherwise they must not perturb another metric's mechanics. */
-function playsForPlayer(player: Player, week: number, metricId?: string): { plays: RawPlay[]; real: boolean } {
+function playsForPlayer(player: Player, week: number, metricId?: string, projection = false): { plays: RawPlay[]; real: boolean } {
   if (player.id === EMPTY_PLAYER.id) return { plays: [], real: false };
+  if (projection) return { plays: projectedPlays(player), real: false }; // historical expectation, not the week's box score
   const r = realRawPlays(player.id, week);
   const base = r ?? []; // real week w/ no entry = genuine DNP (zero); no synthesis
   const ret = metricId === 'retyd' ? returnPlays(player, week) : [];
@@ -299,13 +343,13 @@ const FG_RATE = 0.006;
 export function windowFgMult(
   players: SlotInput[],
   week: number,
-  opts: { reg?: number; carryOT?: boolean; stack?: boolean } = {},
+  opts: { reg?: number; carryOT?: boolean; stack?: boolean; projection?: boolean } = {},
 ): ((clock: number) => number) | undefined {
-  const { reg = 3300, carryOT = false, stack = false } = opts;
+  const { reg = 3300, carryOT = false, stack = false, projection = false } = opts;
   const timelines: RawPlay[][] = [];
   for (const p of players) {
     if (p.player.pos === 'QB' && p.metricId === 'fg') {
-      const plays = realRawPlays(p.player.id, week) ?? [];
+      const plays = projection ? projectedPlays(p.player) : (realRawPlays(p.player.id, week) ?? []);
       const passes = plays.filter((x) => x.kind === 'pass').sort((a, b) => a.clock - b.clock);
       if (passes.length) timelines.push(passes);
     }
@@ -373,15 +417,16 @@ function offSecs(intervals: number[][], t0: number, t1: number): number {
  * `opts.youMult` / `opts.theirMult` apply a per-clock multiplier to that
  * side's scoring (used by the QB Field General window multiplier).
  */
-export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; realResolve?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
+export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; realResolve?: boolean; projection?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
   // Pre-match team buffs active on each side (Momentum / Garbage Time /
   // Floodgates / Overtime). Only the human side carries buffs in the demo.
   const youBuffs = opts.youBuffs ?? new Set<string>();
   const theirBuffs = opts.theirBuffs ?? new Set<string>();
   const youOT = youBuffs.has('overtime') ? 300 : 0;
   const theirOT = theirBuffs.has('overtime') ? 300 : 0;
-  const yp = playsForPlayer(you.player, week, you.metricId);
-  const tp = playsForPlayer(their.player, week, their.metricId);
+  const proj = !!opts.projection;
+  const yp = playsForPlayer(you.player, week, you.metricId, proj);
+  const tp = playsForPlayer(their.player, week, their.metricId, proj);
   const yPlays = yp.plays;
   const tPlays = tp.plays;
   const real = yp.real || tp.real;
@@ -419,8 +464,9 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const theirDripKind = dripKindOf(their);
   const dripYou = youDripKind !== null;
   const dripTheir = theirDripKind !== null;
-  const youPoss = dripYou ? realPossFor(week, you.player.team) : [];
-  const theirPoss = dripTheir ? realPossFor(week, their.player.team) : [];
+  // Projection mode has no real possession data — accrue drips over full game time.
+  const youPoss = dripYou && !proj ? realPossFor(week, you.player.team) : [];
+  const theirPoss = dripTheir && !proj ? realPossFor(week, their.player.team) : [];
   const events: PbpEvent[] = [];
 
   // REAL CLOCK: drip accrues per real wall-clock minute of ACTIVE play instead

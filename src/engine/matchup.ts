@@ -48,15 +48,24 @@ export function pickMetric(p: Player, week: number): string {
 // rushing back on Rush Yards, a multi-TD receiver on the TD nuke, etc. — instead
 // of a random metric. (Field General scores 0 solo, so it's never auto-picked;
 // it's a coordination play left to the human.)
-export function bestMetric(p: Player, week: number): string {
+export function bestMetric(p: Player, week: number, projection = false): string {
   const list = (METRICS[p.pos] || METRICS.WR).filter((m) => !m.lock);
   if (list.length <= 1) return list[0]?.id ?? pickMetric(p, week);
   let best = list[0].id, bestScore = -Infinity;
   for (const m of list) {
-    const res = resolveSlot({ player: p, metricId: m.id }, { player: EMPTY_PLAYER, metricId: 'none' }, week, '', {});
+    const res = resolveSlot({ player: p, metricId: m.id }, { player: EMPTY_PLAYER, metricId: 'none' }, week, '', { projection });
     if (res.youFinal > bestScore) { bestScore = res.youFinal; best = m.id; }
   }
   return best;
+}
+
+// The AI ranks players by historical (per-game season) production — never the
+// week's actual box score. K/DST have no projectable stat line, so they get a
+// nominal baseline so they still get fielded at a sensible priority.
+function projForRank(p: Player, week: number): number {
+  if (p.pos === 'K') return 8;
+  if (p.pos === 'DEF') return 7;
+  return projectedPoints(p, week);
 }
 
 export function slotKey(win: WindowId, idx: number): string {
@@ -88,13 +97,15 @@ export function aiBuffs(teamId: string, week: number): string[] {
 // specific slot. An optional FG window multiplier applies when evaluating a
 // Field General regime.
 function edgeVsThreats(aiPlayer: Player, metricId: string, threats: SlotInput[], week: number, aiBuffSet: Set<string>, mult?: (c: number) => number): number {
-  // The AI is the "their" side; the threat is "you".
+  // The AI is the "their" side; the threat is "you". Always evaluated in
+  // projection mode (historical expectation), never the week's real box score.
+  const opts = { theirBuffs: aiBuffSet, theirMult: mult, projection: true } as const;
   if (!threats.length) {
-    return resolveSlot({ player: EMPTY_PLAYER, metricId: 'none' }, { player: aiPlayer, metricId }, week, '', { theirBuffs: aiBuffSet, theirMult: mult }).theirFinal;
+    return resolveSlot({ player: EMPTY_PLAYER, metricId: 'none' }, { player: aiPlayer, metricId }, week, '', opts).theirFinal;
   }
   let sum = 0;
   for (const t of threats) {
-    const r = resolveSlot(t, { player: aiPlayer, metricId }, week, '', { theirBuffs: aiBuffSet, theirMult: mult });
+    const r = resolveSlot(t, { player: aiPlayer, metricId }, week, '', opts);
     sum += r.theirFinal - r.youFinal;
   }
   return sum / threats.length;
@@ -126,20 +137,20 @@ function bestVsThreats(aiPlayer: Player, threats: SlotInput[], week: number, aiB
 export function aiLineup(aiTeamId: string, humanTeamId: string, week: number, extra?: ExtraSlots): Record<string, Pick> {
   const aiPools = windowPools(aiTeamId, week);
   const humanPools = windowPools(humanTeamId, week);
-  const real = REAL_WEEKS.has(week);
-  const pts = real ? realPointsFor(week) : {};
   const healthy = (p: Player) => { const s = injuryFor(week, p.id); return s !== 'O' && s !== 'IR'; };
-  const rank = (ps: Player[]) => real ? ps.filter(healthy).sort((a, b) => (pts[b.id] || 0) - (pts[a.id] || 0)) : ps.filter(healthy);
+  // Rank by historical (projected) production — the AI never sees the week's
+  // actual results when setting its lineup.
+  const rank = (ps: Player[]) => ps.filter(healthy).sort((a, b) => projForRank(b, week) - projForRank(a, week));
   const aiBuffSet = new Set(aiBuffs(aiTeamId, week));
-  const reg = real ? 3600 : 3300;
+  const reg = 3300; // projection runs regulation only (no actual-week overtime peek)
   const picks: Record<string, Pick> = {};
   for (const w of WINDOWS) {
     const n = slotsFor(w.id, extra);
     const aiPlayers = rank(aiPools[w.id]).slice(0, n);
     if (!aiPlayers.length) continue;
-    // Threats: the opponent's likely fielded set this window (best n eligible),
-    // each on its own best self-metric.
-    const threats: SlotInput[] = rank(humanPools[w.id]).slice(0, n).map((p) => ({ player: p, metricId: bestMetric(p, week) }));
+    // Threats: the opponent's likely fielded set this window (best n eligible by
+    // projection), each on its own best projected self-metric.
+    const threats: SlotInput[] = rank(humanPools[w.id]).slice(0, n).map((p) => ({ player: p, metricId: bestMetric(p, week, true) }));
 
     // Plan A — no Field General: each AI player on its best counter-metric.
     const planA = aiPlayers.map((p) => bestVsThreats(p, threats, week, aiBuffSet));
@@ -150,7 +161,7 @@ export function aiLineup(aiTeamId: string, humanTeamId: string, week: number, ex
     // every other slot. Taken only if its total net edge beats Plan A.
     const qbIdx = aiPlayers.findIndex((p) => p.pos === 'QB');
     if (qbIdx >= 0 && aiPlayers.length >= 2) {
-      const fgMult = windowFgMult([{ player: aiPlayers[qbIdx], metricId: 'fg' }], week, { reg, carryOT: aiBuffSet.has('overtime'), stack: aiBuffSet.has('fg-stack') });
+      const fgMult = windowFgMult([{ player: aiPlayers[qbIdx], metricId: 'fg' }], week, { reg, stack: aiBuffSet.has('fg-stack'), projection: true });
       if (fgMult) {
         const planB = aiPlayers.map((p, i) => i === qbIdx
           ? { metricId: 'fg', edge: edgeVsThreats(p, 'fg', threats, week, aiBuffSet) } // scores 0; pays off via the boost
