@@ -327,11 +327,13 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const liveWins = WINDOWS.filter((w) => winLife[w.id] === 'live');
   const preKickPhase = phase === 'live' && !anyStarted; // locked in, no game kicked yet
 
-  // On lock-in, prompt to assign a backup for each UNOPPOSED player (your player
-  // with no head-to-head opponent) — they're best-ball backups that can sub in.
-  // The prompt is a REQUIRED interrupt: it can't be dismissed, so you can't reach
-  // the live screen without making a call (pick a starter to challenge, or keep on
-  // bench). Each spot is prompted once and chains through multiples.
+  // On lock-in, walk through EVERY UNOPPOSED player (your player with no
+  // head-to-head opponent) — they're best-ball backups that can sub in. The
+  // prompt is a REQUIRED interrupt: it can't be dismissed, so you can't reach
+  // the live screen without making a call (challenge a starter, or take the 0 /
+  // bank half). Every sub-capable unopposed spot is prompted once per lock-in —
+  // even ones with a saved assignment (the card pre-selects it to confirm or
+  // change) — so you never have to hunt for the spot's reassign button.
   const backupPrompted = useRef<Set<string>>(new Set());
   useEffect(() => { if (phase !== 'live') backupPrompted.current = new Set(); }, [phase]);
   useEffect(() => {
@@ -340,7 +342,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
       if (!s.backup || !s.you) return false;
       const k = slotKey(s.win, s.slotIndex);
       if (ZERO_BANK_METRICS.has(`${s.you.player.pos}:${s.you.metricId}`)) return false; // can't sub (scores 0)
-      return !backupAssign[k] && !backupPrompted.current.has(k);
+      return !backupPrompted.current.has(k);
     });
     if (next) { const k = slotKey(next.win, next.slotIndex); backupPrompted.current.add(k); setBackupMenu({ key: k, required: true }); }
   }, [phase, anyStarted, backupMenu, resolved, backupAssign]);
