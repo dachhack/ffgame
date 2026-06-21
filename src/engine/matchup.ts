@@ -12,7 +12,7 @@ import { hashStr } from '../data/players';
 export interface SlotSwap { atClock: number; atRt?: number; toMetricId?: string; toPlayerId?: string; }
 export type SlotSwaps = Record<string, SlotSwap>; // slotKey -> swap
 import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, defEarnScore, hadDefTd, hadLongPassTd, turnoversCommitted, clockAtRealTime, EMPTY_PLAYER, type SlotInput } from './sim';
-import { REAL_WEEKS, realPointsFor } from '../data/realPbp';
+import { REAL_WEEKS } from '../data/realPbp';
 import { windowForTeam } from '../data/nflSlate';
 import { injuryFor } from '../data/injuries';
 
@@ -196,22 +196,19 @@ export function totalSlotsWith(extra?: ExtraSlots): number {
  */
 export function defaultLineup(teamId: string, week: number, extra?: ExtraSlots): Record<string, Pick> {
   const pools = windowPools(teamId, week);
-  const real = REAL_WEEKS.has(week);
-  const pts = real ? realPointsFor(week) : {};
   // Never auto-field a player ruled Out or on IR (the AI opponent uses this too,
   // so it never starts an unavailable player). Questionable/Doubtful are fine.
   const healthy = (p: Player) => { const s = injuryFor(week, p.id); return s !== 'O' && s !== 'IR'; };
   const picks: Record<string, Pick> = {};
   for (const w of WINDOWS) {
-    // Field every slot we can: rank healthy eligible players best-first, but don't
-    // drop players who lack a box score — fielding a 0-point player still contests
-    // the slot, which denies the opponent a free unopposed (best-ball) spot.
-    const ranked = real
-      ? pools[w.id].filter(healthy).sort((a, b) => (pts[b.id] || 0) - (pts[a.id] || 0))
-      : pools[w.id].filter(healthy); // already projection-sorted
+    // Projection-based, like the AI: rank healthy eligible players by historical
+    // per-game production and give each its best projected metric — no peeking at
+    // the week's actual box score. Every slot we can field is filled (fielding a
+    // low projection still contests the slot vs. conceding a free unopposed spot).
+    const ranked = pools[w.id].filter(healthy).sort((a, b) => projForRank(b, week) - projForRank(a, week));
     for (let i = 0; i < slotsFor(w.id, extra); i++) {
       const p = ranked[i];
-      if (p) picks[slotKey(w.id, i)] = { playerId: p.id, metricId: bestMetric(p, week) };
+      if (p) picks[slotKey(w.id, i)] = { playerId: p.id, metricId: bestMetric(p, week, true) };
     }
   }
   return picks;
