@@ -742,7 +742,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     if (!effect && oppFam === 'streak' && pts > 0) {
       effect = { type: 'cold', text: 'STREAK COLD' };
     }
-    if (!effect && isFG && play.kind === 'pass') effect = { type: 'mult', text: `FIELD GENERAL ×${sideMult.toFixed(2)}` };
+    if (!effect && isFG && play.kind === 'pass') effect = { type: 'mult', text: 'FIELD GENERAL' }; // ×mult already shown inline
     if (play.turnover) effect = { type: 'nuke', text: '✕ TURNOVER → opp' }; // giveaway: coin to the opponent
 
     events.push({

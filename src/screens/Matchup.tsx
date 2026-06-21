@@ -2194,7 +2194,7 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
 
   // Running cumulative for a side at the far edge (outside the action column).
   const cum = (ev: PbpEvent, mine: boolean) => (
-    <span className="mono" style={{ width: fw(34), flex: 'none', textAlign: mine ? 'left' : 'right', fontSize: fs(9), fontWeight: 700, color: ev.side === (mine ? 'you' : 'their') ? (mine ? 'var(--you)' : 'var(--opp)') : 'var(--faint)', opacity: 0.85 }}>
+    <span className="mono" style={{ width: fw(28), flex: 'none', textAlign: mine ? 'left' : 'right', fontSize: fs(9), fontWeight: 700, color: ev.side === (mine ? 'you' : 'their') ? (mine ? 'var(--you)' : 'var(--opp)') : 'var(--faint)', opacity: 0.85 }}>
       {(mine ? ev.youBank : ev.theirBank).toFixed(1)}
     </span>
   );
@@ -2226,15 +2226,15 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
         {toggle(minutes, minutes ? 'MINUTES' : 'PLAYS', () => setMinutes((m) => !m))}
         {toggle(top, top ? 'NEWest ↑' : 'NEWest ↓', () => setTop((t) => !t))}
       </div>
-      <div ref={scroller} onScroll={onScroll} style={{ maxHeight: fw(210), overflow: 'auto', paddingRight: 10, scrollbarGutter: 'stable', scrollbarWidth: 'thin' }}>
+      <div ref={scroller} onScroll={onScroll} style={{ maxHeight: fw(210), overflow: 'auto', paddingRight: 6, scrollbarGutter: 'stable', scrollbarWidth: 'thin' }}>
         {rows.length === 0 && (
           <div className="mono" style={{ fontSize: fs(9), color: 'var(--faint)', letterSpacing: '0.1em', textAlign: 'center', padding: '14px 0' }}>— no plays yet at this point —</div>
         )}
         {rows.map((ev, i) => (
-          <div key={i} onClick={() => setDetail(ev)} title="tap for play details" style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '3px 0', borderTop: i === 0 ? undefined : '1px solid color-mix(in srgb, var(--bd) 45%, transparent)', animation: i === newestIdx ? 'slidein .3s ease' : undefined, cursor: 'pointer' }}>
+          <div key={i} onClick={() => setDetail(ev)} title="tap for play details" style={{ display: 'flex', alignItems: 'flex-start', gap: 4, padding: '3px 0', borderTop: i === 0 ? undefined : '1px solid color-mix(in srgb, var(--bd) 45%, transparent)', animation: i === newestIdx ? 'slidein .3s ease' : undefined, cursor: 'pointer' }}>
             {cum(ev, true)}
             {cell(ev, true)}
-            <div className="mono" title="game clock · real wall-clock time" style={{ width: fw(50), flex: 'none', textAlign: 'center', paddingTop: 1, lineHeight: 1.15 }}>
+            <div className="mono" title="game clock · real wall-clock time" style={{ width: fw(40), flex: 'none', textAlign: 'center', paddingTop: 1, lineHeight: 1.15 }}>
               <div style={{ fontSize: fs(8.5), color: 'var(--faint)' }}>{fmtClock(ev.clock)}</div>
               {realOf && <div style={{ fontSize: fs(8), fontWeight: 700, color: 'var(--dimstrong)' }}>{realOf(ev)}</div>}
             </div>
