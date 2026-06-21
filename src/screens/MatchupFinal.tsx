@@ -22,7 +22,7 @@ export function MatchupFinal({ week }: { week: number }) {
   }, [week]);
 
   const youPicks = useMemo(() => defaultLineup(YOU, week), [week, ready]);
-  const oppPicks = useMemo(() => aiLineup(oppId, week, youPicks), [oppId, week, youPicks, ready]);
+  const oppPicks = useMemo(() => aiLineup(oppId, YOU, week), [oppId, week, ready]);
   const m = useMemo(() => buildMatchup(YOU, oppId, week, youPicks, oppPicks), [oppId, week, youPicks, oppPicks, ready]);
 
   const won = m.youFinal >= m.theirFinal;

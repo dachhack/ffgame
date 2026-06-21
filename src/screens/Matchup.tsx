@@ -159,8 +159,9 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const youPools = useMemo(() => windowPools(YOU, week), [week]);
   const oppPools = useMemo(() => windowPools(oppId, week), [week, oppId]);
   const youDefault = useMemo(() => defaultLineup(YOU, week, extraSlots), [week, ready, extraKey]);
-  // The AI scouts the human's projected lineup and defends each window accordingly.
-  const oppPicks = useMemo(() => aiLineup(oppId, week, youDefault, extraSlots), [oppId, week, youDefault, ready, extraKey]);
+  // The AI scouts which players you CAN field each window (the pool, not your spot
+  // assignments — those stay sealed) and defends each window accordingly.
+  const oppPicks = useMemo(() => aiLineup(oppId, YOU, week, extraSlots), [oppId, week, ready, extraKey]);
   const oppArmed = useMemo(() => aiBuffs(oppId, week), [oppId, week]);
   const byeYou = useMemo(() => byePlayers(YOU, week), [week]);
   const byeTheir = useMemo(() => byePlayers(oppId, week), [week, oppId]);

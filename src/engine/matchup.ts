@@ -81,49 +81,86 @@ export function aiBuffs(teamId: string, week: number): string[] {
   return out;
 }
 
-// Counter-aware metric pick for an AI player facing a specific (projected)
-// opponent in its slot: choose the metric that maximizes the AI's NET edge —
-// its own score minus the opponent's. This self-maximizes AND favors denial
-// metrics (erase/reset/nuke/suppress) when the opponent is a drip/big scorer.
-function counterMetric(aiPlayer: Player, week: number, opp: Pick | undefined, aiBuffSet: Set<string>): string {
-  const list = (METRICS[aiPlayer.pos] || METRICS.WR).filter((m) => !m.lock);
-  if (list.length <= 1) return list[0]?.id ?? pickMetric(aiPlayer, week);
-  const oppPlayer = opp ? getPlayer(opp.playerId) : undefined;
-  const oppIn: SlotInput = oppPlayer ? { player: oppPlayer, metricId: opp!.metricId ?? pickMetric(oppPlayer, week) } : { player: EMPTY_PLAYER, metricId: 'none' };
+// Average net edge (AI score − opponent score) for an AI player+metric against a
+// window's likely opponents. The AI knows only the POOL — which players the
+// opponent CAN field this window — never which player is in which spot (sealed
+// until the window goes live), so it defends against the threat SET, not a
+// specific slot. An optional FG window multiplier applies when evaluating a
+// Field General regime.
+function edgeVsThreats(aiPlayer: Player, metricId: string, threats: SlotInput[], week: number, aiBuffSet: Set<string>, mult?: (c: number) => number): number {
+  // The AI is the "their" side; the threat is "you".
+  if (!threats.length) {
+    return resolveSlot({ player: EMPTY_PLAYER, metricId: 'none' }, { player: aiPlayer, metricId }, week, '', { theirBuffs: aiBuffSet, theirMult: mult }).theirFinal;
+  }
+  let sum = 0;
+  for (const t of threats) {
+    const r = resolveSlot(t, { player: aiPlayer, metricId }, week, '', { theirBuffs: aiBuffSet, theirMult: mult });
+    sum += r.theirFinal - r.youFinal;
+  }
+  return sum / threats.length;
+}
+
+// Best metric (and its edge) for an AI player vs the window's threats, optionally
+// boosted by an FG multiplier. Field General is excluded here — it's decided at
+// the window level (it scores the QB nothing and only pays off via teammates).
+function bestVsThreats(aiPlayer: Player, threats: SlotInput[], week: number, aiBuffSet: Set<string>, mult?: (c: number) => number): { metricId: string; edge: number } {
+  const list = (METRICS[aiPlayer.pos] || METRICS.WR).filter((m) => !m.lock && m.id !== 'fg');
+  if (!list.length) return { metricId: pickMetric(aiPlayer, week), edge: 0 };
   let best = list[0].id, bestEdge = -Infinity;
   for (const m of list) {
-    // The AI is the "their" side here (opponent is "you").
-    const res = resolveSlot(oppIn, { player: aiPlayer, metricId: m.id }, week, '', { theirBuffs: aiBuffSet });
-    const edge = res.theirFinal - res.youFinal;
-    if (edge > bestEdge) { bestEdge = edge; best = m.id; }
+    const e = edgeVsThreats(aiPlayer, m.id, threats, week, aiBuffSet, mult);
+    if (e > bestEdge) { bestEdge = e; best = m.id; }
   }
-  return best;
+  return { metricId: best, edge: bestEdge };
 }
 
 /**
- * AI opponent lineup. Scouts the human's projected lineup window-by-window and
- * defends each slot: fields its best eligible player in every slot it can fill
- * (never leaving a contestable slot unopposed), and picks each player's metric to
- * best counter the human's projected player in that slot — using the AI's own
- * armed power-ups in the evaluation.
+ * AI opponent lineup. Per window it (1) fields its best eligible players in every
+ * slot it can fill — never conceding a contestable slot unopposed — and (2) picks
+ * metrics to maximize its NET edge against the window's THREAT SET: the opponent's
+ * top eligible players. It only knows the pool (who CAN be fielded each window),
+ * not which spot each is in. It runs a QB as Field General only when boosting its
+ * window-mates beats the QB scoring for itself; otherwise it answers drips/big
+ * scorers with denial metrics. Its own armed power-ups are used in the eval.
  */
-export function aiLineup(aiTeamId: string, week: number, humanLineup: Record<string, Pick>, extra?: ExtraSlots): Record<string, Pick> {
-  const pools = windowPools(aiTeamId, week);
+export function aiLineup(aiTeamId: string, humanTeamId: string, week: number, extra?: ExtraSlots): Record<string, Pick> {
+  const aiPools = windowPools(aiTeamId, week);
+  const humanPools = windowPools(humanTeamId, week);
   const real = REAL_WEEKS.has(week);
   const pts = real ? realPointsFor(week) : {};
   const healthy = (p: Player) => { const s = injuryFor(week, p.id); return s !== 'O' && s !== 'IR'; };
+  const rank = (ps: Player[]) => real ? ps.filter(healthy).sort((a, b) => (pts[b.id] || 0) - (pts[a.id] || 0)) : ps.filter(healthy);
   const aiBuffSet = new Set(aiBuffs(aiTeamId, week));
+  const reg = real ? 3600 : 3300;
   const picks: Record<string, Pick> = {};
   for (const w of WINDOWS) {
-    const ranked = real
-      ? pools[w.id].filter(healthy).sort((a, b) => (pts[b.id] || 0) - (pts[a.id] || 0))
-      : pools[w.id].filter(healthy);
-    for (let i = 0; i < slotsFor(w.id, extra); i++) {
-      const p = ranked[i];
-      if (!p) continue; // genuinely no eligible player left for this slot
-      const key = slotKey(w.id, i);
-      picks[key] = { playerId: p.id, metricId: counterMetric(p, week, humanLineup[key], aiBuffSet) };
+    const n = slotsFor(w.id, extra);
+    const aiPlayers = rank(aiPools[w.id]).slice(0, n);
+    if (!aiPlayers.length) continue;
+    // Threats: the opponent's likely fielded set this window (best n eligible),
+    // each on its own best self-metric.
+    const threats: SlotInput[] = rank(humanPools[w.id]).slice(0, n).map((p) => ({ player: p, metricId: bestMetric(p, week) }));
+
+    // Plan A — no Field General: each AI player on its best counter-metric.
+    const planA = aiPlayers.map((p) => bestVsThreats(p, threats, week, aiBuffSet));
+    let metrics = planA.map((x) => x.metricId);
+    let bestTotal = planA.reduce((s, x) => s + x.edge, 0);
+
+    // Plan B — Field General: the lead QB runs FG and the window multiplier boosts
+    // every other slot. Taken only if its total net edge beats Plan A.
+    const qbIdx = aiPlayers.findIndex((p) => p.pos === 'QB');
+    if (qbIdx >= 0 && aiPlayers.length >= 2) {
+      const fgMult = windowFgMult([{ player: aiPlayers[qbIdx], metricId: 'fg' }], week, { reg, carryOT: aiBuffSet.has('overtime'), stack: aiBuffSet.has('fg-stack') });
+      if (fgMult) {
+        const planB = aiPlayers.map((p, i) => i === qbIdx
+          ? { metricId: 'fg', edge: edgeVsThreats(p, 'fg', threats, week, aiBuffSet) } // scores 0; pays off via the boost
+          : bestVsThreats(p, threats, week, aiBuffSet, fgMult));                        // boosted by the FG multiplier
+        const totalB = planB.reduce((s, x) => s + x.edge, 0);
+        if (totalB > bestTotal) { metrics = planB.map((x) => x.metricId); bestTotal = totalB; }
+      }
     }
+
+    aiPlayers.forEach((p, i) => { picks[slotKey(w.id, i)] = { playerId: p.id, metricId: metrics[i] }; });
   }
   return picks;
 }
