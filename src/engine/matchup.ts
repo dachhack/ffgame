@@ -120,6 +120,11 @@ export interface ResolvedSlot {
   // Powerup-driven scoring changes on this slot, per side — shown in the spot at FINAL.
   youBuffFx?: BuffFx[];
   theirBuffFx?: BuffFx[];
+  // The live Field General multiplier this side's window applies (product of every
+  // same-side FG QB's ramp), as a function of game clock — undefined when no FG QB
+  // is fielded in the window. Lets a boosted slot show its current ×N.
+  youFgMult?: (clock: number) => number;
+  theirFgMult?: (clock: number) => number;
 }
 
 export interface ResolvedWindow {
@@ -290,7 +295,7 @@ export function buildMatchup(
         if (bp) { displayYou = { player: bp, metricId: 'bye' }; yF = Math.round(projectedPoints(bp, week) * 10) / 10; byeStolen = true; }
       }
 
-      slots.push({ win: w.id, slotIndex: i, you: displayYou, their, events, youFinal: yF, theirFinal: tF, gameLabel, real, suppressSpentYou, suppressSpentTheir, youNegated: youNegated || undefined, theirNegated: theirNegated || undefined, byeStolen: byeStolen || undefined, youBuffFx, theirBuffFx });
+      slots.push({ win: w.id, slotIndex: i, you: displayYou, their, events, youFinal: yF, theirFinal: tF, gameLabel, real, suppressSpentYou, suppressSpentTheir, youNegated: youNegated || undefined, theirNegated: theirNegated || undefined, byeStolen: byeStolen || undefined, youBuffFx, theirBuffFx, youFgMult: youMult, theirFgMult: theirMult });
     }
     windows.push({ window: w, slots });
   }

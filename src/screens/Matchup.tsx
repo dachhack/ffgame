@@ -1822,12 +1822,14 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
     const bEvents = slot.events.filter((e) => e.clock <= bclock);
     const chip = canSub ? (mineBackup ? 'BACKUP' : 'OPP BACKUP') : (mineBackup ? 'UNOPPOSED' : 'OPP UNOPP');
     const showSuppress = isSuppress && (done || phase === 'final') ? (suppressSpent ?? undefined) : undefined;
+    const bFg = (mineBackup ? slot.youFgMult : slot.theirFgMult) && !(be.player.pos === 'QB' && be.metricId === 'fg')
+      ? (mineBackup ? slot.youFgMult : slot.theirFgMult)!(bclock) : undefined;
     const card = (
       <ScoreCard
         side={mineBackup ? 'you' : 'their'} player={be.player} week={week} clock={bclock} metricId={be.metricId}
         metricName={bp?.name ?? ''} tag={bp?.tag ?? ''} bank={liveBackup} onClick={onToggle}
         chip={chip} suppressSpent={showSuppress} coin={slotCoin(slot, mineBackup ? 'you' : 'their', week, turnoverCoin, bclock)}
-        negated={canSub && isFinal && !subbedIn && !halfCredit ? true : undefined}
+        negated={canSub && isFinal && !subbedIn && !halfCredit ? true : undefined} fgMult={bFg}
       />
     );
     const blankBox = (
@@ -1930,8 +1932,12 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
   const incomingKey = Object.keys(backups).find((k) => backups[k] === ownKey);
   const incomingName = incomingKey ? slotName[incomingKey] : undefined;
 
-  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} />;
-  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} />;
+  // Live Field General boost on each side (skip the FG QB itself — it's the source).
+  const isFgSrc = (p: { player: Player; metricId: string }) => p.player.pos === 'QB' && p.metricId === 'fg';
+  const youFg = slot.youFgMult && !isFgSrc(slot.you) ? slot.youFgMult(youClock) : undefined;
+  const theirFg = slot.theirFgMult && !isFgSrc(slot.their) ? slot.theirFgMult(theirClock) : undefined;
+  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} />;
+  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} />;
   const centerKids = (
     <>
       {slot.events.length > 0 && (
@@ -2047,8 +2053,8 @@ function fmtStat(pos: Pos, s: StatLine, compact = false): string {
   return '—';
 }
 
-function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, suppressSpent, negated, halvedFrom, chip, coin }: {
-  side: 'you' | 'their'; player: Player; week: number; clock: number; metricId?: string; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string; coin?: number;
+function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, suppressSpent, negated, halvedFrom, chip, coin, fgMult }: {
+  side: 'you' | 'their'; player: Player; week: number; clock: number; metricId?: string; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string; coin?: number; fgMult?: number;
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
   const isMobile = useIsMobile();
@@ -2114,6 +2120,13 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
       <CoinIcon size={10} /> {coin < 0 ? '' : '+'}{coin}
     </div>
   );
+  // A Field General QB in this slot's window multiplies this player's scoring —
+  // surface the live ×N so the boost is visible (it otherwise only shows on the
+  // hidden per-minute drip ticks). Suppressed on the FG QB itself (its metric
+  // chip already says MULTIPLIER) and when the multiplier is still ~1.
+  const fgEl = fgMult != null && fgMult > 1.005 ? (
+    <span className="mono" title={`A Field General QB in this window is multiplying this slot's scoring ×${fgMult.toFixed(2)} right now`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-mult)', border: '1px solid color-mix(in srgb, var(--fx-mult) 55%, transparent)', background: 'color-mix(in srgb, var(--fx-mult) 14%, transparent)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>⚡ FIELD GEN ×{fgMult.toFixed(2)}</span>
+  ) : null;
 
   if (isMobile) {
     // Name on top, headshot on the outer side, metric + coin/score stacked
@@ -2128,6 +2141,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
           <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={46} />
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2, alignItems: side === 'you' ? 'flex-end' : 'flex-start' }}>
             <div style={{ minHeight: 18, display: 'flex', alignItems: 'center', width: '100%', justifyContent: side === 'you' ? 'flex-end' : 'flex-start' }}>{metricChip}</div>
+            {fgEl}
             <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'baseline', gap: 6 }}>
               {coinEl}
               {bigNum}
@@ -2149,6 +2163,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
       </div>
       <div style={{ flex: 'none', maxWidth: '48%', alignSelf: 'center', display: 'flex', flexDirection: 'column', alignItems: side === 'you' ? 'flex-end' : 'flex-start', gap: 5 }}>
         {metricChip}
+        {fgEl}
         {bigNum}
         {coinEl}
       </div>
