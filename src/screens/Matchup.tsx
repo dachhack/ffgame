@@ -1970,22 +1970,24 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
   const isMobile = useIsMobile();
+  const { bigText } = useStore();
+  const fs = (n: number) => bigText ? Math.round(n * 1.3 * 10) / 10 : n; // larger-text mode bumps the small card labels
   const nuked = fx === 'nuke' && bank === 0 && !subName && suppressSpent == null;
   const stat = useMemo(() => fmtStat(player.pos, statlineAt(player, week, clock, metricId)), [player, week, clock, metricId]);
   const edge = side === 'you' ? 'left' : 'right';
   const nameRow = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexDirection: side === 'you' ? 'row' : 'row-reverse' }}>
       <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>
-      {chip && <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: accent, border: `1px solid ${accent}`, borderRadius: 3, padding: '1px 4px', flex: 'none' }}>{chip}</span>}
+      {chip && <span className="mono" style={{ fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.1em', color: accent, border: `1px solid ${accent}`, borderRadius: 3, padding: '1px 4px', flex: 'none' }}>{chip}</span>}
       <InjuryBadge week={week} slug={player.id} />
-      {!isMobile && <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{player.team}</span>}
+      {!isMobile && <span className="mono" style={{ fontSize: fs(8), color: 'var(--faint)' }}>{player.team}</span>}
     </div>
   );
   // The player's REAL NFL game this week + its real game clock (quarter +
   // countdown, HALF / FINAL) — shown under the name on each card.
   const g = nflGameForTeam(week, player.team);
   const gameLine = g ? (
-    <div className="mono" title="real NFL game · real game clock" style={{ display: 'flex', alignItems: 'center', gap: 5, flexDirection: side === 'you' ? 'row' : 'row-reverse', fontSize: 8.5, letterSpacing: '0.02em', marginTop: 2 }}>
+    <div className="mono" title="real NFL game · real game clock" style={{ display: 'flex', alignItems: 'center', gap: 5, flexDirection: side === 'you' ? 'row' : 'row-reverse', fontSize: fs(8.5), letterSpacing: '0.02em', marginTop: 2 }}>
       <Img src={teamLogo(g.away)} size={12} radius={2} fallback={<span />} />
       <span style={{ fontWeight: 700, color: 'var(--dimstrong)' }}>{g.away}@{g.home}</span>
       <Img src={teamLogo(g.home)} size={12} radius={2} fallback={<span />} />
@@ -1998,15 +2000,15 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   const metricChip = (
     <div style={{ display: 'inline-flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? (side === 'you' ? 'flex-end' : 'flex-start') : 'baseline', maxWidth: '100%', gap: isMobile ? 0 : 5, marginTop: isMobile ? 2 : 0, padding: isMobile ? '2px 7px' : '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)` }}>
       <span className="grotesk" style={{ fontSize: isMobile ? 10.5 : 13, fontWeight: 700, color: accent, letterSpacing: '0.01em', lineHeight: 1.25, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{metricName}</span>
-      <span className="mono" style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.1em', color: accent, opacity: 0.85, whiteSpace: 'nowrap', lineHeight: 1.25 }}>{tag}</span>
+      <span className="mono" style={{ fontSize: fs(7), fontWeight: 700, letterSpacing: '0.1em', color: accent, opacity: 0.85, whiteSpace: 'nowrap', lineHeight: 1.25 }}>{tag}</span>
     </div>
   );
   // Statline: single line, justified to the card's outer edge, ellipsis if long.
   const statLine = suppressSpent != null
-    ? <div className="mono" style={{ fontSize: 9, color: 'var(--fx-stop)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>✕ {suppressSpent.toFixed(1)} spent on SUPPRESS</div>
+    ? <div className="mono" style={{ fontSize: fs(9), color: 'var(--fx-stop)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>✕ {suppressSpent.toFixed(1)} spent on SUPPRESS</div>
     : subName
-      ? <div className="mono" style={{ fontSize: 9.5, color: accent, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>⤴ {subName} scoring</div>
-      : <div className="mono" style={{ fontSize: 9.5, color: 'var(--dimstrong)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>{stat}</div>;
+      ? <div className="mono" style={{ fontSize: fs(9.5), color: accent, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>⤴ {subName} scoring</div>
+      : <div className="mono" style={{ fontSize: fs(9.5), color: 'var(--dimstrong)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>{stat}</div>;
   const bigNum = suppressSpent != null ? (
     <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--dim)', lineHeight: 1, textDecoration: 'line-through' }}>{suppressSpent.toFixed(1)}</div>
   ) : halvedFrom != null ? (
@@ -2023,7 +2025,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
     <div className="grotesk" style={{ fontSize: isMobile ? 24 : 26, fontWeight: 700, color: negated ? 'var(--fx-nuke)' : accent, lineHeight: 1, letterSpacing: '-0.02em', textDecoration: negated ? 'line-through' : undefined, animation: nuked ? 'shake .5s' : undefined }}>{bank.toFixed(1)}</div>
   );
   const coinEl = coin == null ? null : (
-    <div className="mono" title="drip coin earned so far this window" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, color: coin < 0 ? 'var(--opp)' : '#F2C14E' }}>
+    <div className="mono" title="drip coin earned so far this window" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(9), fontWeight: 700, color: coin < 0 ? 'var(--opp)' : '#F2C14E' }}>
       <CoinIcon size={10} /> {coin < 0 ? '' : '+'}{coin}
     </div>
   );
@@ -2081,6 +2083,10 @@ function actionText(play: string): string {
 // right, the clock down the middle. Chronological (newest at the bottom) so it
 // reads like a live ticker, auto-scrolling to keep the latest play in view.
 function TwoColLog({ events, youName, theirName, gameLabel, youCoin = 0, theirCoin = 0, realOf, realOrder }: { events: PbpEvent[]; youName: string; theirName: string; gameLabel: string; youCoin?: number; theirCoin?: number; realOf?: (ev: PbpEvent) => string; realOrder?: boolean }) {
+  // Larger-text mode enlarges this fine-print log (the smallest text in the app).
+  const { bigText } = useStore();
+  const fs = (n: number) => bigText ? Math.round(n * 1.35 * 10) / 10 : n; // font size
+  const fw = (n: number) => bigText ? Math.round(n * 1.35) : n;            // fixed widths/heights
   const [minutes, setMinutes] = useState(false);
   const [top, setTop] = useState(false); // newest entries on top vs bottom
   const scroller = useRef<HTMLDivElement>(null);
@@ -2101,7 +2107,7 @@ function TwoColLog({ events, youName, theirName, gameLabel, youCoin = 0, theirCo
 
   // Running cumulative for a side at the far edge (outside the action column).
   const cum = (ev: PbpEvent, mine: boolean) => (
-    <span className="mono" style={{ width: 34, flex: 'none', textAlign: mine ? 'left' : 'right', fontSize: 9, fontWeight: 700, color: ev.side === (mine ? 'you' : 'their') ? (mine ? 'var(--you)' : 'var(--opp)') : 'var(--faint)', opacity: 0.85 }}>
+    <span className="mono" style={{ width: fw(34), flex: 'none', textAlign: mine ? 'left' : 'right', fontSize: fs(9), fontWeight: 700, color: ev.side === (mine ? 'you' : 'their') ? (mine ? 'var(--you)' : 'var(--opp)') : 'var(--faint)', opacity: 0.85 }}>
       {(mine ? ev.youBank : ev.theirBank).toFixed(1)}
     </span>
   );
@@ -2109,52 +2115,52 @@ function TwoColLog({ events, youName, theirName, gameLabel, youCoin = 0, theirCo
     if (ev.side !== (mine ? 'you' : 'their')) return <div style={{ flex: 1 }} />;
     return (
       <div style={{ flex: 1, minWidth: 0, textAlign: mine ? 'right' : 'left', opacity: ev.drip ? 0.62 : 1 }}>
-        <div style={{ fontSize: 10.5, lineHeight: 1.35, color: 'var(--text)' }}>
+        <div style={{ fontSize: fs(10.5), lineHeight: 1.35, color: 'var(--text)' }}>
           {actionText(ev.play)}
-          {ev.delta > 0 && <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: mine ? 'var(--you)' : 'var(--opp)', marginLeft: 5 }}>+{ev.delta.toFixed(1)}</span>}
-          {ev.mult && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--fx-mult)', marginLeft: 4 }}>×{ev.mult.toFixed(2)}</span>}
+          {ev.delta > 0 && <span className="mono" style={{ fontSize: fs(9.5), fontWeight: 700, color: mine ? 'var(--you)' : 'var(--opp)', marginLeft: 5 }}>+{ev.delta.toFixed(1)}</span>}
+          {ev.mult && <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, color: 'var(--fx-mult)', marginLeft: 4 }}>×{ev.mult.toFixed(2)}</span>}
           {ev.coin && (ev.coinAmt ?? (mine ? youCoin : theirCoin)) > 0 && <CoinPill amt={ev.coinAmt ?? (mine ? youCoin : theirCoin)} />}
         </div>
         {ev.effect && (
-          <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: FX_COLOR[ev.effect.type] ?? 'var(--dim)', marginTop: 1 }}>{ev.effect.text}</div>
+          <div className="mono" style={{ fontSize: fs(8), fontWeight: 700, letterSpacing: '0.08em', color: FX_COLOR[ev.effect.type] ?? 'var(--dim)', marginTop: 1 }}>{ev.effect.text}</div>
         )}
         {ev.buffNote && (
-          <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', marginTop: 1 }}>⚡ {ev.buffNote}</div>
+          <div className="mono" style={{ fontSize: fs(8), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', marginTop: 1 }}>⚡ {ev.buffNote}</div>
         )}
       </div>
     );
   };
   const toggle = (on: boolean, label: string, onClick: () => void) => (
-    <button onClick={onClick} className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--you)' : 'var(--faint)', background: 'var(--surface)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 3, padding: '2px 6px' }}>{label}</button>
+    <button onClick={onClick} className="mono" style={{ fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--you)' : 'var(--faint)', background: 'var(--surface)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 3, padding: '2px 6px' }}>{label}</button>
   );
   return (
     <div style={{ marginTop: 5, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <span className="mono" style={{ flex: 1, textAlign: 'right', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{youName}</span>
+        <span className="mono" style={{ flex: 1, textAlign: 'right', fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{youName}</span>
         <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
           {toggle(minutes, minutes ? 'MINUTES' : 'PLAYS', () => setMinutes((m) => !m))}
           {toggle(top, top ? 'NEWest ↑' : 'NEWest ↓', () => setTop((t) => !t))}
         </div>
-        <span className="mono" style={{ flex: 1, textAlign: 'left', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{theirName}</span>
+        <span className="mono" style={{ flex: 1, textAlign: 'left', fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{theirName}</span>
       </div>
-      <div ref={scroller} onScroll={onScroll} style={{ maxHeight: 210, overflow: 'auto', paddingRight: 10, scrollbarGutter: 'stable', scrollbarWidth: 'thin' }}>
+      <div ref={scroller} onScroll={onScroll} style={{ maxHeight: fw(210), overflow: 'auto', paddingRight: 10, scrollbarGutter: 'stable', scrollbarWidth: 'thin' }}>
         {rows.length === 0 && (
-          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.1em', textAlign: 'center', padding: '14px 0' }}>— no plays yet at this point —</div>
+          <div className="mono" style={{ fontSize: fs(9), color: 'var(--faint)', letterSpacing: '0.1em', textAlign: 'center', padding: '14px 0' }}>— no plays yet at this point —</div>
         )}
         {rows.map((ev, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '3px 0', borderTop: i === 0 ? undefined : '1px solid color-mix(in srgb, var(--bd) 45%, transparent)', animation: i === newestIdx ? 'slidein .3s ease' : undefined }}>
             {cum(ev, true)}
             {cell(ev, true)}
-            <div className="mono" title="game clock · real wall-clock time" style={{ width: 50, flex: 'none', textAlign: 'center', paddingTop: 1, lineHeight: 1.15 }}>
-              <div style={{ fontSize: 8.5, color: 'var(--faint)' }}>{fmtClock(ev.clock)}</div>
-              {realOf && <div style={{ fontSize: 8, fontWeight: 700, color: 'var(--dimstrong)' }}>{realOf(ev)}</div>}
+            <div className="mono" title="game clock · real wall-clock time" style={{ width: fw(50), flex: 'none', textAlign: 'center', paddingTop: 1, lineHeight: 1.15 }}>
+              <div style={{ fontSize: fs(8.5), color: 'var(--faint)' }}>{fmtClock(ev.clock)}</div>
+              {realOf && <div style={{ fontSize: fs(8), fontWeight: 700, color: 'var(--dimstrong)' }}>{realOf(ev)}</div>}
             </div>
             {cell(ev, false)}
             {cum(ev, false)}
           </div>
         ))}
       </div>
-      <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 6, textAlign: 'center' }}>cumulative totals on the edges · {minutes ? 'minute-by-minute drip' : 'plays'} · game + real clock · {realOrder ? 'real-time order' : 'game-clock order'} · {gameLabel}</div>
+      <div className="mono" style={{ fontSize: fs(7.5), color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 6, textAlign: 'center' }}>cumulative totals on the edges · {minutes ? 'minute-by-minute drip' : 'plays'} · game + real clock · {realOrder ? 'real-time order' : 'game-clock order'} · {gameLabel}</div>
     </div>
   );
 }

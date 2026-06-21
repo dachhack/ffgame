@@ -7,7 +7,7 @@ import { Matchup } from './screens/Matchup';
 import { MatchupFinal } from './screens/MatchupFinal';
 
 export function App() {
-  const { theme, route, bigText } = useStore();
+  const { theme, route } = useStore();
   const vars = themeVars(THEMES[theme]) as Record<string, string>;
   const light = theme === 'daylight' || theme === 'arctic';
 
@@ -15,12 +15,6 @@ export function App() {
     document.body.style.background = THEMES[theme].bg;
     document.documentElement.style.colorScheme = light ? 'light' : 'dark';
   }, [theme, light]);
-
-  // Larger-text mode: zoom the whole document (browser-zoom-like — text grows and
-  // reflows to fit width, no horizontal overflow, and sticky headers still work).
-  useEffect(() => {
-    (document.documentElement.style as CSSStyleDeclaration & { zoom?: string }).zoom = bigText ? '1.2' : '';
-  }, [bigText]);
 
   return (
     <div

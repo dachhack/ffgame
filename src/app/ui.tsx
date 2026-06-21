@@ -139,7 +139,7 @@ export function ThemeSwitcher() {
       })}
       <button
         onClick={() => setBigText(!bigText)}
-        title={bigText ? 'Larger text: on (tap for normal)' : 'Larger text: off (tap to enlarge)'}
+        title={bigText ? 'Larger fine print (log + card labels): on' : 'Larger fine print (log + card labels): off'}
         aria-pressed={bigText}
         style={{
           height: 22, padding: '0 6px', marginLeft: 3, borderRadius: 4, fontFamily: MONO, fontWeight: 700, lineHeight: 1,
