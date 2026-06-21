@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
 import { Brand, ThemeSwitcher, PosPill } from '../app/ui';
 import { getTeam, gameForTeam } from '../data/league';
-import { buildMatchup, defaultLineup, slotKey } from '../engine/matchup';
+import { buildMatchup, defaultLineup, aiLineup, slotKey } from '../engine/matchup';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
 import { metricById } from '../data/metrics';
 
@@ -22,7 +22,7 @@ export function MatchupFinal({ week }: { week: number }) {
   }, [week]);
 
   const youPicks = useMemo(() => defaultLineup(YOU, week), [week, ready]);
-  const oppPicks = useMemo(() => defaultLineup(oppId, week), [oppId, week, ready]);
+  const oppPicks = useMemo(() => aiLineup(oppId, week, youPicks), [oppId, week, youPicks, ready]);
   const m = useMemo(() => buildMatchup(YOU, oppId, week, youPicks, oppPicks), [oppId, week, youPicks, oppPicks, ready]);
 
   const won = m.youFinal >= m.theirFinal;

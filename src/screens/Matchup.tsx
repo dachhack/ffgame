@@ -8,7 +8,7 @@ import { WINDOWS, METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById, type Powerup } from '../data/powerups';
 import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
-  windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
+  windowPools, defaultLineup, aiLineup, aiBuffs, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
 } from '../engine/matchup';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock } from '../data/realPbp';
@@ -158,8 +158,10 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const extraKey = JSON.stringify(extraSlots);
   const youPools = useMemo(() => windowPools(YOU, week), [week]);
   const oppPools = useMemo(() => windowPools(oppId, week), [week, oppId]);
-  const oppPicks = useMemo(() => defaultLineup(oppId, week, extraSlots), [oppId, week, ready, extraKey]);
   const youDefault = useMemo(() => defaultLineup(YOU, week, extraSlots), [week, ready, extraKey]);
+  // The AI scouts the human's projected lineup and defends each window accordingly.
+  const oppPicks = useMemo(() => aiLineup(oppId, week, youDefault, extraSlots), [oppId, week, youDefault, ready, extraKey]);
+  const oppArmed = useMemo(() => aiBuffs(oppId, week), [oppId, week]);
   const byeYou = useMemo(() => byePlayers(YOU, week), [week]);
   const byeTheir = useMemo(() => byePlayers(oppId, week), [week, oppId]);
 
@@ -620,6 +622,14 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               </div>
               <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{headline}</div>
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, maxWidth: 520, lineHeight: 1.5 }}>{subhead}</div>
+              {oppArmed.length > 0 && (
+                <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, fontSize: 9, flexWrap: 'wrap' }}>
+                  <span title="Power-ups your opponent has armed this week — scout and plan around them" style={{ letterSpacing: '0.1em', color: 'var(--faint)', fontWeight: 700 }}>OPPONENT ARMED</span>
+                  {oppArmed.map((id) => { const p = powerupById(id); return p ? (
+                    <span key={id} title={p.blurb} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--opp)', border: '1px solid color-mix(in srgb, var(--opp) 45%, transparent)', background: 'color-mix(in srgb, var(--opp) 12%, transparent)', borderRadius: 3, padding: '1px 6px' }}>{p.icon} {p.name}</span>
+                  ) : null; })}
+                </div>
+              )}
               {phase === 'live' && (
                 <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, fontSize: 10, color: 'var(--dim)' }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', flex: 'none', background: clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--faint)' }} />

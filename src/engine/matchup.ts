@@ -63,6 +63,71 @@ export function slotKey(win: WindowId, idx: number): string {
   return `${win}#${idx}`;
 }
 
+// Power-ups the AI opponent loads with. Limited to whole-lineup buffs that affect
+// head-to-head scoring from the opponent's (their) side — so the AI always
+// benefits from arming them (drip/OT buffs; reactive/bonus buffs are human-only).
+const AI_BUFF_POOL = ['momentum', 'garbage-time', 'floodgates', 'overtime', 'ot-shield'];
+
+/** The AI's three armed power-ups for the week — a deterministic random draw,
+ *  seeded per team+week, from the buffs it can actually use. */
+export function aiBuffs(teamId: string, week: number): string[] {
+  const pool = [...AI_BUFF_POOL];
+  const out: string[] = [];
+  let seed = hashStr(`${teamId}|buffs|${week}`);
+  for (let i = 0; i < 3 && pool.length; i++) {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff; // LCG step for a varied draw
+    out.push(pool.splice(seed % pool.length, 1)[0]);
+  }
+  return out;
+}
+
+// Counter-aware metric pick for an AI player facing a specific (projected)
+// opponent in its slot: choose the metric that maximizes the AI's NET edge —
+// its own score minus the opponent's. This self-maximizes AND favors denial
+// metrics (erase/reset/nuke/suppress) when the opponent is a drip/big scorer.
+function counterMetric(aiPlayer: Player, week: number, opp: Pick | undefined, aiBuffSet: Set<string>): string {
+  const list = (METRICS[aiPlayer.pos] || METRICS.WR).filter((m) => !m.lock);
+  if (list.length <= 1) return list[0]?.id ?? pickMetric(aiPlayer, week);
+  const oppPlayer = opp ? getPlayer(opp.playerId) : undefined;
+  const oppIn: SlotInput = oppPlayer ? { player: oppPlayer, metricId: opp!.metricId ?? pickMetric(oppPlayer, week) } : { player: EMPTY_PLAYER, metricId: 'none' };
+  let best = list[0].id, bestEdge = -Infinity;
+  for (const m of list) {
+    // The AI is the "their" side here (opponent is "you").
+    const res = resolveSlot(oppIn, { player: aiPlayer, metricId: m.id }, week, '', { theirBuffs: aiBuffSet });
+    const edge = res.theirFinal - res.youFinal;
+    if (edge > bestEdge) { bestEdge = edge; best = m.id; }
+  }
+  return best;
+}
+
+/**
+ * AI opponent lineup. Scouts the human's projected lineup window-by-window and
+ * defends each slot: fields its best eligible player in every slot it can fill
+ * (never leaving a contestable slot unopposed), and picks each player's metric to
+ * best counter the human's projected player in that slot — using the AI's own
+ * armed power-ups in the evaluation.
+ */
+export function aiLineup(aiTeamId: string, week: number, humanLineup: Record<string, Pick>, extra?: ExtraSlots): Record<string, Pick> {
+  const pools = windowPools(aiTeamId, week);
+  const real = REAL_WEEKS.has(week);
+  const pts = real ? realPointsFor(week) : {};
+  const healthy = (p: Player) => { const s = injuryFor(week, p.id); return s !== 'O' && s !== 'IR'; };
+  const aiBuffSet = new Set(aiBuffs(aiTeamId, week));
+  const picks: Record<string, Pick> = {};
+  for (const w of WINDOWS) {
+    const ranked = real
+      ? pools[w.id].filter(healthy).sort((a, b) => (pts[b.id] || 0) - (pts[a.id] || 0))
+      : pools[w.id].filter(healthy);
+    for (let i = 0; i < slotsFor(w.id, extra); i++) {
+      const p = ranked[i];
+      if (!p) continue; // genuinely no eligible player left for this slot
+      const key = slotKey(w.id, i);
+      picks[key] = { playerId: p.id, metricId: counterMetric(p, week, humanLineup[key], aiBuffSet) };
+    }
+  }
+  return picks;
+}
+
 /** Extra-slot powerups: per-window count of bonus slots applied this week. */
 export type ExtraSlots = Partial<Record<WindowId, number>>;
 /** Slots in a window including any Extra Slot powerups applied this week. */
@@ -90,8 +155,11 @@ export function defaultLineup(teamId: string, week: number, extra?: ExtraSlots):
   const healthy = (p: Player) => { const s = injuryFor(week, p.id); return s !== 'O' && s !== 'IR'; };
   const picks: Record<string, Pick> = {};
   for (const w of WINDOWS) {
+    // Field every slot we can: rank healthy eligible players best-first, but don't
+    // drop players who lack a box score — fielding a 0-point player still contests
+    // the slot, which denies the opponent a free unopposed (best-ball) spot.
     const ranked = real
-      ? pools[w.id].filter((p) => healthy(p) && pts[p.id] !== undefined).sort((a, b) => (pts[b.id] || 0) - (pts[a.id] || 0))
+      ? pools[w.id].filter(healthy).sort((a, b) => (pts[b.id] || 0) - (pts[a.id] || 0))
       : pools[w.id].filter(healthy); // already projection-sorted
     for (let i = 0; i < slotsFor(w.id, extra); i++) {
       const p = ranked[i];
@@ -208,7 +276,9 @@ export function buildMatchup(
   // Armed pre-match buffs that modify scoring (Momentum / Garbage Time /
   // Floodgates / Overtime). Only the human side carries buffs in the demo.
   const youBuffSet = new Set(Object.keys(buffs).filter((k) => buffs[k]));
-  const theirBuffSet = new Set<string>();
+  // The AI opponent loads with its own three armed power-ups (deterministic per
+  // team+week), so its side gets the same buff treatment the human's does.
+  const theirBuffSet = new Set<string>(aiBuffs(oppTeamId, week));
 
   for (const w of WINDOWS) {
     const nSlots = slotsFor(w.id, extraSlots);
