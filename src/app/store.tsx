@@ -4,6 +4,7 @@ import type { WindowId, Pick } from '../types';
 import { LEAGUE, YOU_TEAM_ID } from '../data/league';
 import { powerupById } from '../data/powerups';
 import { DEMO_WEEK } from '../config';
+import type { SleeperUser } from '../data/sleeper';
 
 import type { SlotSwap } from '../engine/matchup';
 export type { SlotSwap };
@@ -24,6 +25,9 @@ export interface AppliedWeek {
 export type Phase = 'setup' | 'live' | 'final';
 
 export type Route =
+  | { name: 'splash' }
+  | { name: 'leagues' }
+  | { name: 'sleeperLeague'; leagueId: string; leagueName: string }
   | { name: 'hub' }
   | { name: 'league' }
   | { name: 'matchup'; week: number; phase: Phase }
@@ -39,6 +43,9 @@ interface Store {
   setFullStats: (v: boolean) => void;
   route: Route;
   navigate: (r: Route) => void;
+  /** The Sleeper account whose leagues we're browsing (null → welcome splash). */
+  sleeperUser: SleeperUser | null;
+  setSleeperUser: (u: SleeperUser | null) => void;
   /** Demo: which league team you're playing as (any team in the league). */
   youTeamId: string;
   setYouTeam: (id: string) => void;
@@ -99,6 +106,7 @@ const Ctx = createContext<Store | null>(null);
 const THEME_KEY = 'gc-theme';
 const BIGTEXT_KEY = 'gc-bigtext';
 const FULLSTATS_KEY = 'gc-fullstats';
+const SLEEPER_KEY = 'gc-sleeper';
 const SAVE_KEY = 'gc-coins';
 
 // One-time demo grant so the powerup shop is testable. Applied once per browser
@@ -125,7 +133,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const saved = typeof localStorage !== 'undefined' ? (localStorage.getItem(THEME_KEY) as ThemeName | null) : null;
     return saved ?? 'prime';
   });
-  const [route, setRoute] = useState<Route>({ name: 'hub' });
+  const [sleeperUser, setSleeperUserState] = useState<SleeperUser | null>(() => {
+    try { const s = localStorage.getItem(SLEEPER_KEY); return s ? JSON.parse(s) as SleeperUser : null; } catch { return null; }
+  });
+  const setSleeperUser = (u: SleeperUser | null) => {
+    setSleeperUserState(u);
+    try { if (u) localStorage.setItem(SLEEPER_KEY, JSON.stringify(u)); else localStorage.removeItem(SLEEPER_KEY); } catch { /* ignore */ }
+  };
+  // Boot to your leagues if a Sleeper user is remembered, else the welcome splash.
+  const [route, setRoute] = useState<Route>(sleeperUser ? { name: 'leagues' } : { name: 'splash' });
   // Demo role/week: pick any team and any week before heading into setup.
   const [youTeamId, setYouTeam] = useState<string>(YOU_TEAM_ID);
   const [demoWeek, setDemoWeek] = useState<number>(DEMO_WEEK);
@@ -297,8 +313,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate: setRoute, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
-    [theme, bigText, fullStats, route, youTeamId, demoWeek, coins, inventory, applied],
+    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate: setRoute, sleeperUser, setSleeperUser, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    [theme, bigText, fullStats, route, sleeperUser, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

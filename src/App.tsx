@@ -5,6 +5,9 @@ import { LeagueHub } from './screens/LeagueHub';
 import { LeagueOverview } from './screens/LeagueOverview';
 import { Matchup } from './screens/Matchup';
 import { MatchupFinal } from './screens/MatchupFinal';
+import { Splash } from './screens/Splash';
+import { Leagues } from './screens/Leagues';
+import { SleeperLeague } from './screens/SleeperLeague';
 
 export function App() {
   const { theme, route, youTeamId } = useStore();
@@ -28,6 +31,9 @@ export function App() {
         flexDirection: 'column',
       }}
     >
+      {route.name === 'splash' && <Splash />}
+      {route.name === 'leagues' && <Leagues />}
+      {route.name === 'sleeperLeague' && <SleeperLeague key={route.leagueId} leagueId={route.leagueId} leagueName={route.leagueName} />}
       {route.name === 'hub' && <LeagueHub />}
       {route.name === 'league' && <LeagueOverview />}
       {route.name === 'matchup' && <Matchup key={`m${route.week}-${youTeamId}`} week={route.week} initialPhase={route.phase} />}
