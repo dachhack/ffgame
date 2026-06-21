@@ -382,6 +382,18 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     else if (newKey !== key) remapDoubleOrNothing(week, newKey); // shifted by compaction → follow
   }
 
+  // Position-based armed buffs (Hail Mary→QB, Pick Six→DST, WR/TE Carries→WR/TE,
+  // Trick Play→non-QB) are wasted if the lineup no longer starts an eligible
+  // position. After a pick change, refund any that lost their last eligible spot.
+  function reconcileBuffs(next: Record<string, Pick>) {
+    const armed = Object.keys(buffs).filter((id) => buffs[id] && POSITION_REFUND_BUFFS.has(id));
+    if (!armed.length) return;
+    const positions = Object.values(next).map((pk) => getPlayer(pk.playerId)?.pos).filter(Boolean) as Pos[];
+    for (const id of armed) {
+      if (!positions.some((pos) => buffAppliesToSpot(id, pos, null))) disarmBuff(week, id); // no eligible starter → refund
+    }
+  }
+
   // Refund an unlock-metric powerup if this pick was using one (dropped a spot).
   function refundUnlockFor(pk?: Pick) {
     if (!pk?.metricId) return;
@@ -408,6 +420,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     n[target] = { playerId, metricId: null };
     const next = compactPicks(n);
     reconcileDoN(picks, next);
+    reconcileBuffs(next);
     setPicks(next);
     setSelSlot(null);
   }
@@ -429,6 +442,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     const n = { ...picks }; delete n[key];
     const next = compactPicks(n);
     reconcileDoN(picks, next);
+    reconcileBuffs(next);
     setPicks(next);
     setSelSlot(null);
   }
@@ -441,6 +455,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     n[key] = { playerId, metricId: null };
     const next = compactPicks(n);
     reconcileDoN(picks, next);
+    reconcileBuffs(next);
     setPicks(next);
     setSelSlot(null);
   }
@@ -1042,6 +1057,13 @@ function buffAppliesToSpot(id: string, pos: Pos, metricId: string | null): boole
     default: return false;
   }
 }
+
+// Armed buffs whose eligibility is purely POSITIONAL (independent of the metric,
+// which is chosen later in setup): if removing a player leaves no started spot
+// of the needed position, the buff is wasted and should refund. Drip buffs
+// (momentum/floodgates/overtime) are metric-dependent and the always-on buffs
+// never go to waste, so neither auto-refunds.
+const POSITION_REFUND_BUFFS = new Set(['unlock-carries-wipe', 'hail-mary', 'pick-six', 'trick-play']);
 
 // Short "how to use" hints for the non-armable powerups in the inventory card.
 const POWERUP_HINT: Record<string, string> = {

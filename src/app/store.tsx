@@ -133,6 +133,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Persist the one-time demo grant on first mount so a reload doesn't re-grant.
   useEffect(() => { persist({ coins: initial.current.coins }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Persist whenever coins / inventory / applied change. This lets several state
+  // updates in one handler (e.g. multiple power-up refunds from a single roster
+  // change) compose via functional setters and still save the final result.
+  useEffect(() => { persist({}); }, [coins, inventory, applied]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const setTheme = (t: ThemeName) => {
     setThemeState(t);
     try { localStorage.setItem(THEME_KEY, t); } catch { /* ignore */ }
@@ -178,22 +183,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     applied[week]?.buffs?.[id] ? false : consumeAndApply(id, week, (cur) => ({ ...cur, buffs: { ...cur.buffs, [id]: true } }));
 
   // Disarm a previously-armed buff: clear the flag and refund the consumable.
+  // Functional setters so several disarms in one tick compose (persist via effect).
   const disarmBuff = (week: number, id: string): void => {
-    const cur = applied[week];
-    if (!cur?.buffs?.[id]) return;
-    const buffs = { ...cur.buffs }; delete buffs[id];
-    const nextApplied = { ...applied, [week]: { ...cur, buffs } };
-    const nextInv = { ...inventory, [id]: (inventory[id] ?? 0) + 1 };
-    setApplied(nextApplied); setInventory(nextInv); persist({ applied: nextApplied, inv: nextInv });
+    if (!applied[week]?.buffs?.[id]) return;
+    setApplied((prev) => {
+      const cur = prev[week]; if (!cur?.buffs?.[id]) return prev;
+      const buffs = { ...cur.buffs }; delete buffs[id];
+      return { ...prev, [week]: { ...cur, buffs } };
+    });
+    setInventory((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
   };
 
   const setDoubleOrNothing = (week: number, slotKey: string): boolean =>
     consumeAndApply('double-or-nothing', week, (cur) => ({ ...cur, doubleOrNothing: slotKey }));
   const remapDoubleOrNothing = (week: number, slotKey: string): void => {
-    const cur = applied[week];
-    if (!cur?.doubleOrNothing || cur.doubleOrNothing === slotKey) return;
-    const nextApplied = { ...applied, [week]: { ...cur, doubleOrNothing: slotKey } };
-    setApplied(nextApplied); persist({ applied: nextApplied });
+    setApplied((prev) => {
+      const cur = prev[week];
+      if (!cur?.doubleOrNothing || cur.doubleOrNothing === slotKey) return prev;
+      return { ...prev, [week]: { ...cur, doubleOrNothing: slotKey } };
+    });
   };
   const setSpy = (week: number, slotKey: string, reveal: 'player' | 'metric'): boolean =>
     consumeAndApply('spy', week, (cur) => ({ ...cur, spy: { slotKey, reveal } }));
@@ -206,12 +214,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ── Back-outs: clear an applied targeted powerup and refund the consumable. ──
   const clearApplied = (week: number, refundId: string, mutate: (cur: AppliedWeek) => void): void => {
-    const cur = applied[week]; if (!cur) return;
-    const nc: AppliedWeek = { ...cur, extraSlots: { ...cur.extraSlots }, swaps: { ...cur.swaps }, backups: { ...cur.backups } };
-    mutate(nc);
-    const nextApplied = { ...applied, [week]: nc };
-    const nextInv = { ...inventory, [refundId]: (inventory[refundId] ?? 0) + 1 };
-    setApplied(nextApplied); setInventory(nextInv); persist({ applied: nextApplied, inv: nextInv });
+    if (!applied[week]) return;
+    setApplied((prev) => {
+      const cur = prev[week]; if (!cur) return prev;
+      const nc: AppliedWeek = { ...cur, extraSlots: { ...cur.extraSlots }, swaps: { ...cur.swaps }, backups: { ...cur.backups } };
+      mutate(nc);
+      return { ...prev, [week]: nc };
+    });
+    setInventory((prev) => ({ ...prev, [refundId]: (prev[refundId] ?? 0) + 1 }));
   };
   const clearDoubleOrNothing = (week: number): void => { if (applied[week]?.doubleOrNothing) clearApplied(week, 'double-or-nothing', (c) => { delete c.doubleOrNothing; }); };
   const clearSpy = (week: number): void => { if (applied[week]?.spy) clearApplied(week, 'spy', (c) => { delete c.spy; }); };
@@ -221,7 +231,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     clearApplied(week, 'extra-slot', (c) => { if (n - 1 > 0) c.extraSlots[win] = n - 1; else delete c.extraSlots[win]; });
   };
   // Refund an unlock-metric powerup (when a player swaps off / clears that metric).
-  const refundUnlock = (id: string): void => { const nextInv = { ...inventory, [id]: (inventory[id] ?? 0) + 1 }; setInventory(nextInv); persist({ inv: nextInv }); };
+  const refundUnlock = (id: string): void => { setInventory((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 })); };
 
   const applyMetricSwap = (week: number, slotKey: string, atClock: number, atRt: number, toMetricId: string): boolean =>
     consumeAndApply('metric-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, atRt, toMetricId } } }));
