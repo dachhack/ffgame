@@ -8,7 +8,7 @@ import { WINDOWS, METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById, type Powerup } from '../data/powerups';
 import { getTeam, getPlayer, gameForTeam } from '../data/league';
 import {
-  windowPools, defaultLineup, aiLineup, aiBuffs, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
+  windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
 } from '../engine/matchup';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock } from '../data/realPbp';
@@ -160,9 +160,9 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const oppPools = useMemo(() => windowPools(oppId, week), [week, oppId]);
   const youDefault = useMemo(() => defaultLineup(YOU, week, extraSlots), [week, ready, extraKey]);
   // The AI scouts which players you CAN field each window (the pool, not your spot
-  // assignments — those stay sealed) and defends each window accordingly.
+  // assignments — those stay sealed) and defends each window accordingly. What the
+  // opponent has armed is hidden, exactly as your loadout is hidden from it.
   const oppPicks = useMemo(() => aiLineup(oppId, YOU, week, extraSlots), [oppId, week, ready, extraKey]);
-  const oppArmed = useMemo(() => aiBuffs(oppId, week), [oppId, week]);
   const byeYou = useMemo(() => byePlayers(YOU, week), [week]);
   const byeTheir = useMemo(() => byePlayers(oppId, week), [week, oppId]);
 
@@ -623,14 +623,6 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
               </div>
               <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{headline}</div>
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, maxWidth: 520, lineHeight: 1.5 }}>{subhead}</div>
-              {oppArmed.length > 0 && (
-                <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, fontSize: 9, flexWrap: 'wrap' }}>
-                  <span title="Power-ups your opponent has armed this week — scout and plan around them" style={{ letterSpacing: '0.1em', color: 'var(--faint)', fontWeight: 700 }}>OPPONENT ARMED</span>
-                  {oppArmed.map((id) => { const p = powerupById(id); return p ? (
-                    <span key={id} title={p.blurb} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--opp)', border: '1px solid color-mix(in srgb, var(--opp) 45%, transparent)', background: 'color-mix(in srgb, var(--opp) 12%, transparent)', borderRadius: 3, padding: '1px 6px' }}>{p.icon} {p.name}</span>
-                  ) : null; })}
-                </div>
-              )}
               {phase === 'live' && (
                 <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, fontSize: 10, color: 'var(--dim)' }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', flex: 'none', background: clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--faint)' }} />
@@ -1305,6 +1297,14 @@ function WindowSection(props: {
 }) {
   const { rw, week, phase, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout } = props;
   const w = rw.window;
+  // Twin Generals: with the buff armed and ≥2 of your Field General QBs in this
+  // window, the top two multipliers stack — link those QB spots so you can see
+  // which two are paired.
+  const twinLinked = new Set<string>();
+  if (armed['fg-stack']) {
+    const fgKeys = rw.slots.filter((s) => s.you && s.you.player.pos === 'QB' && s.you.metricId === 'fg').map((s) => slotKey(w.id, s.slotIndex));
+    if (fgKeys.length >= 2) fgKeys.forEach((k) => twinLinked.add(k));
+  }
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const done = clock >= maxClock;
   const pct = Math.round((Math.min(clock, maxClock) / maxClock) * 100);
@@ -1450,7 +1450,7 @@ function WindowSection(props: {
           if (phase === 'setup') {
             return (
               <SetupRow
-                key={key} slotKeyStr={key} winId={w.id} week={week} pick={picks[key]} selected={selSlot === key} inventory={inventory} armed={armed}
+                key={key} slotKeyStr={key} winId={w.id} week={week} pick={picks[key]} selected={selSlot === key} inventory={inventory} armed={armed} twinLink={twinLinked.has(key)}
                 appliedPu={[...(aw?.doubleOrNothing === key ? ['double-or-nothing'] : []), ...(aw?.byeSteal?.slotKey === key ? ['bye-steal'] : [])]}
                 applyMode={applyMode} onApplyToSpot={() => onApplyToSpot(key)}
                 onOpenPicker={() => onOpenPicker(key, w.id)} onPickMetric={(m) => pickMetricFor(key, m)}
@@ -1464,7 +1464,7 @@ function WindowSection(props: {
           // both sides share it.
           const youClock = wallClock && s.you ? clockAtRealTime(s.you.player, week, clock, s.you.metricId ?? undefined) : clock;
           const theirClock = wallClock && s.their ? clockAtRealTime(s.their.player, week, clock, s.their.metricId ?? undefined) : clock;
-          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={kickoffSecOfDay(w.time)} />;
+          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={kickoffSecOfDay(w.time)} youTwin={twinLinked.has(key)} />;
           if (!spotApplyMode) return row;
           const elig = spotEligible(s);
           return (
@@ -1484,13 +1484,21 @@ function WindowSection(props: {
 }
 
 // ── Setup row ──
+// Marks the two Field General QBs that are paired under the Twin Generals power-up
+// (their multipliers stack — the top two multiply together).
+function TwinChip() {
+  return (
+    <span className="mono" title="Twin Generals: this Field General is paired with your other Field General QB in this window — the top two multipliers stack (multiply)" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-mult)', border: '1px solid color-mix(in srgb, var(--fx-mult) 55%, transparent)', background: 'color-mix(in srgb, var(--fx-mult) 14%, transparent)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>🎖️ TWIN ×2</span>
+  );
+}
+
 function SetupRow(props: {
-  slotKeyStr: string; winId: WindowId; week: number; pick?: Pick; selected: boolean; inventory: Record<string, number>; armed: Record<string, boolean>;
+  slotKeyStr: string; winId: WindowId; week: number; pick?: Pick; selected: boolean; inventory: Record<string, number>; armed: Record<string, boolean>; twinLink?: boolean;
   appliedPu: string[];
   applyMode: string | null; onApplyToSpot: () => void;
   onOpenPicker: () => void; onPickMetric: (m: string) => void; onClearSlot: () => void; onDropPlayer: (id: string) => void; onScout: () => void;
 }) {
-  const { winId, week, pick, selected, inventory, armed, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout } = props;
+  const { winId, week, pick, selected, inventory, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout } = props;
   const isMobile = useIsMobile();
   const gridCols = '1fr 1fr'; // no center gutter — your spot vs the sealed opponent
   const rowGap = isMobile ? 5 : 8;
@@ -1579,6 +1587,7 @@ function SetupRow(props: {
               <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 7, letterSpacing: '0.12em', color: 'var(--faint)' }}>
                 <span style={{ width: 5, height: 5, background: 'var(--you)', borderRadius: '50%', display: 'inline-block', animation: 'bpulse 2s ease infinite' }} /> HIDDEN
               </span>
+              {twinLink && <TwinChip />}
             </div>
           )}
 
@@ -1783,12 +1792,12 @@ function BuffFxRow({ side, fx, stake }: { side: 'you' | 'their'; fx?: BuffFx[]; 
 }
 
 // ── Score row (live / final) ──
-function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName, realClock, kickoffSec }: {
+function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName, realClock, kickoffSec, youTwin }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
   week: number; youClock: number; theirClock: number; open: boolean; onToggle: () => void; phase: Phase; done: boolean;
   onAssignBackup: () => void; turnoverCoin: number;
   backups: Record<string, string>; slotName: Record<string, string>;
-  realClock: boolean; kickoffSec: number;
+  realClock: boolean; kickoffSec: number; youTwin?: boolean;
 }) {
   const ownKey = slotKey(slot.win, slot.slotIndex);
   const isMobile = useIsMobile();
@@ -1954,7 +1963,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
   const isFgSrc = (p: { player: Player; metricId: string }) => p.player.pos === 'QB' && p.metricId === 'fg';
   const youFg = slot.youFgMult && !isFgSrc(slot.you) ? slot.youFgMult(youClock) : undefined;
   const theirFg = slot.theirFgMult && !isFgSrc(slot.their) ? slot.theirFgMult(theirClock) : undefined;
-  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} />;
+  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} twin={youTwin} />;
   const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} />;
   const centerKids = (
     <>
@@ -2071,8 +2080,8 @@ function fmtStat(pos: Pos, s: StatLine, compact = false): string {
   return '—';
 }
 
-function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, suppressSpent, negated, halvedFrom, chip, coin, fgMult }: {
-  side: 'you' | 'their'; player: Player; week: number; clock: number; metricId?: string; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string; coin?: number; fgMult?: number;
+function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, suppressSpent, negated, halvedFrom, chip, coin, fgMult, twin }: {
+  side: 'you' | 'their'; player: Player; week: number; clock: number; metricId?: string; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string; coin?: number; fgMult?: number; twin?: boolean;
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
   const isMobile = useIsMobile();
@@ -2086,6 +2095,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
       <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>
       {chip && <span className="mono" style={{ fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.1em', color: accent, border: `1px solid ${accent}`, borderRadius: 3, padding: '1px 4px', flex: 'none' }}>{chip}</span>}
       <InjuryBadge week={week} slug={player.id} />
+      {twin && <TwinChip />}
       {!isMobile && <span className="mono" style={{ fontSize: fs(8), color: 'var(--faint)' }}>{player.team}</span>}
     </div>
   );
