@@ -34,6 +34,8 @@ interface Store {
   /** Larger-text mode (zooms the whole UI ~20% for readability). */
   bigText: boolean;
   setBigText: (v: boolean) => void;
+  fullStats: boolean;
+  setFullStats: (v: boolean) => void;
   route: Route;
   navigate: (r: Route) => void;
   /** Demo: which league team you're playing as (any team in the league). */
@@ -92,6 +94,7 @@ const Ctx = createContext<Store | null>(null);
 
 const THEME_KEY = 'gc-theme';
 const BIGTEXT_KEY = 'gc-bigtext';
+const FULLSTATS_KEY = 'gc-fullstats';
 const SAVE_KEY = 'gc-coins';
 
 // One-time demo grant so the powerup shop is testable. Applied once per browser
@@ -132,6 +135,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const setBigText = (v: boolean) => {
     setBigTextState(v);
     try { localStorage.setItem(BIGTEXT_KEY, v ? '1' : '0'); } catch { /* ignore */ }
+  };
+  const [fullStats, setFullStatsState] = useState<boolean>(() => {
+    try { return localStorage.getItem(FULLSTATS_KEY) === '1'; } catch { return false; }
+  });
+  const setFullStats = (v: boolean) => {
+    setFullStatsState(v);
+    try { localStorage.setItem(FULLSTATS_KEY, v ? '1' : '0'); } catch { /* ignore */ }
   };
 
   const initial = useRef(loadState());
@@ -277,8 +287,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, bigText, setBigText, route, navigate: setRoute, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
-    [theme, bigText, route, youTeamId, demoWeek, coins, inventory, applied],
+    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate: setRoute, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    [theme, bigText, fullStats, route, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

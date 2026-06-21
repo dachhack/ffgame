@@ -296,7 +296,12 @@ export function statlineAt(player: Player, week: number, clock: number, metricId
 // 300 yds ≈ 1.9×. Given the window's slot inputs for one side, returns a
 // clock→multiplier function (or undefined if no FG QB is in the window).
 const FG_RATE = 0.006;
-export function windowFgMult(players: SlotInput[], week: number): ((clock: number) => number) | undefined {
+export function windowFgMult(
+  players: SlotInput[],
+  week: number,
+  opts: { reg?: number; carryOT?: boolean; stack?: boolean } = {},
+): ((clock: number) => number) | undefined {
+  const { reg = 3300, carryOT = false, stack = false } = opts;
   const timelines: RawPlay[][] = [];
   for (const p of players) {
     if (p.player.pos === 'QB' && p.metricId === 'fg') {
@@ -307,13 +312,16 @@ export function windowFgMult(players: SlotInput[], week: number): ((clock: numbe
   }
   if (!timelines.length) return undefined;
   return (clock: number) => {
-    let m = 1;
-    for (const passes of timelines) {
+    // Field General resets when regulation ends — unless Overtime carries it over.
+    if (clock >= reg && !carryOT) return 1;
+    const mults = timelines.map((passes) => {
       let cum = 0;
       for (const x of passes) { if (x.clock <= clock) cum += x.yards; else break; }
-      m *= 1 + FG_RATE * cum;
-    }
-    return m;
+      return 1 + FG_RATE * cum;
+    }).sort((a, b) => b - a);
+    // Default: multiple Field General QBs do NOT stack — you get the higher
+    // multiplier at any moment. Twin Generals stacks the top two (multiplies).
+    return stack ? mults[0] * (mults[1] ?? 1) : mults[0];
   };
 }
 
@@ -516,8 +524,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       const yg = dripYou ? minuteGain('you', t, next) : ZERO_GAIN;
       const tg = dripTheir ? minuteGain('their', t, next) : ZERO_GAIN;
       const ya = yg.total, ta = tg.total;
-      if (ya > 0) { Y.bank += ya; Y.hist.push({ clock: next, pts: ya }); recBuff('you', 'overtime', yg.ot); recBuff('you', 'momentum', yg.momentum); recBuff('you', 'garbage-time', yg.garbage); }
-      if (ta > 0) { T.bank += ta; T.hist.push({ clock: next, pts: ta }); recBuff('their', 'overtime', tg.ot); recBuff('their', 'momentum', tg.momentum); recBuff('their', 'garbage-time', tg.garbage); }
+      if (ya > 0) { Y.bank += ya; Y.hist.push({ clock: next, pts: ya }); if (next >= REG) youOtPts += ya; recBuff('you', 'overtime', yg.ot); recBuff('you', 'momentum', yg.momentum); recBuff('you', 'garbage-time', yg.garbage); }
+      if (ta > 0) { T.bank += ta; T.hist.push({ clock: next, pts: ta }); if (next >= REG) theirOtPts += ta; recBuff('their', 'overtime', tg.ot); recBuff('their', 'momentum', tg.momentum); recBuff('their', 'garbage-time', tg.garbage); }
       // Only surface a drip tick once it rounds to ≥0.1 — sub-0.1 still banks
       // silently and shows up in the next tick's cumulative.
       const yd = Math.round(ya * 10) / 10, td = Math.round(ta * 10) / 10;
@@ -551,6 +559,9 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
 
   // TDs and banker-XPs per side, surfaced for the lineup-wide K banker bonus.
   let youTds = 0, theirTds = 0, youBankerXp = 0, theirBankerXp = 0;
+  // Points each side banks in overtime (clock ≥ REG) — the Overtime Shield buff
+  // negates the opponent's.
+  let youOtPts = 0, theirOtPts = 0;
   // Counter-Nuke / Insurance fire once per slot, on the human side only.
   let cnUsed = false, insUsed = false;
 
@@ -621,6 +632,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
 
     mine.bank += pts;
     if (pts > 0) mine.hist.push({ clock: play.clock, pts });
+    if (pts > 0 && play.clock >= REG) { if (play.side === 'you') youOtPts += pts; else theirOtPts += pts; }
 
     // A scoring opponent cools a streak/drip/compression run — except a TE drip
     // shrugs off WR/RB scoring (its immunity covers the hot-streak break too).
@@ -770,6 +782,16 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   // Final drip accrual through the end of the game (per-minute, like the rest).
   // Overtime extends the window 5 minutes for whichever side armed it.
   accrue(REG + Math.max(youOT, theirOT));
+
+  // Overtime Shield: negate the points the OPPONENT banked in overtime. Yours
+  // shields against their OT points; theirs against yours (only the human carries
+  // buffs in the demo).
+  if (youBuffs.has('ot-shield') && theirOtPts > 0 && T.bank > 0) {
+    const cut = Math.min(theirOtPts, T.bank); T.bank = Math.round((T.bank - cut) * 10) / 10; recBuff('you', 'ot-shield', cut, true);
+  }
+  if (theirBuffs.has('ot-shield') && youOtPts > 0 && Y.bank > 0) {
+    const cut = Math.min(youOtPts, Y.bank); Y.bank = Math.round((Y.bank - cut) * 10) / 10; recBuff('their', 'ot-shield', cut, true);
+  }
 
   // DEF SUPPRESS (HALVING) resolves globally in buildMatchup — it reaches every
   // opponent slot across every window — so it is not applied here.

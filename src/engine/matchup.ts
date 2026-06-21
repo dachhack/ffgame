@@ -42,6 +42,23 @@ export function pickMetric(p: Player, week: number): string {
   return list[idx].id;
 }
 
+// Smart metric pick (used by the AI opponent and the default lineup): choose the
+// metric that scores this player the most on the week, evaluated solo against an
+// empty opponent. This makes the opponent field each player's best role — a
+// rushing back on Rush Yards, a multi-TD receiver on the TD nuke, etc. — instead
+// of a random metric. (Field General scores 0 solo, so it's never auto-picked;
+// it's a coordination play left to the human.)
+export function bestMetric(p: Player, week: number): string {
+  const list = (METRICS[p.pos] || METRICS.WR).filter((m) => !m.lock);
+  if (list.length <= 1) return list[0]?.id ?? pickMetric(p, week);
+  let best = list[0].id, bestScore = -Infinity;
+  for (const m of list) {
+    const res = resolveSlot({ player: p, metricId: m.id }, { player: EMPTY_PLAYER, metricId: 'none' }, week, '', {});
+    if (res.youFinal > bestScore) { bestScore = res.youFinal; best = m.id; }
+  }
+  return best;
+}
+
 export function slotKey(win: WindowId, idx: number): string {
   return `${win}#${idx}`;
 }
@@ -78,7 +95,7 @@ export function defaultLineup(teamId: string, week: number, extra?: ExtraSlots):
       : pools[w.id].filter(healthy); // already projection-sorted
     for (let i = 0; i < slotsFor(w.id, extra); i++) {
       const p = ranked[i];
-      if (p) picks[slotKey(w.id, i)] = { playerId: p.id, metricId: pickMetric(p, week) };
+      if (p) picks[slotKey(w.id, i)] = { playerId: p.id, metricId: bestMetric(p, week) };
     }
   }
   return picks;
@@ -205,8 +222,9 @@ export function buildMatchup(
       if (y) youIns.push({ player: y.player, metricId: y.metricId });
       if (t) theirIns.push({ player: t.player, metricId: t.metricId });
     }
-    const youMult = windowFgMult(youIns, week);
-    const theirMult = windowFgMult(theirIns, week);
+    const reg = REAL_WEEKS.has(week) ? 3600 : 3300;
+    const youMult = windowFgMult(youIns, week, { reg, carryOT: youBuffSet.has('overtime'), stack: youBuffSet.has('fg-stack') });
+    const theirMult = windowFgMult(theirIns, week, { reg, carryOT: theirBuffSet.has('overtime'), stack: theirBuffSet.has('fg-stack') });
     // TE TD nukes reach across the window: your TEs' TD clocks knock down the
     // opponents' drips, and vice-versa.
     const youTeTd = teTdNukeClocks(youIns, week);

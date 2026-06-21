@@ -108,7 +108,7 @@ export function Avatar({ name, accent = 'var(--you)', size = 30, src }: { name: 
 }
 
 export function ThemeSwitcher() {
-  const { theme, setTheme, bigText, setBigText } = useStore();
+  const { theme, setTheme, bigText, setBigText, fullStats, setFullStats } = useStore();
   const opts: { id: ThemeName; label: string }[] = [
     { id: 'prime', label: 'P' },
     { id: 'tactical', label: 'T' },
@@ -151,6 +151,20 @@ export function ThemeSwitcher() {
         }}
       >
         <span style={{ fontSize: 9 }}>A</span><span style={{ fontSize: 12 }}>A</span>
+      </button>
+      <button
+        onClick={() => setFullStats(!fullStats)}
+        title={fullStats ? 'Full stat lines (wrap, no “…”): on' : 'Full stat lines (wrap, no “…”): off'}
+        aria-pressed={fullStats}
+        style={{
+          height: 22, padding: '0 7px', marginLeft: 3, borderRadius: 4, fontFamily: MONO, fontWeight: 700, fontSize: 11, lineHeight: 1,
+          display: 'inline-flex', alignItems: 'center',
+          background: fullStats ? 'var(--sh)' : 'var(--surface)',
+          border: `1px solid ${fullStats ? 'var(--you)' : 'var(--bd)'}`,
+          color: fullStats ? 'var(--you)' : 'var(--dim)',
+        }}
+      >
+        ↔
       </button>
     </div>
   );
