@@ -114,7 +114,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   });
   const [route, setRoute] = useState<Route>({ name: 'hub' });
   const [bigText, setBigTextState] = useState<boolean>(() => {
-    try { return localStorage.getItem(BIGTEXT_KEY) === '1'; } catch { return false; }
+    try {
+      const saved = localStorage.getItem(BIGTEXT_KEY);
+      if (saved != null) return saved === '1';        // respect an explicit choice
+      return window.matchMedia('(max-width:760px)').matches; // default ON for mobile
+    } catch { return false; }
   });
   const setBigText = (v: boolean) => {
     setBigTextState(v);
