@@ -11,7 +11,7 @@ import {
   windowPools, defaultLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
 } from '../engine/matchup';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type StatLine } from '../engine/sim';
-import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor } from '../data/realPbp';
+import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
@@ -50,7 +50,14 @@ function fmtTimeShort(secOfDay: number): string {
 // Real game clock from game-elapsed seconds (0..3600): "Q2 4:58", "HALF",
 // "FINAL". Quarters are 15:00 each; halftime sits at the end of Q2.
 function fmtGameClock(c: number): string {
-  if (c >= 3595) return 'FINAL';
+  if (c >= 3600) {
+    // Overtime: 10-minute period(s) past 60:00 (OT, 2OT, …).
+    const into = c - 3600;
+    const per = Math.floor(into / 600);
+    const rem = Math.max(0, 600 - (into - per * 600)); // seconds left in the OT period
+    const m = Math.floor(rem / 60), s = Math.round(rem % 60);
+    return `${per === 0 ? 'OT' : `${per + 1}OT`} ${m}:${String(s).padStart(2, '0')}`;
+  }
   const q = Math.min(4, Math.floor(c / 900) + 1);
   const rem = 900 - (c - (q - 1) * 900); // seconds left in the quarter
   if (q === 2 && rem <= 1) return 'HALF';
@@ -2074,13 +2081,19 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // The player's REAL NFL game this week + its real game clock (quarter +
   // countdown, HALF / FINAL) — shown under the name on each card.
   const g = nflGameForTeam(week, player.team);
+  // FINAL once the clock reaches this game's real end (its last play — including
+  // overtime). Falls back to ~regulation when the real end isn't known (synthetic
+  // weeks / not yet loaded), so a window's shared clock running into another
+  // game's OT doesn't read "OT" on a game that already ended in regulation.
+  const gEnd = realGameEndClock(week, player.team);
+  const gameOver = gEnd > 0 ? clock >= gEnd - 1 : clock >= 3595;
   const gameLine = g ? (
     <div className="mono" title="real NFL game · real game clock" style={{ display: 'flex', alignItems: 'center', gap: 5, flexDirection: side === 'you' ? 'row' : 'row-reverse', fontSize: fs(8.5), letterSpacing: '0.02em', marginTop: 2 }}>
       <Img src={teamLogo(g.away)} size={12} radius={2} fallback={<span />} />
       <span style={{ fontWeight: 700, color: 'var(--dimstrong)' }}>{g.away}@{g.home}</span>
       <Img src={teamLogo(g.home)} size={12} radius={2} fallback={<span />} />
       <span style={{ color: 'var(--faint)' }}>·</span>
-      <span style={{ color: 'var(--faint)', fontWeight: 700 }}>{fmtGameClock(clock)}</span>
+      <span style={{ color: 'var(--faint)', fontWeight: 700 }}>{gameOver ? 'FINAL' : fmtGameClock(clock)}</span>
     </div>
   ) : null;
   // On mobile the chip is anchored to two lines (name over tag) so it's always
