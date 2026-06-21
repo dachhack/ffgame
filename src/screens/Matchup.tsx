@@ -106,6 +106,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   // pace (one game can pull minutes ahead of another), keyed off each play's `t`.
   const [winClocks, setWinClocks] = useState<Record<string, number>>({});
   const [winPlaying, setWinPlaying] = useState<Record<string, boolean>>({});
+  const [speed, setSpeed] = useState(1); // playback speed multiplier (1/2/4/8)
   // Playback clock mode: 'game' = all games lockstep on game clock; 'feed' =
   // real-time reveal but scoring still resolves on game clock; 'real' = real-time
   // reveal AND cross-game effects (TE-TD drip nuke) resolve in real-time order.
@@ -250,7 +251,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
         const next = { ...prev };
         for (const wid of Object.keys(winTarget)) {
           if (winPlaying[wid] && (prev[wid] ?? 0) < winTarget[wid]) {
-            next[wid] = Math.min(winTarget[wid], (prev[wid] ?? 0) + TICK_SECONDS);
+            next[wid] = Math.min(winTarget[wid], (prev[wid] ?? 0) + TICK_SECONDS * speed);
             changed = true;
           }
         }
@@ -258,7 +259,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
       });
     }, TICK_MS);
     return () => clearInterval(id);
-  }, [phase, winPlaying, winTarget]);
+  }, [phase, winPlaying, winTarget, speed]);
 
   // Auto-open a window's slot logs while it's in progress, auto-collapse them
   // when it finishes (or the board goes FINAL). Fires only on the transition,
@@ -560,6 +561,12 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 title={'Playback clock (tap to cycle):\n• GAME CLOCK — every game in a window moves in lockstep on game time\n• REAL FEED — plays reveal on the real wall clock (games desync), but the log orders/interleaves and effects resolve on the game clock\n• REAL CLOCK — plays order/interleave and effects resolve on the real clock (cross-game effects land in real-time order)'}
                 className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: wallClock ? 'var(--on-accent)' : 'var(--dim)', background: clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--surface)', border: `1px solid ${clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '6px 10px' }}>
                 ⏱ {clockMode === 'real' ? 'REAL CLOCK' : clockMode === 'feed' ? 'REAL FEED' : 'GAME CLOCK'}
+              </button>
+              <button
+                onClick={() => setSpeed((s) => (s >= 8 ? 1 : s * 2))}
+                title="Playback speed — tap to cycle 1× / 2× / 4× / 8× (speeds up the whole season run)"
+                className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: speed > 1 ? 'var(--on-accent)' : 'var(--dim)', background: speed > 1 ? 'var(--you)' : 'var(--surface)', border: `1px solid ${speed > 1 ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '6px 10px' }}>
+                ⏩ {speed}×
               </button>
             </div>
           )}
