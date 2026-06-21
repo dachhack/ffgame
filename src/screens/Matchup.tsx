@@ -2207,19 +2207,22 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
       <div style={{ flex: 1, minWidth: 0, textAlign: mine ? 'right' : 'left', opacity: ev.drip ? 0.62 : 1 }}>
         {/* Line 1: the play itself — on its own line so it fits before scoring. */}
         <div style={{ fontSize: fs(10.5), lineHeight: 1.3, color: 'var(--text)', overflowWrap: 'anywhere' }}>{actionText(ev.play)}</div>
-        {/* Line 2: scoring — delta · multiplier · coin. */}
+        {/* Line 2: scoring — delta · multiplier · coin. The ×mult is suppressed
+            when a 'mult' effect badge below already carries it (e.g. FIELD GEN ×N). */}
         {hasScore && (
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 4, marginTop: 1, justifyContent: mine ? 'flex-end' : 'flex-start' }}>
             {ev.delta > 0 && <span className="mono" style={{ fontSize: fs(9.5), fontWeight: 700, color: accent }}>+{ev.delta.toFixed(1)}</span>}
-            {ev.mult && <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, color: 'var(--fx-mult)' }}>×{ev.mult.toFixed(2)}</span>}
+            {ev.mult && ev.effect?.type !== 'mult' && <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, color: 'var(--fx-mult)' }}>×{ev.mult.toFixed(2)}</span>}
             {coinAmt > 0 && <CoinPill amt={coinAmt} />}
           </div>
         )}
+        {/* Effect / power-up badges: fixed compact size so they fit on one line;
+            wrap stays on as a safety so they never spill into the totals. */}
         {ev.effect && (
-          <div className="mono" style={{ fontSize: fs(8), fontWeight: 700, letterSpacing: '0.08em', color: FX_COLOR[ev.effect.type] ?? 'var(--dim)', marginTop: 1 }}>{ev.effect.text}</div>
+          <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.02em', color: FX_COLOR[ev.effect.type] ?? 'var(--dim)', marginTop: 1, overflowWrap: 'anywhere' }}>{ev.effect.text}</div>
         )}
         {ev.buffNote && (
-          <div className="mono" style={{ fontSize: fs(8), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', marginTop: 1 }}>⚡ {ev.buffNote}</div>
+          <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.02em', color: 'var(--warn)', marginTop: 1, overflowWrap: 'anywhere' }}>⚡ {ev.buffNote}</div>
         )}
       </div>
     );

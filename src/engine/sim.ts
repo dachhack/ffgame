@@ -734,7 +734,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     }
 
     // streak / drip badges
-    if (!effect && iAmDrip && myDripKind?.includes(play.kind)) effect = { type: 'streak', text: mine.hot ? `DRIP HOT 2× · ${mine.rate.toFixed(2)}/min` : `DRIP ↑ ${mine.rate.toFixed(2)}/min` };
+    if (!effect && iAmDrip && myDripKind?.includes(play.kind)) effect = { type: 'streak', text: mine.hot ? `HOT 2× · ${mine.rate.toFixed(2)}/m` : `DRIP ↑ ${mine.rate.toFixed(2)}/m` };
     if (!effect && myFam === 'streak') {
       if (play.td) effect = { type: 'streak', text: 'TD → STREAK 2×' };
       else if (mine.hot && play.catch) effect = { type: 'streak', text: 'HOT STREAK · 2×' };
@@ -742,7 +742,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     if (!effect && oppFam === 'streak' && pts > 0) {
       effect = { type: 'cold', text: 'STREAK COLD' };
     }
-    if (!effect && isFG && play.kind === 'pass') effect = { type: 'mult', text: 'FIELD GENERAL' }; // ×mult already shown inline
+    if (!effect && isFG && play.kind === 'pass') effect = { type: 'mult', text: `FIELD GEN ×${sideMult.toFixed(2)}` }; // mult lives in the label; inline ×mult is suppressed
     if (play.turnover) effect = { type: 'nuke', text: '✕ TURNOVER → opp' }; // giveaway: coin to the opponent
 
     events.push({
