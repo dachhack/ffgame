@@ -370,7 +370,6 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   // Floodgates / Overtime). Only the human side carries buffs in the demo.
   const youBuffs = opts.youBuffs ?? new Set<string>();
   const theirBuffs = opts.theirBuffs ?? new Set<string>();
-  const GARBAGE_FROM = GAME_SECONDS - 300; // final 5 minutes
   const youOT = youBuffs.has('overtime') ? 300 : 0;
   const theirOT = theirBuffs.has('overtime') ? 300 : 0;
   const yp = playsForPlayer(you.player, week, you.metricId);
@@ -378,6 +377,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const yPlays = yp.plays;
   const tPlays = tp.plays;
   const real = yp.real || tp.real;
+  // Real 2025 play-by-play runs a full 60:00; the synthetic prototype clock caps
+  // at 55:00 (GAME_SECONDS). Pick the right regulation length so a real game's
+  // final 5 minutes aren't mistaken for overtime — which would silently drop all
+  // drip (and mistime Garbage Time) over that stretch.
+  const REG = real ? 3600 : GAME_SECONDS;
+  const GARBAGE_FROM = REG - 300; // final 5 minutes
   const merged: MergedPlay[] = [
     ...yPlays.map((p) => ({ ...p, side: 'you' as const })),
     ...tPlays.map((p) => ({ ...p, side: 'their' as const })),
@@ -469,7 +474,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     if (emp && t0 < emp[1] && t1 > emp[0]) return ZERO_GAIN;
     // Overtime: minutes past regulation count as full possession (no game clock
     // to gate them), so the drip keeps ticking for the bonus window.
-    const isOT = t0 >= GAME_SECONDS;
+    const isOT = t0 >= REG;
     let secs = isOT ? (buffs.has('overtime') ? t1 - t0 : 0) : offSecs(poss, t0, t1);
     // REAL CLOCK: convert THIS game-minute's possession seconds into real
     // wall-clock-active seconds via the game's baked active-wall timeline (breaks
@@ -764,12 +769,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
 
   // Final drip accrual through the end of the game (per-minute, like the rest).
   // Overtime extends the window 5 minutes for whichever side armed it.
-  accrue(GAME_SECONDS + Math.max(youOT, theirOT));
+  accrue(REG + Math.max(youOT, theirOT));
 
   // DEF SUPPRESS (HALVING) resolves globally in buildMatchup — it reaches every
   // opponent slot across every window — so it is not applied here.
 
-  const maxClock = events.length ? Math.max(...events.map((e) => e.clock)) : GAME_SECONDS;
+  const maxClock = events.length ? Math.max(...events.map((e) => e.clock)) : REG;
   return {
     events,
     youFinal: Math.round(Y.bank * 10) / 10,
