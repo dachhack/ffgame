@@ -1516,9 +1516,19 @@ function SetupRow(props: {
               <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 9px' }}>{applyPu?.icon} TAP TO APPLY</span>
             </div>
           )}
+          {/* Remove the player from this spot — compact red ✕ pinned top-right,
+              clear of the metric list below. */}
+          {!applyMode && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onClearSlot(); }}
+              title="Remove player from this spot"
+              className="mono"
+              style={{ position: 'absolute', top: 6, right: 6, zIndex: 3, width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, lineHeight: 1, color: 'var(--opp)', background: 'var(--surface)', border: '1px solid var(--opp)', borderRadius: 4, cursor: 'pointer' }}
+            >✕</button>
+          )}
           {/* identity row — tap to swap the player; on desktop the spot's
               power-ups sit to the right of the headshot (below it on mobile). */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0, paddingRight: 22 }}>
             <div onClick={cardTap} style={{ cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center', minWidth: 0, flex: 1 }}>
               <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={isMobile ? 40 : 48} />
               <div style={{ minWidth: 0, flex: 1 }}>
@@ -1556,10 +1566,8 @@ function SetupRow(props: {
           {/* metric picker — full card width, stacks cleanly */}
           {showPicker && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {editing ? (
+              {editing && (
                 <button onClick={() => setEditing(false)} className="mono" style={{ width: '100%', textAlign: 'center', background: 'none', border: '1px dashed var(--bd)', borderRadius: 3, padding: '3px', fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)' }}>✕ KEEP {metric?.name?.toUpperCase()}</button>
-              ) : (
-                <button onClick={onClearSlot} className="mono" style={{ width: '100%', textAlign: 'center', background: 'none', border: '1px dashed var(--opp)', borderRadius: 3, padding: '3px', fontSize: 8, letterSpacing: '0.1em', color: 'var(--opp)' }}>✕ REMOVE PLAYER</button>
               )}
               {METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === pick?.metricId).map((m) => {
                 const cur = m.id === pick?.metricId;
