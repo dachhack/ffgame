@@ -1829,7 +1829,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
         {open && (() => {
           const log = buildLog(bEvents);
           return (
-            <TwoColLog events={log.events} realOf={log.realOf} realOrder={realClock} youName={mineBackup ? be.player.name : '—'} theirName={mineBackup ? '—' : be.player.name} gameLabel={slot.gameLabel} youCoin={mineBackup ? metricCoin(be.player.pos, be.metricId) : 0} theirCoin={mineBackup ? 0 : metricCoin(be.player.pos, be.metricId)} />
+            <TwoColLog events={log.events} realOf={log.realOf} realOrder={realClock} gameLabel={slot.gameLabel} youCoin={mineBackup ? metricCoin(be.player.pos, be.metricId) : 0} theirCoin={mineBackup ? 0 : metricCoin(be.player.pos, be.metricId)} />
           );
         })()}
       </div>
@@ -1923,7 +1923,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
       {open && (() => {
         const log = buildLog(visibleEvents);
         return (
-          <TwoColLog events={log.events} realOf={log.realOf} realOrder={realClock} youName={slot.you.player.name} theirName={slot.their.player.name} gameLabel={slot.gameLabel} youCoin={metricCoin(slot.you.player.pos, slot.you.metricId)} theirCoin={metricCoin(slot.their.player.pos, slot.their.metricId)} />
+          <TwoColLog events={log.events} realOf={log.realOf} realOrder={realClock} gameLabel={slot.gameLabel} youCoin={metricCoin(slot.you.player.pos, slot.you.metricId)} theirCoin={metricCoin(slot.their.player.pos, slot.their.metricId)} />
         );
       })()}
     </div>
@@ -2082,7 +2082,7 @@ function actionText(play: string): string {
 // Two-column play-by-play: your player's plays on the left, theirs on the
 // right, the clock down the middle. Chronological (newest at the bottom) so it
 // reads like a live ticker, auto-scrolling to keep the latest play in view.
-function TwoColLog({ events, youName, theirName, gameLabel, youCoin = 0, theirCoin = 0, realOf, realOrder }: { events: PbpEvent[]; youName: string; theirName: string; gameLabel: string; youCoin?: number; theirCoin?: number; realOf?: (ev: PbpEvent) => string; realOrder?: boolean }) {
+function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, realOrder }: { events: PbpEvent[]; gameLabel: string; youCoin?: number; theirCoin?: number; realOf?: (ev: PbpEvent) => string; realOrder?: boolean }) {
   // Larger-text mode enlarges this fine-print log (the smallest text in the app).
   const { bigText } = useStore();
   const fs = (n: number) => bigText ? Math.round(n * 1.35 * 10) / 10 : n; // font size
@@ -2135,13 +2135,9 @@ function TwoColLog({ events, youName, theirName, gameLabel, youCoin = 0, theirCo
   );
   return (
     <div style={{ marginTop: 5, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <span className="mono" style={{ flex: 1, textAlign: 'right', fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{youName}</span>
-        <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
-          {toggle(minutes, minutes ? 'MINUTES' : 'PLAYS', () => setMinutes((m) => !m))}
-          {toggle(top, top ? 'NEWest ↑' : 'NEWest ↓', () => setTop((t) => !t))}
-        </div>
-        <span className="mono" style={{ flex: 1, textAlign: 'left', fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{theirName}</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 6 }}>
+        {toggle(minutes, minutes ? 'MINUTES' : 'PLAYS', () => setMinutes((m) => !m))}
+        {toggle(top, top ? 'NEWest ↑' : 'NEWest ↓', () => setTop((t) => !t))}
       </div>
       <div ref={scroller} onScroll={onScroll} style={{ maxHeight: fw(210), overflow: 'auto', paddingRight: 10, scrollbarGutter: 'stable', scrollbarWidth: 'thin' }}>
         {rows.length === 0 && (
