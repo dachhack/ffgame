@@ -1,16 +1,14 @@
 import { useState, type ReactNode } from 'react';
 import { useStore, LEAGUE_REF } from '../app/store';
-import { Brand, Header, ThemeSwitcher, UserChip, Avatar, PosPill, PlayerImg } from '../app/ui';
+import { Brand, Header, ThemeSwitcher, UserChip, Avatar, PosPill, PlayerImg, DemoControls } from '../app/ui';
 import { getTeam, teamRoster, gameForTeam, teamResults, freeAgents } from '../data/league';
 import { TOTAL_SLOTS } from '../data/metrics';
 import { POWERUPS } from '../data/powerups';
 import { avatarUrl } from '../data/media';
-import { DEMO_WEEK, SLEEPER_HANDLE } from '../config';
+import { SLEEPER_HANDLE } from '../config';
 import { weekLockLabel } from '../data/nflSlate';
 import { APP_VERSION, DATA_SOURCE } from '../app/version';
 import type { FantasyTeam } from '../types';
-
-const YOU = 'happy-campers';
 
 type ModalState =
   | null
@@ -20,13 +18,13 @@ type ModalState =
   | { type: 'shop' };
 
 export function LeagueOverview() {
-  const { navigate, coins } = useStore();
+  const { navigate, coins, youTeamId: YOU, demoWeek } = useStore();
   const [modal, setModal] = useState<ModalState>(null);
   const teams = [...LEAGUE_REF.teams].sort((a, b) => a.seed - b.seed);
   const you = getTeam(YOU)!;
-  const wk = gameForTeam(YOU, DEMO_WEEK)!;
+  const wk = gameForTeam(YOU, demoWeek)!;
   const opp = getTeam(wk.oppId)!;
-  const form = teamResults(YOU).filter((r) => r.week < DEMO_WEEK).slice(-5);
+  const form = teamResults(YOU).filter((r) => r.week < demoWeek).slice(-5);
 
   return (
     <>
@@ -62,6 +60,9 @@ export function LeagueOverview() {
             </div>
           </div>
 
+          {/* demo: assume any team, jump to any week */}
+          <div style={{ marginBottom: 16 }}><DemoControls /></div>
+
           {/* toolbar */}
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
             <ToolButton onClick={() => setModal({ type: 'schedule' })}>📅 ALL MATCHUPS</ToolButton>
@@ -75,7 +76,7 @@ export function LeagueOverview() {
             <div style={{ flex: '1.3 1 300px', minWidth: 300, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--warn)', borderRadius: 6, padding: 18 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)' }}>WEEK {DEMO_WEEK} MATCHUP</span>
+                  <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)' }}>WEEK {demoWeek} MATCHUP</span>
                   <span className="mono" style={{ fontSize: 9, color: 'var(--warn)', letterSpacing: '0.1em' }}>OPEN</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '14px 0' }}>
@@ -84,9 +85,9 @@ export function LeagueOverview() {
                   <TeamMini team={opp} accent="var(--opp)" right />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid var(--bd)' }}>
-                  <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>0/{TOTAL_SLOTS} SLOTS SET · LOCKS {weekLockLabel(DEMO_WEEK)}</span>
+                  <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>0/{TOTAL_SLOTS} SLOTS SET · LOCKS {weekLockLabel(demoWeek)}</span>
                   <button
-                    onClick={() => navigate({ name: 'matchup', week: DEMO_WEEK, phase: 'setup' })}
+                    onClick={() => navigate({ name: 'matchup', week: demoWeek, phase: 'setup' })}
                     className="mono"
                     style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', padding: '8px 13px', borderRadius: 4, border: 'none', boxShadow: '0 0 18px color-mix(in srgb, var(--you) 28%, transparent)' }}
                   >
@@ -123,7 +124,7 @@ export function LeagueOverview() {
                 </div>
                 {teams.map((t) => {
                   const isYou = t.id === YOU;
-                  const last = teamResults(t.id).filter((r) => r.week < DEMO_WEEK).slice(-1)[0];
+                  const last = teamResults(t.id).filter((r) => r.week < demoWeek).slice(-1)[0];
                   const strk = last?.result ?? '—';
                   const playoff = t.seed <= 4;
                   return (
@@ -270,6 +271,7 @@ function Modal({ title, sub, onClose, children, maxWidth = 480 }: { title: strin
 }
 
 function TeamModal({ teamId, onClose, onOpenTeam }: { teamId: string; onClose: () => void; onOpenTeam: (id: string) => void }) {
+  const { demoWeek } = useStore();
   const [tab, setTab] = useState<'roster' | 'schedule'>('roster');
   const team = getTeam(teamId)!;
   const roster = teamRoster(teamId);
@@ -297,7 +299,7 @@ function TeamModal({ teamId, onClose, onOpenTeam }: { teamId: string; onClose: (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 440, overflow: 'auto' }}>
           {results.map((r) => {
             const o = getTeam(r.oppId)!;
-            const upcoming = r.week > DEMO_WEEK;
+            const upcoming = r.week > demoWeek;
             const c = upcoming ? 'var(--faint)' : r.result === 'W' ? 'var(--you)' : r.result === 'L' ? 'var(--opp)' : 'var(--dim)';
             return (
               <div key={r.week} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', border: '1px solid var(--bd)', borderLeft: `3px solid ${c}`, borderRadius: 3, padding: '7px 10px' }}>
@@ -340,14 +342,15 @@ function WaiverModal({ onClose }: { onClose: () => void }) {
 }
 
 function ScheduleModal({ onClose, onOpenTeam }: { onClose: () => void; onOpenTeam: (id: string) => void }) {
-  const [week, setWeek] = useState(DEMO_WEEK);
+  const { youTeamId: YOU, demoWeek } = useStore();
+  const [week, setWeek] = useState(demoWeek);
   const games = LEAGUE_REF.schedule.filter((g) => g.week === week);
   return (
     <Modal title="All Matchups" sub={`${LEAGUE_REF.name} · ${LEAGUE_REF.season}`} onClose={onClose} maxWidth={620}>
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
         {Array.from({ length: 14 }, (_, i) => i + 1).map((w) => {
           const sel = w === week;
-          const cur = w === DEMO_WEEK;
+          const cur = w === demoWeek;
           return (
             <button key={w} onClick={() => setWeek(w)} className="mono" style={{ fontSize: 9.5, fontWeight: 700, padding: '5px 9px', borderRadius: 3, border: `1px solid ${sel ? 'var(--you)' : cur ? 'var(--warn)' : 'var(--bd)'}`, background: sel ? 'var(--sh)' : 'transparent', color: sel ? 'var(--you)' : cur ? 'var(--warn)' : 'var(--dim)' }}>
               WK{w}
@@ -359,7 +362,7 @@ function ScheduleModal({ onClose, onOpenTeam }: { onClose: () => void; onOpenTea
         {games.map((g, i) => {
           const a = getTeam(g.homeId)!;
           const b = getTeam(g.awayId)!;
-          const done = week < DEMO_WEEK;
+          const done = week < demoWeek;
           const involvesYou = g.homeId === YOU || g.awayId === YOU;
           const aWon = g.homeScore > g.awayScore;
           return (
@@ -369,7 +372,7 @@ function ScheduleModal({ onClose, onOpenTeam }: { onClose: () => void; onOpenTea
                 <span className="grotesk" style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
               </button>
               <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: done && aWon ? 'var(--you)' : 'var(--mid)' }}>{done ? g.homeScore.toFixed(0) : ''}</span>
-              <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', width: 54, textAlign: 'center', letterSpacing: '0.08em' }}>{done ? 'FINAL' : week === DEMO_WEEK ? '● OPEN' : 'UPCOMING'}<br />vs</span>
+              <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', width: 54, textAlign: 'center', letterSpacing: '0.08em' }}>{done ? 'FINAL' : week === demoWeek ? '● OPEN' : 'UPCOMING'}<br />vs</span>
               <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: done && !aWon ? 'var(--you)' : 'var(--mid)' }}>{done ? g.awayScore.toFixed(0) : ''}</span>
               <button onClick={() => onOpenTeam(b.id)} style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
                 <span className="grotesk" style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>

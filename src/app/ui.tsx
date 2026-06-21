@@ -4,6 +4,7 @@ import { THEMES } from '../theme';
 import { useStore } from './store';
 import { headshot, teamLogo } from '../data/media';
 import { injuryFor } from '../data/injuries';
+import { LEAGUE, REG_SEASON_WEEKS } from '../data/league';
 import { APP_VERSION, DATA_SOURCE } from './version';
 
 /** True when the viewport is at/below `maxWidth` — drives the mobile layout. */
@@ -151,6 +152,41 @@ export function ThemeSwitcher() {
       >
         <span style={{ fontSize: 9 }}>A</span><span style={{ fontSize: 12 }}>A</span>
       </button>
+    </div>
+  );
+}
+
+/** Demo role/week picker — assume any team and jump to any week before setup. */
+export function DemoControls({ compact }: { compact?: boolean }) {
+  const { youTeamId, setYouTeam, demoWeek, setDemoWeek } = useStore();
+  const teams = [...LEAGUE.teams].sort((a, b) => a.seed - b.seed);
+  const selStyle: CSSProperties = {
+    fontFamily: MONO, fontSize: 11, fontWeight: 700, color: 'var(--text)',
+    background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4,
+    padding: '6px 8px', maxWidth: '100%',
+  };
+  const lbl: CSSProperties = { fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)' };
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        background: 'var(--surface)', border: '1px dashed var(--bdh)', borderRadius: 6,
+        padding: compact ? '8px 12px' : '10px 14px',
+      }}
+    >
+      <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 3, padding: '2px 6px' }}>DEMO</span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+        <span style={lbl}>PLAY AS</span>
+        <select value={youTeamId} onChange={(e) => setYouTeam(e.target.value)} style={selStyle}>
+          {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <span style={lbl}>WEEK</span>
+        <select value={demoWeek} onChange={(e) => setDemoWeek(Number(e.target.value))} style={selStyle}>
+          {Array.from({ length: REG_SEASON_WEEKS }, (_, i) => i + 1).map((w) => <option key={w} value={w}>Week {w}</option>)}
+        </select>
+      </div>
     </div>
   );
 }

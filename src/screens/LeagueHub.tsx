@@ -1,8 +1,8 @@
 import { useStore, LEAGUE_REF } from '../app/store';
-import { Brand, Header, ThemeSwitcher, UserChip, Avatar, fonts } from '../app/ui';
+import { Brand, Header, ThemeSwitcher, UserChip, Avatar, DemoControls, fonts } from '../app/ui';
 import { getTeam, gameForTeam } from '../data/league';
 import { TOTAL_SLOTS } from '../data/metrics';
-import { DEMO_WEEK, SLEEPER_HANDLE } from '../config';
+import { SLEEPER_HANDLE } from '../config';
 import { weekLockLabel } from '../data/nflSlate';
 
 const { MONO, GROTESK } = fonts;
@@ -29,9 +29,9 @@ function StatePill({ state }: { state: 'OPEN' | 'LOCKED' | 'LIVE' }) {
 }
 
 export function LeagueHub() {
-  const { navigate } = useStore();
-  const you = getTeam('happy-campers')!;
-  const game = gameForTeam('happy-campers', DEMO_WEEK)!;
+  const { navigate, youTeamId, demoWeek } = useStore();
+  const you = getTeam(youTeamId)!;
+  const game = gameForTeam(youTeamId, demoWeek)!;
   const opp = getTeam(game.oppId)!;
   const connected = 1 + OTHER_LEAGUES.length;
 
@@ -58,8 +58,12 @@ export function LeagueHub() {
             {connected} CONNECTED · SLEEPER DYNASTY PORTFOLIO
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, margin: '26px 0 12px' }}>
-            <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)' }}>WEEK {DEMO_WEEK}</span>
+          <div style={{ margin: '22px 0 14px', maxWidth: 460 }}>
+            <DemoControls />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, margin: '0 0 12px' }}>
+            <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)' }}>WEEK {demoWeek}</span>
             <span style={{ fontSize: 11, color: 'var(--dim)' }}>Kickoff Thu 8:15p · set your windows before lock</span>
           </div>
 
@@ -85,7 +89,7 @@ export function LeagueHub() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                 <div style={{ textAlign: 'right' }}>
                   <div className="mono" style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--faint)' }}>LOCKS IN</div>
-                  <div className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--warn)' }}>{weekLockLabel(DEMO_WEEK)}</div>
+                  <div className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--warn)' }}>{weekLockLabel(demoWeek)}</div>
                 </div>
                 <span
                   className="mono"

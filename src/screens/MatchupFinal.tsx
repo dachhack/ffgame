@@ -5,12 +5,9 @@ import { getTeam, gameForTeam } from '../data/league';
 import { buildMatchup, defaultLineup, slotKey } from '../engine/matchup';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
 import { metricById } from '../data/metrics';
-import { DEMO_WEEK } from '../config';
-
-const YOU = 'happy-campers';
 
 export function MatchupFinal({ week }: { week: number }) {
-  const { navigate } = useStore();
+  const { navigate, youTeamId: YOU } = useStore();
   const oppId = gameForTeam(YOU, week)?.oppId ?? 'rock-tunnel';
   const opp = getTeam(oppId)!;
   const you = getTeam(YOU)!;
@@ -158,7 +155,7 @@ export function MatchupFinal({ week }: { week: number }) {
           )}
           <div style={{ height: 30 }} />
           <div className="mono" style={{ textAlign: 'center', fontSize: 10, color: 'var(--faint)' }}>
-            Drip League FF · {opp.name} matchup · simulated from real 2025 stats · DEMO_WEEK {DEMO_WEEK}
+            Drip League FF · {opp.name} matchup · simulated from real 2025 stats · Week {week}
           </div>
         </div>
       </main>

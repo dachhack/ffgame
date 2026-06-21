@@ -7,7 +7,7 @@ import { Matchup } from './screens/Matchup';
 import { MatchupFinal } from './screens/MatchupFinal';
 
 export function App() {
-  const { theme, route } = useStore();
+  const { theme, route, youTeamId } = useStore();
   const vars = themeVars(THEMES[theme]) as Record<string, string>;
   const light = theme === 'daylight' || theme === 'arctic';
 
@@ -30,8 +30,8 @@ export function App() {
     >
       {route.name === 'hub' && <LeagueHub />}
       {route.name === 'league' && <LeagueOverview />}
-      {route.name === 'matchup' && <Matchup key={`m${route.week}`} week={route.week} initialPhase={route.phase} />}
-      {route.name === 'final' && <MatchupFinal week={route.week} />}
+      {route.name === 'matchup' && <Matchup key={`m${route.week}-${youTeamId}`} week={route.week} initialPhase={route.phase} />}
+      {route.name === 'final' && <MatchupFinal key={`f${route.week}-${youTeamId}`} week={route.week} />}
     </div>
   );
 }

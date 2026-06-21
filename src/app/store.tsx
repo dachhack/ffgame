@@ -3,6 +3,7 @@ import type { ThemeName } from '../theme';
 import type { WindowId } from '../types';
 import { LEAGUE, YOU_TEAM_ID } from '../data/league';
 import { powerupById } from '../data/powerups';
+import { DEMO_WEEK } from '../config';
 
 import type { SlotSwap } from '../engine/matchup';
 export type { SlotSwap };
@@ -35,7 +36,12 @@ interface Store {
   setBigText: (v: boolean) => void;
   route: Route;
   navigate: (r: Route) => void;
+  /** Demo: which league team you're playing as (any team in the league). */
   youTeamId: string;
+  setYouTeam: (id: string) => void;
+  /** Demo: which week the hub/overview/setup revolve around (the "open" week). */
+  demoWeek: number;
+  setDemoWeek: (w: number) => void;
   coins: number;
   /** Credit a week's drip coin once (no-op if that week was already credited). */
   creditWeek: (week: number, amount: number) => void;
@@ -113,6 +119,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return saved ?? 'prime';
   });
   const [route, setRoute] = useState<Route>({ name: 'hub' });
+  // Demo role/week: pick any team and any week before heading into setup.
+  const [youTeamId, setYouTeam] = useState<string>(YOU_TEAM_ID);
+  const [demoWeek, setDemoWeek] = useState<number>(DEMO_WEEK);
   const [bigText, setBigTextState] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem(BIGTEXT_KEY);
@@ -268,8 +277,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, bigText, setBigText, route, navigate: setRoute, youTeamId: YOU_TEAM_ID, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
-    [theme, bigText, route, coins, inventory, applied],
+    () => ({ theme, setTheme, bigText, setBigText, route, navigate: setRoute, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    [theme, bigText, route, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -15,7 +15,6 @@ import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor } from '../data/
 import { ShopModal } from './LeagueOverview';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
-const YOU = 'happy-campers';
 const TICK_MS = 700;
 const TICK_SECONDS = 20;
 
@@ -82,7 +81,7 @@ function CoinPill({ amt }: { amt: number }) {
 }
 
 export function Matchup({ week, initialPhase }: { week: number; initialPhase: Phase }) {
-  const { navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
+  const { youTeamId: YOU, navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const buffs = applied[week]?.buffs ?? {};
   const buffsKey = JSON.stringify(buffs);
   const extraSlots = applied[week]?.extraSlots ?? {};
