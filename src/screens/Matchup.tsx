@@ -670,7 +670,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
                 extraSlotQty={extraSlotQty}
                 onApplyExtra={() => applyExtraSlot(week, rw.window.id)}
                 onRemoveExtra={() => removeExtraSlot(week, rw.window.id)}
-                onAssignBackup={(key) => setBackupMenu({ key })}
+                onAssignBackup={(key) => setBackupMenu({ key, required: true })}
                 picks={picks}
                 selSlot={selSlot}
                 pickMetricFor={pickMetricFor}
