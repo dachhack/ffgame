@@ -107,7 +107,7 @@ export function Avatar({ name, accent = 'var(--you)', size = 30, src }: { name: 
 }
 
 export function ThemeSwitcher() {
-  const { theme, setTheme } = useStore();
+  const { theme, setTheme, bigText, setBigText } = useStore();
   const opts: { id: ThemeName; label: string }[] = [
     { id: 'prime', label: 'P' },
     { id: 'tactical', label: 'T' },
@@ -118,7 +118,7 @@ export function ThemeSwitcher() {
     { id: 'arctic', label: 'A' },
   ];
   return (
-    <div style={{ display: 'flex', gap: 3, flex: 'none' }}>
+    <div style={{ display: 'flex', gap: 3, flex: 'none', alignItems: 'center' }}>
       {opts.map((o) => {
         const active = theme === o.id;
         return (
@@ -137,6 +137,20 @@ export function ThemeSwitcher() {
           </button>
         );
       })}
+      <button
+        onClick={() => setBigText(!bigText)}
+        title={bigText ? 'Larger text: on (tap for normal)' : 'Larger text: off (tap to enlarge)'}
+        aria-pressed={bigText}
+        style={{
+          height: 22, padding: '0 6px', marginLeft: 3, borderRadius: 4, fontFamily: MONO, fontWeight: 700, lineHeight: 1,
+          display: 'inline-flex', alignItems: 'baseline', gap: 1,
+          background: bigText ? 'var(--sh)' : 'var(--surface)',
+          border: `1px solid ${bigText ? 'var(--you)' : 'var(--bd)'}`,
+          color: bigText ? 'var(--you)' : 'var(--dim)',
+        }}
+      >
+        <span style={{ fontSize: 9 }}>A</span><span style={{ fontSize: 12 }}>A</span>
+      </button>
     </div>
   );
 }
