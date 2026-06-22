@@ -2079,6 +2079,16 @@ function fmtStat(pos: Pos, s: StatLine, compact = false): string {
     if (s.safety) p.push(`${s.safety} SF`);
     return p.length ? p.join(' · ') : 'no splash';
   }
+  if (pos === 'DL' || pos === 'LB' || pos === 'DB') {
+    const p: string[] = [];
+    if (s.tackles) p.push(`${s.tackles} tkl`);
+    if (s.sacks) p.push(`${s.sacks} sk`);
+    if (s.ints) p.push(`${s.ints} INT`);
+    if (s.fumrec) p.push(`${s.fumrec} FR`);
+    if (s.dtd) p.push(`${s.dtd} TD`);
+    if (s.safety) p.push(`${s.safety} SF`);
+    return p.length ? p.join(' · ') : '—';
+  }
   return '—';
 }
 
@@ -2330,7 +2340,7 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
 const PLAY_KIND_LABEL: Record<string, string> = {
   pass: 'Pass', rush: 'Rush', rec: 'Reception', incomplete: 'Incompletion', return: 'Return',
   fg: 'Field goal', fgmiss: 'FG miss', xp: 'Extra point', xpmiss: 'XP miss',
-  sack: 'Sack', int: 'Interception', fumrec: 'Fumble recovery', dst_td: 'Defensive TD', safety: 'Safety',
+  sack: 'Sack', int: 'Interception', fumrec: 'Fumble recovery', dst_td: 'Defensive TD', safety: 'Safety', tackle: 'Tackle',
 };
 function PlayDetailModal({ ev, player, week, realStamp, onClose }: { ev: PbpEvent; player?: Player; week: number; realStamp?: string; onClose: () => void }) {
   const raw = player ? (realPbpFor(week, player.id)?.find((p) => p.c === ev.clock) ?? null) : null;

@@ -91,6 +91,26 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
     if (play.kind === 'safety') return 2;
     return 0;
   }
+  if (pos === 'DL' || pos === 'LB' || pos === 'DB') {
+    // IDP (Phase 1, flat). 'idp_splash' weights game-wrecking plays; the default
+    // 'idp_tackles' is a steady box-score line.
+    if (metricId === 'idp_splash') {
+      if (play.kind === 'sack') return 4;
+      if (play.kind === 'int') return 6;
+      if (play.kind === 'fumrec') return 4;
+      if (play.kind === 'dst_td') return 6;
+      if (play.kind === 'safety') return 2;
+      if (play.kind === 'tackle') return 0.5;
+      return 0;
+    }
+    if (play.kind === 'tackle') return 1;
+    if (play.kind === 'sack') return 2;
+    if (play.kind === 'int') return 3;
+    if (play.kind === 'fumrec') return 2;
+    if (play.kind === 'dst_td') return 6;
+    if (play.kind === 'safety') return 2;
+    return 0;
+  }
   // Every valid (position, metric) pair is handled above (drip metrics resolve
   // on their own path and never reach here). Anything else scores nothing,
   // rather than silently bundling multiple stat types into one metric.
@@ -151,6 +171,7 @@ function playText(p: Player, play: RawPlay): string {
   if (play.kind === 'fumrec') return `${t} D: fumble recovered`;
   if (play.kind === 'dst_td') return `${t} D: defensive TD`;
   if (play.kind === 'safety') return `${t} D: safety`;
+  if (play.kind === 'tackle') return `${t} D: tackle`;
   return `${t}: incomplete`;
 }
 
@@ -310,10 +331,11 @@ export interface StatLine {
   retYds: number; retTds: number;
   fg: number; xp: number;
   sacks: number; ints: number; fumrec: number; dtd: number; safety: number;
+  tackles: number;
 }
 export function statlineAt(player: Player, week: number, clock: number, metricId?: string): StatLine {
   const { plays } = playsForPlayer(player, week, metricId);
-  const s: StatLine = { passYds: 0, passTds: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, rec: 0, recYds: 0, recTds: 0, retYds: 0, retTds: 0, fg: 0, xp: 0, sacks: 0, ints: 0, fumrec: 0, dtd: 0, safety: 0 };
+  const s: StatLine = { passYds: 0, passTds: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, rec: 0, recYds: 0, recTds: 0, retYds: 0, retTds: 0, fg: 0, xp: 0, sacks: 0, ints: 0, fumrec: 0, dtd: 0, safety: 0, tackles: 0 };
   for (const p of plays) {
     if (p.clock > clock) break; // plays are sorted ascending by clock
     switch (p.kind) {
@@ -329,6 +351,7 @@ export function statlineAt(player: Player, week: number, clock: number, metricId
       case 'fumrec': s.fumrec++; break;
       case 'dst_td': s.dtd++; break;
       case 'safety': s.safety++; break;
+      case 'tackle': s.tackles++; break;
     }
   }
   return s;

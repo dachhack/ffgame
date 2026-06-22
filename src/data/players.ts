@@ -77,6 +77,11 @@ const DEFAULTS: Record<Pos, PlayerStats> = {
   TE: { games: 14, targets: 32, receptions: 22, recYds: 210, recTds: 2, carries: 0, rushYds: 0, rushTds: 0, passYds: 0, passTds: 0, ints: 0, ppr: 48 },
   K: { games: 16, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 120 },
   DEF: { games: 16, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 110 },
+  // IDP groups: no offensive box score; real scoring comes from defensive plays
+  // (synthesized in Phase 1). A nominal ppr keeps default-lineup ranking sane.
+  DL: { games: 16, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 90 },
+  LB: { games: 16, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 100 },
+  DB: { games: 16, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 90 },
 };
 
 export function statsForName(fullName: string, pos: Pos): PlayerStats {

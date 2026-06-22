@@ -42,7 +42,13 @@ function idbSet(db: IDBDatabase, key: string, val: unknown): Promise<void> {
   });
 }
 
-const FANTASY: Record<string, Pos> = { QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', K: 'K', DEF: 'DEF' };
+const FANTASY: Record<string, Pos> = {
+  QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', K: 'K', DEF: 'DEF',
+  // IDP — collapse Sleeper's sub-positions into the three groups.
+  DL: 'DL', DE: 'DL', DT: 'DL', NT: 'DL', EDGE: 'DL',
+  LB: 'LB', ILB: 'LB', OLB: 'LB', MLB: 'LB',
+  DB: 'DB', CB: 'DB', S: 'DB', FS: 'DB', SS: 'DB',
+};
 
 function parse(raw: Record<string, Record<string, unknown>>): Map<string, PlayerMeta> {
   const out = new Map<string, PlayerMeta>();

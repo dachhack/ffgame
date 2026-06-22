@@ -23,7 +23,9 @@ export interface Theme {
 }
 
 export type FxKey = 'nuke' | 'erase' | 'reset' | 'streak' | 'mult' | 'compression' | 'stop' | 'sys';
-export type Pos = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF';
+// Offensive + K/DEF positions, plus IDP groups (DL/LB/DB). IDP currently shares
+// each theme's neutral DEF palette; it can be themed per-group later.
+export type Pos = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF' | 'DL' | 'LB' | 'DB';
 
 const POS_TACTICAL: Theme['pos'] = {
   QB: { bg: '#102339', fg: '#79B3FF', bd: '#1F3A60' },
@@ -32,6 +34,9 @@ const POS_TACTICAL: Theme['pos'] = {
   TE: { bg: '#2E1F0E', fg: '#F4B66B', bd: '#5B3E1F' },
   K: { bg: '#321414', fg: '#FF8585', bd: '#5C2222' },
   DEF: { bg: '#1F1F1D', fg: '#C2C0B2', bd: '#36352D' },
+  DL: { bg: '#2A1A12', fg: '#E0A87E', bd: '#4A2F1F' },
+  LB: { bg: '#12211F', fg: '#73D6C4', bd: '#21433E' },
+  DB: { bg: '#1C1730', fg: '#A99AE0', bd: '#332A55' },
 };
 
 export const THEMES: Record<ThemeName, Theme> = {
@@ -54,6 +59,9 @@ export const THEMES: Record<ThemeName, Theme> = {
       TE: { bg: '#2B1410', fg: '#FFA67B', bd: '#5A2C20' },
       K: { bg: '#37102B', fg: '#FF7BB2', bd: '#5E1F48' },
       DEF: { bg: '#1B1B27', fg: '#B0AEC6', bd: '#2E2D40' },
+      DL: { bg: '#2A1A12', fg: '#E0A87E', bd: '#4A2F1F' },
+      LB: { bg: '#12211F', fg: '#73D6C4', bd: '#21433E' },
+      DB: { bg: '#1C1730', fg: '#A99AE0', bd: '#332A55' },
     },
   },
   prime: {
@@ -68,6 +76,9 @@ export const THEMES: Record<ThemeName, Theme> = {
       TE: { bg: '#2A1F0E', fg: '#E2B254', bd: '#48371D' },
       K: { bg: '#321B17', fg: '#FF6E5C', bd: '#532F2A' },
       DEF: { bg: '#1F1E1A', fg: '#B5AE9A', bd: '#322F28' },
+      DL: { bg: '#2A1A12', fg: '#E0A87E', bd: '#4A2F1F' },
+      LB: { bg: '#12211F', fg: '#73D6C4', bd: '#21433E' },
+      DB: { bg: '#1C1730', fg: '#A99AE0', bd: '#332A55' },
     },
   },
 
@@ -86,6 +97,9 @@ export const THEMES: Record<ThemeName, Theme> = {
       TE: { bg: '#FBEAD0', fg: '#9A6418', bd: '#EBCF9F' },
       K: { bg: '#FBDADA', fg: '#C0332F', bd: '#F0B3B0' },
       DEF: { bg: '#E7E5DC', fg: '#5A5446', bd: '#CFCABA' },
+      DL: { bg: '#FBE7D6', fg: '#9A5A24', bd: '#EBC9A6' },
+      LB: { bg: '#D7F0EB', fg: '#0E7A6A', bd: '#A6DAD0' },
+      DB: { bg: '#E6DEF8', fg: '#5B3FB0', bd: '#C7B8EC' },
     },
   },
   // Cool, crisp light mode.
@@ -101,6 +115,9 @@ export const THEMES: Record<ThemeName, Theme> = {
       TE: { bg: '#F6E8D6', fg: '#9A6A22', bd: '#E5CFAE' },
       K: { bg: '#FAD9DE', fg: '#C23250', bd: '#EEB1BD' },
       DEF: { bg: '#E4E7EC', fg: '#54606E', bd: '#CAD0D8' },
+      DL: { bg: '#FBE7D6', fg: '#9A5A24', bd: '#EBC9A6' },
+      LB: { bg: '#D7F0EB', fg: '#0E7A6A', bd: '#A6DAD0' },
+      DB: { bg: '#E6DEF8', fg: '#5B3FB0', bd: '#C7B8EC' },
     },
   },
   // Daylight's palette (green primary, red/blue accents) on a warm dark backdrop
@@ -117,6 +134,9 @@ export const THEMES: Record<ThemeName, Theme> = {
       TE: { bg: '#2C2210', fg: '#E5B257', bd: '#4C3B1D' },
       K: { bg: '#341C18', fg: '#ED6A60', bd: '#552F2A' },
       DEF: { bg: '#201E18', fg: '#B5AC96', bd: '#332F27' },
+      DL: { bg: '#2A1A12', fg: '#E0A87E', bd: '#4A2F1F' },
+      LB: { bg: '#12211F', fg: '#73D6C4', bd: '#21433E' },
+      DB: { bg: '#1C1730', fg: '#A99AE0', bd: '#332A55' },
     },
   },
   // Cool dark slate-blue, teal accent.
@@ -132,6 +152,9 @@ export const THEMES: Record<ThemeName, Theme> = {
       TE: { bg: '#2E2410', fg: '#F5C24E', bd: '#4E3E1D' },
       K: { bg: '#341A24', fg: '#FF6B81', bd: '#562C3A' },
       DEF: { bg: '#1F232C', fg: '#AEB8C6', bd: '#333A45' },
+      DL: { bg: '#2A1A12', fg: '#E0A87E', bd: '#4A2F1F' },
+      LB: { bg: '#12211F', fg: '#73D6C4', bd: '#21433E' },
+      DB: { bg: '#1C1730', fg: '#A99AE0', bd: '#332A55' },
     },
   },
 };

@@ -97,6 +97,15 @@ function synthPlays(pos: Pos, P: number): RealPlay[] {
     while (pts >= 3) { add('int', 0); pts -= 3; }
     while (pts >= 2) { add('fumrec', 0); pts -= 2; }
     while (pts >= 1) { add('sack', 0); pts -= 1; }
+  } else if (pos === 'DL' || pos === 'LB' || pos === 'DB') {
+    // IDP texture, scaled to the week's points under the default idp_tackles
+    // metric (~1/tackle, sack 2, int 3). Real per-defender plays land in Phase 2.
+    let pts = P;
+    const sacks = pos === 'DL' ? Math.min(3, Math.round(P / 8)) : pos === 'LB' ? Math.min(2, Math.round(P / 12)) : 0;
+    for (let i = 0; i < sacks; i++) { add('sack', 0); pts -= 2; }
+    if (pos === 'DB' && P >= 12) { add('int', 0); pts -= 3; }
+    const tackles = Math.max(1, Math.round(pts));
+    for (let i = 0; i < tackles; i++) add('tackle', 0);
   }
   const N = out.length || 1;
   return out.map((p, i) => ({ ...p, c: Math.round(150 + ((3100 - 150) * (i + 1)) / (N + 1)) }));

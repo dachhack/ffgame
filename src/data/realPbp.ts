@@ -10,7 +10,8 @@ export type RealPlayKind =
   | 'pass' | 'rush' | 'rec' | 'incomplete'      // skill
   | 'return'                                     // kick/punt return yards
   | 'fg' | 'fgmiss' | 'xp' | 'xpmiss'           // kicker
-  | 'sack' | 'int' | 'fumrec' | 'dst_td' | 'safety'; // team defense
+  | 'sack' | 'int' | 'fumrec' | 'dst_td' | 'safety'  // team defense
+  | 'tackle';                                        // IDP (individual defender)
 // `c` is the game-elapsed clock (seconds). `t` is the REAL wall-clock time of
 // the play, in seconds since the game's first snap (baked from nflverse
 // time_of_day) — used to gate real-time power-ups so a delayed feed can't be

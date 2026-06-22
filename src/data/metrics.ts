@@ -11,6 +11,15 @@ export const WINDOWS: GameWindow[] = [
 
 export const TOTAL_SLOTS = WINDOWS.reduce((n, w) => n + w.slots, 0);
 
+// Shared IDP metric catalog (DL/LB/DB). Phase 1: flat box-score scoring on
+// synthesized defensive plays (tackle / sack / int / fumble rec / def TD /
+// safety); no drip or nuke interaction yet — those land with real per-defender
+// play-by-play (see docs/mcp-requests.md item 8).
+const IDP_METRICS: Metric[] = [
+  { id: 'idp_tackles', name: 'Tackles', tag: 'FLAT', fx: 'sys', sc: 'tkl 1 · sk 2 · int 3 · FR 2', ef: 'Flat defensive scoring: 1 per tackle, 2 per sack, 3 per interception, 2 per fumble recovery, 6 per defensive/ST TD, 2 per safety. Volume-driven and steady.' },
+  { id: 'idp_splash', name: 'Splash Plays', tag: 'BIG PLAY', fx: 'sys', sc: 'sk 4 · int 6 · FR 4 · TD 6', ef: 'Rewards game-wreckers: 4 per sack, 6 per interception, 4 per fumble recovery, 6 per defensive/ST TD, 2 per safety, 0.5 per tackle. Boom-or-bust.' },
+];
+
 // Hidden scoring metrics per position. Each carries a scoring rule AND a
 // strategic effect. Text mirrors the design handoff's MET catalog.
 export const METRICS: Record<Pos, Metric[]> = {
@@ -52,6 +61,12 @@ export const METRICS: Record<Pos, Metric[]> = {
     { id: 'suppress', name: 'Suppress', tag: 'HALVING', fx: 'stop', sc: '0 pts', ef: 'Banks 0 itself — instead its own defensive week score (sk/int/fr/TD) becomes a kill-bar: EVERY opponent slot, in ANY window, that scores at or below it is halved.' },
     { id: 'earn', name: 'Earn Points', tag: 'FLAT', fx: 'sys', sc: 'sk1 / int3 / fr2', ef: 'Normal flat head-to-head scoring. No suppress, no halving.' },
   ],
+  // IDP (individual defensive players). Phase 1: flat box-score scoring off
+  // synthesized defensive plays; upgrades to interactive metrics + real
+  // per-defender play-by-play once Stathead exposes defender ids.
+  DL: IDP_METRICS,
+  LB: IDP_METRICS,
+  DB: IDP_METRICS,
 };
 
 export function metricById(pos: Pos, id: string | null | undefined): Metric | undefined {

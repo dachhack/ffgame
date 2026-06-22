@@ -65,6 +65,8 @@ export function bestMetric(p: Player, week: number, projection = false): string 
 function projForRank(p: Player, week: number): number {
   if (p.pos === 'K') return 8;
   if (p.pos === 'DEF') return 7;
+  if (p.pos === 'LB') return 8;            // tackle volume ≈ a reliable starter
+  if (p.pos === 'DL' || p.pos === 'DB') return 7;
   return projectedPoints(p, week);
 }
 
