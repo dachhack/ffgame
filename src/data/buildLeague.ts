@@ -6,7 +6,7 @@
 //   • Everyone else gets a synthesized play timeline scaled to their real
 //     weekly Sleeper total — "hybrid texture".
 import type { League, FantasyTeam, Player, Pos, PlayerStats, ScheduleGame } from '../types';
-import { normName, shortName } from './players';
+import { normName, shortName, hashStr } from './players';
 import { BAKED_SLUGS } from './bakedSlugs';
 import { SLEEPER_SLUG } from './sleeperSlug';
 import { setSyntheticWeeks, type RealPlay } from './realPbp';
@@ -227,24 +227,29 @@ export async function buildSleeperLeague(
 
   // Many leagues don't roster kickers or team defenses, which leaves the K
   // (Banker / Negation) and DEF (Suppress / Earn) metrics unplayable. When
-  // asked, give any team missing one a real baked K and/or DST — themed on the
-  // NFL team of its best skill player — so those strategies are available. This
-  // only enriches the playable drip lineup; Sleeper standings/scores are
+  // asked, give any team missing one a real baked K and/or DST, assigned a
+  // random NFL team (distinct per fantasy team, so no two mirror each other).
+  // This only enriches the playable drip lineup; Sleeper standings/scores are
   // untouched (they come from real Sleeper totals, not the roster).
   if (opts?.addKdst) {
+    // The 32 NFL teams, all of which have baked K + DST play-by-play.
+    const NFL = ['ari', 'atl', 'bal', 'buf', 'car', 'chi', 'cin', 'cle', 'dal', 'den', 'det', 'gb', 'hou', 'ind', 'jax', 'kc', 'la', 'lac', 'lv', 'mia', 'min', 'ne', 'no', 'nyg', 'nyj', 'phi', 'pit', 'sea', 'sf', 'tb', 'ten', 'was'];
+    // Deterministic shuffle (seeded by league) → a stable but random draw.
+    let seed = hashStr(`${leagueId}|kdst`);
+    const bag = [...NFL];
+    for (let i = bag.length - 1; i > 0; i--) { seed = (seed * 1103515245 + 12345) & 0x7fffffff; const j = seed % (i + 1); [bag[i], bag[j]] = [bag[j], bag[i]]; }
+    let pick = 0;
     for (const t of teams) {
       const roster = t.roster.map((id) => players[id]).filter(Boolean) as Player[];
       const hasK = roster.some((p) => p.pos === 'K');
       const hasDef = roster.some((p) => p.pos === 'DEF');
       if (hasK && hasDef) continue;
-      const nfl = roster
-        .filter((p) => p.pos !== 'K' && p.pos !== 'DEF' && p.team && p.team !== 'NFL')
-        .sort((a, b) => (b.stats.ppr - a.stats.ppr) || a.team.localeCompare(b.team))[0]?.team;
-      if (!nfl) continue;
+      const code = bag[pick % bag.length]; pick++;
+      const abbr = code.toUpperCase();
       const ensure = (pos: 'K' | 'DEF') => {
-        const eid = `${nfl.toLowerCase()}-${pos === 'K' ? 'k' : 'dst'}`;
+        const eid = `${code}-${pos === 'K' ? 'k' : 'dst'}`;
         if (!players[eid]) {
-          players[eid] = { id: eid, name: `${nfl} ${pos === 'K' ? 'K' : 'DST'}`, full: `${nfl} ${pos === 'K' ? 'K' : 'DST'}`, pos, team: nfl, stats: { ...Z } };
+          players[eid] = { id: eid, name: `${abbr} ${pos === 'K' ? 'K' : 'DST'}`, full: `${abbr} ${pos === 'K' ? 'K' : 'DST'}`, pos, team: abbr, stats: { ...Z } };
         }
         if (!t.roster.includes(eid)) t.roster.push(eid);
       };
