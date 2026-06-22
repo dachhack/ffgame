@@ -48,6 +48,42 @@ Status legend: ✅ done · 🟡 works via a workaround we'd like to drop · 🔴
 
 ---
 
+## Message to the MCP team — IDP (individual defensive players)
+
+> **Subject: Per-defender play-by-play fields for IDP support**
+>
+> We're adding IDP (individual defensive player) league support, and the one
+> thing blocking real scoring is **per-defender attribution in
+> `get_play_by_play`**. Today defensive events only come through aggregated by
+> `defteam`, so we can build team DST but not individual defenders. These are all
+> standard nflverse PBP columns, so it should be a quick add:
+>
+> - **Tackles:** `solo_tackle_1_player_id`, `solo_tackle_2_player_id`,
+>   `assist_tackle_1_player_id` … `assist_tackle_4_player_id` (tackles are the
+>   bulk of IDP scoring — the most important and the messiest, multiple per play).
+> - **Tackles for loss:** `tackle_for_loss_1_player_id`,
+>   `tackle_for_loss_2_player_id`.
+> - **Pressure:** `sack_player_id`, `half_sack_1_player_id`,
+>   `half_sack_2_player_id`, `qb_hit_1_player_id`, `qb_hit_2_player_id`.
+> - **Coverage / takeaways:** `interception_player_id`,
+>   `pass_defense_1_player_id`, `pass_defense_2_player_id`,
+>   `forced_fumble_player_1_player_id`, `forced_fumble_player_2_player_id`,
+>   `fumble_recovery_1_player_id`.
+> - **Scores:** `td_player_id` (so we can credit a defensive/ST TD to the
+>   defender, not just the team) and the safety credit if available.
+>
+> With these per-play defender ids (each resolvable via the existing
+> `get_player_crosswalk`), we can bake real defenders exactly the way we bake
+> offense today — on the real clock, attributed per player. Until then we can
+> only synthesize IDP texture from weekly point totals.
+>
+> Also: please extend `get_player_crosswalk` (and `espn_id` coverage) to
+> **defensive positions** (DL/LB/DB and their sub-positions) — today we filter
+> the crosswalk to skill players, and the IDP universe roughly triples the player
+> count.
+
+---
+
 ## Request list
 
 ### 1. Per-player turnovers (INT thrown / fumble lost) — ✅ DONE
@@ -120,3 +156,28 @@ client-side (`src/data/sleeperPlayers.ts`).
 **Ask:** a small hosted JSON (`sleeper ↔ gsis ↔ espn ↔ name/pos/team/headshot`)
 we could fetch at runtime to replace the 5 MB download. (MCP is build-time, so
 this is a "Stathead as a small data CDN" idea rather than an MCP tool.)
+
+### 8. Per-defender PBP attribution (IDP) — 🔴 MISSING (gates real IDP)
+**Why:** IDP league support — scoring individual defenders (DL/LB/DB) on
+tackles, sacks, TFL, QB hits, INTs, passes defended, forced fumbles, recoveries,
+and defensive/ST TDs.
+
+**What we have:** `genRealPbp.mjs` attributes defense to the **team** only
+(`{team}-dst`, keyed by `defteam`); no per-defender ids exist in the pipeline.
+
+**Ask (standard nflverse PBP columns):**
+- Tackles: `solo_tackle_1_player_id`, `solo_tackle_2_player_id`,
+  `assist_tackle_1_player_id`…`assist_tackle_4_player_id`.
+- `tackle_for_loss_1_player_id`, `tackle_for_loss_2_player_id`.
+- `sack_player_id`, `half_sack_1_player_id`, `half_sack_2_player_id`,
+  `qb_hit_1_player_id`, `qb_hit_2_player_id`.
+- `interception_player_id`, `pass_defense_1_player_id`,
+  `pass_defense_2_player_id`.
+- `forced_fumble_player_1_player_id`, `forced_fumble_player_2_player_id`,
+  `fumble_recovery_1_player_id`.
+- `td_player_id` for defensive/ST TD scorer credit.
+- Plus: extend `get_player_crosswalk` + `espn_id` to defensive positions
+  (DL/LB/DB and sub-positions) — the IDP universe ~triples the player count.
+
+**Interim:** until this lands, IDP players are scored by synthesizing texture
+from their weekly Sleeper point totals (Phase 1), not real per-defender plays.
