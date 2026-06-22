@@ -247,7 +247,7 @@ export const EMPTY_PLAYER: Player = {
 /** Real kick/punt returns (from baked 2025 play-by-play) — each at its EXACT
  *  game-elapsed second. Feeds the Return Yards metric. No synthesized timing. */
 function returnPlays(player: Player, week: number): RawPlay[] {
-  if (player.pos !== 'WR' && player.pos !== 'RB') return [];
+  if (player.pos !== 'WR' && player.pos !== 'RB' && player.pos !== 'TE') return [];
   return returnPlaysFor(player.id, week).map(([clock, yards, td, t]) => ({
     clock, t, kind: 'return' as RealPlayKind, yards, td: td === 1, catch: false, target: false,
   }));
@@ -450,7 +450,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   // pts/min) that accrues over the player's team offensive time.
   const dripKindOf = (s: SlotInput): RealPlayKind[] | null =>
     (s.metricId === 'combodrip') ? ['rush', 'rec']                          // Combo Drip unlock: carries AND catches
-      : (s.metricId === 'retyd') ? ['return']                               // Return Yards unlock: kick + punt returns
+      : (s.metricId === 'retyd') ? (s.player.pos === 'RB' ? ['rush', 'return'] : ['rec', 'return']) // Return Yards unlock: returns + the position's natural yardage
         : (s.player.pos === 'WR' && s.metricId === 'recyd') ? ['rec']
           : (s.player.pos === 'RB' && s.metricId === 'rush') ? ['rush']
             : (s.player.pos === 'TE' && s.metricId === 'recyd') ? ['rec']
