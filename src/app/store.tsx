@@ -161,6 +161,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setActiveLeagueState(built.league); // re-render React consumers
     setYouTeam(youId);
     setDemoWeek(DEMO_WEEK);
+    // A fresh sim starts with a clean economy: reset drip coin to the grant and
+    // wipe owned + applied powerups and the per-week credit ledger, so nothing
+    // carries over from the demo or a previously-run league.
+    creditedWeeks.current = new Set();
+    setCoins(DEMO_GRANT); setInventory({}); setApplied({});
+    persist({ coins: DEMO_GRANT, inv: {}, applied: {} });
   };
   const exitSimLeague = () => {
     resetToDemoLeague(); clearSyntheticWeeks(); clearRuntimeHeadshots();
