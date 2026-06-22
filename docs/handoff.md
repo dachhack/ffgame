@@ -123,6 +123,12 @@ league. Live demo: **https://dachhack.github.io/ffgame/**.
    questions. **Next dedicated session deliverable** (deferred): turn the
    build-vs-demo gap into an epic-level roadmap. Likely v1 recommendation: async
    resolution on cached data + cosmetic F2P + mark-free, before any live feed.
+4. **ESPN play-by-play integration** — plan to source PBP from ESPN's free API
+   to **pilot 2026** with a few users, then **launch 2027 on paid feeds**. Full
+   build plan in `docs/espn-pbp-handoff.md`: the key is an ESPN→RealPlay adapter
+   that emits the **same `wN.json` contract** (so the engine/UI are unchanged),
+   validated by re-deriving 2025 and diffing against the nflverse bake. Start
+   with the espn_id→slug crosswalk + adapter, ship the pilot async-first.
 
 ## Doc map
 
@@ -131,6 +137,7 @@ league. Live demo: **https://dachhack.github.io/ffgame/**.
 - `docs/handoff.md` (this file) — current top-level session handoff.
 - `docs/mcp-requests.md` — Stathead MCP data asks (incl. IDP) + ready-to-send messages.
 - `docs/commercialization-handoff.md` — business/scaling brief for a dedicated session.
+- `docs/espn-pbp-handoff.md` — build plan for sourcing PBP from ESPN (2026 pilot → 2027 paid feeds).
 
 ## Constraints (persist these)
 
