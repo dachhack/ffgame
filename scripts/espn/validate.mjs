@@ -75,10 +75,11 @@ let bakedOnly = 0, espnOnly = 0;
 const ydDiffs = [];
 const missExamples = [];
 
-// index baked plays by (slug,pid)
+// index plays by (slug,pid). `return` plays aren't in wN.json (they live in
+// src/data/returns.ts) — exclude them here and validate them separately below.
 function indexByPid(obj) {
   const m = new Map();
-  for (const [slug, plays] of Object.entries(obj)) for (const p of plays) if (p.pid != null) m.set(`${slug}|${p.pid}`, p);
+  for (const [slug, plays] of Object.entries(obj)) for (const p of plays) if (p.pid != null && p.k !== 'return') m.set(`${slug}|${p.pid}`, p);
   return m;
 }
 const bIdx = indexByPid(baked), eIdx = indexByPid(espn);
@@ -118,6 +119,24 @@ for (const s of slugsForPts) {
   if (d < 0.05) ptExact++; else if (d <= 1.0) ptClose++; else { ptOff++; if (ptExamples.length < 12) ptExamples.push(`${s}: espn ${a} vs baked ${b}`); }
 }
 
+// ── Returns cross-check vs src/data/returns.ts (joined on slug,pid) ──
+function loadReturns() {
+  const src = readFileSync(new URL('../../src/data/returns.ts', import.meta.url), 'utf8');
+  const i = src.indexOf('= {', src.indexOf('RETURN_PLAYS'));
+  const j = src.lastIndexOf('};');
+  return JSON.parse(src.slice(i + 2, j + 1)); // slug -> { week: [[c,y,td?,t?,pid?]] }
+}
+let retMatch = 0, retYdOk = 0, retBakedOnly = 0, retEspnOnly = 0;
+try {
+  const RET = loadReturns();
+  const bRet = new Map(); // slug|pid -> yards
+  for (const [slug, byWk] of Object.entries(RET)) for (const r of byWk[WEEK] ?? []) { const pid = r[4]; if (pid != null) bRet.set(`${slug}|${pid}`, r[1]); }
+  const eRet = new Map();
+  for (const [slug, plays] of Object.entries(espn)) for (const p of plays) if (p.k === 'return' && p.pid != null) eRet.set(`${slug}|${p.pid}`, p.y);
+  for (const [key, y] of bRet) { const ey = eRet.get(key); if (ey == null) retBakedOnly++; else { retMatch++; if (ey === y) retYdOk++; } }
+  for (const key of eRet.keys()) if (!bRet.has(key)) retEspnOnly++;
+} catch (e) { console.log('returns cross-check skipped:', e.message); }
+
 const pct = (n, d) => d ? `${((100 * n) / d).toFixed(1)}%` : 'n/a';
 console.log('\n── play-level join (slug,pid) ──');
 console.log(`baked plays w/ pid: ${bIdx.size}  espn plays w/ pid: ${eIdx.size}`);
@@ -126,6 +145,8 @@ console.log(`  attribution exact (k+y+td): ${attrOk} (${pct(attrOk, matched)} of
 console.log(`  kind mismatch: ${kindMismatch}  yard mismatch: ${ydMismatch}  td mismatch: ${tdMismatch}`);
 console.log(`baked-only (ESPN missed): ${bakedOnly}   espn-only (extra): ${espnOnly}`);
 if (ydDiffs.length) console.log(`  yard-diff mean: ${(ydDiffs.reduce((a, b) => a + b, 0) / ydDiffs.length).toFixed(2)}`);
+console.log('\n── returns (vs src/data/returns.ts) ──');
+console.log(`matched: ${retMatch}  yards exact: ${retYdOk} (${pct(retYdOk, retMatch)})  baked-only: ${retBakedOnly}  espn-only: ${retEspnOnly}`);
 console.log('\n── per-player points ──');
 console.log(`exact(<0.05): ${ptExact}  close(<=1.0): ${ptClose}  off(>1.0): ${ptOff}  total ${slugsForPts.size}`);
 if (missExamples.length) { console.log('\nmiss examples:'); for (const m of missExamples) console.log('  ' + m); }

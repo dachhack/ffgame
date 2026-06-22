@@ -86,22 +86,40 @@ the game's boxscore roster (a regex of real "F.Last" abbreviations — never gra
 verb), with an injectable `resolveSlug` (production: ESPN athlete-id → Sleeper
 `espn_id` → slug; validation: crosswalk by normalized name).
 
+**Full kind set emitted** in one pass: `pass · rush · rec · incomplete · sack ·
+int · fumrec · dst_td · safety · fg · fgmiss · xp · xpmiss · return`. Covers
+made/missed/blocked FGs, interception returns (incl. pick-sixes), fumble/punt/
+kick return TDs, and KR/PR return yards (the `return` kind for the retyd metric).
+
 `scripts/espn/validate.mjs` — fetches a real 2025 week from ESPN, normalizes, and
-diffs against the committed `public/pbp/wN.json`, joining plays on `(slug, pid)`.
+diffs against the committed `public/pbp/wN.json` on `(slug, pid)`, plus a returns
+cross-check against `src/data/returns.ts`.
 
-**Result, week 1 (16 games):**
-- **93.9%** of baked plays reproduced from ESPN (2927 / 3117).
-- **99.1%** of matched plays attribution-exact (kind + yards + TD): 2900 / 2927.
-- Per-player points: **298 exact / 30 within 1.0 / 62 off** of 390.
+**Results (weeks 1–3, 16 games each — consistent, not overfit):**
+- **~95%** of baked plays reproduced from ESPN (95.1 / 95.4 / 95.2%).
+- **99.4–99.7%** of matched plays attribution-exact (kind + yards + TD); **0–3**
+  kind mismatches per week.
+- Returns: **86–95%** yard-exact on plays joinable to `returns.ts`.
+- Per-player points (wk1): **348 exact / 25 within 1.0 / 49 off** of 422.
 
-Remaining deltas are understood, not mysterious:
-- **Initials collisions** — e.g. JAX `T.Etienne` (Travis vs Trevor Etienne, brothers
-  on the same team) — unsolvable from initials-only text; the production
-  **athlete-id join eliminates it**.
+Remaining deltas are understood, not mysterious — and the off-by-points are
+dominated by the **validation resolver**, not adapter logic:
+- **Initials collisions** — e.g. JAX `T.Etienne` (Travis vs Trevor Etienne,
+  brothers on one team) — unsolvable from initials-only text; the production
+  **athlete-id join eliminates it**. (~all of the skill-position point misses.)
 - **Nickname slugs** ("Joshua Palmer" vs nflverse `josh-palmer`) — also gone with
   the id join.
-- **K/DST edges** — XP team resolution and INT/fumble-return defense attribution;
-  secondary to skill scoring (the heart of the game), tightened by a richer feed.
+- **XP pid-join artifact** — ESPN bundles the extra point into the TD play (one
+  id); nflverse gives the XP its own `play_id`, so XPs don't pid-match. The XP is
+  still emitted and scored correctly — it's a join artifact, not a miss.
+- **`statYardage` vs nflverse** — a handful of plays/week differ slightly.
+
+**Parser lessons worth keeping** (each was a real bug found against the baked
+truth): trust the play **type**, not the text, for interceptions (reversed-on-
+replay and 2-pt-conversion picks still say "INTERCEPTED"); attribute kickers by
+the **kicker's name → team**, not the play's offense id (some scoring plays omit
+team ids); anchor name matching to the **boxscore roster** (a generic "F.Last"
+token grabs verbs).
 
 Run it: `node scripts/espn/validate.mjs 1` (any week 1–14).
 
