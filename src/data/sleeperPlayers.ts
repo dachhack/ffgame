@@ -42,12 +42,20 @@ function idbSet(db: IDBDatabase, key: string, val: unknown): Promise<void> {
   });
 }
 
+// IDP (DL/LB/DB) is fully wired but NOT enabled yet — flip to true once real
+// per-defender play-by-play lands (Phase 2; see docs/mcp-requests.md item 8).
+// While false, defenders are dropped from Sleeper rosters (pre-IDP behavior) and
+// nothing IDP-related surfaces in the app.
+export const IDP_ENABLED = false;
+
 const FANTASY: Record<string, Pos> = {
   QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', K: 'K', DEF: 'DEF',
-  // IDP — collapse Sleeper's sub-positions into the three groups.
-  DL: 'DL', DE: 'DL', DT: 'DL', NT: 'DL', EDGE: 'DL',
-  LB: 'LB', ILB: 'LB', OLB: 'LB', MLB: 'LB',
-  DB: 'DB', CB: 'DB', S: 'DB', FS: 'DB', SS: 'DB',
+  // IDP — collapse Sleeper's sub-positions into the three groups (gated above).
+  ...(IDP_ENABLED ? {
+    DL: 'DL', DE: 'DL', DT: 'DL', NT: 'DL', EDGE: 'DL',
+    LB: 'LB', ILB: 'LB', OLB: 'LB', MLB: 'LB',
+    DB: 'DB', CB: 'DB', S: 'DB', FS: 'DB', SS: 'DB',
+  } as Record<string, Pos> : {}),
 };
 
 function parse(raw: Record<string, Record<string, unknown>>): Map<string, PlayerMeta> {
