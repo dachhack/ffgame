@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ThemeName } from '../theme';
 import type { WindowId, Pick } from '../types';
-import { LEAGUE, YOU_TEAM_ID } from '../data/league';
+import { LEAGUE, YOU_TEAM_ID, setActiveLeague, resetToDemoLeague, type BuiltLeague } from '../data/league';
+import { clearSyntheticWeeks } from '../data/realPbp';
+import type { League } from '../types';
 import { powerupById } from '../data/powerups';
 import { DEMO_WEEK } from '../config';
 import type { SleeperUser } from '../data/sleeper';
@@ -46,6 +48,12 @@ interface Store {
   /** The Sleeper account whose leagues we're browsing (null → welcome splash). */
   sleeperUser: SleeperUser | null;
   setSleeperUser: (u: SleeperUser | null) => void;
+  /** The league the sim is currently running on (the baked DRIP demo by default). */
+  activeLeague: League;
+  /** Make a freshly-built Sleeper league active and enter its sim as `youTeamId`. */
+  loadSimLeague: (built: BuiltLeague, youTeamId: string) => void;
+  /** Drop back to the baked demo league. */
+  exitSimLeague: () => void;
   /** Demo: which league team you're playing as (any team in the league). */
   youTeamId: string;
   setYouTeam: (id: string) => void;
@@ -142,9 +150,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
   // Boot to your leagues if a Sleeper user is remembered, else the welcome splash.
   const [route, setRoute] = useState<Route>(sleeperUser ? { name: 'leagues' } : { name: 'splash' });
+  // The active league (baked DRIP demo by default; swapped when a sim is loaded).
+  const [activeLeague, setActiveLeagueState] = useState<League>(LEAGUE);
   // Demo role/week: pick any team and any week before heading into setup.
   const [youTeamId, setYouTeam] = useState<string>(YOU_TEAM_ID);
   const [demoWeek, setDemoWeek] = useState<number>(DEMO_WEEK);
+  const loadSimLeague = (built: BuiltLeague, youId: string) => {
+    setActiveLeague(built);             // swap the engine registry (non-React reads)
+    setActiveLeagueState(built.league); // re-render React consumers
+    setYouTeam(youId);
+    setDemoWeek(DEMO_WEEK);
+  };
+  const exitSimLeague = () => {
+    resetToDemoLeague(); clearSyntheticWeeks();
+    setActiveLeagueState(LEAGUE); setYouTeam(YOU_TEAM_ID);
+  };
   const [bigText, setBigTextState] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem(BIGTEXT_KEY);
@@ -313,8 +333,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate: setRoute, sleeperUser, setSleeperUser, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
-    [theme, bigText, fullStats, route, sleeperUser, youTeamId, demoWeek, coins, inventory, applied],
+    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate: setRoute, sleeperUser, setSleeperUser, activeLeague, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    [theme, bigText, fullStats, route, sleeperUser, activeLeague, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

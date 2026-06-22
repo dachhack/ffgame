@@ -1,4 +1,4 @@
-import { useStore, LEAGUE_REF } from '../app/store';
+import { useStore } from '../app/store';
 import { Brand, Header, ThemeSwitcher, UserChip, Avatar, DemoControls, fonts } from '../app/ui';
 import { getTeam, gameForTeam } from '../data/league';
 import { TOTAL_SLOTS } from '../data/metrics';
@@ -29,7 +29,7 @@ function StatePill({ state }: { state: 'OPEN' | 'LOCKED' | 'LIVE' }) {
 }
 
 export function LeagueHub() {
-  const { navigate, youTeamId, demoWeek } = useStore();
+  const { navigate, youTeamId, demoWeek, activeLeague: LEAGUE_REF, sleeperUser } = useStore();
   const you = getTeam(youTeamId)!;
   const game = gameForTeam(youTeamId, demoWeek)!;
   const opp = getTeam(game.oppId)!;
@@ -38,14 +38,17 @@ export function LeagueHub() {
   return (
     <>
       <Header
-        left={<><Brand /><ThemeSwitcher /></>}
+        left={
+          <>
+            {sleeperUser && (
+              <button onClick={() => navigate({ name: 'leagues' })} className="mono" title="Back to your leagues" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', padding: '6px 9px', borderRadius: 4, cursor: 'pointer' }}>← LEAGUES</button>
+            )}
+            <Brand /><ThemeSwitcher />
+          </>
+        }
         right={
           <>
-            <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--dim)' }}>
-              LAST WK <span style={{ color: 'var(--you)', fontWeight: 700 }}>W</span> 195.7–178.1
-            </div>
-            <div style={{ height: 30, width: 1, background: 'var(--bd)' }} />
-            <UserChip handle={SLEEPER_HANDLE} sub="VIA SLEEPER" />
+            <UserChip handle={sleeperUser?.username ?? SLEEPER_HANDLE} sub="VIA SLEEPER" />
           </>
         }
       />

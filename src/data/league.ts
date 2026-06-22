@@ -175,20 +175,21 @@ const KDST: Record<string, { k: [string, string]; dst: [string, string] }> = {
   'achilles':       { k: ['CIN', 'DET'], dst: ['IND', 'PHI'] },
 };
 
-// Global player registry (id -> Player) and per-team rosters.
-const PLAYERS: Record<string, Player> = {};
-const TEAMS: FantasyTeam[] = RAW_TEAMS.map((rt) => {
+// Global player registry (id -> Player) and per-team rosters — the baked DRIP
+// demo. A live Sleeper league swaps these out at runtime via setActiveLeague().
+const DEMO_PLAYERS: Record<string, Player> = {};
+const DEMO_TEAMS: FantasyTeam[] = RAW_TEAMS.map((rt) => {
   const ids: string[] = [];
   for (const [name, pos] of rt.roster) {
     const p = buildPlayer(name, pos);
-    PLAYERS[p.id] = p;
+    DEMO_PLAYERS[p.id] = p;
     ids.push(p.id);
   }
   // Kickers + DSTs (added for the simulation).
   const kd = KDST[rt.id];
   if (kd) {
-    for (const t of kd.k) { const p = buildPlayer(`${t} K`, 'K', t); PLAYERS[p.id] = p; ids.push(p.id); }
-    for (const t of kd.dst) { const p = buildPlayer(`${t} DST`, 'DEF', t); PLAYERS[p.id] = p; ids.push(p.id); }
+    for (const t of kd.k) { const p = buildPlayer(`${t} K`, 'K', t); DEMO_PLAYERS[p.id] = p; ids.push(p.id); }
+    for (const t of kd.dst) { const p = buildPlayer(`${t} DST`, 'DEF', t); DEMO_PLAYERS[p.id] = p; ids.push(p.id); }
   }
   const t: FantasyTeam = {
     id: rt.id, name: rt.name, owner: rt.owner, ownerId: rt.ownerId,
@@ -217,39 +218,64 @@ const RAW_SCHEDULE: RawGame[] = [
   [14, 'rock-tunnel', 'gadsden', 147.36, 187.6], [14, 'happier-camper', 'coolaak', 90.76, 138.8], [14, 'rizzler', 'skeptic-tank', 136.3, 163.8], [14, 'happy-campers', 'achilles', 150.82, 69.6], [14, 'spartandawgs', 'next-year', 145.22, 166.1],
 ];
 
-const SCHEDULE: ScheduleGame[] = RAW_SCHEDULE.map(([week, homeId, awayId, homeScore, awayScore]) => ({
+const DEMO_SCHEDULE: ScheduleGame[] = RAW_SCHEDULE.map(([week, homeId, awayId, homeScore, awayScore]) => ({
   week, homeId, awayId, homeScore, awayScore,
 }));
 
-export const LEAGUE: League = {
+const DEMO_LEAGUE: League = {
   id: '1181483840740397056',
   name: 'PeakedInDynasty',
   format: 'Dynasty · 2QB · 10-team',
   season: 2025,
-  teams: TEAMS,
-  schedule: SCHEDULE,
+  teams: DEMO_TEAMS,
+  schedule: DEMO_SCHEDULE,
 };
 
+// ── Active league (mutable) ──────────────────────────────────────────────────
+// All accessors read from these. They default to the baked DRIP demo; loading a
+// live Sleeper league replaces them (see data/buildLeague.ts → setActiveLeague).
+let activeLeague: League = DEMO_LEAGUE;
+let activePlayers: Record<string, Player> = DEMO_PLAYERS;
+let activeWeeks = 14;
+
+/** The maximum supported regular-season week (the baked NFL slate covers 1–14). */
 export const REG_SEASON_WEEKS = 14;
+/** The active league's regular-season length (≤ REG_SEASON_WEEKS). */
+export function activeRegSeasonWeeks(): number { return activeWeeks; }
+export function getActiveLeague(): League { return activeLeague; }
+
+/** A fully-built league + its player registry, ready to make active. */
+export interface BuiltLeague { league: League; players: Record<string, Player>; weeks: number; }
+/** Swap in a live (Sleeper-built) league. */
+export function setActiveLeague(b: BuiltLeague): void {
+  activeLeague = b.league; activePlayers = b.players; activeWeeks = Math.min(REG_SEASON_WEEKS, Math.max(1, b.weeks));
+}
+/** Restore the baked DRIP demo league. */
+export function resetToDemoLeague(): void {
+  activeLeague = DEMO_LEAGUE; activePlayers = DEMO_PLAYERS; activeWeeks = 14;
+}
+
+// Kept for back-compat: the baked demo league object.
+export const LEAGUE: League = DEMO_LEAGUE;
 
 export function getPlayer(id: string): Player | undefined {
-  return PLAYERS[id];
+  return activePlayers[id];
 }
 
 export function getTeam(id: string): FantasyTeam | undefined {
-  return TEAMS.find((t) => t.id === id);
+  return activeLeague.teams.find((t) => t.id === id);
 }
 
 export function teamRoster(teamId: string): Player[] {
   const t = getTeam(teamId);
   if (!t) return [];
-  return t.roster.map((id) => PLAYERS[id]).filter(Boolean);
+  return t.roster.map((id) => activePlayers[id]).filter(Boolean);
 }
 
 /** All players rostered league-wide (for waiver-wire exclusion). */
 export function allRosteredIds(): Set<string> {
   const s = new Set<string>();
-  for (const t of TEAMS) for (const id of t.roster) s.add(id);
+  for (const t of activeLeague.teams) for (const id of t.roster) s.add(id);
   return s;
 }
 
@@ -266,7 +292,7 @@ export function freeAgents(limit = 24): StatPlayer[] {
 export interface TeamResult { week: number; oppId: string; ptsFor: number; ptsAgainst: number; result: 'W' | 'L' | 'T'; }
 export function teamResults(teamId: string): TeamResult[] {
   const out: TeamResult[] = [];
-  for (let w = 1; w <= REG_SEASON_WEEKS; w++) {
+  for (let w = 1; w <= activeWeeks; w++) {
     const g = gameForTeam(teamId, w);
     if (!g) continue;
     const result = g.ptsFor > g.ptsAgainst ? 'W' : g.ptsFor < g.ptsAgainst ? 'L' : 'T';
@@ -277,7 +303,7 @@ export function teamResults(teamId: string): TeamResult[] {
 
 /** The schedule game for a given team in a given week, normalized to that team's POV. */
 export function gameForTeam(teamId: string, week: number): { oppId: string; ptsFor: number; ptsAgainst: number } | null {
-  const g = SCHEDULE.find((x) => x.week === week && (x.homeId === teamId || x.awayId === teamId));
+  const g = activeLeague.schedule.find((x) => x.week === week && (x.homeId === teamId || x.awayId === teamId));
   if (!g) return null;
   if (g.homeId === teamId) return { oppId: g.awayId, ptsFor: g.homeScore, ptsAgainst: g.awayScore };
   return { oppId: g.homeId, ptsFor: g.awayScore, ptsAgainst: g.homeScore };

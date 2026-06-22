@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { useStore, LEAGUE_REF } from '../app/store';
+import { useStore } from '../app/store';
 import { Brand, Header, ThemeSwitcher, UserChip, Avatar, PosPill, PlayerImg, DemoControls } from '../app/ui';
 import { getTeam, teamRoster, gameForTeam, teamResults, freeAgents } from '../data/league';
 import { TOTAL_SLOTS } from '../data/metrics';
@@ -18,7 +18,7 @@ type ModalState =
   | { type: 'shop' };
 
 export function LeagueOverview() {
-  const { navigate, coins, youTeamId: YOU, demoWeek } = useStore();
+  const { navigate, coins, youTeamId: YOU, demoWeek, activeLeague: LEAGUE_REF } = useStore();
   const [modal, setModal] = useState<ModalState>(null);
   const teams = [...LEAGUE_REF.teams].sort((a, b) => a.seed - b.seed);
   const you = getTeam(YOU)!;
@@ -342,7 +342,7 @@ function WaiverModal({ onClose }: { onClose: () => void }) {
 }
 
 function ScheduleModal({ onClose, onOpenTeam }: { onClose: () => void; onOpenTeam: (id: string) => void }) {
-  const { youTeamId: YOU, demoWeek } = useStore();
+  const { youTeamId: YOU, demoWeek, activeLeague: LEAGUE_REF } = useStore();
   const [week, setWeek] = useState(demoWeek);
   const games = LEAGUE_REF.schedule.filter((g) => g.week === week);
   return (

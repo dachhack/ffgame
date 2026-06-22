@@ -24,9 +24,25 @@ interface WeekData { pbp: Record<string, RealPlay[]>; points: Record<string, num
 const cache = new Map<number, WeekData>();
 const inflight = new Map<number, Promise<void>>();
 
-/** True once a real week's JSON has been fetched into the cache. */
+// ── Synthetic overlay (runtime) ──────────────────────────────────────────────
+// When a live Sleeper league is loaded, players we DON'T have baked play-by-play
+// for get a synthesized timeline scaled to their real weekly Sleeper total (see
+// data/buildLeague.ts). Baked data always wins; the overlay only fills the gaps.
+const synthPbp = new Map<number, Record<string, RealPlay[]>>();
+const synthPts = new Map<number, Record<string, number>>();
+
+/** Install synthesized per-week play-by-play + points for the active league. */
+export function setSyntheticWeeks(weeks: { week: number; pbp: Record<string, RealPlay[]>; points: Record<string, number> }[]): void {
+  synthPbp.clear(); synthPts.clear();
+  for (const w of weeks) { synthPbp.set(w.week, w.pbp); synthPts.set(w.week, w.points); }
+}
+/** Drop all synthesized data (back to the baked demo league). */
+export function clearSyntheticWeeks(): void { synthPbp.clear(); synthPts.clear(); }
+
+
+/** True once a real week's JSON has been fetched into the cache (or synthesized). */
 export function isRealWeekLoaded(week: number): boolean {
-  return cache.has(week);
+  return cache.has(week) || synthPbp.has(week);
 }
 
 /** Fetch + cache a week's real play-by-play (no-op if not a real week or already loaded). */
@@ -45,15 +61,22 @@ export function loadRealWeek(week: number): Promise<void> {
   return p;
 }
 
-/** Per-player real fantasy points for a loaded week ({} if not loaded). */
+/** Per-player real fantasy points for a loaded week ({} if not loaded). Baked
+ *  totals win; synthesized totals fill in players we didn't bake. */
 export function realPointsFor(week: number): Record<string, number> {
-  return cache.get(week)?.points ?? {};
+  const synth = synthPts.get(week);
+  const baked = cache.get(week)?.points;
+  if (synth && baked) return { ...synth, ...baked };
+  return baked ?? synth ?? {};
 }
 
-/** Real plays for a player in a loaded week, or null (→ engine simulates). */
+/** Real plays for a player in a loaded week, or null (→ engine simulates).
+ *  Baked PBP wins; falls back to the synthesized overlay. */
 export function realPbpFor(week: number, playerId: string): RealPlay[] | null {
   const ps = cache.get(week)?.pbp[playerId];
-  return ps && ps.length ? ps : null;
+  if (ps && ps.length) return ps;
+  const sp = synthPbp.get(week)?.[playerId];
+  return sp && sp.length ? sp : null;
 }
 
 /** A team's offensive possession intervals [startSec,endSec] for a loaded week

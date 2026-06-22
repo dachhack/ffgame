@@ -4,7 +4,7 @@ import { ThemeSwitcher } from '../app/ui';
 import { resolveUser } from '../data/sleeper';
 
 export function Splash() {
-  const { navigate, setSleeperUser, sleeperUser } = useStore();
+  const { navigate, setSleeperUser, sleeperUser, exitSimLeague } = useStore();
   const [name, setName] = useState(sleeperUser?.username ?? '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -68,7 +68,7 @@ export function Splash() {
           </div>
 
           <div style={{ textAlign: 'center', marginTop: 18 }}>
-            <button onClick={() => navigate({ name: 'hub' })} className="mono" style={{ background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', cursor: 'pointer' }}>
+            <button onClick={() => { exitSimLeague(); navigate({ name: 'hub' }); }} className="mono" style={{ background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', cursor: 'pointer' }}>
               or explore the demo league →
             </button>
           </div>
