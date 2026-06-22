@@ -137,7 +137,9 @@ Two kinds of power-up surface, both reached from two header chips
 
 ## Return Yards — important data note
 The `unlock-return` power-up's Return Yards metric is now real and fully wired:
-- `src/data/metrics.ts`: `retyd` on WR + RB, flat `0.1/yd + 6/return TD`.
+- `src/data/metrics.ts`: `retyd` on WR + RB, a **drip** — return yards feed a
+  `0.01/yd` rate that accrues over possession (3 returns of 10+ yds → hot, a
+  short return cools). Wired through `dripKindOf(['return'])` in `sim.ts`.
 - Real 2025 KR + PR pulled from the **Stathead MCP** (`get_play_by_play`,
   `play_type=kickoff|punt` + `player_ids`), with exact `qtr+time` clocks.
 - Raw dumps live at `scripts/pbp/_ret_kr.jsonl` / `_ret_pr.jsonl`;

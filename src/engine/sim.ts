@@ -48,8 +48,7 @@ interface RawPlay {
 
 // Effect family of a metric → how it scores a single play and what it does.
 function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): number {
-  // Return Yards (unlock-return) — flat, position-agnostic: 0.1/yd + 6/return TD.
-  if (metricId === 'retyd') return play.kind === 'return' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0;
+  // Return Yards (retyd) is a drip — it scores via rate accrual, never here.
   if (pos === 'QB') {
     if (metricId === 'fg') return 0; // Field General scores nothing — it multiplies your other window players (see windowFgMult / resolveSlot opts)
     if (metricId === 'pass') return play.kind === 'pass' ? play.yards * 0.04 + (play.td ? 4 : 0) : 0; // yards + TD points, but no nuke/erase (flat family)
@@ -451,10 +450,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   // pts/min) that accrues over the player's team offensive time.
   const dripKindOf = (s: SlotInput): RealPlayKind[] | null =>
     (s.metricId === 'combodrip') ? ['rush', 'rec']                          // Combo Drip unlock: carries AND catches
-      : (s.player.pos === 'WR' && s.metricId === 'recyd') ? ['rec']
-        : (s.player.pos === 'RB' && s.metricId === 'rush') ? ['rush']
-          : (s.player.pos === 'TE' && s.metricId === 'recyd') ? ['rec']
-            : null;
+      : (s.metricId === 'retyd') ? ['return']                               // Return Yards unlock: kick + punt returns
+        : (s.player.pos === 'WR' && s.metricId === 'recyd') ? ['rec']
+          : (s.player.pos === 'RB' && s.metricId === 'rush') ? ['rush']
+            : (s.player.pos === 'TE' && s.metricId === 'recyd') ? ['rec']
+              : null;
   // TE drip builds at half the rate (0.005/yd vs 0.01) but is immune to the
   // pauses and erases that WR/RB opponents lay on a drip (see oppIsDrip below).
   const dripRateOf = (s: SlotInput): number => (s.player.pos === 'TE' ? 0.005 : 0.01);
@@ -661,12 +661,15 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       if (myDripKind?.includes(play.kind)) {
         mine.rate += play.yards * myDripRate;
         mine.paused = false;
-        // A rush must gain 3+ yards to advance the HOT streak — a stuffed run
-        // breaks momentum: it builds rate but resets the streak and cools the
-        // drip, so HOT demands *sustained* carries rather than latching for the
-        // whole game (a drip opponent never per-play scores, so it can't cool it
-        // for you). Catches always count toward the streak.
-        if (play.kind !== 'rush' || play.yards >= 3) {
+        // What counts toward the HOT streak: catches always do; a rush must gain
+        // 3+ yards; a return must gain 10+. A stuffed run / short return builds
+        // rate but breaks momentum — it resets the streak and cools the drip, so
+        // HOT demands *sustained* production rather than latching all game (a
+        // drip opponent never per-play scores, so it can't cool it for you).
+        const advances = play.kind === 'rush' ? play.yards >= 3
+          : play.kind === 'return' ? play.yards >= 10
+            : true;
+        if (advances) {
           mine.streak += 1;
           if (mine.streak >= 3 && !mine.hot) { mine.hot = true; sig = true; wentHot = true; } // drip goes HOT
         } else {
