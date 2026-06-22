@@ -8,9 +8,10 @@ import { MatchupFinal } from './screens/MatchupFinal';
 import { Splash } from './screens/Splash';
 import { Leagues } from './screens/Leagues';
 import { SleeperLeague } from './screens/SleeperLeague';
+import { LiveOnboard } from './screens/LiveOnboard';
 
 export function App() {
-  const { theme, route, youTeamId } = useStore();
+  const { theme, route, youTeamId, navigate } = useStore();
   const vars = themeVars(THEMES[theme]) as Record<string, string>;
   const light = theme === 'daylight' || theme === 'arctic';
 
@@ -18,6 +19,12 @@ export function App() {
     document.body.style.background = THEMES[theme].bg;
     document.documentElement.style.colorScheme = light ? 'light' : 'dark';
   }, [theme, light]);
+
+  // Magic-link return lands at ?live=1 — drop the user back into Live mode.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('live') === '1') navigate({ name: 'live' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div
@@ -32,6 +39,7 @@ export function App() {
       }}
     >
       {route.name === 'splash' && <Splash />}
+      {route.name === 'live' && <LiveOnboard />}
       {route.name === 'leagues' && <Leagues />}
       {route.name === 'sleeperLeague' && <SleeperLeague key={route.leagueId} leagueId={route.leagueId} leagueName={route.leagueName} />}
       {route.name === 'hub' && <LeagueHub />}

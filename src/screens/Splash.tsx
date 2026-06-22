@@ -67,9 +67,12 @@ export function Splash() {
             </div>
           </div>
 
-          <div style={{ textAlign: 'center', marginTop: 18 }}>
+          <div style={{ textAlign: 'center', marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button onClick={() => { exitSimLeague(); navigate({ name: 'hub' }); }} className="mono" style={{ background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', cursor: 'pointer' }}>
               or explore the demo league →
+            </button>
+            <button onClick={() => navigate({ name: 'live' })} className="mono" style={{ background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', cursor: 'pointer' }}>
+              ◈ join the live H2H pilot →
             </button>
           </div>
         </div>
