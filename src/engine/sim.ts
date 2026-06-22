@@ -661,8 +661,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       if (myDripKind?.includes(play.kind)) {
         mine.rate += play.yards * myDripRate;
         mine.paused = false;
-        mine.streak += 1;
-        if (mine.streak >= 3 && !mine.hot) { mine.hot = true; sig = true; wentHot = true; } // drip goes HOT
+        // A rush must gain 3+ yards to advance the HOT streak — a stuffed run
+        // builds rate but no momentum. Catches always count toward the streak.
+        if (play.kind !== 'rush' || play.yards >= 3) {
+          mine.streak += 1;
+          if (mine.streak >= 3 && !mine.hot) { mine.hot = true; sig = true; wentHot = true; } // drip goes HOT
+        }
       }
     } else {
       pts = scorePlay(play, myPlayer.player.pos, myPlayer.metricId, myFam === 'streak' && mine.hot);
