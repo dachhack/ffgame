@@ -135,7 +135,7 @@ the fantasy league's own data → Sleeper.**
 | Play-by-play | baked nflverse | **ESPN** `summary` | validated 99.58% (§4) |
 | Schedule / kickoff times / live game state (in-progress, quarter, FINAL) | baked `nflSlate.ts` | **ESPN** `scoreboard` | already polled for PBP; authoritative `lock_at` + final detection |
 | Player headshots / team logos | **already ESPN** (`headshots.ts`, `media.ts`) | unchanged | nothing to do |
-| Injuries / actives | baked Stathead (`injuries.ts`) | **Sleeper** (`injury_status`), ESPN as cross-check | see note below |
+| Injuries / actives | baked Stathead (`injuries.ts`) | **ESPN injuries endpoint, polled daily→hourly** | managers need fresh status before they seal a lineup (see note) |
 | Rosters / starters / league schedule / standings / scoring | Sleeper | **Sleeper** | the league's own data — ESPN can't provide it |
 | Player directory + id crosswalk | Sleeper `/players/nfl` | **Sleeper** | carries `espn_id` per player — the bridge below |
 
@@ -146,17 +146,30 @@ Sleeper `espn_id` → our slug. That's what eliminates the initials-collision /
 nickname misses the validation resolver still has (e.g. the Etienne brothers) —
 they're a harness limitation, not an adapter limitation.
 
-**Injuries — not a scoring input, so low-stakes.** Whether a started player
-actually played is already captured by the PBP (no plays ⇒ zero — the engine's
-existing DNP behavior), so injury *designations* are informational for lineup
-setting, not a scoring feed. Recommendation: take them from **Sleeper**
-(`injury_status`, already fetched alongside rosters — single source), with ESPN's
-`summary.injuries` (structured O/D/Q + athlete id, in the payload we already pull)
-as an optional cross-check. No hard ESPN swap required.
+**Injuries — a real live feed (revised).** Managers must see current
+Out/Doubtful/Questionable status, and which way a player is trending, in the
+lead-up to kickoff so they can decide before sealing a lineup. So this is a
+*fresh* feed, not baked. Source: **ESPN's free injuries endpoint**
+(`/nfl/injuries`) — the official report for all 32 teams with full player names, a
+structured status (`Q/D/O/IR`), a per-entry designation **`date`** (powers
+freshness + "trending" UI), `returnDate`, and a news comment, plus a top-level
+`timestamp`. Adapter: **`scripts/espn/injuries.mjs`** →
+`normalizeInjuries(feed, resolveSlug)` → `{ [slug]: { status, date, returnDate,
+comment, team } }` for rostered players. The bulk feed omits athlete ids, but it
+gives **full names**, so name→slug matching is reliable here (none of the
+first-initial ambiguity that affects play text); `summary.injuries` carries
+athlete ids as a cross-check if needed.
 
-**Net:** the only *new* ESPN feed beyond play-by-play is the **scoreboard** for
-schedule / kickoff / live game-state — and we're already hitting it to find which
-games to poll. Everything league-side stays Sleeper.
+Poll cadence: **daily** off-week; **hourly** from ~24h before each game window
+through kickoff (and during the inactive-report window ~90 min pre-game). The
+worker writes changes to the `injury_status` table and Realtime-pushes them so a
+manager setting a lineup always sees live status. (Sleeper's `injury_status` is a
+fine daily fallback, but its 5 MB player file is too heavy to poll hourly and is
+less detailed — no comment/return-date/designation-date.)
+
+**Net new ESPN feeds beyond play-by-play:** the **scoreboard** (schedule /
+kickoff / live game-state — already polled to find games) and the **injuries**
+endpoint (daily→hourly). Everything league-side stays Sleeper.
 
 ## 5. Data-model sketch (Postgres / Supabase)
 
@@ -181,6 +194,9 @@ live_play           week · game_id · player_slug · c · t · pid · k · y ·
                     -- normalized RealPlay rows from the ESPN poller; UNIQUE(week,game_id,pid,player_slug,k)
 matchup_state       matchup_id · window · home_score · away_score · events_json · updated_at
                     -- engine output; Realtime pushes this to both clients
+injury_status       player_slug (pk) · status (O|D|Q|IR) · designation_date ·
+                    return_date · comment · team · source · updated_at
+                    -- live ESPN injury feed; daily→hourly; Realtime-pushed pre-lock
 ```
 
 **RLS, the load-bearing part:** `sealed_pick` SELECT policy = `app_user_id =
@@ -202,7 +218,11 @@ unreadable by the opponent until the server locks the window. `matchup`,
    `src/data/nflSlate.ts`).
 4. **Lineups** — per week store `sleeper_lineup.starters` (the player pool, and
    the unenrolled-opponent fallback).
-5. **Live** — Node worker polls ESPN (~20–30s) during windows →
+5. **Injuries** — worker polls ESPN `/nfl/injuries` (`scripts/espn/injuries.mjs`)
+   daily, ramping to hourly from ~24h before each window through kickoff → upsert
+   `injury_status` for rostered players → Realtime-push so lineup-setters see live
+   status.
+6. **Live** — Node worker polls ESPN (~20–30s) during windows →
    `gameToRealPlays` → upsert `live_play`. On new plays, for each live matchup:
    gather both sides' `RealPlay[]` (from `live_play` by `player_slug`) + revealed
    sealed picks (enrolled) or `sleeper_lineup` (fallback) → run

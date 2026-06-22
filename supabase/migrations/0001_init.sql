@@ -148,6 +148,19 @@ create table matchup_state (
   primary key (matchup_id, window)
 );
 
+-- Live injury report (ESPN /nfl/injuries, daily→hourly), per player slug. Public
+-- NFL info, surfaced to managers setting lineups; written by the worker.
+create table injury_status (
+  player_slug      text primary key,
+  status           text not null,            -- O | D | Q | IR
+  designation_date timestamptz,              -- ESPN per-entry date (freshness/trend)
+  return_date      date,
+  comment          text,
+  team             text,
+  source           text not null default 'espn',
+  updated_at       timestamptz not null default now()
+);
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Append-only audit log (pick / lock / reveal and friends)
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -201,6 +214,7 @@ alter table sealed_pick       enable row level security;
 alter table applied_state     enable row level security;
 alter table live_play         enable row level security;
 alter table matchup_state     enable row level security;
+alter table injury_status     enable row level security;
 alter table audit_log         enable row level security;
 -- NOTE: the service role bypasses RLS entirely, so the worker can ingest, lock,
 -- reveal, and resolve without any policy below granting it access.
@@ -240,8 +254,10 @@ create policy lineup_read        on sleeper_lineup    for select using (is_leagu
 create policy matchup_read       on matchup           for select using (is_league_member(league_id));
 create policy matchup_state_read on matchup_state     for select using (is_matchup_participant(matchup_id));
 
--- live_play: game data, readable by any authenticated user; written by worker.
+-- live_play + injury_status: public NFL data, readable by any authenticated
+-- user; written by the worker (service role).
 create policy live_play_read on live_play for select using (auth.role() = 'authenticated');
+create policy injury_read on injury_status for select using (auth.role() = 'authenticated');
 
 -- applied_state: a participant reads both sides AFTER the matchup locks; before
 -- lock you see only your own. You may write only your own row.
