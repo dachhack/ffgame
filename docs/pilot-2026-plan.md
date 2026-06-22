@@ -95,12 +95,13 @@ kick return TDs, and KR/PR return yards (the `return` kind for the retyd metric)
 diffs against the committed `public/pbp/wN.json` on `(slug, pid)`, plus a returns
 cross-check against `src/data/returns.ts`.
 
-**Results (weeks 1–3, 16 games each — consistent, not overfit):**
-- **~95%** of baked plays reproduced from ESPN (95.1 / 95.4 / 95.2%).
-- **99.4–99.7%** of matched plays attribution-exact (kind + yards + TD); **0–3**
-  kind mismatches per week.
-- Returns: **86–95%** yard-exact on plays joinable to `returns.ts`.
-- Per-player points (wk1): **348 exact / 25 within 1.0 / 49 off** of 422.
+**Results (all 14 weeks of 2025, 16 games/wk — full validation):**
+- **99.58%** of matched plays attribution-exact (38,586 / 38,747); only **24**
+  kind mismatches all season (0.06%).
+- **~95%** of baked plays reproduced from ESPN each week (94.3–95.4%).
+- Returns: **82–100%** yard-exact/wk on plays joinable to `returns.ts`.
+- Per-player points: **86.7%** within 1.0 pt (4,173 exact + 548 close of 5,443);
+  the **13.3% off is dominated by the validation resolver**, not adapter logic.
 
 Remaining deltas are understood, not mysterious — and the off-by-points are
 dominated by the **validation resolver**, not adapter logic:
@@ -122,6 +123,40 @@ team ids); anchor name matching to the **boxscore roster** (a generic "F.Last"
 token grabs verbs).
 
 Run it: `node scripts/espn/validate.mjs 1` (any week 1–14).
+
+## 4b. Data feeds — what swaps to ESPN, what stays Sleeper
+
+The app currently bakes several feeds from nflverse/Stathead. For the live pilot,
+here's where each should come from. The dividing line: **NFL game reality → ESPN;
+the fantasy league's own data → Sleeper.**
+
+| Feed | Today | Pilot (live) | Why |
+|---|---|---|---|
+| Play-by-play | baked nflverse | **ESPN** `summary` | validated 99.58% (§4) |
+| Schedule / kickoff times / live game state (in-progress, quarter, FINAL) | baked `nflSlate.ts` | **ESPN** `scoreboard` | already polled for PBP; authoritative `lock_at` + final detection |
+| Player headshots / team logos | **already ESPN** (`headshots.ts`, `media.ts`) | unchanged | nothing to do |
+| Injuries / actives | baked Stathead (`injuries.ts`) | **Sleeper** (`injury_status`), ESPN as cross-check | see note below |
+| Rosters / starters / league schedule / standings / scoring | Sleeper | **Sleeper** | the league's own data — ESPN can't provide it |
+| Player directory + id crosswalk | Sleeper `/players/nfl` | **Sleeper** | carries `espn_id` per player — the bridge below |
+
+**The attribution bridge already exists.** `src/data/sleeperPlayers.ts` reads
+Sleeper's `/players/nfl`, whose `PlayerMeta` includes **`espnId`**. So the
+production ESPN-athlete-id → slug join is buildable today: ESPN play athlete-id →
+Sleeper `espn_id` → our slug. That's what eliminates the initials-collision /
+nickname misses the validation resolver still has (e.g. the Etienne brothers) —
+they're a harness limitation, not an adapter limitation.
+
+**Injuries — not a scoring input, so low-stakes.** Whether a started player
+actually played is already captured by the PBP (no plays ⇒ zero — the engine's
+existing DNP behavior), so injury *designations* are informational for lineup
+setting, not a scoring feed. Recommendation: take them from **Sleeper**
+(`injury_status`, already fetched alongside rosters — single source), with ESPN's
+`summary.injuries` (structured O/D/Q + athlete id, in the payload we already pull)
+as an optional cross-check. No hard ESPN swap required.
+
+**Net:** the only *new* ESPN feed beyond play-by-play is the **scoreboard** for
+schedule / kickoff / live game-state — and we're already hitting it to find which
+games to poll. Everything league-side stays Sleeper.
 
 ## 5. Data-model sketch (Postgres / Supabase)
 
