@@ -11,12 +11,13 @@ export function SleeperLeague({ leagueId, leagueName }: { leagueId: string; leag
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [simErr, setSimErr] = useState<string | null>(null);
+  const [addKdst, setAddKdst] = useState(true);
 
   const runSim = async () => {
     if (!sleeperUser || busy) return;
     setBusy(true); setSimErr(null); setNote('Reading league…');
     try {
-      const { built, youTeamId } = await buildSleeperLeague(leagueId, sleeperUser.userId, setNote);
+      const { built, youTeamId } = await buildSleeperLeague(leagueId, sleeperUser.userId, setNote, { addKdst });
       loadSimLeague(built, youTeamId);
       navigate({ name: 'hub' });
     } catch {
@@ -54,6 +55,21 @@ export function SleeperLeague({ leagueId, leagueName }: { leagueId: string; leag
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, lineHeight: 1.5 }}>
                 {busy ? (note || 'Building…') : 'Replays your real 2025 season through the 14-week drip game — real scores, real matchups, your roster.'}
               </div>
+              <button
+                type="button"
+                onClick={() => setAddKdst((v) => !v)}
+                disabled={busy}
+                className="mono"
+                title="Adds a real K and DST to any team missing one, so the kicker/defense metrics are playable. Leagues that already roster them are untouched."
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 10, background: 'transparent', border: 'none', padding: 0, cursor: busy ? 'default' : 'pointer', color: 'var(--dim)' }}
+              >
+                <span style={{ width: 30, height: 17, borderRadius: 999, background: addKdst ? 'var(--you)' : 'var(--bd)', position: 'relative', transition: 'background 120ms', flex: 'none' }}>
+                  <span style={{ position: 'absolute', top: 2, left: addKdst ? 15 : 2, width: 13, height: 13, borderRadius: '50%', background: 'var(--on-accent)', transition: 'left 120ms' }} />
+                </span>
+                <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', color: addKdst ? 'var(--text)' : 'var(--dim)' }}>
+                  ADD K &amp; DST TO ROSTERS MISSING THEM
+                </span>
+              </button>
               {simErr && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', marginTop: 6 }}>{simErr}</div>}
             </div>
             <button onClick={runSim} disabled={busy} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '11px 18px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1, whiteSpace: 'nowrap' }}>

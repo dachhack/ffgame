@@ -123,6 +123,7 @@ export async function buildSleeperLeague(
   leagueId: string,
   userId: string,
   onProgress?: (note: string) => void,
+  opts?: { addKdst?: boolean },
 ): Promise<{ built: BuiltLeague; youTeamId: string }> {
   onProgress?.('Reading league…');
   const [detail, rosters, users] = await Promise.all([
@@ -223,6 +224,35 @@ export async function buildSleeperLeague(
     });
     if (r.owner_id && r.owner_id === userId) youTeamId = teamIdOf(r.roster_id);
   }
+
+  // Many leagues don't roster kickers or team defenses, which leaves the K
+  // (Banker / Negation) and DEF (Suppress / Earn) metrics unplayable. When
+  // asked, give any team missing one a real baked K and/or DST — themed on the
+  // NFL team of its best skill player — so those strategies are available. This
+  // only enriches the playable drip lineup; Sleeper standings/scores are
+  // untouched (they come from real Sleeper totals, not the roster).
+  if (opts?.addKdst) {
+    for (const t of teams) {
+      const roster = t.roster.map((id) => players[id]).filter(Boolean) as Player[];
+      const hasK = roster.some((p) => p.pos === 'K');
+      const hasDef = roster.some((p) => p.pos === 'DEF');
+      if (hasK && hasDef) continue;
+      const nfl = roster
+        .filter((p) => p.pos !== 'K' && p.pos !== 'DEF' && p.team && p.team !== 'NFL')
+        .sort((a, b) => (b.stats.ppr - a.stats.ppr) || a.team.localeCompare(b.team))[0]?.team;
+      if (!nfl) continue;
+      const ensure = (pos: 'K' | 'DEF') => {
+        const eid = `${nfl.toLowerCase()}-${pos === 'K' ? 'k' : 'dst'}`;
+        if (!players[eid]) {
+          players[eid] = { id: eid, name: `${nfl} ${pos === 'K' ? 'K' : 'DST'}`, full: `${nfl} ${pos === 'K' ? 'K' : 'DST'}`, pos, team: nfl, stats: { ...Z } };
+        }
+        if (!t.roster.includes(eid)) t.roster.push(eid);
+      };
+      if (!hasK) ensure('K');
+      if (!hasDef) ensure('DEF');
+    }
+  }
+
   // Seed by record then points-for (standings order).
   teams.sort((a, b) => (b.wins - a.wins) || (b.pf - a.pf));
   teams.forEach((t, i) => { t.seed = i + 1; });
