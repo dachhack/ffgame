@@ -89,6 +89,11 @@ export function MatchupFinal({ week }: { week: number }) {
                   ) : null; })}
                 </div>
               )}
+              {nextOpp && (
+                <button onClick={() => navigate({ name: 'matchup', week: nextWeek, phase: 'setup' })} className="mono" style={{ marginTop: 14, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4, cursor: 'pointer' }}>
+                  SET WEEK {nextWeek} →
+                </button>
+              )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 16 }}>
               <div style={{ textAlign: 'center' }}>
