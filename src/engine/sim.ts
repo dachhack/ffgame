@@ -672,6 +672,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         } else {
           mine.streak = 0; mine.hot = false;
         }
+      } else if (play.kind === 'incomplete' && play.target && myDripKind?.includes('rec')) {
+        // An incomplete target breaks a receiving drip's momentum, mirroring the
+        // stuffed-run cool on rush drips: HOT needs sustained catches, not one
+        // early burst that latches all game (a drip opponent never per-play
+        // cools it for you).
+        mine.streak = 0; mine.hot = false;
       }
     } else {
       pts = scorePlay(play, myPlayer.player.pos, myPlayer.metricId, myFam === 'streak' && mine.hot);
