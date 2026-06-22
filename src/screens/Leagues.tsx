@@ -1,12 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
 import { ThemeSwitcher } from '../app/ui';
 import { getLeagues, sleeperAvatarUrl, type SleeperLeague } from '../data/sleeper';
+
+// The base league type (drops the "· Superflex" sub-tag), for filtering.
+const baseType = (lg: SleeperLeague) => lg.format.split(' · ')[0];
+// Display order for the filter chips.
+const TYPE_ORDER = ['Dynasty', 'Keeper', 'Redraft', 'Best Ball'];
 
 export function Leagues() {
   const { navigate, sleeperUser } = useStore();
   const [leagues, setLeagues] = useState<SleeperLeague[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [filter, setFilter] = useState<string>('All');
+
+  // Type chips present in this user's leagues, in a stable order.
+  const types = useMemo(() => {
+    const set = new Set((leagues ?? []).map(baseType));
+    return TYPE_ORDER.filter((t) => set.has(t)).concat([...set].filter((t) => !TYPE_ORDER.includes(t)));
+  }, [leagues]);
+  const shown = useMemo(
+    () => (leagues ?? []).filter((lg) => filter === 'All' || baseType(lg) === filter),
+    [leagues, filter],
+  );
 
   useEffect(() => {
     if (!sleeperUser) { navigate({ name: 'splash' }); return; }
@@ -42,8 +58,34 @@ export function Leagues() {
         <div style={{ maxWidth: 1000, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
             <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>Your 2025 Leagues</div>
-            {leagues && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.08em' }}>{leagues.length} LEAGUE{leagues.length === 1 ? '' : 'S'} · NFL</span>}
+            {leagues && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.08em' }}>{shown.length} LEAGUE{shown.length === 1 ? '' : 'S'}{filter !== 'All' ? '' : ' · NFL'}</span>}
           </div>
+
+          {/* Type filter chips (only shown when there's more than one type) */}
+          {leagues && types.length > 1 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+              {['All', ...types].map((t) => {
+                const active = filter === t;
+                const n = t === 'All' ? leagues.length : leagues.filter((lg) => baseType(lg) === t).length;
+                return (
+                  <button
+                    key={t}
+                    onClick={() => setFilter(t)}
+                    className="mono"
+                    style={{
+                      fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
+                      color: active ? 'var(--on-accent)' : 'var(--dim)',
+                      background: active ? 'var(--you)' : 'var(--surface)',
+                      border: `1px solid ${active ? 'var(--you)' : 'var(--bd)'}`,
+                      borderRadius: 999, padding: '5px 11px',
+                    }}
+                  >
+                    {t.toUpperCase()} <span style={{ opacity: 0.6 }}>{n}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {err && <div className="mono" style={{ fontSize: 12, color: 'var(--opp)' }}>{err}</div>}
           {!leagues && !err && <div className="mono" style={{ fontSize: 12, color: 'var(--dim)', letterSpacing: '0.08em' }}>LOADING LEAGUES…</div>}
@@ -51,7 +93,7 @@ export function Leagues() {
 
           {leagues && leagues.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
-              {leagues.map((lg) => {
+              {shown.map((lg) => {
                 const la = sleeperAvatarUrl(lg.avatar);
                 return (
                   <button
