@@ -138,6 +138,7 @@ league. Live demo: **https://dachhack.github.io/ffgame/**.
 - `docs/mcp-requests.md` — Stathead MCP data asks (incl. IDP) + ready-to-send messages.
 - `docs/commercialization-handoff.md` — business/scaling brief for a dedicated session.
 - `docs/espn-pbp-handoff.md` — build plan for sourcing PBP from ESPN (2026 pilot → 2027 paid feeds).
+- `docs/pilot-kickoff-prompt.md` — paste-ready prompt to start the near-live H2H pilot build in a fresh session.
 
 ## Constraints (persist these)
 
