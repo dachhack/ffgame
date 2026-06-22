@@ -18,10 +18,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..", "..");
 
 const CROSSWALK = path.join(__dirname, "crosswalk.json");
-const PLAYERS_CSV = path.join(__dirname, "players.csv");
 const OUT = path.join(ROOT, "src", "data", "headshots.ts");
-const PLAYERS_URL =
-  "https://github.com/nflverse/nflverse-data/releases/download/players_components/players.csv";
+
+// nflverse sources for gsis_id -> espn_id, tried in order. players.csv is the
+// canonical components file; the weekly roster file is a fallback that tends to
+// carry espn_ids for recent rookies sooner than the components file.
+const SOURCES = [
+  {
+    file: path.join(__dirname, "players.csv"),
+    url: "https://github.com/nflverse/nflverse-data/releases/download/players_components/players.csv",
+  },
+  {
+    file: path.join(__dirname, "roster_2025.csv"),
+    url: "https://github.com/nflverse/nflverse-data/releases/download/rosters/roster_2025.csv",
+  },
+];
 
 const headshotUrl = (espnId) =>
   `https://a.espncdn.com/i/headshots/nfl/players/full/${espnId}.png`;
@@ -68,13 +79,33 @@ function parseCsv(text) {
   return rows;
 }
 
-async function ensurePlayersCsv() {
-  if (fs.existsSync(PLAYERS_CSV)) return;
-  console.log(`Downloading players.csv from nflverse...`);
-  const res = await fetch(PLAYERS_URL);
-  if (!res.ok) throw new Error(`Failed to download players.csv: ${res.status}`);
-  const text = await res.text();
-  fs.writeFileSync(PLAYERS_CSV, text);
+async function ensureCsv(source) {
+  if (fs.existsSync(source.file)) return;
+  console.log(`Downloading ${path.basename(source.file)} from nflverse...`);
+  const res = await fetch(source.url);
+  if (!res.ok)
+    throw new Error(`Failed to download ${source.url}: ${res.status}`);
+  fs.writeFileSync(source.file, await res.text());
+}
+
+// Build a gsis_id -> espn_id map, layering sources so earlier ones win and
+// later ones only fill gaps.
+function buildGsisToEspn() {
+  const map = new Map();
+  for (const source of SOURCES) {
+    const rows = parseCsv(fs.readFileSync(source.file, "utf8"));
+    const header = rows[0];
+    const gsisIdx = header.indexOf("gsis_id");
+    const espnIdx = header.indexOf("espn_id");
+    if (gsisIdx < 0 || espnIdx < 0)
+      throw new Error(`${source.file} missing gsis_id/espn_id columns`);
+    for (let i = 1; i < rows.length; i++) {
+      const gsis = rows[i][gsisIdx];
+      const espn = rows[i][espnIdx];
+      if (gsis && espn && !map.has(gsis)) map.set(gsis, espn);
+    }
+  }
+  return map;
 }
 
 // Read espn ids already present in the current headshots.ts so we can preserve
@@ -90,24 +121,11 @@ function readExisting() {
 }
 
 async function main() {
-  await ensurePlayersCsv();
+  for (const source of SOURCES) await ensureCsv(source);
 
   const crosswalk = JSON.parse(fs.readFileSync(CROSSWALK, "utf8"));
   const existing = readExisting();
-
-  const rows = parseCsv(fs.readFileSync(PLAYERS_CSV, "utf8"));
-  const header = rows[0];
-  const gsisIdx = header.indexOf("gsis_id");
-  const espnIdx = header.indexOf("espn_id");
-  if (gsisIdx < 0 || espnIdx < 0)
-    throw new Error("players.csv missing gsis_id/espn_id columns");
-
-  const gsisToEspn = new Map();
-  for (let i = 1; i < rows.length; i++) {
-    const gsis = rows[i][gsisIdx];
-    const espn = rows[i][espnIdx];
-    if (gsis && espn) gsisToEspn.set(gsis, espn);
-  }
+  const gsisToEspn = buildGsisToEspn();
 
   const result = {};
   let resolved = 0;
