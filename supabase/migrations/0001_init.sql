@@ -94,7 +94,7 @@ create table sealed_pick (
   id           uuid primary key default gen_random_uuid(),
   matchup_id   uuid not null references matchup(id) on delete cascade,
   app_user_id  uuid not null references app_user(id) on delete cascade,
-  window       text not null,             -- TNF | SUN1 | SUN4 | SNF | MNF
+  game_window  text not null,             -- TNF | SUN1 | SUN4 | SNF | MNF ("window" is reserved)
   roster_slot  text not null,
   player_slug  text,
   metric_id    text,
@@ -102,7 +102,7 @@ create table sealed_pick (
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   revealed_at  timestamptz,
-  unique (matchup_id, app_user_id, window, roster_slot)
+  unique (matchup_id, app_user_id, game_window, roster_slot)
 );
 create index on sealed_pick(matchup_id);
 
@@ -140,12 +140,12 @@ create index on live_play(week, player_slug);
 
 create table matchup_state (
   matchup_id  uuid not null references matchup(id) on delete cascade,
-  window      text not null,
+  game_window text not null,                  -- "window" is a reserved keyword
   home_score  numeric not null default 0,
   away_score  numeric not null default 0,
   events_json jsonb not null default '[]'::jsonb,
   updated_at  timestamptz not null default now(),
-  primary key (matchup_id, window)
+  primary key (matchup_id, game_window)
 );
 
 -- Live injury report (ESPN /nfl/injuries, daily→hourly), per player slug. Public

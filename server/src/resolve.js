@@ -45,9 +45,9 @@ async function playsForWeek(week) {
  *  else the roster's real Sleeper starters. */
 async function sideSlugs(matchup, rosterId, membership, plays) {
   if (membership?.enrolled && membership.app_user_id && matchup.status !== 'scheduled') {
-    const { data } = await db().from('sealed_pick').select('window,roster_slot,player_slug,metric_id')
+    const { data } = await db().from('sealed_pick').select('game_window,roster_slot,player_slug,metric_id')
       .eq('matchup_id', matchup.id).eq('app_user_id', membership.app_user_id).eq('locked', true);
-    if (data && data.length) return data.map((p) => ({ slug: p.player_slug, window: p.window, metric: p.metric_id }));
+    if (data && data.length) return data.map((p) => ({ slug: p.player_slug, window: p.game_window, metric: p.metric_id }));
   }
   const { data: lu } = await db().from('sleeper_lineup').select('starters_json')
     .eq('league_id', matchup.league_id).eq('week', matchup.week).eq('roster_id', rosterId).maybeSingle();
@@ -71,9 +71,9 @@ export async function resolveMatchup(matchup) {
   // SEAM: write one aggregate row for now. With the shared engine this becomes
   // per-window home/away scores + the resolved event feed (events_json).
   await db().from('matchup_state').upsert({
-    matchup_id: matchup.id, window: 'ALL', home_score: homeScore, away_score: awayScore,
+    matchup_id: matchup.id, game_window: 'ALL', home_score: homeScore, away_score: awayScore,
     events_json: [], updated_at: new Date().toISOString(),
-  }, { onConflict: 'matchup_id,window' });
+  }, { onConflict: 'matchup_id,game_window' });
 
   const final = matchup.status === 'final';
   if (final) await db().from('matchup').update({ home_final: homeScore, away_final: awayScore }).eq('id', matchup.id);

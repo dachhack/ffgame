@@ -183,7 +183,7 @@ matchup             id · league_id · week · sleeper_matchup_id ·
                     home_roster_id · away_roster_id ·
                     status (scheduled|locked|live|final) · lock_at · home_final · away_final
                     -- mirrors the Sleeper schedule pairing for that week
-sealed_pick         id · matchup_id · app_user_id · window · roster_slot ·
+sealed_pick         id · matchup_id · app_user_id · game_window · roster_slot ·
                     player_slug · metric_id · locked (bool) · revealed_at
                     -- RLS: owner-only SELECT until locked; both participants after lock
 applied_state       matchup_id · app_user_id · week · payload_json
@@ -192,7 +192,7 @@ sleeper_lineup      league_id · week · roster_id · starters_json
                     -- the real Sleeper starters; the unenrolled-opponent fallback + player pool
 live_play           week · game_id · player_slug · c · t · pid · k · y · td · ca · tg · to
                     -- normalized RealPlay rows from the ESPN poller; UNIQUE(week,game_id,pid,player_slug,k)
-matchup_state       matchup_id · window · home_score · away_score · events_json · updated_at
+matchup_state       matchup_id · game_window · home_score · away_score · events_json · updated_at
                     -- engine output; Realtime pushes this to both clients
 injury_status       player_slug (pk) · status (O|D|Q|IR) · designation_date ·
                     return_date · comment · team · source · updated_at
