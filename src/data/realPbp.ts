@@ -40,9 +40,12 @@ export function setSyntheticWeeks(weeks: { week: number; pbp: Record<string, Rea
 export function clearSyntheticWeeks(): void { synthPbp.clear(); synthPts.clear(); }
 
 
-/** True once a real week's JSON has been fetched into the cache (or synthesized). */
+/** True once a real week's baked JSON has been fetched into the cache. NOTE:
+ *  this gates the per-week fetch, so it must reflect ONLY the baked cache — the
+ *  synthetic overlay is in-memory and supplements it, but the baked w*.json must
+ *  still be fetched (it carries every baked player plus per-team poss/wall data). */
 export function isRealWeekLoaded(week: number): boolean {
-  return cache.has(week) || synthPbp.has(week);
+  return cache.has(week);
 }
 
 /** Fetch + cache a week's real play-by-play (no-op if not a real week or already loaded). */
