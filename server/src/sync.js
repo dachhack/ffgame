@@ -22,7 +22,7 @@ export async function importLeague(leagueId, season = config.season) {
     sleeper_league_id: leagueId, season, name: league?.name ?? 'League',
     settings_json: { settings: league?.settings, scoring: league?.scoring_settings, roster_positions: league?.roster_positions },
     synced_at: new Date().toISOString(),
-  }, { onConflict: 'sleeper_league_id,season' }).select('id').single();
+  }, { onConflict: 'sleeper_league_id,season' }).select('id, invite_code').single(); // invite_code is DB-generated on insert (migration 0002)
   const lid = leagueRow.id;
 
   // Which Sleeper users are enrolled pilot testers? (app_user linked by sleeper id)
@@ -42,7 +42,10 @@ export async function importLeague(leagueId, season = config.season) {
     };
   });
   await db().from('league_membership').upsert(memberships, { onConflict: 'league_id,sleeper_roster_id' });
-  return { leagueId: lid, rosters: rosters.length, enrolled: memberships.filter((m) => m.enrolled).length };
+  return {
+    leagueId: lid, inviteCode: leagueRow.invite_code,
+    rosters: rosters.length, enrolled: memberships.filter((m) => m.enrolled).length,
+  };
 }
 
 /** Mirror a week's Sleeper schedule into matchup rows + store starting lineups. */

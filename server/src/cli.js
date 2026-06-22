@@ -17,7 +17,11 @@ async function main() {
   switch (cmd) {
     case 'sync': {
       const ids = args.length ? args : config.leagueIds;
-      for (const id of ids) console.log('imported', id, await importLeague(id));
+      for (const id of ids) {
+        const r = await importLeague(id);
+        console.log('imported', id, r);
+        console.log(`  ➜ invite code: ${r.inviteCode}  (share with the league — players redeem it to enroll)`);
+      }
       break;
     }
     case 'sync-week': {

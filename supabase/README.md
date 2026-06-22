@@ -30,6 +30,23 @@ Quick check after applying (as a normal user JWT, not service role):
 - you get **zero rows** selecting the opponent's picks while `locked = false` ✔
 - after the worker sets `locked = true`, both participants can read them ✔
 
+## League invite codes (migration 0002)
+The commissioner imports the league once and gets a short shareable code; players
+redeem it to enroll. Flow:
+1. **Commissioner / admin** imports the league: `node src/cli.js sync <leagueId>`.
+   The CLI prints the **invite code** (DB-generated, stable per league). Share it.
+2. **Player** signs in (magic-link), enters the code + their Sleeper username.
+   The client resolves the username via the Sleeper API, then calls the
+   `redeem_invite(code, sleeper_user_id, sleeper_username)` RPC.
+3. The RPC (SECURITY DEFINER) links the player's account to the Sleeper id, finds
+   their roster in that league by `sleeper_owner_id`, and sets the membership
+   `app_user_id` + `enrolled = true`. `league_by_invite(code)` lets the client
+   preview "You're joining <name>" first.
+
+Clients never write `league_membership` directly — only these two RPCs are granted
+to `authenticated`; the tables stay RLS-guarded. Trusted-pilot model: we trust the
+claimed Sleeper id (light anti-cheat, by decision).
+
 ## Auth + anti-cheat (confirmed decisions)
 - Email magic-link (Supabase Auth). On first sign-in, the user links a Sleeper
   account: enter username → resolve `sleeper_user_id` → store on `app_user`.
