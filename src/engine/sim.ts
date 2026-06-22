@@ -662,10 +662,15 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         mine.rate += play.yards * myDripRate;
         mine.paused = false;
         // A rush must gain 3+ yards to advance the HOT streak — a stuffed run
-        // builds rate but no momentum. Catches always count toward the streak.
+        // breaks momentum: it builds rate but resets the streak and cools the
+        // drip, so HOT demands *sustained* carries rather than latching for the
+        // whole game (a drip opponent never per-play scores, so it can't cool it
+        // for you). Catches always count toward the streak.
         if (play.kind !== 'rush' || play.yards >= 3) {
           mine.streak += 1;
           if (mine.streak >= 3 && !mine.hot) { mine.hot = true; sig = true; wentHot = true; } // drip goes HOT
+        } else {
+          mine.streak = 0; mine.hot = false;
         }
       }
     } else {
