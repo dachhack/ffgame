@@ -58,7 +58,7 @@ export function LeagueHub() {
             Your Leagues
           </div>
           <div className="mono" style={{ fontSize: 11, letterSpacing: '0.08em', color: 'var(--dim)', marginTop: 6 }}>
-            {connected} CONNECTED · SLEEPER DYNASTY PORTFOLIO
+            {sleeperUser ? `${sleeperUser.displayName.toUpperCase()} · VIA SLEEPER` : `${connected} CONNECTED · SLEEPER DYNASTY PORTFOLIO`}
           </div>
 
           <div style={{ margin: '22px 0 14px', maxWidth: 460 }}>
@@ -128,41 +128,56 @@ export function LeagueHub() {
             </div>
           </button>
 
-          {/* secondary leagues */}
-          {OTHER_LEAGUES.map((l) => (
-            <div
-              key={l.name}
+          {/* A signed-in Sleeper user manages their real leagues from the Leagues
+              screen; the fake portfolio is demo-only flavor. */}
+          {sleeperUser ? (
+            <button
+              onClick={() => navigate({ name: 'leagues' })}
               style={{
-                background: 'var(--surface)', border: '1px solid var(--bd)',
-                borderLeft: `3px solid ${l.state === 'LIVE' ? '#FF4F62' : 'var(--you)'}`,
-                borderRadius: 5, padding: '14px 20px', marginBottom: 12, opacity: 0.78,
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+                width: '100%', background: 'transparent', border: '1px dashed var(--bdh)', borderRadius: 5,
+                padding: '16px', color: 'var(--dim)', fontFamily: MONO, fontSize: 11, letterSpacing: '0.12em', marginTop: 4, cursor: 'pointer',
               }}
             >
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--dimstrong)' }}>{l.name}</span>
-                  <StatePill state={l.state} />
+              ← BACK TO ALL YOUR LEAGUES
+            </button>
+          ) : (
+            <>
+              {/* secondary leagues (demo portfolio) */}
+              {OTHER_LEAGUES.map((l) => (
+                <div
+                  key={l.name}
+                  style={{
+                    background: 'var(--surface)', border: '1px solid var(--bd)',
+                    borderLeft: `3px solid ${l.state === 'LIVE' ? '#FF4F62' : 'var(--you)'}`,
+                    borderRadius: 5, padding: '14px 20px', marginBottom: 12, opacity: 0.78,
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--dimstrong)' }}>{l.name}</span>
+                      <StatePill state={l.state} />
+                    </div>
+                    <div className="mono" style={{ fontSize: 10, letterSpacing: '0.06em', color: 'var(--faint)', marginTop: 4 }}>{l.format}</div>
+                  </div>
+                  <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', border: '1px solid var(--bd)', padding: '8px 12px', borderRadius: 4 }}>
+                    {l.state === 'LIVE' ? 'OPEN LIVE' : 'REVIEW LINEUP'}
+                  </span>
                 </div>
-                <div className="mono" style={{ fontSize: 10, letterSpacing: '0.06em', color: 'var(--faint)', marginTop: 4 }}>{l.format}</div>
-              </div>
-              <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', border: '1px solid var(--bd)', padding: '8px 12px', borderRadius: 4 }}>
-                {l.state === 'LIVE' ? 'OPEN LIVE' : 'REVIEW LINEUP'}
-              </span>
-            </div>
-          ))}
-
-          <button
-            style={{
-              width: '100%', background: 'transparent', border: '1px dashed var(--bdh)', borderRadius: 5,
-              padding: '16px', color: 'var(--faint)', fontFamily: MONO, fontSize: 11, letterSpacing: '0.12em', marginTop: 4,
-            }}
-          >
-            + CONNECT ANOTHER SLEEPER LEAGUE
-          </button>
+              ))}
+              <button
+                style={{
+                  width: '100%', background: 'transparent', border: '1px dashed var(--bdh)', borderRadius: 5,
+                  padding: '16px', color: 'var(--faint)', fontFamily: MONO, fontSize: 11, letterSpacing: '0.12em', marginTop: 4,
+                }}
+              >
+                + CONNECT ANOTHER SLEEPER LEAGUE
+              </button>
+            </>
+          )}
 
           <div style={{ marginTop: 28, fontFamily: GROTESK, fontSize: 11, color: 'var(--faint)', textAlign: 'center', lineHeight: 1.7 }}>
-            Drip League FF demo · real PeakedInDynasty 2025 data · simulated live scoring
+            {sleeperUser ? `${LEAGUE_REF.name} · real ${LEAGUE_REF.season} Sleeper data · simulated live scoring` : 'Drip League FF demo · real PeakedInDynasty 2025 data · simulated live scoring'}
           </div>
         </div>
       </main>

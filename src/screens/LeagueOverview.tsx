@@ -18,7 +18,7 @@ type ModalState =
   | { type: 'shop' };
 
 export function LeagueOverview() {
-  const { navigate, coins, youTeamId: YOU, demoWeek, activeLeague: LEAGUE_REF } = useStore();
+  const { navigate, coins, youTeamId: YOU, demoWeek, activeLeague: LEAGUE_REF, sleeperUser } = useStore();
   const [modal, setModal] = useState<ModalState>(null);
   const teams = [...LEAGUE_REF.teams].sort((a, b) => a.seed - b.seed);
   const you = getTeam(YOU)!;
@@ -42,7 +42,7 @@ export function LeagueOverview() {
             </button>
           </>
         }
-        right={<UserChip handle={SLEEPER_HANDLE} sub="VIA SLEEPER" />}
+        right={<UserChip handle={sleeperUser?.username ?? SLEEPER_HANDLE} sub="VIA SLEEPER" />}
       />
       <main style={{ flex: 1, overflow: 'auto', padding: '22px 18px 60px' }}>
         <div style={{ maxWidth: 1080, margin: '0 auto' }}>
