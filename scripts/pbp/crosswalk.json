@@ -1,260 +1,8 @@
 {
-  "dak-prescott": {
-    "gsis": "00-0033077",
-    "team": "DAL",
-    "name": "Dak Prescott",
-    "pos": "QB"
-  },
-  "trevor-lawrence": {
-    "gsis": "00-0036971",
-    "team": "JAX",
-    "name": "Trevor Lawrence",
-    "pos": "QB"
-  },
-  "christian-mccaffrey": {
-    "gsis": "00-0033280",
-    "team": "SF",
-    "name": "Christian McCaffrey",
-    "pos": "RB"
-  },
-  "travis-etienne": {
-    "gsis": "00-0036973",
-    "team": "JAX",
-    "name": "Travis Etienne",
-    "pos": "RB"
-  },
-  "devonta-smith": {
-    "gsis": "00-0036912",
-    "team": "PHI",
-    "name": "DeVonta Smith",
-    "pos": "WR"
-  },
-  "george-pickens": {
-    "gsis": "00-0037247",
-    "team": "DAL",
-    "name": "George Pickens",
-    "pos": "WR"
-  },
-  "terry-mclaurin": {
-    "gsis": "00-0035659",
-    "team": "WAS",
-    "name": "Terry McLaurin",
-    "pos": "WR"
-  },
-  "kyle-pitts": {
-    "gsis": "00-0036970",
-    "team": "ATL",
-    "name": "Kyle Pitts",
-    "pos": "TE"
-  },
-  "wandale-robinson": {
-    "gsis": "00-0038117",
-    "team": "NYG",
-    "name": "Wan'Dale Robinson",
-    "pos": "WR"
-  },
-  "dallas-goedert": {
-    "gsis": "00-0034351",
-    "team": "PHI",
-    "name": "Dallas Goedert",
-    "pos": "TE"
-  },
-  "jordan-addison": {
-    "gsis": "00-0038994",
-    "team": "MIN",
-    "name": "Jordan Addison",
-    "pos": "WR"
-  },
-  "brock-bowers": {
-    "gsis": "00-0039338",
-    "team": "LV",
-    "name": "Brock Bowers",
-    "pos": "TE"
-  },
-  "josh-jacobs": {
-    "gsis": "00-0035700",
-    "team": "GB",
-    "name": "Josh Jacobs",
-    "pos": "RB"
-  },
-  "alvin-kamara": {
-    "gsis": "00-0033906",
-    "team": "NO",
-    "name": "Alvin Kamara",
-    "pos": "RB"
-  },
-  "caleb-williams": {
-    "gsis": "00-0039918",
-    "team": "CHI",
-    "name": "Caleb Williams",
-    "pos": "QB"
-  },
-  "george-kittle": {
-    "gsis": "00-0033288",
-    "team": "SF",
-    "name": "George Kittle",
-    "pos": "TE"
-  },
-  "christian-watson": {
-    "gsis": "00-0038124",
-    "team": "GB",
-    "name": "Christian Watson",
-    "pos": "WR"
-  },
-  "davante-adams": {
-    "gsis": "00-0031381",
-    "team": "LA",
-    "name": "Davante Adams",
-    "pos": "WR"
-  },
-  "tyrone-tracy": {
-    "gsis": "00-0039384",
-    "team": "NYG",
-    "name": "Tyrone Tracy",
-    "pos": "RB"
-  },
-  "chimere-dike": {
-    "gsis": "00-0040705",
-    "team": "TEN",
-    "name": "Chimere Dike",
-    "pos": "WR"
-  },
-  "cole-kmet": {
-    "gsis": "00-0036290",
-    "team": "CHI",
-    "name": "Cole Kmet",
-    "pos": "TE"
-  },
-  "baker-mayfield": {
-    "gsis": "00-0034855",
-    "team": "TB",
-    "name": "Baker Mayfield",
-    "pos": "QB"
-  },
-  "jaylin-noel": {
-    "gsis": "00-0040138",
-    "team": "HOU",
-    "name": "Jaylin Noel",
-    "pos": "WR"
-  },
-  "cedric-tillman": {
-    "gsis": "00-0038979",
-    "team": "CLE",
-    "name": "Cedric Tillman",
-    "pos": "WR"
-  },
-  "jared-goff": {
-    "gsis": "00-0033106",
-    "team": "DET",
-    "name": "Jared Goff",
-    "pos": "QB"
-  },
-  "matthew-stafford": {
-    "gsis": "00-0026498",
-    "team": "LA",
-    "name": "Matthew Stafford",
-    "pos": "QB"
-  },
-  "jonathan-taylor": {
-    "gsis": "00-0036223",
-    "team": "IND",
-    "name": "Jonathan Taylor",
-    "pos": "RB"
-  },
-  "breece-hall": {
-    "gsis": "00-0038120",
-    "team": "NYJ",
-    "name": "Breece Hall",
-    "pos": "RB"
-  },
-  "jakobi-meyers": {
-    "gsis": "00-0034960",
-    "team": "JAX",
-    "name": "Jakobi Meyers",
-    "pos": "WR"
-  },
-  "jaxon-smith-njigba": {
-    "gsis": "00-0038543",
-    "team": "SEA",
-    "name": "Jaxon Smith-Njigba",
-    "pos": "WR"
-  },
-  "stefon-diggs": {
-    "gsis": "00-0031588",
-    "team": "NE",
-    "name": "Stefon Diggs",
-    "pos": "WR"
-  },
-  "trey-mcbride": {
-    "gsis": "00-0037744",
-    "team": "ARI",
-    "name": "Trey McBride",
-    "pos": "TE"
-  },
-  "tyler-warren": {
-    "gsis": "00-0040128",
-    "team": "IND",
-    "name": "Tyler Warren",
-    "pos": "TE"
-  },
-  "deebo-samuel": {
-    "gsis": "00-0035719",
-    "team": "WAS",
-    "name": "Deebo Samuel",
-    "pos": "WR"
-  },
-  "travis-kelce": {
-    "gsis": "00-0030506",
-    "team": "KC",
-    "name": "Travis Kelce",
-    "pos": "TE"
-  },
-  "david-njoku": {
-    "gsis": "00-0033885",
-    "team": "CLE",
-    "name": "David Njoku",
-    "pos": "TE"
-  },
-  "david-montgomery": {
-    "gsis": "00-0035685",
-    "team": "DET",
-    "name": "David Montgomery",
-    "pos": "RB"
-  },
-  "zach-ertz": {
-    "gsis": "00-0030061",
-    "team": "WAS",
-    "name": "Zach Ertz",
-    "pos": "TE"
-  },
-  "aaron-rodgers": {
-    "gsis": "00-0023459",
-    "team": "PIT",
-    "name": "Aaron Rodgers",
-    "pos": "QB"
-  },
-  "michael-penix": {
-    "gsis": "00-0039917",
-    "team": "ATL",
-    "name": "Michael Penix",
-    "pos": "QB"
-  },
-  "braelon-allen": {
-    "gsis": "00-0039794",
-    "team": "NYJ",
-    "name": "Braelon Allen",
-    "pos": "RB"
-  },
-  "ollie-gordon": {
-    "gsis": "00-0040198",
-    "team": "MIA",
-    "name": "Ollie Gordon",
-    "pos": "RB"
-  },
-  "bo-nix": {
-    "gsis": "00-0039732",
-    "team": "DEN",
-    "name": "Bo Nix",
+  "josh-allen": {
+    "gsis": "00-0034857",
+    "team": "BUF",
+    "name": "Josh Allen",
     "pos": "QB"
   },
   "drake-maye": {
@@ -263,670 +11,34 @@
     "name": "Drake Maye",
     "pos": "QB"
   },
-  "jahmyr-gibbs": {
-    "gsis": "00-0039139",
-    "team": "DET",
-    "name": "Jahmyr Gibbs",
-    "pos": "RB"
+  "matthew-stafford": {
+    "gsis": "00-0026498",
+    "team": "LA",
+    "name": "Matthew Stafford",
+    "pos": "QB"
   },
-  "rj-harvey": {
-    "gsis": "00-0040730",
+  "trevor-lawrence": {
+    "gsis": "00-0036971",
+    "team": "JAX",
+    "name": "Trevor Lawrence",
+    "pos": "QB"
+  },
+  "caleb-williams": {
+    "gsis": "00-0039918",
+    "team": "CHI",
+    "name": "Caleb Williams",
+    "pos": "QB"
+  },
+  "dak-prescott": {
+    "gsis": "00-0033077",
+    "team": "DAL",
+    "name": "Dak Prescott",
+    "pos": "QB"
+  },
+  "bo-nix": {
+    "gsis": "00-0039732",
     "team": "DEN",
-    "name": "RJ Harvey",
-    "pos": "RB"
-  },
-  "ladd-mcconkey": {
-    "gsis": "00-0039915",
-    "team": "LAC",
-    "name": "Ladd McConkey",
-    "pos": "WR"
-  },
-  "drake-london": {
-    "gsis": "00-0037238",
-    "team": "ATL",
-    "name": "Drake London",
-    "pos": "WR"
-  },
-  "ricky-pearsall": {
-    "gsis": "00-0039916",
-    "team": "SF",
-    "name": "Ricky Pearsall",
-    "pos": "WR"
-  },
-  "harold-fannin": {
-    "gsis": "00-0040663",
-    "team": "CLE",
-    "name": "Harold Fannin",
-    "pos": "TE"
-  },
-  "ashton-jeanty": {
-    "gsis": "00-0040122",
-    "team": "LV",
-    "name": "Ashton Jeanty",
-    "pos": "RB"
-  },
-  "treveyon-henderson": {
-    "gsis": "00-0040734",
-    "team": "NE",
-    "name": "TreVeyon Henderson",
-    "pos": "RB"
-  },
-  "rashee-rice": {
-    "gsis": "00-0039067",
-    "team": "KC",
-    "name": "Rashee Rice",
-    "pos": "WR"
-  },
-  "emeka-egbuka": {
-    "gsis": "00-0040129",
-    "team": "TB",
-    "name": "Emeka Egbuka",
-    "pos": "WR"
-  },
-  "jj-mccarthy": {
-    "gsis": "00-0039923",
-    "team": "MIN",
-    "name": "J.J. McCarthy",
-    "pos": "QB"
-  },
-  "trey-benson": {
-    "gsis": "00-0039921",
-    "team": "ARI",
-    "name": "Trey Benson",
-    "pos": "RB"
-  },
-  "isaiah-likely": {
-    "gsis": "00-0037838",
-    "team": "BAL",
-    "name": "Isaiah Likely",
-    "pos": "TE"
-  },
-  "bhayshul-tuten": {
-    "gsis": "00-0040719",
-    "team": "JAX",
-    "name": "Bhayshul Tuten",
-    "pos": "RB"
-  },
-  "jayden-reed": {
-    "gsis": "00-0039146",
-    "team": "GB",
-    "name": "Jayden Reed",
-    "pos": "WR"
-  },
-  "jacoby-brissett": {
-    "gsis": "00-0033119",
-    "team": "ARI",
-    "name": "Jacoby Brissett",
-    "pos": "QB"
-  },
-  "cj-stroud": {
-    "gsis": "00-0039163",
-    "team": "HOU",
-    "name": "C.J. Stroud",
-    "pos": "QB"
-  },
-  "devon-achane": {
-    "gsis": "00-0039040",
-    "team": "MIA",
-    "name": "De'Von Achane",
-    "pos": "RB"
-  },
-  "chase-brown": {
-    "gsis": "00-0038597",
-    "team": "CIN",
-    "name": "Chase Brown",
-    "pos": "RB"
-  },
-  "nico-collins": {
-    "gsis": "00-0036554",
-    "team": "HOU",
-    "name": "Nico Collins",
-    "pos": "WR"
-  },
-  "jauan-jennings": {
-    "gsis": "00-0036259",
-    "team": "SF",
-    "name": "Jauan Jennings",
-    "pos": "WR"
-  },
-  "chris-olave": {
-    "gsis": "00-0037239",
-    "team": "NO",
-    "name": "Chris Olave",
-    "pos": "WR"
-  },
-  "jake-tonges": {
-    "gsis": "00-0037112",
-    "team": "SF",
-    "name": "Jake Tonges",
-    "pos": "TE"
-  },
-  "bijan-robinson": {
-    "gsis": "00-0038542",
-    "team": "ATL",
-    "name": "Bijan Robinson",
-    "pos": "RB"
-  },
-  "puka-nacua": {
-    "gsis": "00-0039075",
-    "team": "LA",
-    "name": "Puka Nacua",
-    "pos": "WR"
-  },
-  "kyler-murray": {
-    "gsis": "00-0035228",
-    "team": "ARI",
-    "name": "Kyler Murray",
-    "pos": "QB"
-  },
-  "jayden-daniels": {
-    "gsis": "00-0039910",
-    "team": "WAS",
-    "name": "Jayden Daniels",
-    "pos": "QB"
-  },
-  "malik-nabers": {
-    "gsis": "00-0039337",
-    "team": "NYG",
-    "name": "Malik Nabers",
-    "pos": "WR"
-  },
-  "sam-laporta": {
-    "gsis": "00-0039065",
-    "team": "DET",
-    "name": "Sam LaPorta",
-    "pos": "TE"
-  },
-  "isiah-pacheco": {
-    "gsis": "00-0037197",
-    "team": "KC",
-    "name": "Isiah Pacheco",
-    "pos": "RB"
-  },
-  "brian-thomas": {
-    "gsis": "00-0039893",
-    "team": "JAX",
-    "name": "Brian Thomas",
-    "pos": "WR"
-  },
-  "rhamondre-stevenson": {
-    "gsis": "00-0036875",
-    "team": "NE",
-    "name": "Rhamondre Stevenson",
-    "pos": "RB"
-  },
-  "pat-freiermuth": {
-    "gsis": "00-0036894",
-    "team": "PIT",
-    "name": "Pat Freiermuth",
-    "pos": "TE"
-  },
-  "quentin-johnston": {
-    "gsis": "00-0038544",
-    "team": "LAC",
-    "name": "Quentin Johnston",
-    "pos": "WR"
-  },
-  "jaxson-dart": {
-    "gsis": "00-0040691",
-    "team": "NYG",
-    "name": "Jaxson Dart",
-    "pos": "QB"
-  },
-  "philip-rivers": {
-    "gsis": "00-0022942",
-    "team": "IND",
-    "name": "Philip Rivers",
-    "pos": "QB"
-  },
-  "brady-cook": {
-    "gsis": "00-0040398",
-    "team": "NYJ",
-    "name": "Brady Cook",
-    "pos": "QB"
-  },
-  "james-cook": {
-    "gsis": "00-0037248",
-    "team": "BUF",
-    "name": "James Cook",
-    "pos": "RB"
-  },
-  "omarion-hampton": {
-    "gsis": "00-0040666",
-    "team": "LAC",
-    "name": "Omarion Hampton",
-    "pos": "RB"
-  },
-  "xavier-worthy": {
-    "gsis": "00-0039894",
-    "team": "KC",
-    "name": "Xavier Worthy",
-    "pos": "WR"
-  },
-  "tee-higgins": {
-    "gsis": "00-0036410",
-    "team": "CIN",
-    "name": "Tee Higgins",
-    "pos": "WR"
-  },
-  "michael-wilson": {
-    "gsis": "00-0038559",
-    "team": "ARI",
-    "name": "Michael Wilson",
-    "pos": "WR"
-  },
-  "hunter-henry": {
-    "gsis": "00-0033090",
-    "team": "NE",
-    "name": "Hunter Henry",
-    "pos": "TE"
-  },
-  "zay-flowers": {
-    "gsis": "00-0039064",
-    "team": "BAL",
-    "name": "Zay Flowers",
-    "pos": "WR"
-  },
-  "michael-pittman": {
-    "gsis": "00-0036252",
-    "team": "IND",
-    "name": "Michael Pittman",
-    "pos": "WR"
-  },
-  "zach-charbonnet": {
-    "gsis": "00-0039165",
-    "team": "SEA",
-    "name": "Zach Charbonnet",
-    "pos": "RB"
-  },
-  "cam-skattebo": {
-    "gsis": "00-0040715",
-    "team": "NYG",
-    "name": "Cam Skattebo",
-    "pos": "RB"
-  },
-  "marvin-harrison": {
-    "gsis": "00-0039849",
-    "team": "ARI",
-    "name": "Marvin Harrison",
-    "pos": "WR"
-  },
-  "darnell-mooney": {
-    "gsis": "00-0036309",
-    "team": "ATL",
-    "name": "Darnell Mooney",
-    "pos": "WR"
-  },
-  "justin-fields": {
-    "gsis": "00-0036945",
-    "team": "NYJ",
-    "name": "Justin Fields",
-    "pos": "QB"
-  },
-  "patrick-mahomes": {
-    "gsis": "00-0033873",
-    "team": "KC",
-    "name": "Patrick Mahomes",
-    "pos": "QB"
-  },
-  "tua-tagovailoa": {
-    "gsis": "00-0036212",
-    "team": "MIA",
-    "name": "Tua Tagovailoa",
-    "pos": "QB"
-  },
-  "dandre-swift": {
-    "gsis": "00-0036275",
-    "team": "CHI",
-    "name": "D'Andre Swift",
-    "pos": "RB"
-  },
-  "daniel-jones": {
-    "gsis": "00-0035710",
-    "team": "IND",
-    "name": "Daniel Jones",
-    "pos": "QB"
-  },
-  "theo-johnson": {
-    "gsis": "00-0039847",
-    "team": "NYG",
-    "name": "Theo Johnson",
-    "pos": "TE"
-  },
-  "bryce-young": {
-    "gsis": "00-0039150",
-    "team": "CAR",
-    "name": "Bryce Young",
-    "pos": "QB"
-  },
-  "josh-allen": {
-    "gsis": "00-0034857",
-    "team": "BUF",
-    "name": "Josh Allen",
-    "pos": "QB"
-  },
-  "jaylen-warren": {
-    "gsis": "00-0037228",
-    "team": "PIT",
-    "name": "Jaylen Warren",
-    "pos": "RB"
-  },
-  "kareem-hunt": {
-    "gsis": "00-0033923",
-    "team": "KC",
-    "name": "Kareem Hunt",
-    "pos": "RB"
-  },
-  "jamarr-chase": {
-    "gsis": "00-0036900",
-    "team": "CIN",
-    "name": "Ja'Marr Chase",
-    "pos": "WR"
-  },
-  "alec-pierce": {
-    "gsis": "00-0037664",
-    "team": "IND",
-    "name": "Alec Pierce",
-    "pos": "WR"
-  },
-  "amon-ra-st-brown": {
-    "gsis": "00-0036963",
-    "team": "DET",
-    "name": "Amon-Ra St. Brown",
-    "pos": "WR"
-  },
-  "oronde-gadsden": {
-    "gsis": "00-0040189",
-    "team": "LAC",
-    "name": "Oronde Gadsden",
-    "pos": "TE"
-  },
-  "tetairoa-mcmillan": {
-    "gsis": "00-0040124",
-    "team": "CAR",
-    "name": "Tetairoa McMillan",
-    "pos": "WR"
-  },
-  "blake-corum": {
-    "gsis": "00-0039738",
-    "team": "LA",
-    "name": "Blake Corum",
-    "pos": "RB"
-  },
-  "dalton-kincaid": {
-    "gsis": "00-0038933",
-    "team": "BUF",
-    "name": "Dalton Kincaid",
-    "pos": "TE"
-  },
-  "cooper-kupp": {
-    "gsis": "00-0033908",
-    "team": "SEA",
-    "name": "Cooper Kupp",
-    "pos": "WR"
-  },
-  "jonnu-smith": {
-    "gsis": "00-0033858",
-    "team": "PIT",
-    "name": "Jonnu Smith",
-    "pos": "TE"
-  },
-  "aaron-jones": {
-    "gsis": "00-0033293",
-    "team": "MIN",
-    "name": "Aaron Jones",
-    "pos": "RB"
-  },
-  "jordan-love": {
-    "gsis": "00-0036264",
-    "team": "GB",
-    "name": "Jordan Love",
-    "pos": "QB"
-  },
-  "jk-dobbins": {
-    "gsis": "00-0036158",
-    "team": "DEN",
-    "name": "J.K. Dobbins",
-    "pos": "RB"
-  },
-  "travis-hunter": {
-    "gsis": "00-0040718",
-    "team": "JAX",
-    "name": "Travis Hunter",
-    "pos": "WR"
-  },
-  "brian-robinson": {
-    "gsis": "00-0037746",
-    "team": "SF",
-    "name": "Brian Robinson",
-    "pos": "RB"
-  },
-  "shedeur-sanders": {
-    "gsis": "00-0040668",
-    "team": "CLE",
-    "name": "Shedeur Sanders",
-    "pos": "QB"
-  },
-  "cam-ward": {
-    "gsis": "00-0040676",
-    "team": "TEN",
-    "name": "Cam Ward",
-    "pos": "QB"
-  },
-  "tyler-shough": {
-    "gsis": "00-0040743",
-    "team": "NO",
-    "name": "Tyler Shough",
-    "pos": "QB"
-  },
-  "bucky-irving": {
-    "gsis": "00-0039361",
-    "team": "TB",
-    "name": "Bucky Irving",
-    "pos": "RB"
-  },
-  "saquon-barkley": {
-    "gsis": "00-0034844",
-    "team": "PHI",
-    "name": "Saquon Barkley",
-    "pos": "RB"
-  },
-  "dk-metcalf": {
-    "gsis": "00-0035640",
-    "team": "PIT",
-    "name": "DK Metcalf",
-    "pos": "WR"
-  },
-  "rashid-shaheed": {
-    "gsis": "00-0037545",
-    "team": "SEA",
-    "name": "Rashid Shaheed",
-    "pos": "WR"
-  },
-  "aj-brown": {
-    "gsis": "00-0035676",
-    "team": "PHI",
-    "name": "A.J. Brown",
-    "pos": "WR"
-  },
-  "jake-ferguson": {
-    "gsis": "00-0038041",
-    "team": "DAL",
-    "name": "Jake Ferguson",
-    "pos": "TE"
-  },
-  "javonte-williams": {
-    "gsis": "00-0036997",
-    "team": "DAL",
-    "name": "Javonte Williams",
-    "pos": "RB"
-  },
-  "rico-dowdle": {
-    "gsis": "00-0036139",
-    "team": "CAR",
-    "name": "Rico Dowdle",
-    "pos": "RB"
-  },
-  "matthew-golden": {
-    "gsis": "00-0040667",
-    "team": "GB",
-    "name": "Matthew Golden",
-    "pos": "WR"
-  },
-  "garrett-wilson": {
-    "gsis": "00-0037740",
-    "team": "NYJ",
-    "name": "Garrett Wilson",
-    "pos": "WR"
-  },
-  "tucker-kraft": {
-    "gsis": "00-0038996",
-    "team": "GB",
-    "name": "Tucker Kraft",
-    "pos": "TE"
-  },
-  "tony-pollard": {
-    "gsis": "00-0035261",
-    "team": "TEN",
-    "name": "Tony Pollard",
-    "pos": "RB"
-  },
-  "rome-odunze": {
-    "gsis": "00-0039919",
-    "team": "CHI",
-    "name": "Rome Odunze",
-    "pos": "WR"
-  },
-  "geno-smith": {
-    "gsis": "00-0030565",
-    "team": "LV",
-    "name": "Geno Smith",
-    "pos": "QB"
-  },
-  "dalton-schultz": {
-    "gsis": "00-0034383",
-    "team": "HOU",
-    "name": "Dalton Schultz",
-    "pos": "TE"
-  },
-  "jayden-higgins": {
-    "gsis": "00-0040130",
-    "team": "HOU",
-    "name": "Jayden Higgins",
-    "pos": "WR"
-  },
-  "joe-burrow": {
-    "gsis": "00-0036442",
-    "team": "CIN",
-    "name": "Joe Burrow",
-    "pos": "QB"
-  },
-  "justin-herbert": {
-    "gsis": "00-0036355",
-    "team": "LAC",
-    "name": "Justin Herbert",
-    "pos": "QB"
-  },
-  "kenneth-walker": {
-    "gsis": "00-0038134",
-    "team": "SEA",
-    "name": "Kenneth Walker",
-    "pos": "RB"
-  },
-  "kyren-williams": {
-    "gsis": "00-0037840",
-    "team": "LA",
-    "name": "Kyren Williams",
-    "pos": "RB"
-  },
-  "jameson-williams": {
-    "gsis": "00-0037240",
-    "team": "DET",
-    "name": "Jameson Williams",
-    "pos": "WR"
-  },
-  "ceedee-lamb": {
-    "gsis": "00-0036358",
-    "team": "DAL",
-    "name": "CeeDee Lamb",
-    "pos": "WR"
-  },
-  "dj-moore": {
-    "gsis": "00-0034827",
-    "team": "CHI",
-    "name": "DJ Moore",
-    "pos": "WR"
-  },
-  "aj-barner": {
-    "gsis": "00-0039793",
-    "team": "SEA",
-    "name": "AJ Barner",
-    "pos": "TE"
-  },
-  "cade-otton": {
-    "gsis": "00-0038129",
-    "team": "TB",
-    "name": "Cade Otton",
-    "pos": "TE"
-  },
-  "woody-marks": {
-    "gsis": "00-0040583",
-    "team": "HOU",
-    "name": "Woody Marks",
-    "pos": "RB"
-  },
-  "quinshon-judkins": {
-    "gsis": "00-0040784",
-    "team": "CLE",
-    "name": "Quinshon Judkins",
-    "pos": "RB"
-  },
-  "khalil-shakir": {
-    "gsis": "00-0037261",
-    "team": "BUF",
-    "name": "Khalil Shakir",
-    "pos": "WR"
-  },
-  "tj-hockenson": {
-    "gsis": "00-0035229",
-    "team": "MIN",
-    "name": "T.J. Hockenson",
-    "pos": "TE"
-  },
-  "rachaad-white": {
-    "gsis": "00-0037256",
-    "team": "TB",
-    "name": "Rachaad White",
-    "pos": "RB"
-  },
-  "sam-darnold": {
-    "gsis": "00-0034869",
-    "team": "SEA",
-    "name": "Sam Darnold",
-    "pos": "QB"
-  },
-  "tre-tucker": {
-    "gsis": "00-0038563",
-    "team": "LV",
-    "name": "Tre Tucker",
-    "pos": "WR"
-  },
-  "dylan-sampson": {
-    "gsis": "00-0040162",
-    "team": "CLE",
-    "name": "Dylan Sampson",
-    "pos": "RB"
-  },
-  "spencer-rattler": {
-    "gsis": "00-0039376",
-    "team": "NO",
-    "name": "Spencer Rattler",
-    "pos": "QB"
-  },
-  "lamar-jackson": {
-    "gsis": "00-0034796",
-    "team": "BAL",
-    "name": "Lamar Jackson",
+    "name": "Bo Nix",
     "pos": "QB"
   },
   "jalen-hurts": {
@@ -935,10 +47,532 @@
     "name": "Jalen Hurts",
     "pos": "QB"
   },
+  "jared-goff": {
+    "gsis": "00-0033106",
+    "team": "DET",
+    "name": "Jared Goff",
+    "pos": "QB"
+  },
+  "justin-herbert": {
+    "gsis": "00-0036355",
+    "team": "LAC",
+    "name": "Justin Herbert",
+    "pos": "QB"
+  },
+  "patrick-mahomes": {
+    "gsis": "00-0033873",
+    "team": "KC",
+    "name": "Patrick Mahomes",
+    "pos": "QB"
+  },
+  "baker-mayfield": {
+    "gsis": "00-0034855",
+    "team": "TB",
+    "name": "Baker Mayfield",
+    "pos": "QB"
+  },
+  "jaxson-dart": {
+    "gsis": "00-0040691",
+    "team": "NYG",
+    "name": "Jaxson Dart",
+    "pos": "QB"
+  },
+  "sam-darnold": {
+    "gsis": "00-0034869",
+    "team": "SEA",
+    "name": "Sam Darnold",
+    "pos": "QB"
+  },
+  "jordan-love": {
+    "gsis": "00-0036264",
+    "team": "GB",
+    "name": "Jordan Love",
+    "pos": "QB"
+  },
+  "jacoby-brissett": {
+    "gsis": "00-0033119",
+    "team": "ARI",
+    "name": "Jacoby Brissett",
+    "pos": "QB"
+  },
+  "aaron-rodgers": {
+    "gsis": "00-0023459",
+    "team": "PIT",
+    "name": "Aaron Rodgers",
+    "pos": "QB"
+  },
+  "daniel-jones": {
+    "gsis": "00-0035710",
+    "team": "IND",
+    "name": "Daniel Jones",
+    "pos": "QB"
+  },
+  "bryce-young": {
+    "gsis": "00-0039150",
+    "team": "CAR",
+    "name": "Bryce Young",
+    "pos": "QB"
+  },
+  "lamar-jackson": {
+    "gsis": "00-0034796",
+    "team": "BAL",
+    "name": "Lamar Jackson",
+    "pos": "QB"
+  },
+  "cj-stroud": {
+    "gsis": "00-0039163",
+    "team": "HOU",
+    "name": "C.J. Stroud",
+    "pos": "QB"
+  },
+  "cam-ward": {
+    "gsis": "00-0040676",
+    "team": "TEN",
+    "name": "Cam Ward",
+    "pos": "QB"
+  },
+  "brock-purdy": {
+    "gsis": "00-0037834",
+    "team": "SF",
+    "name": "Brock Purdy",
+    "pos": "QB"
+  },
+  "geno-smith": {
+    "gsis": "00-0030565",
+    "team": "LV",
+    "name": "Geno Smith",
+    "pos": "QB"
+  },
+  "tua-tagovailoa": {
+    "gsis": "00-0036212",
+    "team": "MIA",
+    "name": "Tua Tagovailoa",
+    "pos": "QB"
+  },
+  "tyler-shough": {
+    "gsis": "00-0040743",
+    "team": "NO",
+    "name": "Tyler Shough",
+    "pos": "QB"
+  },
+  "joe-flacco": {
+    "gsis": "00-0026158",
+    "team": "CIN",
+    "name": "Joe Flacco",
+    "pos": "QB"
+  },
+  "justin-fields": {
+    "gsis": "00-0036945",
+    "team": "NYJ",
+    "name": "Justin Fields",
+    "pos": "QB"
+  },
+  "joe-burrow": {
+    "gsis": "00-0036442",
+    "team": "CIN",
+    "name": "Joe Burrow",
+    "pos": "QB"
+  },
+  "mac-jones": {
+    "gsis": "00-0036972",
+    "team": "SF",
+    "name": "Mac Jones",
+    "pos": "QB"
+  },
+  "marcus-mariota": {
+    "gsis": "00-0032268",
+    "team": "WAS",
+    "name": "Marcus Mariota",
+    "pos": "QB"
+  },
+  "jj-mccarthy": {
+    "gsis": "00-0039923",
+    "team": "MIN",
+    "name": "J.J. McCarthy",
+    "pos": "QB"
+  },
+  "michael-penix": {
+    "gsis": "00-0039917",
+    "team": "ATL",
+    "name": "Michael Penix Jr.",
+    "pos": "QB"
+  },
+  "jayden-daniels": {
+    "gsis": "00-0039910",
+    "team": "WAS",
+    "name": "Jayden Daniels",
+    "pos": "QB"
+  },
+  "kirk-cousins": {
+    "gsis": "00-0029604",
+    "team": "ATL",
+    "name": "Kirk Cousins",
+    "pos": "QB"
+  },
+  "spencer-rattler": {
+    "gsis": "00-0039376",
+    "team": "NO",
+    "name": "Spencer Rattler",
+    "pos": "QB"
+  },
+  "shedeur-sanders": {
+    "gsis": "00-0040668",
+    "team": "CLE",
+    "name": "Shedeur Sanders",
+    "pos": "QB"
+  },
+  "kyler-murray": {
+    "gsis": "00-0035228",
+    "team": "ARI",
+    "name": "Kyler Murray",
+    "pos": "QB"
+  },
+  "carson-wentz": {
+    "gsis": "00-0032950",
+    "team": "MIN",
+    "name": "Carson Wentz",
+    "pos": "QB"
+  },
+  "dillon-gabriel": {
+    "gsis": "00-0040704",
+    "team": "CLE",
+    "name": "Dillon Gabriel",
+    "pos": "QB"
+  },
+  "davis-mills": {
+    "gsis": "00-0036898",
+    "team": "HOU",
+    "name": "Davis Mills",
+    "pos": "QB"
+  },
+  "tyrod-taylor": {
+    "gsis": "00-0028118",
+    "team": "NYJ",
+    "name": "Tyrod Taylor",
+    "pos": "QB"
+  },
+  "malik-willis": {
+    "gsis": "00-0038128",
+    "team": "GB",
+    "name": "Malik Willis",
+    "pos": "QB"
+  },
+  "russell-wilson": {
+    "gsis": "00-0029263",
+    "team": "NYG",
+    "name": "Russell Wilson",
+    "pos": "QB"
+  },
+  "jake-browning": {
+    "gsis": "00-0035100",
+    "team": "CIN",
+    "name": "Jake Browning",
+    "pos": "QB"
+  },
+  "jameis-winston": {
+    "gsis": "00-0031503",
+    "team": "NYG",
+    "name": "Jameis Winston",
+    "pos": "QB"
+  },
+  "tyler-huntley": {
+    "gsis": "00-0035993",
+    "team": "BAL",
+    "name": "Tyler Huntley",
+    "pos": "QB"
+  },
+  "quinn-ewers": {
+    "gsis": "00-0040234",
+    "team": "MIA",
+    "name": "Quinn Ewers",
+    "pos": "QB"
+  },
+  "philip-rivers": {
+    "gsis": "00-0022942",
+    "team": "IND",
+    "name": "Philip Rivers",
+    "pos": "QB"
+  },
+  "mitchell-trubisky": {
+    "gsis": "00-0033869",
+    "team": "BUF",
+    "name": "Mitchell Trubisky",
+    "pos": "QB"
+  },
+  "riley-leonard": {
+    "gsis": "00-0040206",
+    "team": "IND",
+    "name": "Riley Leonard",
+    "pos": "QB"
+  },
+  "brady-cook": {
+    "gsis": "00-0040398",
+    "team": "NYJ",
+    "name": "Brady Cook",
+    "pos": "QB"
+  },
+  "josh-johnson": {
+    "gsis": "00-0026300",
+    "team": "WAS",
+    "name": "Josh Johnson",
+    "pos": "QB"
+  },
+  "mason-rudolph": {
+    "gsis": "00-0034771",
+    "team": "PIT",
+    "name": "Mason Rudolph",
+    "pos": "QB"
+  },
+  "tanner-mckee": {
+    "gsis": "00-0038400",
+    "team": "PHI",
+    "name": "Tanner McKee",
+    "pos": "QB"
+  },
+  "trey-lance": {
+    "gsis": "00-0037012",
+    "team": "LAC",
+    "name": "Trey Lance",
+    "pos": "QB"
+  },
+  "chris-oladokun": {
+    "gsis": "00-0037324",
+    "team": "KC",
+    "name": "Chris Oladokun",
+    "pos": "QB"
+  },
+  "joe-milton": {
+    "gsis": "00-0039398",
+    "team": "DAL",
+    "name": "Joe Milton III",
+    "pos": "QB"
+  },
+  "andy-dalton": {
+    "gsis": "00-0027973",
+    "team": "CAR",
+    "name": "Andy Dalton",
+    "pos": "QB"
+  },
+  "kenny-pickett": {
+    "gsis": "00-0038102",
+    "team": "LV",
+    "name": "Kenny Pickett",
+    "pos": "QB"
+  },
+  "aidan-oconnell": {
+    "gsis": "00-0038579",
+    "team": "LV",
+    "name": "Aidan O'Connell",
+    "pos": "QB"
+  },
+  "max-brosmer": {
+    "gsis": "00-0040494",
+    "team": "MIN",
+    "name": "Max Brosmer",
+    "pos": "QB"
+  },
+  "shane-buechele": {
+    "gsis": "00-0036679",
+    "team": "KC",
+    "name": "Shane Buechele",
+    "pos": "QB"
+  },
+  "teddy-bridgewater": {
+    "gsis": "00-0031237",
+    "team": "TB",
+    "name": "Teddy Bridgewater",
+    "pos": "QB"
+  },
+  "tyson-bagent": {
+    "gsis": "00-0038416",
+    "team": "CHI",
+    "name": "Tyson Bagent",
+    "pos": "QB"
+  },
+  "anthony-richardson": {
+    "gsis": "00-0039164",
+    "team": "IND",
+    "name": "Anthony Richardson",
+    "pos": "QB"
+  },
+  "joshua-dobbs": {
+    "gsis": "00-0033949",
+    "team": "NE",
+    "name": "Joshua Dobbs",
+    "pos": "QB"
+  },
+  "clayton-tune": {
+    "gsis": "00-0038582",
+    "team": "GB",
+    "name": "Clayton Tune",
+    "pos": "QB"
+  },
+  "cooper-rush": {
+    "gsis": "00-0033662",
+    "team": "BAL",
+    "name": "Cooper Rush",
+    "pos": "QB"
+  },
+  "zach-wilson": {
+    "gsis": "00-0037013",
+    "team": "MIA",
+    "name": "Zach Wilson",
+    "pos": "QB"
+  },
+  "brandon-allen": {
+    "gsis": "00-0032434",
+    "team": "TEN",
+    "name": "Brandon Allen",
+    "pos": "QB"
+  },
+  "drew-lock": {
+    "gsis": "00-0035704",
+    "team": "SEA",
+    "name": "Drew Lock",
+    "pos": "QB"
+  },
+  "brett-rypien": {
+    "gsis": "00-0034955",
+    "team": "CIN",
+    "name": "Brett Rypien",
+    "pos": "QB"
+  },
+  "nick-mullens": {
+    "gsis": "00-0033319",
+    "team": "JAX",
+    "name": "Nick Mullens",
+    "pos": "QB"
+  },
+  "kedon-slovis": {
+    "gsis": "00-0039577",
+    "team": "ARI",
+    "name": "Kedon Slovis",
+    "pos": "QB"
+  },
+  "jarrett-stidham": {
+    "gsis": "00-0035264",
+    "team": "DEN",
+    "name": "Jarrett Stidham",
+    "pos": "QB"
+  },
+  "adrian-martinez": {
+    "gsis": "00-0038658",
+    "team": "SF",
+    "name": "Adrian Martinez",
+    "pos": "QB"
+  },
+  "kyle-allen": {
+    "gsis": "00-0034577",
+    "team": "DET",
+    "name": "Kyle Allen",
+    "pos": "QB"
+  },
+  "gardner-minshew": {
+    "gsis": "00-0035289",
+    "team": "KC",
+    "name": "Gardner Minshew",
+    "pos": "QB"
+  },
+  "jimmy-garoppolo": {
+    "gsis": "00-0031345",
+    "team": "LA",
+    "name": "Jimmy Garoppolo",
+    "pos": "QB"
+  },
+  "jalen-milroe": {
+    "gsis": "00-0040673",
+    "team": "SEA",
+    "name": "Jalen Milroe",
+    "pos": "QB"
+  },
+  "christian-mccaffrey": {
+    "gsis": "00-0033280",
+    "team": "SF",
+    "name": "Christian McCaffrey",
+    "pos": "RB"
+  },
+  "bijan-robinson": {
+    "gsis": "00-0038542",
+    "team": "ATL",
+    "name": "Bijan Robinson",
+    "pos": "RB"
+  },
+  "jahmyr-gibbs": {
+    "gsis": "00-0039139",
+    "team": "DET",
+    "name": "Jahmyr Gibbs",
+    "pos": "RB"
+  },
+  "jonathan-taylor": {
+    "gsis": "00-0036223",
+    "team": "IND",
+    "name": "Jonathan Taylor",
+    "pos": "RB"
+  },
+  "devon-achane": {
+    "gsis": "00-0039040",
+    "team": "MIA",
+    "name": "De'Von Achane",
+    "pos": "RB"
+  },
+  "james-cook": {
+    "gsis": "00-0037248",
+    "team": "BUF",
+    "name": "James Cook",
+    "pos": "RB"
+  },
+  "chase-brown": {
+    "gsis": "00-0038597",
+    "team": "CIN",
+    "name": "Chase Brown",
+    "pos": "RB"
+  },
   "derrick-henry": {
     "gsis": "00-0032764",
     "team": "BAL",
     "name": "Derrick Henry",
+    "pos": "RB"
+  },
+  "kyren-williams": {
+    "gsis": "00-0037840",
+    "team": "LA",
+    "name": "Kyren Williams",
+    "pos": "RB"
+  },
+  "travis-etienne": {
+    "gsis": "00-0036973",
+    "team": "JAX",
+    "name": "Travis Etienne",
+    "pos": "RB"
+  },
+  "ashton-jeanty": {
+    "gsis": "00-0040122",
+    "team": "LV",
+    "name": "Ashton Jeanty",
+    "pos": "RB"
+  },
+  "javonte-williams": {
+    "gsis": "00-0036997",
+    "team": "DAL",
+    "name": "Javonte Williams",
+    "pos": "RB"
+  },
+  "josh-jacobs": {
+    "gsis": "00-0035700",
+    "team": "GB",
+    "name": "Josh Jacobs",
+    "pos": "RB"
+  },
+  "saquon-barkley": {
+    "gsis": "00-0034844",
+    "team": "PHI",
+    "name": "Saquon Barkley",
+    "pos": "RB"
+  },
+  "dandre-swift": {
+    "gsis": "00-0036275",
+    "team": "CHI",
+    "name": "D'Andre Swift",
     "pos": "RB"
   },
   "kenneth-gainwell": {
@@ -947,77 +581,101 @@
     "name": "Kenneth Gainwell",
     "pos": "RB"
   },
-  "justin-jefferson": {
-    "gsis": "00-0036322",
-    "team": "MIN",
-    "name": "Justin Jefferson",
-    "pos": "WR"
-  },
-  "keenan-allen": {
-    "gsis": "00-0030279",
-    "team": "LAC",
-    "name": "Keenan Allen",
-    "pos": "WR"
-  },
-  "courtland-sutton": {
-    "gsis": "00-0034348",
-    "team": "DEN",
-    "name": "Courtland Sutton",
-    "pos": "WR"
-  },
-  "colston-loveland": {
-    "gsis": "00-0040126",
-    "team": "CHI",
-    "name": "Colston Loveland",
-    "pos": "TE"
-  },
-  "juwan-johnson": {
-    "gsis": "00-0036040",
-    "team": "NO",
-    "name": "Juwan Johnson",
-    "pos": "TE"
-  },
-  "mark-andrews": {
-    "gsis": "00-0034753",
-    "team": "BAL",
-    "name": "Mark Andrews",
-    "pos": "TE"
-  },
-  "james-conner": {
-    "gsis": "00-0033553",
-    "team": "ARI",
-    "name": "James Conner",
+  "jaylen-warren": {
+    "gsis": "00-0037228",
+    "team": "PIT",
+    "name": "Jaylen Warren",
     "pos": "RB"
   },
-  "brock-purdy": {
-    "gsis": "00-0037834",
-    "team": "SF",
-    "name": "Brock Purdy",
-    "pos": "QB"
-  },
-  "chuba-hubbard": {
-    "gsis": "00-0036555",
+  "rico-dowdle": {
+    "gsis": "00-0036139",
     "team": "CAR",
-    "name": "Chuba Hubbard",
+    "name": "Rico Dowdle",
     "pos": "RB"
   },
-  "evan-engram": {
-    "gsis": "00-0033881",
+  "breece-hall": {
+    "gsis": "00-0038120",
+    "team": "NYJ",
+    "name": "Breece Hall",
+    "pos": "RB"
+  },
+  "rj-harvey": {
+    "gsis": "00-0040730",
     "team": "DEN",
-    "name": "Evan Engram",
-    "pos": "TE"
+    "name": "RJ Harvey",
+    "pos": "RB"
   },
-  "dillon-gabriel": {
-    "gsis": "00-0040704",
+  "treveyon-henderson": {
+    "gsis": "00-0040734",
+    "team": "NE",
+    "name": "TreVeyon Henderson",
+    "pos": "RB"
+  },
+  "kenneth-walker": {
+    "gsis": "00-0038134",
+    "team": "SEA",
+    "name": "Kenneth Walker III",
+    "pos": "RB"
+  },
+  "tony-pollard": {
+    "gsis": "00-0035261",
+    "team": "TEN",
+    "name": "Tony Pollard",
+    "pos": "RB"
+  },
+  "zach-charbonnet": {
+    "gsis": "00-0039165",
+    "team": "SEA",
+    "name": "Zach Charbonnet",
+    "pos": "RB"
+  },
+  "rhamondre-stevenson": {
+    "gsis": "00-0036875",
+    "team": "NE",
+    "name": "Rhamondre Stevenson",
+    "pos": "RB"
+  },
+  "quinshon-judkins": {
+    "gsis": "00-0040784",
     "team": "CLE",
-    "name": "Dillon Gabriel",
-    "pos": "QB"
+    "name": "Quinshon Judkins",
+    "pos": "RB"
   },
-  "tre-harris": {
-    "gsis": "00-0040727",
-    "team": "LAC",
-    "name": "Tre' Harris",
-    "pos": "WR"
+  "david-montgomery": {
+    "gsis": "00-0035685",
+    "team": "DET",
+    "name": "David Montgomery",
+    "pos": "RB"
+  },
+  "tyrone-tracy": {
+    "gsis": "00-0039384",
+    "team": "NYG",
+    "name": "Tyrone Tracy Jr.",
+    "pos": "RB"
+  },
+  "kyle-monangai": {
+    "gsis": "00-0040236",
+    "team": "CHI",
+    "name": "Kyle Monangai",
+    "pos": "RB"
+  },
+  "kareem-hunt": {
+    "gsis": "00-0033923",
+    "team": "KC",
+    "name": "Kareem Hunt",
+    "pos": "RB"
+  },
+  "woody-marks": {
+    "gsis": "00-0040583",
+    "team": "HOU",
+    "name": "Woody Marks",
+    "pos": "RB"
+  },
+  "rachaad-white": {
+    "gsis": "00-0037256",
+    "team": "TB",
+    "name": "Rachaad White",
+    "pos": "RB"
   },
   "jacory-croskey-merritt": {
     "gsis": "00-0040242",
@@ -1025,22 +683,16 @@
     "name": "Jacory Croskey-Merritt",
     "pos": "RB"
   },
-  "taysom-hill": {
-    "gsis": "00-0033357",
-    "team": "NO",
-    "name": "Taysom Hill",
-    "pos": "TE"
+  "bucky-irving": {
+    "gsis": "00-0039361",
+    "team": "TB",
+    "name": "Bucky Irving",
+    "pos": "RB"
   },
-  "trey-lance": {
-    "gsis": "00-0037012",
+  "omarion-hampton": {
+    "gsis": "00-0040666",
     "team": "LAC",
-    "name": "Trey Lance",
-    "pos": "QB"
-  },
-  "kyle-monangai": {
-    "gsis": "00-0040236",
-    "team": "CHI",
-    "name": "Kyle Monangai",
+    "name": "Omarion Hampton",
     "pos": "RB"
   },
   "jordan-mason": {
@@ -1049,10 +701,640 @@
     "name": "Jordan Mason",
     "pos": "RB"
   },
+  "cam-skattebo": {
+    "gsis": "00-0040715",
+    "team": "NYG",
+    "name": "Cam Skattebo",
+    "pos": "RB"
+  },
+  "chuba-hubbard": {
+    "gsis": "00-0036555",
+    "team": "CAR",
+    "name": "Chuba Hubbard",
+    "pos": "RB"
+  },
+  "tyler-allgeier": {
+    "gsis": "00-0037263",
+    "team": "ATL",
+    "name": "Tyler Allgeier",
+    "pos": "RB"
+  },
+  "blake-corum": {
+    "gsis": "00-0039738",
+    "team": "LA",
+    "name": "Blake Corum",
+    "pos": "RB"
+  },
+  "aaron-jones": {
+    "gsis": "00-0033293",
+    "team": "MIN",
+    "name": "Aaron Jones",
+    "pos": "RB"
+  },
+  "kimani-vidal": {
+    "gsis": "00-0039391",
+    "team": "LAC",
+    "name": "Kimani Vidal",
+    "pos": "RB"
+  },
+  "jk-dobbins": {
+    "gsis": "00-0036158",
+    "team": "DEN",
+    "name": "J.K. Dobbins",
+    "pos": "RB"
+  },
+  "tyjae-spears": {
+    "gsis": "00-0039032",
+    "team": "TEN",
+    "name": "Tyjae Spears",
+    "pos": "RB"
+  },
+  "devin-singletary": {
+    "gsis": "00-0035250",
+    "team": "NYG",
+    "name": "Devin Singletary",
+    "pos": "RB"
+  },
+  "alvin-kamara": {
+    "gsis": "00-0033906",
+    "team": "NO",
+    "name": "Alvin Kamara",
+    "pos": "RB"
+  },
+  "ty-johnson": {
+    "gsis": "00-0035537",
+    "team": "BUF",
+    "name": "Ty Johnson",
+    "pos": "RB"
+  },
+  "michael-carter": {
+    "gsis": "00-0036924",
+    "team": "ARI",
+    "name": "Michael Carter",
+    "pos": "RB"
+  },
+  "emanuel-wilson": {
+    "gsis": "00-0038797",
+    "team": "GB",
+    "name": "Emanuel Wilson",
+    "pos": "RB"
+  },
+  "bam-knight": {
+    "gsis": "00-0037157",
+    "team": "ARI",
+    "name": "Bam Knight",
+    "pos": "RB"
+  },
+  "chris-rodriguez": {
+    "gsis": "00-0038611",
+    "team": "WAS",
+    "name": "Chris Rodriguez Jr.",
+    "pos": "RB"
+  },
+  "sean-tucker": {
+    "gsis": "00-0038951",
+    "team": "TB",
+    "name": "Sean Tucker",
+    "pos": "RB"
+  },
+  "bhayshul-tuten": {
+    "gsis": "00-0040719",
+    "team": "JAX",
+    "name": "Bhayshul Tuten",
+    "pos": "RB"
+  },
+  "nick-chubb": {
+    "gsis": "00-0034791",
+    "team": "HOU",
+    "name": "Nick Chubb",
+    "pos": "RB"
+  },
+  "dylan-sampson": {
+    "gsis": "00-0040162",
+    "team": "CLE",
+    "name": "Dylan Sampson",
+    "pos": "RB"
+  },
+  "isiah-pacheco": {
+    "gsis": "00-0037197",
+    "team": "KC",
+    "name": "Isiah Pacheco",
+    "pos": "RB"
+  },
+  "samaje-perine": {
+    "gsis": "00-0033526",
+    "team": "CIN",
+    "name": "Samaje Perine",
+    "pos": "RB"
+  },
+  "jeremy-mcnichols": {
+    "gsis": "00-0033955",
+    "team": "WAS",
+    "name": "Jeremy McNichols",
+    "pos": "RB"
+  },
+  "isaiah-davis": {
+    "gsis": "00-0039798",
+    "team": "NYJ",
+    "name": "Isaiah Davis",
+    "pos": "RB"
+  },
+  "justice-hill": {
+    "gsis": "00-0034975",
+    "team": "BAL",
+    "name": "Justice Hill",
+    "pos": "RB"
+  },
+  "ray-davis": {
+    "gsis": "00-0039875",
+    "team": "BUF",
+    "name": "Ray Davis",
+    "pos": "RB"
+  },
+  "brashard-smith": {
+    "gsis": "00-0040078",
+    "team": "KC",
+    "name": "Brashard Smith",
+    "pos": "RB"
+  },
+  "brian-robinson": {
+    "gsis": "00-0037746",
+    "team": "SF",
+    "name": "Brian Robinson",
+    "pos": "RB"
+  },
+  "devin-neal": {
+    "gsis": "00-0040202",
+    "team": "NO",
+    "name": "Devin Neal",
+    "pos": "RB"
+  },
+  "emari-demercado": {
+    "gsis": "00-0038705",
+    "team": "ARI",
+    "name": "Emari Demercado",
+    "pos": "RB"
+  },
+  "keaton-mitchell": {
+    "gsis": "00-0038454",
+    "team": "BAL",
+    "name": "Keaton Mitchell",
+    "pos": "RB"
+  },
+  "ollie-gordon": {
+    "gsis": "00-0040198",
+    "team": "MIA",
+    "name": "Ollie Gordon II",
+    "pos": "RB"
+  },
+  "tank-bigsby": {
+    "gsis": "00-0038555",
+    "team": "PHI",
+    "name": "Tank Bigsby",
+    "pos": "RB"
+  },
+  "jaylen-wright": {
+    "gsis": "00-0039874",
+    "team": "MIA",
+    "name": "Jaylen Wright",
+    "pos": "RB"
+  },
+  "audric-estim": {
+    "gsis": "00-0039373",
+    "team": "NO",
+    "name": "Audric Estimé",
+    "pos": "RB"
+  },
+  "jerome-ford": {
+    "gsis": "00-0037267",
+    "team": "CLE",
+    "name": "Jerome Ford",
+    "pos": "RB"
+  },
+  "malik-davis": {
+    "gsis": "00-0037563",
+    "team": "DAL",
+    "name": "Malik Davis",
+    "pos": "RB"
+  },
+  "zavier-scott": {
+    "gsis": "00-0038440",
+    "team": "MIN",
+    "name": "Zavier Scott",
+    "pos": "RB"
+  },
+  "ameer-abdullah": {
+    "gsis": "00-0032104",
+    "team": "IND",
+    "name": "Ameer Abdullah",
+    "pos": "RB"
+  },
+  "hunter-luepke": {
+    "gsis": "00-0038738",
+    "team": "DAL",
+    "name": "Hunter Luepke",
+    "pos": "RB"
+  },
+  "tyler-badie": {
+    "gsis": "00-0037085",
+    "team": "DEN",
+    "name": "Tyler Badie",
+    "pos": "RB"
+  },
+  "trey-benson": {
+    "gsis": "00-0039921",
+    "team": "ARI",
+    "name": "Trey Benson",
+    "pos": "RB"
+  },
+  "james-conner": {
+    "gsis": "00-0033553",
+    "team": "ARI",
+    "name": "James Conner",
+    "pos": "RB"
+  },
+  "kendre-miller": {
+    "gsis": "00-0038551",
+    "team": "NO",
+    "name": "Kendre Miller",
+    "pos": "RB"
+  },
+  "chris-brooks": {
+    "gsis": "00-0038685",
+    "team": "GB",
+    "name": "Chris Brooks",
+    "pos": "RB"
+  },
+  "jaleel-mclaughlin": {
+    "gsis": "00-0038794",
+    "team": "DEN",
+    "name": "Jaleel McLaughlin",
+    "pos": "RB"
+  },
+  "jawhar-jordan": {
+    "gsis": "00-0039405",
+    "team": "HOU",
+    "name": "Jawhar Jordan",
+    "pos": "RB"
+  },
+  "raheem-mostert": {
+    "gsis": "00-0031687",
+    "team": "LV",
+    "name": "Raheem Mostert",
+    "pos": "RB"
+  },
+  "miles-sanders": {
+    "gsis": "00-0035243",
+    "team": "DAL",
+    "name": "Miles Sanders",
+    "pos": "RB"
+  },
+  "jaret-patterson": {
+    "gsis": "00-0036755",
+    "team": "LAC",
+    "name": "Jaret Patterson",
+    "pos": "RB"
+  },
+  "lequint-allen": {
+    "gsis": "00-0040238",
+    "team": "JAX",
+    "name": "LeQuint Allen Jr.",
+    "pos": "RB"
+  },
+  "rasheen-ali": {
+    "gsis": "00-0039796",
+    "team": "BAL",
+    "name": "Rasheen Ali",
+    "pos": "RB"
+  },
+  "dare-ogunbowale": {
+    "gsis": "00-0033854",
+    "team": "HOU",
+    "name": "Dare Ogunbowale",
+    "pos": "RB"
+  },
+  "antonio-gibson": {
+    "gsis": "00-0036328",
+    "team": "NE",
+    "name": "Antonio Gibson",
+    "pos": "RB"
+  },
+  "andrew-beck": {
+    "gsis": "00-0034959",
+    "team": "NYJ",
+    "name": "Andrew Beck",
+    "pos": "RB"
+  },
+  "george-holani": {
+    "gsis": "00-0039299",
+    "team": "SEA",
+    "name": "George Holani",
+    "pos": "RB"
+  },
+  "jaydon-blue": {
+    "gsis": "00-0040586",
+    "team": "DAL",
+    "name": "Jaydon Blue",
+    "pos": "RB"
+  },
+  "raheim-sanders": {
+    "gsis": "00-0040466",
+    "team": "CLE",
+    "name": "Raheim Sanders",
+    "pos": "RB"
+  },
+  "will-shipley": {
+    "gsis": "00-0039746",
+    "team": "PHI",
+    "name": "Will Shipley",
+    "pos": "RB"
+  },
+  "trayveon-williams": {
+    "gsis": "00-0035291",
+    "team": "CLE",
+    "name": "Trayveon Williams",
+    "pos": "RB"
+  },
+  "adam-prentice": {
+    "gsis": "00-0036727",
+    "team": "DEN",
+    "name": "Adam Prentice",
+    "pos": "RB"
+  },
+  "braelon-allen": {
+    "gsis": "00-0039794",
+    "team": "NYJ",
+    "name": "Braelon Allen",
+    "pos": "RB"
+  },
+  "terrell-jennings": {
+    "gsis": "00-0039757",
+    "team": "NE",
+    "name": "Terrell Jennings",
+    "pos": "RB"
+  },
+  "trevor-etienne": {
+    "gsis": "00-0040644",
+    "team": "CAR",
+    "name": "Trevor Etienne",
+    "pos": "RB"
+  },
+  "austin-ekeler": {
+    "gsis": "00-0033699",
+    "team": "WAS",
+    "name": "Austin Ekeler",
+    "pos": "RB"
+  },
+  "puka-nacua": {
+    "gsis": "00-0039075",
+    "team": "LA",
+    "name": "Puka Nacua",
+    "pos": "WR"
+  },
+  "jaxon-smith-njigba": {
+    "gsis": "00-0038543",
+    "team": "SEA",
+    "name": "Jaxon Smith-Njigba",
+    "pos": "WR"
+  },
+  "amon-ra-st-brown": {
+    "gsis": "00-0036963",
+    "team": "DET",
+    "name": "Amon-Ra St. Brown",
+    "pos": "WR"
+  },
+  "jamarr-chase": {
+    "gsis": "00-0036900",
+    "team": "CIN",
+    "name": "Ja'Marr Chase",
+    "pos": "WR"
+  },
+  "george-pickens": {
+    "gsis": "00-0037247",
+    "team": "DAL",
+    "name": "George Pickens",
+    "pos": "WR"
+  },
+  "chris-olave": {
+    "gsis": "00-0037239",
+    "team": "NO",
+    "name": "Chris Olave",
+    "pos": "WR"
+  },
+  "zay-flowers": {
+    "gsis": "00-0039064",
+    "team": "BAL",
+    "name": "Zay Flowers",
+    "pos": "WR"
+  },
+  "nico-collins": {
+    "gsis": "00-0036554",
+    "team": "HOU",
+    "name": "Nico Collins",
+    "pos": "WR"
+  },
+  "davante-adams": {
+    "gsis": "00-0031381",
+    "team": "LA",
+    "name": "Davante Adams",
+    "pos": "WR"
+  },
+  "michael-wilson": {
+    "gsis": "00-0038559",
+    "team": "ARI",
+    "name": "Michael Wilson",
+    "pos": "WR"
+  },
+  "aj-brown": {
+    "gsis": "00-0035676",
+    "team": "PHI",
+    "name": "A.J. Brown",
+    "pos": "WR"
+  },
+  "jameson-williams": {
+    "gsis": "00-0037240",
+    "team": "DET",
+    "name": "Jameson Williams",
+    "pos": "WR"
+  },
+  "courtland-sutton": {
+    "gsis": "00-0034348",
+    "team": "DEN",
+    "name": "Courtland Sutton",
+    "pos": "WR"
+  },
+  "wandale-robinson": {
+    "gsis": "00-0038117",
+    "team": "NYG",
+    "name": "Wan'Dale Robinson",
+    "pos": "WR"
+  },
+  "tetairoa-mcmillan": {
+    "gsis": "00-0040124",
+    "team": "CAR",
+    "name": "Tetairoa McMillan",
+    "pos": "WR"
+  },
+  "tee-higgins": {
+    "gsis": "00-0036410",
+    "team": "CIN",
+    "name": "Tee Higgins",
+    "pos": "WR"
+  },
+  "stefon-diggs": {
+    "gsis": "00-0031588",
+    "team": "NE",
+    "name": "Stefon Diggs",
+    "pos": "WR"
+  },
+  "michael-pittman": {
+    "gsis": "00-0036252",
+    "team": "IND",
+    "name": "Michael Pittman",
+    "pos": "WR"
+  },
+  "drake-london": {
+    "gsis": "00-0037238",
+    "team": "ATL",
+    "name": "Drake London",
+    "pos": "WR"
+  },
+  "devonta-smith": {
+    "gsis": "00-0036912",
+    "team": "PHI",
+    "name": "DeVonta Smith",
+    "pos": "WR"
+  },
+  "justin-jefferson": {
+    "gsis": "00-0036322",
+    "team": "MIN",
+    "name": "Justin Jefferson",
+    "pos": "WR"
+  },
+  "ceedee-lamb": {
+    "gsis": "00-0036358",
+    "team": "DAL",
+    "name": "CeeDee Lamb",
+    "pos": "WR"
+  },
+  "emeka-egbuka": {
+    "gsis": "00-0040129",
+    "team": "TB",
+    "name": "Emeka Egbuka",
+    "pos": "WR"
+  },
   "jaylen-waddle": {
     "gsis": "00-0036613",
     "team": "MIA",
     "name": "Jaylen Waddle",
+    "pos": "WR"
+  },
+  "deebo-samuel": {
+    "gsis": "00-0035719",
+    "team": "WAS",
+    "name": "Deebo Samuel Sr.",
+    "pos": "WR"
+  },
+  "dk-metcalf": {
+    "gsis": "00-0035640",
+    "team": "PIT",
+    "name": "DK Metcalf",
+    "pos": "WR"
+  },
+  "parker-washington": {
+    "gsis": "00-0038606",
+    "team": "JAX",
+    "name": "Parker Washington",
+    "pos": "WR"
+  },
+  "alec-pierce": {
+    "gsis": "00-0037664",
+    "team": "IND",
+    "name": "Alec Pierce",
+    "pos": "WR"
+  },
+  "keenan-allen": {
+    "gsis": "00-0030279",
+    "team": "LAC",
+    "name": "Keenan Allen",
+    "pos": "WR"
+  },
+  "ladd-mcconkey": {
+    "gsis": "00-0039915",
+    "team": "LAC",
+    "name": "Ladd McConkey",
+    "pos": "WR"
+  },
+  "troy-franklin": {
+    "gsis": "00-0039868",
+    "team": "DEN",
+    "name": "Troy Franklin",
+    "pos": "WR"
+  },
+  "jakobi-meyers": {
+    "gsis": "00-0034960",
+    "team": "JAX",
+    "name": "Jakobi Meyers",
+    "pos": "WR"
+  },
+  "jauan-jennings": {
+    "gsis": "00-0036259",
+    "team": "SF",
+    "name": "Jauan Jennings",
+    "pos": "WR"
+  },
+  "dj-moore": {
+    "gsis": "00-0034827",
+    "team": "CHI",
+    "name": "DJ Moore",
+    "pos": "WR"
+  },
+  "quentin-johnston": {
+    "gsis": "00-0038544",
+    "team": "LAC",
+    "name": "Quentin Johnston",
+    "pos": "WR"
+  },
+  "khalil-shakir": {
+    "gsis": "00-0037261",
+    "team": "BUF",
+    "name": "Khalil Shakir",
+    "pos": "WR"
+  },
+  "romeo-doubs": {
+    "gsis": "00-0037816",
+    "team": "GB",
+    "name": "Romeo Doubs",
+    "pos": "WR"
+  },
+  "tre-tucker": {
+    "gsis": "00-0038563",
+    "team": "LV",
+    "name": "Tre Tucker",
+    "pos": "WR"
+  },
+  "rashid-shaheed": {
+    "gsis": "00-0037545",
+    "team": "SEA",
+    "name": "Rashid Shaheed",
+    "pos": "WR"
+  },
+  "rashee-rice": {
+    "gsis": "00-0039067",
+    "team": "KC",
+    "name": "Rashee Rice",
+    "pos": "WR"
+  },
+  "rome-odunze": {
+    "gsis": "00-0039919",
+    "team": "CHI",
+    "name": "Rome Odunze",
+    "pos": "WR"
+  },
+  "brian-thomas": {
+    "gsis": "00-0039893",
+    "team": "JAX",
+    "name": "Brian Thomas Jr.",
     "pos": "WR"
   },
   "josh-downs": {
@@ -1061,52 +1343,52 @@
     "name": "Josh Downs",
     "pos": "WR"
   },
-  "john-metchie": {
-    "gsis": "00-0037614",
-    "team": "NYJ",
-    "name": "John Metchie",
-    "pos": "WR"
-  },
-  "chig-okonkwo": {
-    "gsis": "00-0037809",
-    "team": "TEN",
-    "name": "Chig Okonkwo",
-    "pos": "TE"
-  },
-  "brenton-strange": {
-    "gsis": "00-0038935",
-    "team": "JAX",
-    "name": "Brenton Strange",
-    "pos": "TE"
-  },
-  "nick-chubb": {
-    "gsis": "00-0034791",
-    "team": "HOU",
-    "name": "Nick Chubb",
-    "pos": "RB"
-  },
-  "keon-coleman": {
-    "gsis": "00-0039901",
-    "team": "BUF",
-    "name": "Keon Coleman",
-    "pos": "WR"
-  },
-  "tyler-lockett": {
-    "gsis": "00-0032211",
-    "team": "LV",
-    "name": "Tyler Lockett",
-    "pos": "WR"
-  },
-  "mike-evans": {
-    "gsis": "00-0031408",
-    "team": "TB",
-    "name": "Mike Evans",
-    "pos": "WR"
-  },
   "marquise-brown": {
     "gsis": "00-0035662",
     "team": "KC",
     "name": "Marquise Brown",
+    "pos": "WR"
+  },
+  "jordan-addison": {
+    "gsis": "00-0038994",
+    "team": "MIN",
+    "name": "Jordan Addison",
+    "pos": "WR"
+  },
+  "christian-watson": {
+    "gsis": "00-0038124",
+    "team": "GB",
+    "name": "Christian Watson",
+    "pos": "WR"
+  },
+  "jayden-higgins": {
+    "gsis": "00-0040130",
+    "team": "HOU",
+    "name": "Jayden Higgins",
+    "pos": "WR"
+  },
+  "chimere-dike": {
+    "gsis": "00-0040705",
+    "team": "TEN",
+    "name": "Chimere Dike",
+    "pos": "WR"
+  },
+  "luther-burden": {
+    "gsis": "00-0040735",
+    "team": "CHI",
+    "name": "Luther Burden III",
+    "pos": "WR"
+  },
+  "marvin-harrison": {
+    "gsis": "00-0039849",
+    "team": "ARI",
+    "name": "Marvin Harrison Jr.",
+    "pos": "WR"
+  },
+  "kayshon-boutte": {
+    "gsis": "00-0038608",
+    "team": "NE",
+    "name": "Kayshon Boutte",
     "pos": "WR"
   },
   "jerry-jeudy": {
@@ -1115,10 +1397,898 @@
     "name": "Jerry Jeudy",
     "pos": "WR"
   },
-  "troy-franklin": {
-    "gsis": "00-0039868",
+  "malik-washington": {
+    "gsis": "00-0039880",
+    "team": "MIA",
+    "name": "Malik Washington",
+    "pos": "WR"
+  },
+  "elic-ayomanor": {
+    "gsis": "00-0040170",
+    "team": "TEN",
+    "name": "Elic Ayomanor",
+    "pos": "WR"
+  },
+  "cooper-kupp": {
+    "gsis": "00-0033908",
+    "team": "SEA",
+    "name": "Cooper Kupp",
+    "pos": "WR"
+  },
+  "terry-mclaurin": {
+    "gsis": "00-0035659",
+    "team": "WAS",
+    "name": "Terry McLaurin",
+    "pos": "WR"
+  },
+  "ryan-flournoy": {
+    "gsis": "00-0039410",
+    "team": "DAL",
+    "name": "Ryan Flournoy",
+    "pos": "WR"
+  },
+  "mack-hollins": {
+    "gsis": "00-0033555",
+    "team": "NE",
+    "name": "Mack Hollins",
+    "pos": "WR"
+  },
+  "xavier-worthy": {
+    "gsis": "00-0039894",
+    "team": "KC",
+    "name": "Xavier Worthy",
+    "pos": "WR"
+  },
+  "keon-coleman": {
+    "gsis": "00-0039901",
+    "team": "BUF",
+    "name": "Keon Coleman",
+    "pos": "WR"
+  },
+  "jalen-nailor": {
+    "gsis": "00-0037291",
+    "team": "MIN",
+    "name": "Jalen Nailor",
+    "pos": "WR"
+  },
+  "garrett-wilson": {
+    "gsis": "00-0037740",
+    "team": "NYJ",
+    "name": "Garrett Wilson",
+    "pos": "WR"
+  },
+  "darius-slayton": {
+    "gsis": "00-0035535",
+    "team": "NYG",
+    "name": "Darius Slayton",
+    "pos": "WR"
+  },
+  "xavier-hutchinson": {
+    "gsis": "00-0038618",
+    "team": "HOU",
+    "name": "Xavier Hutchinson",
+    "pos": "WR"
+  },
+  "demario-douglas": {
+    "gsis": "00-0038621",
+    "team": "NE",
+    "name": "DeMario Douglas",
+    "pos": "WR"
+  },
+  "marvin-mims": {
+    "gsis": "00-0038976",
     "team": "DEN",
-    "name": "Troy Franklin",
+    "name": "Marvin Mims Jr.",
+    "pos": "WR"
+  },
+  "tez-johnson": {
+    "gsis": "00-0040237",
+    "team": "TB",
+    "name": "Tez Johnson",
+    "pos": "WR"
+  },
+  "kendrick-bourne": {
+    "gsis": "00-0033307",
+    "team": "SF",
+    "name": "Kendrick Bourne",
+    "pos": "WR"
+  },
+  "jalen-coker": {
+    "gsis": "00-0039491",
+    "team": "CAR",
+    "name": "Jalen Coker",
+    "pos": "WR"
+  },
+  "andrei-iosivas": {
+    "gsis": "00-0038619",
+    "team": "CIN",
+    "name": "Andrei Iosivas",
+    "pos": "WR"
+  },
+  "xavier-legette": {
+    "gsis": "00-0039342",
+    "team": "CAR",
+    "name": "Xavier Legette",
+    "pos": "WR"
+  },
+  "ricky-pearsall": {
+    "gsis": "00-0039916",
+    "team": "SF",
+    "name": "Ricky Pearsall",
+    "pos": "WR"
+  },
+  "adonai-mitchell": {
+    "gsis": "00-0039890",
+    "team": "NYJ",
+    "name": "Adonai Mitchell",
+    "pos": "WR"
+  },
+  "calvin-austin": {
+    "gsis": "00-0037837",
+    "team": "PIT",
+    "name": "Calvin Austin III",
+    "pos": "WR"
+  },
+  "mike-evans": {
+    "gsis": "00-0031408",
+    "team": "TB",
+    "name": "Mike Evans",
+    "pos": "WR"
+  },
+  "olamide-zaccheaus": {
+    "gsis": "00-0035208",
+    "team": "CHI",
+    "name": "Olamide Zaccheaus",
+    "pos": "WR"
+  },
+  "kavontae-turpin": {
+    "gsis": "00-0037801",
+    "team": "DAL",
+    "name": "KaVontae Turpin",
+    "pos": "WR"
+  },
+  "chris-godwin": {
+    "gsis": "00-0033921",
+    "team": "TB",
+    "name": "Chris Godwin Jr.",
+    "pos": "WR"
+  },
+  "darnell-mooney": {
+    "gsis": "00-0036309",
+    "team": "ATL",
+    "name": "Darnell Mooney",
+    "pos": "WR"
+  },
+  "sterling-shepard": {
+    "gsis": "00-0032385",
+    "team": "TB",
+    "name": "Sterling Shepard",
+    "pos": "WR"
+  },
+  "tyquan-thornton": {
+    "gsis": "00-0038104",
+    "team": "KC",
+    "name": "Tyquan Thornton",
+    "pos": "WR"
+  },
+  "isaac-teslaa": {
+    "gsis": "00-0040669",
+    "team": "DET",
+    "name": "Isaac TeSlaa",
+    "pos": "WR"
+  },
+  "dontayvion-wicks": {
+    "gsis": "00-0038393",
+    "team": "GB",
+    "name": "Dontayvion Wicks",
+    "pos": "WR"
+  },
+  "greg-dortch": {
+    "gsis": "00-0035500",
+    "team": "ARI",
+    "name": "Greg Dortch",
+    "pos": "WR"
+  },
+  "pat-bryant": {
+    "gsis": "00-0040134",
+    "team": "DEN",
+    "name": "Pat Bryant",
+    "pos": "WR"
+  },
+  "juju-smith-schuster": {
+    "gsis": "00-0033857",
+    "team": "KC",
+    "name": "JuJu Smith-Schuster",
+    "pos": "WR"
+  },
+  "john-metchie": {
+    "gsis": "00-0037614",
+    "team": "NYJ",
+    "name": "John Metchie III",
+    "pos": "WR"
+  },
+  "matthew-golden": {
+    "gsis": "00-0040667",
+    "team": "GB",
+    "name": "Matthew Golden",
+    "pos": "WR"
+  },
+  "van-jefferson": {
+    "gsis": "00-0036415",
+    "team": "TEN",
+    "name": "Van Jefferson",
+    "pos": "WR"
+  },
+  "tre-harris": {
+    "gsis": "00-0040727",
+    "team": "LAC",
+    "name": "Tre Harris",
+    "pos": "WR"
+  },
+  "jaylin-noel": {
+    "gsis": "00-0040138",
+    "team": "HOU",
+    "name": "Jaylin Noel",
+    "pos": "WR"
+  },
+  "tyler-lockett": {
+    "gsis": "00-0032211",
+    "team": "LV",
+    "name": "Tyler Lockett",
+    "pos": "WR"
+  },
+  "deandre-hopkins": {
+    "gsis": "00-0030564",
+    "team": "BAL",
+    "name": "DeAndre Hopkins",
+    "pos": "WR"
+  },
+  "kalif-raymond": {
+    "gsis": "00-0032464",
+    "team": "DET",
+    "name": "Kalif Raymond",
+    "pos": "WR"
+  },
+  "devaughn-vele": {
+    "gsis": "00-0039424",
+    "team": "NO",
+    "name": "Devaughn Vele",
+    "pos": "WR"
+  },
+  "tory-horton": {
+    "gsis": "00-0040648",
+    "team": "SEA",
+    "name": "Tory Horton",
+    "pos": "WR"
+  },
+  "travis-hunter": {
+    "gsis": "00-0040718",
+    "team": "JAX",
+    "name": "Travis Hunter",
+    "pos": "WR"
+  },
+  "isaiah-williams": {
+    "gsis": "00-0039451",
+    "team": "NYJ",
+    "name": "Isaiah Williams",
+    "pos": "WR"
+  },
+  "cedric-tillman": {
+    "gsis": "00-0038979",
+    "team": "CLE",
+    "name": "Cedric Tillman",
+    "pos": "WR"
+  },
+  "demarcus-robinson": {
+    "gsis": "00-0032775",
+    "team": "SF",
+    "name": "Demarcus Robinson",
+    "pos": "WR"
+  },
+  "trey-mcbride": {
+    "gsis": "00-0037744",
+    "team": "ARI",
+    "name": "Trey McBride",
+    "pos": "TE"
+  },
+  "kyle-pitts": {
+    "gsis": "00-0036970",
+    "team": "ATL",
+    "name": "Kyle Pitts",
+    "pos": "TE"
+  },
+  "travis-kelce": {
+    "gsis": "00-0030506",
+    "team": "KC",
+    "name": "Travis Kelce",
+    "pos": "TE"
+  },
+  "tyler-warren": {
+    "gsis": "00-0040128",
+    "team": "IND",
+    "name": "Tyler Warren",
+    "pos": "TE"
+  },
+  "jake-ferguson": {
+    "gsis": "00-0038041",
+    "team": "DAL",
+    "name": "Jake Ferguson",
+    "pos": "TE"
+  },
+  "harold-fannin": {
+    "gsis": "00-0040663",
+    "team": "CLE",
+    "name": "Harold Fannin Jr.",
+    "pos": "TE"
+  },
+  "dallas-goedert": {
+    "gsis": "00-0034351",
+    "team": "PHI",
+    "name": "Dallas Goedert",
+    "pos": "TE"
+  },
+  "juwan-johnson": {
+    "gsis": "00-0036040",
+    "team": "NO",
+    "name": "Juwan Johnson",
+    "pos": "TE"
+  },
+  "hunter-henry": {
+    "gsis": "00-0033090",
+    "team": "NE",
+    "name": "Hunter Henry",
+    "pos": "TE"
+  },
+  "dalton-schultz": {
+    "gsis": "00-0034383",
+    "team": "HOU",
+    "name": "Dalton Schultz",
+    "pos": "TE"
+  },
+  "brock-bowers": {
+    "gsis": "00-0039338",
+    "team": "LV",
+    "name": "Brock Bowers",
+    "pos": "TE"
+  },
+  "colston-loveland": {
+    "gsis": "00-0040126",
+    "team": "CHI",
+    "name": "Colston Loveland",
+    "pos": "TE"
+  },
+  "george-kittle": {
+    "gsis": "00-0033288",
+    "team": "SF",
+    "name": "George Kittle",
+    "pos": "TE"
+  },
+  "aj-barner": {
+    "gsis": "00-0039793",
+    "team": "SEA",
+    "name": "AJ Barner",
+    "pos": "TE"
+  },
+  "oronde-gadsden": {
+    "gsis": "00-0040189",
+    "team": "LAC",
+    "name": "Oronde Gadsden II",
+    "pos": "TE"
+  },
+  "mark-andrews": {
+    "gsis": "00-0034753",
+    "team": "BAL",
+    "name": "Mark Andrews",
+    "pos": "TE"
+  },
+  "colby-parkinson": {
+    "gsis": "00-0036244",
+    "team": "LA",
+    "name": "Colby Parkinson",
+    "pos": "TE"
+  },
+  "theo-johnson": {
+    "gsis": "00-0039847",
+    "team": "NYG",
+    "name": "Theo Johnson",
+    "pos": "TE"
+  },
+  "zach-ertz": {
+    "gsis": "00-0030061",
+    "team": "WAS",
+    "name": "Zach Ertz",
+    "pos": "TE"
+  },
+  "dalton-kincaid": {
+    "gsis": "00-0038933",
+    "team": "BUF",
+    "name": "Dalton Kincaid",
+    "pos": "TE"
+  },
+  "chig-okonkwo": {
+    "gsis": "00-0037809",
+    "team": "TEN",
+    "name": "Chig Okonkwo",
+    "pos": "TE"
+  },
+  "cade-otton": {
+    "gsis": "00-0038129",
+    "team": "TB",
+    "name": "Cade Otton",
+    "pos": "TE"
+  },
+  "brenton-strange": {
+    "gsis": "00-0038935",
+    "team": "JAX",
+    "name": "Brenton Strange",
+    "pos": "TE"
+  },
+  "tucker-kraft": {
+    "gsis": "00-0038996",
+    "team": "GB",
+    "name": "Tucker Kraft",
+    "pos": "TE"
+  },
+  "pat-freiermuth": {
+    "gsis": "00-0036894",
+    "team": "PIT",
+    "name": "Pat Freiermuth",
+    "pos": "TE"
+  },
+  "tj-hockenson": {
+    "gsis": "00-0035229",
+    "team": "MIN",
+    "name": "T.J. Hockenson",
+    "pos": "TE"
+  },
+  "sam-laporta": {
+    "gsis": "00-0039065",
+    "team": "DET",
+    "name": "Sam LaPorta",
+    "pos": "TE"
+  },
+  "dawson-knox": {
+    "gsis": "00-0035689",
+    "team": "BUF",
+    "name": "Dawson Knox",
+    "pos": "TE"
+  },
+  "evan-engram": {
+    "gsis": "00-0033881",
+    "team": "DEN",
+    "name": "Evan Engram",
+    "pos": "TE"
+  },
+  "jake-tonges": {
+    "gsis": "00-0037112",
+    "team": "SF",
+    "name": "Jake Tonges",
+    "pos": "TE"
+  },
+  "gunnar-helm": {
+    "gsis": "00-0040584",
+    "team": "TEN",
+    "name": "Gunnar Helm",
+    "pos": "TE"
+  },
+  "mason-taylor": {
+    "gsis": "00-0040736",
+    "team": "NYJ",
+    "name": "Mason Taylor",
+    "pos": "TE"
+  },
+  "darren-waller": {
+    "gsis": "00-0031610",
+    "team": "MIA",
+    "name": "Darren Waller",
+    "pos": "TE"
+  },
+  "david-njoku": {
+    "gsis": "00-0033885",
+    "team": "CLE",
+    "name": "David Njoku",
+    "pos": "TE"
+  },
+  "jonnu-smith": {
+    "gsis": "00-0033858",
+    "team": "PIT",
+    "name": "Jonnu Smith",
+    "pos": "TE"
+  },
+  "cole-kmet": {
+    "gsis": "00-0036290",
+    "team": "CHI",
+    "name": "Cole Kmet",
+    "pos": "TE"
+  },
+  "noah-fant": {
+    "gsis": "00-0035644",
+    "team": "CIN",
+    "name": "Noah Fant",
+    "pos": "TE"
+  },
+  "michael-mayer": {
+    "gsis": "00-0039066",
+    "team": "LV",
+    "name": "Michael Mayer",
+    "pos": "TE"
+  },
+  "darnell-washington": {
+    "gsis": "00-0038558",
+    "team": "PIT",
+    "name": "Darnell Washington",
+    "pos": "TE"
+  },
+  "tyler-higbee": {
+    "gsis": "00-0033110",
+    "team": "LA",
+    "name": "Tyler Higbee",
+    "pos": "TE"
+  },
+  "mike-gesicki": {
+    "gsis": "00-0034829",
+    "team": "CIN",
+    "name": "Mike Gesicki",
+    "pos": "TE"
+  },
+  "tommy-tremble": {
+    "gsis": "00-0037005",
+    "team": "CAR",
+    "name": "Tommy Tremble",
+    "pos": "TE"
+  },
+  "greg-dulcich": {
+    "gsis": "00-0037252",
+    "team": "MIA",
+    "name": "Greg Dulcich",
+    "pos": "TE"
+  },
+  "davis-allen": {
+    "gsis": "00-0039074",
+    "team": "LA",
+    "name": "Davis Allen",
+    "pos": "TE"
+  },
+  "isaiah-likely": {
+    "gsis": "00-0037838",
+    "team": "BAL",
+    "name": "Isaiah Likely",
+    "pos": "TE"
+  },
+  "daniel-bellinger": {
+    "gsis": "00-0038115",
+    "team": "NYG",
+    "name": "Daniel Bellinger",
+    "pos": "TE"
+  },
+  "austin-hooper": {
+    "gsis": "00-0032392",
+    "team": "NE",
+    "name": "Austin Hooper",
+    "pos": "TE"
+  },
+  "elijah-higgins": {
+    "gsis": "00-0039041",
+    "team": "ARI",
+    "name": "Elijah Higgins",
+    "pos": "TE"
+  },
+  "josh-oliver": {
+    "gsis": "00-0035249",
+    "team": "MIN",
+    "name": "Josh Oliver",
+    "pos": "TE"
+  },
+  "jatavion-sanders": {
+    "gsis": "00-0039356",
+    "team": "CAR",
+    "name": "Ja'Tavion Sanders",
+    "pos": "TE"
+  },
+  "jackson-hawes": {
+    "gsis": "00-0040194",
+    "team": "BUF",
+    "name": "Jackson Hawes",
+    "pos": "TE"
+  },
+  "terrance-ferguson": {
+    "gsis": "00-0040737",
+    "team": "LA",
+    "name": "Terrance Ferguson",
+    "pos": "TE"
+  },
+  "luke-musgrave": {
+    "gsis": "00-0039144",
+    "team": "GB",
+    "name": "Luke Musgrave",
+    "pos": "TE"
+  },
+  "mitchell-evans": {
+    "gsis": "00-0040187",
+    "team": "CAR",
+    "name": "Mitchell Evans",
+    "pos": "TE"
+  },
+  "tanner-hudson": {
+    "gsis": "00-0034613",
+    "team": "CIN",
+    "name": "Tanner Hudson",
+    "pos": "TE"
+  },
+  "jeremy-ruckert": {
+    "gsis": "00-0037805",
+    "team": "NYJ",
+    "name": "Jeremy Ruckert",
+    "pos": "TE"
+  },
+  "adam-trautman": {
+    "gsis": "00-0036422",
+    "team": "DEN",
+    "name": "Adam Trautman",
+    "pos": "TE"
+  },
+  "taysom-hill": {
+    "gsis": "00-0033357",
+    "team": "NO",
+    "name": "Taysom Hill",
+    "pos": "TE"
+  },
+  "noah-gray": {
+    "gsis": "00-0036637",
+    "team": "KC",
+    "name": "Noah Gray",
+    "pos": "TE"
+  },
+  "elijah-arroyo": {
+    "gsis": "00-0040739",
+    "team": "SEA",
+    "name": "Elijah Arroyo",
+    "pos": "TE"
+  },
+  "brock-wright": {
+    "gsis": "00-0036754",
+    "team": "DET",
+    "name": "Brock Wright",
+    "pos": "TE"
+  },
+  "charlie-kolar": {
+    "gsis": "00-0038046",
+    "team": "BAL",
+    "name": "Charlie Kolar",
+    "pos": "TE"
+  },
+  "hunter-long": {
+    "gsis": "00-0037004",
+    "team": "JAX",
+    "name": "Hunter Long",
+    "pos": "TE"
+  },
+  "drew-sample": {
+    "gsis": "00-0035631",
+    "team": "CIN",
+    "name": "Drew Sample",
+    "pos": "TE"
+  },
+  "julian-hill": {
+    "gsis": "00-0038720",
+    "team": "MIA",
+    "name": "Julian Hill",
+    "pos": "TE"
+  },
+  "mo-alie-cox": {
+    "gsis": "00-0033217",
+    "team": "IND",
+    "name": "Mo Alie-Cox",
+    "pos": "TE"
+  },
+  "luke-farrell": {
+    "gsis": "00-0036887",
+    "team": "SF",
+    "name": "Luke Farrell",
+    "pos": "TE"
+  },
+  "ben-sinnott": {
+    "gsis": "00-0039912",
+    "team": "WAS",
+    "name": "Ben Sinnott",
+    "pos": "TE"
+  },
+  "connor-heyward": {
+    "gsis": "00-0037304",
+    "team": "PIT",
+    "name": "Connor Heyward",
+    "pos": "TE"
+  },
+  "john-bates": {
+    "gsis": "00-0036628",
+    "team": "WAS",
+    "name": "John Bates",
+    "pos": "TE"
+  },
+  "luke-schoonmaker": {
+    "gsis": "00-0038547",
+    "team": "DAL",
+    "name": "Luke Schoonmaker",
+    "pos": "TE"
+  },
+  "john-fitzpatrick": {
+    "gsis": "00-0037306",
+    "team": "GB",
+    "name": "John FitzPatrick",
+    "pos": "TE"
+  },
+  "ian-thomas": {
+    "gsis": "00-0034365",
+    "team": "LV",
+    "name": "Ian Thomas",
+    "pos": "TE"
+  },
+  "brevyn-spann-ford": {
+    "gsis": "00-0039530",
+    "team": "DAL",
+    "name": "Brevyn Spann-Ford",
+    "pos": "TE"
+  },
+  "grant-calcaterra": {
+    "gsis": "00-0037086",
+    "team": "PHI",
+    "name": "Grant Calcaterra",
+    "pos": "TE"
+  },
+  "will-dissly": {
+    "gsis": "00-0034159",
+    "team": "LAC",
+    "name": "Will Dissly",
+    "pos": "TE"
+  },
+  "johnny-mundt": {
+    "gsis": "00-0033246",
+    "team": "JAX",
+    "name": "Johnny Mundt",
+    "pos": "TE"
+  },
+  "cade-stover": {
+    "gsis": "00-0039359",
+    "team": "HOU",
+    "name": "Cade Stover",
+    "pos": "TE"
+  },
+  "tanner-conner": {
+    "gsis": "00-0037348",
+    "team": "MIA",
+    "name": "Tanner Conner",
+    "pos": "TE"
+  },
+  "quintin-morris": {
+    "gsis": "00-0036590",
+    "team": "JAX",
+    "name": "Quintin Morris",
+    "pos": "TE"
+  },
+  "tyler-conklin": {
+    "gsis": "00-0034270",
+    "team": "LAC",
+    "name": "Tyler Conklin",
+    "pos": "TE"
+  },
+  "nate-adkins": {
+    "gsis": "00-0038783",
+    "team": "DEN",
+    "name": "Nate Adkins",
+    "pos": "TE"
+  },
+  "jack-stoll": {
+    "gsis": "00-0036741",
+    "team": "NO",
+    "name": "Jack Stoll",
+    "pos": "TE"
+  },
+  "josh-whyle": {
+    "gsis": "00-0038589",
+    "team": "GB",
+    "name": "Josh Whyle",
+    "pos": "TE"
+  },
+  "anthony-firkser": {
+    "gsis": "00-0033455",
+    "team": "DET",
+    "name": "Anthony Firkser",
+    "pos": "TE"
+  },
+  "david-martin-robinson": {
+    "gsis": "00-0039648",
+    "team": "TEN",
+    "name": "David Martin-Robinson",
+    "pos": "TE"
+  },
+  "foster-moreau": {
+    "gsis": "00-0034981",
+    "team": "NO",
+    "name": "Foster Moreau",
+    "pos": "TE"
+  },
+  "charlie-woerner": {
+    "gsis": "00-0036429",
+    "team": "ATL",
+    "name": "Charlie Woerner",
+    "pos": "TE"
+  },
+  "andrew-ogletree": {
+    "gsis": "00-0037292",
+    "team": "IND",
+    "name": "Andrew Ogletree",
+    "pos": "TE"
+  },
+  "stone-smartt": {
+    "gsis": "00-0037475",
+    "team": "NYJ",
+    "name": "Stone Smartt",
+    "pos": "TE"
+  },
+  "josiah-deguara": {
+    "gsis": "00-0036332",
+    "team": "ARI",
+    "name": "Josiah Deguara",
+    "pos": "TE"
+  },
+  "kylen-granson": {
+    "gsis": "00-0036876",
+    "team": "PHI",
+    "name": "Kylen Granson",
+    "pos": "TE"
+  },
+  "eric-saubert": {
+    "gsis": "00-0033576",
+    "team": "SEA",
+    "name": "Eric Saubert",
+    "pos": "TE"
+  },
+  "brenden-bates": {
+    "gsis": "00-0039458",
+    "team": "CLE",
+    "name": "Brenden Bates",
+    "pos": "TE"
+  },
+  "albert-okwuegbunam": {
+    "gsis": "00-0036423",
+    "team": "LV",
+    "name": "Albert Okwuegbunam",
+    "pos": "TE"
+  },
+  "devin-culp": {
+    "gsis": "00-0039754",
+    "team": "TB",
+    "name": "Devin Culp",
+    "pos": "TE"
+  },
+  "durham-smythe": {
+    "gsis": "00-0034798",
+    "team": "CHI",
+    "name": "Durham Smythe",
+    "pos": "TE"
+  },
+  "ben-sims": {
+    "gsis": "00-0038809",
+    "team": "MIN",
+    "name": "Ben Sims",
+    "pos": "TE"
+  },
+  "james-mitchell": {
+    "gsis": "00-0037282",
+    "team": "CAR",
+    "name": "James Mitchell",
+    "pos": "TE"
+  },
+  "malik-nabers": {
+    "gsis": "00-0039337",
+    "team": "NYG",
+    "name": "Malik Nabers",
+    "pos": "WR"
+  },
+  "jayden-reed": {
+    "gsis": "00-0039146",
+    "team": "GB",
+    "name": "Jayden Reed",
     "pos": "WR"
   }
 }

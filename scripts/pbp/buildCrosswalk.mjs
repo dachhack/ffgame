@@ -1,6 +1,8 @@
-// Build a slug -> gsis_id crosswalk for every league-rostered player.
-// Reads league rosters from src/data/league.ts and gsis IDs from season_ids.csv
-// (pulled from Stathead get_player_season_stats). Reports any unmatched players.
+// Build a slug -> gsis_id crosswalk for EVERY skill player in season_ids.csv
+// (the full pulled universe — not just league-rostered players), so the PBP
+// generator bakes real play-by-play for a wide net. gsis IDs come from
+// season_ids.csv (pulled from Stathead get_player_season_stats); league rosters
+// (src/data/league.ts) are read only for a coverage report.
 // Run: node scripts/pbp/buildCrosswalk.mjs  -> writes scripts/pbp/crosswalk.json
 import { readFileSync, writeFileSync } from 'node:fs';
 
@@ -38,17 +40,18 @@ for (const line of idsCsv) {
   if (!byName.has(key)) byName.set(key, { name, pos, team, gsis });
 }
 
-// ── Match ──
+// ── Build the crosswalk from EVERY season_ids row (slug-keyed; byName already
+// deduped normalized-name collisions, first wins) ──
 const crosswalk = {};
-const unmatched = [];
-for (const p of leaguePlayers) {
-  const hit = byName.get(normName(p.name));
-  if (hit) crosswalk[slugOf(p.name)] = { gsis: hit.gsis, team: hit.team, name: p.name, pos: p.pos };
-  else unmatched.push(p);
+for (const { name, pos, team, gsis } of byName.values()) {
+  crosswalk[slugOf(name)] = { gsis, team, name, pos };
 }
 
 writeFileSync(new URL('crosswalk.json', here), JSON.stringify(crosswalk, null, 2));
-console.log(`league players: ${leaguePlayers.length}`);
-console.log(`matched:        ${Object.keys(crosswalk).length}`);
-console.log(`unmatched:      ${unmatched.length}`);
+console.log(`season_ids players: ${byName.size}`);
+console.log(`crosswalk slugs:    ${Object.keys(crosswalk).length}`);
+
+// ── Coverage report: any league-rostered player we still can't bake? ──
+const unmatched = leaguePlayers.filter((p) => !crosswalk[slugOf(p.name)]);
+console.log(`league players:     ${leaguePlayers.length}, covered: ${leaguePlayers.length - unmatched.length}, unmatched: ${unmatched.length}`);
 for (const u of unmatched) console.log(`  ✗ ${u.name} (${u.pos})`);
