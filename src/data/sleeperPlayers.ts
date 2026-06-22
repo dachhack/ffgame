@@ -58,6 +58,20 @@ function parse(raw: Record<string, Record<string, unknown>>): Map<string, Player
   return out;
 }
 
+// Fetch with a hard timeout so a stalled connection fails fast (and can be
+// retried) instead of hanging the sim build forever.
+async function fetchJson(url: string, ms: number): Promise<Record<string, Record<string, unknown>>> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) throw new Error(`player directory: HTTP ${res.status}`);
+    return (await res.json()) as Record<string, Record<string, unknown>>;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Load (and cache) the Sleeper player directory. `onProgress` fires with a note. */
 export async function loadPlayerDirectory(onProgress?: (note: string) => void): Promise<Map<string, PlayerMeta>> {
   if (mem) return mem;
@@ -71,9 +85,16 @@ export async function loadPlayerDirectory(onProgress?: (note: string) => void): 
     }
   }
   onProgress?.('Downloading Sleeper player directory (~5MB, one-time)…');
-  const res = await fetch(URL_ALL);
-  if (!res.ok) throw new Error(`player directory: HTTP ${res.status}`);
-  const data = (await res.json()) as Record<string, Record<string, unknown>>;
+  // One retry: a 5MB fetch can stall on flaky networks; abort and try again
+  // before giving up so the build doesn't wedge on "Downloading…".
+  let data: Record<string, Record<string, unknown>>;
+  try {
+    data = await fetchJson(URL_ALL, 30000);
+  } catch {
+    onProgress?.('Retrying player directory download…');
+    data = await fetchJson(URL_ALL, 45000);
+  }
+  onProgress?.('Processing players…');
   if (db) await idbSet(db, KEY, { ts: Date.now(), data });
   mem = parse(data);
   return mem;
