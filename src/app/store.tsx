@@ -3,6 +3,7 @@ import type { ThemeName } from '../theme';
 import type { WindowId, Pick } from '../types';
 import { LEAGUE, YOU_TEAM_ID, setActiveLeague, resetToDemoLeague, type BuiltLeague } from '../data/league';
 import { clearSyntheticWeeks } from '../data/realPbp';
+import { clearRuntimeHeadshots } from '../data/media';
 import type { League } from '../types';
 import { powerupById } from '../data/powerups';
 import { DEMO_WEEK } from '../config';
@@ -162,7 +163,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setDemoWeek(DEMO_WEEK);
   };
   const exitSimLeague = () => {
-    resetToDemoLeague(); clearSyntheticWeeks();
+    resetToDemoLeague(); clearSyntheticWeeks(); clearRuntimeHeadshots();
     setActiveLeagueState(LEAGUE); setYouTeam(YOU_TEAM_ID);
   };
   const [bigText, setBigTextState] = useState<boolean>(() => {

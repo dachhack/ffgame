@@ -9,10 +9,25 @@ export function teamLogo(abbr?: string | null): string | null {
   return `https://a.espncdn.com/i/teamlogos/nfl/500/${abbr.toLowerCase()}.png`;
 }
 
+/** Build an ESPN headshot URL from a raw ESPN player id. */
+export function espnHeadshot(espnId?: string | null): string | null {
+  if (!espnId) return null;
+  return `https://a.espncdn.com/i/headshots/nfl/players/full/${espnId}.png`;
+}
+
+// Runtime headshots, keyed by engine player id, for a loaded Sleeper league —
+// built from the Sleeper directory's espn_id so roster players outside the baked
+// crosswalk still get a real photo. Baked HEADSHOTS win; this fills the gaps.
+let runtimeHeadshots: Record<string, string> = {};
+/** Install per-player headshot URLs for the active (Sleeper) league. */
+export function setRuntimeHeadshots(map: Record<string, string>): void { runtimeHeadshots = map; }
+/** Drop runtime headshots (back to the baked demo league). */
+export function clearRuntimeHeadshots(): void { runtimeHeadshots = {}; }
+
 /** ESPN headshot for a player slug, or null (→ fall back to the team logo). */
 export function headshot(playerId?: string | null): string | null {
   if (!playerId) return null;
-  return HEADSHOTS[playerId] ?? null;
+  return HEADSHOTS[playerId] ?? runtimeHeadshots[playerId] ?? null;
 }
 
 // Manager/team avatar by Sleeper owner_id — team upload if set, else the user

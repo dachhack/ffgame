@@ -10,6 +10,7 @@ import { normName, shortName } from './players';
 import { BAKED_SLUGS } from './bakedSlugs';
 import { SLEEPER_SLUG } from './sleeperSlug';
 import { setSyntheticWeeks, type RealPlay } from './realPbp';
+import { setRuntimeHeadshots, espnHeadshot } from './media';
 import { loadPlayerDirectory, type PlayerMeta } from './sleeperPlayers';
 import { REG_SEASON_WEEKS, type BuiltLeague } from './league';
 
@@ -182,12 +183,17 @@ export async function buildSleeperLeague(
 
   // Build the player registry + per-team rosters.
   const teams: FantasyTeam[] = [];
+  // Per-player headshots from Sleeper's espn_id, so roster players outside the
+  // baked crosswalk still get a real photo (baked HEADSHOTS still win).
+  const runtimeHeadshots: Record<string, string> = {};
   let youTeamId = teamIdOf(rosters[0]?.roster_id ?? 1);
   for (const r of rosters) {
     const ids: string[] = [];
     for (const sid of r.players ?? []) {
       const m = resolve(sid);
       if (!m) continue;
+      const hs = espnHeadshot(m.meta.espnId);
+      if (hs && !runtimeHeadshots[m.eid]) runtimeHeadshots[m.eid] = hs;
       if (!players[m.eid]) {
         const ppr = seasonPts.get(m.eid) ?? 0;
         const g = gamesPlayed.get(m.eid) ?? 0;
@@ -235,6 +241,8 @@ export async function buildSleeperLeague(
       schedule.push({ week: wi + 1, homeId: teamIdOf(h.roster_id), awayId: teamIdOf(a.roster_id), homeScore: Math.round(h.points * 100) / 100, awayScore: Math.round(a.points * 100) / 100 });
     }
   }
+
+  setRuntimeHeadshots(runtimeHeadshots);
 
   const league: League = {
     id: leagueId,

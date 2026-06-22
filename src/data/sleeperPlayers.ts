@@ -3,7 +3,7 @@
 // cached in IndexedDB so the season sim loads instantly on repeat visits.
 import type { Pos } from '../types';
 
-export interface PlayerMeta { id: string; full: string; pos: Pos; team: string | null; }
+export interface PlayerMeta { id: string; full: string; pos: Pos; team: string | null; espnId?: string; }
 
 const URL_ALL = 'https://api.sleeper.app/v1/players/nfl';
 const DB = 'gridiron-clash';
@@ -52,7 +52,8 @@ function parse(raw: Record<string, Record<string, unknown>>): Map<string, Player
     const full = pos === 'DEF'
       ? `${p.team ?? id} DST`
       : String(p.full_name ?? (`${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || id));
-    out.set(id, { id, full, pos, team: (p.team as string) ?? (pos === 'DEF' ? id : null) });
+    const espnId = p.espn_id != null && p.espn_id !== '' ? String(p.espn_id) : undefined;
+    out.set(id, { id, full, pos, team: (p.team as string) ?? (pos === 'DEF' ? id : null), espnId });
   }
   return out;
 }
