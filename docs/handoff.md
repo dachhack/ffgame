@@ -1,127 +1,140 @@
-# Gridiron Clash — Session Handoff
+# Drip League FF — Session Handoff
 
-Living handoff for picking up work in a fresh session. Last updated after
-shipping **v0.4.7** (WR/TE Carries as an automatic plus-up).
+Living handoff for picking up work in a fresh session. **Last updated after
+shipping `v0.19.1`.** (Older deep-dive on the data pipeline lives in the root
+`HANDOFF.md`; this is the current top-level entry point.)
 
 ## What the project is
 
-A fantasy-football web game built on the 2025 **PeakedInDynasty** Sleeper league
-(10-team, 2QB dynasty). Static **Vite + React + TypeScript** site, auto-deployed
-to **GitHub Pages**. Stat/PBP data comes from **Stathead** (stathead.app), surfaced
-in the UI footer + version chip.
+A real-time fantasy-football web game of **hidden picks + live effect
+resolution**. Each NFL week you field players into the 5 real time-slot
+**windows** (TNF / SUN-1 / SUN-4 / SNF / MNF = 8 slots). Each slot pairs a
+player with a hidden **metric** that both *scores* and applies a *strategic
+effect* (drip / nuke / erase / hot-streak / multiplier / compression …) against
+the head-to-head opponent in that slot. A **drip-coin** economy funds
+**power-ups**.
 
-The core loop: each NFL week, you field players into the 5 real time-slot
-**windows** (TNF / early / late / SNF / MNF). Each slot picks a hidden **metric**
-that both *scores* and applies a *strategic effect* (nuke / erase / drip / etc.)
-against the head-to-head opponent in that slot. A **drip-coin** economy funds
-**powerups**.
+Static **Vite + React + TypeScript** site, no backend, auto-deployed to **GitHub
+Pages**. All scoring is a **deterministic replay of real 2025 nflverse
+play-by-play** baked into the bundle (`public/pbp/*.json`, weeks 1–14). Any
+**Sleeper** user can connect at runtime to build a playable sim of their real
+league. Live demo: **https://dachhack.github.io/ffgame/**.
 
 ## Deploy / branch model — READ BEFORE PUSHING
 
-- Work branch: **`claude/youthful-albattani-s9kprl`** (this is the repo's
-  **default** branch and the **only** branch the deploy workflow triggers on).
-- GitHub Pages env protection only allows the default branch. Pushing `main`
-  must **NOT** trigger a deploy and would cancel the feature-branch deploy via
-  the `pages` concurrency group — so `.github/workflows/deploy.yml` is
-  restricted to `branches: [claude/youthful-albattani-s9kprl]`.
-- To ship: `git push -u origin claude/youthful-albattani-s9kprl` (this deploys),
-  then mirror without triggering: `git push origin claude/youthful-albattani-s9kprl:main`.
-- Bump `APP_VERSION` in `src/app/version.ts` on every notable change (it shows
-  as a chip at the top of the page so we can tell which build is live).
-- Build to verify before pushing: `npm run build` (runs `tsc -b && vite build`).
-- Do **NOT** open a PR unless explicitly asked. Commit trailers required:
+- Dev/work branch this session: **`claude/relaxed-turing-ymqhz6`**.
+- **Deploy branch: `claude/youthful-albattani-s9kprl`** — the only branch the
+  Pages workflow triggers on (`.github/workflows/deploy.yml`); GitHub Pages env
+  protection allows only it.
+- **To ship:** push the work branch, then fast-forward the deploy branch to it:
+  ```
+  git push -u origin claude/relaxed-turing-ymqhz6
+  git push origin claude/relaxed-turing-ymqhz6:claude/youthful-albattani-s9kprl   # deploys
+  ```
+  (The work branch is the deploy branch + your commits, so this is a clean
+  fast-forward. Retry pushes up to 4× with exponential backoff on network errors.)
+- **Docs-only commits** (e.g. anything under `docs/`) don't need a deploy.
+- Build to verify before pushing: `npm run build` (`tsc -b && vite build`).
+- Verify CI after a deploy via the GitHub MCP Actions tools (`deploy.yml`); the
+  list call overflows context — fetch a single run/jobs instead.
+
+## Build / commit conventions
+
+- Do **NOT** open a PR unless explicitly asked.
+- Commit trailers required:
   `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` and the
   `Claude-Session:` line. The model id must never appear in any committed artifact.
+- `APP_VERSION` lives in `src/app/version.ts` (chip at top of page) — bump on
+  notable shipped changes.
 
 ## Architecture cheat-sheet
 
-- `src/engine/sim.ts` — `resolveSlot(you, their, week, label, opts)` walks a merged
-  play timeline and produces the event feed + finals for one slot. Metric families
-  via `familyOf` (nuke/erase/streak/mult/compression/reset/stop). Drip rate
-  integrator accrues per-minute while a side has possession. `scorePlay` = per-play
-  points by pos+metric. Per-side armed buffs arrive as `opts.youBuffs`/`theirBuffs`
-  (`Set<string>` of powerup ids); only the human side carries buffs in the demo.
-- `src/engine/matchup.ts` — `buildMatchup(...)` resolves a full week across windows,
-  applies best-ball backups, DEF SUPPRESS halving, K banker bonus, armed-buff
-  payouts (`award`), and targeted powerups (`extras`). Coin economy: `metricCoin`
-  (coin per event of note), `coinRisk`, `weekEarnings` (stipend 50 + unopposed 15 +
-  signature events + turnover transfer). `turnoversCommitted` counts INT/fumble-lost.
-- `src/data/metrics.ts` — `METRICS[pos]` catalog. Locked metrics carry `lock: <powerup id>`.
-- `src/data/powerups.ts` — `POWERUPS` catalog. `kind: 'action'` + `timing: 'pre'` +
-  no `target` ⇒ shows up in `TEAM_BUFFS` (armed one-click via BuffStrip).
-- `src/app/store.tsx` — coin balance, inventory, `applied[week]` (extraSlots, swaps,
-  backups, buffs, doubleOrNothing, spy, byeSteal, emp). `armBuff` consumes one and
-  sets `buffs[id]=true`. `DEMO_GRANT = 2500` one-time for play-testing.
-- `src/screens/Matchup.tsx` — the whole matchup UI: SetupRow (metric picker),
-  ScoreRow/ScoreCard (live/final, unopposed slots reuse ScoreCard with a chip),
-  TwoColLog (play feed with `◈` coin marks), BuffStrip, TargetPanel, EarningsModal.
+- `src/engine/sim.ts` — `resolveSlot(you, their, week, …)` walks a merged play
+  timeline → event feed + finals for one slot. Drips accrue a per-minute rate
+  while a side has possession; **HOT** doubles the drip (3× with Momentum). HOT
+  rules (recently reworked): a productive touch advances the streak (catch always;
+  rush ≥3; return ≥10), an unproductive one cools it (stuffed run, short/fair
+  return, incomplete on rec-fed drips). **Single drips need 3 straight; combos
+  (`combodrip`, `retyd`) need 4.** `scorePlay` = per-play points by pos+metric.
+- `src/engine/matchup.ts` — `buildMatchup(...)` resolves a full week across
+  windows: best-ball backups, DEF SUPPRESS halving, K banker bonus, armed-buff
+  payouts, targeted power-ups. `defaultLineup`/`aiLineup` rank via `projForRank`.
+  Coin economy: `weekEarnings`, `turnoversCommitted`.
+- `src/data/metrics.ts` — `METRICS[pos]` catalog (locked metrics carry
+  `lock: <powerup id>`). Drip kinds are wired in `sim.ts` `dripKindOf`.
+- `src/data/powerups.ts` — `POWERUPS`; armable team buffs gate on `myBuffs`.
+- `src/app/store.tsx` — coin balance, inventory, `applied[week]`, **all in
+  `localStorage`**. `DEMO_GRANT = 2500`. `loadSimLeague` resets the economy on a
+  new sim; `exitSimLeague` returns to the baked demo.
+- `src/data/buildLeague.ts` — builds a playable League from a Sleeper league
+  (real standings/schedule/scores; baked players reuse real PBP, the rest get
+  synthesized texture scaled to weekly Sleeper points). Houses the **Add K & DST**
+  feature and the runtime headshot map.
+- `src/screens/Matchup.tsx` — the full matchup UI (SETUP → LIVE → FINAL).
 
-## Just shipped — v0.4.7: WR/TE Carries as an automatic plus-up
+## Data model & sources
 
-Per request: *"Have the carries bonus apply automatically as an additional
-'plus up' metric on top of whatever else you choose."*
+- **Baked (build-time, in repo):** `public/pbp/wN.json` (real PBP, weeks 1–14,
+  ~3.1 MB), `src/data/statsRaw.ts` (season totals), `returns.ts`, `headshots.ts`
+  (slug→ESPN id, 607/608), `injuries.ts`, `crosswalk.json`. Regenerated by
+  `scripts/` + `scripts/pbp/*.mjs` from **Stathead MCP** (nflverse) + nflverse
+  GitHub releases. Pipeline detail: root `HANDOFF.md`; data gaps: `docs/mcp-requests.md`.
+- **Runtime (third-party, no commercial agreement):** Sleeper API
+  (`sleeper.ts`, `buildLeague.ts`, `sleeperPlayers.ts` — league import + a 5 MB
+  player directory, with a 30s/45s timeout+retry), ESPN headshot/logo CDN and
+  Sleeper avatar CDN (`media.ts`).
 
-- `unlock-carries-wipe` is now an **armable team buff** (`kind: 'action'` in
-  `powerups.ts`) instead of a selectable metric. Arm it pre-kickoff; for the rest
-  of the week **every WR/TE carry in your starting spots wipes its matched
-  opponent to 0**, layered on top of whatever metric that slot is scoring.
-- The `carries` metric was **removed** from the WR and TE lists in `metrics.ts`
-  (RB `carries` COMPRESSION metric is untouched). Dead `scorePlay` branches for
-  WR/TE carries removed.
-- `sim.ts` carry-wipe block now gates on `myBuffs.has('unlock-carries-wipe')`
-  (the acting side's buff set) rather than `metricId === 'carries'`, and tags the
-  event with `coinAmt = 25` so the carry wipe pays its 25-coin bounty regardless
-  of the slot's primary metric.
-- New `PbpEvent.coinAmt?: number` (in `src/types.ts`); `weekEarnings` now adds
-  `e.coinAmt ?? rate` per coin event (was `rate` only, gated on `rate > 0`).
-- Removed the now-dead `metricId === 'carries'` branch in `metricCoin`.
+## Recently shipped (this session, on top of `v0.19.x`)
 
-## Open / pending work
+- **Headshots:** expanded to the full crosswalk (607/608) via an nflverse
+  roster fallback; **any Sleeper roster player** now gets a photo from Sleeper's
+  `espn_id` at runtime (`media.ts` runtime map). Only Caden Prieskorn lacks one.
+- **Drip balance:** rush drip cools on stuffed runs (<3 yds); receiving drip
+  cools on incomplete targets — HOT no longer latches all game in drip-vs-drip.
+- **Return Yards (`retyd`):** converted from weak flat scoring to a **combo
+  drip** — rush+return for RB, rec+return for WR/TE (TE returns enabled). Combo
+  drips now require **4** straight productive touches to go HOT (singles stay 3).
+- **Add K & DST toggle** on the Run-Sim card: fills any team missing a K/DST
+  with a real baked one from a **random, distinct** NFL team (K and DST from
+  different teams). Standings/scores untouched.
+- **New-sim reset:** drip coin + owned/applied power-ups + credit ledger reset
+  when you Run Sim.
+- **Fixes:** "Play As" picker now lists the active league's teams; "Set Week"
+  button added to the matchup-final hero; Sleeper directory download timeout+retry
+  (was hanging on "Downloading…").
 
-### 1. PBP re-pull for exact fumble attribution (IN PROGRESS — week 1 only)
+## Open threads / next work
 
-Goal: every week's `public/pbp/wN.json` should attribute lost fumbles to the
-exact fumbler via Stathead's `fumbled_1_player_id`. The baker
-(`scripts/pbp/genRealPbp.mjs`, committed c2a5cca) already does this when the raw
-dumps carry `fumbled_1_player_id`, and falls back to a play-role heuristic when
-they don't.
+1. **IDP — Phase 2 (blocked on MCP).** Phase 1 is fully wired but **gated off**:
+   `IDP_ENABLED = false` in `src/data/sleeperPlayers.ts`. DL/LB/DB positions,
+   theme colors, a flat metric catalog (`Tackles` / `Splash Plays`), a `tackle`
+   play kind, and synthetic scaling all exist and are dormant. When the MCP team
+   ships per-defender PBP fields (`docs/mcp-requests.md` item 8 — "almost done"
+   per the founder), do Phase 2: bake real per-defender plays, swap flat metrics
+   for interactive ones, flip the flag to `true`. **Do not enable before then.**
+2. **Outstanding MCP requests** (`docs/mcp-requests.md`): complete `espn_id` for
+   rookies; first-class return fields + fair-catch; exact fumble attribution;
+   schedule kickoff/byes; week-PBP payload ergonomics; per-defender IDP fields.
+   Some are workarounds we'd retire once served natively.
+3. **Commercialization** (the founder is exploring making this a business): see
+   `docs/commercialization-handoff.md` — current-state/dependency/risk map,
+   technical + data weaknesses, path to third-party independence, target
+   architecture + rough cost model (1k/10k/100k MAU), legal flags, and open
+   questions. **Next dedicated session deliverable** (deferred): turn the
+   build-vs-demo gap into an epic-level roadmap. Likely v1 recommendation: async
+   resolution on cached data + cosmetic F2P + mark-free, before any live feed.
 
-State of the data:
-- The **existing 208 raw files** in `scripts/pbp/raw/` (all 14 weeks) were pulled
-  **before** `fumbled_1_player_id` was exposed — they lack it (role-heuristic only).
-- **Week 1 has been freshly re-pulled** WITH `fumbled_1_player_id`, landed as
-  per-team `scripts/pbp/_t_<CODE>.jsonl` (31 files; LAR was a bye/no-data, 0 plays).
-  These are committed to preserve the expensive pulls.
-- The shipped `public/pbp/wN.json` (last baked in v0.4.6, commit 08e884a) still
-  uses the role heuristic for fumbles.
+## Doc map
 
-To finish:
-1. Re-pull weeks **2–14** per team. Stathead `get_play_by_play` has **no `offset`** —
-   paginate via the `team` filter (~60–80 plays/team-week, under the 200-row cap),
-   ~32 calls/week. Keep each team's `posteam` plays only. (Parallel background
-   subagents work well; 8 batches × 4 teams per week. Do NOT read the subagent
-   transcript output files — they overflow context; trust their summaries.)
-2. Merge the per-team `_t_<CODE>.jsonl` pulls back into per-**game** raw files in
-   `scripts/pbp/raw/` (each raw file is one game keyed `2025_<WW>_<AWAY>_<HOME>`
-   holding both teams' plays — match the existing raw filename convention; the
-   baker maps gsis→slug via `scripts/pbp/crosswalk.json`).
-3. Re-run `node scripts/pbp/genRealPbp.mjs` → regenerates `public/pbp/wN.json`
-   ({pbp, points, poss}) and `src/data/realWeeks.ts`.
-4. Verify exact fumble attribution (spot-check a known multi-player fumble), bump
-   `APP_VERSION`, commit + push (feature branch + mirror main).
-
-NOTE: a partial re-bake (week 1 exact, weeks 2–14 heuristic) is safe — the baker
-handles both — but ideally finish all 14 for consistency before shipping.
-
-### 2. Return Yards powerup (parked — blocked on MCP data)
-
-`docs/mcp-requests.md` item 2: the `unlock-return` powerup (0.1/yd banked +
-0.003 drip multiplier) is wired but dormant until Stathead exposes `return_yards`
-and the kick/punt returner id per return play.
+- `README.md` — game overview + honest simplifications.
+- `HANDOFF.md` (root) — deep data-pipeline/timing/real-PBP detail.
+- `docs/handoff.md` (this file) — current top-level session handoff.
+- `docs/mcp-requests.md` — Stathead MCP data asks (incl. IDP) + ready-to-send messages.
+- `docs/commercialization-handoff.md` — business/scaling brief for a dedicated session.
 
 ## Constraints (persist these)
 
 - GitHub MCP scope is restricted to `dachhack/ffgame` only.
-- Commit/push only when work is complete (a stop-hook enforces no uncommitted
-  changes at end of turn).
-- Do not create PRs unless explicitly asked.
+- Commit/push only when work is complete; do not create PRs unless asked.
+- Never push to a branch other than the designated work/deploy branches without
+  explicit permission.
