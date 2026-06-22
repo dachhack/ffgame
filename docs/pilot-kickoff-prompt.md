@@ -11,6 +11,16 @@ real-time feel of the game is viable with a few real users. If the pilot goes
 well we launch in 2027 on a **paid play-by-play feed**; for the pilot we use
 **ESPN's free/unofficial API**.
 
+**Pilot model (decided):** **everything is Sleeper-driven.** Users sign in,
+import their Sleeper league, and our weekly **H2H matchups mirror the Sleeper
+league's actual schedule** (same pairings, same week boundaries) via the Sleeper
+API. Rosters come from Sleeper; our game layer (sealed lineup + metrics/power-ups,
+drip scoring) sits on top. **Edge to handle:** not every manager in a Sleeper
+league will be an enrolled pilot user — when both managers in a mirrored pairing
+are enrolled it's **live H2H with two sets of sealed picks**; when the opponent
+isn't enrolled, fall back to playing against that opponent's **actual Sleeper
+lineup** (no sealed picks for them). Track enrollment per league.
+
 **Before writing any code, read these in order** and confirm you understand the
 current state:
 - `docs/handoff.md` — current project state, deploy/branch model, conventions.
@@ -27,7 +37,8 @@ that consumes per-player `RealPlay[]` timelines — this is reusable server-side
 
 **What the pilot requires (the gap):** near-live + true H2H forces a
 **server-authoritative backend**. Specifically:
-1. **Accounts/auth** (lightweight — these are a handful of known testers).
+1. **Accounts/auth** (lightweight — a handful of known testers), each linked to a
+   **Sleeper user id**; a user joins by importing their Sleeper league(s).
 2. **Server-held sealed picks** — each window's lineup+metrics are hidden until
    that window locks at kickoff, then revealed and resolved live. Picks must
    never be readable by the opponent before lock (the current client-only model
@@ -56,18 +67,27 @@ cheap correctness gate — do it before trusting live data).
 - Share the engine TS between client (optimistic display) and server
   (authoritative resolution).
 - Build order: (A) ESPN→RealPlay adapter + 2025 diff validation → (B) backend +
-  auth + data model (users/leagues/matchups/sealed-picks/plays) → (C) sealed-pick
-  H2H flow with server lock/reveal → (D) live ESPN poller → server resolution →
-  (E) realtime push to clients → (F) closed pilot with the playtesters.
+  auth + data model (users↔sleeper, leagues, mirrored matchups, sealed-picks,
+  plays) + **Sleeper sync** (import league, rosters, and the weekly schedule;
+  mark per-manager enrollment) → (C) sealed-pick H2H flow with server lock/reveal,
+  incl. the unenrolled-opponent fallback (play their real Sleeper lineup) →
+  (D) live ESPN poller → server resolution → (E) realtime push to clients →
+  (F) closed pilot with the playtesters.
+- Sleeper data is available via the `stathead` MCP tools (`get_sleeper_league`,
+  `get_sleeper_league_users`, `get_sleeper_matchups`, `get_sleeper_user_leagues`,
+  …) and Sleeper's public HTTP API; the existing client already imports leagues —
+  reuse that path and lift it server-side.
+
+**Decided (don't re-litigate):** all-Sleeper import; matchups mirror the Sleeper
+league schedule; live H2H when both managers are enrolled, else fall back to the
+opponent's real Sleeper lineup; no real money in the pilot.
 
 **Confirm with the founder first (don't assume):**
 - Stack/hosting choice and budget for the pilot.
-- How pilot leagues/matchups are seeded — one manually-created tester league, or
-  Sleeper import? How are the H2H pairings set each week?
-- Account model (magic-link email vs Sleeper handle + email).
+- Account model — recommend Sleeper sign-in / handle + email (no separate identity).
 - Anti-cheat depth for a trusted pilot (can be light now; server-authoritative
-  picks are the non-negotiable part).
-- No real money in the pilot (cosmetic/economy stays local for now) — confirm.
+  sealed picks are the non-negotiable part).
+- Whether the pilot covers the full season or a few weeks, and league size/count.
 
 **Constraints (persist):**
 - Work/deploy branch model in `docs/handoff.md` — the static site deploys to
@@ -79,5 +99,6 @@ cheap correctness gate — do it before trusting live data).
 
 **First deliverables:** (1) a short plan + stack recommendation + the open
 questions answered; (2) the ESPN→RealPlay adapter with a 2025 validation diff;
-(3) a data-model sketch for users/leagues/matchups/sealed-picks/live-plays. Then
-build incrementally, smallest shippable slices first.
+(3) a data-model sketch for users↔sleeper / leagues / mirrored-matchups /
+sealed-picks / live-plays, plus the Sleeper-sync flow (league import → rosters →
+schedule → enrollment). Then build incrementally, smallest shippable slices first.
