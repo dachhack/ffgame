@@ -669,9 +669,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         const advances = play.kind === 'rush' ? play.yards >= 3
           : play.kind === 'return' ? play.yards >= 10
             : true;
+        // Combo drips (two touch streams: combodrip, retyd) heat faster, so they
+        // need 4 straight productive touches to go HOT vs 3 for a single drip.
+        const hotNeed = (myDripKind && myDripKind.length > 1) ? 4 : 3;
         if (advances) {
           mine.streak += 1;
-          if (mine.streak >= 3 && !mine.hot) { mine.hot = true; sig = true; wentHot = true; } // drip goes HOT
+          if (mine.streak >= hotNeed && !mine.hot) { mine.hot = true; sig = true; wentHot = true; } // drip goes HOT
         } else {
           mine.streak = 0; mine.hot = false;
         }
