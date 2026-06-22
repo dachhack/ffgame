@@ -38,20 +38,21 @@ Quick check after applying (as a normal user JWT, not service role):
 - Real-wall-clock gating against a delayed feed is in the engine already
   (`RealPlay.t`), reused server-side.
 
-## Worker (server/) — next slice
-- **Sleeper sync:** import league → `league` + `league_membership` (mark
-  `enrolled` where a Sleeper owner links to an `app_user`); per week, mirror the
-  Sleeper schedule into `matchup` and store `sleeper_lineup` starters.
-- **Poller:** every ~20–30s during game windows, ESPN scoreboard → in-progress
-  events → `summary` → `gameToRealPlays` (scripts/espn/espnAdapter.mjs) → upsert
-  `live_play`.
-- **Resolver:** on new plays, for each live matchup, gather both sides'
-  `RealPlay[]` from `live_play` + revealed sealed picks (or the Sleeper-lineup
-  fallback for an unenrolled opponent) → run the shared `buildMatchup`/
-  `resolveSlot` engine → write `matchup_state` → Supabase Realtime pushes to both
-  clients.
-- **Lock/reveal:** at `lock_at`, set `matchup.status` and `sealed_pick.locked`.
+## Worker (server/) — scaffolded
+Implemented in `server/` (see `server/README.md`). Connects with the service-role
+key; reuses the validated `scripts/espn/` adapters.
+- **Sleeper sync** (`src/sync.js`): import league → `league` + `league_membership`
+  (enrollment where a Sleeper owner links to an `app_user`); per week mirror the
+  schedule into `matchup` + store `sleeper_lineup` starters.
+- **Pollers** (`src/poll/*`): scoreboard (game-state + `lock_at`), plays
+  (`summary` → `gameToRealPlays` → `live_play`), injuries (`normalizeInjuries` →
+  `injury_status`).
+- **Lock/reveal** (`src/lock.js`): at `lock_at`, set `matchup.status='live'` and
+  `sealed_pick.locked=true` (service-role only).
+- **Resolver** (`src/resolve.js`): gather revealed picks (or Sleeper-lineup
+  fallback) + `live_play` → write `matchup_state` (Realtime push).
 
-The engine (`src/engine/{sim,matchup}.ts`) is pure/deterministic and will be
-extracted into a shared package so the worker and the React client run identical
-scoring. Keep the `RealPlay` contract frozen.
+**Remaining seam:** `resolve.js:baseScore` is base fantasy points; the full
+metric/effect engine (`src/engine/{sim,matchup}.ts`) still needs extracting into a
+shared package both the client and worker import, then swap in `buildMatchup()`.
+The `RealPlay` contract is already shared — keep it frozen.
