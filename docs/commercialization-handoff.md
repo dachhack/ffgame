@@ -215,6 +215,116 @@ feed) is the expensive, unavoidable one for an in-season live product.
 
 ---
 
+## 11. Target architecture & rough cost model
+
+> Order-of-magnitude, not a quote. Assumes the **§10 v1 recommendation** (async
+> resolution, cosmetic/F2P, mark-free) first, then a path to live in-season.
+> Numbers are monthly USD, infra only — **Stripe fees (~2.9% + 30¢) and any
+> live-feed/compliance contracts are called out separately** because they dwarf
+> infra and scale with revenue/licensing, not MAU.
+
+### 11.1 Target architecture (recommended)
+
+Keep the React/Vite SPA; put everything it currently borrows behind your own API.
+
+```
+                          ┌──────────────────────────────┐
+        Browser  ───────► │  React/Vite SPA (static)      │
+        (user)            │  CDN: Cloudflare/Vercel Pages │
+                          └───────────────┬──────────────┘
+                                          │ HTTPS (your API only — no direct
+                                          │ Sleeper/ESPN calls from the client)
+                                          ▼
+                          ┌──────────────────────────────┐
+                          │  API / app server            │  ← server-authoritative
+                          │  Fastify/tRPC (Node) or       │    game state, sealed
+                          │  Supabase Edge / CF Workers   │    picks, economy, anti-cheat
+                          └───┬───────────┬───────────┬───┘
+                              │           │           │
+                  ┌───────────▼──┐ ┌──────▼──────┐ ┌──▼───────────────┐
+                  │ Postgres     │ │ Realtime/WS │ │ Cache + proxy     │
+                  │ (Supabase/   │ │ (Supabase   │ │ (CF Workers + KV/ │
+                  │  Neon/RDS)   │ │  Realtime / │ │  Redis): Sleeper, │
+                  │ users, games,│ │  Ably)      │ │  player directory │
+                  │ economy,     │ │ pick reveal,│ │  (kills the 5MB    │
+                  │ stats        │ │ live tick   │ │  client download) │
+                  └──────▲───────┘ └─────────────┘ └──▲────────────────┘
+                         │                             │
+            ┌────────────┴───────────┐    ┌────────────┴───────────────┐
+            │ Ingestion (cron jobs)  │    │ Object storage + CDN (R2/S3)│
+            │ historical stats/PBP → │    │ imagery you have rights to  │
+            │ DB; in-season: LIVE    │    │ (headshots/logos/avatars)   │
+            │ FEED (SportsRadar/     │    └─────────────────────────────┘
+            │ Genius) → DB → Realtime│
+            └────────────────────────┘
+   Cross-cutting: Auth (Supabase/Clerk) · Payments (Stripe) ·
+   Observability (Sentry + PostHog) · Email (Resend) · IaC + CI/CD
+```
+
+**Component picks** (recommended → alternative → why):
+
+| Concern | Recommended | Alternative | Notes / cost driver |
+|---|---|---|---|
+| SPA hosting/CDN | Cloudflare Pages | Vercel/Netlify | Cheap/flat; egress-bound |
+| API | Fastify or tRPC on Fly.io/Render | Supabase Edge Fns / CF Workers | Server-authoritative state lives here |
+| DB | Supabase Postgres | Neon, RDS | Scales with rows/compute/connections |
+| Auth | Supabase Auth | Clerk, Auth0 | Clerk/Auth0 bill **per-MAU** and get pricey fast |
+| Realtime | Supabase Realtime | Ably, Pusher, CF Durable Objects | **Bills on concurrency + messages** — the spiky cost (see 11.3) |
+| Cache/proxy | CF Workers + KV / Upstash Redis | — | Removes runtime Sleeper/ESPN coupling |
+| Object storage | Cloudflare R2 | S3 | R2 has no egress fees — good for imagery |
+| Payments | Stripe | — | % of revenue, not MAU |
+| Observability | Sentry + PostHog | Datadog | Datadog scales steeply |
+| Email | Resend | Postmark | Transactional + lifecycle |
+
+**Why this shape:** one platform (Supabase) collapses DB + Auth + Realtime +
+Storage to cut early ops; the CF cache/proxy layer is what actually buys
+*independence* from Sleeper/ESPN at runtime; ingestion is isolated so you can
+ship v1 on historical data and bolt on a live feed later without touching the
+client.
+
+### 11.2 Rough monthly cost by scale (infra only)
+
+Assumptions: fantasy usage is **weekly-active and hyper-concurrent on NFL
+Sundays**; ~30–40% of MAU active in a given game window; small JSON payloads;
+imagery served from your CDN.
+
+| Line item | 1k MAU (beta) | 10k MAU | 100k MAU |
+|---|---|---|---|
+| SPA hosting + CDN | $0 | $20 | $100–300 |
+| API compute | $0–25 | $50–150 | $400–1,500 |
+| Postgres | $25 | $50–150 | $400–1,500 |
+| Realtime/WebSockets | $0–25 | $50–250 | $800–4,000 |
+| Cache/proxy (Workers/Redis) | $5 | $20–60 | $200–800 |
+| Object storage + CDN egress | $0–5 | $20–60 | $150–600 |
+| Auth | $0 (Supabase) | $0–100 | $0–500 |
+| Observability + analytics | $0–30 | $50–250 | $400–1,500 |
+| Email | $0–20 | $20–60 | $150–600 |
+| **Infra subtotal** | **~$30–140** | **~$300–1,100** | **~$2,500–11,000** |
+
+**Not in the table (can dominate):**
+- **Live in-season feed** (SportsRadar/Genius NFL play-by-play): roughly
+  **$1k–$15k+/mo or rev-share**, largely fixed regardless of MAU. This is the
+  reason v1 should run on cached/historical data. Historical/aggregated stats
+  licenses are far cheaper than real-time.
+- **Stripe**: ~2.9% + 30¢ per transaction — scales with revenue, not users.
+- **Real-money compliance** (only if you do entry-fee contests): geo/age
+  verification vendors, licensing, and legal — can run **tens of thousands**
+  upfront + per-check fees, and easily exceeds all infra combined. Strong
+  argument to launch cosmetic/F2P first.
+- **Marks/likeness licensing** if not going mark-free.
+
+### 11.3 The one cost trap to flag now
+
+Fantasy traffic is **not** smooth — it spikes hard during Sunday game windows
+when most users are online watching picks resolve live. **Realtime and API
+costs must be sized for peak concurrency, not average MAU**, and per-connection
+realtime pricing (Ably/Pusher) can balloon during those windows. Two levers:
+(1) **async resolution for v1** sidesteps the live-concurrency cost entirely;
+(2) if/when you go live, prefer connection-efficient transport (shared channels,
+CF Durable Objects, or self-hosted WS) over per-connection SaaS pricing.
+
+---
+
 ## Appendix: fast file orientation for the next session
 
 - **Game engine:** `src/engine/sim.ts` (scoring/effects/clock), `matchup.ts`
