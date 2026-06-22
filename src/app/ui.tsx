@@ -4,7 +4,7 @@ import { THEMES } from '../theme';
 import { useStore } from './store';
 import { headshot, teamLogo } from '../data/media';
 import { injuryFor } from '../data/injuries';
-import { LEAGUE, REG_SEASON_WEEKS } from '../data/league';
+import { REG_SEASON_WEEKS } from '../data/league';
 import { APP_VERSION, DATA_SOURCE } from './version';
 
 /** True when the viewport is at/below `maxWidth` — drives the mobile layout. */
@@ -172,8 +172,8 @@ export function ThemeSwitcher() {
 
 /** Demo role/week picker — assume any team and jump to any week before setup. */
 export function DemoControls({ compact }: { compact?: boolean }) {
-  const { youTeamId, setYouTeam, demoWeek, setDemoWeek } = useStore();
-  const teams = [...LEAGUE.teams].sort((a, b) => a.seed - b.seed);
+  const { youTeamId, setYouTeam, demoWeek, setDemoWeek, activeLeague } = useStore();
+  const teams = [...activeLeague.teams].sort((a, b) => a.seed - b.seed);
   const selStyle: CSSProperties = {
     fontFamily: MONO, fontSize: 11, fontWeight: 700, color: 'var(--text)',
     background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4,
