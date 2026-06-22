@@ -1,2294 +1,3581 @@
 {
   "josh-allen": {
     "gsis": "00-0034857",
-    "team": "BUF",
+    "pos": "QB",
     "name": "Josh Allen",
-    "pos": "QB"
+    "sleeper": "4984"
   },
   "drake-maye": {
     "gsis": "00-0039851",
-    "team": "NE",
+    "pos": "QB",
     "name": "Drake Maye",
-    "pos": "QB"
+    "sleeper": "11564"
   },
   "matthew-stafford": {
     "gsis": "00-0026498",
-    "team": "LA",
+    "pos": "QB",
     "name": "Matthew Stafford",
-    "pos": "QB"
+    "sleeper": "421"
   },
   "trevor-lawrence": {
     "gsis": "00-0036971",
-    "team": "JAX",
+    "pos": "QB",
     "name": "Trevor Lawrence",
-    "pos": "QB"
+    "sleeper": "7523"
   },
   "caleb-williams": {
     "gsis": "00-0039918",
-    "team": "CHI",
+    "pos": "QB",
     "name": "Caleb Williams",
-    "pos": "QB"
+    "sleeper": "11560"
   },
   "dak-prescott": {
     "gsis": "00-0033077",
-    "team": "DAL",
+    "pos": "QB",
     "name": "Dak Prescott",
-    "pos": "QB"
+    "sleeper": "3294"
   },
   "bo-nix": {
     "gsis": "00-0039732",
-    "team": "DEN",
+    "pos": "QB",
     "name": "Bo Nix",
-    "pos": "QB"
+    "sleeper": "11563"
   },
   "jalen-hurts": {
     "gsis": "00-0036389",
-    "team": "PHI",
+    "pos": "QB",
     "name": "Jalen Hurts",
-    "pos": "QB"
+    "sleeper": "6904"
   },
   "jared-goff": {
     "gsis": "00-0033106",
-    "team": "DET",
+    "pos": "QB",
     "name": "Jared Goff",
-    "pos": "QB"
+    "sleeper": "3163"
   },
   "justin-herbert": {
     "gsis": "00-0036355",
-    "team": "LAC",
+    "pos": "QB",
     "name": "Justin Herbert",
-    "pos": "QB"
+    "sleeper": "6797"
   },
   "patrick-mahomes": {
     "gsis": "00-0033873",
-    "team": "KC",
+    "pos": "QB",
     "name": "Patrick Mahomes",
-    "pos": "QB"
+    "sleeper": "4046"
   },
   "baker-mayfield": {
     "gsis": "00-0034855",
-    "team": "TB",
+    "pos": "QB",
     "name": "Baker Mayfield",
-    "pos": "QB"
+    "sleeper": "4892"
   },
   "jaxson-dart": {
     "gsis": "00-0040691",
-    "team": "NYG",
+    "pos": "QB",
     "name": "Jaxson Dart",
-    "pos": "QB"
+    "sleeper": "12508"
   },
   "sam-darnold": {
     "gsis": "00-0034869",
-    "team": "SEA",
+    "pos": "QB",
     "name": "Sam Darnold",
-    "pos": "QB"
+    "sleeper": "4943"
   },
   "jordan-love": {
     "gsis": "00-0036264",
-    "team": "GB",
+    "pos": "QB",
     "name": "Jordan Love",
-    "pos": "QB"
+    "sleeper": "6804"
   },
   "jacoby-brissett": {
     "gsis": "00-0033119",
-    "team": "ARI",
+    "pos": "QB",
     "name": "Jacoby Brissett",
-    "pos": "QB"
+    "sleeper": "3257"
   },
   "aaron-rodgers": {
     "gsis": "00-0023459",
-    "team": "PIT",
+    "pos": "QB",
     "name": "Aaron Rodgers",
-    "pos": "QB"
+    "sleeper": "96"
   },
   "daniel-jones": {
     "gsis": "00-0035710",
-    "team": "IND",
+    "pos": "QB",
     "name": "Daniel Jones",
-    "pos": "QB"
+    "sleeper": "5870"
   },
   "bryce-young": {
     "gsis": "00-0039150",
-    "team": "CAR",
+    "pos": "QB",
     "name": "Bryce Young",
-    "pos": "QB"
+    "sleeper": "9228"
   },
   "lamar-jackson": {
     "gsis": "00-0034796",
-    "team": "BAL",
+    "pos": "QB",
     "name": "Lamar Jackson",
-    "pos": "QB"
+    "sleeper": "4881"
   },
   "cj-stroud": {
     "gsis": "00-0039163",
-    "team": "HOU",
+    "pos": "QB",
     "name": "C.J. Stroud",
-    "pos": "QB"
+    "sleeper": "9758"
   },
   "cam-ward": {
     "gsis": "00-0040676",
-    "team": "TEN",
+    "pos": "QB",
     "name": "Cam Ward",
-    "pos": "QB"
+    "sleeper": "12522"
   },
   "brock-purdy": {
     "gsis": "00-0037834",
-    "team": "SF",
+    "pos": "QB",
     "name": "Brock Purdy",
-    "pos": "QB"
+    "sleeper": "8183"
   },
   "geno-smith": {
     "gsis": "00-0030565",
-    "team": "LV",
+    "pos": "QB",
     "name": "Geno Smith",
-    "pos": "QB"
+    "sleeper": "1373"
   },
   "tua-tagovailoa": {
     "gsis": "00-0036212",
-    "team": "MIA",
+    "pos": "QB",
     "name": "Tua Tagovailoa",
-    "pos": "QB"
+    "sleeper": "6768"
   },
   "tyler-shough": {
     "gsis": "00-0040743",
-    "team": "NO",
+    "pos": "QB",
     "name": "Tyler Shough",
-    "pos": "QB"
+    "sleeper": "12545"
   },
   "joe-flacco": {
     "gsis": "00-0026158",
-    "team": "CIN",
+    "pos": "QB",
     "name": "Joe Flacco",
-    "pos": "QB"
+    "sleeper": "19"
   },
   "justin-fields": {
     "gsis": "00-0036945",
-    "team": "NYJ",
+    "pos": "QB",
     "name": "Justin Fields",
-    "pos": "QB"
+    "sleeper": "7591"
   },
   "joe-burrow": {
     "gsis": "00-0036442",
-    "team": "CIN",
+    "pos": "QB",
     "name": "Joe Burrow",
-    "pos": "QB"
+    "sleeper": "6770"
   },
   "mac-jones": {
     "gsis": "00-0036972",
-    "team": "SF",
+    "pos": "QB",
     "name": "Mac Jones",
-    "pos": "QB"
+    "sleeper": "7527"
   },
   "marcus-mariota": {
     "gsis": "00-0032268",
-    "team": "WAS",
+    "pos": "QB",
     "name": "Marcus Mariota",
-    "pos": "QB"
+    "sleeper": "2307"
   },
   "jj-mccarthy": {
     "gsis": "00-0039923",
-    "team": "MIN",
+    "pos": "QB",
     "name": "J.J. McCarthy",
-    "pos": "QB"
+    "sleeper": "11565"
   },
   "michael-penix": {
     "gsis": "00-0039917",
-    "team": "ATL",
+    "pos": "QB",
     "name": "Michael Penix Jr.",
-    "pos": "QB"
+    "sleeper": "11559"
   },
   "jayden-daniels": {
     "gsis": "00-0039910",
-    "team": "WAS",
+    "pos": "QB",
     "name": "Jayden Daniels",
-    "pos": "QB"
+    "sleeper": "11566"
   },
   "kirk-cousins": {
     "gsis": "00-0029604",
-    "team": "ATL",
+    "pos": "QB",
     "name": "Kirk Cousins",
-    "pos": "QB"
+    "sleeper": "1166"
   },
   "spencer-rattler": {
     "gsis": "00-0039376",
-    "team": "NO",
+    "pos": "QB",
     "name": "Spencer Rattler",
-    "pos": "QB"
+    "sleeper": "11562"
   },
   "shedeur-sanders": {
     "gsis": "00-0040668",
-    "team": "CLE",
+    "pos": "QB",
     "name": "Shedeur Sanders",
-    "pos": "QB"
+    "sleeper": "12524"
   },
   "kyler-murray": {
     "gsis": "00-0035228",
-    "team": "ARI",
+    "pos": "QB",
     "name": "Kyler Murray",
-    "pos": "QB"
+    "sleeper": "5849"
   },
   "carson-wentz": {
     "gsis": "00-0032950",
-    "team": "MIN",
+    "pos": "QB",
     "name": "Carson Wentz",
-    "pos": "QB"
+    "sleeper": "3161"
   },
   "dillon-gabriel": {
     "gsis": "00-0040704",
-    "team": "CLE",
+    "pos": "QB",
     "name": "Dillon Gabriel",
-    "pos": "QB"
+    "sleeper": "12486"
   },
   "davis-mills": {
     "gsis": "00-0036898",
-    "team": "HOU",
+    "pos": "QB",
     "name": "Davis Mills",
-    "pos": "QB"
+    "sleeper": "7585"
   },
   "tyrod-taylor": {
     "gsis": "00-0028118",
-    "team": "NYJ",
+    "pos": "QB",
     "name": "Tyrod Taylor",
-    "pos": "QB"
+    "sleeper": "827"
   },
   "malik-willis": {
     "gsis": "00-0038128",
-    "team": "GB",
+    "pos": "QB",
     "name": "Malik Willis",
-    "pos": "QB"
+    "sleeper": "8161"
   },
   "russell-wilson": {
     "gsis": "00-0029263",
-    "team": "NYG",
+    "pos": "QB",
     "name": "Russell Wilson",
-    "pos": "QB"
+    "sleeper": "1234"
   },
   "jake-browning": {
     "gsis": "00-0035100",
-    "team": "CIN",
+    "pos": "QB",
     "name": "Jake Browning",
-    "pos": "QB"
+    "sleeper": "6111"
   },
   "jameis-winston": {
     "gsis": "00-0031503",
-    "team": "NYG",
+    "pos": "QB",
     "name": "Jameis Winston",
-    "pos": "QB"
+    "sleeper": "2306"
   },
   "tyler-huntley": {
     "gsis": "00-0035993",
-    "team": "BAL",
+    "pos": "QB",
     "name": "Tyler Huntley",
-    "pos": "QB"
+    "sleeper": "7083"
   },
   "quinn-ewers": {
     "gsis": "00-0040234",
-    "team": "MIA",
+    "pos": "QB",
     "name": "Quinn Ewers",
-    "pos": "QB"
+    "sleeper": "12500"
   },
   "philip-rivers": {
     "gsis": "00-0022942",
-    "team": "IND",
+    "pos": "QB",
     "name": "Philip Rivers",
-    "pos": "QB"
+    "sleeper": "331"
   },
   "mitchell-trubisky": {
     "gsis": "00-0033869",
-    "team": "BUF",
+    "pos": "QB",
     "name": "Mitchell Trubisky",
-    "pos": "QB"
+    "sleeper": "3976"
   },
   "riley-leonard": {
     "gsis": "00-0040206",
-    "team": "IND",
-    "name": "Riley Leonard",
-    "pos": "QB"
+    "pos": "QB",
+    "name": "Riley Leonard"
   },
   "brady-cook": {
     "gsis": "00-0040398",
-    "team": "NYJ",
+    "pos": "QB",
     "name": "Brady Cook",
-    "pos": "QB"
+    "sleeper": "12538"
   },
   "josh-johnson": {
     "gsis": "00-0026300",
-    "team": "WAS",
+    "pos": "QB",
     "name": "Josh Johnson",
-    "pos": "QB"
+    "sleeper": "260"
   },
   "mason-rudolph": {
     "gsis": "00-0034771",
-    "team": "PIT",
+    "pos": "QB",
     "name": "Mason Rudolph",
-    "pos": "QB"
+    "sleeper": "4972"
   },
   "tanner-mckee": {
     "gsis": "00-0038400",
-    "team": "PHI",
+    "pos": "QB",
     "name": "Tanner McKee",
-    "pos": "QB"
+    "sleeper": "9230"
   },
   "trey-lance": {
     "gsis": "00-0037012",
-    "team": "LAC",
+    "pos": "QB",
     "name": "Trey Lance",
-    "pos": "QB"
+    "sleeper": "7610"
   },
   "chris-oladokun": {
     "gsis": "00-0037324",
-    "team": "KC",
+    "pos": "QB",
     "name": "Chris Oladokun",
-    "pos": "QB"
+    "sleeper": "8413"
   },
   "joe-milton": {
     "gsis": "00-0039398",
-    "team": "DAL",
+    "pos": "QB",
     "name": "Joe Milton III",
-    "pos": "QB"
+    "sleeper": "11557"
   },
   "andy-dalton": {
     "gsis": "00-0027973",
-    "team": "CAR",
+    "pos": "QB",
     "name": "Andy Dalton",
-    "pos": "QB"
+    "sleeper": "829"
   },
   "kenny-pickett": {
     "gsis": "00-0038102",
-    "team": "LV",
+    "pos": "QB",
     "name": "Kenny Pickett",
-    "pos": "QB"
+    "sleeper": "8160"
   },
   "aidan-oconnell": {
     "gsis": "00-0038579",
-    "team": "LV",
+    "pos": "QB",
     "name": "Aidan O'Connell",
-    "pos": "QB"
+    "sleeper": "10866"
   },
   "max-brosmer": {
     "gsis": "00-0040494",
-    "team": "MIN",
-    "name": "Max Brosmer",
-    "pos": "QB"
+    "pos": "QB",
+    "name": "Max Brosmer"
   },
   "shane-buechele": {
     "gsis": "00-0036679",
-    "team": "KC",
+    "pos": "QB",
     "name": "Shane Buechele",
-    "pos": "QB"
+    "sleeper": "8002"
   },
   "teddy-bridgewater": {
     "gsis": "00-0031237",
-    "team": "TB",
+    "pos": "QB",
     "name": "Teddy Bridgewater",
-    "pos": "QB"
+    "sleeper": "2152"
   },
   "tyson-bagent": {
     "gsis": "00-0038416",
-    "team": "CHI",
+    "pos": "QB",
     "name": "Tyson Bagent",
-    "pos": "QB"
+    "sleeper": "11256"
   },
   "anthony-richardson": {
     "gsis": "00-0039164",
-    "team": "IND",
+    "pos": "QB",
     "name": "Anthony Richardson",
-    "pos": "QB"
+    "sleeper": "9229"
   },
   "joshua-dobbs": {
     "gsis": "00-0033949",
-    "team": "NE",
+    "pos": "QB",
     "name": "Joshua Dobbs",
-    "pos": "QB"
+    "sleeper": "4179"
   },
   "clayton-tune": {
     "gsis": "00-0038582",
-    "team": "GB",
+    "pos": "QB",
     "name": "Clayton Tune",
-    "pos": "QB"
+    "sleeper": "10217"
   },
   "cooper-rush": {
     "gsis": "00-0033662",
-    "team": "BAL",
+    "pos": "QB",
     "name": "Cooper Rush",
-    "pos": "QB"
+    "sleeper": "4574"
   },
   "zach-wilson": {
     "gsis": "00-0037013",
-    "team": "MIA",
+    "pos": "QB",
     "name": "Zach Wilson",
-    "pos": "QB"
+    "sleeper": "7538"
   },
   "brandon-allen": {
     "gsis": "00-0032434",
-    "team": "TEN",
+    "pos": "QB",
     "name": "Brandon Allen",
-    "pos": "QB"
+    "sleeper": "3357"
   },
   "drew-lock": {
     "gsis": "00-0035704",
-    "team": "SEA",
+    "pos": "QB",
     "name": "Drew Lock",
-    "pos": "QB"
+    "sleeper": "5854"
   },
   "brett-rypien": {
     "gsis": "00-0034955",
-    "team": "CIN",
+    "pos": "QB",
     "name": "Brett Rypien",
-    "pos": "QB"
+    "sleeper": "6037"
   },
   "nick-mullens": {
     "gsis": "00-0033319",
-    "team": "JAX",
+    "pos": "QB",
     "name": "Nick Mullens",
-    "pos": "QB"
+    "sleeper": "4464"
   },
   "kedon-slovis": {
     "gsis": "00-0039577",
-    "team": "ARI",
-    "name": "Kedon Slovis",
-    "pos": "QB"
+    "pos": "QB",
+    "name": "Kedon Slovis"
   },
   "jarrett-stidham": {
     "gsis": "00-0035264",
-    "team": "DEN",
+    "pos": "QB",
     "name": "Jarrett Stidham",
-    "pos": "QB"
+    "sleeper": "6136"
   },
   "adrian-martinez": {
     "gsis": "00-0038658",
-    "team": "SF",
+    "pos": "QB",
     "name": "Adrian Martinez",
-    "pos": "QB"
+    "sleeper": "11065"
   },
   "kyle-allen": {
     "gsis": "00-0034577",
-    "team": "DET",
+    "pos": "QB",
     "name": "Kyle Allen",
-    "pos": "QB"
+    "sleeper": "5127"
   },
   "gardner-minshew": {
     "gsis": "00-0035289",
-    "team": "KC",
+    "pos": "QB",
     "name": "Gardner Minshew",
-    "pos": "QB"
+    "sleeper": "6011"
   },
   "jimmy-garoppolo": {
     "gsis": "00-0031345",
-    "team": "LA",
+    "pos": "QB",
     "name": "Jimmy Garoppolo",
-    "pos": "QB"
+    "sleeper": "1837"
   },
   "jalen-milroe": {
     "gsis": "00-0040673",
-    "team": "SEA",
+    "pos": "QB",
     "name": "Jalen Milroe",
-    "pos": "QB"
+    "sleeper": "12510"
   },
   "christian-mccaffrey": {
     "gsis": "00-0033280",
-    "team": "SF",
+    "pos": "RB",
     "name": "Christian McCaffrey",
-    "pos": "RB"
+    "sleeper": "4034"
   },
   "bijan-robinson": {
     "gsis": "00-0038542",
-    "team": "ATL",
+    "pos": "RB",
     "name": "Bijan Robinson",
-    "pos": "RB"
+    "sleeper": "9509"
   },
   "jahmyr-gibbs": {
     "gsis": "00-0039139",
-    "team": "DET",
+    "pos": "RB",
     "name": "Jahmyr Gibbs",
-    "pos": "RB"
+    "sleeper": "9221"
   },
   "jonathan-taylor": {
     "gsis": "00-0036223",
-    "team": "IND",
+    "pos": "RB",
     "name": "Jonathan Taylor",
-    "pos": "RB"
+    "sleeper": "6813"
   },
   "devon-achane": {
     "gsis": "00-0039040",
-    "team": "MIA",
+    "pos": "RB",
     "name": "De'Von Achane",
-    "pos": "RB"
+    "sleeper": "9226"
   },
   "james-cook": {
     "gsis": "00-0037248",
-    "team": "BUF",
+    "pos": "RB",
     "name": "James Cook",
-    "pos": "RB"
+    "sleeper": "8138"
   },
   "chase-brown": {
     "gsis": "00-0038597",
-    "team": "CIN",
+    "pos": "RB",
     "name": "Chase Brown",
-    "pos": "RB"
+    "sleeper": "9224"
   },
   "derrick-henry": {
     "gsis": "00-0032764",
-    "team": "BAL",
+    "pos": "RB",
     "name": "Derrick Henry",
-    "pos": "RB"
+    "sleeper": "3198"
   },
   "kyren-williams": {
     "gsis": "00-0037840",
-    "team": "LA",
+    "pos": "RB",
     "name": "Kyren Williams",
-    "pos": "RB"
+    "sleeper": "8150"
   },
   "travis-etienne": {
     "gsis": "00-0036973",
-    "team": "JAX",
+    "pos": "RB",
     "name": "Travis Etienne",
-    "pos": "RB"
+    "sleeper": "7543"
   },
   "ashton-jeanty": {
     "gsis": "00-0040122",
-    "team": "LV",
+    "pos": "RB",
     "name": "Ashton Jeanty",
-    "pos": "RB"
+    "sleeper": "12527"
   },
   "javonte-williams": {
     "gsis": "00-0036997",
-    "team": "DAL",
+    "pos": "RB",
     "name": "Javonte Williams",
-    "pos": "RB"
+    "sleeper": "7588"
   },
   "josh-jacobs": {
     "gsis": "00-0035700",
-    "team": "GB",
+    "pos": "RB",
     "name": "Josh Jacobs",
-    "pos": "RB"
+    "sleeper": "5850"
   },
   "saquon-barkley": {
     "gsis": "00-0034844",
-    "team": "PHI",
+    "pos": "RB",
     "name": "Saquon Barkley",
-    "pos": "RB"
+    "sleeper": "4866"
   },
   "dandre-swift": {
     "gsis": "00-0036275",
-    "team": "CHI",
+    "pos": "RB",
     "name": "D'Andre Swift",
-    "pos": "RB"
+    "sleeper": "6790"
   },
   "kenneth-gainwell": {
     "gsis": "00-0036919",
-    "team": "PIT",
+    "pos": "RB",
     "name": "Kenneth Gainwell",
-    "pos": "RB"
+    "sleeper": "7567"
   },
   "jaylen-warren": {
     "gsis": "00-0037228",
-    "team": "PIT",
+    "pos": "RB",
     "name": "Jaylen Warren",
-    "pos": "RB"
+    "sleeper": "8228"
   },
   "rico-dowdle": {
     "gsis": "00-0036139",
-    "team": "CAR",
+    "pos": "RB",
     "name": "Rico Dowdle",
-    "pos": "RB"
+    "sleeper": "7021"
   },
   "breece-hall": {
     "gsis": "00-0038120",
-    "team": "NYJ",
+    "pos": "RB",
     "name": "Breece Hall",
-    "pos": "RB"
+    "sleeper": "8155"
   },
   "rj-harvey": {
     "gsis": "00-0040730",
-    "team": "DEN",
-    "name": "RJ Harvey",
-    "pos": "RB"
+    "pos": "RB",
+    "name": "RJ Harvey"
   },
   "treveyon-henderson": {
     "gsis": "00-0040734",
-    "team": "NE",
-    "name": "TreVeyon Henderson",
-    "pos": "RB"
+    "pos": "RB",
+    "name": "TreVeyon Henderson"
   },
   "kenneth-walker": {
     "gsis": "00-0038134",
-    "team": "SEA",
+    "pos": "RB",
     "name": "Kenneth Walker III",
-    "pos": "RB"
+    "sleeper": "8151"
   },
   "tony-pollard": {
     "gsis": "00-0035261",
-    "team": "TEN",
+    "pos": "RB",
     "name": "Tony Pollard",
-    "pos": "RB"
+    "sleeper": "5967"
   },
   "zach-charbonnet": {
     "gsis": "00-0039165",
-    "team": "SEA",
+    "pos": "RB",
     "name": "Zach Charbonnet",
-    "pos": "RB"
+    "sleeper": "9753"
   },
   "rhamondre-stevenson": {
     "gsis": "00-0036875",
-    "team": "NE",
+    "pos": "RB",
     "name": "Rhamondre Stevenson",
-    "pos": "RB"
+    "sleeper": "7611"
   },
   "quinshon-judkins": {
     "gsis": "00-0040784",
-    "team": "CLE",
-    "name": "Quinshon Judkins",
-    "pos": "RB"
+    "pos": "RB",
+    "name": "Quinshon Judkins"
   },
   "david-montgomery": {
     "gsis": "00-0035685",
-    "team": "DET",
+    "pos": "RB",
     "name": "David Montgomery",
-    "pos": "RB"
+    "sleeper": "5892"
   },
   "tyrone-tracy": {
     "gsis": "00-0039384",
-    "team": "NYG",
+    "pos": "RB",
     "name": "Tyrone Tracy Jr.",
-    "pos": "RB"
+    "sleeper": "11655"
   },
   "kyle-monangai": {
     "gsis": "00-0040236",
-    "team": "CHI",
+    "pos": "RB",
     "name": "Kyle Monangai",
-    "pos": "RB"
+    "sleeper": "12534"
   },
   "kareem-hunt": {
     "gsis": "00-0033923",
-    "team": "KC",
+    "pos": "RB",
     "name": "Kareem Hunt",
-    "pos": "RB"
+    "sleeper": "4098"
   },
   "woody-marks": {
     "gsis": "00-0040583",
-    "team": "HOU",
-    "name": "Woody Marks",
-    "pos": "RB"
+    "pos": "RB",
+    "name": "Woody Marks"
   },
   "rachaad-white": {
     "gsis": "00-0037256",
-    "team": "TB",
+    "pos": "RB",
     "name": "Rachaad White",
-    "pos": "RB"
+    "sleeper": "8136"
   },
   "jacory-croskey-merritt": {
     "gsis": "00-0040242",
-    "team": "WAS",
+    "pos": "RB",
     "name": "Jacory Croskey-Merritt",
-    "pos": "RB"
+    "sleeper": "12533"
   },
   "bucky-irving": {
     "gsis": "00-0039361",
-    "team": "TB",
+    "pos": "RB",
     "name": "Bucky Irving",
-    "pos": "RB"
+    "sleeper": "11584"
   },
   "omarion-hampton": {
     "gsis": "00-0040666",
-    "team": "LAC",
-    "name": "Omarion Hampton",
-    "pos": "RB"
+    "pos": "RB",
+    "name": "Omarion Hampton"
   },
   "jordan-mason": {
     "gsis": "00-0037525",
-    "team": "MIN",
+    "pos": "RB",
     "name": "Jordan Mason",
-    "pos": "RB"
+    "sleeper": "8408"
   },
   "cam-skattebo": {
     "gsis": "00-0040715",
-    "team": "NYG",
-    "name": "Cam Skattebo",
-    "pos": "RB"
+    "pos": "RB",
+    "name": "Cam Skattebo"
   },
   "chuba-hubbard": {
     "gsis": "00-0036555",
-    "team": "CAR",
+    "pos": "RB",
     "name": "Chuba Hubbard",
-    "pos": "RB"
+    "sleeper": "7594"
   },
   "tyler-allgeier": {
     "gsis": "00-0037263",
-    "team": "ATL",
+    "pos": "RB",
     "name": "Tyler Allgeier",
-    "pos": "RB"
+    "sleeper": "8132"
   },
   "blake-corum": {
     "gsis": "00-0039738",
-    "team": "LA",
+    "pos": "RB",
     "name": "Blake Corum",
-    "pos": "RB"
+    "sleeper": "11586"
   },
   "aaron-jones": {
     "gsis": "00-0033293",
-    "team": "MIN",
+    "pos": "RB",
     "name": "Aaron Jones",
-    "pos": "RB"
+    "sleeper": "4199"
   },
   "kimani-vidal": {
     "gsis": "00-0039391",
-    "team": "LAC",
+    "pos": "RB",
     "name": "Kimani Vidal",
-    "pos": "RB"
+    "sleeper": "11647"
   },
   "jk-dobbins": {
     "gsis": "00-0036158",
-    "team": "DEN",
+    "pos": "RB",
     "name": "J.K. Dobbins",
-    "pos": "RB"
+    "sleeper": "6806"
   },
   "tyjae-spears": {
     "gsis": "00-0039032",
-    "team": "TEN",
+    "pos": "RB",
     "name": "Tyjae Spears",
-    "pos": "RB"
+    "sleeper": "9508"
   },
   "devin-singletary": {
     "gsis": "00-0035250",
-    "team": "NYG",
+    "pos": "RB",
     "name": "Devin Singletary",
-    "pos": "RB"
+    "sleeper": "6130"
   },
   "alvin-kamara": {
     "gsis": "00-0033906",
-    "team": "NO",
+    "pos": "RB",
     "name": "Alvin Kamara",
-    "pos": "RB"
+    "sleeper": "4035"
   },
   "ty-johnson": {
     "gsis": "00-0035537",
-    "team": "BUF",
+    "pos": "RB",
     "name": "Ty Johnson",
-    "pos": "RB"
+    "sleeper": "6039"
   },
   "michael-carter": {
     "gsis": "00-0036924",
-    "team": "ARI",
+    "pos": "RB",
     "name": "Michael Carter",
-    "pos": "RB"
+    "sleeper": "7607"
   },
   "emanuel-wilson": {
     "gsis": "00-0038797",
-    "team": "GB",
+    "pos": "RB",
     "name": "Emanuel Wilson",
-    "pos": "RB"
+    "sleeper": "11435"
   },
   "bam-knight": {
     "gsis": "00-0037157",
-    "team": "ARI",
+    "pos": "RB",
     "name": "Bam Knight",
-    "pos": "RB"
+    "sleeper": "8122"
   },
   "chris-rodriguez": {
     "gsis": "00-0038611",
-    "team": "WAS",
+    "pos": "RB",
     "name": "Chris Rodriguez Jr.",
-    "pos": "RB"
+    "sleeper": "10219"
   },
   "sean-tucker": {
     "gsis": "00-0038951",
-    "team": "TB",
+    "pos": "RB",
     "name": "Sean Tucker",
-    "pos": "RB"
+    "sleeper": "9506"
   },
   "bhayshul-tuten": {
     "gsis": "00-0040719",
-    "team": "JAX",
-    "name": "Bhayshul Tuten",
-    "pos": "RB"
+    "pos": "RB",
+    "name": "Bhayshul Tuten"
   },
   "nick-chubb": {
     "gsis": "00-0034791",
-    "team": "HOU",
+    "pos": "RB",
     "name": "Nick Chubb",
-    "pos": "RB"
+    "sleeper": "4988"
   },
   "dylan-sampson": {
     "gsis": "00-0040162",
-    "team": "CLE",
+    "pos": "RB",
     "name": "Dylan Sampson",
-    "pos": "RB"
+    "sleeper": "12469"
   },
   "isiah-pacheco": {
     "gsis": "00-0037197",
-    "team": "KC",
+    "pos": "RB",
     "name": "Isiah Pacheco",
-    "pos": "RB"
+    "sleeper": "8205"
   },
   "samaje-perine": {
     "gsis": "00-0033526",
-    "team": "CIN",
+    "pos": "RB",
     "name": "Samaje Perine",
-    "pos": "RB"
+    "sleeper": "4147"
   },
   "jeremy-mcnichols": {
     "gsis": "00-0033955",
-    "team": "WAS",
+    "pos": "RB",
     "name": "Jeremy McNichols",
-    "pos": "RB"
+    "sleeper": "4219"
   },
   "isaiah-davis": {
     "gsis": "00-0039798",
-    "team": "NYJ",
+    "pos": "RB",
     "name": "Isaiah Davis",
-    "pos": "RB"
+    "sleeper": "11571"
   },
   "justice-hill": {
     "gsis": "00-0034975",
-    "team": "BAL",
+    "pos": "RB",
     "name": "Justice Hill",
-    "pos": "RB"
+    "sleeper": "5995"
   },
   "ray-davis": {
     "gsis": "00-0039875",
-    "team": "BUF",
+    "pos": "RB",
     "name": "Ray Davis",
-    "pos": "RB"
+    "sleeper": "11575"
   },
   "brashard-smith": {
     "gsis": "00-0040078",
-    "team": "KC",
+    "pos": "RB",
     "name": "Brashard Smith",
-    "pos": "RB"
+    "sleeper": "12455"
   },
   "brian-robinson": {
     "gsis": "00-0037746",
-    "team": "SF",
+    "pos": "RB",
     "name": "Brian Robinson",
-    "pos": "RB"
+    "sleeper": "8154"
   },
   "devin-neal": {
     "gsis": "00-0040202",
-    "team": "NO",
+    "pos": "RB",
     "name": "Devin Neal",
-    "pos": "RB"
+    "sleeper": "12476"
   },
   "emari-demercado": {
     "gsis": "00-0038705",
-    "team": "ARI",
+    "pos": "RB",
     "name": "Emari Demercado",
-    "pos": "RB"
+    "sleeper": "11199"
   },
   "keaton-mitchell": {
     "gsis": "00-0038454",
-    "team": "BAL",
+    "pos": "RB",
     "name": "Keaton Mitchell",
-    "pos": "RB"
+    "sleeper": "9511"
   },
   "ollie-gordon": {
     "gsis": "00-0040198",
-    "team": "MIA",
+    "pos": "RB",
     "name": "Ollie Gordon II",
-    "pos": "RB"
+    "sleeper": "12495"
   },
   "tank-bigsby": {
     "gsis": "00-0038555",
-    "team": "PHI",
+    "pos": "RB",
     "name": "Tank Bigsby",
-    "pos": "RB"
+    "sleeper": "9225"
   },
   "jaylen-wright": {
     "gsis": "00-0039874",
-    "team": "MIA",
+    "pos": "RB",
     "name": "Jaylen Wright",
-    "pos": "RB"
+    "sleeper": "11643"
   },
   "audric-estim": {
     "gsis": "00-0039373",
-    "team": "NO",
+    "pos": "RB",
     "name": "Audric Estimé",
-    "pos": "RB"
+    "sleeper": "11579"
   },
   "jerome-ford": {
     "gsis": "00-0037267",
-    "team": "CLE",
+    "pos": "RB",
     "name": "Jerome Ford",
-    "pos": "RB"
+    "sleeper": "8143"
   },
   "malik-davis": {
     "gsis": "00-0037563",
-    "team": "DAL",
+    "pos": "RB",
     "name": "Malik Davis",
-    "pos": "RB"
+    "sleeper": "8800"
   },
   "zavier-scott": {
     "gsis": "00-0038440",
-    "team": "MIN",
-    "name": "Zavier Scott",
-    "pos": "RB"
+    "pos": "RB",
+    "name": "Zavier Scott"
   },
   "ameer-abdullah": {
     "gsis": "00-0032104",
-    "team": "IND",
+    "pos": "RB",
     "name": "Ameer Abdullah",
-    "pos": "RB"
+    "sleeper": "2359"
   },
   "hunter-luepke": {
     "gsis": "00-0038738",
-    "team": "DAL",
+    "pos": "RB",
     "name": "Hunter Luepke",
-    "pos": "RB"
+    "sleeper": "11510"
   },
   "tyler-badie": {
     "gsis": "00-0037085",
-    "team": "DEN",
+    "pos": "RB",
     "name": "Tyler Badie",
-    "pos": "RB"
+    "sleeper": "8208"
   },
   "trey-benson": {
     "gsis": "00-0039921",
-    "team": "ARI",
+    "pos": "RB",
     "name": "Trey Benson",
-    "pos": "RB"
+    "sleeper": "11589"
   },
   "james-conner": {
     "gsis": "00-0033553",
-    "team": "ARI",
+    "pos": "RB",
     "name": "James Conner",
-    "pos": "RB"
+    "sleeper": "4137"
   },
   "kendre-miller": {
     "gsis": "00-0038551",
-    "team": "NO",
+    "pos": "RB",
     "name": "Kendre Miller",
-    "pos": "RB"
+    "sleeper": "9757"
   },
   "chris-brooks": {
     "gsis": "00-0038685",
-    "team": "GB",
+    "pos": "RB",
     "name": "Chris Brooks",
-    "pos": "RB"
+    "sleeper": "11370"
   },
   "jaleel-mclaughlin": {
     "gsis": "00-0038794",
-    "team": "DEN",
+    "pos": "RB",
     "name": "Jaleel McLaughlin",
-    "pos": "RB"
+    "sleeper": "11439"
   },
   "jawhar-jordan": {
     "gsis": "00-0039405",
-    "team": "HOU",
-    "name": "Jawhar Jordan",
-    "pos": "RB"
+    "pos": "RB",
+    "name": "Jawhar Jordan"
   },
   "raheem-mostert": {
     "gsis": "00-0031687",
-    "team": "LV",
+    "pos": "RB",
     "name": "Raheem Mostert",
-    "pos": "RB"
+    "sleeper": "2749"
   },
   "miles-sanders": {
     "gsis": "00-0035243",
-    "team": "DAL",
+    "pos": "RB",
     "name": "Miles Sanders",
-    "pos": "RB"
+    "sleeper": "6151"
   },
   "jaret-patterson": {
     "gsis": "00-0036755",
-    "team": "LAC",
+    "pos": "RB",
     "name": "Jaret Patterson",
-    "pos": "RB"
+    "sleeper": "7537"
   },
   "lequint-allen": {
     "gsis": "00-0040238",
-    "team": "JAX",
+    "pos": "RB",
     "name": "LeQuint Allen Jr.",
-    "pos": "RB"
+    "sleeper": "12544"
   },
   "rasheen-ali": {
     "gsis": "00-0039796",
-    "team": "BAL",
+    "pos": "RB",
     "name": "Rasheen Ali",
-    "pos": "RB"
+    "sleeper": "11570"
   },
   "dare-ogunbowale": {
     "gsis": "00-0033854",
-    "team": "HOU",
+    "pos": "RB",
     "name": "Dare Ogunbowale",
-    "pos": "RB"
+    "sleeper": "4718"
   },
   "antonio-gibson": {
     "gsis": "00-0036328",
-    "team": "NE",
+    "pos": "RB",
     "name": "Antonio Gibson",
-    "pos": "RB"
+    "sleeper": "6945"
   },
   "andrew-beck": {
     "gsis": "00-0034959",
-    "team": "NYJ",
+    "pos": "RB",
     "name": "Andrew Beck",
-    "pos": "RB"
+    "sleeper": "6323"
   },
   "george-holani": {
     "gsis": "00-0039299",
-    "team": "SEA",
+    "pos": "RB",
     "name": "George Holani",
-    "pos": "RB"
+    "sleeper": "12048"
   },
   "jaydon-blue": {
     "gsis": "00-0040586",
-    "team": "DAL",
-    "name": "Jaydon Blue",
-    "pos": "RB"
+    "pos": "RB",
+    "name": "Jaydon Blue"
   },
   "raheim-sanders": {
     "gsis": "00-0040466",
-    "team": "CLE",
-    "name": "Raheim Sanders",
-    "pos": "RB"
+    "pos": "RB",
+    "name": "Raheim Sanders"
   },
   "will-shipley": {
     "gsis": "00-0039746",
-    "team": "PHI",
+    "pos": "RB",
     "name": "Will Shipley",
-    "pos": "RB"
+    "sleeper": "11577"
   },
   "trayveon-williams": {
     "gsis": "00-0035291",
-    "team": "CLE",
+    "pos": "RB",
     "name": "Trayveon Williams",
-    "pos": "RB"
+    "sleeper": "6144"
   },
   "adam-prentice": {
     "gsis": "00-0036727",
-    "team": "DEN",
+    "pos": "RB",
     "name": "Adam Prentice",
-    "pos": "RB"
+    "sleeper": "8025"
   },
   "braelon-allen": {
     "gsis": "00-0039794",
-    "team": "NYJ",
+    "pos": "RB",
     "name": "Braelon Allen",
-    "pos": "RB"
+    "sleeper": "11576"
   },
   "terrell-jennings": {
     "gsis": "00-0039757",
-    "team": "NE",
+    "pos": "RB",
     "name": "Terrell Jennings",
-    "pos": "RB"
+    "sleeper": "12412"
   },
   "trevor-etienne": {
     "gsis": "00-0040644",
-    "team": "CAR",
-    "name": "Trevor Etienne",
-    "pos": "RB"
+    "pos": "RB",
+    "name": "Trevor Etienne"
   },
   "austin-ekeler": {
     "gsis": "00-0033699",
-    "team": "WAS",
+    "pos": "RB",
     "name": "Austin Ekeler",
-    "pos": "RB"
+    "sleeper": "4663"
   },
   "puka-nacua": {
     "gsis": "00-0039075",
-    "team": "LA",
-    "name": "Puka Nacua",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Puka Nacua"
   },
   "jaxon-smith-njigba": {
     "gsis": "00-0038543",
-    "team": "SEA",
+    "pos": "WR",
     "name": "Jaxon Smith-Njigba",
-    "pos": "WR"
+    "sleeper": "9488"
   },
   "amon-ra-st-brown": {
     "gsis": "00-0036963",
-    "team": "DET",
+    "pos": "WR",
     "name": "Amon-Ra St. Brown",
-    "pos": "WR"
+    "sleeper": "7547"
   },
   "jamarr-chase": {
     "gsis": "00-0036900",
-    "team": "CIN",
+    "pos": "WR",
     "name": "Ja'Marr Chase",
-    "pos": "WR"
+    "sleeper": "7564"
   },
   "george-pickens": {
     "gsis": "00-0037247",
-    "team": "DAL",
+    "pos": "WR",
     "name": "George Pickens",
-    "pos": "WR"
+    "sleeper": "8137"
   },
   "chris-olave": {
     "gsis": "00-0037239",
-    "team": "NO",
+    "pos": "WR",
     "name": "Chris Olave",
-    "pos": "WR"
+    "sleeper": "8144"
   },
   "zay-flowers": {
     "gsis": "00-0039064",
-    "team": "BAL",
-    "name": "Zay Flowers",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Zay Flowers"
   },
   "nico-collins": {
     "gsis": "00-0036554",
-    "team": "HOU",
+    "pos": "WR",
     "name": "Nico Collins",
-    "pos": "WR"
+    "sleeper": "7569"
   },
   "davante-adams": {
     "gsis": "00-0031381",
-    "team": "LA",
+    "pos": "WR",
     "name": "Davante Adams",
-    "pos": "WR"
+    "sleeper": "2133"
   },
   "michael-wilson": {
     "gsis": "00-0038559",
-    "team": "ARI",
+    "pos": "WR",
     "name": "Michael Wilson",
-    "pos": "WR"
+    "sleeper": "10232"
   },
   "aj-brown": {
     "gsis": "00-0035676",
-    "team": "PHI",
+    "pos": "WR",
     "name": "A.J. Brown",
-    "pos": "WR"
+    "sleeper": "5859"
   },
   "jameson-williams": {
     "gsis": "00-0037240",
-    "team": "DET",
+    "pos": "WR",
     "name": "Jameson Williams",
-    "pos": "WR"
+    "sleeper": "8148"
   },
   "courtland-sutton": {
     "gsis": "00-0034348",
-    "team": "DEN",
+    "pos": "WR",
     "name": "Courtland Sutton",
-    "pos": "WR"
+    "sleeper": "5045"
   },
   "wandale-robinson": {
     "gsis": "00-0038117",
-    "team": "NYG",
+    "pos": "WR",
     "name": "Wan'Dale Robinson",
-    "pos": "WR"
+    "sleeper": "8126"
   },
   "tetairoa-mcmillan": {
     "gsis": "00-0040124",
-    "team": "CAR",
-    "name": "Tetairoa McMillan",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Tetairoa McMillan"
   },
   "tee-higgins": {
     "gsis": "00-0036410",
-    "team": "CIN",
+    "pos": "WR",
     "name": "Tee Higgins",
-    "pos": "WR"
+    "sleeper": "6801"
   },
   "stefon-diggs": {
     "gsis": "00-0031588",
-    "team": "NE",
+    "pos": "WR",
     "name": "Stefon Diggs",
-    "pos": "WR"
+    "sleeper": "2449"
   },
   "michael-pittman": {
     "gsis": "00-0036252",
-    "team": "IND",
+    "pos": "WR",
     "name": "Michael Pittman",
-    "pos": "WR"
+    "sleeper": "6819"
   },
   "drake-london": {
     "gsis": "00-0037238",
-    "team": "ATL",
+    "pos": "WR",
     "name": "Drake London",
-    "pos": "WR"
+    "sleeper": "8112"
   },
   "devonta-smith": {
     "gsis": "00-0036912",
-    "team": "PHI",
+    "pos": "WR",
     "name": "DeVonta Smith",
-    "pos": "WR"
+    "sleeper": "7525"
   },
   "justin-jefferson": {
     "gsis": "00-0036322",
-    "team": "MIN",
+    "pos": "WR",
     "name": "Justin Jefferson",
-    "pos": "WR"
+    "sleeper": "6794"
   },
   "ceedee-lamb": {
     "gsis": "00-0036358",
-    "team": "DAL",
+    "pos": "WR",
     "name": "CeeDee Lamb",
-    "pos": "WR"
+    "sleeper": "6786"
   },
   "emeka-egbuka": {
     "gsis": "00-0040129",
-    "team": "TB",
-    "name": "Emeka Egbuka",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Emeka Egbuka"
   },
   "jaylen-waddle": {
     "gsis": "00-0036613",
-    "team": "MIA",
+    "pos": "WR",
     "name": "Jaylen Waddle",
-    "pos": "WR"
+    "sleeper": "7526"
   },
   "deebo-samuel": {
     "gsis": "00-0035719",
-    "team": "WAS",
+    "pos": "WR",
     "name": "Deebo Samuel Sr.",
-    "pos": "WR"
+    "sleeper": "5872"
   },
   "dk-metcalf": {
     "gsis": "00-0035640",
-    "team": "PIT",
+    "pos": "WR",
     "name": "DK Metcalf",
-    "pos": "WR"
+    "sleeper": "5846"
   },
   "parker-washington": {
     "gsis": "00-0038606",
-    "team": "JAX",
-    "name": "Parker Washington",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Parker Washington"
   },
   "alec-pierce": {
     "gsis": "00-0037664",
-    "team": "IND",
+    "pos": "WR",
     "name": "Alec Pierce",
-    "pos": "WR"
+    "sleeper": "8142"
   },
   "keenan-allen": {
     "gsis": "00-0030279",
-    "team": "LAC",
+    "pos": "WR",
     "name": "Keenan Allen",
-    "pos": "WR"
+    "sleeper": "1479"
   },
   "ladd-mcconkey": {
     "gsis": "00-0039915",
-    "team": "LAC",
-    "name": "Ladd McConkey",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Ladd McConkey"
   },
   "troy-franklin": {
     "gsis": "00-0039868",
-    "team": "DEN",
-    "name": "Troy Franklin",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Troy Franklin"
   },
   "jakobi-meyers": {
     "gsis": "00-0034960",
-    "team": "JAX",
+    "pos": "WR",
     "name": "Jakobi Meyers",
-    "pos": "WR"
+    "sleeper": "5947"
   },
   "jauan-jennings": {
     "gsis": "00-0036259",
-    "team": "SF",
+    "pos": "WR",
     "name": "Jauan Jennings",
-    "pos": "WR"
+    "sleeper": "7049"
   },
   "dj-moore": {
     "gsis": "00-0034827",
-    "team": "CHI",
+    "pos": "WR",
     "name": "DJ Moore",
-    "pos": "WR"
+    "sleeper": "4983"
   },
   "quentin-johnston": {
     "gsis": "00-0038544",
-    "team": "LAC",
+    "pos": "WR",
     "name": "Quentin Johnston",
-    "pos": "WR"
+    "sleeper": "9754"
   },
   "khalil-shakir": {
     "gsis": "00-0037261",
-    "team": "BUF",
+    "pos": "WR",
     "name": "Khalil Shakir",
-    "pos": "WR"
+    "sleeper": "8134"
   },
   "romeo-doubs": {
     "gsis": "00-0037816",
-    "team": "GB",
+    "pos": "WR",
     "name": "Romeo Doubs",
-    "pos": "WR"
+    "sleeper": "8121"
   },
   "tre-tucker": {
     "gsis": "00-0038563",
-    "team": "LV",
+    "pos": "WR",
     "name": "Tre Tucker",
-    "pos": "WR"
+    "sleeper": "10213"
   },
   "rashid-shaheed": {
     "gsis": "00-0037545",
-    "team": "SEA",
+    "pos": "WR",
     "name": "Rashid Shaheed",
-    "pos": "WR"
+    "sleeper": "8676"
   },
   "rashee-rice": {
     "gsis": "00-0039067",
-    "team": "KC",
-    "name": "Rashee Rice",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Rashee Rice"
   },
   "rome-odunze": {
     "gsis": "00-0039919",
-    "team": "CHI",
-    "name": "Rome Odunze",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Rome Odunze"
   },
   "brian-thomas": {
     "gsis": "00-0039893",
-    "team": "JAX",
-    "name": "Brian Thomas Jr.",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Brian Thomas Jr."
   },
   "josh-downs": {
     "gsis": "00-0038997",
-    "team": "IND",
-    "name": "Josh Downs",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Josh Downs"
   },
   "marquise-brown": {
     "gsis": "00-0035662",
-    "team": "KC",
+    "pos": "WR",
     "name": "Marquise Brown",
-    "pos": "WR"
+    "sleeper": "5848"
   },
   "jordan-addison": {
     "gsis": "00-0038994",
-    "team": "MIN",
-    "name": "Jordan Addison",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Jordan Addison"
   },
   "christian-watson": {
     "gsis": "00-0038124",
-    "team": "GB",
+    "pos": "WR",
     "name": "Christian Watson",
-    "pos": "WR"
+    "sleeper": "8167"
   },
   "jayden-higgins": {
     "gsis": "00-0040130",
-    "team": "HOU",
-    "name": "Jayden Higgins",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Jayden Higgins"
   },
   "chimere-dike": {
     "gsis": "00-0040705",
-    "team": "TEN",
-    "name": "Chimere Dike",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Chimere Dike"
   },
   "luther-burden": {
     "gsis": "00-0040735",
-    "team": "CHI",
-    "name": "Luther Burden III",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Luther Burden III"
   },
   "marvin-harrison": {
     "gsis": "00-0039849",
-    "team": "ARI",
-    "name": "Marvin Harrison Jr.",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Marvin Harrison Jr."
   },
   "kayshon-boutte": {
     "gsis": "00-0038608",
-    "team": "NE",
-    "name": "Kayshon Boutte",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Kayshon Boutte"
   },
   "jerry-jeudy": {
     "gsis": "00-0036407",
-    "team": "CLE",
+    "pos": "WR",
     "name": "Jerry Jeudy",
-    "pos": "WR"
+    "sleeper": "6783"
   },
   "malik-washington": {
     "gsis": "00-0039880",
-    "team": "MIA",
-    "name": "Malik Washington",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Malik Washington"
   },
   "elic-ayomanor": {
     "gsis": "00-0040170",
-    "team": "TEN",
-    "name": "Elic Ayomanor",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Elic Ayomanor"
   },
   "cooper-kupp": {
     "gsis": "00-0033908",
-    "team": "SEA",
+    "pos": "WR",
     "name": "Cooper Kupp",
-    "pos": "WR"
+    "sleeper": "4039"
   },
   "terry-mclaurin": {
     "gsis": "00-0035659",
-    "team": "WAS",
+    "pos": "WR",
     "name": "Terry McLaurin",
-    "pos": "WR"
+    "sleeper": "5927"
   },
   "ryan-flournoy": {
     "gsis": "00-0039410",
-    "team": "DAL",
-    "name": "Ryan Flournoy",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Ryan Flournoy"
   },
   "mack-hollins": {
     "gsis": "00-0033555",
-    "team": "NE",
+    "pos": "WR",
     "name": "Mack Hollins",
-    "pos": "WR"
+    "sleeper": "4177"
   },
   "xavier-worthy": {
     "gsis": "00-0039894",
-    "team": "KC",
-    "name": "Xavier Worthy",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Xavier Worthy"
   },
   "keon-coleman": {
     "gsis": "00-0039901",
-    "team": "BUF",
-    "name": "Keon Coleman",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Keon Coleman"
   },
   "jalen-nailor": {
     "gsis": "00-0037291",
-    "team": "MIN",
+    "pos": "WR",
     "name": "Jalen Nailor",
-    "pos": "WR"
+    "sleeper": "8180"
   },
   "garrett-wilson": {
     "gsis": "00-0037740",
-    "team": "NYJ",
+    "pos": "WR",
     "name": "Garrett Wilson",
-    "pos": "WR"
+    "sleeper": "8146"
   },
   "darius-slayton": {
     "gsis": "00-0035535",
-    "team": "NYG",
+    "pos": "WR",
     "name": "Darius Slayton",
-    "pos": "WR"
+    "sleeper": "6149"
   },
   "xavier-hutchinson": {
     "gsis": "00-0038618",
-    "team": "HOU",
-    "name": "Xavier Hutchinson",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Xavier Hutchinson"
   },
   "demario-douglas": {
     "gsis": "00-0038621",
-    "team": "NE",
-    "name": "DeMario Douglas",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "DeMario Douglas"
   },
   "marvin-mims": {
     "gsis": "00-0038976",
-    "team": "DEN",
-    "name": "Marvin Mims Jr.",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Marvin Mims Jr."
   },
   "tez-johnson": {
     "gsis": "00-0040237",
-    "team": "TB",
-    "name": "Tez Johnson",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Tez Johnson"
   },
   "kendrick-bourne": {
     "gsis": "00-0033307",
-    "team": "SF",
+    "pos": "WR",
     "name": "Kendrick Bourne",
-    "pos": "WR"
+    "sleeper": "4454"
   },
   "jalen-coker": {
     "gsis": "00-0039491",
-    "team": "CAR",
-    "name": "Jalen Coker",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Jalen Coker"
   },
   "andrei-iosivas": {
     "gsis": "00-0038619",
-    "team": "CIN",
-    "name": "Andrei Iosivas",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Andrei Iosivas"
   },
   "xavier-legette": {
     "gsis": "00-0039342",
-    "team": "CAR",
-    "name": "Xavier Legette",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Xavier Legette"
   },
   "ricky-pearsall": {
     "gsis": "00-0039916",
-    "team": "SF",
-    "name": "Ricky Pearsall",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Ricky Pearsall"
   },
   "adonai-mitchell": {
     "gsis": "00-0039890",
-    "team": "NYJ",
-    "name": "Adonai Mitchell",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Adonai Mitchell"
   },
   "calvin-austin": {
     "gsis": "00-0037837",
-    "team": "PIT",
+    "pos": "WR",
     "name": "Calvin Austin III",
-    "pos": "WR"
+    "sleeper": "8125"
   },
   "mike-evans": {
     "gsis": "00-0031408",
-    "team": "TB",
+    "pos": "WR",
     "name": "Mike Evans",
-    "pos": "WR"
+    "sleeper": "2216"
   },
   "olamide-zaccheaus": {
     "gsis": "00-0035208",
-    "team": "CHI",
+    "pos": "WR",
     "name": "Olamide Zaccheaus",
-    "pos": "WR"
+    "sleeper": "6271"
   },
   "kavontae-turpin": {
     "gsis": "00-0037801",
-    "team": "DAL",
+    "pos": "WR",
     "name": "KaVontae Turpin",
-    "pos": "WR"
+    "sleeper": "8917"
   },
   "chris-godwin": {
     "gsis": "00-0033921",
-    "team": "TB",
+    "pos": "WR",
     "name": "Chris Godwin Jr.",
-    "pos": "WR"
+    "sleeper": "4037"
   },
   "darnell-mooney": {
     "gsis": "00-0036309",
-    "team": "ATL",
+    "pos": "WR",
     "name": "Darnell Mooney",
-    "pos": "WR"
+    "sleeper": "7090"
   },
   "sterling-shepard": {
     "gsis": "00-0032385",
-    "team": "TB",
+    "pos": "WR",
     "name": "Sterling Shepard",
-    "pos": "WR"
+    "sleeper": "3200"
   },
   "tyquan-thornton": {
     "gsis": "00-0038104",
-    "team": "KC",
+    "pos": "WR",
     "name": "Tyquan Thornton",
-    "pos": "WR"
+    "sleeper": "8188"
   },
   "isaac-teslaa": {
     "gsis": "00-0040669",
-    "team": "DET",
-    "name": "Isaac TeSlaa",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Isaac TeSlaa"
   },
   "dontayvion-wicks": {
     "gsis": "00-0038393",
-    "team": "GB",
+    "pos": "WR",
     "name": "Dontayvion Wicks",
-    "pos": "WR"
+    "sleeper": "9486"
   },
   "greg-dortch": {
     "gsis": "00-0035500",
-    "team": "ARI",
+    "pos": "WR",
     "name": "Greg Dortch",
-    "pos": "WR"
+    "sleeper": "5970"
   },
   "pat-bryant": {
     "gsis": "00-0040134",
-    "team": "DEN",
-    "name": "Pat Bryant",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Pat Bryant"
   },
   "juju-smith-schuster": {
     "gsis": "00-0033857",
-    "team": "KC",
+    "pos": "WR",
     "name": "JuJu Smith-Schuster",
-    "pos": "WR"
+    "sleeper": "4040"
   },
   "john-metchie": {
     "gsis": "00-0037614",
-    "team": "NYJ",
+    "pos": "WR",
     "name": "John Metchie III",
-    "pos": "WR"
+    "sleeper": "8147"
   },
   "matthew-golden": {
     "gsis": "00-0040667",
-    "team": "GB",
-    "name": "Matthew Golden",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Matthew Golden"
   },
   "van-jefferson": {
     "gsis": "00-0036415",
-    "team": "TEN",
+    "pos": "WR",
     "name": "Van Jefferson",
-    "pos": "WR"
+    "sleeper": "6853"
   },
   "tre-harris": {
     "gsis": "00-0040727",
-    "team": "LAC",
-    "name": "Tre Harris",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Tre Harris"
   },
   "jaylin-noel": {
     "gsis": "00-0040138",
-    "team": "HOU",
-    "name": "Jaylin Noel",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Jaylin Noel"
   },
   "tyler-lockett": {
     "gsis": "00-0032211",
-    "team": "LV",
+    "pos": "WR",
     "name": "Tyler Lockett",
-    "pos": "WR"
+    "sleeper": "2374"
   },
   "deandre-hopkins": {
     "gsis": "00-0030564",
-    "team": "BAL",
+    "pos": "WR",
     "name": "DeAndre Hopkins",
-    "pos": "WR"
+    "sleeper": "1426"
   },
   "kalif-raymond": {
     "gsis": "00-0032464",
-    "team": "DET",
+    "pos": "WR",
     "name": "Kalif Raymond",
-    "pos": "WR"
+    "sleeper": "3634"
   },
   "devaughn-vele": {
     "gsis": "00-0039424",
-    "team": "NO",
-    "name": "Devaughn Vele",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Devaughn Vele"
   },
   "tory-horton": {
     "gsis": "00-0040648",
-    "team": "SEA",
-    "name": "Tory Horton",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Tory Horton"
   },
   "travis-hunter": {
     "gsis": "00-0040718",
-    "team": "JAX",
-    "name": "Travis Hunter",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Travis Hunter"
   },
   "isaiah-williams": {
     "gsis": "00-0039451",
-    "team": "NYJ",
-    "name": "Isaiah Williams",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Isaiah Williams"
   },
   "cedric-tillman": {
     "gsis": "00-0038979",
-    "team": "CLE",
-    "name": "Cedric Tillman",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Cedric Tillman"
   },
   "demarcus-robinson": {
     "gsis": "00-0032775",
-    "team": "SF",
+    "pos": "WR",
     "name": "Demarcus Robinson",
-    "pos": "WR"
+    "sleeper": "3286"
   },
   "trey-mcbride": {
     "gsis": "00-0037744",
-    "team": "ARI",
+    "pos": "TE",
     "name": "Trey McBride",
-    "pos": "TE"
+    "sleeper": "8130"
   },
   "kyle-pitts": {
     "gsis": "00-0036970",
-    "team": "ATL",
+    "pos": "TE",
     "name": "Kyle Pitts",
-    "pos": "TE"
+    "sleeper": "7553"
   },
   "travis-kelce": {
     "gsis": "00-0030506",
-    "team": "KC",
+    "pos": "TE",
     "name": "Travis Kelce",
-    "pos": "TE"
+    "sleeper": "1466"
   },
   "tyler-warren": {
     "gsis": "00-0040128",
-    "team": "IND",
+    "pos": "TE",
     "name": "Tyler Warren",
-    "pos": "TE"
+    "sleeper": "12518"
   },
   "jake-ferguson": {
     "gsis": "00-0038041",
-    "team": "DAL",
+    "pos": "TE",
     "name": "Jake Ferguson",
-    "pos": "TE"
+    "sleeper": "8110"
   },
   "harold-fannin": {
     "gsis": "00-0040663",
-    "team": "CLE",
-    "name": "Harold Fannin Jr.",
-    "pos": "TE"
+    "pos": "TE",
+    "name": "Harold Fannin Jr."
   },
   "dallas-goedert": {
     "gsis": "00-0034351",
-    "team": "PHI",
+    "pos": "TE",
     "name": "Dallas Goedert",
-    "pos": "TE"
+    "sleeper": "5022"
   },
   "juwan-johnson": {
     "gsis": "00-0036040",
-    "team": "NO",
+    "pos": "TE",
     "name": "Juwan Johnson",
-    "pos": "TE"
+    "sleeper": "7002"
   },
   "hunter-henry": {
     "gsis": "00-0033090",
-    "team": "NE",
+    "pos": "TE",
     "name": "Hunter Henry",
-    "pos": "TE"
+    "sleeper": "3214"
   },
   "dalton-schultz": {
     "gsis": "00-0034383",
-    "team": "HOU",
+    "pos": "TE",
     "name": "Dalton Schultz",
-    "pos": "TE"
+    "sleeper": "5001"
   },
   "brock-bowers": {
     "gsis": "00-0039338",
-    "team": "LV",
+    "pos": "TE",
     "name": "Brock Bowers",
-    "pos": "TE"
+    "sleeper": "11604"
   },
   "colston-loveland": {
     "gsis": "00-0040126",
-    "team": "CHI",
+    "pos": "TE",
     "name": "Colston Loveland",
-    "pos": "TE"
+    "sleeper": "12517"
   },
   "george-kittle": {
     "gsis": "00-0033288",
-    "team": "SF",
+    "pos": "TE",
     "name": "George Kittle",
-    "pos": "TE"
+    "sleeper": "4217"
   },
   "aj-barner": {
     "gsis": "00-0039793",
-    "team": "SEA",
+    "pos": "TE",
     "name": "AJ Barner",
-    "pos": "TE"
+    "sleeper": "11603"
   },
   "oronde-gadsden": {
     "gsis": "00-0040189",
-    "team": "LAC",
+    "pos": "TE",
     "name": "Oronde Gadsden II",
-    "pos": "TE"
+    "sleeper": "12493"
   },
   "mark-andrews": {
     "gsis": "00-0034753",
-    "team": "BAL",
+    "pos": "TE",
     "name": "Mark Andrews",
-    "pos": "TE"
+    "sleeper": "5012"
   },
   "colby-parkinson": {
     "gsis": "00-0036244",
-    "team": "LA",
+    "pos": "TE",
     "name": "Colby Parkinson",
-    "pos": "TE"
+    "sleeper": "6865"
   },
   "theo-johnson": {
     "gsis": "00-0039847",
-    "team": "NYG",
+    "pos": "TE",
     "name": "Theo Johnson",
-    "pos": "TE"
+    "sleeper": "11597"
   },
   "zach-ertz": {
     "gsis": "00-0030061",
-    "team": "WAS",
+    "pos": "TE",
     "name": "Zach Ertz",
-    "pos": "TE"
+    "sleeper": "1339"
   },
   "dalton-kincaid": {
     "gsis": "00-0038933",
-    "team": "BUF",
+    "pos": "TE",
     "name": "Dalton Kincaid",
-    "pos": "TE"
+    "sleeper": "10236"
   },
   "chig-okonkwo": {
     "gsis": "00-0037809",
-    "team": "TEN",
+    "pos": "TE",
     "name": "Chig Okonkwo",
-    "pos": "TE"
+    "sleeper": "8210"
   },
   "cade-otton": {
     "gsis": "00-0038129",
-    "team": "TB",
+    "pos": "TE",
     "name": "Cade Otton",
-    "pos": "TE"
+    "sleeper": "8111"
   },
   "brenton-strange": {
     "gsis": "00-0038935",
-    "team": "JAX",
+    "pos": "TE",
     "name": "Brenton Strange",
-    "pos": "TE"
+    "sleeper": "9480"
   },
   "tucker-kraft": {
     "gsis": "00-0038996",
-    "team": "GB",
+    "pos": "TE",
     "name": "Tucker Kraft",
-    "pos": "TE"
+    "sleeper": "9484"
   },
   "pat-freiermuth": {
     "gsis": "00-0036894",
-    "team": "PIT",
+    "pos": "TE",
     "name": "Pat Freiermuth",
-    "pos": "TE"
+    "sleeper": "7600"
   },
   "tj-hockenson": {
     "gsis": "00-0035229",
-    "team": "MIN",
+    "pos": "TE",
     "name": "T.J. Hockenson",
-    "pos": "TE"
+    "sleeper": "5844"
   },
   "sam-laporta": {
     "gsis": "00-0039065",
-    "team": "DET",
+    "pos": "TE",
     "name": "Sam LaPorta",
-    "pos": "TE"
+    "sleeper": "10859"
   },
   "dawson-knox": {
     "gsis": "00-0035689",
-    "team": "BUF",
+    "pos": "TE",
     "name": "Dawson Knox",
-    "pos": "TE"
+    "sleeper": "5906"
   },
   "evan-engram": {
     "gsis": "00-0033881",
-    "team": "DEN",
+    "pos": "TE",
     "name": "Evan Engram",
-    "pos": "TE"
+    "sleeper": "4066"
   },
   "jake-tonges": {
     "gsis": "00-0037112",
-    "team": "SF",
+    "pos": "TE",
     "name": "Jake Tonges",
-    "pos": "TE"
+    "sleeper": "8698"
   },
   "gunnar-helm": {
     "gsis": "00-0040584",
-    "team": "TEN",
-    "name": "Gunnar Helm",
-    "pos": "TE"
+    "pos": "TE",
+    "name": "Gunnar Helm"
   },
   "mason-taylor": {
     "gsis": "00-0040736",
-    "team": "NYJ",
-    "name": "Mason Taylor",
-    "pos": "TE"
+    "pos": "TE",
+    "name": "Mason Taylor"
   },
   "darren-waller": {
     "gsis": "00-0031610",
-    "team": "MIA",
+    "pos": "TE",
     "name": "Darren Waller",
-    "pos": "TE"
+    "sleeper": "2505"
   },
   "david-njoku": {
     "gsis": "00-0033885",
-    "team": "CLE",
+    "pos": "TE",
     "name": "David Njoku",
-    "pos": "TE"
+    "sleeper": "4033"
   },
   "jonnu-smith": {
     "gsis": "00-0033858",
-    "team": "PIT",
+    "pos": "TE",
     "name": "Jonnu Smith",
-    "pos": "TE"
+    "sleeper": "4144"
   },
   "cole-kmet": {
     "gsis": "00-0036290",
-    "team": "CHI",
+    "pos": "TE",
     "name": "Cole Kmet",
-    "pos": "TE"
+    "sleeper": "6826"
   },
   "noah-fant": {
     "gsis": "00-0035644",
-    "team": "CIN",
+    "pos": "TE",
     "name": "Noah Fant",
-    "pos": "TE"
+    "sleeper": "5857"
   },
   "michael-mayer": {
     "gsis": "00-0039066",
-    "team": "LV",
+    "pos": "TE",
     "name": "Michael Mayer",
-    "pos": "TE"
+    "sleeper": "9482"
   },
   "darnell-washington": {
     "gsis": "00-0038558",
-    "team": "PIT",
+    "pos": "TE",
     "name": "Darnell Washington",
-    "pos": "TE"
+    "sleeper": "9479"
   },
   "tyler-higbee": {
     "gsis": "00-0033110",
-    "team": "LA",
+    "pos": "TE",
     "name": "Tyler Higbee",
-    "pos": "TE"
+    "sleeper": "3271"
   },
   "mike-gesicki": {
     "gsis": "00-0034829",
-    "team": "CIN",
+    "pos": "TE",
     "name": "Mike Gesicki",
-    "pos": "TE"
+    "sleeper": "4993"
   },
   "tommy-tremble": {
     "gsis": "00-0037005",
-    "team": "CAR",
+    "pos": "TE",
     "name": "Tommy Tremble",
-    "pos": "TE"
+    "sleeper": "7694"
   },
   "greg-dulcich": {
     "gsis": "00-0037252",
-    "team": "MIA",
+    "pos": "TE",
     "name": "Greg Dulcich",
-    "pos": "TE"
+    "sleeper": "8172"
   },
   "davis-allen": {
     "gsis": "00-0039074",
-    "team": "LA",
+    "pos": "TE",
     "name": "Davis Allen",
-    "pos": "TE"
+    "sleeper": "10214"
   },
   "isaiah-likely": {
     "gsis": "00-0037838",
-    "team": "BAL",
+    "pos": "TE",
     "name": "Isaiah Likely",
-    "pos": "TE"
+    "sleeper": "8131"
   },
   "daniel-bellinger": {
     "gsis": "00-0038115",
-    "team": "NYG",
+    "pos": "TE",
     "name": "Daniel Bellinger",
-    "pos": "TE"
+    "sleeper": "8225"
   },
   "austin-hooper": {
     "gsis": "00-0032392",
-    "team": "NE",
+    "pos": "TE",
     "name": "Austin Hooper",
-    "pos": "TE"
+    "sleeper": "3202"
   },
   "elijah-higgins": {
     "gsis": "00-0039041",
-    "team": "ARI",
+    "pos": "TE",
     "name": "Elijah Higgins",
-    "pos": "TE"
+    "sleeper": "10231"
   },
   "josh-oliver": {
     "gsis": "00-0035249",
-    "team": "MIN",
+    "pos": "TE",
     "name": "Josh Oliver",
-    "pos": "TE"
+    "sleeper": "5973"
   },
   "jatavion-sanders": {
     "gsis": "00-0039356",
-    "team": "CAR",
+    "pos": "TE",
     "name": "Ja'Tavion Sanders",
-    "pos": "TE"
+    "sleeper": "11600"
   },
   "jackson-hawes": {
     "gsis": "00-0040194",
-    "team": "BUF",
+    "pos": "TE",
     "name": "Jackson Hawes",
-    "pos": "TE"
+    "sleeper": "12658"
   },
   "terrance-ferguson": {
     "gsis": "00-0040737",
-    "team": "LA",
-    "name": "Terrance Ferguson",
-    "pos": "TE"
+    "pos": "TE",
+    "name": "Terrance Ferguson"
   },
   "luke-musgrave": {
     "gsis": "00-0039144",
-    "team": "GB",
+    "pos": "TE",
     "name": "Luke Musgrave",
-    "pos": "TE"
+    "sleeper": "9481"
   },
   "mitchell-evans": {
     "gsis": "00-0040187",
-    "team": "CAR",
+    "pos": "TE",
     "name": "Mitchell Evans",
-    "pos": "TE"
+    "sleeper": "12473"
   },
   "tanner-hudson": {
     "gsis": "00-0034613",
-    "team": "CIN",
+    "pos": "TE",
     "name": "Tanner Hudson",
-    "pos": "TE"
+    "sleeper": "5409"
   },
   "jeremy-ruckert": {
     "gsis": "00-0037805",
-    "team": "NYJ",
+    "pos": "TE",
     "name": "Jeremy Ruckert",
-    "pos": "TE"
+    "sleeper": "8145"
   },
   "adam-trautman": {
     "gsis": "00-0036422",
-    "team": "DEN",
+    "pos": "TE",
     "name": "Adam Trautman",
-    "pos": "TE"
+    "sleeper": "6869"
   },
   "taysom-hill": {
     "gsis": "00-0033357",
-    "team": "NO",
+    "pos": "TE",
     "name": "Taysom Hill",
-    "pos": "TE"
+    "sleeper": "4381"
   },
   "noah-gray": {
     "gsis": "00-0036637",
-    "team": "KC",
+    "pos": "TE",
     "name": "Noah Gray",
-    "pos": "TE"
+    "sleeper": "7828"
   },
   "elijah-arroyo": {
     "gsis": "00-0040739",
-    "team": "SEA",
-    "name": "Elijah Arroyo",
-    "pos": "TE"
+    "pos": "TE",
+    "name": "Elijah Arroyo"
   },
   "brock-wright": {
     "gsis": "00-0036754",
-    "team": "DET",
+    "pos": "TE",
     "name": "Brock Wright",
-    "pos": "TE"
+    "sleeper": "7891"
   },
   "charlie-kolar": {
     "gsis": "00-0038046",
-    "team": "BAL",
+    "pos": "TE",
     "name": "Charlie Kolar",
-    "pos": "TE"
+    "sleeper": "8127"
   },
   "hunter-long": {
     "gsis": "00-0037004",
-    "team": "JAX",
+    "pos": "TE",
     "name": "Hunter Long",
-    "pos": "TE"
+    "sleeper": "7535"
   },
   "drew-sample": {
     "gsis": "00-0035631",
-    "team": "CIN",
+    "pos": "TE",
     "name": "Drew Sample",
-    "pos": "TE"
+    "sleeper": "6001"
   },
   "julian-hill": {
     "gsis": "00-0038720",
-    "team": "MIA",
-    "name": "Julian Hill",
-    "pos": "TE"
+    "pos": "TE",
+    "name": "Julian Hill"
   },
   "mo-alie-cox": {
     "gsis": "00-0033217",
-    "team": "IND",
+    "pos": "TE",
     "name": "Mo Alie-Cox",
-    "pos": "TE"
+    "sleeper": "4054"
   },
   "luke-farrell": {
     "gsis": "00-0036887",
-    "team": "SF",
+    "pos": "TE",
     "name": "Luke Farrell",
-    "pos": "TE"
+    "sleeper": "7842"
   },
   "ben-sinnott": {
     "gsis": "00-0039912",
-    "team": "WAS",
+    "pos": "TE",
     "name": "Ben Sinnott",
-    "pos": "TE"
+    "sleeper": "11596"
   },
   "connor-heyward": {
     "gsis": "00-0037304",
-    "team": "PIT",
+    "pos": "TE",
     "name": "Connor Heyward",
-    "pos": "TE"
+    "sleeper": "8181"
   },
   "john-bates": {
     "gsis": "00-0036628",
-    "team": "WAS",
+    "pos": "TE",
     "name": "John Bates",
-    "pos": "TE"
+    "sleeper": "7716"
   },
   "luke-schoonmaker": {
     "gsis": "00-0038547",
-    "team": "DAL",
+    "pos": "TE",
     "name": "Luke Schoonmaker",
-    "pos": "TE"
+    "sleeper": "10871"
   },
   "john-fitzpatrick": {
     "gsis": "00-0037306",
-    "team": "GB",
-    "name": "John FitzPatrick",
-    "pos": "TE"
+    "pos": "TE",
+    "name": "John FitzPatrick"
   },
   "ian-thomas": {
     "gsis": "00-0034365",
-    "team": "LV",
+    "pos": "TE",
     "name": "Ian Thomas",
-    "pos": "TE"
+    "sleeper": "4995"
   },
   "brevyn-spann-ford": {
     "gsis": "00-0039530",
-    "team": "DAL",
+    "pos": "TE",
     "name": "Brevyn Spann-Ford",
-    "pos": "TE"
+    "sleeper": "11593"
   },
   "grant-calcaterra": {
     "gsis": "00-0037086",
-    "team": "PHI",
+    "pos": "TE",
     "name": "Grant Calcaterra",
-    "pos": "TE"
+    "sleeper": "8177"
   },
   "will-dissly": {
     "gsis": "00-0034159",
-    "team": "LAC",
+    "pos": "TE",
     "name": "Will Dissly",
-    "pos": "TE"
+    "sleeper": "5010"
   },
   "johnny-mundt": {
     "gsis": "00-0033246",
-    "team": "JAX",
+    "pos": "TE",
     "name": "Johnny Mundt",
-    "pos": "TE"
+    "sleeper": "4314"
   },
   "cade-stover": {
     "gsis": "00-0039359",
-    "team": "HOU",
+    "pos": "TE",
     "name": "Cade Stover",
-    "pos": "TE"
+    "sleeper": "11599"
   },
   "tanner-conner": {
     "gsis": "00-0037348",
-    "team": "MIA",
-    "name": "Tanner Conner",
-    "pos": "TE"
+    "pos": "TE",
+    "name": "Tanner Conner"
   },
   "quintin-morris": {
     "gsis": "00-0036590",
-    "team": "JAX",
+    "pos": "TE",
     "name": "Quintin Morris",
-    "pos": "TE"
+    "sleeper": "7536"
   },
   "tyler-conklin": {
     "gsis": "00-0034270",
-    "team": "LAC",
+    "pos": "TE",
     "name": "Tyler Conklin",
-    "pos": "TE"
+    "sleeper": "5133"
   },
   "nate-adkins": {
     "gsis": "00-0038783",
-    "team": "DEN",
+    "pos": "TE",
     "name": "Nate Adkins",
-    "pos": "TE"
+    "sleeper": "11433"
   },
   "jack-stoll": {
     "gsis": "00-0036741",
-    "team": "NO",
+    "pos": "TE",
     "name": "Jack Stoll",
-    "pos": "TE"
+    "sleeper": "7946"
   },
   "josh-whyle": {
     "gsis": "00-0038589",
-    "team": "GB",
+    "pos": "TE",
     "name": "Josh Whyle",
-    "pos": "TE"
+    "sleeper": "10212"
   },
   "anthony-firkser": {
     "gsis": "00-0033455",
-    "team": "DET",
+    "pos": "TE",
     "name": "Anthony Firkser",
-    "pos": "TE"
+    "sleeper": "4435"
   },
   "david-martin-robinson": {
     "gsis": "00-0039648",
-    "team": "TEN",
-    "name": "David Martin-Robinson",
-    "pos": "TE"
+    "pos": "TE",
+    "name": "David Martin-Robinson"
   },
   "foster-moreau": {
     "gsis": "00-0034981",
-    "team": "NO",
+    "pos": "TE",
     "name": "Foster Moreau",
-    "pos": "TE"
+    "sleeper": "5985"
   },
   "charlie-woerner": {
     "gsis": "00-0036429",
-    "team": "ATL",
+    "pos": "TE",
     "name": "Charlie Woerner",
-    "pos": "TE"
+    "sleeper": "7075"
   },
   "andrew-ogletree": {
     "gsis": "00-0037292",
-    "team": "IND",
-    "name": "Andrew Ogletree",
-    "pos": "TE"
+    "pos": "TE",
+    "name": "Andrew Ogletree"
   },
   "stone-smartt": {
     "gsis": "00-0037475",
-    "team": "NYJ",
+    "pos": "TE",
     "name": "Stone Smartt",
-    "pos": "TE"
+    "sleeper": "8583"
   },
   "josiah-deguara": {
     "gsis": "00-0036332",
-    "team": "ARI",
+    "pos": "TE",
     "name": "Josiah Deguara",
-    "pos": "TE"
+    "sleeper": "7050"
   },
   "kylen-granson": {
     "gsis": "00-0036876",
-    "team": "PHI",
+    "pos": "TE",
     "name": "Kylen Granson",
-    "pos": "TE"
+    "sleeper": "7602"
   },
   "eric-saubert": {
     "gsis": "00-0033576",
-    "team": "SEA",
+    "pos": "TE",
     "name": "Eric Saubert",
-    "pos": "TE"
+    "sleeper": "4189"
   },
   "brenden-bates": {
     "gsis": "00-0039458",
-    "team": "CLE",
-    "name": "Brenden Bates",
-    "pos": "TE"
+    "pos": "TE",
+    "name": "Brenden Bates"
   },
   "albert-okwuegbunam": {
     "gsis": "00-0036423",
-    "team": "LV",
+    "pos": "TE",
     "name": "Albert Okwuegbunam",
-    "pos": "TE"
+    "sleeper": "6843"
   },
   "devin-culp": {
     "gsis": "00-0039754",
-    "team": "TB",
+    "pos": "TE",
     "name": "Devin Culp",
-    "pos": "TE"
+    "sleeper": "11820"
   },
   "durham-smythe": {
     "gsis": "00-0034798",
-    "team": "CHI",
+    "pos": "TE",
     "name": "Durham Smythe",
-    "pos": "TE"
+    "sleeper": "5008"
   },
   "ben-sims": {
     "gsis": "00-0038809",
-    "team": "MIN",
+    "pos": "TE",
     "name": "Ben Sims",
-    "pos": "TE"
+    "sleeper": "11082"
   },
   "james-mitchell": {
     "gsis": "00-0037282",
-    "team": "CAR",
+    "pos": "TE",
     "name": "James Mitchell",
-    "pos": "TE"
+    "sleeper": "8170"
   },
   "malik-nabers": {
     "gsis": "00-0039337",
-    "team": "NYG",
-    "name": "Malik Nabers",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Malik Nabers"
   },
   "jayden-reed": {
     "gsis": "00-0039146",
-    "team": "GB",
-    "name": "Jayden Reed",
-    "pos": "WR"
+    "pos": "WR",
+    "name": "Jayden Reed"
+  },
+  "case-keenum": {
+    "gsis": "00-0028986",
+    "pos": "QB",
+    "name": "Case Keenum",
+    "sleeper": "1737"
+  },
+  "derek-carr": {
+    "gsis": "00-0031280",
+    "pos": "QB",
+    "name": "Derek Carr",
+    "sleeper": "2028"
+  },
+  "taylor-heinicke": {
+    "gsis": "00-0031800",
+    "pos": "QB",
+    "name": "Taylor Heinicke",
+    "sleeper": "2711"
+  },
+  "trevor-siemian": {
+    "gsis": "00-0032156",
+    "pos": "QB",
+    "name": "Trevor Siemian",
+    "sleeper": "2549"
+  },
+  "jeff-driskel": {
+    "gsis": "00-0032436",
+    "pos": "QB",
+    "name": "Jeff Driskel",
+    "sleeper": "3362"
+  },
+  "deshaun-watson": {
+    "gsis": "00-0033537",
+    "pos": "QB",
+    "name": "Deshaun Watson",
+    "sleeper": "4017"
+  },
+  "cj-beathard": {
+    "gsis": "00-0033936",
+    "pos": "QB",
+    "name": "C.J. Beathard",
+    "sleeper": "4127"
+  },
+  "mike-white": {
+    "gsis": "00-0034401",
+    "pos": "QB",
+    "name": "Mike White",
+    "sleeper": "5089"
+  },
+  "logan-woodside": {
+    "gsis": "00-0034438",
+    "pos": "QB",
+    "name": "Logan Woodside",
+    "sleeper": "5128"
+  },
+  "john-wolford": {
+    "gsis": "00-0034899",
+    "pos": "QB",
+    "name": "John Wolford",
+    "sleeper": "5806"
+  },
+  "will-grier": {
+    "gsis": "00-0035251",
+    "pos": "QB",
+    "name": "Will Grier",
+    "sleeper": "5903"
+  },
+  "easton-stick": {
+    "gsis": "00-0035282",
+    "pos": "QB",
+    "name": "Easton Stick",
+    "sleeper": "6185"
+  },
+  "tyree-jackson": {
+    "gsis": "00-0035356",
+    "pos": "TE",
+    "name": "Tyree Jackson",
+    "sleeper": "6040"
+  },
+  "bryce-perkins": {
+    "gsis": "00-0035939",
+    "pos": "QB",
+    "name": "Bryce Perkins",
+    "sleeper": "7335"
+  },
+  "ben-dinucci": {
+    "gsis": "00-0036384",
+    "pos": "QB",
+    "name": "Ben DiNucci",
+    "sleeper": "7143"
+  },
+  "feleipe-franks": {
+    "gsis": "00-0036825",
+    "pos": "TE",
+    "name": "Feleipe Franks",
+    "sleeper": "7531"
+  },
+  "sam-ehlinger": {
+    "gsis": "00-0036879",
+    "pos": "QB",
+    "name": "Sam Ehlinger",
+    "sleeper": "7583"
+  },
+  "kyle-trask": {
+    "gsis": "00-0036928",
+    "pos": "QB",
+    "name": "Kyle Trask",
+    "sleeper": "7605"
+  },
+  "sam-howell": {
+    "gsis": "00-0037077",
+    "pos": "QB",
+    "name": "Sam Howell",
+    "sleeper": "8162"
+  },
+  "skylar-thompson": {
+    "gsis": "00-0037327",
+    "pos": "QB",
+    "name": "Skylar Thompson",
+    "sleeper": "8206"
+  },
+  "bailey-zappe": {
+    "gsis": "00-0038108",
+    "pos": "QB",
+    "name": "Bailey Zappe",
+    "sleeper": "8157"
+  },
+  "desmond-ridder": {
+    "gsis": "00-0038122",
+    "pos": "QB",
+    "name": "Desmond Ridder",
+    "sleeper": "8159"
+  },
+  "sean-clifford": {
+    "gsis": "00-0038391",
+    "pos": "QB",
+    "name": "Sean Clifford",
+    "sleeper": "10983"
+  },
+  "tommy-devito": {
+    "gsis": "00-0038476",
+    "pos": "QB",
+    "name": "Tommy DeVito",
+    "sleeper": "11292"
+  },
+  "hendon-hooker": {
+    "gsis": "00-0038550",
+    "pos": "QB",
+    "name": "Hendon Hooker",
+    "sleeper": "9998"
+  },
+  "dorian-thompson-robinson": {
+    "gsis": "00-0038583",
+    "pos": "QB",
+    "name": "Dorian Thompson-Robinson",
+    "sleeper": "10862"
+  },
+  "malik-cunningham": {
+    "gsis": "00-0038911",
+    "pos": "WR",
+    "name": "Malik Cunningham",
+    "sleeper": "10860"
+  },
+  "jake-haener": {
+    "gsis": "00-0038998",
+    "pos": "QB",
+    "name": "Jake Haener",
+    "sleeper": "10215"
+  },
+  "stetson-bennett": {
+    "gsis": "00-0039107",
+    "pos": "QB",
+    "name": "Stetson Bennett",
+    "sleeper": "10857"
+  },
+  "will-levis": {
+    "gsis": "00-0039152",
+    "pos": "QB",
+    "name": "Will Levis",
+    "sleeper": "9999"
+  },
+  "nick-bellore": {
+    "gsis": "00-0028292",
+    "pos": "RB",
+    "name": "Nick Bellore",
+    "sleeper": "815"
+  },
+  "kyle-juszczyk": {
+    "gsis": "00-0029892",
+    "pos": "RB",
+    "name": "Kyle Juszczyk",
+    "sleeper": "1379"
+  },
+  "michael-burton": {
+    "gsis": "00-0031595",
+    "pos": "RB",
+    "name": "Michael Burton",
+    "sleeper": "2471"
+  },
+  "cj-ham": {
+    "gsis": "00-0032918",
+    "pos": "RB",
+    "name": "C.J. Ham",
+    "sleeper": "3832"
+  },
+  "patrick-ricard": {
+    "gsis": "00-0033376",
+    "pos": "RB",
+    "name": "Patrick Ricard",
+    "sleeper": "4353"
+  },
+  "joe-mixon": {
+    "gsis": "00-0033897",
+    "pos": "RB",
+    "name": "Joe Mixon",
+    "sleeper": "4018"
+  },
+  "jeff-wilson": {
+    "gsis": "00-0034115",
+    "pos": "RB",
+    "name": "Jeff Wilson",
+    "sleeper": "5284"
+  },
+  "mike-boone": {
+    "gsis": "00-0034208",
+    "pos": "RB",
+    "name": "Mike Boone",
+    "sleeper": "5209"
+  },
+  "nyheim-hines": {
+    "gsis": "00-0034367",
+    "pos": "RB",
+    "name": "Nyheim Hines",
+    "sleeper": "5347"
+  },
+  "chase-edmonds": {
+    "gsis": "00-0034681",
+    "pos": "RB",
+    "name": "Chase Edmonds",
+    "sleeper": "5000"
+  },
+  "royce-freeman": {
+    "gsis": "00-0034838",
+    "pos": "RB",
+    "name": "Royce Freeman",
+    "sleeper": "5046"
+  },
+  "alexander-mattison": {
+    "gsis": "00-0034972",
+    "pos": "RB",
+    "name": "Alexander Mattison",
+    "sleeper": "5987"
+  },
+  "alec-ingold": {
+    "gsis": "00-0035125",
+    "pos": "RB",
+    "name": "Alec Ingold",
+    "sleeper": "6109"
+  },
+  "myles-gaskin": {
+    "gsis": "00-0035311",
+    "pos": "RB",
+    "name": "Myles Gaskin",
+    "sleeper": "5980"
+  },
+  "craig-reynolds": {
+    "gsis": "00-0035567",
+    "pos": "RB",
+    "name": "Craig Reynolds",
+    "sleeper": "6659"
+  },
+  "travis-homer": {
+    "gsis": "00-0035594",
+    "pos": "RB",
+    "name": "Travis Homer",
+    "sleeper": "6012"
+  },
+  "dernest-johnson": {
+    "gsis": "00-0035628",
+    "pos": "RB",
+    "name": "D'Ernest Johnson",
+    "sleeper": "6694"
+  },
+  "jakob-johnson": {
+    "gsis": "00-0035726",
+    "pos": "RB",
+    "name": "Jakob Johnson",
+    "sleeper": "6202"
+  },
+  "jonathan-ward": {
+    "gsis": "00-0035924",
+    "pos": "RB",
+    "name": "Jonathan Ward",
+    "sleeper": "7087"
+  },
+  "giovanni-ricci": {
+    "gsis": "00-0035956",
+    "pos": "TE",
+    "name": "Giovanni Ricci",
+    "sleeper": "7216"
+  },
+  "patrick-taylor": {
+    "gsis": "00-0035973",
+    "pos": "RB",
+    "name": "Patrick Taylor",
+    "sleeper": "6963"
+  },
+  "salvon-ahmed": {
+    "gsis": "00-0036020",
+    "pos": "RB",
+    "name": "Salvon Ahmed",
+    "sleeper": "6918"
+  },
+  "reggie-gilliam": {
+    "gsis": "00-0036187",
+    "pos": "RB",
+    "name": "Reggie Gilliam",
+    "sleeper": "7204"
+  },
+  "aj-dillon": {
+    "gsis": "00-0036265",
+    "pos": "RB",
+    "name": "AJ Dillon",
+    "sleeper": "6828"
+  },
+  "darrynton-evans": {
+    "gsis": "00-0036297",
+    "pos": "RB",
+    "name": "Darrynton Evans",
+    "sleeper": "7064"
+  },
+  "clyde-edwards-helaire": {
+    "gsis": "00-0036360",
+    "pos": "RB",
+    "name": "Clyde Edwards-Helaire",
+    "sleeper": "6820"
+  },
+  "cam-akers": {
+    "gsis": "00-0036414",
+    "pos": "RB",
+    "name": "Cam Akers",
+    "sleeper": "6938"
+  },
+  "deejay-dallas": {
+    "gsis": "00-0036425",
+    "pos": "RB",
+    "name": "DeeJay Dallas",
+    "sleeper": "6931"
+  },
+  "keshawn-vaughn": {
+    "gsis": "00-0036450",
+    "pos": "RB",
+    "name": "Ke'Shawn Vaughn",
+    "sleeper": "6885"
+  },
+  "deon-jackson": {
+    "gsis": "00-0036493",
+    "pos": "RB",
+    "name": "Deon Jackson",
+    "sleeper": "7551"
+  },
+  "elijah-mitchell": {
+    "gsis": "00-0036567",
+    "pos": "RB",
+    "name": "Elijah Mitchell",
+    "sleeper": "7561"
+  },
+  "gary-brightwell": {
+    "gsis": "00-0036569",
+    "pos": "RB",
+    "name": "Gary Brightwell",
+    "sleeper": "7529"
+  },
+  "demetric-felton": {
+    "gsis": "00-0036654",
+    "pos": "RB",
+    "name": "Demetric Felton",
+    "sleeper": "7609"
+  },
+  "jermar-jefferson": {
+    "gsis": "00-0036670",
+    "pos": "RB",
+    "name": "Jermar Jefferson",
+    "sleeper": "7599"
+  },
+  "kene-nwangwu": {
+    "gsis": "00-0036842",
+    "pos": "RB",
+    "name": "Kene Nwangwu",
+    "sleeper": "7720"
+  },
+  "najee-harris": {
+    "gsis": "00-0036893",
+    "pos": "RB",
+    "name": "Najee Harris",
+    "sleeper": "7528"
+  },
+  "khalil-herbert": {
+    "gsis": "00-0036906",
+    "pos": "RB",
+    "name": "Khalil Herbert",
+    "sleeper": "7608"
+  },
+  "avery-williams": {
+    "gsis": "00-0036950",
+    "pos": "RB",
+    "name": "Avery Williams",
+    "sleeper": "7809"
+  },
+  "trey-sermon": {
+    "gsis": "00-0036984",
+    "pos": "RB",
+    "name": "Trey Sermon",
+    "sleeper": "7593"
+  },
+  "tyler-goodson": {
+    "gsis": "00-0037120",
+    "pos": "RB",
+    "name": "Tyler Goodson",
+    "sleeper": "8207"
+  },
+  "dameon-pierce": {
+    "gsis": "00-0037258",
+    "pos": "RB",
+    "name": "Dameon Pierce",
+    "sleeper": "8129"
+  },
+  "ty-chandler": {
+    "gsis": "00-0037276",
+    "pos": "RB",
+    "name": "Ty Chandler",
+    "sleeper": "8230"
+  },
+  "kevin-harris": {
+    "gsis": "00-0037286",
+    "pos": "RB",
+    "name": "Kevin Harris",
+    "sleeper": "8174"
+  },
+  "keaontay-ingram": {
+    "gsis": "00-0037299",
+    "pos": "RB",
+    "name": "Keaontay Ingram",
+    "sleeper": "8221"
+  },
+  "jashaun-corbin": {
+    "gsis": "00-0037410",
+    "pos": "RB",
+    "name": "Jashaun Corbin",
+    "sleeper": "8194"
+  },
+  "sincere-mccormick": {
+    "gsis": "00-0037509",
+    "pos": "RB",
+    "name": "Sincere McCormick",
+    "sleeper": "8220"
+  },
+  "julius-chestnut": {
+    "gsis": "00-0037594",
+    "pos": "RB",
+    "name": "Julius Chestnut",
+    "sleeper": "8254"
+  },
+  "hassan-haskins": {
+    "gsis": "00-0037617",
+    "pos": "RB",
+    "name": "Hassan Haskins",
+    "sleeper": "8123"
+  },
+  "velus-jones": {
+    "gsis": "00-0037745",
+    "pos": "RB",
+    "name": "Velus Jones Jr.",
+    "sleeper": "8223"
+  },
+  "tyrion-davis-price": {
+    "gsis": "00-0037827",
+    "pos": "RB",
+    "name": "Tyrion Davis-Price",
+    "sleeper": "8211"
+  },
+  "zamir-white": {
+    "gsis": "00-0038040",
+    "pos": "RB",
+    "name": "Zamir White",
+    "sleeper": "8139"
+  },
+  "pierre-strong": {
+    "gsis": "00-0038098",
+    "pos": "RB",
+    "name": "Pierre Strong",
+    "sleeper": "8116"
+  },
+  "israel-abanikanda": {
+    "gsis": "00-0038389",
+    "pos": "RB",
+    "name": "Israel Abanikanda",
+    "sleeper": "9227"
+  },
+  "eric-gray": {
+    "gsis": "00-0038396",
+    "pos": "RB",
+    "name": "Eric Gray",
+    "sleeper": "10223"
+  },
+  "evan-hull": {
+    "gsis": "00-0038397",
+    "pos": "RB",
+    "name": "Evan Hull",
+    "sleeper": "9220"
+  },
+  "deneric-prince": {
+    "gsis": "00-0038518",
+    "pos": "RB",
+    "name": "Deneric Prince",
+    "sleeper": "10870"
+  },
+  "deuce-vaughn": {
+    "gsis": "00-0038622",
+    "pos": "RB",
+    "name": "Deuce Vaughn",
+    "sleeper": "9505"
+  },
+  "kenny-mcintosh": {
+    "gsis": "00-0038636",
+    "pos": "RB",
+    "name": "Kenny McIntosh",
+    "sleeper": "10216"
+  },
+  "roschon-johnson": {
+    "gsis": "00-0039021",
+    "pos": "RB",
+    "name": "Roschon Johnson",
+    "sleeper": "10235"
+  },
+  "carson-steele": {
+    "gsis": "00-0039325",
+    "pos": "RB",
+    "name": "Carson Steele",
+    "sleeper": "11582"
+  },
+  "jonathon-brooks": {
+    "gsis": "00-0039344",
+    "pos": "RB",
+    "name": "Jonathon Brooks",
+    "sleeper": "11583"
+  },
+  "isaac-guerendo": {
+    "gsis": "00-0039363",
+    "pos": "RB",
+    "name": "Isaac Guerendo",
+    "sleeper": "11651"
+  },
+  "sione-vaki": {
+    "gsis": "00-0039364",
+    "pos": "RB",
+    "name": "Sione Vaki",
+    "sleeper": "11729"
+  },
+  "jase-mcclellan": {
+    "gsis": "00-0039393",
+    "pos": "RB",
+    "name": "Jase McClellan",
+    "sleeper": "11590"
+  },
+  "dylan-laube": {
+    "gsis": "00-0039407",
+    "pos": "RB",
+    "name": "Dylan Laube",
+    "sleeper": "11574"
+  },
+  "frank-gore": {
+    "gsis": "00-0039471",
+    "pos": "RB",
+    "name": "Frank Gore Jr.",
+    "sleeper": "11573"
+  },
+  "blake-watson": {
+    "gsis": "00-0039573",
+    "pos": "RB",
+    "name": "Blake Watson",
+    "sleeper": "11568"
+  },
+  "cody-schrader": {
+    "gsis": "00-0039703",
+    "pos": "RB",
+    "name": "Cody Schrader",
+    "sleeper": "11644"
+  },
+  "marshawn-lloyd": {
+    "gsis": "00-0039811",
+    "pos": "RB",
+    "name": "MarShawn Lloyd",
+    "sleeper": "11581"
+  },
+  "montrell-johnson": {
+    "gsis": "00-0040028",
+    "pos": "RB",
+    "name": "Montrell Johnson Jr.",
+    "sleeper": "12868"
+  },
+  "kaleb-johnson": {
+    "gsis": "00-0040142",
+    "pos": "RB",
+    "name": "Kaleb Johnson",
+    "sleeper": "12504"
+  },
+  "jordan-james": {
+    "gsis": "00-0040177",
+    "pos": "RB",
+    "name": "Jordan James",
+    "sleeper": "12467"
+  },
+  "dj-giddens": {
+    "gsis": "00-0040179",
+    "pos": "RB",
+    "name": "DJ Giddens",
+    "sleeper": "12471"
+  },
+  "kalel-mullings": {
+    "gsis": "00-0040205",
+    "pos": "RB",
+    "name": "Kalel Mullings",
+    "sleeper": "12516"
+  },
+  "tahj-brooks": {
+    "gsis": "00-0040208",
+    "pos": "RB",
+    "name": "Tahj Brooks",
+    "sleeper": "12543"
+  },
+  "robert-woods": {
+    "gsis": "00-0030431",
+    "pos": "WR",
+    "name": "Robert Woods",
+    "sleeper": "1352"
+  },
+  "adam-thielen": {
+    "gsis": "00-0030035",
+    "pos": "WR",
+    "name": "Adam Thielen",
+    "sleeper": "1689"
+  },
+  "odell-beckham": {
+    "gsis": "00-0031235",
+    "pos": "WR",
+    "name": "Odell Beckham Jr.",
+    "sleeper": "2078"
+  },
+  "brandin-cooks": {
+    "gsis": "00-0031236",
+    "pos": "WR",
+    "name": "Brandin Cooks",
+    "sleeper": "2197"
+  },
+  "amari-cooper": {
+    "gsis": "00-0031544",
+    "pos": "WR",
+    "name": "Amari Cooper",
+    "sleeper": "2309"
+  },
+  "phillip-dorsett": {
+    "gsis": "00-0032208",
+    "pos": "WR",
+    "name": "Phillip Dorsett",
+    "sleeper": "2334"
+  },
+  "deandre-carter": {
+    "gsis": "00-0031763",
+    "pos": "WR",
+    "name": "DeAndre Carter",
+    "sleeper": "2750"
+  },
+  "chris-moore": {
+    "gsis": "00-0032398",
+    "pos": "WR",
+    "name": "Chris Moore",
+    "sleeper": "3269"
+  },
+  "robbie-chosen": {
+    "gsis": "00-0032688",
+    "pos": "WR",
+    "name": "Robbie Chosen",
+    "sleeper": "3423"
+  },
+  "laquon-treadwell": {
+    "gsis": "00-0032951",
+    "pos": "WR",
+    "name": "Laquon Treadwell",
+    "sleeper": "3155"
+  },
+  "tyreek-hill": {
+    "gsis": "00-0033040",
+    "pos": "WR",
+    "name": "Tyreek Hill",
+    "sleeper": "3321"
+  },
+  "curtis-samuel": {
+    "gsis": "00-0033282",
+    "pos": "WR",
+    "name": "Curtis Samuel",
+    "sleeper": "4082"
+  },
+  "trent-taylor": {
+    "gsis": "00-0033292",
+    "pos": "WR",
+    "name": "Trent Taylor",
+    "sleeper": "4218"
+  },
+  "tim-patrick": {
+    "gsis": "00-0033375",
+    "pos": "WR",
+    "name": "Tim Patrick",
+    "sleeper": "4351"
+  },
+  "mike-williams": {
+    "gsis": "00-0033536",
+    "pos": "WR",
+    "name": "Mike Williams",
+    "sleeper": "4068"
+  },
+  "jamal-agnew": {
+    "gsis": "00-0033572",
+    "pos": "WR",
+    "name": "Jamal Agnew",
+    "sleeper": "4198"
+  },
+  "david-moore": {
+    "gsis": "00-0033589",
+    "pos": "WR",
+    "name": "David Moore",
+    "sleeper": "4274"
+  },
+  "noah-brown": {
+    "gsis": "00-0033591",
+    "pos": "WR",
+    "name": "Noah Brown",
+    "sleeper": "4234"
+  },
+  "zay-jones": {
+    "gsis": "00-0033891",
+    "pos": "WR",
+    "name": "Zay Jones",
+    "sleeper": "4080"
+  },
+  "josh-reynolds": {
+    "gsis": "00-0033943",
+    "pos": "WR",
+    "name": "Josh Reynolds",
+    "sleeper": "4171"
+  },
+  "river-cracraft": {
+    "gsis": "00-0034054",
+    "pos": "WR",
+    "name": "River Cracraft",
+    "sleeper": "4854"
+  },
+  "marquez-valdes-scantling": {
+    "gsis": "00-0034272",
+    "pos": "WR",
+    "name": "Marquez Valdes-Scantling",
+    "sleeper": "5086"
+  },
+  "keith-kirkwood": {
+    "gsis": "00-0034317",
+    "pos": "WR",
+    "name": "Keith Kirkwood",
+    "sleeper": "5134"
+  },
+  "anthony-miller": {
+    "gsis": "00-0034353",
+    "pos": "WR",
+    "name": "Anthony Miller",
+    "sleeper": "5013"
+  },
+  "justin-watson": {
+    "gsis": "00-0034386",
+    "pos": "WR",
+    "name": "Justin Watson",
+    "sleeper": "5374"
+  },
+  "deon-cain": {
+    "gsis": "00-0034406",
+    "pos": "WR",
+    "name": "Deon Cain",
+    "sleeper": "5101"
+  },
+  "ray-ray-mccloud": {
+    "gsis": "00-0034407",
+    "pos": "WR",
+    "name": "Ray-Ray McCloud",
+    "sleeper": "5096"
+  },
+  "russell-gage": {
+    "gsis": "00-0034411",
+    "pos": "WR",
+    "name": "Russell Gage",
+    "sleeper": "5110"
+  },
+  "cedrick-wilson": {
+    "gsis": "00-0034418",
+    "pos": "WR",
+    "name": "Cedrick Wilson Jr.",
+    "sleeper": "5113"
+  },
+  "braxton-berrios": {
+    "gsis": "00-0034419",
+    "pos": "WR",
+    "name": "Braxton Berrios",
+    "sleeper": "5121"
+  },
+  "trent-sherfield": {
+    "gsis": "00-0034487",
+    "pos": "WR",
+    "name": "Trent Sherfield",
+    "sleeper": "5154"
+  },
+  "allen-lazard": {
+    "gsis": "00-0034521",
+    "pos": "WR",
+    "name": "Allen Lazard",
+    "sleeper": "5185"
+  },
+  "michael-gallup": {
+    "gsis": "00-0034764",
+    "pos": "WR",
+    "name": "Michael Gallup",
+    "sleeper": "5038"
+  },
+  "christian-kirk": {
+    "gsis": "00-0034775",
+    "pos": "WR",
+    "name": "Christian Kirk",
+    "sleeper": "4950"
+  },
+  "calvin-ridley": {
+    "gsis": "00-0034837",
+    "pos": "WR",
+    "name": "Calvin Ridley",
+    "sleeper": "4981"
+  },
+  "khadarel-hodge": {
+    "gsis": "00-0034854",
+    "pos": "WR",
+    "name": "KhaDarel Hodge",
+    "sleeper": "5773"
+  },
+  "dante-pettis": {
+    "gsis": "00-0034860",
+    "pos": "WR",
+    "name": "Dante Pettis",
+    "sleeper": "4992"
+  },
+  "malik-turner": {
+    "gsis": "00-0034867",
+    "pos": "WR",
+    "name": "Malik Turner",
+    "sleeper": "5781"
+  },
+  "steven-sims": {
+    "gsis": "00-0034928",
+    "pos": "WR",
+    "name": "Steven Sims",
+    "sleeper": "6402"
+  },
+  "hunter-renfrow": {
+    "gsis": "00-0034983",
+    "pos": "WR",
+    "name": "Hunter Renfrow",
+    "sleeper": "5955"
+  },
+  "ashton-dulin": {
+    "gsis": "00-0035021",
+    "pos": "WR",
+    "name": "Ashton Dulin",
+    "sleeper": "6427"
+  },
+  "mecole-hardman": {
+    "gsis": "00-0035140",
+    "pos": "WR",
+    "name": "Mecole Hardman",
+    "sleeper": "5917"
+  },
+  "diontae-johnson": {
+    "gsis": "00-0035216",
+    "pos": "WR",
+    "name": "Diontae Johnson",
+    "sleeper": "5937"
+  },
+  "scott-miller": {
+    "gsis": "00-0035298",
+    "pos": "WR",
+    "name": "Scott Miller",
+    "sleeper": "6290"
+  },
+  "trenton-irwin": {
+    "gsis": "00-0035341",
+    "pos": "WR",
+    "name": "Trenton Irwin",
+    "sleeper": "6598"
+  },
+  "david-sills": {
+    "gsis": "00-0035359",
+    "pos": "WR",
+    "name": "David Sills",
+    "sleeper": "6154"
+  },
+  "liljordan-humphrey": {
+    "gsis": "00-0035406",
+    "pos": "WR",
+    "name": "Lil'Jordan Humphrey",
+    "sleeper": "5938"
+  },
+  "malik-taylor": {
+    "gsis": "00-0035480",
+    "pos": "WR",
+    "name": "Malik Taylor",
+    "sleeper": "6239"
+  },
+  "juwann-winfree": {
+    "gsis": "00-0035593",
+    "pos": "WR",
+    "name": "Juwann Winfree",
+    "sleeper": "6223"
+  },
+  "parris-campbell": {
+    "gsis": "00-0035639",
+    "pos": "WR",
+    "name": "Parris Campbell",
+    "sleeper": "5880"
+  },
+  "miles-boykin": {
+    "gsis": "00-0035703",
+    "pos": "WR",
+    "name": "Miles Boykin",
+    "sleeper": "5965"
+  },
+  "cody-white": {
+    "gsis": "00-0035891",
+    "pos": "WR",
+    "name": "Cody White",
+    "sleeper": "7039"
+  },
+  "james-proche": {
+    "gsis": "00-0036133",
+    "pos": "WR",
+    "name": "James Proche",
+    "sleeper": "6957"
+  },
+  "isaiah-hodgins": {
+    "gsis": "00-0036165",
+    "pos": "WR",
+    "name": "Isaiah Hodgins",
+    "sleeper": "6920"
+  },
+  "nick-westbrook-ikhine": {
+    "gsis": "00-0036182",
+    "pos": "WR",
+    "name": "Nick Westbrook-Ikhine",
+    "sleeper": "7496"
+  },
+  "gabe-davis": {
+    "gsis": "00-0036196",
+    "pos": "WR",
+    "name": "Gabe Davis",
+    "sleeper": "6943"
+  },
+  "marquez-callaway": {
+    "gsis": "00-0036219",
+    "pos": "WR",
+    "name": "Marquez Callaway",
+    "sleeper": "6989"
+  },
+  "brandon-aiyuk": {
+    "gsis": "00-0036261",
+    "pos": "WR",
+    "name": "Brandon Aiyuk",
+    "sleeper": "6803"
+  },
+  "laviska-shenault": {
+    "gsis": "00-0036268",
+    "pos": "WR",
+    "name": "Laviska Shenault Jr.",
+    "sleeper": "6814"
+  },
+  "quez-watkins": {
+    "gsis": "00-0036271",
+    "pos": "WR",
+    "name": "Quez Watkins",
+    "sleeper": "6927"
+  },
+  "devin-duvernay": {
+    "gsis": "00-0036331",
+    "pos": "WR",
+    "name": "Devin Duvernay",
+    "sleeper": "6847"
+  },
+  "kj-osborn": {
+    "gsis": "00-0036345",
+    "pos": "WR",
+    "name": "K.J. Osborn",
+    "sleeper": "7066"
+  },
+  "jalen-reagor": {
+    "gsis": "00-0036387",
+    "pos": "WR",
+    "name": "Jalen Reagor",
+    "sleeper": "6798"
+  },
+  "tyler-johnson": {
+    "gsis": "00-0036427",
+    "pos": "WR",
+    "name": "Tyler Johnson",
+    "sleeper": "6960"
+  },
+  "chris-blair": {
+    "gsis": "00-0036463",
+    "pos": "WR",
+    "name": "Chris Blair",
+    "sleeper": "7521"
+  },
+  "tim-jones": {
+    "gsis": "00-0036497",
+    "pos": "WR",
+    "name": "Tim Jones",
+    "sleeper": "8013"
+  },
+  "rashod-bateman": {
+    "gsis": "00-0036550",
+    "pos": "WR",
+    "name": "Rashod Bateman",
+    "sleeper": "7571"
+  },
+  "dyami-brown": {
+    "gsis": "00-0036626",
+    "pos": "WR",
+    "name": "Dyami Brown",
+    "sleeper": "7587"
+  },
+  "tylan-wallace": {
+    "gsis": "00-0036630",
+    "pos": "WR",
+    "name": "Tylan Wallace",
+    "sleeper": "7595"
+  },
+  "cornell-powell": {
+    "gsis": "00-0036647",
+    "pos": "WR",
+    "name": "Cornell Powell",
+    "sleeper": "7541"
+  },
+  "tutu-atwell": {
+    "gsis": "00-0036849",
+    "pos": "WR",
+    "name": "Tutu Atwell",
+    "sleeper": "7562"
+  },
+  "ben-skowronek": {
+    "gsis": "00-0036862",
+    "pos": "WR",
+    "name": "Ben Skowronek",
+    "sleeper": "7757"
+  },
+  "rondale-moore": {
+    "gsis": "00-0036936",
+    "pos": "WR",
+    "name": "Rondale Moore",
+    "sleeper": "7601"
+  },
+  "terrace-marshall": {
+    "gsis": "00-0036955",
+    "pos": "WR",
+    "name": "Terrace Marshall Jr.",
+    "sleeper": "7565"
+  },
+  "elijah-moore": {
+    "gsis": "00-0036980",
+    "pos": "WR",
+    "name": "Elijah Moore",
+    "sleeper": "7596"
+  },
+  "josh-palmer": {
+    "gsis": "00-0036988",
+    "pos": "WR",
+    "name": "Josh Palmer",
+    "sleeper": "7670"
+  },
+  "dareke-young": {
+    "gsis": "00-0037093",
+    "pos": "WR",
+    "name": "Dareke Young",
+    "sleeper": "8527"
+  },
+  "britain-covey": {
+    "gsis": "00-0037132",
+    "pos": "WR",
+    "name": "Britain Covey",
+    "sleeper": "8414"
+  },
+  "david-bell": {
+    "gsis": "00-0037257",
+    "pos": "WR",
+    "name": "David Bell",
+    "sleeper": "8118"
+  },
+  "jalen-tolbert": {
+    "gsis": "00-0037666",
+    "pos": "WR",
+    "name": "Jalen Tolbert",
+    "sleeper": "8117"
+  },
+  "jahan-dotson": {
+    "gsis": "00-0037741",
+    "pos": "WR",
+    "name": "Jahan Dotson",
+    "sleeper": "8119"
+  },
+  "treylon-burks": {
+    "gsis": "00-0037742",
+    "pos": "WR",
+    "name": "Treylon Burks",
+    "sleeper": "8135"
+  },
+  "skyy-moore": {
+    "gsis": "00-0038090",
+    "pos": "WR",
+    "name": "Skyy Moore",
+    "sleeper": "8168"
+  },
+  "malik-heath": {
+    "gsis": "00-0038465",
+    "pos": "WR",
+    "name": "Malik Heath",
+    "sleeper": "11210"
+  },
+  "jason-brownlee": {
+    "gsis": "00-0038492",
+    "pos": "WR",
+    "name": "Jason Brownlee",
+    "sleeper": "11311"
+  },
+  "xavier-gipson": {
+    "gsis": "00-0038496",
+    "pos": "WR",
+    "name": "Xavier Gipson",
+    "sleeper": "11306"
+  },
+  "derius-davis": {
+    "gsis": "00-0038573",
+    "pos": "WR",
+    "name": "Derius Davis",
+    "sleeper": "10234"
+  },
+  "charlie-jones": {
+    "gsis": "00-0038576",
+    "pos": "WR",
+    "name": "Charlie Jones",
+    "sleeper": "10228"
+  },
+  "justin-shorter": {
+    "gsis": "00-0038590",
+    "pos": "WR",
+    "name": "Justin Shorter",
+    "sleeper": "9489"
+  },
+  "marcedes-lewis": {
+    "gsis": "00-0024243",
+    "pos": "TE",
+    "name": "Marcedes Lewis",
+    "sleeper": "111"
+  },
+  "chris-manhertz": {
+    "gsis": "00-0031484",
+    "pos": "TE",
+    "name": "Chris Manhertz",
+    "sleeper": "3048"
+  },
+  "nick-vannett": {
+    "gsis": "00-0032394",
+    "pos": "TE",
+    "name": "Nick Vannett",
+    "sleeper": "3258"
+  },
+  "pharaoh-brown": {
+    "gsis": "00-0033439",
+    "pos": "TE",
+    "name": "Pharaoh Brown",
+    "sleeper": "4443"
+  },
+  "robert-tonyan": {
+    "gsis": "00-0033757",
+    "pos": "TE",
+    "name": "Robert Tonyan",
+    "sleeper": "4602"
+  },
+  "ross-dwelley": {
+    "gsis": "00-0034073",
+    "pos": "TE",
+    "name": "Ross Dwelley",
+    "sleeper": "5285"
+  },
+  "jordan-akins": {
+    "gsis": "00-0034364",
+    "pos": "TE",
+    "name": "Jordan Akins",
+    "sleeper": "5032"
+  },
+  "irv-smith": {
+    "gsis": "00-0034970",
+    "pos": "TE",
+    "name": "Irv Smith",
+    "sleeper": "6126"
+  },
+  "stephen-carlson": {
+    "gsis": "00-0035039",
+    "pos": "TE",
+    "name": "Stephen Carlson",
+    "sleeper": "6451"
+  },
+  "donald-parham": {
+    "gsis": "00-0035329",
+    "pos": "TE",
+    "name": "Donald Parham",
+    "sleeper": "6074"
+  },
+  "sean-mckeon": {
+    "gsis": "00-0036032",
+    "pos": "TE",
+    "name": "Sean McKeon",
+    "sleeper": "6964"
+  },
+  "lawrence-cager": {
+    "gsis": "00-0036145",
+    "pos": "TE",
+    "name": "Lawrence Cager",
+    "sleeper": "7106"
+  },
+  "dalton-keene": {
+    "gsis": "00-0036225",
+    "pos": "TE",
+    "name": "Dalton Keene",
+    "sleeper": "7082"
+  },
+  "harrison-bryant": {
+    "gsis": "00-0036232",
+    "pos": "TE",
+    "name": "Harrison Bryant",
+    "sleeper": "6850"
+  },
+  "kenny-yeboah": {
+    "gsis": "00-0036510",
+    "pos": "TE",
+    "name": "Kenny Yeboah",
+    "sleeper": "7597"
+  },
+  "brevin-jordan": {
+    "gsis": "00-0036556",
+    "pos": "TE",
+    "name": "Brevin Jordan",
+    "sleeper": "7568"
+  },
+  "cole-turner": {
+    "gsis": "00-0037078",
+    "pos": "TE",
+    "name": "Cole Turner",
+    "sleeper": "8214"
+  },
+  "teagan-quitoriano": {
+    "gsis": "00-0037277",
+    "pos": "TE",
+    "name": "Teagan Quitoriano",
+    "sleeper": "8227"
+  },
+  "ko-kieft": {
+    "gsis": "00-0037311",
+    "pos": "TE",
+    "name": "Ko Kieft",
+    "sleeper": "8484"
+  },
+  "lucas-krull": {
+    "gsis": "00-0037539",
+    "pos": "TE",
+    "name": "Lucas Krull",
+    "sleeper": "8249"
+  },
+  "jelani-woods": {
+    "gsis": "00-0037755",
+    "pos": "TE",
+    "name": "Jelani Woods",
+    "sleeper": "8219"
+  },
+  "will-mallory": {
+    "gsis": "00-0038394",
+    "pos": "TE",
+    "name": "Will Mallory",
+    "sleeper": "10220"
+  },
+  "payne-durham": {
+    "gsis": "00-0039050",
+    "pos": "TE",
+    "name": "Payne Durham",
+    "sleeper": "10227"
+  },
+  "tanner-mclachlan": {
+    "gsis": "00-0039399",
+    "pos": "TE",
+    "name": "Tanner McLachlan",
+    "sleeper": "11598"
+  },
+  "jaheim-bell": {
+    "gsis": "00-0039420",
+    "pos": "TE",
+    "name": "Jaheim Bell",
+    "sleeper": "11605"
+  },
+  "tip-reiman": {
+    "gsis": "00-0039737",
+    "pos": "TE",
+    "name": "Tip Reiman",
+    "sleeper": "11716"
+  },
+  "erick-all": {
+    "gsis": "00-0039814",
+    "pos": "TE",
+    "name": "Erick All",
+    "sleeper": "11592"
+  },
+  "jared-wiley": {
+    "gsis": "00-0039824",
+    "pos": "TE",
+    "name": "Jared Wiley",
+    "sleeper": "11595"
+  },
+  "gavin-bartholomew": {
+    "gsis": "00-0040215",
+    "pos": "TE",
+    "name": "Gavin Bartholomew",
+    "sleeper": "12700"
+  },
+  "thomas-fidone": {
+    "gsis": "00-0040225",
+    "pos": "TE",
+    "name": "Thomas Fidone II",
+    "sleeper": "12715"
+  },
+  "luke-lachey": {
+    "gsis": "00-0040250",
+    "pos": "TE",
+    "name": "Luke Lachey",
+    "sleeper": "12725"
+  },
+  "caden-prieskorn": {
+    "gsis": "00-0040392",
+    "pos": "TE",
+    "name": "Caden Prieskorn",
+    "sleeper": "12933"
   }
 }

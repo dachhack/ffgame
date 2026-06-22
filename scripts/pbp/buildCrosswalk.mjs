@@ -1,12 +1,17 @@
-// Build a slug -> gsis_id crosswalk for EVERY skill player in season_ids.csv
-// (the full pulled universe — not just league-rostered players), so the PBP
-// generator bakes real play-by-play for a wide net. gsis IDs come from
-// season_ids.csv (pulled from Stathead get_player_season_stats); league rosters
-// (src/data/league.ts) are read only for a coverage report.
+// Build a slug -> {gsis, pos, name, sleeper} crosswalk for the full skill-player
+// universe, so the PBP generator bakes real play-by-play for a wide net. Two
+// sources, merged by slug:
+//   • season_ids.csv      — Stathead season-stats pull (name,pos,team,gsis)
+//   • crosswalk_extra.csv — Stathead get_player_crosswalk (pos,gsis,name,sleeper)
+//     adds depth players beyond the season-stats top-100/pos AND the Sleeper id.
+// Team is intentionally omitted here — genRealPbp.mjs derives each slug's 2025
+// team from the play-by-play (authoritative, and immune to offseason team moves).
+// league.ts rosters are read only for a coverage report.
 // Run: node scripts/pbp/buildCrosswalk.mjs  -> writes scripts/pbp/crosswalk.json
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const here = new URL('.', import.meta.url);
+const SKILL = new Set(['QB', 'RB', 'WR', 'TE']);
 
 // normName MUST mirror src/data/players.ts exactly.
 function normName(raw) {
@@ -30,28 +35,36 @@ while ((m = rosterRe.exec(leagueSrc))) {
   leaguePlayers.push({ name, pos: m[2] });
 }
 
-// ── Index gsis IDs by normalized name (first wins, like STAT_INDEX) ──
-const idsCsv = readFileSync(new URL('season_ids.csv', here), 'utf8').trim().split('\n');
-idsCsv.shift(); // header
-const byName = new Map();
-for (const line of idsCsv) {
-  const [name, pos, team, gsis] = line.split(',');
-  const key = normName(name);
-  if (!byName.has(key)) byName.set(key, { name, pos, team, gsis });
-}
+// ── Collect source rows {name, pos, gsis, sleeper?} from both files ──
+const rows = [];
+const readCsv = (file, map) => {
+  let txt; try { txt = readFileSync(new URL(file, here), 'utf8'); } catch { return; }
+  const lines = txt.trim().split('\n'); lines.shift(); // header
+  for (const line of lines) { const r = map(line.split(',')); if (r) rows.push(r); }
+};
+// season_ids.csv: name,pos,team,gsis_id
+readCsv('season_ids.csv', ([name, pos, , gsis]) => name && SKILL.has(pos) && gsis ? { name, pos, gsis, sleeper: '' } : null);
+// crosswalk_extra.csv: position,gsis_id,display_name,sleeper_id
+readCsv('crosswalk_extra.csv', ([pos, gsis, name, sleeper]) => name && SKILL.has(pos) && gsis ? { name, pos, gsis, sleeper: (sleeper || '').trim() } : null);
 
-// ── Build the crosswalk from EVERY season_ids row (slug-keyed; byName already
-// deduped normalized-name collisions, first wins) ──
+// ── Merge by slug (first wins; later rows only fill in a missing sleeper id) ──
 const crosswalk = {};
-for (const { name, pos, team, gsis } of byName.values()) {
-  crosswalk[slugOf(name)] = { gsis, team, name, pos };
+let withSleeper = 0;
+for (const { name, pos, gsis, sleeper } of rows) {
+  const slug = slugOf(name);
+  if (!crosswalk[slug]) {
+    crosswalk[slug] = { gsis, pos, name, ...(sleeper ? { sleeper } : {}) };
+    if (sleeper) withSleeper++;
+  } else if (sleeper && !crosswalk[slug].sleeper) {
+    crosswalk[slug].sleeper = sleeper; withSleeper++;
+  }
 }
 
 writeFileSync(new URL('crosswalk.json', here), JSON.stringify(crosswalk, null, 2));
-console.log(`season_ids players: ${byName.size}`);
-console.log(`crosswalk slugs:    ${Object.keys(crosswalk).length}`);
+console.log(`source rows:     ${rows.length}`);
+console.log(`crosswalk slugs: ${Object.keys(crosswalk).length} (${withSleeper} with sleeper id)`);
 
 // ── Coverage report: any league-rostered player we still can't bake? ──
 const unmatched = leaguePlayers.filter((p) => !crosswalk[slugOf(p.name)]);
-console.log(`league players:     ${leaguePlayers.length}, covered: ${leaguePlayers.length - unmatched.length}, unmatched: ${unmatched.length}`);
+console.log(`league players:  ${leaguePlayers.length}, covered: ${leaguePlayers.length - unmatched.length}, unmatched: ${unmatched.length}`);
 for (const u of unmatched) console.log(`  ✗ ${u.name} (${u.pos})`);

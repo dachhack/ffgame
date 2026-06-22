@@ -8,6 +8,7 @@
 import type { League, FantasyTeam, Player, Pos, PlayerStats, ScheduleGame } from '../types';
 import { normName, shortName } from './players';
 import { BAKED_SLUGS } from './bakedSlugs';
+import { SLEEPER_SLUG } from './sleeperSlug';
 import { setSyntheticWeeks, type RealPlay } from './realPbp';
 import { loadPlayerDirectory, type PlayerMeta } from './sleeperPlayers';
 import { REG_SEASON_WEEKS, type BuiltLeague } from './league';
@@ -32,6 +33,10 @@ function engineId(meta: PlayerMeta): { id: string; baked: boolean; team: string 
   const team = normTeam(meta.team);
   if (meta.pos === 'DEF') return { id: `${(team || meta.id).toLowerCase()}-dst`, baked: true, team: team || meta.id };
   if (meta.pos === 'K' && team) return { id: `${team.toLowerCase()}-k`, baked: true, team };
+  // Exact Sleeper-id → baked slug (most reliable); else fall back to a normalized
+  // name match; else synthesize.
+  const exact = SLEEPER_SLUG[meta.id];
+  if (exact && BAKED_SLUGS[exact]) return { id: exact, baked: true, team: BAKED_SLUGS[exact].team };
   const slug = normName(meta.full).replace(/\s+/g, '-');
   if (BAKED_SLUGS[slug] && BAKED_SLUGS[slug].pos === meta.pos) return { id: slug, baked: true, team: BAKED_SLUGS[slug].team };
   return { id: `sl-${meta.id}`, baked: false, team };
