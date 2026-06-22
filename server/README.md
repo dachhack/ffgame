@@ -41,18 +41,35 @@ node src/cli.js inj-once                      # one injury poll
 - **scoreboard** — every tick (lock detection + which games to poll).
 - **plays** — `PLAYS_POLL_MS` (~25s) during live windows → resolve live matchups.
 
-## What's wired vs. stubbed
-**Wired:** Sleeper sync, all three pollers, lock/reveal, resolution data-flow,
-Realtime-ready writes. The live (non-DB) paths are smoke-tested against real
-Sleeper/ESPN data (player index + `espn_id` bridge + scoreboard).
+## Real engine resolution
+The worker resolves the **actual Drip game** — not placeholder points — by running
+the SAME TypeScript engine the client runs (`src/engine/sim.ts`), via `tsx`
+(`server/src/engine.js`). One source of truth, no compiled copy to drift.
 
-**The one seam — scoring.** `resolve.js:baseScore` computes base fantasy points
-(PPR + K + DST). The actual game — hidden metrics and their effects
-(nuke/erase/streak/…) + the drip economy — lives in `src/engine/{sim,matchup}.ts`.
-Next step: extract that engine into a package both the React client and this
-worker import, then swap `baseScore` for `buildMatchup()` so authoritative
-resolution equals the client's optimistic display. The `RealPlay` contract is
-already shared, so this is a packaging task, not a rewrite.
+- Live `live_play` rows are injected through `realPbp.ts:setSyntheticWeeks()` (the
+  same hook the client uses for live Sleeper leagues), so `resolveSlot` reads them
+  transparently via `realPbpFor(week, slug)`.
+- When **both** managers are enrolled, `resolve.js` pairs their sealed picks by
+  `(game_window, roster_slot)` and resolves each with full metric effects
+  (nuke/erase/streak/drip). When an opponent isn't enrolled, it falls back to base
+  fantasy points off their real Sleeper starters (`baseScore`).
+- Proof it runs in Node: `npm run smoke` (`test/engine-smoke.mjs`) injects a baked
+  2025 week and resolves real matchups — e.g. a rushing-TD NUKE wiping the
+  opponent's bank to 0, exactly as the client engine does.
+
+**Still simplified vs the client's `buildMatchup`:** no best-ball backups, coin
+economy, or cross-window Field-General multiplier yet — those live in
+`matchup.ts` and can be layered on when the pilot needs them. The `RealPlay`
+contract stays frozen.
+
+> Runs under `tsx` so the `.ts` engine imports resolve in Node — see the
+> `start` / `cli` / `smoke` scripts.
+
+## What's wired vs. untested
+**Wired + smoke-tested (no DB needed):** the engine bridge, player index +
+`espn_id` bridge, scoreboard normalize, and the ESPN adapters. **Untested only for
+lack of network to Supabase from this sandbox:** the DB reads/writes (sync, poll
+upserts, lock, resolve persistence) — they run on a normal network / at deploy.
 
 ## Slug resolution
 Plays/picks/lineups/injuries all key on one slug = `slugOf(full_name)`. Play text

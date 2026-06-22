@@ -54,7 +54,7 @@ async function tick() {
 
   // Resolve every live matchup for the week.
   const { data: live } = await db().from('matchup').select('*').eq('week', week).in('status', ['live', 'final']);
-  for (const m of live ?? []) { try { await resolveMatchup(m); } catch (e) { log('resolve', m.id, e.message); } }
+  for (const m of live ?? []) { try { await resolveMatchup(m, playerIndex); } catch (e) { log('resolve', m.id, e.message); } }
 
   // Finalize when the slate is complete.
   if (games.length && games.every((g) => g.completed)) {

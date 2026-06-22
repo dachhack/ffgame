@@ -17,6 +17,7 @@ export async function buildPlayerIndex() {
   const byEspnId = new Map(); // "12345" -> slug
   const byName = new Map();   // normName(full) -> slug
   const bySleeperId = new Map(); // sleeper player_id -> { slug, full, pos, team, espnId }
+  const bySlug = new Map();    // slug -> { full, pos, team } (for engine Player objects)
   for (const [sid, p] of Object.entries(players)) {
     const full = p.full_name || [p.first_name, p.last_name].filter(Boolean).join(' ');
     if (!full) continue;
@@ -24,11 +25,13 @@ export async function buildPlayerIndex() {
     bySleeperId.set(sid, { slug, full, pos: p.position, team: p.team, espnId: p.espn_id ? String(p.espn_id) : null });
     if (p.espn_id) byEspnId.set(String(p.espn_id), slug);
     if (!byName.has(normName(full))) byName.set(normName(full), slug);
+    if (!bySlug.has(slug)) bySlug.set(slug, { full, pos: p.position, team: p.team });
   }
   return {
     slugForEspnId: (id) => (id != null ? byEspnId.get(String(id)) ?? null : null),
     slugForName: (name) => byName.get(normName(name)) ?? null,
     sleeper: (sid) => bySleeperId.get(String(sid)) ?? null,
+    metaForSlug: (slug) => bySlug.get(slug) ?? null,
     size: bySleeperId.size,
   };
 }
