@@ -74,12 +74,16 @@ export function Splash() {
             </div>
           </div>
 
-          <div style={{ textAlign: 'center', marginTop: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <button onClick={() => { exitSimLeague(); navigate({ name: 'demo' }); }} className="mono" style={{ width: '100%', marginTop: 14, fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 6, padding: '13px 0', cursor: 'pointer' }}>
+            ▶ New here? Watch the 60-second demo
+          </button>
+
+          <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <button onClick={() => navigate({ name: 'live' })} className="mono" style={{ width: '100%', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '12px 0', cursor: 'pointer' }}>
               {signedIn ? '↩ continue to your live H2H league →' : '◈ Have a pilot invite? Join the live H2H league →'}
             </button>
             <button onClick={() => { exitSimLeague(); navigate({ name: 'hub' }); }} className="mono" style={{ background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', cursor: 'pointer' }}>
-              or explore the demo league →
+              or explore the demo league hands-on →
             </button>
           </div>
         </div>
