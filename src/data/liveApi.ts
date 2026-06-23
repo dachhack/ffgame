@@ -141,3 +141,36 @@ export async function savePicks(matchupId: string, userId: string, rows: PickRow
   const { error } = await client().from('sealed_pick').upsert(payload, { onConflict: 'matchup_id,app_user_id,game_window,roster_slot' });
   if (error) throw error;
 }
+
+// ── Live board (Realtime) ───────────────────────────────────────────────────────
+export interface WindowScore { game_window: string; home_score: number; away_score: number; }
+export interface RevealedPick { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null; locked: boolean; }
+
+/** Re-read a matchup's row (status / lock_at / finals may have changed). */
+export async function getMatchup(matchupId: string): Promise<LiveMatchup | null> {
+  const { data } = await client().from('matchup').select('*').eq('id', matchupId).maybeSingle();
+  return (data as LiveMatchup) ?? null;
+}
+
+/** Per-window engine scores for a matchup (written by the worker's resolver). */
+export async function getMatchupState(matchupId: string): Promise<WindowScore[]> {
+  const { data } = await client().from('matchup_state').select('game_window, home_score, away_score').eq('matchup_id', matchupId);
+  return (data ?? []) as WindowScore[];
+}
+
+/** Sealed picks visible under RLS: always yours; the opponent's only once locked. */
+export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[]> {
+  const { data } = await client().from('sealed_pick')
+    .select('app_user_id, game_window, roster_slot, player_slug, metric_id, locked').eq('matchup_id', matchupId);
+  return (data ?? []) as RevealedPick[];
+}
+
+/** Subscribe to live score changes for a matchup. Returns an unsubscribe fn. */
+export function subscribeMatchup(matchupId: string, onChange: () => void): () => void {
+  const c = client();
+  const ch = c.channel(`mw-${matchupId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'matchup_state', filter: `matchup_id=eq.${matchupId}` }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'matchup', filter: `id=eq.${matchupId}` }, onChange)
+    .subscribe();
+  return () => { c.removeChannel(ch); };
+}

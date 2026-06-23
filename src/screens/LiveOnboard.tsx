@@ -9,6 +9,7 @@ import {
   type Enrollment, type LeaguePreview,
 } from '../data/liveApi';
 import { LivePicks } from './LivePicks';
+import { LiveBoard } from './LiveBoard';
 import type { Session } from '@supabase/supabase-js';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
@@ -121,7 +122,7 @@ function SignIn() {
 
 function Enroll({ session }: { session: Session }) {
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
-  const [view, setView] = useState<'home' | 'commish' | 'picks'>('home');
+  const [view, setView] = useState<'home' | 'commish' | 'picks' | 'board'>('home');
 
   const refresh = async () => {
     try { await ensureAppUser(session); setEnrollments(await myEnrollments(session.user.id)); }
@@ -131,12 +132,14 @@ function Enroll({ session }: { session: Session }) {
 
   if (view === 'commish') return <CommishVerify onBack={() => { setView('home'); refresh(); }} />;
   if (view === 'picks') return <LivePicks userId={session.user.id} onBack={() => setView('home')} />;
+  if (view === 'board') return <LiveBoard userId={session.user.id} onBack={() => setView('home')} />;
   if (enrollments === null) return <Muted text="Loading your leagues…" />;
   return (
     <>
       {enrollments.length > 0 ? <Enrolled enrollments={enrollments} /> : <RedeemForm onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {enrollments.length > 0 && <button onClick={() => setView('picks')} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◈ set your lineup →</button>}
+        {enrollments.length > 0 && <button onClick={() => setView('board')} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board →</button>}
         <button onClick={() => setView('commish')} className="mono" style={linkBtn}>I’m the commissioner — verify my league →</button>
       </div>
     </>
