@@ -11,6 +11,7 @@
 // NOTE: run anything importing this under tsx (see package.json scripts), so the
 // .ts imports resolve in Node.
 import { resolveSlot, EMPTY_PLAYER } from '../../src/engine/sim.ts';
+import { resolveLiveMatchup } from '../../src/engine/liveResolve.ts';
 import { setSyntheticWeeks, clearSyntheticWeeks } from '../../src/data/realPbp.ts';
 
 const ZERO_STATS = {
@@ -24,7 +25,7 @@ export function makePlayer(slug, pos, team, full) {
 }
 
 export const EMPTY = EMPTY_PLAYER;
-export { clearSyntheticWeeks };
+export { clearSyntheticWeeks, resolveLiveMatchup };
 
 /** Inject a week's plays so the engine sees them via realPbpFor(week, slug).
  *  bySlug: { [slug]: RealPlay[] } (the live_play rows in RealPlay shape). */

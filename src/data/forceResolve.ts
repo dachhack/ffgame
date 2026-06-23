@@ -4,7 +4,7 @@
 // src/engine/sim.ts the demo runs. Writes per-window scores via admin_set_state.
 import type { Player } from '../types';
 import { WINDOWS, defaultMetric } from './metrics';
-import { resolveSlot, EMPTY_PLAYER, type SlotInput } from '../engine/sim';
+import { resolveLiveMatchup, type LivePick } from '../engine/liveResolve';
 import { loadRealWeek } from './realPbp';
 import { slugMeta as meta } from './slugMeta';
 import { adminMatchupPicks, adminSetMatchup, adminSetState, type MatchupPicks } from './liveApi';
@@ -36,33 +36,15 @@ function sideSlots(data: MatchupPicks, side: 'home' | 'away'): Slot[] {
   return out;
 }
 
+const toLivePick = (s: Slot): LivePick => ({ win: s.win, slot: s.slot, player: mkPlayer(s.slug), metricId: s.metric });
+
 /** Resolve a matchup from baked week `sourceWeek`, set it live, and write scores.
- *  Returns the per-window result. */
+ *  Runs the shared resolver (cross-window Field General + best-ball backups), the
+ *  same one the worker uses, so this preview matches live scoring. */
 export async function forceResolve(matchupId: string, sourceWeek: number): Promise<{ window: string; home: number; away: number }[]> {
   const data = await adminMatchupPicks(matchupId);
   await loadRealWeek(sourceWeek); // baked plays into the engine's cache
-  const home = sideSlots(data, 'home');
-  const away = new Map(sideSlots(data, 'away').map((s) => [`${s.win}-${s.slot}`, s]));
-
-  const win: Record<string, { home: number; away: number }> = {};
-  const bump = (w: string, side: 'home' | 'away', v: number) => { (win[w] ||= { home: 0, away: 0 })[side] += v; };
-  const si = (s: Slot): SlotInput => ({ player: mkPlayer(s.slug), metricId: s.metric });
-  const empty: SlotInput = { player: EMPTY_PLAYER, metricId: '' };
-
-  for (const hs of home) {
-    const key = `${hs.win}-${hs.slot}`;
-    const as = away.get(key);
-    const r = resolveSlot(si(hs), as ? si(as) : empty, sourceWeek, key);
-    bump(hs.win, 'home', r.youFinal);
-    if (as) { bump(hs.win, 'away', r.theirFinal); away.delete(key); }
-  }
-  for (const as of away.values()) {
-    const r = resolveSlot(si(as), empty, sourceWeek, `${as.win}-${as.slot}`);
-    bump(as.win, 'away', r.youFinal);
-  }
-
-  const round = (n: number) => Math.round(n * 10) / 10;
-  const states = Object.entries(win).map(([window, s]) => ({ window, home: round(s.home), away: round(s.away) }));
+  const { states } = resolveLiveMatchup(sideSlots(data, 'home').map(toLivePick), sideSlots(data, 'away').map(toLivePick), sourceWeek);
   await adminSetMatchup(matchupId, 'live', true); // reveal picks + show on the board
   await adminSetState(matchupId, states);
   return states;

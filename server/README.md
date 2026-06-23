@@ -57,10 +57,13 @@ the SAME TypeScript engine the client runs (`src/engine/sim.ts`), via `tsx`
   2025 week and resolves real matchups — e.g. a rushing-TD NUKE wiping the
   opponent's bank to 0, exactly as the client engine does.
 
-**Still simplified vs the client's `buildMatchup`:** no best-ball backups, coin
-economy, or cross-window Field-General multiplier yet — those live in
-`matchup.ts` and can be layered on when the pilot needs them. The `RealPlay`
-contract stays frozen.
+**Shared resolver:** the live H2H path runs `src/engine/liveResolve.ts` — the
+same resolver the in-browser admin force-resolve uses — so the worker and the
+founder's preview score identically. It layers cross-window Field General +
+best-ball backups on top of per-slot `resolveSlot`, and computes the drip-coin
+economy per side (returned, not yet persisted — no DB column). Still simplified
+vs the demo's `buildMatchup`: DEF suppress halving, cross-window TE-TD nukes, and
+the K banker bonus. The `RealPlay` contract stays frozen.
 
 > Runs under `tsx` so the `.ts` engine imports resolve in Node — see the
 > `start` / `cli` / `smoke` scripts.
