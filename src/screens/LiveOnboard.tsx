@@ -3,7 +3,8 @@ import { useStore } from '../app/store';
 import { ThemeSwitcher } from '../app/ui';
 import { liveConfigured } from '../data/supabaseClient';
 import {
-  sendMagicLink, verifyEmailOtp, getSession, onAuth, signOut, ensureAppUser,
+  sendMagicLink, verifyEmailOtp, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
+  getSession, onAuth, signOut, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, myEnrollments,
   startCommishVerify, confirmCommishVerify, isAdmin, commishOverview,
   type Enrollment, type LeaguePreview, type PreviewRedeem,
@@ -25,11 +26,12 @@ export function LiveOnboard() {
   const { navigate } = useStore();
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
+  const [recovery, setRecovery] = useState(false);
 
   useEffect(() => {
     if (!liveConfigured) { setReady(true); return; }
     getSession().then((s) => { setSession(s); setReady(true); });
-    return onAuth(setSession);
+    return onAuth((s, ev) => { setSession(s); if (ev === 'PASSWORD_RECOVERY') setRecovery(true); });
   }, []);
 
   return (
@@ -49,7 +51,8 @@ export function LiveOnboard() {
         <div style={{ width: '100%', maxWidth: 440 }}>
           {!liveConfigured ? <NotConfigured />
             : !ready ? <Muted text="Loading…" />
-            : !session ? <SignIn />
+            : recovery ? <SetPassword onDone={() => setRecovery(false)} />
+            : !session ? <AuthForm />
             : <Enroll session={session} />}
         </div>
       </main>
@@ -72,70 +75,126 @@ function NotConfigured() {
   );
 }
 
-function SignIn() {
+type AuthMode = 'signin' | 'signup' | 'forgot' | 'magic';
+
+function AuthForm() {
+  const [mode, setMode] = useState<AuthMode>('signin');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
-  const [token, setToken] = useState('');
   const [err, setErr] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const reset = () => { setErr(null); setInfo(null); };
+  const go = (m: AuthMode) => { setMode(m); setSent(false); reset(); };
 
-  const submit = async () => {
-    const e = email.trim();
-    if (!e || busy) return;
-    setBusy(true); setErr(null);
-    try { await sendMagicLink(e); setSent(true); }
-    catch (x) { setErr(x instanceof Error ? x.message : 'Could not send the link.'); }
+  const run = async (fn: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true); reset();
+    try { await fn(); } catch (x) { setErr(x instanceof Error ? x.message : 'Something went wrong.'); }
     finally { setBusy(false); }
   };
-
-  const verify = async () => {
-    if (token.trim().length < 6 || busy) return;
-    setBusy(true); setErr(null);
-    try { await verifyEmailOtp(email, token); /* onAuth fires → screen advances */ }
-    catch (x) { setErr(x instanceof Error ? x.message : 'Invalid or expired code.'); setBusy(false); }
+  const submit = () => {
+    if (!email.trim()) return;
+    if (mode === 'signin') return run(() => signInPassword(email, password));
+    if (mode === 'signup') return run(async () => { const r = await signUpPassword(email, password); if (r.needsConfirm) setInfo('Account created — check your email to confirm, then sign in.'); });
+    if (mode === 'forgot') return run(async () => { await sendPasswordReset(email); setInfo('If that email has an account, a reset link is on its way.'); });
+    return run(async () => { await sendMagicLink(email); setSent(true); });
   };
+  const verify = () => run(() => verifyEmailOtp(email, token));
 
-  if (sent) return (
+  // magic-link sent → OTP entry
+  if (mode === 'magic' && sent) return (
     <div style={card}>
       <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>Check your email</div>
       <div className="mono" style={{ fontSize: 11, color: 'var(--dim)', marginTop: 10, lineHeight: 1.5 }}>
-        Sent to <span style={{ color: 'var(--text)' }}>{email.trim()}</span>. Tap the link — or, if it opens the wrong browser, enter the 6-digit code from the email:
+        Sent to <span style={{ color: 'var(--text)' }}>{email.trim()}</span>. Tap the link — or enter the 6-digit code:
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         <input value={token} autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6}
-          onChange={(e) => { setToken(e.target.value.replace(/\D/g, '')); setErr(null); }}
+          onChange={(e) => { setToken(e.target.value.replace(/\D/g, '')); reset(); }}
           onKeyDown={(e) => { if (e.key === 'Enter') verify(); }}
           placeholder="123456" style={{ ...input, letterSpacing: '0.3em', textAlign: 'center' }} />
         <button onClick={verify} disabled={busy || token.length < 6} className="mono" style={{ ...btn, opacity: busy || token.length < 6 ? 0.6 : 1 }}>{busy ? '…' : 'VERIFY'}</button>
       </div>
       {err && <div className="mono" style={errStyle}>{err}</div>}
-      <button onClick={() => { setSent(false); setToken(''); setErr(null); }} className="mono" style={{ ...linkBtn, marginTop: 12 }}>← use a different email</button>
+      <button onClick={() => go('signin')} className="mono" style={{ ...linkBtn, marginTop: 12 }}>← back</button>
     </div>
   );
 
+  const title = mode === 'signup' ? 'Create your account' : mode === 'forgot' ? 'Reset password' : mode === 'magic' ? 'Email me a sign-in link' : 'Sign in';
+  const cta = mode === 'signup' ? 'CREATE ACCOUNT' : mode === 'forgot' ? 'SEND RESET LINK' : mode === 'magic' ? 'SEND LINK →' : 'SIGN IN';
+  const showPw = mode === 'signin' || mode === 'signup';
+
   return (
     <>
-      <div style={{ textAlign: 'center', marginBottom: 22 }}>
-        <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1.1 }}>
-          Join the <span style={{ color: 'var(--you)' }}>live H2H</span> pilot.
+      <div style={{ textAlign: 'center', marginBottom: 20 }}>
+        <div className="grotesk" style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1.1 }}>
+          {mode === 'signin' ? <>The <span style={{ color: 'var(--you)' }}>live H2H</span> pilot.</> : title}
         </div>
-        <div style={{ fontSize: 13, color: 'var(--dim)', marginTop: 10, lineHeight: 1.5 }}>
-          Sign in with your email — we’ll send a one-tap link. Then enter your league’s invite code.
-        </div>
+        {mode === 'signin' && <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 10 }}>Sign in to set your lineup and watch it play live.</div>}
       </div>
       <div style={card}>
         <label className="mono" style={label}>EMAIL</label>
-        <div style={{ display: 'flex', gap: 8, marginTop: 7 }}>
-          <input value={email} autoFocus type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false}
-            onChange={(e) => { setEmail(e.target.value); setErr(null); }}
-            onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
-            placeholder="you@example.com" style={input} />
-          <button onClick={submit} disabled={busy || !email.trim()} className="mono" style={{ ...btn, opacity: busy || !email.trim() ? 0.6 : 1 }}>{busy ? '…' : 'SEND →'}</button>
-        </div>
+        <input value={email} autoFocus type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false}
+          onChange={(e) => { setEmail(e.target.value); reset(); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !showPw) submit(); }}
+          placeholder="you@example.com" style={{ ...input, width: '100%', boxSizing: 'border-box', marginTop: 7 }} />
+        {showPw && (
+          <>
+            <label className="mono" style={{ ...label, display: 'block', marginTop: 12 }}>PASSWORD</label>
+            <input value={password} type="password" autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+              onChange={(e) => { setPassword(e.target.value); reset(); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+              placeholder={mode === 'signup' ? 'at least 6 characters' : '••••••••'} style={{ ...input, width: '100%', boxSizing: 'border-box', marginTop: 7 }} />
+          </>
+        )}
+        <button onClick={submit} disabled={busy || !email.trim() || (showPw && password.length < 6)} className="mono"
+          style={{ ...btn, width: '100%', padding: '11px 0', marginTop: 14, opacity: busy || !email.trim() || (showPw && password.length < 6) ? 0.6 : 1 }}>{busy ? '…' : cta}</button>
         {err && <div className="mono" style={errStyle}>{err}</div>}
-        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>No password — a magic link signs you in.</div>
+        {info && <div className="mono" style={{ ...errStyle, color: 'var(--you)' }}>{info}</div>}
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, flexWrap: 'wrap', gap: 8 }}>
+          {mode === 'signin' && <button onClick={() => go('signup')} className="mono" style={linkBtn}>create account</button>}
+          {mode === 'signin' && <button onClick={() => go('forgot')} className="mono" style={linkBtn}>forgot password?</button>}
+          {mode !== 'signin' && <button onClick={() => go('signin')} className="mono" style={linkBtn}>← sign in</button>}
+          {mode !== 'magic' && <button onClick={() => go('magic')} className="mono" style={linkBtn}>email me a link instead</button>}
+        </div>
       </div>
     </>
+  );
+}
+
+function SetPassword({ onDone }: { onDone: () => void }) {
+  const [pw, setPw] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const save = async () => {
+    if (pw.length < 6) { setErr('At least 6 characters.'); return; }
+    setBusy(true); setErr(null);
+    try { await updatePassword(pw); setDone(true); }
+    catch (x) { setErr(x instanceof Error ? x.message : 'Could not update.'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={card}>
+      <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>{done ? 'Password updated' : 'Set a new password'}</div>
+      {done ? (
+        <>
+          <div className="mono" style={{ fontSize: 11, color: 'var(--dim)', marginTop: 10 }}>You’re signed in.</div>
+          <button onClick={onDone} className="mono" style={{ ...btn, width: '100%', padding: '11px 0', marginTop: 14 }}>CONTINUE</button>
+        </>
+      ) : (
+        <>
+          <input value={pw} type="password" autoFocus autoComplete="new-password" onChange={(e) => { setPw(e.target.value); setErr(null); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') save(); }} placeholder="new password" style={{ ...input, width: '100%', boxSizing: 'border-box', marginTop: 12 }} />
+          <button onClick={save} disabled={busy} className="mono" style={{ ...btn, width: '100%', padding: '11px 0', marginTop: 12, opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'SAVE PASSWORD'}</button>
+          {err && <div className="mono" style={errStyle}>{err}</div>}
+        </>
+      )}
+    </div>
   );
 }
 

@@ -27,13 +27,33 @@ export async function verifyEmailOtp(email: string, token: string): Promise<void
   if (error) throw error;
 }
 
+// ── Password auth ───────────────────────────────────────────────────────────────
+export async function signInPassword(email: string, password: string): Promise<void> {
+  const { error } = await client().auth.signInWithPassword({ email: email.trim(), password });
+  if (error) throw error;
+}
+/** Create an account. needsConfirm=true when the project requires email confirmation. */
+export async function signUpPassword(email: string, password: string): Promise<{ needsConfirm: boolean }> {
+  const { data, error } = await client().auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: redirectTo() } });
+  if (error) throw error;
+  return { needsConfirm: !data.session };
+}
+export async function sendPasswordReset(email: string): Promise<void> {
+  const { error } = await client().auth.resetPasswordForEmail(email.trim(), { redirectTo: redirectTo() });
+  if (error) throw error;
+}
+export async function updatePassword(password: string): Promise<void> {
+  const { error } = await client().auth.updateUser({ password });
+  if (error) throw error;
+}
+
 export async function getSession(): Promise<Session | null> {
   const { data } = await client().auth.getSession();
   return data.session;
 }
 
-export function onAuth(cb: (s: Session | null) => void): () => void {
-  const { data } = client().auth.onAuthStateChange((_e, session) => cb(session));
+export function onAuth(cb: (s: Session | null, event?: string) => void): () => void {
+  const { data } = client().auth.onAuthStateChange((event, session) => cb(session, event));
   return () => data.subscription.unsubscribe();
 }
 
