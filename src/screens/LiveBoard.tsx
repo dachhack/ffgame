@@ -1,0 +1,140 @@
+import { useEffect, useMemo, useState } from 'react';
+import { WINDOWS, metricById } from '../data/metrics';
+import type { Pos } from '../types';
+import {
+  myRoster, myMatchup, getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, myPool,
+  type LiveMatchup, type WindowScore, type RevealedPick, type PoolPlayer,
+} from '../data/liveApi';
+
+const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16 };
+const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
+const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
+
+export function LiveBoard({ userId, onBack }: { userId: string; onBack: () => void }) {
+  const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
+  const [youAreHome, setYouAreHome] = useState(true);
+  const [scores, setScores] = useState<WindowScore[]>([]);
+  const [picks, setPicks] = useState<RevealedPick[]>([]);
+  const [pool, setPool] = useState<Record<string, PoolPlayer>>({});
+  const [state, setState] = useState<'loading' | 'none' | 'ready'>('loading');
+
+  useEffect(() => {
+    let unsub = () => {};
+    (async () => {
+      const r = await myRoster(userId);
+      if (!r) { setState('none'); return; }
+      const m = await myMatchup(r.leagueId, r.rosterId);
+      if (!m) { setState('none'); return; }
+      setMatchup(m); setYouAreHome(m.home_roster_id === r.rosterId);
+      const pl = await myPool(r.leagueId, m.week, r.rosterId);
+      setPool(Object.fromEntries(pl.map((p) => [p.slug, p])));
+      const refresh = async () => {
+        const [mm, ss, pk] = await Promise.all([getMatchup(m.id), getMatchupState(m.id), getRevealedPicks(m.id)]);
+        if (mm) setMatchup(mm);
+        setScores(ss); setPicks(pk);
+      };
+      await refresh();
+      setState('ready');
+      unsub = subscribeMatchup(m.id, refresh); // live push on score/status change
+    })();
+    return () => unsub();
+  }, [userId]);
+
+  const totals = useMemo(() => {
+    const home = scores.reduce((t, s) => t + Number(s.home_score), 0);
+    const away = scores.reduce((t, s) => t + Number(s.away_score), 0);
+    return { you: youAreHome ? home : away, them: youAreHome ? away : home };
+  }, [scores, youAreHome]);
+
+  if (state === 'loading') return <Muted text="Loading the board…" />;
+  if (state === 'none') return (
+    <div style={card}>
+      <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>No matchup yet</div>
+      <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 10 }}>Your schedule hasn’t synced yet.</div>
+      <div style={{ textAlign: 'center', marginTop: 14 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
+    </div>
+  );
+
+  const status = matchup!.status;
+  const locked = status !== 'scheduled';
+  const round = (n: number) => Math.round(n * 10) / 10;
+  const mine = picks.filter((p) => p.app_user_id === userId);
+  const theirs = picks.filter((p) => p.app_user_id !== userId);
+
+  return (
+    <div>
+      <div style={{ ...card, marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Week {matchup!.week} · live board</div>
+          <span className="mono" style={{ fontSize: 9, color: status === 'final' ? 'var(--dim)' : status === 'scheduled' ? 'var(--faint)' : 'var(--you)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 7px' }}>{status.toUpperCase()}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, margin: '16px 0 4px' }}>
+          <Big label="YOU" value={round(totals.you)} color="var(--you)" />
+          <span className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>vs</span>
+          <Big label="OPP" value={round(totals.them)} color="var(--opp)" />
+        </div>
+        {status === 'scheduled' && <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', marginTop: 8 }}>Scores start ticking after kickoff.</div>}
+      </div>
+
+      {scores.length > 0 && (
+        <div style={{ ...card, marginBottom: 12 }}>
+          <div className="mono" style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginBottom: 8 }}>BY WINDOW</div>
+          {scores.sort((a, b) => a.game_window.localeCompare(b.game_window)).map((s) => {
+            const you = youAreHome ? s.home_score : s.away_score;
+            const them = youAreHome ? s.away_score : s.home_score;
+            return (
+              <div key={s.game_window} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--bd)' }}>
+                <span style={{ color: Number(you) >= Number(them) ? 'var(--you)' : 'var(--text)', fontWeight: 700, fontSize: 13, width: 50, textAlign: 'right' }}>{round(Number(you))}</span>
+                <span className="mono" style={{ fontSize: 10, color: 'var(--dim)', flex: 1, textAlign: 'center', alignSelf: 'center' }}>{winLabel(s.game_window)}</span>
+                <span style={{ color: Number(them) > Number(you) ? 'var(--opp)' : 'var(--text)', fontWeight: 700, fontSize: 13, width: 50 }}>{round(Number(them))}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <Lineup title="Your lineup" picks={mine} pool={pool} reveal />
+      <Lineup title={locked ? 'Opponent lineup' : 'Opponent — sealed'} picks={theirs} pool={pool} reveal={locked} />
+
+      <div style={{ textAlign: 'center', marginTop: 14 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
+    </div>
+  );
+}
+
+function Big({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <div className="grotesk" style={{ fontSize: 38, fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
+      <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 4 }}>{label}</div>
+    </div>
+  );
+}
+
+function Lineup({ title, picks, pool, reveal }: { title: string; picks: RevealedPick[]; pool: Record<string, PoolPlayer>; reveal: boolean }) {
+  if (picks.length === 0 && reveal) return null;
+  return (
+    <div style={{ ...card, marginBottom: 10 }}>
+      <div className="mono" style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginBottom: 8 }}>{title.toUpperCase()}</div>
+      {!reveal ? (
+        <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>Hidden until kickoff.</div>
+      ) : picks.length === 0 ? (
+        <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>No sealed picks (plays their Sleeper lineup).</div>
+      ) : (
+        picks.sort((a, b) => a.game_window.localeCompare(b.game_window)).map((p, i) => {
+          const player = p.player_slug ? pool[p.player_slug] : null;
+          const metric = player ? metricById(player.pos as Pos, p.metric_id) : null;
+          return (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--bd)' }}>
+              <span style={{ fontSize: 12, color: 'var(--text)' }}>{player?.full ?? p.player_slug ?? '—'}</span>
+              <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)' }}>{winLabel(p.game_window)} · {metric?.name ?? p.metric_id ?? '—'}</span>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+function Muted({ text }: { text: string }) {
+  return <div className="mono" style={{ textAlign: 'center', fontSize: 11, color: 'var(--dim)' }}>{text}</div>;
+}

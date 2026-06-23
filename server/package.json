@@ -1,0 +1,21 @@
+{
+  "name": "drip-pilot-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Drip League FF 2026 pilot worker: Sleeper sync + ESPN pollers + server-authoritative resolution.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "tsx src/index.js",
+    "cli": "tsx src/cli.js",
+    "smoke": "tsx test/engine-smoke.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "dotenv": "^16.4.5",
+    "tsx": "^4.22.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
