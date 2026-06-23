@@ -12,15 +12,21 @@
 //   • Best-ball backups — an unopposed player doesn't score in place; the biggest
 //     such backup subs for the side's lowest beatable starter, and with 2+
 //     unopposed the rest bank half-credit.
+//   • TE Touchdown 8-PT NUKE — each TE TD in a window knocks every opposing
+//     drip rate down by 1.0 across that window (wired through resolveSlot's
+//     drip-nuke clocks).
+//   • DEF SUPPRESS halving — a DST on `suppress` banks 0 itself; its defensive
+//     earn score is the kill-threshold, halving every OPPOSING slot (any
+//     window) that scored at or below it. Highest threshold wins per side.
+//   • K BANKER XP bonus — +1 to each of your TDs per banker XP made. Applied
+//     after backups + suppress, baked into the banker K's window so per-window
+//     scores still sum to the grand total.
 //   • Drip-coin economy — weekly stipend + unopposed bounty + per-event-of-note
 //     coin, returned per side. (No DB sink yet; surfaced for a future column.)
-//
-// DEF suppress / TE-TD cross-window nukes / K banker remain simplified here —
-// they need a wider rework and aren't yet exercised by the pilot.
 import type { Player, PbpEvent, Pos } from '../types';
 import { WINDOWS, metricById } from '../data/metrics';
 import { REAL_WEEKS } from '../data/realPbp';
-import { resolveSlot, windowFgMult, EMPTY_PLAYER, type SlotInput } from './sim';
+import { resolveSlot, windowFgMult, teTdNukeClocks, defEarnScore, EMPTY_PLAYER, type SlotInput } from './sim';
 
 export interface LivePick { win: string; slot: string; player: Player; metricId: string; }
 export interface LiveWindowScore { window: string; home: number; away: number; }
@@ -108,12 +114,22 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
   const awayBy = new Map(awayPicks.map((p) => [key(p), p]));
 
   const slots: SlotRes[] = [];
+  // Lineup-wide aggregates for K banker and DEF suppress.
+  let homeTds = 0, awayTds = 0, homeBankerXp = 0, awayBankerXp = 0;
+  let homeSuppress = 0, awaySuppress = 0;
   for (const w of WINDOWS) {
     const homeIns: SlotInput[] = homePicks.filter((p) => p.win === w.id).map((p) => ({ player: p.player, metricId: p.metricId }));
     const awayIns: SlotInput[] = awayPicks.filter((p) => p.win === w.id).map((p) => ({ player: p.player, metricId: p.metricId }));
     // Field General builds its multiplier from every filled slot on its side.
     const homeMult = windowFgMult(homeIns, week, { reg });
     const awayMult = windowFgMult(awayIns, week, { reg });
+    // TE-TD 8-PT NUKE clocks: a side's TE TDs knock the OPPONENT's drips.
+    const homeTeTd = teTdNukeClocks(homeIns, week).map((n) => n.c);
+    const awayTeTd = teTdNukeClocks(awayIns, week).map((n) => n.c);
+    // SUPPRESS threshold: a DEF/suppress DST forgoes its own earn score and
+    // spends it as the kill-bar. With more than one per side, the highest wins.
+    for (const p of homeIns) if (p.player.pos === 'DEF' && p.metricId === 'suppress') homeSuppress = Math.max(homeSuppress, defEarnScore(p.player, week));
+    for (const p of awayIns) if (p.player.pos === 'DEF' && p.metricId === 'suppress') awaySuppress = Math.max(awaySuppress, defEarnScore(p.player, week));
 
     const idxs = new Set<string>();
     for (const p of homePicks) if (p.win === w.id) idxs.add(p.slot);
@@ -124,17 +140,49 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
       const you: SlotInput = hp ? { player: hp.player, metricId: hp.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
       const them: SlotInput = ap ? { player: ap.player, metricId: ap.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
       const label = `${hp?.player.team || 'BYE'} · ${ap?.player.team || 'BYE'}`;
-      const res = resolveSlot(you, them, week, label, { youMult: homeMult, theirMult: awayMult });
+      const res = resolveSlot(you, them, week, label, {
+        youMult: homeMult, theirMult: awayMult,
+        youDripNukeClocks: awayTeTd, theirDripNukeClocks: homeTeTd,
+      });
+      let homeF = res.youFinal, awayF = res.theirFinal;
+      // A suppress DST banks 0 itself — its points are spent as the threshold.
+      if (hp?.player.pos === 'DEF' && hp.metricId === 'suppress') homeF = 0;
+      if (ap?.player.pos === 'DEF' && ap.metricId === 'suppress') awayF = 0;
       slots.push({
         win: w.id, slot, homeP: hp?.player ?? null, awayP: ap?.player ?? null,
         homeMetric: hp?.metricId ?? null, awayMetric: ap?.metricId ?? null,
-        home: res.youFinal, away: res.theirFinal, events: res.events,
+        home: homeF, away: awayF, events: res.events,
       });
+      homeTds += res.youTds; awayTds += res.theirTds;
+      homeBankerXp += res.youBankerXp; awayBankerXp += res.theirBankerXp;
     }
   }
 
   applyBackups(slots, 'home');
   applyBackups(slots, 'away');
+
+  // DEF SUPPRESS (HALVING): apply after backups so a subbed-in starter score is
+  // the one tested. Each side's threshold halves every OPPOSING slot (any
+  // window) that scored above 0 and at or below it.
+  if (homeSuppress > 0 || awaySuppress > 0) {
+    for (const s of slots) {
+      if (awaySuppress > 0 && s.home > 0 && s.home <= awaySuppress) s.home = round(s.home * 0.5);
+      if (homeSuppress > 0 && s.away > 0 && s.away <= homeSuppress) s.away = round(s.away * 0.5);
+    }
+  }
+
+  // K BANKER (XP BONUS): bake the +XP·TDs into the banker K's window so the
+  // grand total stays the sum of per-window states. If a side has multiple
+  // banker Ks, the first one's window carries the bonus.
+  const bonusSlot = (picks: LivePick[]): SlotRes | undefined => {
+    const banker = picks.find((p) => p.player.pos === 'K' && p.metricId === 'banker');
+    if (!banker) return undefined;
+    return slots.find((s) => s.win === banker.win && s.slot === banker.slot);
+  };
+  const homeBonus = homeBankerXp * homeTds;
+  const awayBonus = awayBankerXp * awayTds;
+  if (homeBonus > 0) { const sl = bonusSlot(homePicks); if (sl) sl.home = round(sl.home + homeBonus); }
+  if (awayBonus > 0) { const sl = bonusSlot(awayPicks); if (sl) sl.away = round(sl.away + awayBonus); }
 
   const byWin: Record<string, { home: number; away: number }> = {};
   let home = 0, away = 0;
