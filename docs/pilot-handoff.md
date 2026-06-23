@@ -1,113 +1,138 @@
 # 2026 Pilot — Session Handoff
 
 _Read this first to pick up the near-live H2H pilot in a fresh session. Pairs with
-`docs/pilot-2026-plan.md` (deeper plan, ESPN validation, data-model rationale),
-`server/DEPLOY.md` (Fly worker), and `supabase/README.md`. Last build: **v0.30.1**._
+`docs/pilot-2026-plan.md` (deeper plan), `docs/supabase-polish.md` + `docs/domain-runbook.md`
+(ops), `server/DEPLOY.md` (Fly worker), and `supabase/README.md`. Last build: **v0.37.0**._
 
 ## TL;DR — what exists now
 A full **closed-pilot product** is built, deployed, and mobile-tested end to end —
 everything except the live worker running on a real NFL Sunday (it's the offseason).
 
-- **Live site:** https://dachhack.github.io/ffgame/ → Splash → "◈ join the live H2H pilot".
-- **Supabase project** `dripff` (ref `kaoitimdsftclykhqaqx`, us-east-1, free tier) is
-  fully provisioned: schema + RLS + auth + realtime. Migrations 0001–0010 applied.
-- **Auth:** Google OAuth (working), email+password (sign in / create / reset), and
-  magic-link + 6-digit OTP fallback. Apple is wired but hidden (`SHOW_APPLE=false`).
-- **Player flow:** sign in → redeem invite code (or one-tap share link) → confirm
-  team → set sealed lineup → live board (Supabase Realtime).
+- **Live site:** **https://www.dripfantasy.com** (custom domain; GitHub Pages still
+  backs it). Splash → "◈ join the live H2H pilot". Old `dachhack.github.io/ffgame/`
+  still resolves.
+- **Supabase project** `dripff` (ref `kaoitimdsftclykhqaqx`, us-east-1, **Pro plan**)
+  fully provisioned: schema + RLS + auth + realtime. Migrations 0001–0015 applied.
+- **Auth:** Google OAuth (consent screen published as "Drip League FF"),
+  email+password (sign in / create / reset, confirm-email OFF), magic-link + 6-digit
+  OTP fallback (template carries `{{ .Token }}`). Apple wired but hidden (`SHOW_APPLE=false`).
+- **Custom auth domain:** `auth.dripfantasy.com` (Supabase Custom Domains add-on).
+  `supabaseClient.ts` points at it. See "Domain cutover" below for live status.
+- **Player flow:** sign in → redeem invite (or share link) → confirm team → set sealed
+  lineup (**slate-gated** to each player's real NFL game window) → live board (Realtime).
 - **Commissioner flow:** verify ownership via a Sleeper team-name tag → self-serve
-  dashboard (codes, members, sync week, run windows, regen invite).
-- **Admin console** (allowlisted by email): import league, sync week, drive matchup
-  lifecycle, **force-resolve a matchup from baked 2025 data** (real engine, in-browser,
-  no worker), users/scoring/audit, manage admins/overrides, code regen, share links.
+  dashboard (codes, members, sync week, matchup lifecycle, **coin edit**, **audit**).
+- **Admin console** (allowlisted by email): import league, sync week, matchup lifecycle,
+  **force-resolve from baked 2025 data** (real engine, in-browser), coin edit, audit
+  (with actor), manage admins/overrides, code regen, share links.
 - **Auto-migrate pipeline:** push `supabase/migrations/00NN_*.sql` → a GitHub Action
-  applies it. **No SQL pasting.**
+  applies it. **No SQL pasting**, and it now runs on this work branch too.
 
 ## Branch + deploy model (IMPORTANT)
-- **Work on `claude/admiring-brown-x5limu`.** Push there.
-- **Mirror client changes to `claude/youthful-albattani-s9kprl`** — this is the branch
-  the Pages deploy (`.github/workflows/deploy.yml`) triggers on:
+- **This session worked on `claude/charming-bardeen-tqeyue`.** Future sessions get
+  their own branch from the harness — push there.
+- **`.github/workflows/migrate.yml`** auto-applies ADDED `supabase/migrations/*.sql`
+  on push to **either** `claude/admiring-brown-x5limu` **or** `claude/charming-bardeen-tqeyue`
+  (uses `git diff --no-renames --diff-filter=A`; never re-runs existing files). Needs
+  the repo secret **`SUPABASE_DB_URL`** = the **session-pooler** string
+  (`…pooler.supabase.com`, IPv4). To watch a new branch, add it to that workflow's
+  `push.branches`. (The Claude GitHub token lacks `actions: write`, so I can't trigger
+  `workflow_dispatch` — push-triggered runs are the way.)
+- **Pages deploy** (`.github/workflows/deploy.yml`) triggers on
+  `claude/youthful-albattani-s9kprl` and builds with **`VITE_BASE=/`** (custom domain is
+  served at root, not `/ffgame/`). Mirror client changes there:
   ```
-  git push origin claude/admiring-brown-x5limu
-  git push origin claude/admiring-brown-x5limu:claude/youthful-albattani-s9kprl   # client changes
+  git push origin <work-branch>
+  git push origin <work-branch>:claude/youthful-albattani-s9kprl   # client changes
   ```
-- **Migrations auto-apply** via `.github/workflows/migrate.yml` on push to the work
-  branch (runs only ADDED `supabase/migrations/*.sql` via `psql`; never re-runs). Needs
-  the repo secret **`SUPABASE_DB_URL`** = the **session-pooler** connection string
-  (`…pooler.supabase.com`, NOT the IPv6 `db.<ref>.supabase.co` direct host — GitHub
-  runners are IPv4).
-- **Bump `src/app/version.ts` (`APP_VERSION`)** every client change; confirm deploys via
-  the version chip. **Build gate:** `npm run build` (strict tsc — remove unused vars).
-- Commit trailers required (`Co-Authored-By: Claude Opus 4.8 …` + `Claude-Session:`);
-  the model id never appears in committed artifacts. No PRs unless asked.
+  `public/CNAME` pins `www.dripfantasy.com` so deploys don't drop the custom domain.
+- **Bump `src/app/version.ts`** every client change; confirm via the version chip.
+  **Build gate:** `npm run build` (strict tsc — remove unused vars).
+- Commit trailers required (`Co-Authored-By: Claude …` + `Claude-Session:`); the model
+  id never appears in committed artifacts. No PRs unless asked.
 
 ## Architecture map
 **Data spine (frozen contract — keep stable):** the engine consumes per-player,
 slug-keyed `RealPlay[]` timelines. Same engine serves baked-2025, ESPN-live, and a
 future paid feed by swapping only the adapter.
 
-- `scripts/espn/espnAdapter.mjs` — ESPN `summary` → `RealPlay` (validated 99.6%/full
-  season via `validate.mjs`). `injuries.mjs` — ESPN injuries → per-slug status.
-- `src/engine/{sim,matchup}.ts` — the pure deterministic engine (demo + live share it).
-- **Worker `server/`** (Node, runs via `tsx`): `sync.js` (Sleeper import/schedule),
-  `poll/{scoreboard,plays,injuries}.js`, `lock.js`, `resolve.js` (reuses the engine via
-  `engine.js` + `realPbp.setSyntheticWeeks`). **Not deployed** — Fly artifacts ready
-  (`Dockerfile`, `fly.toml`, `server/DEPLOY.md`).
-- **Client live mode** (`src/`): `data/supabaseClient.ts` (URL + publishable key baked
-  in — both public), `data/liveApi.ts` (all auth + RPC wrappers), `data/sleeperAdmin.ts`
-  (client-orchestrated import/sync), `data/forceResolve.ts` (in-browser engine preview),
-  `screens/{LiveOnboard,LivePicks,LiveBoard,AdminPage,CommishDash}.tsx`. Route `'live'`
-  in `App.tsx`; entry from `Splash.tsx`. The static vs-AI demo is untouched and gated:
-  Live mode only activates when Supabase env/keys are present.
+- `scripts/espn/espnAdapter.mjs` — ESPN `summary` → `RealPlay`. `validate.mjs` is now a
+  **pass/fail gate** (`npm run validate [wk]`, exit 1 on regression) wired into
+  `.github/workflows/validate-espn.yml` (push on `scripts/espn/**`, weekly Mon, dispatch).
+- `src/engine/{sim,matchup}.ts` — pure deterministic engine (the vs-AI demo uses these).
+- **`src/engine/liveResolve.ts` — the shared H2H resolver.** Used by BOTH the in-browser
+  admin force-resolve (`src/data/forceResolve.ts`) AND the worker (`server/src/resolve.js`
+  via `engine.js`), so preview and live score identically. Resolves slug-keyed sealed
+  picks paired by (window, slot), layering every cross-slot effect: cross-window Field
+  General, best-ball backups, TE-TD 8-pt nukes, DEF suppress halving, K banker XP bonus,
+  and the per-side drip-coin economy. (`matchup.ts`'s `buildMatchup` is the demo's
+  league-bound equivalent; `liveResolve` is the league-agnostic one.)
+- `src/data/slugMeta.ts` — slug → {pos, team} (with team-abbrev normalization), used for
+  slate-gating and the resolver. `src/data/nflSlate.ts` — `windowForTeam`, `hasSlate`.
+- **Worker `server/`** (Node via `tsx`): `sync.js`, `poll/{scoreboard,plays,injuries}.js`,
+  `lock.js`, `resolve.js`. **Not deployed** — Fly artifacts ready (`server/DEPLOY.md`).
+- **Client live mode** (`src/`): `data/supabaseClient.ts` (URL + publishable key — both
+  public), `data/liveApi.ts` (auth + RPC wrappers), `data/sleeperAdmin.ts`,
+  `data/forceResolve.ts`, `screens/{LiveOnboard,LivePicks,LiveBoard,AdminPage,CommishDash}.tsx`.
 
 ## Supabase specifics
-- **Keys:** publishable/anon key is committed in `supabaseClient.ts` (safe — RLS guards
-  everything). **Service-role key** is only for the Fly worker → store as a Fly secret,
-  never in git. ⚠️ **Rotate the service-role key** if not already (it was shared in chat
-  during setup).
-- **Migrations 0001–0010:** 0001 schema+RLS+audit · 0002 invite codes · 0003 commish
-  verify (+`http` extension) · 0004 commish override (admin exception: dachhack) · 0005
-  realtime publication · 0006 admin · 0007 admin setup/writers · 0008 redeem preview ·
-  0009 admin tools (members/regen) · 0010 commissioner-scoped RPCs + force-resolve.
+- **Keys:** publishable/anon key committed in `supabaseClient.ts` (safe — RLS guards
+  everything). **Service-role key** only for the Fly worker (Fly secret, never git).
+  ⚠️ **Rotate the service-role key** if not already (shared in chat during setup).
+- **Migrations 0001–0015:** 0001 schema+RLS+audit · 0002 invite codes · 0003 commish
+  verify · 0004 commish override · 0005 realtime · 0006 admin · 0007 admin setup ·
+  0008 redeem preview · 0009 admin tools · 0010 commish-scoped RPCs + force-resolve ·
+  **0011** matchup coin columns + `admin_set_state` coin · **0013** `admin_set_coin`
+  + coin/status audit detail (0012 was renumbered to 0013 to ride auto-apply) ·
+  **0014** `commish_audit` (league-scoped) · **0015** audit `actor` (email join).
 - **RLS load-bearing fact:** a `sealed_pick` is unreadable by the opponent until the
   server flips `locked` at kickoff; clients can never set `locked`.
-- **Admin allowlist:** `app_admin` table, seeded with `mlporritt@gmail.com`. `is_admin()`
-  checks `auth.jwt()->>'email'`. Commissioner access via `is_league_commish()`.
-- **Auth config done:** Email provider on; Redirect URLs include
-  `https://dachhack.github.io/ffgame/?live=1`; Realtime on `matchup_state`/`matchup`;
-  Google OAuth credentials set.
-- **Test seed:** `supabase/seed_week1_test.sql` — PeakedInDynasty (`1181483840740397056`)
-  week-1 matchup (roster 5 dachhack vs roster 1), invite code **`DRIP2026`**. (Now that
-  admin "import league"/"sync week" buttons exist, prefer those over the seed.)
+- **Admin allowlist:** `app_admin` table, seeded `mlporritt@gmail.com`. `is_admin()`
+  checks the JWT email. Commissioner access via `is_league_commish()` /
+  `is_matchup_commish()`.
+- **Drip coin:** `matchup.home_coin`/`away_coin`, written by the resolver (worker live +
+  force-resolve), shown on the live board, hand-editable in admin/commish (audited).
+- **Test seed:** `supabase/seed_week1_test.sql` — PeakedInDynasty week-1 matchup
+  (roster 5 dachhack vs roster 1), invite code **`DRIP2026`**. Prefer admin "import
+  league"/"sync week" over the seed now.
+
+## Domain cutover (in progress as of this handoff)
+- **Domain:** `dripfantasy.com` (Squarespace). DNS: `www`→`dachhack.github.io`, apex
+  A-records→GitHub Pages, `auth`→`kaoitimdsftclykhqaqx.supabase.co`, plus the
+  `_acme-challenge.auth` TXT for Supabase's cert.
+- **Site cutover: DONE** — `www.dripfantasy.com` serves the app (deploy built with
+  `VITE_BASE=/`). Supabase redirect URLs include `https://www.dripfantasy.com/?live=1`.
+- **Custom auth domain: verifying** — `supabaseClient.ts` `DEFAULT_URL` is already set to
+  `https://auth.dripfantasy.com` (committed on the work branch, **NOT yet mirrored to the
+  deploy branch** so the live site keeps working until the domain is active). When Supabase
+  shows the custom domain **active**: mirror the work branch → deploy branch, confirm the
+  version chip, then sign-in should read "dripfantasy.com". Google OAuth already has the
+  `auth.dripfantasy.com/auth/v1/callback` redirect URI added.
 
 ## Open items / next steps
-1. **Deploy the worker to Fly** (`server/DEPLOY.md`) with the rotated service-role key.
-   Only fully exercised on a live NFL Sunday — until then it runs injuries/scoreboard/
-   lock; live scoring is previewable now via admin **force-resolve**.
-2. **Supabase polish (founder, dashboard):**
-   - Magic-link email template → add `{{ .Token }}` so the OTP-code path works (link works without it).
-   - Email provider → "Confirm email" **OFF** for instant password signup.
-   - Google **OAuth consent screen** → set App name "Drip League FF" + Publish (consent
-     currently shows raw `…supabase.co`; App-name+publish cleans it up free; a custom
-     auth domain removes supabase.co entirely but needs a domain + paid add-on).
-3. **Product polish (code, optional):** slate-gate lineup slots to real NFL game windows
-   (needs the ESPN slate; currently any player → any slot); official Google-button
-   styling; email allowlist for closed signups; port the engine niceties still simplified
-   in `resolve.js` (best-ball backups, coin economy, cross-window Field-General mult).
-4. **Validation gate before trusting live ESPN:** `node scripts/espn/validate.mjs <wk>`
-   re-derives a 2025 week and diffs vs `public/pbp/wN.json` (the cheap correctness check).
+1. **Finish the domain cutover** (above) once Supabase verifies `auth.dripfantasy.com`.
+2. **Deploy the worker to Fly** (`server/DEPLOY.md`) with the rotated service-role key.
+   Only fully exercised on a live NFL Sunday; live scoring previewable now via
+   force-resolve. The worker already runs the full shared resolver.
+3. **Product polish (optional):** official Google-button styling; email allowlist for
+   closed signups (restrict who can sign up).
 
 ## Gotchas (save yourself time)
-- **Sandbox egress is allowlisted.** Reachable: ESPN `site.api.espn.com`, Sleeper,
-  npm, github.com. **Blocked:** `*.supabase.co`, `*.github.io`, ESPN `core.api`. So you
-  **cannot test the live DB, OAuth, or the deployed site from the agent sandbox** — the
-  founder tests on a real device. (You can run the ESPN adapters + the engine + builds.)
+- **Sandbox egress is allowlisted.** Reachable: ESPN `site.api.espn.com`, Sleeper, npm,
+  github.com. The founder can add hosts (e.g. `*.dripfantasy.com`) to the environment's
+  network policy, but **it only takes effect after a session restart**. Default-blocked:
+  `*.supabase.co`, `*.github.io`. You generally **cannot test the live DB/OAuth/site from
+  the sandbox** — the founder tests on a device. (You can run ESPN adapters + engine +
+  builds + `validate.mjs`.)
 - **`mcp__github__actions_list` output overflows** the tool limit — it auto-saves to a
-  file; `grep`/`python` the saved path for `conclusion`/`status` instead of reading it.
-- Confirm a migration applied by checking the latest `migrate.yml` run is `success`.
-- The big chunk-size build warning is expected (Supabase + engine in one bundle); not an error.
+  file; `python`/`grep` the saved path for `conclusion`/`status`. `actions_get` /
+  `list_workflow_jobs` (single run) stay small enough to read inline.
+- Confirm a migration applied by checking the latest `migrate.yml` run is `success` AND
+  the apply-step log shows `── applying …NN_*.sql ──` (a no-op run also "succeeds").
+- The big chunk-size build warning is expected (Supabase + engine in one bundle).
 
 ## How to verify the live flow (founder, on a phone)
-Site (chip = current version) → join live → Google or email → redeem `DRIP2026` as
-`dachhack` → set a lineup → Admin → matchups → ▶ "force-resolve from 2025 wk 1" →
-open the live board → real Drip scoring (nukes/drips) appears.
+`www.dripfantasy.com` (chip = current version) → join live → Google or email → redeem
+`DRIP2026` as `dachhack` → set a lineup (note slate-gating: each slot only lists players
+whose NFL team plays that window) → Admin → matchups → ▶ "force-resolve from 2025 wk 1"
+→ live board → real Drip scoring (nukes/drips/FG/suppress) + per-side ◇ drip coin.
