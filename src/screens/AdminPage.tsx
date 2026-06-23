@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
-  adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode,
+  adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember,
 } from '../data/liveApi';
 import { importLeague, syncWeek } from '../data/sleeperAdmin';
@@ -73,7 +73,8 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload: () => void; admin?: boolean }) {
   const [matchups, setMatchups] = useState<AdminMatchup[] | null>(null);
   const [members, setMembers] = useState<AdminMember[] | null>(null);
-  const [tab, setTab] = useState<'' | 'matchups' | 'members'>('');
+  const [audit, setAudit] = useState<AdminAudit[] | null>(null);
+  const [tab, setTab] = useState<'' | 'matchups' | 'members' | 'audit'>('');
   const [week, setWeek] = useState('1');
   const [srcWeek, setSrcWeek] = useState('1');
   const [busy, setBusy] = useState<string | null>(null);
@@ -90,10 +91,12 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
 
   const loadM = async () => setMatchups(await adminMatchups(l.league_id));
   const loadMembers = async () => setMembers(await adminLeagueMembers(l.league_id));
-  const showTab = (t: 'matchups' | 'members') => {
+  const loadAudit = async () => setAudit(await commishAudit(l.league_id, 40));
+  const showTab = (t: 'matchups' | 'members' | 'audit') => {
     setTab((cur) => (cur === t ? '' : t));
     if (t === 'matchups' && !matchups) loadM();
     if (t === 'members' && !members) loadMembers();
+    if (t === 'audit') loadAudit();
   };
   const set = async (id: string, status: string, lockNow = false) => { await adminSetMatchup(id, status, lockNow); await loadM(); };
   const sync = async () => {
@@ -117,6 +120,7 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => showTab('members')} className="mono" style={linkBtn}>{tab === 'members' ? 'hide' : 'members'}</button>
           <button onClick={() => showTab('matchups')} className="mono" style={linkBtn}>{tab === 'matchups' ? 'hide' : 'matchups'}</button>
+          <button onClick={() => showTab('audit')} className="mono" style={linkBtn}>{tab === 'audit' ? 'hide' : 'audit'}</button>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 10, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -176,6 +180,16 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
                   <span className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)' }}>(audited)</span>
                 </div>
               )}
+            </div>
+          ))}
+        </div>
+      )}
+      {tab === 'audit' && (
+        <div style={{ marginTop: 10 }}>
+          {audit === null ? <Muted text="Loading…" /> : audit.length === 0 ? <Muted text="No matchup activity yet." /> : audit.map((a, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
+              <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)' }}>{a.op} <span style={{ color: 'var(--dim)' }}>{a.table}</span>{a.detail && <span style={{ color: 'var(--you)' }}> · {a.detail}</span>}</span>
+              <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{new Date(a.at).toLocaleString()}</span>
             </div>
           ))}
         </div>

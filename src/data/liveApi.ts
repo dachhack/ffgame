@@ -236,6 +236,7 @@ export const adminOverrides = () => rpc<AdminOverride[]>('admin_overrides');
 export const adminSetOverride = (sleeperUserId: string, note: string, remove = false) =>
   rpc<{ ok: boolean }>('admin_set_override', { p_sleeper_user_id: sleeperUserId, p_note: note, p_remove: remove });
 export const adminAudit = (limit = 50) => rpc<AdminAudit[]>('admin_audit', { p_limit: limit });
+export const commishAudit = (leagueId: string, limit = 50) => rpc<AdminAudit[]>('commish_audit', { p_league_id: leagueId, p_limit: limit });
 
 // Setup writers (the client fetches/parses Sleeper, these just persist).
 export const adminUpsertLeague = (sleeperId: string, season: string, name: string, settings: unknown) =>
