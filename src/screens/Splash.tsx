@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
 import { ThemeSwitcher } from '../app/ui';
 import { resolveUser } from '../data/sleeper';
+import { getSession } from '../data/liveApi';
 
 export function Splash() {
   const { navigate, setSleeperUser, sleeperUser, exitSimLeague } = useStore();
   const [name, setName] = useState(sleeperUser?.username ?? '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [signedIn, setSignedIn] = useState(false);
+  useEffect(() => { getSession().then((s) => setSignedIn(!!s)).catch(() => {}); }, []);
 
   const submit = async () => {
     const u = name.trim();
@@ -72,7 +75,7 @@ export function Splash() {
               or explore the demo league →
             </button>
             <button onClick={() => navigate({ name: 'live' })} className="mono" style={{ background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', cursor: 'pointer' }}>
-              ◈ join the live H2H pilot →
+              {signedIn ? '↩ continue to your live league →' : '◈ join the live H2H pilot →'}
             </button>
           </div>
         </div>

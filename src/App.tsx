@@ -20,9 +20,15 @@ export function App() {
     document.documentElement.style.colorScheme = light ? 'light' : 'dark';
   }, [theme, light]);
 
-  // Magic-link return lands at ?live=1 — drop the user back into Live mode.
+  // Deep link: ?live=1 enters Live mode; ?code=XXXX (a commissioner's share link)
+  // is stashed so it survives the magic-link round trip and pre-fills the join form.
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('live') === '1') navigate({ name: 'live' });
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('live') === '1') {
+      const code = p.get('code');
+      if (code) { try { localStorage.setItem('dripInviteCode', code.toUpperCase()); } catch { /* ignore */ } }
+      navigate({ name: 'live' });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

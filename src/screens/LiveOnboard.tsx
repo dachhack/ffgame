@@ -3,12 +3,11 @@ import { useStore } from '../app/store';
 import { ThemeSwitcher } from '../app/ui';
 import { liveConfigured } from '../data/supabaseClient';
 import {
-  sendMagicLink, getSession, onAuth, signOut, ensureAppUser,
-  previewLeague, redeemInvite, myEnrollments,
-  startCommishVerify, confirmCommishVerify,
-  type Enrollment, type LeaguePreview,
+  sendMagicLink, verifyEmailOtp, getSession, onAuth, signOut, ensureAppUser,
+  previewLeague, redeemPreview, redeemInvite, myEnrollments,
+  startCommishVerify, confirmCommishVerify, isAdmin,
+  type Enrollment, type LeaguePreview, type PreviewRedeem,
 } from '../data/liveApi';
-import { isAdmin } from '../data/liveApi';
 import { LivePicks } from './LivePicks';
 import { LiveBoard } from './LiveBoard';
 import { AdminPage } from './AdminPage';
@@ -76,6 +75,7 @@ function SignIn() {
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const [token, setToken] = useState('');
   const [err, setErr] = useState<string | null>(null);
 
   const submit = async () => {
@@ -87,12 +87,28 @@ function SignIn() {
     finally { setBusy(false); }
   };
 
+  const verify = async () => {
+    if (token.trim().length < 6 || busy) return;
+    setBusy(true); setErr(null);
+    try { await verifyEmailOtp(email, token); /* onAuth fires → screen advances */ }
+    catch (x) { setErr(x instanceof Error ? x.message : 'Invalid or expired code.'); setBusy(false); }
+  };
+
   if (sent) return (
     <div style={card}>
       <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>Check your email</div>
       <div className="mono" style={{ fontSize: 11, color: 'var(--dim)', marginTop: 10, lineHeight: 1.5 }}>
-        We sent a sign-in link to <span style={{ color: 'var(--text)' }}>{email.trim()}</span>. Open it on this device to continue.
+        Sent to <span style={{ color: 'var(--text)' }}>{email.trim()}</span>. Tap the link — or, if it opens the wrong browser, enter the 6-digit code from the email:
       </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <input value={token} autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6}
+          onChange={(e) => { setToken(e.target.value.replace(/\D/g, '')); setErr(null); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') verify(); }}
+          placeholder="123456" style={{ ...input, letterSpacing: '0.3em', textAlign: 'center' }} />
+        <button onClick={verify} disabled={busy || token.length < 6} className="mono" style={{ ...btn, opacity: busy || token.length < 6 ? 0.6 : 1 }}>{busy ? '…' : 'VERIFY'}</button>
+      </div>
+      {err && <div className="mono" style={errStyle}>{err}</div>}
+      <button onClick={() => { setSent(false); setToken(''); setErr(null); }} className="mono" style={{ ...linkBtn, marginTop: 12 }}>← use a different email</button>
     </div>
   );
 
@@ -263,26 +279,48 @@ function RedeemForm({ onJoined }: { onJoined: () => void }) {
   const [code, setCode] = useState('');
   const [preview, setPreview] = useState<LeaguePreview | null>(null);
   const [username, setUsername] = useState('');
+  const [team, setTeam] = useState<PreviewRedeem | null>(null); // confirm step
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const find = async () => {
-    const c = code.trim();
+  const find = async (c0?: string) => {
+    const c = (c0 ?? code).trim();
     if (!c || busy) return;
     setBusy(true); setErr(null);
     try {
       const p = await previewLeague(c);
-      if (!p) setErr('No league found for that code.'); else setPreview(p);
+      if (!p) setErr('No league found for that code. If you’re the commissioner, use “verify my league” below.');
+      else setPreview(p);
+    } catch (x) { setErr(x instanceof Error ? x.message : 'Lookup failed.'); }
+    finally { setBusy(false); }
+  };
+
+  // A commissioner share link pre-fills the code (survives the magic-link bounce).
+  useEffect(() => {
+    let c: string | null = null;
+    try { c = localStorage.getItem('dripInviteCode'); } catch { /* ignore */ }
+    if (c) { setCode(c); find(c); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Resolve the Sleeper username → which team you'd join, before committing.
+  const check = async () => {
+    if (!username.trim() || busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await redeemPreview(code, username);
+      if (!r.ok) { setErr(r.error ?? 'Could not match your account.'); } else setTeam(r);
     } catch (x) { setErr(x instanceof Error ? x.message : 'Lookup failed.'); }
     finally { setBusy(false); }
   };
 
   const join = async () => {
-    if (!username.trim() || busy) return;
+    if (busy) return;
     setBusy(true); setErr(null);
     try {
       const r = await redeemInvite(code, username);
       if (!r.ok) { setErr(r.error ?? 'Could not join.'); setBusy(false); return; }
+      try { localStorage.removeItem('dripInviteCode'); } catch { /* ignore */ }
       onJoined();
     } catch (x) { setErr(x instanceof Error ? x.message : 'Could not join.'); setBusy(false); }
   };
@@ -300,10 +338,10 @@ function RedeemForm({ onJoined }: { onJoined: () => void }) {
             onChange={(e) => { setCode(e.target.value.toUpperCase()); setPreview(null); setErr(null); }}
             onKeyDown={(e) => { if (e.key === 'Enter') find(); }}
             placeholder="e.g. A1B2C3D4" style={{ ...input, letterSpacing: '0.15em', textTransform: 'uppercase' }} />
-          {!preview && <button onClick={find} disabled={busy || !code.trim()} className="mono" style={{ ...btn, opacity: busy || !code.trim() ? 0.6 : 1 }}>{busy ? '…' : 'FIND'}</button>}
+          {!preview && <button onClick={() => find()} disabled={busy || !code.trim()} className="mono" style={{ ...btn, opacity: busy || !code.trim() ? 0.6 : 1 }}>{busy ? '…' : 'FIND'}</button>}
         </div>
 
-        {preview && (
+        {preview && !team && (
           <div style={{ marginTop: 14 }}>
             <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginBottom: 10 }}>
               Joining <span style={{ color: 'var(--text)', fontWeight: 700 }}>{preview.name}</span> · {preview.season}
@@ -312,11 +350,22 @@ function RedeemForm({ onJoined }: { onJoined: () => void }) {
             <div style={{ display: 'flex', gap: 8, marginTop: 7 }}>
               <input value={username} autoFocus autoCapitalize="none" autoCorrect="off" spellCheck={false}
                 onChange={(e) => { setUsername(e.target.value); setErr(null); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') join(); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') check(); }}
                 placeholder="your Sleeper handle" style={input} />
-              <button onClick={join} disabled={busy || !username.trim()} className="mono" style={{ ...btn, opacity: busy || !username.trim() ? 0.6 : 1 }}>{busy ? '…' : 'JOIN →'}</button>
+              <button onClick={check} disabled={busy || !username.trim()} className="mono" style={{ ...btn, opacity: busy || !username.trim() ? 0.6 : 1 }}>{busy ? '…' : 'NEXT →'}</button>
             </div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>We match your Sleeper account to your team in this league.</div>
+          </div>
+        )}
+
+        {team && (
+          <div style={{ marginTop: 14 }}>
+            <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)' }}>You’ll join as</div>
+            <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--you)', margin: '4px 0 12px' }}>{team.team}</div>
+            <button onClick={join} disabled={busy} className="mono" style={{ ...btn, width: '100%', padding: '11px 0', opacity: busy ? 0.6 : 1 }}>{busy ? 'JOINING…' : 'CONFIRM & JOIN'}</button>
+            <div style={{ textAlign: 'center', marginTop: 10 }}>
+              <button onClick={() => { setTeam(null); setErr(null); }} className="mono" style={linkBtn}>not me — change username</button>
+            </div>
           </div>
         )}
         {err && <div className="mono" style={errStyle}>{err}</div>}

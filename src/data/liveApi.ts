@@ -21,6 +21,12 @@ export async function sendMagicLink(email: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Sign in with the 6-digit code from the email (magic-link fallback for mobile). */
+export async function verifyEmailOtp(email: string, token: string): Promise<void> {
+  const { error } = await client().auth.verifyOtp({ email: email.trim(), token: token.trim(), type: 'email' });
+  if (error) throw error;
+}
+
 export async function getSession(): Promise<Session | null> {
   const { data } = await client().auth.getSession();
   return data.session;
@@ -53,6 +59,17 @@ export async function previewLeague(code: string): Promise<LeaguePreview | null>
 }
 
 export interface RedeemResult { ok: boolean; error?: string; league_id?: string; roster_id?: number; team?: string; }
+
+export interface PreviewRedeem { ok: boolean; error?: string; league?: string; team?: string; }
+
+/** Which team a code + Sleeper username would join — without enrolling. */
+export async function redeemPreview(code: string, sleeperUsername: string): Promise<PreviewRedeem> {
+  const user = await resolveUser(sleeperUsername);
+  if (!user) return { ok: false, error: `No Sleeper user “${sleeperUsername}”. Check the spelling.` };
+  const { data, error } = await client().rpc('redeem_preview', { p_code: code.trim(), p_sleeper_user_id: user.userId });
+  if (error) return { ok: false, error: error.message };
+  return data as PreviewRedeem;
+}
 
 /** Redeem: resolve the Sleeper username, then link + enroll via the RPC. */
 export async function redeemInvite(code: string, sleeperUsername: string): Promise<RedeemResult> {
