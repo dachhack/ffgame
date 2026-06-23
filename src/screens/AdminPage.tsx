@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import {
   adminOverview, adminMatchups, adminSetMatchup, adminOverrides, adminSetOverride, adminAudit,
-  adminAdmins, adminSetAdmin, adminUsers,
-  type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser,
+  adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode,
+  type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember,
 } from '../data/liveApi';
 import { importLeague, syncWeek } from '../data/sleeperAdmin';
+
+const shareLink = (code: string) => `${window.location.origin}${window.location.pathname}?live=1&code=${code}`;
+const copy = (v: string) => navigator.clipboard?.writeText(v);
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 14, marginBottom: 12 };
 const h: React.CSSProperties = { fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginBottom: 10 };
@@ -44,7 +47,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
       <div style={card}>
         <div style={h}>LEAGUES</div>
         {leagues === null ? <Muted text="Loading…" /> : leagues.length === 0 ? <Muted text="No leagues imported yet." /> :
-          leagues.map((l) => <LeagueRow key={l.league_id} l={l} />)}
+          leagues.map((l) => <LeagueRow key={l.league_id} l={l} reload={load} />)}
       </div>
 
       <Overrides overrides={overrides} reload={load} />
@@ -66,19 +69,31 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
   );
 }
 
-function LeagueRow({ l }: { l: AdminLeague }) {
+function LeagueRow({ l, reload }: { l: AdminLeague; reload: () => void }) {
   const [matchups, setMatchups] = useState<AdminMatchup[] | null>(null);
-  const [open, setOpen] = useState(false);
+  const [members, setMembers] = useState<AdminMember[] | null>(null);
+  const [tab, setTab] = useState<'' | 'matchups' | 'members'>('');
   const [week, setWeek] = useState('1');
   const [busy, setBusy] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const loadM = async () => setMatchups(await adminMatchups(l.league_id));
-  const toggle = () => { setOpen((o) => !o); if (!matchups) loadM(); };
+  const loadMembers = async () => setMembers(await adminLeagueMembers(l.league_id));
+  const showTab = (t: 'matchups' | 'members') => {
+    setTab((cur) => (cur === t ? '' : t));
+    if (t === 'matchups' && !matchups) loadM();
+    if (t === 'members' && !members) loadMembers();
+  };
   const set = async (id: string, status: string, lockNow = false) => { await adminSetMatchup(id, status, lockNow); await loadM(); };
   const sync = async () => {
     setBusy('sync');
-    try { const r = await syncWeek(l.league_id, l.sleeper_league_id, Number(week)); setBusy(`✓ ${r.pairs} matchups`); setOpen(true); await loadM(); }
+    try { const r = await syncWeek(l.league_id, l.sleeper_league_id, Number(week)); setBusy(`✓ ${r.pairs} matchups`); setTab('matchups'); await loadM(); }
     catch (e) { setBusy(e instanceof Error ? e.message : 'sync failed'); }
+  };
+  const regen = async (which: 'invite' | 'commish') => {
+    if (!confirm(`Regenerate the ${which} code? The old one stops working.`)) return;
+    const r = await adminRegenCode(l.league_id, which);
+    if (r.ok) reload();
   };
 
   return (
@@ -88,19 +103,40 @@ function LeagueRow({ l }: { l: AdminLeague }) {
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{l.name} <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>· {l.season}</span></div>
           <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 3 }}>{l.enrolled}/{l.rosters} enrolled · commish {l.commissioner ? '✓' : '—'}</div>
         </div>
-        <button onClick={toggle} className="mono" style={linkBtn}>{open ? 'hide' : 'matchups'}</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => showTab('members')} className="mono" style={linkBtn}>{tab === 'members' ? 'hide' : 'members'}</button>
+          <button onClick={() => showTab('matchups')} className="mono" style={linkBtn}>{tab === 'matchups' ? 'hide' : 'matchups'}</button>
+        </div>
       </div>
-      <div style={{ display: 'flex', gap: 14, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 10, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <span style={{ ...chip }}>commish&nbsp;{code(l.commish_code)}</span>
+        <button onClick={() => regen('commish')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate">↻</button>
         <span style={{ ...chip }}>invite&nbsp;{code(l.invite_code)}</span>
+        <button onClick={() => regen('invite')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate">↻</button>
+        <button onClick={() => { copy(shareLink(l.invite_code)); setCopied(true); }} className="mono" style={btn(false)}>{copied ? 'link copied' : 'copy invite link'}</button>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
         <span style={{ flex: 1 }} />
         <input value={week} onChange={(e) => setWeek(e.target.value.replace(/\D/g, ''))} style={{ ...inp, width: 38, padding: '5px 6px', textAlign: 'center' }} />
         <button onClick={sync} disabled={busy === 'sync'} className="mono" style={btn(true)}>{busy === 'sync' ? 'syncing…' : 'sync week'}</button>
       </div>
       {busy && busy !== 'sync' && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{busy}</div>}
-      {open && matchups && (
+      {tab === 'members' && members && (
         <div style={{ marginTop: 10 }}>
-          {matchups.length === 0 ? <Muted text="No matchups (run sync-week)." /> : matchups.map((m) => (
+          {members.map((m) => (
+            <div key={m.roster_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
+              <div>
+                <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{m.team}</div>
+                <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{m.enrolled ? (m.email ?? m.sleeper ?? 'enrolled') : 'not joined'}</div>
+              </div>
+              <span className="mono" style={{ fontSize: 8.5, color: m.enrolled ? 'var(--you)' : 'var(--faint)', border: `1px solid ${m.enrolled ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '2px 6px' }}>{m.enrolled ? 'JOINED' : '—'}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {tab === 'matchups' && matchups && (
+        <div style={{ marginTop: 10 }}>
+          {matchups.length === 0 ? <Muted text="No matchups (run sync week)." /> : matchups.map((m) => (
             <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderTop: '1px solid var(--bd)', flexWrap: 'wrap', gap: 6 }}>
               <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)' }}>W{m.week} · {m.home_roster_id}v{m.away_roster_id} · <span style={{ color: 'var(--you)' }}>{m.status}</span></span>
               <div style={{ display: 'flex', gap: 5 }}>

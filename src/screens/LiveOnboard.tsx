@@ -207,7 +207,11 @@ function CommishVerify({ onBack }: { onBack: () => void }) {
         <div className="mono" style={{ flex: 1, fontSize: 20, fontWeight: 700, letterSpacing: '0.15em', color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '12px 14px', textAlign: 'center' }}>{invite}</div>
         <button onClick={() => { navigator.clipboard?.writeText(invite); setCopied(true); }} className="mono" style={{ ...btn, padding: '0 14px' }}>{copied ? 'COPIED' : 'COPY'}</button>
       </div>
-      <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>You can now remove the tag from your Sleeper team name.</div>
+      <button onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}${window.location.pathname}?live=1&code=${invite}`); setCopied(true); }}
+        className="mono" style={{ ...btn, width: '100%', padding: '10px 0', marginTop: 8, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--bd)' }}>
+        ⛓ copy one-tap join link
+      </button>
+      <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>Players who open the link just sign in and confirm — no code to type. You can remove the tag from your Sleeper team name now.</div>
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={onBack} className="mono" style={linkBtn}>← done</button></div>
     </div>
   );
