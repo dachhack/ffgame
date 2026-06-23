@@ -1,30 +1,17 @@
 # Domain + custom auth — runbook
 
-For when you're ready to move off `…supabase.co` / `…github.io` and onto your
-own domain. Self-contained — pick it up later without rereading earlier
-context.
+For moving off `…supabase.co` / `…github.io` and onto **dripfantasy.com**.
+Self-contained — pick it up later without rereading earlier context.
+
+Domain registered via **Squarespace Domains** (Google Domains successor). DNS
+panel sits under: Squarespace dashboard → Domains → dripfantasy.com → DNS.
 
 ## TL;DR
-1. **Buy a domain** ($10–15/yr). My pick: **Cloudflare Registrar** — at-cost
-   pricing, free DNS, no upsells. Alt: Porkbun.
-2. **Upgrade Supabase to Pro** ($25/mo). Custom Domains is paid-only.
-3. **Add the auth subdomain** + a CNAME at your registrar.
-4. **Flip three configs** (auth URL, Google OAuth redirect, Pages CNAME).
-
-## 1. Buy the domain
-
-Cloudflare Registrar: <https://dash.cloudflare.com/?to=/:account/registrar>.
-Login → Domain Registration → Register Domains → search.
-
-Suggestions (verify availability):
-- `dripleague.com` / `dripleague.app` — most direct
-- `dripff.com` / `dripff.app` — keys to the Supabase project ref
-- `dripfantasy.com` — descriptive
-
-Cloudflare doesn't charge a markup over the registry fee. `.com` is ~$10/yr,
-`.app` is ~$14/yr.
-
-Once bought, Cloudflare auto-creates the zone. No DNS yet.
+1. ~~Buy a domain~~ ✓ done — `dripfantasy.com` at Squarespace.
+2. Add DNS records for **the site** (GitHub Pages) — free, immediate win.
+3. **Upgrade Supabase to Pro** ($25/mo) if you want custom auth.
+4. Add the **auth subdomain** + a CNAME at Squarespace.
+5. **Flip three configs** (auth URL, Google OAuth redirect, Pages CNAME).
 
 ## 2. Upgrade Supabase to Pro
 
@@ -32,78 +19,85 @@ Dashboard → **Project Settings → Billing → Change Plan → Pro ($25/mo)**.
 Same project, no data move. Pro is required for Custom Domains; everything
 else stays free quota.
 
-## 3. DNS — three records
+## 3. DNS at Squarespace
 
-At your registrar's DNS panel:
+Squarespace dashboard → **Domains → dripfantasy.com → DNS → Custom Records**.
 
-| Record | Type | Value | Why |
-|--------|------|-------|-----|
-| `auth` | CNAME | (from Supabase) | Custom auth host |
-| `www` (or apex) | CNAME / A | `dachhack.github.io` | Site itself |
-| `MX` | optional | (forwarding) | Email forwarding |
+| Host | Type | Value | Why |
+|------|------|-------|-----|
+| `www` | CNAME | `dachhack.github.io` | Site (GitHub Pages) |
+| `@` (apex) | A | 4× GitHub Pages IPs (below) | Site (apex redirect) |
+| `auth` | CNAME | (from Supabase, see §4) | Custom auth host |
 
-### auth subdomain
-- Dashboard → **Custom Domains → Add Custom Domain**: `auth.<your-domain>`
+### Site (move off `…github.io`) — do this first, it's free
+1. At Squarespace DNS → Add Custom Record:
+   - **CNAME**: host `www` → `dachhack.github.io.` (trailing dot)
+   - **A records** for the apex (host `@`), one per IP, GitHub Pages:
+     ```
+     185.199.108.153
+     185.199.109.153
+     185.199.110.153
+     185.199.111.153
+     ```
+2. GitHub repo → **Settings → Pages → Custom domain**: `www.dripfantasy.com`
+   → Save. Tick **"Enforce HTTPS"** once the cert provisions (~5–15 min).
+3. Update Supabase Auth → URL Configuration:
+   - Site URL: `https://www.dripfantasy.com/`
+   - Add to Redirect URLs: `https://www.dripfantasy.com/?live=1`
+   - Keep the old `https://dachhack.github.io/...` entry until you're confident.
+
+That alone makes the live site live at https://www.dripfantasy.com — no
+Supabase Pro needed.
+
+### auth subdomain (only after Supabase Pro)
+- Supabase Dashboard → **Custom Domains → Add Custom Domain**:
+  `auth.dripfantasy.com`
 - It returns a CNAME target like `abc123.frontend-prod.cluster.supabase.co`.
-- Add a **CNAME** record at registrar: `auth` → that target.
-  - **Cloudflare users**: set proxy status to **DNS only** (gray cloud).
-    Supabase needs a raw CNAME for its own SSL cert.
-- Wait 5–10 min → click **Verify** in the dashboard.
+- Squarespace DNS → Add Custom Record → **CNAME**: host `auth` → that target.
+- Wait 5–10 min → click **Verify** in the Supabase dashboard.
 
-### Site host (move off `…github.io`)
-- Dashboard for your registrar → CNAME `www` → `dachhack.github.io`
-  (or for the apex: an A record set to GitHub Pages IPs — see
-  <https://docs.github.com/pages/configuring-a-custom-domain-for-your-github-pages-site>).
-- GitHub repo → Settings → Pages → **Custom domain**: `www.<your-domain>`.
-  Tick **"Enforce HTTPS"** once the cert provisions (~10 min).
+### Email forwarding (free)
+Squarespace Domains includes free email forwarding under **Email → Email
+Forwarding**. Add `hi@dripfantasy.com` → `mlporritt@gmail.com`. Useful for
+OAuth's "App support email" looking professional.
 
-### Email forwarding (no inbox setup)
-Cloudflare Email Routing (free) → forward `hi@<your-domain>` →
-`mlporritt@gmail.com`. Useful for OAuth's "App support email" looking
-professional.
+## 4. Flip three configs (auth-domain only — site cutover is in §3 above)
 
-## 4. Flip three configs
-
-1. **Supabase Auth URL** — Dashboard → Authentication → URL Configuration
-   - Site URL: `https://www.<your-domain>/`  (or wherever the site lives)
-   - Redirect URLs: add `https://www.<your-domain>/?live=1`
-     (keep the old `https://dachhack.github.io/...` entry until cutover is done)
-
-2. **Google OAuth** — Cloud Console → OAuth client → **Authorized redirect URIs**
+1. **Google OAuth** — Cloud Console → OAuth client → **Authorized redirect URIs**
    - Replace `https://kaoitimdsftclykhqaqx.supabase.co/auth/v1/callback`
-     with `https://auth.<your-domain>/auth/v1/callback`
-   - Update **Authorized JavaScript origins** to your new site host.
-   - **Authorized domains** on the consent screen: add your domain, can drop
-     `supabase.co`.
+     with `https://auth.dripfantasy.com/auth/v1/callback`
+   - Update **Authorized JavaScript origins** to `https://www.dripfantasy.com`.
+   - **Authorized domains** on the consent screen: add `dripfantasy.com`,
+     can drop `supabase.co`.
 
-3. **App code** — `src/data/supabaseClient.ts`
-   - Update `DEFAULT_URL` to `https://auth.<your-domain>` (or leave the
-     supabase.co default and set `VITE_SUPABASE_URL=https://auth.<your-domain>`
+2. **App code** — `src/data/supabaseClient.ts`
+   - Update `DEFAULT_URL` to `https://auth.dripfantasy.com` (or leave the
+     supabase.co default and set `VITE_SUPABASE_URL=https://auth.dripfantasy.com`
      as a build-time env on the Pages workflow).
    - Bump version, push, confirm the version chip on the deployed site.
 
+3. **Supabase Auth → URL Configuration** (already partly done in §3)
+   - Site URL: `https://www.dripfantasy.com/`
+   - Redirect URLs: `https://www.dripfantasy.com/?live=1`
+
 ## Verify
-- Visit the new domain → Splash → join the live H2H pilot → Google sign-in:
-  prompt should read **"Sign in to <your-domain>"** with no supabase.co.
-- Magic-link email's redirect URL points at `www.<your-domain>`.
-- `https://www.<your-domain>` serves the live site with a green padlock.
+- Visit https://www.dripfantasy.com → live H2H pilot → Google sign-in:
+  prompt should read **"Sign in to dripfantasy.com"** with no supabase.co.
+- Magic-link email's redirect URL points at `www.dripfantasy.com`.
+- `https://www.dripfantasy.com` serves the live site with a green padlock.
 
-## Rough order-of-operations
-Same day:
-- Buy domain (5 min)
-- Upgrade Supabase Pro (1 min)
-- DNS records (5 min, then 10 min propagation wait)
+## Stage gates
+- **Today / free**: §3 site cutover only. Live site moves to
+  `www.dripfantasy.com`; auth still reads supabase.co in the consent screen.
+- **+$25/mo, ~30 min**: §3 auth subdomain + §4 config flips. Removes
+  supabase.co from the user-facing flow entirely.
 
-Next ~30 min:
-- Verify Supabase custom domain
-- Flip auth/OAuth configs
-- Push the code change
-
-## Cost summary
-| Item | First-year cost |
-|------|-----------------|
-| Domain (`.com` via Cloudflare) | $10 |
-| Supabase Pro | $25/mo (~$300/yr) |
-| Cloudflare DNS / Email Routing | $0 |
-| GitHub Pages (with custom domain) | $0 |
-| **Total** | **~$310/yr** |
+## Cost summary (with dripfantasy.com)
+| Item | Cost |
+|------|------|
+| Domain (Squarespace `.com`) | ~$20/yr |
+| Supabase Pro (only for custom auth) | $25/mo |
+| Squarespace DNS + email forwarding | $0 |
+| GitHub Pages | $0 |
+| **Site only (no auth domain)** | **~$20/yr** |
+| **Full custom auth** | **~$320/yr** |
