@@ -5,6 +5,7 @@ import { liveConfigured } from '../data/supabaseClient';
 import {
   sendMagicLink, getSession, onAuth, signOut, ensureAppUser,
   previewLeague, redeemInvite, myEnrollments,
+  startCommishVerify, confirmCommishVerify,
   type Enrollment, type LeaguePreview,
 } from '../data/liveApi';
 import type { Session } from '@supabase/supabase-js';
@@ -14,6 +15,7 @@ const label: React.CSSProperties = { fontSize: 9, letterSpacing: '0.14em', color
 const input: React.CSSProperties = { flex: 1, minWidth: 0, fontFamily: 'inherit', fontSize: 14, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '10px 12px', outline: 'none' };
 const btn: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 5, padding: '0 16px', cursor: 'pointer', whiteSpace: 'nowrap' };
 const errStyle: React.CSSProperties = { fontSize: 10.5, color: 'var(--opp)', marginTop: 9, lineHeight: 1.4 };
+const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
 
 export function LiveOnboard() {
   const { navigate } = useStore();
@@ -118,6 +120,7 @@ function SignIn() {
 
 function Enroll({ session }: { session: Session }) {
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
+  const [commish, setCommish] = useState(false);
 
   const refresh = async () => {
     try { await ensureAppUser(session); setEnrollments(await myEnrollments(session.user.id)); }
@@ -125,9 +128,97 @@ function Enroll({ session }: { session: Session }) {
   };
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [session.user.id]);
 
+  if (commish) return <CommishVerify onBack={() => { setCommish(false); refresh(); }} />;
   if (enrollments === null) return <Muted text="Loading your leagues…" />;
-  if (enrollments.length > 0) return <Enrolled enrollments={enrollments} />;
-  return <RedeemForm onJoined={refresh} />;
+  return (
+    <>
+      {enrollments.length > 0 ? <Enrolled enrollments={enrollments} /> : <RedeemForm onJoined={refresh} />}
+      <div style={{ textAlign: 'center', marginTop: 16 }}>
+        <button onClick={() => setCommish(true)} className="mono" style={linkBtn}>I’m the commissioner — verify my league →</button>
+      </div>
+    </>
+  );
+}
+
+function CommishVerify({ onBack }: { onBack: () => void }) {
+  const [code, setCode] = useState('');
+  const [username, setUsername] = useState('');
+  const [tag, setTag] = useState<string | null>(null);
+  const [league, setLeague] = useState('');
+  const [invite, setInvite] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const start = async () => {
+    if (!code.trim() || !username.trim() || busy) return;
+    setBusy(true); setErr(null);
+    const r = await startCommishVerify(code, username);
+    setBusy(false);
+    if (!r.ok) { setErr(r.error ?? 'Could not start verification.'); return; }
+    setTag(r.tag ?? null); setLeague(r.league ?? '');
+  };
+
+  const confirm = async () => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    const r = await confirmCommishVerify(code);
+    setBusy(false);
+    if (!r.ok) { setErr(r.error ?? 'Not verified yet.'); return; }
+    setInvite(r.invite_code ?? null); setLeague(r.league ?? league);
+  };
+
+  if (invite) return (
+    <div style={card}>
+      <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--you)' }}>Verified — you’re the commissioner.</div>
+      <div className="mono" style={{ fontSize: 11, color: 'var(--dim)', marginTop: 8 }}>{league}. Share this player invite code with your league:</div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <div className="mono" style={{ flex: 1, fontSize: 20, fontWeight: 700, letterSpacing: '0.15em', color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '12px 14px', textAlign: 'center' }}>{invite}</div>
+        <button onClick={() => { navigator.clipboard?.writeText(invite); setCopied(true); }} className="mono" style={{ ...btn, padding: '0 14px' }}>{copied ? 'COPIED' : 'COPY'}</button>
+      </div>
+      <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>You can now remove the tag from your Sleeper team name.</div>
+      <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={onBack} className="mono" style={linkBtn}>← done</button></div>
+    </div>
+  );
+
+  return (
+    <>
+      <div style={{ textAlign: 'center', marginBottom: 20 }}>
+        <div className="grotesk" style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>Verify as commissioner</div>
+        <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Enter the commissioner code you were given, and prove you run the league by tagging your Sleeper team name.</div>
+      </div>
+      <div style={card}>
+        {!tag ? (
+          <>
+            <label className="mono" style={label}>COMMISSIONER CODE</label>
+            <input value={code} autoFocus autoCapitalize="characters" autoCorrect="off" spellCheck={false}
+              onChange={(e) => { setCode(e.target.value.toUpperCase()); setErr(null); }}
+              placeholder="e.g. 9F3A1C2D" style={{ ...input, letterSpacing: '0.12em', marginTop: 7, width: '100%', boxSizing: 'border-box' }} />
+            <label className="mono" style={{ ...label, display: 'block', marginTop: 12 }}>YOUR SLEEPER USERNAME</label>
+            <div style={{ display: 'flex', gap: 8, marginTop: 7 }}>
+              <input value={username} autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                onChange={(e) => { setUsername(e.target.value); setErr(null); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') start(); }}
+                placeholder="your Sleeper handle" style={input} />
+              <button onClick={start} disabled={busy || !code.trim() || !username.trim()} className="mono" style={{ ...btn, opacity: busy || !code.trim() || !username.trim() ? 0.6 : 1 }}>{busy ? '…' : 'START'}</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', lineHeight: 1.6 }}>
+              {league && <>Verifying <span style={{ color: 'var(--text)', fontWeight: 700 }}>{league}</span>.<br /></>}
+              In Sleeper, add this tag to your team name, then tap Check:
+            </div>
+            <div className="mono" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--you)', borderRadius: 6, padding: '12px 14px', textAlign: 'center', margin: '12px 0' }}>{tag}</div>
+            <button onClick={confirm} disabled={busy} className="mono" style={{ ...btn, width: '100%', padding: '11px 0', opacity: busy ? 0.6 : 1 }}>{busy ? 'CHECKING…' : 'CHECK ✓'}</button>
+            <div style={{ textAlign: 'center', marginTop: 10 }}><button onClick={() => { setTag(null); setErr(null); }} className="mono" style={linkBtn}>start over</button></div>
+          </>
+        )}
+        {err && <div className="mono" style={errStyle}>{err}</div>}
+      </div>
+      <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
+    </>
+  );
 }
 
 function Enrolled({ enrollments }: { enrollments: Enrollment[] }) {

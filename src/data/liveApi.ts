@@ -77,3 +77,25 @@ export async function myEnrollments(userId: string): Promise<Enrollment[]> {
   if (error) throw error;
   return (data as unknown as Enrollment[]) ?? [];
 }
+
+// ── Commissioner verification (migration 0003) ──────────────────────────────────
+export interface StartCommish { ok: boolean; error?: string; tag?: string; league?: string; }
+export interface ConfirmCommish { ok: boolean; error?: string; invite_code?: string; league?: string; }
+
+/** Step 1: validate the commissioner code, confirm Sleeper ownership, get a team-name tag. */
+export async function startCommishVerify(commishCode: string, sleeperUsername: string): Promise<StartCommish> {
+  const user = await resolveUser(sleeperUsername);
+  if (!user) return { ok: false, error: `No Sleeper user “${sleeperUsername}”. Check the spelling.` };
+  const { data, error } = await client().rpc('start_commish_verify', {
+    p_code: commishCode.trim(), p_sleeper_user_id: user.userId, p_sleeper_username: user.username,
+  });
+  if (error) return { ok: false, error: error.message };
+  return data as StartCommish;
+}
+
+/** Step 2: confirm the tag is now in the Sleeper team name → become commissioner + get the invite code. */
+export async function confirmCommishVerify(commishCode: string): Promise<ConfirmCommish> {
+  const { data, error } = await client().rpc('confirm_commish_verify', { p_code: commishCode.trim() });
+  if (error) return { ok: false, error: error.message };
+  return data as ConfirmCommish;
+}
