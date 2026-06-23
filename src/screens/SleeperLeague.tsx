@@ -14,7 +14,7 @@ function buildErrorCopy(e: unknown): string {
   const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
   const isDirectory = (e instanceof Error && e.name === 'AbortError') || msg.includes('player directory') || msg.includes('directory');
   return isDirectory
-    ? 'Couldn’t download the Sleeper player directory (~5MB) — check your connection and try again.'
+    ? 'Couldn’t download the Sleeper player directory (~15MB) — check your connection and try again.'
     : 'Couldn’t build the sim for this league. Try again.';
 }
 

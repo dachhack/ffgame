@@ -1,4 +1,4 @@
-// Sleeper's full NFL player directory (~5MB), needed to turn a league's roster
+// Sleeper's full NFL player directory (~15MB), needed to turn a league's roster
 // player_ids into names / positions / NFL teams. Fetched at most once a day and
 // cached in IndexedDB so the season sim loads instantly on repeat visits.
 import type { Pos } from '../types';
@@ -103,7 +103,7 @@ export async function loadPlayerDirectory(onProgress?: (note: string) => void): 
         return mem;
       }
     }
-    onProgress?.('Downloading Sleeper player directory (~5MB, one-time)…');
+    onProgress?.('Downloading Sleeper player directory (~15MB, one-time)…');
     // One retry: a 5MB fetch can stall on flaky networks; abort and try again
     // before giving up so the build doesn't wedge on "Downloading…".
     let data: Record<string, Record<string, unknown>>;
