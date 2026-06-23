@@ -5,12 +5,13 @@ import { liveConfigured } from '../data/supabaseClient';
 import {
   sendMagicLink, verifyEmailOtp, getSession, onAuth, signOut, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, myEnrollments,
-  startCommishVerify, confirmCommishVerify, isAdmin,
+  startCommishVerify, confirmCommishVerify, isAdmin, commishOverview,
   type Enrollment, type LeaguePreview, type PreviewRedeem,
 } from '../data/liveApi';
 import { LivePicks } from './LivePicks';
 import { LiveBoard } from './LiveBoard';
 import { AdminPage } from './AdminPage';
+import { CommishDash } from './CommishDash';
 import type { Session } from '@supabase/supabase-js';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
@@ -141,11 +142,13 @@ function SignIn() {
 function Enroll({ session }: { session: Session }) {
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
   const [admin, setAdmin] = useState(false);
-  const [view, setView] = useState<'home' | 'commish' | 'picks' | 'board' | 'admin'>('home');
+  const [isCommish, setIsCommish] = useState(false);
+  const [view, setView] = useState<'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin'>('home');
 
   const refresh = async () => {
     try { await ensureAppUser(session); setEnrollments(await myEnrollments(session.user.id)); }
     catch { setEnrollments([]); }
+    commishOverview().then((l) => setIsCommish((l?.length ?? 0) > 0)).catch(() => setIsCommish(false));
   };
   useEffect(() => {
     refresh();
@@ -154,6 +157,7 @@ function Enroll({ session }: { session: Session }) {
   }, [session.user.id]);
 
   if (view === 'commish') return <CommishVerify onBack={() => { setView('home'); refresh(); }} />;
+  if (view === 'commishdash') return <CommishDash onBack={() => setView('home')} />;
   if (view === 'picks') return <LivePicks userId={session.user.id} onBack={() => setView('home')} />;
   if (view === 'board') return <LiveBoard userId={session.user.id} onBack={() => setView('home')} />;
   if (view === 'admin') return <AdminPage onBack={() => setView('home')} />;
@@ -164,6 +168,7 @@ function Enroll({ session }: { session: Session }) {
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {enrollments.length > 0 && <button onClick={() => setView('picks')} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◈ set your lineup →</button>}
         {enrollments.length > 0 && <button onClick={() => setView('board')} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board →</button>}
+        {isCommish && <button onClick={() => setView('commishdash')} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚑ manage my league →</button>}
         <button onClick={() => setView('commish')} className="mono" style={linkBtn}>I’m the commissioner — verify my league →</button>
         {admin && <button onClick={() => setView('admin')} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚙ super admin →</button>}
       </div>

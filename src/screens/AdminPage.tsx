@@ -5,6 +5,7 @@ import {
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember,
 } from '../data/liveApi';
 import { importLeague, syncWeek } from '../data/sleeperAdmin';
+import { forceResolve } from '../data/forceResolve';
 
 const shareLink = (code: string) => `${window.location.origin}${window.location.pathname}?live=1&code=${code}`;
 const copy = (v: string) => navigator.clipboard?.writeText(v);
@@ -69,13 +70,19 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
   );
 }
 
-function LeagueRow({ l, reload }: { l: AdminLeague; reload: () => void }) {
+export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload: () => void; admin?: boolean }) {
   const [matchups, setMatchups] = useState<AdminMatchup[] | null>(null);
   const [members, setMembers] = useState<AdminMember[] | null>(null);
   const [tab, setTab] = useState<'' | 'matchups' | 'members'>('');
   const [week, setWeek] = useState('1');
+  const [srcWeek, setSrcWeek] = useState('1');
   const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const resolve = async (id: string) => {
+    setBusy('resolve');
+    try { await forceResolve(id, Number(srcWeek)); setBusy('✓ resolved from 2025'); await loadM(); }
+    catch (e) { setBusy(e instanceof Error ? e.message : 'resolve failed'); }
+  };
 
   const loadM = async () => setMatchups(await adminMatchups(l.league_id));
   const loadMembers = async () => setMembers(await adminLeagueMembers(l.league_id));
@@ -110,7 +117,7 @@ function LeagueRow({ l, reload }: { l: AdminLeague; reload: () => void }) {
       </div>
       <div style={{ display: 'flex', gap: 10, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <span style={{ ...chip }}>commish&nbsp;{code(l.commish_code)}</span>
-        <button onClick={() => regen('commish')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate">↻</button>
+        {admin && <button onClick={() => regen('commish')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate">↻</button>}
         <span style={{ ...chip }}>invite&nbsp;{code(l.invite_code)}</span>
         <button onClick={() => regen('invite')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate">↻</button>
         <button onClick={() => { copy(shareLink(l.invite_code)); setCopied(true); }} className="mono" style={btn(false)}>{copied ? 'link copied' : 'copy invite link'}</button>
@@ -136,13 +143,21 @@ function LeagueRow({ l, reload }: { l: AdminLeague; reload: () => void }) {
       )}
       {tab === 'matchups' && matchups && (
         <div style={{ marginTop: 10 }}>
+          {admin && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+              <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>force-resolve ▶ from 2025 wk</span>
+              <input value={srcWeek} onChange={(e) => setSrcWeek(e.target.value.replace(/\D/g, ''))} style={{ ...inp, width: 32, padding: '4px 5px', textAlign: 'center' }} />
+              <span className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)' }}>(real engine preview)</span>
+            </div>
+          )}
           {matchups.length === 0 ? <Muted text="No matchups (run sync week)." /> : matchups.map((m) => (
             <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderTop: '1px solid var(--bd)', flexWrap: 'wrap', gap: 6 }}>
-              <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)' }}>W{m.week} · {m.home_roster_id}v{m.away_roster_id} · <span style={{ color: 'var(--you)' }}>{m.status}</span></span>
+              <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)' }}>W{m.week} · {m.home_roster_id}v{m.away_roster_id} · <span style={{ color: 'var(--you)' }}>{m.status}</span>{m.home_final != null && <span style={{ color: 'var(--faint)' }}> · {m.home_final}-{m.away_final}</span>}</span>
               <div style={{ display: 'flex', gap: 5 }}>
                 <button style={btn(m.status === 'scheduled')} onClick={() => set(m.id, 'scheduled')}>sched</button>
                 <button style={btn(m.status === 'live')} onClick={() => set(m.id, 'live', true)}>live+lock</button>
                 <button style={btn(m.status === 'final')} onClick={() => set(m.id, 'final')}>final</button>
+                {admin && <button style={btn(false)} onClick={() => resolve(m.id)} title="run real engine on baked 2025 data">▶</button>}
               </div>
             </div>
           ))}
