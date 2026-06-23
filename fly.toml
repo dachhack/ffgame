@@ -1,0 +1,15 @@
+# Fly config for the 2026 pilot WORKER (server/). Deploy from the repo root:
+#   fly deploy
+# Set secrets first (see server/DEPLOY.md). No [[services]] — it's a background
+# poller with no inbound traffic, so the machine just runs the scheduler.
+app = "drip-pilot-worker"
+primary_region = "iad"
+
+[build]
+
+[env]
+  PILOT_SEASON = "2026"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
