@@ -96,8 +96,9 @@ OAuth's "App support email" looking professional.
 | Item | Cost |
 |------|------|
 | Domain (Squarespace `.com`) | ~$20/yr |
-| Supabase Pro (only for custom auth) | $25/mo |
+| Supabase Pro (base plan) | $25/mo |
+| Supabase Custom Domains add-on | $10/mo |
 | Squarespace DNS + email forwarding | $0 |
 | GitHub Pages | $0 |
 | **Site only (no auth domain)** | **~$20/yr** |
-| **Full custom auth** | **~$320/yr** |
+| **Full custom auth** | **~$440/yr** ($20 + $35×12) |
