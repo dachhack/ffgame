@@ -165,6 +165,28 @@ export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[
   return (data ?? []) as RevealedPick[];
 }
 
+// ── Super admin ─────────────────────────────────────────────────────────────────
+export interface AdminLeague { league_id: string; name: string; season: string; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; }
+export interface AdminMatchup { id: string; week: number; home_roster_id: number; away_roster_id: number; status: string; lock_at: string | null; home_final: number | null; away_final: number | null; }
+export interface AdminOverride { sleeper_user_id: string; note: string | null; }
+export interface AdminAudit { table: string; op: string; row_id: string | null; at: string; }
+
+async function rpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
+  const { data, error } = await client().rpc(fn, args);
+  if (error) throw error;
+  return data as T;
+}
+
+export const isAdmin = () => rpc<boolean>('is_admin');
+export const adminOverview = () => rpc<AdminLeague[]>('admin_overview');
+export const adminMatchups = (leagueId: string) => rpc<AdminMatchup[]>('admin_matchups', { p_league_id: leagueId });
+export const adminSetMatchup = (matchupId: string, status: string, lockNow = false) =>
+  rpc<{ ok: boolean; error?: string }>('admin_set_matchup', { p_matchup_id: matchupId, p_status: status, p_lock_now: lockNow });
+export const adminOverrides = () => rpc<AdminOverride[]>('admin_overrides');
+export const adminSetOverride = (sleeperUserId: string, note: string, remove = false) =>
+  rpc<{ ok: boolean }>('admin_set_override', { p_sleeper_user_id: sleeperUserId, p_note: note, p_remove: remove });
+export const adminAudit = (limit = 50) => rpc<AdminAudit[]>('admin_audit', { p_limit: limit });
+
 /** Subscribe to live score changes for a matchup. Returns an unsubscribe fn. */
 export function subscribeMatchup(matchupId: string, onChange: () => void): () => void {
   const c = client();

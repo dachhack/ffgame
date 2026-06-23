@@ -8,8 +8,10 @@ import {
   startCommishVerify, confirmCommishVerify,
   type Enrollment, type LeaguePreview,
 } from '../data/liveApi';
+import { isAdmin } from '../data/liveApi';
 import { LivePicks } from './LivePicks';
 import { LiveBoard } from './LiveBoard';
+import { AdminPage } from './AdminPage';
 import type { Session } from '@supabase/supabase-js';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
@@ -122,17 +124,23 @@ function SignIn() {
 
 function Enroll({ session }: { session: Session }) {
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
-  const [view, setView] = useState<'home' | 'commish' | 'picks' | 'board'>('home');
+  const [admin, setAdmin] = useState(false);
+  const [view, setView] = useState<'home' | 'commish' | 'picks' | 'board' | 'admin'>('home');
 
   const refresh = async () => {
     try { await ensureAppUser(session); setEnrollments(await myEnrollments(session.user.id)); }
     catch { setEnrollments([]); }
   };
-  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [session.user.id]);
+  useEffect(() => {
+    refresh();
+    isAdmin().then(setAdmin).catch(() => setAdmin(false));
+    /* eslint-disable-next-line */
+  }, [session.user.id]);
 
   if (view === 'commish') return <CommishVerify onBack={() => { setView('home'); refresh(); }} />;
   if (view === 'picks') return <LivePicks userId={session.user.id} onBack={() => setView('home')} />;
   if (view === 'board') return <LiveBoard userId={session.user.id} onBack={() => setView('home')} />;
+  if (view === 'admin') return <AdminPage onBack={() => setView('home')} />;
   if (enrollments === null) return <Muted text="Loading your leagues…" />;
   return (
     <>
@@ -141,6 +149,7 @@ function Enroll({ session }: { session: Session }) {
         {enrollments.length > 0 && <button onClick={() => setView('picks')} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◈ set your lineup →</button>}
         {enrollments.length > 0 && <button onClick={() => setView('board')} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board →</button>}
         <button onClick={() => setView('commish')} className="mono" style={linkBtn}>I’m the commissioner — verify my league →</button>
+        {admin && <button onClick={() => setView('admin')} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚙ super admin →</button>}
       </div>
     </>
   );
