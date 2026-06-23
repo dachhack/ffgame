@@ -2,21 +2,15 @@
 // play-by-play to preview a matchup's live scores before the season. Mirrors the
 // worker's resolver (server/src/resolve.js) but client-side, using the same
 // src/engine/sim.ts the demo runs. Writes per-window scores via admin_set_state.
-import type { Player, Pos } from '../types';
+import type { Player } from '../types';
 import { WINDOWS, defaultMetric } from './metrics';
 import { resolveSlot, EMPTY_PLAYER, type SlotInput } from '../engine/sim';
 import { loadRealWeek } from './realPbp';
-import { BAKED_SLUGS } from './bakedSlugs';
+import { slugMeta as meta } from './slugMeta';
 import { adminMatchupPicks, adminSetMatchup, adminSetState, type MatchupPicks } from './liveApi';
 
 const ZERO = { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 };
 
-function meta(slug: string): { pos: Pos; team: string } {
-  if (slug.endsWith('-dst')) return { pos: 'DEF', team: slug.slice(0, -4).toUpperCase() };
-  if (slug.endsWith('-k')) return { pos: 'K', team: slug.slice(0, -2).toUpperCase() };
-  const b = BAKED_SLUGS[slug];
-  return b ? { pos: b.pos as Pos, team: b.team } : { pos: 'WR', team: '' };
-}
 function mkPlayer(slug: string): Player {
   const m = meta(slug);
   return { id: slug, name: slug, full: slug, pos: m.pos, team: m.team, stats: { ...ZERO } };

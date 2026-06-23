@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { WINDOWS, METRICS } from '../data/metrics';
-import type { Pos } from '../types';
+import { windowForTeam, hasSlate } from '../data/nflSlate';
+import { slugMeta } from '../data/slugMeta';
+import type { Pos, WindowId } from '../types';
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks,
   type LiveMatchup, type PoolPlayer, type PickRow,
@@ -51,6 +53,28 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   const posBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, p.pos])), [pool]);
   const locked = !!matchup && (matchup.status !== 'scheduled' || (!!matchup.lock_at && new Date(matchup.lock_at) <= new Date()));
 
+  // Slate-gating: a player can only fill a slot in the window their real NFL team
+  // plays that week. Players on a bye are eligible nowhere; players whose team we
+  // can't resolve (no slate / synthetic) stay eligible everywhere so picks aren't
+  // stranded. Gating is off entirely for weeks we have no baked slate for.
+  const week = matchup?.week ?? 0;
+  const gateOn = hasSlate(week);
+  const teamBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, slugMeta(p.slug).team])), [pool]);
+  const winBySlug = useMemo<Record<string, WindowId | 'any' | null>>(() => {
+    const m: Record<string, WindowId | 'any' | null> = {};
+    for (const p of pool) { const t = teamBySlug[p.slug]; m[p.slug] = t ? windowForTeam(week, t) : 'any'; }
+    return m;
+  }, [pool, teamBySlug, week]);
+  /** Pool eligible for a window's slots, keeping any already-picked player visible. */
+  const eligibleFor = (winId: string, picked: string | null): PoolPlayer[] => {
+    let list = gateOn ? pool.filter((p) => winBySlug[p.slug] === 'any' || winBySlug[p.slug] === winId) : pool;
+    if (picked && !list.some((p) => p.slug === picked)) {
+      const sel = pool.find((p) => p.slug === picked);
+      if (sel) list = [sel, ...list];
+    }
+    return list;
+  };
+
   const setSlot = (key: string, patch: Partial<{ player_slug: string | null; metric_id: string | null }>) => {
     setSaved(false);
     setPicks((prev) => {
@@ -95,21 +119,28 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         </div>
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
           Pick a player + a hidden metric per slot. Sealed picks stay hidden from your opponent until kickoff. {filled}/{SLOTS.length} set.
+          {gateOn && <><br />Each slot only takes players whose real NFL team plays in that window. Players on a bye can’t be slotted.</>}
         </div>
       </div>
 
-      {WINDOWS.map((w) => (
+      {WINDOWS.map((w) => {
+        const elig = gateOn ? pool.filter((pl) => winBySlug[pl.slug] === 'any' || winBySlug[pl.slug] === w.id).length : pool.length;
+        return (
         <div key={w.id} style={{ ...card, marginBottom: 10 }}>
-          <div className="mono" style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginBottom: 8 }}>{w.label} · {w.sub}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div className="mono" style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700 }}>{w.label} · {w.sub}</div>
+            {gateOn && <div className="mono" style={{ fontSize: 9, color: elig ? 'var(--faint)' : 'var(--opp)' }}>{elig} eligible</div>}
+          </div>
           {SLOTS.filter((s) => s.win === w.id).map((s) => {
             const p = picks[s.key] ?? { player_slug: null, metric_id: null };
             const pos = (p.player_slug ? posBySlug[p.player_slug] : null) as Pos | null;
             const metrics = pos ? (METRICS[pos] ?? []).filter((m) => !m.lock) : [];
+            const options = eligibleFor(w.id, p.player_slug);
             return (
               <div key={s.key} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                 <select value={p.player_slug ?? ''} disabled={locked} onChange={(e) => setSlot(s.key, { player_slug: e.target.value || null })} style={{ ...sel, flex: 1.3 }}>
-                  <option value="">— player —</option>
-                  {pool.map((pl) => <option key={pl.slug} value={pl.slug}>{pl.full} ({pl.pos})</option>)}
+                  <option value="">{options.length ? '— player —' : '— none this window —'}</option>
+                  {options.map((pl) => <option key={pl.slug} value={pl.slug}>{pl.full} ({pl.pos}{teamBySlug[pl.slug] ? ` · ${teamBySlug[pl.slug]}` : ''})</option>)}
                 </select>
                 <select value={p.metric_id ?? ''} disabled={locked || !pos} onChange={(e) => setSlot(s.key, { metric_id: e.target.value || null })} style={{ ...sel, flex: 1 }}>
                   <option value="">— metric —</option>
@@ -119,7 +150,8 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
             );
           })}
         </div>
-      ))}
+        );
+      })}
 
       {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', margin: '4px 0 10px' }}>{err}</div>}
       {!locked && <button onClick={seal} disabled={saving} className="mono" style={{ ...btn, opacity: saving ? 0.6 : 1 }}>{saving ? 'SEALING…' : saved ? 'SEALED ✓ — UPDATE' : 'SEAL LINEUP'}</button>}

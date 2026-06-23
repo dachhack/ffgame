@@ -21,6 +21,9 @@ export const NFL_SLATE: Record<number, NflGame[]> = {
   14: [{ away: "DAL", home: "DET", aScore: 30, hScore: 44, win: "tnf" }, { away: "SEA", home: "ATL", aScore: 37, hScore: 9, win: "early" }, { away: "PIT", home: "BAL", aScore: 27, hScore: 22, win: "early" }, { away: "CIN", home: "BUF", aScore: 34, hScore: 39, win: "early" }, { away: "TEN", home: "CLE", aScore: 31, hScore: 29, win: "early" }, { away: "IND", home: "JAX", aScore: 19, hScore: 36, win: "early" }, { away: "WAS", home: "MIN", aScore: 0, hScore: 31, win: "early" }, { away: "MIA", home: "NYJ", aScore: 34, hScore: 10, win: "early" }, { away: "NO", home: "TB", aScore: 24, hScore: 20, win: "early" }, { away: "DEN", home: "LV", aScore: 24, hScore: 17, win: "late" }, { away: "LA", home: "ARI", aScore: 45, hScore: 17, win: "late" }, { away: "CHI", home: "GB", aScore: 21, hScore: 28, win: "late" }, { away: "HOU", home: "KC", aScore: 20, hScore: 10, win: "snf" }, { away: "PHI", home: "LAC", aScore: 19, hScore: 22, win: "mnf" }],
 };
 
+/** Whether we have a real slate baked for a week (gates slate-aware UI). */
+export const hasSlate = (week: number): boolean => !!NFL_SLATE[week];
+
 /** The NFL game a team plays in a given week, or undefined (bye). */
 export function nflGameForTeam(week: number, team?: string | null): NflGame | undefined {
   if (!team) return undefined;
