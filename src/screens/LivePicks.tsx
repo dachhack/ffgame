@@ -100,9 +100,9 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   if (state === 'loading') return <Muted text="Loading your matchup…" />;
   if (state === 'none') return (
     <div style={card}>
-      <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>No matchup yet</div>
+      <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>You’re all set — no matchup yet</div>
       <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 10, lineHeight: 1.5 }}>
-        Your weekly schedule hasn’t synced yet (the commissioner / worker imports it). {err && <><br />— {err}</>}
+        Your team is enrolled. Your week-1 matchup appears here once your commissioner syncs the schedule — check back closer to kickoff. {err && <><br />— {err}</>}
       </div>
       <div style={{ textAlign: 'center', marginTop: 14 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
     </div>

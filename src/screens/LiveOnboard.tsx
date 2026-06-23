@@ -192,6 +192,11 @@ function AuthForm() {
           {mode !== 'signin' && <button onClick={() => go('signin')} className="mono" style={linkBtn}>← sign in</button>}
           {mode !== 'magic' && <button onClick={() => go('magic')} className="mono" style={linkBtn}>email me a link instead</button>}
         </div>
+        {showPw && (
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 14, lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
+            To join a league you’ll also need your <span style={{ color: 'var(--dim)' }}>invite code</span> (from your commissioner) and your <span style={{ color: 'var(--dim)' }}>Sleeper username</span>.
+          </div>
+        )}
       </div>
     </>
   );
@@ -234,6 +239,7 @@ function Enroll({ session }: { session: Session }) {
   const [admin, setAdmin] = useState(false);
   const [isCommish, setIsCommish] = useState(false);
   const [view, setView] = useState<'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin'>('home');
+  const [choice, setChoice] = useState<'none' | 'player'>('none');
 
   const refresh = async () => {
     try { await ensureAppUser(session); setEnrollments(await myEnrollments(session.user.id)); }
@@ -252,15 +258,51 @@ function Enroll({ session }: { session: Session }) {
   if (view === 'board') return <LiveBoard userId={session.user.id} onBack={() => setView('home')} />;
   if (view === 'admin') return <AdminPage onBack={() => setView('home')} />;
   if (enrollments === null) return <Muted text="Loading your leagues…" />;
+
+  // Not enrolled yet → fork by role instead of defaulting everyone into the player form.
+  if (enrollments.length === 0) return (
+    <>
+      {choice === 'none'
+        ? <RoleChooser onPlayer={() => setChoice('player')} onCommish={() => setView('commish')} />
+        : <RedeemForm onJoined={refresh} />}
+      <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
+        {admin && <button onClick={() => setView('admin')} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚙ super admin →</button>}
+      </div>
+    </>
+  );
+
   return (
     <>
-      {enrollments.length > 0 ? <Enrolled enrollments={enrollments} /> : <RedeemForm onJoined={refresh} />}
+      <Enrolled enrollments={enrollments} />
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {enrollments.length > 0 && <button onClick={() => setView('picks')} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◈ set your lineup →</button>}
-        {enrollments.length > 0 && <button onClick={() => setView('board')} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board →</button>}
+        <button onClick={() => setView('picks')} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◈ set your lineup →</button>
+        <button onClick={() => setView('board')} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board →</button>
         {isCommish && <button onClick={() => setView('commishdash')} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚑ manage my league →</button>}
-        <button onClick={() => setView('commish')} className="mono" style={linkBtn}>I’m the commissioner — verify my league →</button>
+        {!isCommish && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>I also run a league — verify as commissioner →</button>}
         {admin && <button onClick={() => setView('admin')} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚙ super admin →</button>}
+      </div>
+    </>
+  );
+}
+
+function RoleChooser({ onPlayer, onCommish }: { onPlayer: () => void; onCommish: () => void }) {
+  const choice: React.CSSProperties = { width: '100%', textAlign: 'left', fontFamily: 'inherit', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, cursor: 'pointer' };
+  return (
+    <>
+      <div style={{ textAlign: 'center', marginBottom: 20 }}>
+        <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>You’re signed in.</div>
+        <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>How are you joining the pilot?</div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <button onClick={onPlayer} style={choice}>
+          <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>I’m a player →</div>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>I have a league invite code. Link my Sleeper team and set my lineup.</div>
+        </button>
+        <button onClick={onCommish} style={choice}>
+          <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>I run this league →</div>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Verify as commissioner with the code you were given, then share a player invite code with your league.</div>
+        </button>
       </div>
     </>
   );

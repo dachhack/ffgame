@@ -34,6 +34,12 @@ export function friendlyError(x: unknown): string {
     return 'That doesn’t look like a valid email address.';
   if (m.includes('signups not allowed') || m.includes('signup is disabled') || m.includes('signups disabled'))
     return 'Sign-ups are closed right now. Reach out to your commissioner.';
+  if (m.includes('not a manager'))
+    return 'That Sleeper account isn’t a manager in this league. Double-check your handle — or ask your commissioner to confirm you’re in the Sleeper league.';
+  if (m.includes('already linked to another login'))
+    return 'That Sleeper account is already linked to a different login. Sign in with that account, or ask your commissioner for help.';
+  if (m.includes('invalid code'))
+    return 'That code didn’t match a league. Double-check it with your commissioner.';
   return raw.charAt(0).toUpperCase() + raw.slice(1) + (/[.!?]$/.test(raw) ? '' : '.');
 }
 

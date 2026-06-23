@@ -39,21 +39,34 @@ export function Splash() {
 
       <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}>
         <div style={{ width: '100%', maxWidth: 440 }}>
-          <div style={{ textAlign: 'center', marginBottom: 22 }}>
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
             <div className="grotesk" style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1.1 }}>
-              Run your league as a <span style={{ color: 'var(--you)' }}>2025 season sim</span>.
+              The <span style={{ color: 'var(--you)' }}>live H2H</span> fantasy pilot.
             </div>
             <div style={{ fontSize: 13, color: 'var(--dim)', marginTop: 10, lineHeight: 1.5 }}>
-              Drop in your Sleeper username to pull every 2025 league you’re in — across all formats — then dive into one.
+              Sealed lineups, head-to-head, scored live off real NFL games. Join your league’s pilot — your commissioner shares a code.
             </div>
           </div>
 
+          <button onClick={() => navigate({ name: 'live' })} className="mono" style={{ width: '100%', fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 7, padding: '15px 0', cursor: 'pointer' }}>
+            {signedIn ? '↩ continue to your live league →' : '◈ join the live H2H pilot →'}
+          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '22px 0 16px' }}>
+            <span style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
+            <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.1em' }}>OR JUST EXPLORING</span>
+            <span style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
+          </div>
+
           <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Run any league as a 2025 season sim</div>
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', margin: '6px 0 12px', lineHeight: 1.5 }}>
+              Drop in your Sleeper username to pull every 2025 league you’re in, then dive into one.
+            </div>
             <label className="mono" style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)', fontWeight: 700 }}>SLEEPER USERNAME</label>
             <div style={{ display: 'flex', gap: 8, marginTop: 7 }}>
               <input
                 value={name}
-                autoFocus
                 onChange={(e) => { setName(e.target.value); setErr(null); }}
                 onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
                 placeholder="e.g. dachhack"
@@ -70,12 +83,9 @@ export function Splash() {
             </div>
           </div>
 
-          <div style={{ textAlign: 'center', marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ textAlign: 'center', marginTop: 16 }}>
             <button onClick={() => { exitSimLeague(); navigate({ name: 'hub' }); }} className="mono" style={{ background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', cursor: 'pointer' }}>
               or explore the demo league →
-            </button>
-            <button onClick={() => navigate({ name: 'live' })} className="mono" style={{ background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', cursor: 'pointer' }}>
-              {signedIn ? '↩ continue to your live league →' : '◈ join the live H2H pilot →'}
             </button>
           </div>
         </div>
