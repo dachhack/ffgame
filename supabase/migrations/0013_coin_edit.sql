@@ -1,4 +1,5 @@
--- 0012: manual drip-coin edit (admin or league commissioner), audited.
+-- 0013: manual drip-coin edit (admin or league commissioner), audited.
+-- (Renumbered from 0012 so it lands as a freshly-added file for auto-apply.)
 --
 -- A plain matchup UPDATE, so the existing `audit_matchup` trigger records the
 -- old/new coin automatically. admin_audit is enriched to surface the change.
