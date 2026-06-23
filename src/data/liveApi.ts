@@ -10,6 +10,33 @@ function client() {
   return supabase;
 }
 
+/** Turn a raw Supabase / auth / network error into calm, player-facing copy.
+ *  Unknown messages fall through lightly cleaned (capitalized, trailing period). */
+export function friendlyError(x: unknown): string {
+  const raw = (x instanceof Error ? x.message : typeof x === 'string' ? x : '').trim();
+  if (!raw) return 'Something went wrong. Please try again.';
+  const m = raw.toLowerCase();
+  if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('load failed') || m.includes('fetch failed'))
+    return 'Network error — check your connection and try again.';
+  if (m.includes('invalid login credentials'))
+    return 'That email and password don’t match. Try again, or reset your password.';
+  if (m.includes('email not confirmed'))
+    return 'Confirm your email first — check your inbox for the link we sent.';
+  if (m.includes('already registered') || m.includes('already been registered') || m.includes('user already'))
+    return 'An account with that email already exists — sign in instead.';
+  if (m.includes('expired') || (m.includes('token') && m.includes('invalid')) || m.includes('otp_expired'))
+    return 'That code has expired or was already used. Request a fresh link.';
+  if (m.includes('rate limit') || m.includes('only request this after') || m.includes('too many'))
+    return 'Too many attempts — wait a minute, then try again.';
+  if (m.includes('password should be at least') || m.includes('password is too short'))
+    return 'Password must be at least 6 characters.';
+  if (m.includes('unable to validate email') || m.includes('invalid format') || m.includes('invalid email'))
+    return 'That doesn’t look like a valid email address.';
+  if (m.includes('signups not allowed') || m.includes('signup is disabled') || m.includes('signups disabled'))
+    return 'Sign-ups are closed right now. Reach out to your commissioner.';
+  return raw.charAt(0).toUpperCase() + raw.slice(1) + (/[.!?]$/.test(raw) ? '' : '.');
+}
+
 /** Where the magic-link returns the user — back into Live mode (?live=1). Must be
  *  added to Supabase Auth → URL Configuration → Redirect URLs. */
 function redirectTo(): string {
