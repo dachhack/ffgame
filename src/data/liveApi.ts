@@ -27,6 +27,13 @@ export async function verifyEmailOtp(email: string, token: string): Promise<void
   if (error) throw error;
 }
 
+/** Third-party OAuth (Google / Apple). Redirects the page to the provider and
+ *  back to ?live=1. Each provider must be enabled in Supabase → Auth → Providers. */
+export async function signInWithProvider(provider: 'google' | 'apple'): Promise<void> {
+  const { error } = await client().auth.signInWithOAuth({ provider, options: { redirectTo: redirectTo() } });
+  if (error) throw error;
+}
+
 // ── Password auth ───────────────────────────────────────────────────────────────
 export async function signInPassword(email: string, password: string): Promise<void> {
   const { error } = await client().auth.signInWithPassword({ email: email.trim(), password });

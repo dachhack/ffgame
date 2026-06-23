@@ -3,7 +3,7 @@ import { useStore } from '../app/store';
 import { ThemeSwitcher } from '../app/ui';
 import { liveConfigured } from '../data/supabaseClient';
 import {
-  sendMagicLink, verifyEmailOtp, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
+  sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   getSession, onAuth, signOut, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, myEnrollments,
   startCommishVerify, confirmCommishVerify, isAdmin, commishOverview,
@@ -21,6 +21,7 @@ const input: React.CSSProperties = { flex: 1, minWidth: 0, fontFamily: 'inherit'
 const btn: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 5, padding: '0 16px', cursor: 'pointer', whiteSpace: 'nowrap' };
 const errStyle: React.CSSProperties = { fontSize: 10.5, color: 'var(--opp)', marginTop: 9, lineHeight: 1.4 };
 const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
+const providerBtn: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '11px 0', cursor: 'pointer' };
 
 export function LiveOnboard() {
   const { navigate } = useStore();
@@ -136,6 +137,17 @@ function AuthForm() {
         {mode === 'signin' && <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 10 }}>Sign in to set your lineup and watch it play live.</div>}
       </div>
       <div style={card}>
+        {showPw && (
+          <div style={{ marginBottom: 14 }}>
+            <button onClick={() => run(() => signInWithProvider('google'))} className="mono" style={providerBtn}><span style={{ fontWeight: 800 }}>G</span>&nbsp;&nbsp;Continue with Google</button>
+            <button onClick={() => run(() => signInWithProvider('apple'))} className="mono" style={{ ...providerBtn, marginTop: 8 }}>&nbsp;&nbsp;Continue with Apple</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0 2px' }}>
+              <span style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
+              <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>or with email</span>
+              <span style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
+            </div>
+          </div>
+        )}
         <label className="mono" style={label}>EMAIL</label>
         <input value={email} autoFocus type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false}
           onChange={(e) => { setEmail(e.target.value); reset(); }}
