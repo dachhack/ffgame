@@ -145,7 +145,7 @@ export async function confirmCommishVerify(commishCode: string): Promise<Confirm
 }
 
 // ── Sealed picks (live-H2H lineup) ──────────────────────────────────────────────
-export interface LiveMatchup { id: string; league_id: string; week: number; status: string; lock_at: string | null; home_roster_id: number; away_roster_id: number; }
+export interface LiveMatchup { id: string; league_id: string; week: number; status: string; lock_at: string | null; home_roster_id: number; away_roster_id: number; home_coin: number | null; away_coin: number | null; }
 export interface PoolPlayer { slug: string; full: string; pos: string; }
 export interface PickRow { game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null; }
 
@@ -217,7 +217,7 @@ export interface AdminAdmin { email: string; note: string | null; }
 export interface MemberRow { roster_id: number; owner_id: string | null; team_name: string; }
 export interface MatchupRow { sleeper_matchup_id: number | null; home_roster_id: number; away_roster_id: number; }
 export interface LineupRow { roster_id: number; starters: { slug: string; full: string; pos: string }[]; }
-export interface AdminMatchup { id: string; week: number; home_roster_id: number; away_roster_id: number; status: string; lock_at: string | null; home_final: number | null; away_final: number | null; }
+export interface AdminMatchup { id: string; week: number; home_roster_id: number; away_roster_id: number; status: string; lock_at: string | null; home_final: number | null; away_final: number | null; home_coin?: number | null; away_coin?: number | null; }
 export interface AdminOverride { sleeper_user_id: string; note: string | null; }
 export interface AdminAudit { table: string; op: string; row_id: string | null; at: string; }
 
@@ -256,8 +256,8 @@ export const adminLeagueMembers = (leagueId: string) => rpc<AdminMember[]>('admi
 export const commishOverview = () => rpc<AdminLeague[]>('commish_overview');
 export interface MatchupPicks { home_roster_id: number; away_roster_id: number; home_app_user: string | null; away_app_user: string | null; picks: { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null }[]; home_lineup: { slug: string; pos: string }[]; away_lineup: { slug: string; pos: string }[]; }
 export const adminMatchupPicks = (matchupId: string) => rpc<MatchupPicks>('admin_matchup_picks', { p_matchup_id: matchupId });
-export const adminSetState = (matchupId: string, states: { window: string; home: number; away: number }[]) =>
-  rpc<{ ok: boolean }>('admin_set_state', { p_matchup_id: matchupId, p_states: states });
+export const adminSetState = (matchupId: string, states: { window: string; home: number; away: number }[], coin?: { home: number; away: number }) =>
+  rpc<{ ok: boolean }>('admin_set_state', { p_matchup_id: matchupId, p_states: states, p_home_coin: coin?.home ?? null, p_away_coin: coin?.away ?? null });
 export const adminRegenCode = (leagueId: string, which: 'invite' | 'commish') =>
   rpc<{ ok: boolean; code?: string; error?: string }>('admin_regen_code', { p_league_id: leagueId, p_which: which });
 

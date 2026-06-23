@@ -75,13 +75,14 @@ export async function resolveMatchup(matchup, playerIndex) {
 
   const states = []; // { game_window, home_score, away_score }
   let homeTotal = 0, awayTotal = 0;
+  let coin = null; // weekly drip-coin per side (only the real-engine H2H path earns it)
 
   if (homePicks && awayPicks) {
     // ── Live H2H: shared resolver, paired by (window, slot) ──
     const toLive = (p) => ({ win: p.win, slot: p.slot, player: player(p.slug), metricId: p.metric || 'rush' });
     const r = resolveLiveMatchup(homePicks.map(toLive), awayPicks.map(toLive), matchup.week);
     for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
-    homeTotal = r.home; awayTotal = r.away;
+    homeTotal = r.home; awayTotal = r.away; coin = r.coin;
   } else {
     // ── Fallback: base points off whichever side(s) aren't enrolled picks ──
     const homeSlugs = homePicks ? homePicks.map((p) => p.slug) : await lineupSlugs(matchup, matchup.home_roster_id);
@@ -96,10 +97,11 @@ export async function resolveMatchup(matchup, playerIndex) {
     states.map((s) => ({ matchup_id: matchup.id, ...s, events_json: [], updated_at: now })),
     { onConflict: 'matchup_id,game_window' },
   );
-  if (matchup.status === 'final') {
-    await db().from('matchup').update({ home_final: round(homeTotal), away_final: round(awayTotal) }).eq('id', matchup.id);
-  }
-  return { home: round(homeTotal), away: round(awayTotal) };
+  const patch = {};
+  if (coin) { patch.home_coin = coin.home; patch.away_coin = coin.away; }
+  if (matchup.status === 'final') { patch.home_final = round(homeTotal); patch.away_final = round(awayTotal); }
+  if (Object.keys(patch).length) await db().from('matchup').update(patch).eq('id', matchup.id);
+  return { home: round(homeTotal), away: round(awayTotal), coin };
 }
 
 const round = (n) => Math.round(n * 10) / 10;

@@ -44,8 +44,8 @@ const toLivePick = (s: Slot): LivePick => ({ win: s.win, slot: s.slot, player: m
 export async function forceResolve(matchupId: string, sourceWeek: number): Promise<{ window: string; home: number; away: number }[]> {
   const data = await adminMatchupPicks(matchupId);
   await loadRealWeek(sourceWeek); // baked plays into the engine's cache
-  const { states } = resolveLiveMatchup(sideSlots(data, 'home').map(toLivePick), sideSlots(data, 'away').map(toLivePick), sourceWeek);
+  const { states, coin } = resolveLiveMatchup(sideSlots(data, 'home').map(toLivePick), sideSlots(data, 'away').map(toLivePick), sourceWeek);
   await adminSetMatchup(matchupId, 'live', true); // reveal picks + show on the board
-  await adminSetState(matchupId, states);
+  await adminSetState(matchupId, states, coin);
   return states;
 }

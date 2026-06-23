@@ -60,6 +60,8 @@ export function LiveBoard({ userId, onBack }: { userId: string; onBack: () => vo
   const round = (n: number) => Math.round(n * 10) / 10;
   const mine = picks.filter((p) => p.app_user_id === userId);
   const theirs = picks.filter((p) => p.app_user_id !== userId);
+  const myCoin = youAreHome ? matchup!.home_coin : matchup!.away_coin;
+  const theirCoin = youAreHome ? matchup!.away_coin : matchup!.home_coin;
 
   return (
     <div>
@@ -74,6 +76,12 @@ export function LiveBoard({ userId, onBack }: { userId: string; onBack: () => vo
           <Big label="OPP" value={round(totals.them)} color="var(--opp)" />
         </div>
         {status === 'scheduled' && <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', marginTop: 8 }}>Scores start ticking after kickoff.</div>}
+        {(myCoin != null || theirCoin != null) && (
+          <div className="mono" style={{ display: 'flex', justifyContent: 'center', gap: 18, fontSize: 9.5, color: 'var(--faint)', marginTop: 8 }}>
+            <span style={{ color: 'var(--you)' }}>◇ {round(Number(myCoin ?? 0))} drip coin</span>
+            <span style={{ color: 'var(--opp)' }}>◇ {round(Number(theirCoin ?? 0))}</span>
+          </div>
+        )}
       </div>
 
       {scores.length > 0 && (
