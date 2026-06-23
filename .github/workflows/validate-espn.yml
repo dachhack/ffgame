@@ -1,0 +1,27 @@
+name: Validate ESPN adapter
+
+# Re-derives a 2025 week from ESPN's free feed and diffs it against the baked
+# nflverse data, gated on play-match / attribution / per-player-points /
+# returns floors. Runs on every push that touches the adapter or this workflow,
+# and weekly (Mondays) to catch ESPN schema drift even when we're not editing
+# the adapter.
+on:
+  push:
+    paths: ['scripts/espn/**', '.github/workflows/validate-espn.yml']
+  workflow_dispatch:
+    inputs:
+      week:
+        description: 'Week to validate (default 1)'
+        required: false
+  schedule:
+    - cron: '0 14 * * 1' # Mondays 14:00 UTC
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Validate
+        run: node scripts/espn/validate.mjs "${{ github.event.inputs.week || 1 }}"

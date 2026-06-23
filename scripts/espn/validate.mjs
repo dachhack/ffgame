@@ -7,10 +7,28 @@
 // compare attribution play-for-play, not just season totals.
 //
 // Usage: node scripts/espn/validate.mjs [week]   (default week 1)
+//
+// Pass/fail gate: exits non-zero when any threshold is breached, so CI can
+// catch real regressions in the adapter (e.g. ESPN schema drift). The baselines
+// were sampled against weeks 1 + 5 of the 2025 season (~95% play match, ~99.5%
+// attribution-exact, ~83% per-player points within 1.0); thresholds are set a
+// few points below those to ride out normal noise without false alarms.
+// Override any of them: --match=0.92 --attr=0.98 --pts=0.80 --returns=0.80
 import { readFileSync } from 'node:fs';
 import { gameToRealPlays, normName } from './espnAdapter.mjs';
 
-const WEEK = Number(process.argv[2] || 1);
+const args = process.argv.slice(2);
+const WEEK = Number(args.find((a) => !a.startsWith('--')) || 1);
+const flag = (name, dflt) => {
+  const a = args.find((x) => x.startsWith(`--${name}=`));
+  return a ? Number(a.split('=')[1]) : dflt;
+};
+const TH = {
+  match: flag('match', 0.92),     // matched / baked plays w/ pid
+  attr: flag('attr', 0.985),       // attribution-exact / matched
+  pts: flag('pts', 0.80),         // (exact + close) / total players
+  returns: flag('returns', 0.80), // returns yards-exact / matched
+};
 
 // Crosswalk-backed slug resolver: ESPN displayName -> contract slug. Production
 // would join ESPN athlete-id -> Sleeper espn_id -> slug (stable, no name fuzz);
@@ -151,3 +169,17 @@ console.log('\n── per-player points ──');
 console.log(`exact(<0.05): ${ptExact}  close(<=1.0): ${ptClose}  off(>1.0): ${ptOff}  total ${slugsForPts.size}`);
 if (missExamples.length) { console.log('\nmiss examples:'); for (const m of missExamples) console.log('  ' + m); }
 if (ptExamples.length) { console.log('\npoint-off examples:'); for (const m of ptExamples) console.log('  ' + m); }
+
+// ── Gate ──
+const rates = {
+  match: bIdx.size ? matched / bIdx.size : 1,
+  attr: matched ? attrOk / matched : 1,
+  pts: slugsForPts.size ? (ptExact + ptClose) / slugsForPts.size : 1,
+  returns: retMatch ? retYdOk / retMatch : 1,
+};
+const fails = [];
+for (const k of Object.keys(TH)) if (rates[k] < TH[k]) fails.push(`${k} ${(rates[k] * 100).toFixed(1)}% < floor ${(TH[k] * 100).toFixed(1)}%`);
+console.log('\n── gate ──');
+console.log(`match ${(rates.match * 100).toFixed(1)}%  attr ${(rates.attr * 100).toFixed(1)}%  pts ${(rates.pts * 100).toFixed(1)}%  returns ${(rates.returns * 100).toFixed(1)}%`);
+if (fails.length) { console.log(`FAIL — ${fails.join(' · ')}`); process.exit(1); }
+console.log('PASS');
