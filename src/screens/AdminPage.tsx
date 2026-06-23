@@ -58,9 +58,9 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
       <div style={card}>
         <div style={h}>RECENT AUDIT</div>
         {audit.length === 0 ? <Muted text="No activity." /> : audit.map((a, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 10.5 }}>
-            <span className="mono" style={{ ...mono, color: 'var(--text)' }}>{a.op} <span style={{ color: 'var(--dim)' }}>{a.table}</span>{a.detail && <span style={{ color: 'var(--you)' }}> · {a.detail}</span>}</span>
-            <span className="mono" style={{ ...mono, color: 'var(--faint)', fontSize: 9.5 }}>{new Date(a.at).toLocaleString()}</span>
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 10.5, gap: 8 }}>
+            <span className="mono" style={{ ...mono, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.op} <span style={{ color: 'var(--dim)' }}>{a.table}</span>{a.detail && <span style={{ color: 'var(--you)' }}> · {a.detail}</span>}{a.actor && <span style={{ color: 'var(--faint)' }}> · {a.actor}</span>}</span>
+            <span className="mono" style={{ ...mono, color: 'var(--faint)', fontSize: 9.5, whiteSpace: 'nowrap' }}>{new Date(a.at).toLocaleString()}</span>
           </div>
         ))}
       </div>
@@ -187,9 +187,9 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
       {tab === 'audit' && (
         <div style={{ marginTop: 10 }}>
           {audit === null ? <Muted text="Loading…" /> : audit.length === 0 ? <Muted text="No matchup activity yet." /> : audit.map((a, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
-              <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)' }}>{a.op} <span style={{ color: 'var(--dim)' }}>{a.table}</span>{a.detail && <span style={{ color: 'var(--you)' }}> · {a.detail}</span>}</span>
-              <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{new Date(a.at).toLocaleString()}</span>
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: '1px solid var(--bd)', gap: 8 }}>
+              <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.op} <span style={{ color: 'var(--dim)' }}>{a.table}</span>{a.detail && <span style={{ color: 'var(--you)' }}> · {a.detail}</span>}{a.actor && <span style={{ color: 'var(--faint)' }}> · {a.actor}</span>}</span>
+              <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', whiteSpace: 'nowrap' }}>{new Date(a.at).toLocaleString()}</span>
             </div>
           ))}
         </div>

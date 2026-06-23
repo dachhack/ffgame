@@ -219,7 +219,7 @@ export interface MatchupRow { sleeper_matchup_id: number | null; home_roster_id:
 export interface LineupRow { roster_id: number; starters: { slug: string; full: string; pos: string }[]; }
 export interface AdminMatchup { id: string; week: number; home_roster_id: number; away_roster_id: number; status: string; lock_at: string | null; home_final: number | null; away_final: number | null; home_coin?: number | null; away_coin?: number | null; }
 export interface AdminOverride { sleeper_user_id: string; note: string | null; }
-export interface AdminAudit { table: string; op: string; row_id: string | null; at: string; detail?: string | null; }
+export interface AdminAudit { table: string; op: string; row_id: string | null; at: string; detail?: string | null; actor?: string | null; }
 
 async function rpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
   const { data, error } = await client().rpc(fn, args);
