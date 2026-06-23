@@ -219,7 +219,7 @@ export interface MatchupRow { sleeper_matchup_id: number | null; home_roster_id:
 export interface LineupRow { roster_id: number; starters: { slug: string; full: string; pos: string }[]; }
 export interface AdminMatchup { id: string; week: number; home_roster_id: number; away_roster_id: number; status: string; lock_at: string | null; home_final: number | null; away_final: number | null; home_coin?: number | null; away_coin?: number | null; }
 export interface AdminOverride { sleeper_user_id: string; note: string | null; }
-export interface AdminAudit { table: string; op: string; row_id: string | null; at: string; }
+export interface AdminAudit { table: string; op: string; row_id: string | null; at: string; detail?: string | null; }
 
 async function rpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
   const { data, error } = await client().rpc(fn, args);
@@ -258,6 +258,8 @@ export interface MatchupPicks { home_roster_id: number; away_roster_id: number; 
 export const adminMatchupPicks = (matchupId: string) => rpc<MatchupPicks>('admin_matchup_picks', { p_matchup_id: matchupId });
 export const adminSetState = (matchupId: string, states: { window: string; home: number; away: number }[], coin?: { home: number; away: number }) =>
   rpc<{ ok: boolean }>('admin_set_state', { p_matchup_id: matchupId, p_states: states, p_home_coin: coin?.home ?? null, p_away_coin: coin?.away ?? null });
+export const adminSetCoin = (matchupId: string, home: number, away: number) =>
+  rpc<{ ok: boolean; error?: string }>('admin_set_coin', { p_matchup_id: matchupId, p_home_coin: home, p_away_coin: away });
 export const adminRegenCode = (leagueId: string, which: 'invite' | 'commish') =>
   rpc<{ ok: boolean; code?: string; error?: string }>('admin_regen_code', { p_league_id: leagueId, p_which: which });
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  adminOverview, adminMatchups, adminSetMatchup, adminOverrides, adminSetOverride, adminAudit,
+  adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember,
 } from '../data/liveApi';
@@ -59,7 +59,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
         <div style={h}>RECENT AUDIT</div>
         {audit.length === 0 ? <Muted text="No activity." /> : audit.map((a, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 10.5 }}>
-            <span className="mono" style={{ ...mono, color: 'var(--text)' }}>{a.op} <span style={{ color: 'var(--dim)' }}>{a.table}</span></span>
+            <span className="mono" style={{ ...mono, color: 'var(--text)' }}>{a.op} <span style={{ color: 'var(--dim)' }}>{a.table}</span>{a.detail && <span style={{ color: 'var(--you)' }}> · {a.detail}</span>}</span>
             <span className="mono" style={{ ...mono, color: 'var(--faint)', fontSize: 9.5 }}>{new Date(a.at).toLocaleString()}</span>
           </div>
         ))}
@@ -78,6 +78,10 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
   const [srcWeek, setSrcWeek] = useState('1');
   const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [coinEdit, setCoinEdit] = useState<string | null>(null);
+  const [coinVals, setCoinVals] = useState<{ home: string; away: string }>({ home: '', away: '' });
+  const openCoin = (m: AdminMatchup) => { setCoinEdit(m.id); setCoinVals({ home: String(m.home_coin ?? ''), away: String(m.away_coin ?? '') }); };
+  const saveCoin = async (id: string) => { await adminSetCoin(id, Number(coinVals.home || 0), Number(coinVals.away || 0)); setCoinEdit(null); await loadM(); };
   const resolve = async (id: string) => {
     setBusy('resolve');
     try { await forceResolve(id, Number(srcWeek)); setBusy('✓ resolved from 2025'); await loadM(); }
@@ -151,14 +155,27 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
             </div>
           )}
           {matchups.length === 0 ? <Muted text="No matchups (run sync week)." /> : matchups.map((m) => (
-            <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderTop: '1px solid var(--bd)', flexWrap: 'wrap', gap: 6 }}>
-              <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)' }}>W{m.week} · {m.home_roster_id}v{m.away_roster_id} · <span style={{ color: 'var(--you)' }}>{m.status}</span>{m.home_final != null && <span style={{ color: 'var(--faint)' }}> · {m.home_final}-{m.away_final}</span>}</span>
-              <div style={{ display: 'flex', gap: 5 }}>
-                <button style={btn(m.status === 'scheduled')} onClick={() => set(m.id, 'scheduled')}>sched</button>
-                <button style={btn(m.status === 'live')} onClick={() => set(m.id, 'live', true)}>live+lock</button>
-                <button style={btn(m.status === 'final')} onClick={() => set(m.id, 'final')}>final</button>
-                {admin && <button style={btn(false)} onClick={() => resolve(m.id)} title="run real engine on baked 2025 data">▶</button>}
+            <div key={m.id} style={{ borderTop: '1px solid var(--bd)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', flexWrap: 'wrap', gap: 6 }}>
+                <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)' }}>W{m.week} · {m.home_roster_id}v{m.away_roster_id} · <span style={{ color: 'var(--you)' }}>{m.status}</span>{m.home_final != null && <span style={{ color: 'var(--faint)' }}> · {m.home_final}-{m.away_final}</span>}{(m.home_coin != null || m.away_coin != null) && <span style={{ color: 'var(--faint)' }}> · ◇ {m.home_coin ?? 0}/{m.away_coin ?? 0}</span>}</span>
+                <div style={{ display: 'flex', gap: 5 }}>
+                  <button style={btn(m.status === 'scheduled')} onClick={() => set(m.id, 'scheduled')}>sched</button>
+                  <button style={btn(m.status === 'live')} onClick={() => set(m.id, 'live', true)}>live+lock</button>
+                  <button style={btn(m.status === 'final')} onClick={() => set(m.id, 'final')}>final</button>
+                  <button style={btn(coinEdit === m.id)} onClick={() => (coinEdit === m.id ? setCoinEdit(null) : openCoin(m))} title="edit drip coin">◇</button>
+                  {admin && <button style={btn(false)} onClick={() => resolve(m.id)} title="run real engine on baked 2025 data">▶</button>}
+                </div>
               </div>
+              {coinEdit === m.id && (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', paddingBottom: 8 }}>
+                  <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>◇ home</span>
+                  <input value={coinVals.home} onChange={(e) => setCoinVals((v) => ({ ...v, home: e.target.value.replace(/[^\d.-]/g, '') }))} style={{ ...inp, width: 56, padding: '4px 5px', textAlign: 'center' }} />
+                  <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>away</span>
+                  <input value={coinVals.away} onChange={(e) => setCoinVals((v) => ({ ...v, away: e.target.value.replace(/[^\d.-]/g, '') }))} style={{ ...inp, width: 56, padding: '4px 5px', textAlign: 'center' }} />
+                  <button style={btn(true)} onClick={() => saveCoin(m.id)}>save</button>
+                  <span className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)' }}>(audited)</span>
+                </div>
+              )}
             </div>
           ))}
         </div>
