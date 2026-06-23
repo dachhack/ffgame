@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
 import { ThemeSwitcher } from '../app/ui';
 import { getLeagues, sleeperAvatarUrl, type SleeperLeague } from '../data/sleeper';
+import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
+
+// Leagues we've already auto-forwarded into (single-league shortcut). Tracked so
+// pressing "← LEAGUES" from that league shows the (1-item) list instead of
+// instantly bouncing back in.
+const autoEntered = new Set<string>();
 
 // The base league type (drops the "· Superflex" sub-tag), for filtering.
 const baseType = (lg: SleeperLeague) => lg.format.split(' · ')[0];
@@ -28,8 +34,19 @@ export function Leagues() {
     if (!sleeperUser) { navigate({ name: 'splash' }); return; }
     let alive = true;
     setLeagues(null); setErr(null);
+    prefetchPlayerDirectory(); // backstop: warm the directory if we booted straight here
     getLeagues(sleeperUser.userId)
-      .then((ls) => { if (alive) setLeagues(ls); })
+      .then((ls) => {
+        if (!alive) return;
+        // One league? Skip the list and drop them straight in (first visit only —
+        // so a back-tap can still reach the list/switch user).
+        if (ls.length === 1 && !autoEntered.has(ls[0].leagueId)) {
+          autoEntered.add(ls[0].leagueId);
+          navigate({ name: 'sleeperLeague', leagueId: ls[0].leagueId, leagueName: ls[0].name });
+          return;
+        }
+        setLeagues(ls);
+      })
       .catch(() => { if (alive) setErr('Could not load leagues from Sleeper.'); });
     return () => { alive = false; };
   }, [sleeperUser]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -88,7 +105,7 @@ export function Leagues() {
           )}
 
           {err && <div className="mono" style={{ fontSize: 12, color: 'var(--opp)' }}>{err}</div>}
-          {!leagues && !err && <div className="mono" style={{ fontSize: 12, color: 'var(--dim)', letterSpacing: '0.08em' }}>LOADING LEAGUES…</div>}
+          {!leagues && !err && <div className="mono" style={{ fontSize: 12, color: 'var(--dim)', letterSpacing: '0.08em' }}>Loading {sleeperUser.displayName}’s leagues…</div>}
           {leagues && leagues.length === 0 && <div className="mono" style={{ fontSize: 12, color: 'var(--dim)' }}>No 2025 NFL leagues found for this user.</div>}
 
           {leagues && leagues.length > 0 && (

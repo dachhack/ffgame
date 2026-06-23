@@ -12,6 +12,7 @@ const KEY = 'sleeper-players-nfl';
 const TTL = 24 * 60 * 60 * 1000; // refresh at most once a day
 
 let mem: Map<string, PlayerMeta> | null = null;
+let inflight: Promise<Map<string, PlayerMeta>> | null = null;
 
 function idb(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
@@ -86,30 +87,44 @@ async function fetchJson(url: string, ms: number): Promise<Record<string, Record
   }
 }
 
-/** Load (and cache) the Sleeper player directory. `onProgress` fires with a note. */
+/** Load (and cache) the Sleeper player directory. `onProgress` fires with a note.
+ *  Concurrent calls (e.g. a background prefetch + the sim build) are coalesced via
+ *  an in-flight guard so the ~5MB download only ever happens once. */
 export async function loadPlayerDirectory(onProgress?: (note: string) => void): Promise<Map<string, PlayerMeta>> {
   if (mem) return mem;
-  const db = await idb();
-  if (db) {
-    const hit = await idbGet<{ ts: number; data: Record<string, Record<string, unknown>> }>(db, KEY);
-    if (hit && Date.now() - hit.ts < TTL && hit.data) {
-      onProgress?.('Loading player directory (cached)…');
-      mem = parse(hit.data);
-      return mem;
+  if (inflight) return inflight;
+  inflight = (async () => {
+    const db = await idb();
+    if (db) {
+      const hit = await idbGet<{ ts: number; data: Record<string, Record<string, unknown>> }>(db, KEY);
+      if (hit && Date.now() - hit.ts < TTL && hit.data) {
+        onProgress?.('Loading player directory (cached)…');
+        mem = parse(hit.data);
+        return mem;
+      }
     }
-  }
-  onProgress?.('Downloading Sleeper player directory (~5MB, one-time)…');
-  // One retry: a 5MB fetch can stall on flaky networks; abort and try again
-  // before giving up so the build doesn't wedge on "Downloading…".
-  let data: Record<string, Record<string, unknown>>;
-  try {
-    data = await fetchJson(URL_ALL, 30000);
-  } catch {
-    onProgress?.('Retrying player directory download…');
-    data = await fetchJson(URL_ALL, 45000);
-  }
-  onProgress?.('Processing players…');
-  if (db) await idbSet(db, KEY, { ts: Date.now(), data });
-  mem = parse(data);
-  return mem;
+    onProgress?.('Downloading Sleeper player directory (~5MB, one-time)…');
+    // One retry: a 5MB fetch can stall on flaky networks; abort and try again
+    // before giving up so the build doesn't wedge on "Downloading…".
+    let data: Record<string, Record<string, unknown>>;
+    try {
+      data = await fetchJson(URL_ALL, 30000);
+    } catch {
+      onProgress?.('Retrying player directory download…');
+      data = await fetchJson(URL_ALL, 45000);
+    }
+    onProgress?.('Processing players…');
+    if (db) await idbSet(db, KEY, { ts: Date.now(), data });
+    mem = parse(data);
+    return mem;
+  })();
+  try { return await inflight; }
+  finally { inflight = null; }
+}
+
+/** Warm the directory cache in the background so the ~5MB download overlaps with
+ *  league browsing instead of stalling the sim build. Best-effort; coalesced with
+ *  the real load via the in-flight guard above. */
+export function prefetchPlayerDirectory(): void {
+  loadPlayerDirectory().catch(() => { /* best-effort warm-up */ });
 }

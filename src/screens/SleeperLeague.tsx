@@ -1,8 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../app/store';
 import { ThemeSwitcher } from '../app/ui';
 import { getStandings, sleeperAvatarUrl, type SleeperStanding } from '../data/sleeper';
 import { buildSleeperLeague } from '../data/buildLeague';
+
+// A background build either resolves to the engine-ready league or carries its
+// error — it never rejects, so a prefetch the user never triggers can't warn.
+type BuildOutcome =
+  | { ok: true; built: Awaited<ReturnType<typeof buildSleeperLeague>>['built']; youTeamId: string }
+  | { ok: false; error: unknown };
+
+function buildErrorCopy(e: unknown): string {
+  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  const isDirectory = (e instanceof Error && e.name === 'AbortError') || msg.includes('player directory') || msg.includes('directory');
+  return isDirectory
+    ? 'Couldn’t download the Sleeper player directory (~5MB) — check your connection and try again.'
+    : 'Couldn’t build the sim for this league. Try again.';
+}
 
 export function SleeperLeague({ leagueId, leagueName }: { leagueId: string; leagueName: string }) {
   const { navigate, sleeperUser, loadSimLeague } = useStore();
@@ -12,30 +26,49 @@ export function SleeperLeague({ leagueId, leagueName }: { leagueId: string; leag
   const [note, setNote] = useState('');
   const [simErr, setSimErr] = useState<string | null>(null);
   const [addKdst, setAddKdst] = useState(true);
+  // Background build, keyed by the addKdst it was built with, so RUN MY SEASON is
+  // near-instant (the heavy work overlaps with reading the standings).
+  const buildRef = useRef<{ addKdst: boolean; p: Promise<BuildOutcome> } | null>(null);
+
+  const startBuild = (kdst: boolean) => {
+    if (!sleeperUser) return;
+    const p: Promise<BuildOutcome> = buildSleeperLeague(leagueId, sleeperUser.userId, setNote, { addKdst: kdst })
+      .then((r) => ({ ok: true as const, built: r.built, youTeamId: r.youTeamId }))
+      .catch((error) => ({ ok: false as const, error }));
+    buildRef.current = { addKdst: kdst, p };
+  };
 
   const runSim = async () => {
     if (!sleeperUser || busy) return;
-    setBusy(true); setSimErr(null); setNote('Reading league…');
+    setBusy(true); setSimErr(null);
     try {
-      const { built, youTeamId } = await buildSleeperLeague(leagueId, sleeperUser.userId, setNote, { addKdst });
-      loadSimLeague(built, youTeamId);
+      // Reuse the prefetched build when the K/DST choice hasn't changed.
+      if (!buildRef.current || buildRef.current.addKdst !== addKdst) startBuild(addKdst);
+      const outcome = await buildRef.current!.p;
+      if (!outcome.ok) throw outcome.error;
+      loadSimLeague(outcome.built, outcome.youTeamId);
       navigate({ name: 'hub' });
-    } catch {
-      setSimErr('Could not build the sim for this league. Try again.');
+    } catch (e) {
+      setSimErr(buildErrorCopy(e));
       setBusy(false);
+      buildRef.current = null; // force a fresh build on retry
     }
   };
 
   useEffect(() => {
     let alive = true;
     setRows(null); setErr(null);
+    startBuild(addKdst); // warm the build in the background, in parallel with standings
     getStandings(leagueId)
       .then((d) => { if (alive) setRows(d.standings); })
       .catch(() => { if (alive) setErr('Could not load this league from Sleeper.'); });
     return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
 
   const mine = sleeperUser?.displayName?.toLowerCase();
+  const myIdx = rows ? rows.findIndex((r) => mine && r.owner.toLowerCase() === mine) : -1;
+  const myRow = myIdx >= 0 ? rows![myIdx] : null;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -51,9 +84,12 @@ export function SleeperLeague({ leagueId, leagueName }: { leagueId: string; leag
         <div style={{ maxWidth: 800, margin: '0 auto' }}>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 6, padding: '14px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ minWidth: 0 }}>
-              <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Run the season sim</div>
+              <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{myRow ? 'Run your season' : 'Run the season sim'}</div>
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, lineHeight: 1.5 }}>
-                {busy ? (note || 'Building…') : 'Replays your real 2025 season through the 14-week drip game — real scores, real matchups, your roster.'}
+                {busy ? (note || 'Building…')
+                  : myRow
+                    ? <>You’re <span style={{ color: 'var(--text)', fontWeight: 700 }}>{myRow.teamName}</span> — seeded #{myIdx + 1}, {myRow.wins}-{myRow.losses}{myRow.ties ? `-${myRow.ties}` : ''}. Replay your real 2025 season through the drip game.</>
+                    : 'Replays your real 2025 season through the 14-week drip game — real scores, real matchups, your roster.'}
               </div>
               <button
                 type="button"
@@ -73,7 +109,7 @@ export function SleeperLeague({ leagueId, leagueName }: { leagueId: string; leag
               {simErr && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', marginTop: 6 }}>{simErr}</div>}
             </div>
             <button onClick={runSim} disabled={busy} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '11px 18px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1, whiteSpace: 'nowrap' }}>
-              {busy ? '…' : '▶ RUN SIM'}
+              {busy ? '…' : myRow ? '▶ RUN MY SEASON' : '▶ RUN SIM'}
             </button>
           </div>
 

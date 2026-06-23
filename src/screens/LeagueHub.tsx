@@ -29,7 +29,7 @@ function StatePill({ state }: { state: 'OPEN' | 'LOCKED' | 'LIVE' }) {
 }
 
 export function LeagueHub() {
-  const { navigate, youTeamId, demoWeek, activeLeague: LEAGUE_REF, sleeperUser } = useStore();
+  const { navigate, youTeamId, demoWeek, activeLeague: LEAGUE_REF, sleeperUser, isSimLeague } = useStore();
   const you = getTeam(youTeamId)!;
   const game = gameForTeam(youTeamId, demoWeek)!;
   const opp = getTeam(game.oppId)!;
@@ -60,6 +60,11 @@ export function LeagueHub() {
           <div className="mono" style={{ fontSize: 11, letterSpacing: '0.08em', color: 'var(--dim)', marginTop: 6 }}>
             {sleeperUser ? `${sleeperUser.displayName.toUpperCase()} · VIA SLEEPER` : `${connected} CONNECTED · SLEEPER DYNASTY PORTFOLIO`}
           </div>
+          {isSimLeague && (
+            <div className="grotesk" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--you)', marginTop: 10, lineHeight: 1.5 }}>
+              You’re in — {you.name}, seed #{you.seed} in {LEAGUE_REF.name}.
+            </div>
+          )}
 
           <div style={{ margin: '22px 0 14px', maxWidth: 460 }}>
             <DemoControls />
@@ -127,6 +132,28 @@ export function LeagueHub() {
               </div>
             </div>
           </button>
+
+          {/* Bridge from "my league sim" to the real product: the live H2H pilot. */}
+          {isSimLeague && (
+            <button
+              onClick={() => navigate({ name: 'live' })}
+              style={{
+                width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: 12,
+                background: 'color-mix(in srgb, var(--you) 8%, var(--surface))',
+                border: '1px solid color-mix(in srgb, var(--you) 40%, var(--bd))',
+                borderRadius: 5, padding: '14px 18px', color: 'var(--text)',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+              }}
+            >
+              <span style={{ minWidth: 0 }}>
+                <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--you)' }}>◈ Play this for real — live &amp; head-to-head</span>
+                <span className="mono" style={{ display: 'block', fontSize: 9.5, color: 'var(--dim)', marginTop: 4, lineHeight: 1.5 }}>
+                  Sealed lineups vs your leaguemates, scored live off real NFL games. Join the H2H pilot.
+                </span>
+              </span>
+              <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', padding: '8px 13px', borderRadius: 4, whiteSpace: 'nowrap' }}>JOIN →</span>
+            </button>
+          )}
 
           {/* A signed-in Sleeper user manages their real leagues from the Leagues
               screen; the fake portfolio is demo-only flavor. */}
