@@ -96,21 +96,35 @@ future paid feed by swapping only the adapter.
   (roster 5 dachhack vs roster 1), invite code **`DRIP2026`**. Prefer admin "import
   league"/"sync week" over the seed now.
 
-## Domain cutover (in progress as of this handoff)
+## Domain cutover (COMPLETE)
 - **Domain:** `dripfantasy.com` (Squarespace). DNS: `www`→`dachhack.github.io`, apex
   A-records→GitHub Pages, `auth`→`kaoitimdsftclykhqaqx.supabase.co`, plus the
   `_acme-challenge.auth` TXT for Supabase's cert.
-- **Site cutover: DONE** — `www.dripfantasy.com` serves the app (deploy built with
-  `VITE_BASE=/`). Supabase redirect URLs include `https://www.dripfantasy.com/?live=1`.
-- **Custom auth domain: verifying** — `supabaseClient.ts` `DEFAULT_URL` is already set to
-  `https://auth.dripfantasy.com` (committed on the work branch, **NOT yet mirrored to the
-  deploy branch** so the live site keeps working until the domain is active). When Supabase
-  shows the custom domain **active**: mirror the work branch → deploy branch, confirm the
-  version chip, then sign-in should read "dripfantasy.com". Google OAuth already has the
-  `auth.dripfantasy.com/auth/v1/callback` redirect URI added.
+- **Live end to end:** site at `https://www.dripfantasy.com` (Pages, `VITE_BASE=/`,
+  `public/CNAME` pins it); auth/API at `https://auth.dripfantasy.com` (Supabase Custom
+  Domain, valid SSL). The deployed bundle references `auth.dripfantasy.com` and **no**
+  `supabase.co`. Google OAuth has the `auth.dripfantasy.com/auth/v1/callback` redirect
+  URI; Supabase redirect URLs include `https://www.dripfantasy.com/?live=1`.
+- `supabaseClient.ts` `DEFAULT_URL = https://auth.dripfantasy.com`. Old
+  `dachhack.github.io/ffgame/` still resolves but the app self-references the new domain.
+- To revert in an emergency: set `VITE_SUPABASE_URL` back to the `…supabase.co` host on
+  the deploy workflow (or `DEFAULT_URL`), and the site keeps working.
+
+## Onboarding — where to work next (founder is iterating here)
+The player onboarding flow lives in:
+- `src/screens/LiveOnboard.tsx` — sign-in (Google / email+password / magic-link OTP),
+  invite-code redemption, team confirmation, resume. Entry from `src/screens/Splash.tsx`
+  ("◈ join the live H2H pilot"); routed as `'live'` in `App.tsx`.
+- `src/data/liveApi.ts` — all auth + redemption wrappers: `signInWithProvider`,
+  `signInPassword`/`signUpPassword`/`sendPasswordReset`, `sendMagicLink`/`verifyEmailOtp`,
+  `previewLeague`/`redeemPreview`/`redeemInvite`, `myEnrollments`, `ensureAppUser`.
+- Redemption RPCs are server-side (`redeem_invite`, `redeem_preview`, `league_by_invite`)
+  in migrations 0002/0008 — change behavior there, add a migration (auto-applies on push).
+- Closed-signup **email allowlist** is still an open idea (gate who can create an account);
+  would be a new RPC/check, likely in onboarding + a small table.
 
 ## Open items / next steps
-1. **Finish the domain cutover** (above) once Supabase verifies `auth.dripfantasy.com`.
+1. **Onboarding polish** (founder actively working here — see the section above).
 2. **Deploy the worker to Fly** (`server/DEPLOY.md`) with the rotated service-role key.
    Only fully exercised on a live NFL Sunday; live scoring previewable now via
    force-resolve. The worker already runs the full shared resolver.
