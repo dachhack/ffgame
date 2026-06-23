@@ -22,6 +22,9 @@ const btn: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing:
 const errStyle: React.CSSProperties = { fontSize: 10.5, color: 'var(--opp)', marginTop: 9, lineHeight: 1.4 };
 const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
 const providerBtn: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '11px 0', cursor: 'pointer' };
+// Flip on once the provider is configured in Supabase → Auth → Providers.
+const SHOW_GOOGLE = true;
+const SHOW_APPLE = false;
 
 export function LiveOnboard() {
   const { navigate } = useStore();
@@ -137,10 +140,10 @@ function AuthForm() {
         {mode === 'signin' && <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 10 }}>Sign in to set your lineup and watch it play live.</div>}
       </div>
       <div style={card}>
-        {showPw && (
+        {showPw && (SHOW_GOOGLE || SHOW_APPLE) && (
           <div style={{ marginBottom: 14 }}>
-            <button onClick={() => run(() => signInWithProvider('google'))} className="mono" style={providerBtn}><span style={{ fontWeight: 800 }}>G</span>&nbsp;&nbsp;Continue with Google</button>
-            <button onClick={() => run(() => signInWithProvider('apple'))} className="mono" style={{ ...providerBtn, marginTop: 8 }}>&nbsp;&nbsp;Continue with Apple</button>
+            {SHOW_GOOGLE && <button onClick={() => run(() => signInWithProvider('google'))} className="mono" style={providerBtn}><span style={{ fontWeight: 800 }}>G</span>&nbsp;&nbsp;Continue with Google</button>}
+            {SHOW_APPLE && <button onClick={() => run(() => signInWithProvider('apple'))} className="mono" style={{ ...providerBtn, marginTop: 8 }}>&nbsp;&nbsp;Continue with Apple</button>}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0 2px' }}>
               <span style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
               <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>or with email</span>
