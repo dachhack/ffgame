@@ -9,7 +9,10 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 // Defaults so the deployed Pages build has Live mode on with no CI env. These are
 // PUBLIC by design — the publishable/anon key grants nothing on its own; every
 // table is RLS-guarded (supabase/migrations). Override via .env.local if needed.
-const DEFAULT_URL = 'https://kaoitimdsftclykhqaqx.supabase.co';
+// auth.dripfantasy.com is the project's Custom Domain — Supabase routes Auth,
+// REST, Realtime, Storage all through it, so this single change moves the whole
+// API surface off supabase.co.
+const DEFAULT_URL = 'https://auth.dripfantasy.com';
 const DEFAULT_ANON = 'sb_publishable_bEjQC0i5aZ36WFlBisxhbQ_9MwLo8d2';
 
 const URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || DEFAULT_URL;
