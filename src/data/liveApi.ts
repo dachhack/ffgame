@@ -99,3 +99,45 @@ export async function confirmCommishVerify(commishCode: string): Promise<Confirm
   if (error) return { ok: false, error: error.message };
   return data as ConfirmCommish;
 }
+
+// ── Sealed picks (live-H2H lineup) ──────────────────────────────────────────────
+export interface LiveMatchup { id: string; league_id: string; week: number; status: string; lock_at: string | null; home_roster_id: number; away_roster_id: number; }
+export interface PoolPlayer { slug: string; full: string; pos: string; }
+export interface PickRow { game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null; }
+
+/** The caller's enrolled roster in a league (first enrolled membership). */
+export async function myRoster(userId: string): Promise<{ leagueId: string; rosterId: number } | null> {
+  const { data } = await client().from('league_membership')
+    .select('league_id, sleeper_roster_id').eq('app_user_id', userId).eq('enrolled', true).limit(1).maybeSingle();
+  return data ? { leagueId: data.league_id, rosterId: data.sleeper_roster_id } : null;
+}
+
+/** The caller's next/earliest matchup in a league. */
+export async function myMatchup(leagueId: string, rosterId: number): Promise<LiveMatchup | null> {
+  const { data } = await client().from('matchup').select('*')
+    .eq('league_id', leagueId).or(`home_roster_id.eq.${rosterId},away_roster_id.eq.${rosterId}`)
+    .order('week').limit(1).maybeSingle();
+  return (data as LiveMatchup) ?? null;
+}
+
+/** The caller's player pool for a week (their Sleeper roster, from sleeper_lineup). */
+export async function myPool(leagueId: string, week: number, rosterId: number): Promise<PoolPlayer[]> {
+  const { data } = await client().from('sleeper_lineup').select('starters_json')
+    .eq('league_id', leagueId).eq('week', week).eq('roster_id', rosterId).maybeSingle();
+  return ((data?.starters_json) ?? []) as PoolPlayer[];
+}
+
+/** The caller's saved picks for a matchup. */
+export async function myPicks(matchupId: string, userId: string): Promise<PickRow[]> {
+  const { data } = await client().from('sealed_pick')
+    .select('game_window, roster_slot, player_slug, metric_id')
+    .eq('matchup_id', matchupId).eq('app_user_id', userId);
+  return (data ?? []) as PickRow[];
+}
+
+/** Upsert the caller's sealed picks (only allowed by RLS while unlocked). */
+export async function savePicks(matchupId: string, userId: string, rows: PickRow[]): Promise<void> {
+  const payload = rows.map((r) => ({ matchup_id: matchupId, app_user_id: userId, ...r }));
+  const { error } = await client().from('sealed_pick').upsert(payload, { onConflict: 'matchup_id,app_user_id,game_window,roster_slot' });
+  if (error) throw error;
+}
