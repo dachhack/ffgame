@@ -56,8 +56,10 @@ async function lineupSlugs(matchup, rosterId) {
   return ((data?.starters_json) ?? []).map((s) => s.player_slug).filter(Boolean);
 }
 
-/** Resolve one matchup → write matchup_state (per game_window) + finals when final. */
-export async function resolveMatchup(matchup, playerIndex) {
+/** Resolve one matchup → write matchup_state (per game_window) + finals when final.
+ *  `override` (sim only): { home, away } pick arrays [{win,slot,slug,metric}] that
+ *  bypass enrollment/sealed-pick gathering so both sides resolve with full metrics. */
+export async function resolveMatchup(matchup, playerIndex, override) {
   const rows = await weekPlayRows(matchup.week);
   const bySlug = rowsToPbp(rows);
   injectWeek(matchup.week, bySlug);
@@ -70,8 +72,8 @@ export async function resolveMatchup(matchup, playerIndex) {
     .in('sleeper_roster_id', [matchup.home_roster_id, matchup.away_roster_id]);
   const byRoster = new Map((members ?? []).map((m) => [m.sleeper_roster_id, m]));
 
-  const homePicks = await enrolledPicks(matchup, byRoster.get(matchup.home_roster_id));
-  const awayPicks = await enrolledPicks(matchup, byRoster.get(matchup.away_roster_id));
+  const homePicks = override ? override.home : await enrolledPicks(matchup, byRoster.get(matchup.home_roster_id));
+  const awayPicks = override ? override.away : await enrolledPicks(matchup, byRoster.get(matchup.away_roster_id));
 
   const states = []; // { game_window, home_score, away_score }
   let homeTotal = 0, awayTotal = 0;

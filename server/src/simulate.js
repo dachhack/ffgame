@@ -20,6 +20,23 @@
 //   npm run cli -- simulate --dry [--week=1] [--speed=900]
 import { readFileSync } from 'node:fs';
 import { injectWeek, rowsToPbp, resolveWindow, makePlayer } from './engine.js';
+import { WINDOWS } from '../../src/data/metrics.ts';
+
+// Default metric per position for the self-contained sim's auto-built lineups —
+// a sensible, predictable scorer for each spot so the full metric duel resolves
+// without anyone setting a lineup.
+const DEFAULT_METRIC = { QB: 'pass', RB: 'rush', WR: 'recyd', TE: 'recyd', K: 'banker', DEF: 'earn', DL: 'idp_tackles', LB: 'idp_tackles', DB: 'idp_tackles' };
+// The lineup spots in window order (tnf, early×3, late×2, snf, mnf).
+const SLOTS = WINDOWS.flatMap((w) => Array.from({ length: w.slots }, (_, j) => ({ win: w.id, slot: String(j) })));
+
+/** Auto-build a roster's lineup from its synced Sleeper starters: fill the
+ *  window/slot grid, default metric per position. Shape matches enrolledPicks. */
+function autoLineup(starters) {
+  return (starters ?? [])
+    .filter((s) => s.player_slug)
+    .slice(0, SLOTS.length)
+    .map((s, i) => ({ win: SLOTS[i].win, slot: SLOTS[i].slot, slug: s.player_slug, metric: DEFAULT_METRIC[s.pos] || 'rush' }));
+}
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const round = (n) => Math.round(n * 10) / 10;
@@ -130,6 +147,38 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs }) {
   const live = matchups.map((m) => ({ ...m, status: 'live' }));
 
   const playerIndex = await buildPlayerIndex();
+
+  // Self-contained lineups: honor a roster's real LOCKED picks if it set any,
+  // otherwise auto-build from its synced Sleeper starters — so both sides resolve
+  // with full metric effects and nobody has to set a lineup to watch a real duel.
+  const rosterIds = [...new Set(live.flatMap((m) => [m.home_roster_id, m.away_roster_id]))];
+  const { data: members } = await db().from('league_membership')
+    .select('sleeper_roster_id,app_user_id,enrolled').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
+  const memByRoster = new Map((members ?? []).map((m) => [m.sleeper_roster_id, m]));
+  const { data: lineupRows } = await db().from('sleeper_lineup').select('roster_id,starters_json').eq('league_id', leagueId).eq('week', week);
+  const startersByRoster = new Map((lineupRows ?? []).map((r) => [r.roster_id, r.starters_json]));
+
+  const sealedPicks = async (matchupId, appUserId) => {
+    const { data } = await db().from('sealed_pick').select('game_window,roster_slot,player_slug,metric_id')
+      .eq('matchup_id', matchupId).eq('app_user_id', appUserId).eq('locked', true);
+    return data && data.length ? data.map((p) => ({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id })) : null;
+  };
+  const sideFor = async (matchupId, rosterId) => {
+    const mem = memByRoster.get(rosterId);
+    if (mem?.enrolled && mem.app_user_id) { const sp = await sealedPicks(matchupId, mem.app_user_id); if (sp) return sp; }
+    return autoLineup(startersByRoster.get(rosterId));
+  };
+  const lineups = new Map();
+  let autoCount = 0;
+  for (const m of live) {
+    const home = await sideFor(m.id, m.home_roster_id);
+    const away = await sideFor(m.id, m.away_roster_id);
+    lineups.set(m.id, { home, away });
+    if (!home.length || !away.length) log(`  ⚠ ${m.home_roster_id}v${m.away_roster_id}: ${[!home.length && 'home', !away.length && 'away'].filter(Boolean).join('+')} has no synced lineup → scores 0 (run sync-week)`);
+    autoCount += [home, away].filter((s) => s.length).length;
+  }
+  log(`lineups ready for ${live.length} matchups (${autoCount} sides, default metric per position) — full metric duel, no enrollment needed`);
+
   const feed = buildFeed(pbp, week);
   const maxAt = feed.length ? feed[feed.length - 1].at : 0;
   log(`feed: ${feed.length} plays over ${fmtClock(maxAt)} game-time · speed ${speed}× · open the live board now\n`);
@@ -139,7 +188,7 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs }) {
     const batch = [];
     while (i < feed.length && feed[i].at <= clk) batch.push(feed[i++].row);
     if (batch.length) await db().from('live_play').insert(batch);
-    for (const m of live) { try { await resolveMatchup(m, playerIndex); } catch (e) { log('resolve', m.id, e.message); } }
+    for (const m of live) { try { await resolveMatchup(m, playerIndex, lineups.get(m.id)); } catch (e) { log('resolve', m.id, e.message); } }
     const { data: st } = await db().from('matchup_state').select('matchup_id,home_score,away_score').in('matchup_id', ids);
     const totals = new Map();
     for (const s of st ?? []) { const t = totals.get(s.matchup_id) ?? { h: 0, a: 0 }; t.h += s.home_score; t.a += s.away_score; totals.set(s.matchup_id, t); }
@@ -151,7 +200,7 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs }) {
 
   log('\nfeed complete — finalizing matchups…');
   await db().from('matchup').update({ status: 'final' }).in('id', ids);
-  for (const m of live) await resolveMatchup({ ...m, status: 'final' }, playerIndex);
+  for (const m of live) await resolveMatchup({ ...m, status: 'final' }, playerIndex, lineups.get(m.id));
   log('done. Matchups are FINAL with the full baked game resolved through the live path.');
 }
 

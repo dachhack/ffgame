@@ -40,9 +40,13 @@ npm run cli -- simulate --dry --week=1 [--speed=900] [--tick=1000]
 # CHECK — read-only: connect with the service key, count matchups, write nothing.
 npm run cli -- simulate --check [leagueId]
 
-# LIVE — drive a real test matchup in Supabase. Locks picks, goes live, clears the
-# prior SIM feed, then drips baked plays into live_play on a timer, re-resolving
-# each tick. Open that matchup's live board and watch it animate; ends FINAL.
+# LIVE — drive a real test matchup in Supabase. Goes live, clears the prior SIM
+# feed, then drips baked plays into live_play on a timer, re-resolving each tick.
+# Open that matchup's live board and watch it animate; ends FINAL.
+# Self-contained: both sides' lineups are AUTO-BUILT from each roster's synced
+# Sleeper starters (default metric per position), so the full metric duel resolves
+# with NOBODY setting a lineup. A roster that set its own locked picks is honored;
+# the rest are auto-filled. → the only prep is `sync` + `sync-week`.
 npm run cli -- simulate <leagueId> <week> [--src=<bakedWeek>] [--speed=600] [--tick=1000]
 
 # RESET — fully revert a live run: matchups → scheduled, picks unlocked, the SIM
