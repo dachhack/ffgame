@@ -155,6 +155,20 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs }) {
   log('done. Matchups are FINAL with the full baked game resolved through the live path.');
 }
 
+// ── CHECK: read-only. Confirm the secret + DB are reachable; write nothing. ──────
+async function simulateCheck(leagueId) {
+  const { db } = await import('./supabase.js');
+  let q = db().from('matchup').select('id,week,status', { count: 'exact' });
+  if (leagueId) q = q.eq('league_id', leagueId);
+  const { data, count, error } = await q;
+  if (error) throw error;
+  const byStatus = {};
+  for (const m of data ?? []) byStatus[m.status] = (byStatus[m.status] ?? 0) + 1;
+  log(`DB OK · ${count ?? data?.length ?? 0} matchups${leagueId ? ` for league ${leagueId}` : ''} · by status ${JSON.stringify(byStatus)}`);
+  loadBaked(1); // confirm baked data + engine imports resolve in this runtime
+  log('PASS — service-role secret + DB reachable, baked data loads. No writes made.');
+}
+
 /** Parse `simulate` args and dispatch. Called from cli.js. */
 export async function simulate(args) {
   const flags = {};
@@ -167,6 +181,10 @@ export async function simulate(args) {
   const tickMs = Number(flags.tick ?? 1000);   // real ms per tick
   if (flags.dry) {
     await simulateDry({ week: Number(flags.week ?? pos[1] ?? 1), speed, tickMs });
+    return;
+  }
+  if (flags.check) {
+    await simulateCheck(pos[0]);
     return;
   }
   const [leagueId, week] = pos;
