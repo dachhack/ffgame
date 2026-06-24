@@ -7,6 +7,7 @@ import {
 } from '../data/liveApi';
 import { importLeague, syncWeek } from '../data/sleeperAdmin';
 import { forceResolve } from '../data/forceResolve';
+import { FeedSheet } from './FeedSheet';
 import { WINDOWS } from '../data/metrics';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
@@ -87,6 +88,7 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
   const [coinEdit, setCoinEdit] = useState<string | null>(null);
   const [coinVals, setCoinVals] = useState<{ home: string; away: string }>({ home: '', away: '' });
   const [watch, setWatch] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const openCoin = (m: AdminMatchup) => { setCoinEdit(m.id); setCoinVals({ home: String(m.home_coin ?? ''), away: String(m.away_coin ?? '') }); };
   const saveCoin = async (id: string) => { await adminSetCoin(id, Number(coinVals.home || 0), Number(coinVals.away || 0)); setCoinEdit(null); await loadM(); };
@@ -153,6 +155,7 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
   return (
     <div style={{ borderTop: '1px solid var(--bd)', paddingTop: 8, marginTop: 8 }}>
       {watch && <AdminMatchupBoard matchupId={watch} onClose={() => setWatch(null)} />}
+      {sheet && <FeedSheet matchupId={sheet} week={Number(srcWeek) || 1} onClose={() => setSheet(null)} />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{l.name} <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>· {l.season}</span></div>
@@ -213,6 +216,7 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
                   <button style={btn(m.status === 'final')} onClick={() => set(m.id, 'final')}>final</button>
                   <button style={btn(coinEdit === m.id)} onClick={() => (coinEdit === m.id ? setCoinEdit(null) : openCoin(m))} title="edit drip coin">◇</button>
                   <button style={btn(false)} onClick={() => setWatch(m.id)} title="watch the live board">▦</button>
+                  <button style={btn(false)} onClick={() => setSheet(m.id)} title={`feed sheet — per-player play log (2025 wk ${srcWeek})`}>≣</button>
                   {admin && <button style={btn(false)} onClick={() => resolve(m.id)} title="run real engine on baked 2025 data">▶</button>}
                   {admin && <button style={btn(false)} onClick={() => resetOne(m.id)} title="reset this matchup → scheduled, scores cleared">↺</button>}
                 </div>
