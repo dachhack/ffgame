@@ -29,9 +29,11 @@ function sideSlots(data: MatchupPicks, side: 'home' | 'away'): Slot[] {
   const lineup = (side === 'home' ? data.home_lineup : data.away_lineup) ?? [];
   const out: Slot[] = [];
   let i = 0;
+  // starters_json entries are { slot, sleeper_id, player_slug, pos } (server/src/sync.js),
+  // so read player_slug — NOT slug — or every slot drops out and the side scores 0.
   for (const w of WINDOWS) for (let s = 0; s < w.slots; s++) {
     const e = lineup[i++];
-    if (e?.slug) out.push({ win: w.id, slot: String(s), slug: e.slug, metric: defaultMetric(meta(e.slug).pos).id });
+    if (e?.player_slug) out.push({ win: w.id, slot: String(s), slug: e.player_slug, metric: defaultMetric(meta(e.player_slug).pos).id });
   }
   return out;
 }
