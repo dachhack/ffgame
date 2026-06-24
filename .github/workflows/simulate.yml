@@ -8,6 +8,9 @@ name: Simulate live feed
 #   • live  — drives a REAL matchup in Supabase: locks picks, goes live, drips a
 #             baked week into live_play, resolves each tick, ends FINAL. MUTATES
 #             the pilot DB — only run against a test league/week.
+#   • reset — fully reverts a live run for a league/week: matchups → scheduled,
+#             picks unlocked, SIM feed + matchup_state cleared. Touches only the
+#             sim's own SIM plays, never real ESPN rows.
 #
 # Secrets required for check/live (Settings → Secrets and variables → Actions):
 #   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   (the worker's service-role creds)
@@ -15,9 +18,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'dry | check | live'
+        description: 'dry | check | live | reset'
         type: choice
-        options: [dry, check, live]
+        options: [dry, check, live, reset]
         default: dry
       league:
         description: 'pilot league id (check/live)'
@@ -69,6 +72,9 @@ jobs:
             live)
               if [ -z "$LEAGUE" ]; then echo "::error::live mode needs a league id (input: league)"; exit 1; fi
               npm run --silent cli -- simulate "$LEAGUE" "$WEEK" --src="$SRC" --speed="$SPEED" --tick=2000 ;;
+            reset)
+              if [ -z "$LEAGUE" ]; then echo "::error::reset mode needs a league id (input: league)"; exit 1; fi
+              npm run --silent cli -- simulate --reset "$LEAGUE" "$WEEK" ;;
             *)
               echo "::error::unknown mode $MODE"; exit 1 ;;
           esac

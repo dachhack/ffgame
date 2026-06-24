@@ -126,7 +126,7 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs }) {
   const now = new Date().toISOString();
   await db().from('sealed_pick').update({ locked: true, revealed_at: now }).in('matchup_id', ids).eq('locked', false);
   await db().from('matchup').update({ status: 'live' }).in('id', ids);
-  await db().from('live_play').delete().eq('week', week);
+  await db().from('live_play').delete().eq('week', week).eq('game_id', 'SIM'); // only our own feed, never real ESPN plays
   const live = matchups.map((m) => ({ ...m, status: 'live' }));
 
   const playerIndex = await buildPlayerIndex();
@@ -169,6 +169,20 @@ async function simulateCheck(leagueId) {
   log('PASS — service-role secret + DB reachable, baked data loads. No writes made.');
 }
 
+// ── RESET: fully revert a sim'd week → scheduled, picks unlocked, scores wiped. ──
+async function simulateReset(leagueId, week) {
+  if (!leagueId || !week) throw new Error('usage: simulate --reset <leagueId> <week>');
+  const { db } = await import('./supabase.js');
+  const { data: matchups } = await db().from('matchup').select('id').eq('league_id', leagueId).eq('week', week);
+  const ids = (matchups ?? []).map((m) => m.id);
+  if (!ids.length) { log(`no matchups for league ${leagueId} week ${week} — nothing to reset`); return; }
+  await db().from('matchup_state').delete().in('matchup_id', ids);
+  await db().from('sealed_pick').update({ locked: false, revealed_at: null }).in('matchup_id', ids);
+  await db().from('live_play').delete().eq('week', week).eq('game_id', 'SIM'); // only our own feed
+  await db().from('matchup').update({ status: 'scheduled', home_final: null, away_final: null, home_coin: null, away_coin: null }).in('id', ids);
+  log(`reset ${ids.length} matchups (week ${week}) → scheduled · picks unlocked · SIM feed + matchup_state cleared`);
+}
+
 /** Parse `simulate` args and dispatch. Called from cli.js. */
 export async function simulate(args) {
   const flags = {};
@@ -185,6 +199,10 @@ export async function simulate(args) {
   }
   if (flags.check) {
     await simulateCheck(pos[0]);
+    return;
+  }
+  if (flags.reset) {
+    await simulateReset(pos[0], Number(pos[1]));
     return;
   }
   const [leagueId, week] = pos;

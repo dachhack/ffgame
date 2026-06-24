@@ -37,11 +37,20 @@ literal ESPN fetch in `poll/plays.js` is bypassed.
 # depends on). Runs offline; this is also the validate-feed CI gate.
 npm run cli -- simulate --dry --week=1 [--speed=900] [--tick=1000]
 
+# CHECK — read-only: connect with the service key, count matchups, write nothing.
+npm run cli -- simulate --check [leagueId]
+
 # LIVE — drive a real test matchup in Supabase. Locks picks, goes live, clears the
-# prior feed, then drips baked plays into live_play on a timer, re-resolving each
-# tick. Open that matchup's live board and watch it animate; ends FINAL.
+# prior SIM feed, then drips baked plays into live_play on a timer, re-resolving
+# each tick. Open that matchup's live board and watch it animate; ends FINAL.
 npm run cli -- simulate <leagueId> <week> [--src=<bakedWeek>] [--speed=600] [--tick=1000]
+
+# RESET — fully revert a live run: matchups → scheduled, picks unlocked, the SIM
+# feed + matchup_state cleared. Touches only the sim's own rows, never real ESPN.
+npm run cli -- simulate --reset <leagueId> <week>
 ```
+A live run only ever inserts/clears `live_play` rows tagged `game_id='SIM'`, so it
+never disturbs real ESPN plays; `--reset` makes the whole rehearsal reversible.
 `--speed` = game-seconds advanced per tick; `--tick` = real ms per tick (use a big
 speed + `--tick=0` for an instant full-game pass). The slate is released on one
 concurrent timeline (all games from kickoff t=0); per-game kickoff staggering is a

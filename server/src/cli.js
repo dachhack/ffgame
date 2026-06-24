@@ -5,6 +5,8 @@
 //   node src/cli.js inj-once                   one injury poll
 //   node src/cli.js simulate <lg> <wk> [..]    replay baked plays through the live feed
 //   node src/cli.js simulate --dry [--week=1]  feed round-trip check, no DB
+//   node src/cli.js simulate --check [lg]      read-only DB connectivity probe
+//   node src/cli.js simulate --reset <lg> <wk> revert a sim'd week (scheduled, cleared)
 import { config } from './config.js';
 import { importLeague, syncWeek } from './sync.js';
 import { buildPlayerIndex } from './playerIndex.js';
