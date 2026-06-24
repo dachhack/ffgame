@@ -11,6 +11,7 @@ import type { Pos } from '../types';
 import { WINDOWS, TOTAL_SLOTS, metricById } from './metrics';
 import { slugMeta } from './slugMeta';
 import { statsForSlug } from './players';
+import { hasSlate, windowForTeam } from './nflSlate';
 
 // Sensible default metric per position. Each is a steady, predictable scorer for
 // that spot — chosen WITHOUT seeing the week's box score. This also fixes a real
@@ -110,32 +111,70 @@ export function aiLiveBuffs(teamKey: string, week: number, n = 3): string[] {
   return out;
 }
 
-/** Build an AI lineup from a roster's starter slugs: lay them across the
- *  window/slot grid, each on its honest default metric, then run the
- *  Field-General read. The first QB is seated in the marquee multi-slot Sunday
- *  window so FG can actually coordinate that window's drips — a QB stranded in a
- *  1-slot window (e.g. TNF) could never run Field General. Returns
- *  [{ win, slot, slug, metric }] — the shape sealed picks resolve from. */
-export function aiLineup(slugs: string[]): AiPick[] {
-  const tagged = (slugs ?? []).filter(Boolean).slice(0, TOTAL_SLOTS).map((slug) => {
-    const pos = slugMeta(slug).pos;
-    return { slug, pos, metric: aiMetric(slug, pos) };
+interface Tagged { slug: string; pos: Pos; team: string; metric: string }
+
+/** Build an AI lineup from a roster's starter slugs, each on its honest pre-game
+ *  metric, then run the Field-General read. Returns [{ win, slot, slug, metric }].
+ *
+ *  When the week's NFL slate is known, the AI is SLATE-GATED exactly like a human
+ *  in LivePicks: every player may only occupy the window his real team plays, a
+ *  player on bye is unslottable, and a window that fills overflows to the bench.
+ *  This closes the fairness gap where the AI could grid-fill synthetic windows a
+ *  human can't use. Without a slate (weeks we have no schedule for) it falls back
+ *  to the deterministic grid-fill. No hindsight either way — placement reads only
+ *  the schedule and the AI's own roster, never the opponent or the week's result. */
+export function aiLineup(slugs: string[], week = 0): AiPick[] {
+  const tagged: Tagged[] = (slugs ?? []).filter(Boolean).map((slug) => {
+    const { pos, team } = slugMeta(slug);
+    return { slug, pos, team, metric: aiMetric(slug, pos) };
   });
 
-  // Reserve the first QB for slot 0 of the largest window (3-slot 'early'); the
-  // rest fill the grid in roster order around it.
+  const picks = hasSlate(week) ? slateGated(tagged, week) : gridFill(tagged);
+  applyFieldGeneral(picks);
+  return picks;
+}
+
+/** Slate-gated placement: each player into the window his NFL team plays; byes
+ *  and window-overflow are benched. Flexible players (no resolvable team) fill
+ *  whatever slots remain, in window order. */
+function slateGated(tagged: Tagged[], week: number): AiPick[] {
+  const free = new Map<string, number[]>();
+  for (const w of WINDOWS) free.set(w.id, Array.from({ length: w.slots }, (_, i) => i));
+  const place = (winId: string, p: Tagged): boolean => {
+    const slots = free.get(winId);
+    if (!slots || !slots.length) return false;
+    picks.push({ win: winId, slot: String(slots.shift()), slug: p.slug, metric: p.metric });
+    return true;
+  };
+
+  const picks: AiPick[] = [];
+  const flexible: Tagged[] = [];
+  for (const p of tagged) {
+    if (!p.team) { flexible.push(p); continue; }      // unknown team → eligible anywhere
+    const win = windowForTeam(week, p.team);           // WindowId | null (bye)
+    if (!win) continue;                                // bye → unslottable
+    place(win, p);                                     // window full → benched (drop)
+  }
+  for (const p of flexible) for (const w of WINDOWS) if (place(w.id, p)) break;
+  return picks;
+}
+
+/** No-slate fallback: lay players across the fixed window/slot grid, with the
+ *  first QB seated in the marquee multi-slot window so Field General can still
+ *  coordinate a QB that would otherwise be stranded in a 1-slot window. */
+function gridFill(tagged: Tagged[]): AiPick[] {
+  const pool = tagged.slice(0, TOTAL_SLOTS);
   const fgWin = WINDOWS.reduce((a, b) => (b.slots > a.slots ? b : a));
-  const qbIdx = tagged.findIndex((p) => p.pos === 'QB');
-  const reserved = qbIdx >= 0 ? tagged.splice(qbIdx, 1)[0] : undefined;
+  const qbIdx = pool.findIndex((p) => p.pos === 'QB');
+  const reserved = qbIdx >= 0 ? pool.splice(qbIdx, 1)[0] : undefined;
 
   const picks: AiPick[] = [];
   let i = 0;
   for (const w of WINDOWS) {
     for (let s = 0; s < w.slots; s++) {
-      const p = reserved && w.id === fgWin.id && s === 0 ? reserved : tagged[i++];
+      const p = reserved && w.id === fgWin.id && s === 0 ? reserved : pool[i++];
       if (p) picks.push({ win: w.id, slot: String(s), slug: p.slug, metric: p.metric });
     }
   }
-  applyFieldGeneral(picks);
   return picks;
 }

@@ -23,7 +23,7 @@ interface Slot { win: string; slot: string; slug: string; metric: string }
  *  from its Sleeper starters (src/data/aiLineup — sensible default metrics + a
  *  pre-game Field-General read, NO hindsight). The auto path covers empty seats,
  *  AI-controlled teams, and managers who didn't pick. */
-function sideSlots(data: MatchupPicks, side: 'home' | 'away'): Slot[] {
+function sideSlots(data: MatchupPicks, side: 'home' | 'away', week: number): Slot[] {
   const appUser = side === 'home' ? data.home_app_user : data.away_app_user;
   const picks = appUser ? data.picks.filter((p) => p.app_user_id === appUser && p.player_slug) : [];
   if (picks.length) {
@@ -32,7 +32,7 @@ function sideSlots(data: MatchupPicks, side: 'home' | 'away'): Slot[] {
   // starters_json entries are { slot, sleeper_id, player_slug, pos } (server/src/sync.js).
   const lineup = (side === 'home' ? data.home_lineup : data.away_lineup) ?? [];
   const slugs = lineup.map((e) => e.player_slug).filter((s): s is string => !!s);
-  return aiLineup(slugs);
+  return aiLineup(slugs, week);
 }
 
 /** A side's armed in-slot buffs, mirroring the worker (resolve.js): a human who
@@ -55,7 +55,7 @@ export async function forceResolve(matchupId: string, sourceWeek: number): Promi
   const data = await adminMatchupPicks(matchupId);
   await loadRealWeek(sourceWeek); // baked plays into the engine's cache
   const { states, slots, coin } = resolveLiveMatchup(
-    sideSlots(data, 'home').map(toLivePick), sideSlots(data, 'away').map(toLivePick), sourceWeek,
+    sideSlots(data, 'home', sourceWeek).map(toLivePick), sideSlots(data, 'away', sourceWeek).map(toLivePick), sourceWeek,
     { homeBuffs: new Set(sideBuffs(data, 'home', sourceWeek)), awayBuffs: new Set(sideBuffs(data, 'away', sourceWeek)) },
   );
   await adminSetMatchup(matchupId, 'live', true); // reveal picks + show on the board

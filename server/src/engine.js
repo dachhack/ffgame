@@ -29,12 +29,13 @@ export const EMPTY = EMPTY_PLAYER;
 export { clearSyntheticWeeks, resolveLiveMatchup, aiLiveBuffs };
 
 /** AI auto-lineup for a real LIVE game — delegates to the shared honest builder
- *  (src/data/aiLineup.ts): spread a roster's Sleeper starters across the
- *  window/slot grid on sensible default metrics (fixing the old QB→fg / DEF→
- *  suppress zero-scoring bug) plus a pre-game Field-General read. Returns
- *  [{ win, slot, slug, metric }] — the same shape sealed picks resolve from. */
-export function autoLineup(slugs) {
-  return aiLineup(slugs ?? []);
+ *  (src/data/aiLineup.ts): place a roster's Sleeper starters on sensible default
+ *  metrics (fixing the old QB→fg / DEF→suppress zero-scoring bug) plus a pre-game
+ *  Field-General read. With a `week` that has a known NFL slate, players are
+ *  slate-gated into the window their team actually plays, exactly like a human's
+ *  lineup. Returns [{ win, slot, slug, metric }] — the sealed-pick shape. */
+export function autoLineup(slugs, week = 0) {
+  return aiLineup(slugs ?? [], week);
 }
 
 /** Inject a week's plays so the engine sees them via realPbpFor(week, slug).

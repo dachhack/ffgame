@@ -95,7 +95,7 @@ export async function resolveMatchup(matchup, playerIndex, override) {
   // ai → AI lineup + AI buffs; empty → null, scores 0). AI/auto sides get free
   // buffs in this milestone; a later one gates them behind a coin budget.
   const aiSide = (rosterId) => lineupSlugs(matchup, rosterId).then((slugs) => ({
-    picks: autoLineup(slugs), buffs: aiLiveBuffs(String(rosterId), matchup.week),
+    picks: autoLineup(slugs, matchup.week), buffs: aiLiveBuffs(String(rosterId), matchup.week),
   }));
   const sideLineup = async (rosterId) => {
     const mem = byRoster.get(rosterId);

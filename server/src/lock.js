@@ -46,7 +46,7 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       if (!(isAi || (missed && policy !== 'empty'))) continue;
       if (isAi && hasPicks) await db().from('sealed_pick').delete().eq('matchup_id', m.id).eq('app_user_id', mem.app_user_id);
       const slugs = ((startersByRoster.get(rosterId)) ?? []).map((s) => s.player_slug).filter(Boolean);
-      const rows = autoLineup(slugs).map((p) => ({
+      const rows = autoLineup(slugs, m.week).map((p) => ({
         matchup_id: m.id, app_user_id: mem.app_user_id, game_window: p.win, roster_slot: p.slot,
         player_slug: p.slug, metric_id: p.metric, locked: true, revealed_at: iso,
       }));
