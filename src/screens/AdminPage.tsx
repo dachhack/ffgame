@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
-  adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard,
+  adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard,
 } from '../data/liveApi';
 import { importLeague, syncWeek } from '../data/sleeperAdmin';
@@ -94,6 +94,24 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
     try { await forceResolve(id, Number(srcWeek)); setBusy('✓ resolved from 2025'); await loadM(); }
     catch (e) { setBusy(e instanceof Error ? e.message : 'resolve failed'); }
   };
+  const resetOne = async (id: string) => {
+    setBusy('reset');
+    try { await adminResetMatchup(id); setBusy('✓ reset → scheduled'); await loadM(); }
+    catch (e) { setBusy(e instanceof Error ? e.message : 'reset failed'); }
+  };
+  const resolveAll = async () => {
+    if (!matchups?.length) return;
+    setBusy('resolve all');
+    try { for (const m of matchups) await forceResolve(m.id, Number(srcWeek)); setBusy(`✓ resolved ${matchups.length} matchups`); await loadM(); }
+    catch (e) { setBusy(e instanceof Error ? e.message : 'resolve failed'); }
+  };
+  const resetAll = async () => {
+    if (!matchups?.length) return;
+    if (!confirm(`Reset all ${matchups.length} matchups → scheduled, scores + coin cleared?`)) return;
+    setBusy('reset all');
+    try { for (const m of matchups) await adminResetMatchup(m.id); setBusy(`✓ reset ${matchups.length} matchups`); await loadM(); }
+    catch (e) { setBusy(e instanceof Error ? e.message : 'reset failed'); }
+  };
 
   const loadM = async () => setMatchups(await adminMatchups(l.league_id));
   const loadMembers = async () => setMembers(await adminLeagueMembers(l.league_id));
@@ -159,10 +177,11 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
       {tab === 'matchups' && matchups && (
         <div style={{ marginTop: 10 }}>
           {admin && (
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
-              <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>force-resolve ▶ from 2025 wk</span>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+              <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>from 2025 wk</span>
               <input value={srcWeek} onChange={(e) => setSrcWeek(e.target.value.replace(/\D/g, ''))} style={{ ...inp, width: 32, padding: '4px 5px', textAlign: 'center' }} />
-              <span className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)' }}>(real engine preview)</span>
+              <button style={btn(true)} onClick={resolveAll} disabled={busy === 'resolve all'} title="run the real engine on every matchup — lights up the whole board">{busy === 'resolve all' ? 'resolving…' : '▶▶ resolve all'}</button>
+              <button style={btn(false)} onClick={resetAll} disabled={busy === 'reset all'} title="clear every matchup → scheduled, scores wiped">{busy === 'reset all' ? 'resetting…' : '↺ reset all'}</button>
             </div>
           )}
           {matchups.length === 0 ? <Muted text="No matchups (run sync week)." /> : matchups.map((m) => (
@@ -176,6 +195,7 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
                   <button style={btn(coinEdit === m.id)} onClick={() => (coinEdit === m.id ? setCoinEdit(null) : openCoin(m))} title="edit drip coin">◇</button>
                   <button style={btn(false)} onClick={() => setWatch(m.id)} title="watch the live board">▦</button>
                   {admin && <button style={btn(false)} onClick={() => resolve(m.id)} title="run real engine on baked 2025 data">▶</button>}
+                  {admin && <button style={btn(false)} onClick={() => resetOne(m.id)} title="reset this matchup → scheduled, scores cleared">↺</button>}
                 </div>
               </div>
               {coinEdit === m.id && (
