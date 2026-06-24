@@ -49,7 +49,7 @@ export function App() {
       {route.name === 'splash' && <Splash />}
       {route.name === 'live' && <LiveOnboard />}
       {route.name === 'demo' && (route.view === 'board'
-        ? <Matchup key="demo-board" week={DEMO_WEEK} initialPhase="live" demo />
+        ? <Matchup key="demo-board" week={DEMO_WEEK} initialPhase="setup" demo />
         : <GuidedDemo />)}
       {route.name === 'leagues' && <Leagues />}
       {route.name === 'sleeperLeague' && <SleeperLeague key={route.leagueId} leagueId={route.leagueId} leagueName={route.leagueName} />}

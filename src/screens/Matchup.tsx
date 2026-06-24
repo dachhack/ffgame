@@ -81,15 +81,19 @@ function CoinPill({ amt }: { amt: number }) {
   );
 }
 
-// Power-ups the guided board demo arms so the authentic board shows them live:
-// Garbage Time (doubles points in the final 5 min — surfaces as a "×2" buff note
-// in the play log) plus an EMP aimed at the featured window (freezes the
-// opponent's drip clock, below).
-const DEMO_BUFFS: Record<string, boolean> = { 'garbage-time': true };
+// Power-ups the interactive board demo lets a viewer arm pre-kick (real engine
+// buffs). The chosen one surfaces on the authentic board — e.g. Garbage Time's
+// "×2" notes in the play log.
+const DEMO_POWERUPS = [
+  { id: 'garbage-time', icon: '🗑️', name: 'Garbage Time', blurb: 'Every point you score in the final 5 minutes counts double.' },
+  { id: 'momentum', icon: '📈', name: 'Momentum', blurb: 'When your drip goes hot, it runs 3× instead of 2×.' },
+  { id: 'floodgates', icon: '🌊', name: 'Floodgates', blurb: 'Your drips ignore the opponent’s pauses and erases all game.' },
+];
 
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
   const { youTeamId: YOU, navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
-  const buffs = demo ? DEMO_BUFFS : (applied[week]?.buffs ?? {});
+  const [demoBuff, setDemoBuff] = useState('garbage-time'); // the power-up the demo viewer armed
+  const buffs = demo ? { [demoBuff]: true } : (applied[week]?.buffs ?? {});
   const buffsKey = JSON.stringify(buffs);
   const extraSlots = applied[week]?.extraSlots ?? {};
   const swaps = applied[week]?.swaps ?? {};
@@ -178,9 +182,15 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   }, [youPools]);
 
   const effYouPicks = useMemo<Record<string, Pick>>(() => {
-    if (phase === 'setup') return picks;
+    // The demo always shows the seeded lineup (even in setup) so a viewer can edit
+    // a metric on a real, populated board; the live game keeps setup hidden.
+    if (phase === 'setup' && !demo) return picks;
     return { ...youDefault, ...picks };
-  }, [phase, picks, youDefault]);
+  }, [phase, picks, youDefault, demo]);
+
+  // Seed the demo's local lineup once so its setup board is populated and metric
+  // edits (pickMetricFor needs picks[key]) take hold — never touches the store.
+  useEffect(() => { if (demo && ready && Object.keys(picks).length === 0) setPicks(youDefault); }, [demo, ready, youDefault]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const swapsKey = JSON.stringify(swaps);
   const backupsKey = JSON.stringify(backupAssign);
@@ -276,11 +286,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // (lead changes, tight margins) plus on-field action — so the 60-second
   // highlight always lands on a thriller. The board carries the armed demo
   // power-up (Garbage Time), so its "×2" notes surface live in the play log.
-  const demoWin = useMemo(() => {
+  // Lock the featured window from a scout of the DEFAULT lineup, so the viewer's
+  // metric edits don't make the spotlight jump windows mid-setup.
+  const demoWinId = useMemo<WindowId | null>(() => {
     if (!demo) return null;
-    let best: typeof resolved.windows[number] | null = null;
-    let bestScore = -Infinity;
-    for (const rw of resolved.windows) {
+    const scout = buildMatchup(YOU, oppId, week, youDefault, oppPicks, extraSlots, swaps, backupAssign, {}, {}, realResolve);
+    let bestId: WindowId | null = null, bestScore = -Infinity;
+    for (const rw of scout.windows) {
       let action = 0, exc = 0;
       for (const s of rw.slots) {
         for (const e of s.events) action += (e.effect ? 3 : 0) + (e.coin ? 2 : 0) + (e.sig ? 1 : 0);
@@ -292,20 +304,23 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         }
       }
       const score = exc + action;
-      if (score > bestScore) { bestScore = score; best = rw; }
+      if (score > bestScore) { bestScore = score; bestId = rw.window.id; }
     }
-    return best;
-  }, [demo, resolved]);
+    return bestId;
+  }, [demo, oppId, week, youDefault, oppPicks, extraKey, swapsKey, backupsKey, realResolve]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The featured window from the LIVE resolve, so it reflects the viewer's picks.
+  const demoWin = useMemo(() => (demo && demoWinId ? (resolved.windows.find((w) => w.window.id === demoWinId) ?? null) : null), [demo, resolved, demoWinId]);
   const demoBeats = useMemo<Beat[]>(() => (demoWin ? buildBeats(demoWin.slots.flatMap((s) => s.events)) : []), [demoWin]);
-  // Auto-start the featured window once (at ~2× ⇒ ~60s through a full game).
+  // Auto-start the featured window once the viewer kicks off (phase → live), at
+  // ~2× ⇒ ~60s through a full game.
   const demoStarted = useRef(false);
   useEffect(() => {
-    if (!demo || !demoWin || demoStarted.current) return;
+    if (!demo || phase !== 'live' || !demoWin || demoStarted.current) return;
     if (!(demoWin.window.id in winTarget)) return;
     demoStarted.current = true;
     setSpeed(2);
     setWinPlay(demoWin.window.id, true);
-  }, [demo, demoWin, winTarget]); // eslint-disable-line react-hooks/exhaustive-deps -- setWinPlay is a stable hoisted fn
+  }, [demo, phase, demoWin, winTarget]); // eslint-disable-line react-hooks/exhaustive-deps -- setWinPlay is a stable hoisted fn
 
   // Auto-open a window's slot logs while it's in progress, auto-collapse them
   // when it finishes (or the board goes FINAL). Fires only on the transition,
@@ -532,6 +547,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   }
 
   function lockIn() { setPhase('live'); setSelSlot(null); setRosterOpen({ you: false, their: false }); }
+  // Demo kickoff (setup → live auto-play) and a way back to re-pick.
+  function demoKick() { setSelSlot(null); setPhase('live'); }
+  function demoBackToSetup() { demoStarted.current = false; setWinClocks({}); setWinPlaying({}); setSelSlot(null); setPhase('setup'); }
   function changePhase(p: Phase) { setPhase(p); setSelSlot(null); setRosterOpen({ you: p === 'setup', their: p === 'setup' }); }
   function toggleAll() {
     const v = !anyPlaying;
@@ -551,9 +569,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     );
   }
 
-  // ── REAL-BOARD guided demo: the authentic live board for one featured window,
-  // auto-played and narrated. A separate slim render path so the full setup/live/
-  // final UI below is untouched; it reuses WindowSection + the live playback state.
+  // ── REAL-BOARD guided demo: the AUTHENTIC board. First the real setup — the
+  // viewer edits a hidden metric and arms a power-up on the featured window —
+  // then they kick off and it auto-plays + narrates. A slim render path so the
+  // full setup/live/final UI below is untouched; it reuses WindowSection.
   if (demo) {
     const fid = demoWin?.window.id;
     if (!demoWin || !fid) {
@@ -563,6 +582,70 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         </div>
       );
     }
+    const demoHeader = (
+      <header style={{ flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 8, padding: isMobile ? '8px 10px' : '8px 16px', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <Brand onClick={() => navigate({ name: 'splash' })} />
+          <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← back</button>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <DemoViewToggle view="board" onSwitch={(v) => v === 'clean' && navigate({ name: 'demo', view: 'clean' })} />
+          <ThemeSwitcher />
+        </div>
+      </header>
+    );
+
+    // ── interactive setup: real metric pickers + arm a power-up, then kick off ──
+    if (phase === 'setup') {
+      return (
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+          {demoHeader}
+          <main style={{ flex: 1, overflow: 'auto', padding: isMobile ? '14px 10px 40px' : '18px 16px 48px' }}>
+            <div style={{ maxWidth: 560, margin: '0 auto' }}>
+              <div style={{ textAlign: 'center', marginBottom: 14 }}>
+                <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>Set your window</div>
+                <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6, lineHeight: 1.45 }}>This is the real board. Tap a player’s metric to change how he scores — it’s hidden from your opponent — then arm a power-up and kick off.</div>
+              </div>
+              <WindowSection
+                rw={demoWin} week={week} phase="setup" clock={0} maxClock={winTarget[fid] ?? GAME_SECONDS}
+                wallClock={wallClock} realClock={realResolve} wallSeconds={0} playing={false}
+                onTogglePlay={() => {}} onReplay={() => {}}
+                canApplyExtra={false} extraSlotQty={0} onApplyExtra={() => {}} onRemoveExtra={() => {}} onAssignBackup={() => {}}
+                picks={effYouPicks} selSlot={selSlot} pickMetricFor={pickMetricFor}
+                onClearSlot={() => {}} onOpenPicker={() => {}}
+                openPBP={openPBP} togglePBP={(k) => setOpenPBP((o) => ({ ...o, [k]: !o[k] }))}
+                youPools={youPools} inventory={inventory} onAssign={() => {}} turnoverCoin={turnoverCoin}
+                backups={backupAssign} slotName={slotName} armed={buffs} aw={aw}
+                applyMode={null} onApplyToSpot={() => {}} onApplyToWindow={() => {}} onScout={() => {}}
+                lockPlayer
+              />
+              {/* arm a power-up */}
+              <div style={{ marginTop: 16 }}>
+                <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 8 }}>ARM A POWER-UP</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {DEMO_POWERUPS.map((pu) => {
+                    const on = demoBuff === pu.id;
+                    return (
+                      <button key={pu.id} onClick={() => setDemoBuff(pu.id)} style={{ display: 'flex', alignItems: 'flex-start', gap: 11, padding: '10px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left', background: on ? 'color-mix(in srgb, var(--you) 9%, var(--surface))' : 'var(--surface)', border: `1.5px solid ${on ? 'var(--you)' : 'var(--bd)'}`, boxShadow: on ? '0 0 0 3px color-mix(in srgb, var(--you) 14%, transparent)' : 'none' }}>
+                        <span style={{ fontSize: 22, lineHeight: 1 }}>{pu.icon}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="grotesk" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>{pu.name}</div>
+                          <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>{pu.blurb}</div>
+                        </div>
+                        {on && <span style={{ flex: 'none', fontSize: 13, fontWeight: 700, color: 'var(--you)' }}>✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <button onClick={demoKick} className="mono" style={{ width: '100%', marginTop: 18, fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', boxShadow: '0 0 20px color-mix(in srgb, var(--you) 30%, transparent)' }}>▶ KICK OFF — watch it play</button>
+            </div>
+          </main>
+        </div>
+      );
+    }
+
+    // ── live/final: the featured window auto-plays, narrated ──
     const dClock = winClocks[fid] ?? 0;
     const dMax = winTarget[fid] ?? GAME_SECONDS;
     const dPlaying = !!winPlaying[fid];
@@ -570,21 +653,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     const activeBeat = demoBeats.reduce<Beat | null>((acc, b) => (b.clock <= dClock ? b : acc), null);
     return (
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <header style={{ flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 8, padding: isMobile ? '8px 10px' : '8px 16px', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-            <Brand onClick={() => navigate({ name: 'splash' })} />
-            <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← back</button>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <DemoViewToggle view="board" onSwitch={(v) => v === 'clean' && navigate({ name: 'demo', view: 'clean' })} />
-            <ThemeSwitcher />
-          </div>
-        </header>
+        {demoHeader}
         <main style={{ flex: 1, overflow: 'auto', padding: isMobile ? '14px 10px 40px' : '18px 16px 48px' }}>
           <div style={{ maxWidth: 720, margin: '0 auto' }}>
             <div style={{ textAlign: 'center', marginBottom: 14 }}>
-              <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>This is the real board</div>
-              <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6 }}>One window of {you.name} vs {opp.name}, auto-playing off real NFL plays. The captions explain each swing as it lands.</div>
+              <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>Your window, live</div>
+              <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6 }}>{you.name} vs {opp.name}, auto-playing off real NFL plays. The captions explain each swing — and <button onClick={demoBackToSetup} className="mono" style={{ background: 'none', border: 'none', padding: 0, color: 'var(--you)', cursor: 'pointer', fontSize: 12 }}>↩ change your picks</button>.</div>
             </div>
             <WindowSection
               rw={demoWin}
@@ -1433,8 +1507,9 @@ function WindowSection(props: {
   onApplyToSpot: (key: string) => void;
   onApplyToWindow: (win: WindowId) => void;
   onScout: (win: WindowId) => void;
+  lockPlayer?: boolean; // demo setup: metric is editable, but the player is fixed
 }) {
-  const { rw, week, phase, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout } = props;
+  const { rw, week, phase, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer } = props;
   const w = rw.window;
   // Twin Generals: with the buff armed and ≥2 of your Field General QBs in this
   // window, the top two multipliers stack — link those QB spots so you can see
@@ -1594,7 +1669,7 @@ function WindowSection(props: {
                 applyMode={applyMode} onApplyToSpot={() => onApplyToSpot(key)}
                 onOpenPicker={() => onOpenPicker(key, w.id)} onPickMetric={(m) => pickMetricFor(key, m)}
                 onClearSlot={() => onClearSlot(key)}
-                onDropPlayer={(id) => onAssign(id)} onScout={() => onScout(w.id)}
+                onDropPlayer={(id) => onAssign(id)} onScout={() => onScout(w.id)} lockPlayer={lockPlayer}
               />
             );
           }
@@ -1636,8 +1711,9 @@ function SetupRow(props: {
   appliedPu: string[];
   applyMode: string | null; onApplyToSpot: () => void;
   onOpenPicker: () => void; onPickMetric: (m: string) => void; onClearSlot: () => void; onDropPlayer: (id: string) => void; onScout: () => void;
+  lockPlayer?: boolean;
 }) {
-  const { winId, week, pick, selected, inventory, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout } = props;
+  const { winId, week, pick, selected, inventory, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout, lockPlayer } = props;
   const isMobile = useIsMobile();
   const gridCols = '1fr 1fr'; // no center gutter — your spot vs the sealed opponent
   const rowGap = isMobile ? 5 : 8;
@@ -1658,7 +1734,7 @@ function SetupRow(props: {
   const emptyEligible = applyMode === 'bye-steal' && !player;
   const applyHi = fillEligible;
   const applyDim = !!applyMode && !fillEligible && !emptyEligible;
-  const cardTap = applyMode ? (fillEligible ? onApplyToSpot : () => {}) : onOpenPicker;
+  const cardTap = lockPlayer ? () => {} : applyMode ? (fillEligible ? onApplyToSpot : () => {}) : onOpenPicker;
   const applyPu = applyMode ? powerupById(applyMode) : null;
   // "Change metric" re-opens the picker for an already-set spot without dropping
   // the player. Reset whenever the slot's player changes (incl. top-down shifts).
@@ -1684,7 +1760,7 @@ function SetupRow(props: {
           )}
           {/* Remove the player from this spot — compact red ✕ pinned top-right,
               clear of the metric list below. */}
-          {!applyMode && (
+          {!applyMode && !lockPlayer && (
             <button
               onClick={(e) => { e.stopPropagation(); onClearSlot(); }}
               title="Remove player from this spot"
@@ -1752,7 +1828,7 @@ function SetupRow(props: {
           {!showPicker && (
             <div style={{ display: 'flex', gap: 14, marginTop: 'auto', paddingTop: 4 }}>
               <button onClick={() => setEditing(true)} className="mono" style={{ ...link, color: 'var(--warn)' }}>↻ METRIC</button>
-              <button onClick={onOpenPicker} className="mono" style={{ ...link, color: 'var(--opp)' }}>⇄ PLAYER</button>
+              {!lockPlayer && <button onClick={onOpenPicker} className="mono" style={{ ...link, color: 'var(--opp)' }}>⇄ PLAYER</button>}
             </div>
           )}
         </div>
