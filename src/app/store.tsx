@@ -30,6 +30,7 @@ export type Phase = 'setup' | 'live' | 'final';
 export type Route =
   | { name: 'splash' }
   | { name: 'live' }            // authenticated live-H2H pilot (separate from the demo)
+  | { name: 'demo'; view?: 'clean' | 'board' } // narrated guided demo: 'clean' explainer (default) or the real in-game board
   | { name: 'leagues' }
   | { name: 'sleeperLeague'; leagueId: string; leagueName: string }
   | { name: 'hub' }
@@ -52,6 +53,8 @@ interface Store {
   setSleeperUser: (u: SleeperUser | null) => void;
   /** The league the sim is currently running on (the baked DRIP demo by default). */
   activeLeague: League;
+  /** True when a real Sleeper league is loaded (vs the baked DRIP demo). */
+  isSimLeague: boolean;
   /** Make a freshly-built Sleeper league active and enter its sim as `youTeamId`. */
   loadSimLeague: (built: BuiltLeague, youTeamId: string) => void;
   /** Drop back to the baked demo league. */
@@ -154,12 +157,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [route, setRoute] = useState<Route>(sleeperUser ? { name: 'leagues' } : { name: 'splash' });
   // The active league (baked DRIP demo by default; swapped when a sim is loaded).
   const [activeLeague, setActiveLeagueState] = useState<League>(LEAGUE);
+  const [isSimLeague, setIsSimLeague] = useState(false);
   // Demo role/week: pick any team and any week before heading into setup.
   const [youTeamId, setYouTeam] = useState<string>(YOU_TEAM_ID);
   const [demoWeek, setDemoWeek] = useState<number>(DEMO_WEEK);
   const loadSimLeague = (built: BuiltLeague, youId: string) => {
     setActiveLeague(built);             // swap the engine registry (non-React reads)
     setActiveLeagueState(built.league); // re-render React consumers
+    setIsSimLeague(true);
     setYouTeam(youId);
     setDemoWeek(DEMO_WEEK);
     // A fresh sim starts with a clean economy: reset drip coin to the grant and
@@ -171,7 +176,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
   const exitSimLeague = () => {
     resetToDemoLeague(); clearSyntheticWeeks(); clearRuntimeHeadshots();
-    setActiveLeagueState(LEAGUE); setYouTeam(YOU_TEAM_ID);
+    setActiveLeagueState(LEAGUE); setIsSimLeague(false); setYouTeam(YOU_TEAM_ID);
   };
   const [bigText, setBigTextState] = useState<boolean>(() => {
     try {
@@ -341,8 +346,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate: setRoute, sleeperUser, setSleeperUser, activeLeague, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
-    [theme, bigText, fullStats, route, sleeperUser, activeLeague, youTeamId, demoWeek, coins, inventory, applied],
+    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate: setRoute, sleeperUser, setSleeperUser, activeLeague, isSimLeague, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    [theme, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

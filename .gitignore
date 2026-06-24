@@ -13,3 +13,6 @@ npm-debug.log*
 # play-by-play) IS committed — it's the canonical source genRealPbp.mjs +
 # genReturns.mjs bake from. rtdump/ is the legacy lightweight dump, not needed.
 scripts/pbp/rtdump/
+
+# Supabase CLI local scratch (linked project ref, version cache) — not for VCS.
+supabase/.temp/

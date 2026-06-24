@@ -1,0 +1,72 @@
+name: Sync pilot league
+
+# One-click PREP for a pilot/test league — the step that used to require a local
+# shell with the service-role key. Mirrors a Sleeper league into Supabase so a
+# live sim (or the real season) has something to run against. Modes (input `mode`):
+#   • both   — sync the league THEN sync the week (the full prep, one click). Default.
+#   • league — import the league + memberships only (prints the invite code).
+#   • week   — mirror one week's schedule + starting lineups (needs the league
+#              already synced).
+# After this, run "Simulate live feed" (mode: live) against the same league/week.
+#
+# Secrets required (Settings → Secrets and variables → Actions):
+#   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   (the worker's service-role creds)
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'both | league | week'
+        type: choice
+        options: [both, league, week]
+        default: both
+      league:
+        description: 'Sleeper league id'
+        required: true
+        default: ''
+      week:
+        description: 'week to mirror (both/week)'
+        required: false
+        default: '1'
+      season:
+        description: 'season override (blank → PILOT_SEASON, default 2026)'
+        required: false
+        default: ''
+
+concurrency: live-sim  # share the group with Simulate so prep + run never clobber the same DB
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Install worker deps
+        working-directory: server
+        run: npm ci
+      - name: Sync (${{ inputs.mode }})
+        working-directory: server
+        env:
+          MODE: ${{ inputs.mode }}
+          LEAGUE: ${{ inputs.league }}
+          WEEK: ${{ inputs.week }}
+          PILOT_SEASON: ${{ inputs.season }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -uo pipefail
+          if [ -z "$LEAGUE" ]; then echo "::error::a Sleeper league id is required (input: league)"; exit 1; fi
+          if [ -z "${SUPABASE_URL:-}" ] || ! printf '%s' "$SUPABASE_URL" | grep -q '^https://'; then
+            echo "::error::SUPABASE_URL secret is missing or not an https:// URL. Set SUPABASE_URL (https://<ref>.supabase.co) and SUPABASE_SERVICE_ROLE_KEY in Settings → Secrets and variables → Actions."; exit 1
+          fi
+          case "$MODE" in
+            league)
+              npm run --silent cli -- sync "$LEAGUE" ;;
+            week)
+              npm run --silent cli -- sync-week "$LEAGUE" "$WEEK" ;;
+            both)
+              npm run --silent cli -- sync "$LEAGUE" \
+                && npm run --silent cli -- sync-week "$LEAGUE" "$WEEK" ;;
+            *)
+              echo "::error::unknown mode $MODE"; exit 1 ;;
+          esac

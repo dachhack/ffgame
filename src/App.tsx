@@ -9,6 +9,9 @@ import { Splash } from './screens/Splash';
 import { Leagues } from './screens/Leagues';
 import { SleeperLeague } from './screens/SleeperLeague';
 import { LiveOnboard } from './screens/LiveOnboard';
+import { GuidedDemo } from './screens/GuidedDemo';
+import { RequestCodeFab } from './screens/RequestCode';
+import { DEMO_WEEK } from './config';
 
 export function App() {
   const { theme, route, youTeamId, navigate } = useStore();
@@ -46,12 +49,18 @@ export function App() {
     >
       {route.name === 'splash' && <Splash />}
       {route.name === 'live' && <LiveOnboard />}
+      {route.name === 'demo' && (route.view === 'board'
+        ? <Matchup key="demo-board" week={DEMO_WEEK} initialPhase="setup" demo />
+        : <GuidedDemo />)}
       {route.name === 'leagues' && <Leagues />}
       {route.name === 'sleeperLeague' && <SleeperLeague key={route.leagueId} leagueId={route.leagueId} leagueName={route.leagueName} />}
       {route.name === 'hub' && <LeagueHub />}
       {route.name === 'league' && <LeagueOverview />}
       {route.name === 'matchup' && <Matchup key={`m${route.week}-${youTeamId}`} week={route.week} initialPhase={route.phase} />}
       {route.name === 'final' && <MatchupFinal key={`f${route.week}-${youTeamId}`} week={route.week} />}
+      {/* Persistent "out" across the funnel — request a pilot code for your league.
+          Hidden inside the live pilot itself (you're already in). */}
+      {route.name !== 'live' && <RequestCodeFab />}
     </div>
   );
 }

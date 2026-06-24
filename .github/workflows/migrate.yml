@@ -5,7 +5,7 @@ name: Apply Supabase migrations
 # already-applied migrations are never re-run), so it needs no migration tracking.
 on:
   push:
-    branches: [claude/admiring-brown-x5limu]
+    branches: [claude/admiring-brown-x5limu, claude/charming-bardeen-tqeyue, claude/drip-fantasy-live-onboard-i6dgrs]
     paths: ['supabase/migrations/**']
   workflow_dispatch:
     inputs:
@@ -32,7 +32,7 @@ jobs:
           if [ -n "${{ github.event.inputs.file }}" ]; then
             files="${{ github.event.inputs.file }}"
           else
-            files=$(git diff --name-only --diff-filter=A "${{ github.event.before }}" "${{ github.sha }}" -- 'supabase/migrations/*.sql' | sort)
+            files=$(git diff --no-renames --name-only --diff-filter=A "${{ github.event.before }}" "${{ github.sha }}" -- 'supabase/migrations/*.sql' | sort)
           fi
           if [ -z "$files" ]; then echo "No new migration files to apply."; exit 0; fi
           for f in $files; do

@@ -3,6 +3,10 @@
 //   node src/cli.js sync-week <leagueId> <wk>  mirror a week's schedule + lineups
 //   node src/cli.js poll-once                  one scoreboard+plays pass (current week)
 //   node src/cli.js inj-once                   one injury poll
+//   node src/cli.js simulate <lg> <wk> [..]    replay baked plays through the live feed
+//   node src/cli.js simulate --dry [--week=1]  feed round-trip check, no DB
+//   node src/cli.js simulate --check [lg]      read-only DB connectivity probe
+//   node src/cli.js simulate --reset <lg> <wk> revert a sim'd week (scheduled, cleared)
 import { config } from './config.js';
 import { importLeague, syncWeek } from './sync.js';
 import { buildPlayerIndex } from './playerIndex.js';
@@ -10,6 +14,7 @@ import { pollInjuries } from './poll/injuries.js';
 import { gamesToPoll } from './poll/scoreboard.js';
 import { pollGame } from './poll/plays.js';
 import { getState } from './sleeper.js';
+import { simulate } from './simulate.js';
 
 const [cmd, ...args] = process.argv.slice(2);
 
@@ -45,8 +50,12 @@ async function main() {
       console.log('polled', ids.length, 'games,', wrote, 'rows');
       break;
     }
+    case 'simulate': {
+      await simulate(args);
+      break;
+    }
     default:
-      console.log('commands: sync <leagueId> | sync-week <leagueId> <wk> | poll-once | inj-once');
+      console.log('commands: sync <leagueId> | sync-week <leagueId> <wk> | poll-once | inj-once | simulate <lg> <wk> [--dry]');
   }
 }
 

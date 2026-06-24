@@ -12,11 +12,13 @@
 //     resolveSlot reads them through realPbpFor(week, slug).
 //   • sealed_pick rows (enrolled, post-lock) or sleeper_lineup (fallback).
 //
-// Still simplified vs the client's buildMatchup: no best-ball backups, coin
-// economy, or cross-window Field-General multiplier yet — those live in
-// matchup.ts and can be layered on once the pilot needs them.
+// The live H2H path runs the shared resolver (src/engine/liveResolve.ts) — the
+// SAME one the in-browser admin force-resolve uses — so the worker and the
+// founder's preview produce identical scores. It layers cross-window Field
+// General + best-ball backups on top of per-slot resolveSlot. DEF suppress,
+// cross-window TE-TD nukes, and the K banker bonus remain simplified there.
 import { db } from './supabase.js';
-import { injectWeek, makePlayer, resolveWindow, rowsToPbp, EMPTY } from './engine.js';
+import { injectWeek, makePlayer, resolveLiveMatchup, rowsToPbp } from './engine.js';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
 export function baseScore(plays) {
@@ -54,8 +56,10 @@ async function lineupSlugs(matchup, rosterId) {
   return ((data?.starters_json) ?? []).map((s) => s.player_slug).filter(Boolean);
 }
 
-/** Resolve one matchup → write matchup_state (per game_window) + finals when final. */
-export async function resolveMatchup(matchup, playerIndex) {
+/** Resolve one matchup → write matchup_state (per game_window) + finals when final.
+ *  `override` (sim only): { home, away } pick arrays [{win,slot,slug,metric}] that
+ *  bypass enrollment/sealed-pick gathering so both sides resolve with full metrics. */
+export async function resolveMatchup(matchup, playerIndex, override) {
   const rows = await weekPlayRows(matchup.week);
   const bySlug = rowsToPbp(rows);
   injectWeek(matchup.week, bySlug);
@@ -68,32 +72,19 @@ export async function resolveMatchup(matchup, playerIndex) {
     .in('sleeper_roster_id', [matchup.home_roster_id, matchup.away_roster_id]);
   const byRoster = new Map((members ?? []).map((m) => [m.sleeper_roster_id, m]));
 
-  const homePicks = await enrolledPicks(matchup, byRoster.get(matchup.home_roster_id));
-  const awayPicks = await enrolledPicks(matchup, byRoster.get(matchup.away_roster_id));
+  const homePicks = override ? override.home : await enrolledPicks(matchup, byRoster.get(matchup.home_roster_id));
+  const awayPicks = override ? override.away : await enrolledPicks(matchup, byRoster.get(matchup.away_roster_id));
 
   const states = []; // { game_window, home_score, away_score }
   let homeTotal = 0, awayTotal = 0;
+  let coin = null; // weekly drip-coin per side (only the real-engine H2H path earns it)
 
   if (homePicks && awayPicks) {
-    // ── Live H2H: real engine, paired by (window, slot) ──
-    const key = (p) => `${p.win}|${p.slot}`;
-    const awayBy = new Map(awayPicks.map((p) => [key(p), p]));
-    const win = {}; // game_window -> {home, away}
-    const bump = (w, side, v) => { (win[w] ||= { home: 0, away: 0 })[side] += v; };
-    for (const hp of homePicks) {
-      const ap = awayBy.get(key(hp));
-      const you = { player: player(hp.slug), metricId: hp.metric || 'rush' };
-      const them = ap ? { player: player(ap.slug), metricId: ap.metric || 'rush' } : { player: EMPTY, metricId: '' };
-      const r = resolveWindow(you, them, matchup.week, key(hp));
-      bump(hp.win, 'home', r.youFinal); homeTotal += r.youFinal;
-      if (ap) { bump(hp.win, 'away', r.theirFinal); awayTotal += r.theirFinal; awayBy.delete(key(hp)); }
-    }
-    // Away picks with no home opponent in that slot → unopposed for away.
-    for (const ap of awayBy.values()) {
-      const r = resolveWindow({ player: player(ap.slug), metricId: ap.metric || 'rush' }, { player: EMPTY, metricId: '' }, matchup.week, key(ap));
-      bump(ap.win, 'away', r.youFinal); awayTotal += r.youFinal;
-    }
-    for (const [w, s] of Object.entries(win)) states.push({ game_window: w, home_score: round(s.home), away_score: round(s.away) });
+    // ── Live H2H: shared resolver, paired by (window, slot) ──
+    const toLive = (p) => ({ win: p.win, slot: p.slot, player: player(p.slug), metricId: p.metric || 'rush' });
+    const r = resolveLiveMatchup(homePicks.map(toLive), awayPicks.map(toLive), matchup.week);
+    for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
+    homeTotal = r.home; awayTotal = r.away; coin = r.coin;
   } else {
     // ── Fallback: base points off whichever side(s) aren't enrolled picks ──
     const homeSlugs = homePicks ? homePicks.map((p) => p.slug) : await lineupSlugs(matchup, matchup.home_roster_id);
@@ -108,10 +99,11 @@ export async function resolveMatchup(matchup, playerIndex) {
     states.map((s) => ({ matchup_id: matchup.id, ...s, events_json: [], updated_at: now })),
     { onConflict: 'matchup_id,game_window' },
   );
-  if (matchup.status === 'final') {
-    await db().from('matchup').update({ home_final: round(homeTotal), away_final: round(awayTotal) }).eq('id', matchup.id);
-  }
-  return { home: round(homeTotal), away: round(awayTotal) };
+  const patch = {};
+  if (coin) { patch.home_coin = coin.home; patch.away_coin = coin.away; }
+  if (matchup.status === 'final') { patch.home_final = round(homeTotal); patch.away_final = round(awayTotal); }
+  if (Object.keys(patch).length) await db().from('matchup').update(patch).eq('id', matchup.id);
+  return { home: round(homeTotal), away: round(awayTotal), coin };
 }
 
 const round = (n) => Math.round(n * 10) / 10;

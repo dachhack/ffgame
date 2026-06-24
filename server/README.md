@@ -15,13 +15,59 @@ npm install
 npm start                   # the scheduler (src/index.js)
 ```
 
-Manual ops (CLI):
+Manual ops (CLI). No local shell? The **Sync pilot league** GitHub Action runs
+`sync` + `sync-week` from the UI (mode `both` = one-click prep), then **Simulate
+live feed** drives the run — the whole pilot without local creds.
 ```bash
 node src/cli.js sync <sleeperLeagueId>        # import league + memberships/enrollment
 node src/cli.js sync-week <leagueId> <week>   # mirror that week's schedule + lineups
 node src/cli.js poll-once                     # one plays pass for the current week
 node src/cli.js inj-once                      # one injury poll
+node src/cli.js simulate <leagueId> <week>    # replay a baked week through the LIVE feed
+node src/cli.js simulate --dry --week=1       # feed round-trip check, no DB
 ```
+
+## Simulate the ESPN feed (dress rehearsal)
+Before pointing at real ESPN, prove the whole live path with our baked 2025 data.
+The baker and the ESPN adapter both emit the same `RealPlay` shape, so replaying
+baked plays into `live_play` exercises everything downstream for real — only the
+literal ESPN fetch in `poll/plays.js` is bypassed.
+
+```bash
+# DRY — no DB. Time-released feed → real engine. Asserts (a) the live_play row
+# shape reproduces every player's baked points exactly, and (b) RECONCILIATION:
+# a re-sent corrected play overwrites by key, a reclassified play drops its stale
+# row (no double-count), and a duplicate re-send is a no-op. `--jitter=N` adds up
+# to N s of random per-play delay (latency) — late/out-of-order delivery must not
+# change the result. Runs offline; this is the validate-feed CI gate.
+npm run cli -- simulate --dry --week=1 [--jitter=60] [--speed=900] [--tick=1000]
+
+# CHECK — read-only: connect with the service key, count matchups, write nothing.
+npm run cli -- simulate --check [leagueId]
+
+# LIVE — drive a real test matchup in Supabase. Goes live, clears the prior SIM
+# feed, then drips baked plays into live_play on a timer, re-resolving each tick.
+# Open that matchup's live board and watch it animate; ends FINAL.
+# Self-contained: both sides' lineups are AUTO-BUILT from each roster's synced
+# Sleeper starters (default metric per position), so the full metric duel resolves
+# with NOBODY setting a lineup. A roster that set its own locked picks is honored;
+# the rest are auto-filled. → the only prep is `sync` + `sync-week`.
+#   --jitter=N        up to N s of random per-play delivery delay (feed latency)
+#   --corrections=P   P% of scoring plays arrive PROVISIONAL (a wrong stat) then
+#                     self-correct a few ticks later — watch a score fix itself on
+#                     the admin board. It always ends on the true totals.
+npm run cli -- simulate <leagueId> <week> [--src=<bakedWeek>] [--speed=600] [--tick=1000] [--jitter=10] [--corrections=20]
+
+# RESET — fully revert a live run: matchups → scheduled, picks unlocked, the SIM
+# feed + matchup_state cleared. Touches only the sim's own rows, never real ESPN.
+npm run cli -- simulate --reset <leagueId> <week>
+```
+A live run only ever inserts/clears `live_play` rows tagged `game_id='SIM'`, so it
+never disturbs real ESPN plays; `--reset` makes the whole rehearsal reversible.
+`--speed` = game-seconds advanced per tick; `--tick` = real ms per tick (use a big
+speed + `--tick=0` for an instant full-game pass). The slate is released on one
+concurrent timeline (all games from kickoff t=0); per-game kickoff staggering is a
+later refinement.
 
 ## Layout
 | File | Role |
@@ -57,9 +103,12 @@ the SAME TypeScript engine the client runs (`src/engine/sim.ts`), via `tsx`
   2025 week and resolves real matchups — e.g. a rushing-TD NUKE wiping the
   opponent's bank to 0, exactly as the client engine does.
 
-**Still simplified vs the client's `buildMatchup`:** no best-ball backups, coin
-economy, or cross-window Field-General multiplier yet — those live in
-`matchup.ts` and can be layered on when the pilot needs them. The `RealPlay`
+**Shared resolver:** the live H2H path runs `src/engine/liveResolve.ts` — the
+same resolver the in-browser admin force-resolve uses — so the worker and the
+founder's preview score identically. It layers, on top of per-slot
+`resolveSlot`: cross-window Field General, best-ball backups, TE-TD 8-pt nuke
+clocks, DEF suppress halving, and the K banker XP bonus. Drip-coin per side
+is computed and persisted to `matchup.home_coin` / `away_coin`. The `RealPlay`
 contract stays frozen.
 
 > Runs under `tsx` so the `.ts` engine imports resolve in Node — see the

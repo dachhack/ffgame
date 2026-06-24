@@ -10,6 +10,39 @@ function client() {
   return supabase;
 }
 
+/** Turn a raw Supabase / auth / network error into calm, player-facing copy.
+ *  Unknown messages fall through lightly cleaned (capitalized, trailing period). */
+export function friendlyError(x: unknown): string {
+  const raw = (x instanceof Error ? x.message : typeof x === 'string' ? x : '').trim();
+  if (!raw) return 'Something went wrong. Please try again.';
+  const m = raw.toLowerCase();
+  if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('load failed') || m.includes('fetch failed'))
+    return 'Network error — check your connection and try again.';
+  if (m.includes('invalid login credentials'))
+    return 'That email and password don’t match. Try again, or reset your password.';
+  if (m.includes('email not confirmed'))
+    return 'Confirm your email first — check your inbox for the link we sent.';
+  if (m.includes('already registered') || m.includes('already been registered') || m.includes('user already'))
+    return 'An account with that email already exists — sign in instead.';
+  if (m.includes('expired') || (m.includes('token') && m.includes('invalid')) || m.includes('otp_expired'))
+    return 'That code has expired or was already used. Request a fresh link.';
+  if (m.includes('rate limit') || m.includes('only request this after') || m.includes('too many'))
+    return 'Too many attempts — wait a minute, then try again.';
+  if (m.includes('password should be at least') || m.includes('password is too short'))
+    return 'Password must be at least 6 characters.';
+  if (m.includes('unable to validate email') || m.includes('invalid format') || m.includes('invalid email'))
+    return 'That doesn’t look like a valid email address.';
+  if (m.includes('signups not allowed') || m.includes('signup is disabled') || m.includes('signups disabled'))
+    return 'Sign-ups are closed right now. Reach out to your commissioner.';
+  if (m.includes('not a manager'))
+    return 'That Sleeper account isn’t a manager in this league. Double-check your handle — or ask your commissioner to confirm you’re in the Sleeper league.';
+  if (m.includes('already linked to another login'))
+    return 'That Sleeper account is already linked to a different login. Sign in with that account, or ask your commissioner for help.';
+  if (m.includes('invalid code'))
+    return 'That code didn’t match a league. Double-check it with your commissioner.';
+  return raw.charAt(0).toUpperCase() + raw.slice(1) + (/[.!?]$/.test(raw) ? '' : '.');
+}
+
 /** Where the magic-link returns the user — back into Live mode (?live=1). Must be
  *  added to Supabase Auth → URL Configuration → Redirect URLs. */
 function redirectTo(): string {
@@ -109,6 +142,18 @@ export async function redeemInvite(code: string, sleeperUsername: string): Promi
   return data as RedeemResult;
 }
 
+// ── "Request a code" lead capture (migration 0016) ───────────────────────────────
+/** Pre-auth request to have a pilot code set up for the visitor's league. Routes
+ *  through a SECURITY DEFINER RPC granted to anon, so it works before sign-in. */
+export async function requestCode(input: { email?: string; sleeper?: string; league?: string; note?: string }): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Live mode is not configured.' };
+  const { data, error } = await client().rpc('request_code', {
+    p_email: input.email ?? null, p_sleeper: input.sleeper ?? null, p_league: input.league ?? null, p_note: input.note ?? null,
+  });
+  if (error) return { ok: false, error: friendlyError(error) };
+  return data as { ok: boolean; error?: string };
+}
+
 export interface Enrollment { team_name: string; sleeper_roster_id: number; league: { name: string; season: string } | null; }
 
 /** The caller's enrolled memberships (RLS scopes to their own rows). */
@@ -145,7 +190,7 @@ export async function confirmCommishVerify(commishCode: string): Promise<Confirm
 }
 
 // ── Sealed picks (live-H2H lineup) ──────────────────────────────────────────────
-export interface LiveMatchup { id: string; league_id: string; week: number; status: string; lock_at: string | null; home_roster_id: number; away_roster_id: number; }
+export interface LiveMatchup { id: string; league_id: string; week: number; status: string; lock_at: string | null; home_roster_id: number; away_roster_id: number; home_coin: number | null; away_coin: number | null; }
 export interface PoolPlayer { slug: string; full: string; pos: string; }
 export interface PickRow { game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null; }
 
@@ -217,9 +262,9 @@ export interface AdminAdmin { email: string; note: string | null; }
 export interface MemberRow { roster_id: number; owner_id: string | null; team_name: string; }
 export interface MatchupRow { sleeper_matchup_id: number | null; home_roster_id: number; away_roster_id: number; }
 export interface LineupRow { roster_id: number; starters: { slug: string; full: string; pos: string }[]; }
-export interface AdminMatchup { id: string; week: number; home_roster_id: number; away_roster_id: number; status: string; lock_at: string | null; home_final: number | null; away_final: number | null; }
+export interface AdminMatchup { id: string; week: number; home_roster_id: number; away_roster_id: number; status: string; lock_at: string | null; home_final: number | null; away_final: number | null; home_coin?: number | null; away_coin?: number | null; }
 export interface AdminOverride { sleeper_user_id: string; note: string | null; }
-export interface AdminAudit { table: string; op: string; row_id: string | null; at: string; }
+export interface AdminAudit { table: string; op: string; row_id: string | null; at: string; detail?: string | null; actor?: string | null; }
 
 async function rpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
   const { data, error } = await client().rpc(fn, args);
@@ -236,6 +281,7 @@ export const adminOverrides = () => rpc<AdminOverride[]>('admin_overrides');
 export const adminSetOverride = (sleeperUserId: string, note: string, remove = false) =>
   rpc<{ ok: boolean }>('admin_set_override', { p_sleeper_user_id: sleeperUserId, p_note: note, p_remove: remove });
 export const adminAudit = (limit = 50) => rpc<AdminAudit[]>('admin_audit', { p_limit: limit });
+export const commishAudit = (leagueId: string, limit = 50) => rpc<AdminAudit[]>('commish_audit', { p_league_id: leagueId, p_limit: limit });
 
 // Setup writers (the client fetches/parses Sleeper, these just persist).
 export const adminUpsertLeague = (sleeperId: string, season: string, name: string, settings: unknown) =>
@@ -252,12 +298,36 @@ export const adminAdmins = () => rpc<AdminAdmin[]>('admin_admins');
 export const adminSetAdmin = (email: string, note: string, remove = false) =>
   rpc<{ ok: boolean; error?: string }>('admin_set_admin', { p_email: email, p_note: note, p_remove: remove });
 export const adminUsers = () => rpc<AdminUser[]>('admin_users');
+export interface CodeRequest { id: string; created_at: string; email: string | null; sleeper_username: string | null; league_name: string | null; note: string | null; handled: boolean; }
+export const adminCodeRequests = () => rpc<CodeRequest[]>('admin_code_requests');
+export const adminSetCodeRequestHandled = (id: string, handled: boolean) => rpc<{ ok: boolean }>('admin_set_code_request_handled', { p_id: id, p_handled: handled });
+export interface BoardPick { slug: string; metric: string | null; }
+export interface BoardSlotScore { side: 'home' | 'away'; slot: string; slug: string | null; metric: string | null; score: number; }
+export interface BoardState { game_window: string; home_score: number; away_score: number; slot_scores: BoardSlotScore[]; home_picks: BoardPick[]; away_picks: BoardPick[]; }
+export interface MatchupBoard {
+  matchup: { id: string; week: number; status: string; home_roster_id: number; away_roster_id: number; home_final: number | null; away_final: number | null; home_coin: number | null; away_coin: number | null; lock_at: string | null };
+  home_team: string | null; away_team: string | null;
+  states: BoardState[];
+  updated_at: string | null;
+}
+export const adminMatchupBoard = (matchupId: string) => rpc<MatchupBoard>('admin_matchup_board', { p_matchup_id: matchupId });
+export const adminResetMatchup = (matchupId: string) => rpc<{ ok: boolean; error?: string }>('admin_reset_matchup', { p_matchup_id: matchupId });
+
+/** Launch the real server-driven live feed sim via the dispatch-sim edge function
+ *  (admin-only; the function re-checks is_admin and holds the GitHub token). */
+export async function dispatchSim(input: { mode?: 'live' | 'reset' | 'check' | 'dry'; league: string; week?: number | string; src?: number | string; speed?: number; jitter?: number; corrections?: number }): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await client().functions.invoke('dispatch-sim', { body: input });
+  if (error) return { ok: false, error: friendlyError(error) };
+  return data as { ok: boolean; error?: string };
+}
 export const adminLeagueMembers = (leagueId: string) => rpc<AdminMember[]>('admin_league_members', { p_league_id: leagueId });
 export const commishOverview = () => rpc<AdminLeague[]>('commish_overview');
-export interface MatchupPicks { home_roster_id: number; away_roster_id: number; home_app_user: string | null; away_app_user: string | null; picks: { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null }[]; home_lineup: { slug: string; pos: string }[]; away_lineup: { slug: string; pos: string }[]; }
+export interface MatchupPicks { home_roster_id: number; away_roster_id: number; home_app_user: string | null; away_app_user: string | null; picks: { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null }[]; home_lineup: { player_slug: string | null; pos: string | null }[]; away_lineup: { player_slug: string | null; pos: string | null }[]; }
 export const adminMatchupPicks = (matchupId: string) => rpc<MatchupPicks>('admin_matchup_picks', { p_matchup_id: matchupId });
-export const adminSetState = (matchupId: string, states: { window: string; home: number; away: number }[]) =>
-  rpc<{ ok: boolean }>('admin_set_state', { p_matchup_id: matchupId, p_states: states });
+export const adminSetState = (matchupId: string, states: { window: string; home: number; away: number }[], coin?: { home: number; away: number }, slotScores?: { win: string; side: string; slot: string; slug: string; metric: string | null; score: number }[]) =>
+  rpc<{ ok: boolean }>('admin_set_state', { p_matchup_id: matchupId, p_states: states, p_home_coin: coin?.home ?? null, p_away_coin: coin?.away ?? null, p_slot_scores: slotScores ?? null });
+export const adminSetCoin = (matchupId: string, home: number, away: number) =>
+  rpc<{ ok: boolean; error?: string }>('admin_set_coin', { p_matchup_id: matchupId, p_home_coin: home, p_away_coin: away });
 export const adminRegenCode = (leagueId: string, which: 'invite' | 'commish') =>
   rpc<{ ok: boolean; code?: string; error?: string }>('admin_regen_code', { p_league_id: leagueId, p_which: which });
 

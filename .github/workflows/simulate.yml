@@ -1,0 +1,100 @@
+name: Simulate live feed
+
+# Manual dress-rehearsal of the live pipeline. Three modes (input `mode`):
+#   (Prep first: run the "Sync pilot league" workflow to mirror the league + week.)
+#   • dry   — offline; replays a baked week through the engine + asserts the
+#             live_play round-trip (no secrets, no DB). Safe anytime.
+#   • check — connects with the service-role secret and READS (counts matchups).
+#             Proves the secret + DB are reachable. Writes nothing. Safe anytime.
+#   • live  — drives a REAL matchup in Supabase: locks picks, goes live, drips a
+#             baked week into live_play, resolves each tick, ends FINAL. MUTATES
+#             the pilot DB — only run against a test league/week. Realism knobs:
+#             `jitter` (feed latency — plays arrive late/out of order) and
+#             `corrections` (% of plays that arrive provisional then self-correct
+#             on the board). Both still finish on the exact true totals.
+#   • reset — fully reverts a live run for a league/week: matchups → scheduled,
+#             picks unlocked, SIM feed + matchup_state cleared. Touches only the
+#             sim's own SIM plays, never real ESPN rows.
+#
+# Secrets required for check/live (Settings → Secrets and variables → Actions):
+#   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   (the worker's service-role creds)
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'dry | check | live | reset'
+        type: choice
+        options: [dry, check, live, reset]
+        default: dry
+      league:
+        description: 'pilot league id (check/live)'
+        required: false
+        default: ''
+      week:
+        description: 'pilot week (live/dry)'
+        required: false
+        default: '1'
+      src:
+        description: 'baked week to source plays from (defaults to week)'
+        required: false
+        default: ''
+      speed:
+        description: 'game-seconds advanced per tick (live)'
+        required: false
+        default: '600'
+      jitter:
+        description: 'feed latency: max seconds of random per-play delivery delay (live/dry)'
+        required: false
+        default: '0'
+      corrections:
+        description: '% of scoring plays that arrive provisional then self-correct (live)'
+        required: false
+        default: '0'
+
+concurrency: live-sim  # never two at once against the same DB
+
+jobs:
+  sim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Install worker deps
+        working-directory: server
+        run: npm ci
+      - name: Run simulation (${{ inputs.mode }})
+        working-directory: server
+        env:
+          MODE: ${{ inputs.mode }}
+          LEAGUE: ${{ inputs.league }}
+          WEEK: ${{ inputs.week }}
+          SRC: ${{ inputs.src }}
+          SPEED: ${{ inputs.speed }}
+          JITTER: ${{ inputs.jitter }}
+          CORRECTIONS: ${{ inputs.corrections }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -uo pipefail
+          SRC="${SRC:-$WEEK}"
+          JITTER="${JITTER:-0}"; CORRECTIONS="${CORRECTIONS:-0}"
+          case "$MODE" in check|live|reset)
+            if [ -z "${SUPABASE_URL:-}" ] || ! printf '%s' "$SUPABASE_URL" | grep -q '^https://'; then
+              echo "::error::SUPABASE_URL secret is missing or not an https:// URL. Set SUPABASE_URL (https://<ref>.supabase.co) and SUPABASE_SERVICE_ROLE_KEY in Settings → Secrets and variables → Actions."; exit 1
+            fi ;;
+          esac
+          case "$MODE" in
+            dry)
+              npm run --silent cli -- simulate --dry --week="$WEEK" --jitter="$JITTER" --speed=100000 --tick=0 ;;
+            check)
+              npm run --silent cli -- simulate --check "$LEAGUE" ;;
+            live)
+              if [ -z "$LEAGUE" ]; then echo "::error::live mode needs a league id (input: league)"; exit 1; fi
+              npm run --silent cli -- simulate "$LEAGUE" "$WEEK" --src="$SRC" --speed="$SPEED" --tick=2000 --jitter="$JITTER" --corrections="$CORRECTIONS" ;;
+            reset)
+              if [ -z "$LEAGUE" ]; then echo "::error::reset mode needs a league id (input: league)"; exit 1; fi
+              npm run --silent cli -- simulate --reset "$LEAGUE" "$WEEK" ;;
+            *)
+              echo "::error::unknown mode $MODE"; exit 1 ;;
+          esac
