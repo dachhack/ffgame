@@ -13,8 +13,7 @@
 import { resolveSlot, EMPTY_PLAYER } from '../../src/engine/sim.ts';
 import { resolveLiveMatchup } from '../../src/engine/liveResolve.ts';
 import { setSyntheticWeeks, clearSyntheticWeeks } from '../../src/data/realPbp.ts';
-import { WINDOWS, defaultMetric } from '../../src/data/metrics.ts';
-import { slugMeta } from '../../src/data/slugMeta.ts';
+import { aiLineup } from '../../src/data/aiLineup.ts';
 
 const ZERO_STATS = {
   games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0,
@@ -29,19 +28,13 @@ export function makePlayer(slug, pos, team, full) {
 export const EMPTY = EMPTY_PLAYER;
 export { clearSyntheticWeeks, resolveLiveMatchup };
 
-/** AI auto-lineup for a real LIVE game: spread a roster's Sleeper starters across
- *  the window/slot grid, each on its position's DEFAULT metric. Metrics are chosen
- *  pre-game (no hindsight), unlike the in-app baked-week optimizer. Returns
+/** AI auto-lineup for a real LIVE game — delegates to the shared honest builder
+ *  (src/data/aiLineup.ts): spread a roster's Sleeper starters across the
+ *  window/slot grid on sensible default metrics (fixing the old QB→fg / DEF→
+ *  suppress zero-scoring bug) plus a pre-game Field-General read. Returns
  *  [{ win, slot, slug, metric }] — the same shape sealed picks resolve from. */
 export function autoLineup(slugs) {
-  const clean = (slugs ?? []).filter(Boolean);
-  const out = [];
-  let i = 0;
-  for (const w of WINDOWS) for (let s = 0; s < w.slots; s++) {
-    const slug = clean[i++];
-    if (slug) out.push({ win: w.id, slot: String(s), slug, metric: defaultMetric(slugMeta(slug).pos).id });
-  }
-  return out;
+  return aiLineup(slugs ?? []);
 }
 
 /** Inject a week's plays so the engine sees them via realPbpFor(week, slug).
