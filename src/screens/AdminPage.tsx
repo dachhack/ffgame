@@ -3,12 +3,15 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
+  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
+  type PickReadiness, type PickSide, type AdminHealth,
 } from '../data/liveApi';
 import { importLeague, syncWeek } from '../data/sleeperAdmin';
 import { forceResolve } from '../data/forceResolve';
 import { FeedSheet } from './FeedSheet';
-import { WINDOWS } from '../data/metrics';
+import { WINDOWS, defaultMetric } from '../data/metrics';
+import { slugMeta } from '../data/slugMeta';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
 
@@ -48,6 +51,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
       </div>
       {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', marginBottom: 10 }}>{err}</div>}
 
+      <HealthPanel />
       <ImportLeague reload={load} />
 
       <div style={card}>
@@ -80,7 +84,7 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
   const [matchups, setMatchups] = useState<AdminMatchup[] | null>(null);
   const [members, setMembers] = useState<AdminMember[] | null>(null);
   const [audit, setAudit] = useState<AdminAudit[] | null>(null);
-  const [tab, setTab] = useState<'' | 'matchups' | 'members' | 'audit'>('');
+  const [tab, setTab] = useState<'' | 'matchups' | 'members' | 'audit' | 'ready'>('');
   const [week, setWeek] = useState('1');
   const [srcWeek, setSrcWeek] = useState('1');
   const [busy, setBusy] = useState<string | null>(null);
@@ -134,7 +138,7 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
   const loadM = async () => setMatchups(await adminMatchups(l.league_id));
   const loadMembers = async () => setMembers(await adminLeagueMembers(l.league_id));
   const loadAudit = async () => setAudit(await commishAudit(l.league_id, 40));
-  const showTab = (t: 'matchups' | 'members' | 'audit') => {
+  const showTab = (t: 'matchups' | 'members' | 'audit' | 'ready') => {
     setTab((cur) => (cur === t ? '' : t));
     if (t === 'matchups' && !matchups) loadM();
     if (t === 'members' && !members) loadMembers();
@@ -162,6 +166,7 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
           <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 3 }}>{l.enrolled}/{l.rosters} enrolled · commish {l.commissioner ? '✓' : '—'}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => showTab('ready')} className="mono" style={linkBtn}>{tab === 'ready' ? 'hide' : 'picks'}</button>
           <button onClick={() => showTab('members')} className="mono" style={linkBtn}>{tab === 'members' ? 'hide' : 'members'}</button>
           <button onClick={() => showTab('matchups')} className="mono" style={linkBtn}>{tab === 'matchups' ? 'hide' : 'matchups'}</button>
           <button onClick={() => showTab('audit')} className="mono" style={linkBtn}>{tab === 'audit' ? 'hide' : 'audit'}</button>
@@ -180,15 +185,24 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
         <button onClick={sync} disabled={busy === 'sync'} className="mono" style={btn(true)}>{busy === 'sync' ? 'syncing…' : 'sync week'}</button>
       </div>
       {busy && busy !== 'sync' && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{busy}</div>}
+      {tab === 'ready' && <PickReadinessTab leagueId={l.league_id} week={Number(week) || 1} admin={admin} />}
       {tab === 'members' && members && (
         <div style={{ marginTop: 10 }}>
+          {(() => { const nj = members.filter((m) => !m.enrolled).length; return (
+            <div className="mono" style={{ ...mono, fontSize: 9.5, color: nj ? 'var(--dim)' : 'var(--you)', marginBottom: 6 }}>
+              {members.length - nj}/{members.length} joined{nj ? ` · ${nj} not yet` : ''}
+            </div>
+          ); })()}
           {members.map((m) => (
             <div key={m.roster_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
               <div>
                 <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{m.team}</div>
                 <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{m.enrolled ? (m.email ?? m.sleeper ?? 'enrolled') : 'not joined'}</div>
               </div>
-              <span className="mono" style={{ fontSize: 8.5, color: m.enrolled ? 'var(--you)' : 'var(--faint)', border: `1px solid ${m.enrolled ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '2px 6px' }}>{m.enrolled ? 'JOINED' : '—'}</span>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                {m.email && <SendLink email={m.email} />}
+                <span className="mono" style={{ fontSize: 8.5, color: m.enrolled ? 'var(--you)' : 'var(--faint)', border: `1px solid ${m.enrolled ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '2px 6px' }}>{m.enrolled ? 'JOINED' : '—'}</span>
+              </div>
             </div>
           ))}
         </div>
@@ -520,6 +534,146 @@ function AdminMatchupBoard({ matchupId, onClose }: { matchupId: string; onClose:
         )}
       </div>
     </div>
+  );
+}
+
+// Relative "Xs/Xm/Xh ago" for freshness readouts.
+const ago = (iso: string | null): string => {
+  if (!iso) return 'never';
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return `${Math.floor(s)}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+};
+
+// System health: ingest + resolve freshness, status mix. Polls every 10s.
+function HealthPanel() {
+  const [hp, setHp] = useState<AdminHealth | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const load = async () => { try { setHp(await adminHealth()); setErr(null); } catch (e) { setErr(e instanceof Error ? e.message : 'load failed'); } };
+  useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, []);
+  const liveOn = (hp?.live_matchups ?? 0) > 0;
+  // While games are live, a >90s gap since the last play ingest is suspicious.
+  const ingestStale = liveOn && hp?.last_play_ingest && (Date.now() - new Date(hp.last_play_ingest).getTime()) > 90_000;
+  const stat = (label: string, value: React.ReactNode, color = 'var(--text)') => (
+    <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '6px 9px', minWidth: 0 }}>
+      <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.08em', color: 'var(--faint)', fontWeight: 700 }}>{label}</div>
+      <div className="mono" style={{ ...mono, fontSize: 12, fontWeight: 700, color, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>
+    </div>
+  );
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={h}>SYSTEM HEALTH{liveOn && <span style={{ color: 'var(--you)', marginLeft: 6 }}>● {hp!.live_matchups} LIVE</span>}</div>
+        <button onClick={load} className="mono" style={{ ...linkBtn, fontSize: 9 }}>↻</button>
+      </div>
+      {err ? <Muted text={err} /> : !hp ? <Muted text="Loading…" /> : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))', gap: 6 }}>
+          {stat('LEAGUES', hp.leagues)}
+          {stat('ENROLLED', hp.enrolled)}
+          {stat('MATCHUPS', Object.entries(hp.matchups_by_status).map(([s, n]) => `${n} ${s}`).join(' · ') || '—')}
+          {stat('LIVE PLAYS', `${hp.live_play_count}${hp.sim_play_count ? ` (${hp.sim_play_count} sim)` : ''}`)}
+          {stat('LAST INGEST', ago(hp.last_play_ingest), ingestStale ? 'var(--opp)' : liveOn ? 'var(--you)' : 'var(--text)')}
+          {stat('LAST RESOLVE', ago(hp.last_state_update))}
+        </div>
+      )}
+      {ingestStale && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--opp)', marginTop: 8 }}>⚠ games are live but no play ingested in over 90s — check the poller.</div>}
+    </div>
+  );
+}
+
+const SIDE_STATUS = (s: PickSide): { label: string; color: string } => {
+  if (!s.enrolled) return { label: 'not joined', color: 'var(--faint)' };
+  if (s.picks_set === 0) return { label: 'EMPTY', color: 'var(--opp)' };
+  if (s.lineup_size && s.picks_set < s.lineup_size) return { label: `PARTIAL ${s.picks_set}/${s.lineup_size}`, color: '#d9a23a' };
+  return { label: `SET ${s.picks_set}`, color: 'var(--you)' };
+};
+
+// Pick-readiness board: who's set a lineup for a week, with autofill/clear rescue.
+function PickReadinessTab({ leagueId, week, admin }: { leagueId: string; week: number; admin: boolean }) {
+  const [rows, setRows] = useState<PickReadiness[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = async () => { try { setRows(await adminPickReadiness(leagueId, week)); } catch (e) { setBusy(e instanceof Error ? e.message : 'load failed'); } };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [leagueId, week]);
+
+  const autofill = async (m: PickReadiness, side: 'home' | 'away') => {
+    const s = side === 'home' ? m.home : m.away;
+    if (!s.app_user_id) { setBusy('manager not joined — no account to attach picks to (resolver falls back to their Sleeper lineup)'); return; }
+    setBusy('autofill…');
+    try {
+      const data = await adminMatchupPicks(m.matchup_id);
+      const lineup = (side === 'home' ? data.home_lineup : data.away_lineup) ?? [];
+      const out: { game_window: string; roster_slot: string; player_slug: string; metric_id: string }[] = [];
+      let i = 0;
+      for (const w of WINDOWS) for (let sl = 0; sl < w.slots; sl++) {
+        const e = lineup[i++];
+        if (e?.player_slug) out.push({ game_window: w.id, roster_slot: String(sl), player_slug: e.player_slug, metric_id: defaultMetric(slugMeta(e.player_slug).pos).id });
+      }
+      if (!out.length) { setBusy('no synced lineup to autofill (run sync week)'); return; }
+      const r = await adminSetPicks(m.matchup_id, s.app_user_id, out);
+      setBusy(r.ok ? `✓ filled ${r.count} picks for ${s.team}` : (r.error ?? 'failed')); await load();
+    } catch (e) { setBusy(e instanceof Error ? e.message : 'autofill failed'); }
+  };
+  const clear = async (m: PickReadiness, side: 'home' | 'away') => {
+    const s = side === 'home' ? m.home : m.away;
+    if (!s.app_user_id) return;
+    if (!confirm(`Clear ${s.team}'s picks for this matchup?`)) return;
+    setBusy('clear…');
+    try { await adminClearPicks(m.matchup_id, s.app_user_id); setBusy(`✓ cleared ${s.team}`); await load(); }
+    catch (e) { setBusy(e instanceof Error ? e.message : 'clear failed'); }
+  };
+
+  const sideRow = (m: PickReadiness, side: 'home' | 'away') => {
+    const s = side === 'home' ? m.home : m.away;
+    const st = SIDE_STATUS(s);
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0' }}>
+        <span style={{ fontSize: 11, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.team ?? `roster ${s.roster_id}`}</span>
+        <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, color: st.color, border: `1px solid ${st.color}`, borderRadius: 4, padding: '1px 5px', whiteSpace: 'nowrap' }}>{st.label}</span>
+        {admin && s.enrolled && (
+          <>
+            <button style={{ ...btn(false), padding: '3px 6px' }} onClick={() => autofill(m, side)} title="fill picks from their synced Sleeper lineup">autofill</button>
+            {s.picks_set > 0 && <button style={{ ...btn(false), padding: '3px 6px' }} onClick={() => clear(m, side)} title="clear their picks">✕</button>}
+          </>
+        )}
+      </div>
+    );
+  };
+
+  if (rows === null) return <div style={{ marginTop: 10 }}><Muted text="Loading…" /></div>;
+  const empties = rows.reduce((n, m) => n + (m.home.enrolled && m.home.picks_set === 0 ? 1 : 0) + (m.away.enrolled && m.away.picks_set === 0 ? 1 : 0), 0);
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div className="mono" style={{ ...mono, fontSize: 9.5, color: empties ? 'var(--opp)' : 'var(--you)', marginBottom: 8 }}>
+        week {week} · {empties ? `${empties} enrolled manager${empties > 1 ? 's' : ''} with NO lineup` : 'all enrolled managers have a lineup'}
+      </div>
+      {busy && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginBottom: 6 }}>{busy}</div>}
+      {rows.length === 0 ? <Muted text="No matchups this week (run sync week)." /> : rows.map((m) => (
+        <div key={m.matchup_id} style={{ borderTop: '1px solid var(--bd)', padding: '6px 0' }}>
+          <div className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)', marginBottom: 2 }}>{m.home_roster_id}v{m.away_roster_id} · {m.status}</div>
+          {sideRow(m, 'home')}
+          {sideRow(m, 'away')}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// One-click "resend sign-in link" — fires a fresh magic link to the member's email.
+function SendLink({ email }: { email: string }) {
+  const [s, setS] = useState<'' | 'sending' | 'sent' | 'err'>('');
+  const send = async () => {
+    setS('sending');
+    try { await sendMagicLink(email); setS('sent'); }
+    catch { setS('err'); }
+  };
+  return (
+    <button onClick={send} disabled={s === 'sending' || s === 'sent'} className="mono"
+      style={{ ...linkBtn, fontSize: 9, color: s === 'sent' ? 'var(--you)' : s === 'err' ? 'var(--opp)' : 'var(--dim)' }}
+      title={`email a sign-in link to ${email}`}>
+      {s === 'sent' ? '✓ link sent' : s === 'sending' ? '…' : s === 'err' ? 'failed' : '✉ send link'}
+    </button>
   );
 }
 
