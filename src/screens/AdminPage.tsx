@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
-  type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember,
+  adminCodeRequests, adminSetCodeRequestHandled,
+  type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest,
 } from '../data/liveApi';
 import { importLeague, syncWeek } from '../data/sleeperAdmin';
 import { forceResolve } from '../data/forceResolve';
@@ -51,6 +52,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
           leagues.map((l) => <LeagueRow key={l.league_id} l={l} reload={load} />)}
       </div>
 
+      <CodeRequests />
       <Overrides overrides={overrides} reload={load} />
       <Admins />
       <Users />
@@ -267,6 +269,33 @@ function Admins() {
         <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@example.com" style={{ ...inp, flex: 1, minWidth: 0 }} />
         <button onClick={add} className="mono" style={btn(true)}>add</button>
       </div>
+    </div>
+  );
+}
+
+function CodeRequests() {
+  const [rows, setRows] = useState<CodeRequest[] | null>(null);
+  const load = async () => { try { setRows(await adminCodeRequests()); } catch { setRows([]); } };
+  useEffect(() => { load(); }, []);
+  const toggle = async (id: string, handled: boolean) => { await adminSetCodeRequestHandled(id, handled); load(); };
+  const pending = rows?.filter((r) => !r.handled).length ?? 0;
+  return (
+    <div style={card}>
+      <div style={h}>CODE REQUESTS{pending ? ` · ${pending} NEW` : ''}</div>
+      {rows === null ? <Muted text="Loading…" /> : rows.length === 0 ? <Muted text="No requests yet." /> : rows.map((r) => (
+        <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '6px 0', borderTop: '1px solid var(--bd)', gap: 8, opacity: r.handled ? 0.5 : 1 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 11.5, color: 'var(--text)' }}>
+              {r.email ? <span className="mono" style={{ ...mono, cursor: 'pointer' }} onClick={() => copy(r.email!)} title="copy">{r.email}</span> : '—'}
+              {r.sleeper_username && <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}> · @{r.sleeper_username}</span>}
+            </div>
+            {r.league_name && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 2 }}>{r.league_name}</div>}
+            {r.note && <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 2, lineHeight: 1.4 }}>{r.note}</div>}
+            <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>{new Date(r.created_at).toLocaleString()}</div>
+          </div>
+          <button onClick={() => toggle(r.id, !r.handled)} className="mono" style={btn(r.handled)}>{r.handled ? 'handled' : 'mark done'}</button>
+        </div>
+      ))}
     </div>
   );
 }
