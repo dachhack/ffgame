@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
-  adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup,
+  adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
 } from '../data/liveApi';
 import { importLeague, syncWeek } from '../data/sleeperAdmin';
@@ -87,49 +87,46 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
   const [coinEdit, setCoinEdit] = useState<string | null>(null);
   const [coinVals, setCoinVals] = useState<{ home: string; away: string }>({ home: '', away: '' });
   const [watch, setWatch] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
   const openCoin = (m: AdminMatchup) => { setCoinEdit(m.id); setCoinVals({ home: String(m.home_coin ?? ''), away: String(m.away_coin ?? '') }); };
   const saveCoin = async (id: string) => { await adminSetCoin(id, Number(coinVals.home || 0), Number(coinVals.away || 0)); setCoinEdit(null); await loadM(); };
-  const resolve = async (id: string) => {
-    setBusy('resolve');
-    try { await forceResolve(id, Number(srcWeek)); setBusy('✓ resolved from 2025'); await loadM(); }
-    catch (e) { setBusy(e instanceof Error ? e.message : 'resolve failed'); }
+  // Wrap an async demo action: guard double-clicks, surface progress + result/error.
+  const run = async (label: string, fn: () => Promise<string>) => {
+    if (running) return;
+    setRunning(true); setBusy(label);
+    try { setBusy(await fn()); await loadM(); }
+    catch (e) { setBusy(e instanceof Error ? e.message : `${label} failed`); }
+    finally { setRunning(false); }
   };
-  const resetOne = async (id: string) => {
-    setBusy('reset');
-    try { await adminResetMatchup(id); setBusy('✓ reset → scheduled'); await loadM(); }
-    catch (e) { setBusy(e instanceof Error ? e.message : 'reset failed'); }
-  };
-  const resolveAll = async () => {
-    if (!matchups?.length) return;
-    setBusy('resolve all');
-    try { for (const m of matchups) await forceResolve(m.id, Number(srcWeek)); setBusy(`✓ resolved ${matchups.length} matchups`); await loadM(); }
-    catch (e) { setBusy(e instanceof Error ? e.message : 'resolve failed'); }
-  };
-  const resetAll = async () => {
+  const resolve = (id: string) => run('resolve', async () => { await forceResolve(id, Number(srcWeek)); return '✓ resolved from 2025'; });
+  const resetOne = (id: string) => run('reset', async () => { await adminResetMatchup(id); return '✓ reset → scheduled'; });
+  const resolveAll = () => { if (!matchups?.length) return; run('resolve all', async () => { for (const m of matchups) await forceResolve(m.id, Number(srcWeek)); return `✓ resolved ${matchups.length} matchups`; }); };
+  const resetAll = () => {
     if (!matchups?.length) return;
     if (!confirm(`Reset all ${matchups.length} matchups → scheduled, scores + coin cleared?`)) return;
-    setBusy('reset all');
-    try { for (const m of matchups) await adminResetMatchup(m.id); setBusy(`✓ reset ${matchups.length} matchups`); await loadM(); }
-    catch (e) { setBusy(e instanceof Error ? e.message : 'reset failed'); }
+    run('reset all', async () => { for (const m of matchups) await adminResetMatchup(m.id); return `✓ reset ${matchups.length} matchups`; });
   };
-  const finalizeAll = async () => {
-    if (!matchups?.length) return;
-    setBusy('finalize all');
-    try { for (const m of matchups) await adminSetMatchup(m.id, 'final'); setBusy(`✓ finalized ${matchups.length} matchups`); await loadM(); }
-    catch (e) { setBusy(e instanceof Error ? e.message : 'finalize failed'); }
-  };
-  const replay = async () => {
+  const finalizeAll = () => { if (!matchups?.length) return; run('finalize all', async () => { for (const m of matchups) await adminSetMatchup(m.id, 'final'); return `✓ finalized ${matchups.length} matchups`; }); };
+  const replay = () => {
     if (!matchups?.length) return;
     if (!confirm(`Replay: reset all ${matchups.length} matchups then resolve from 2025 wk ${srcWeek}?`)) return;
-    setBusy('resetting…');
-    try {
+    run('replaying…', async () => {
       for (const m of matchups) await adminResetMatchup(m.id);
-      setBusy('resolving…');
       for (const m of matchups) await forceResolve(m.id, Number(srcWeek));
-      setBusy(`✓ replayed ${matchups.length} matchups`);
-      await loadM();
-    }
-    catch (e) { setBusy(e instanceof Error ? e.message : 'replay failed'); }
+      return `✓ replayed ${matchups.length} matchups`;
+    });
+  };
+  // Real server-driven feed: drip plays in tick by tick so the board ANIMATES
+  // (vs ▶ resolve which writes every window at once). Fires the simulate workflow
+  // via the dispatch-sim edge function; takes ~30s to spin up, then ~20–30s to play.
+  const playLive = () => {
+    const week = matchups?.[0]?.week ?? 1;
+    if (!confirm(`Play LIVE: drive the real feed for week ${week} (plays from 2025 wk ${srcWeek}) — locks picks, animates the board, ends FINAL. Open ▦ to watch.`)) return;
+    run('starting live feed…', async () => {
+      const r = await dispatchSim({ mode: 'live', league: l.league_id, week, src: srcWeek, speed: 300 });
+      if (!r.ok) throw new Error(r.error ?? 'dispatch failed');
+      return '✓ live feed launching — open ▦ in ~30s to watch it animate';
+    });
   };
 
   const loadM = async () => setMatchups(await adminMatchups(l.league_id));
@@ -199,10 +196,11 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
               <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>from 2025 wk</span>
               <input value={srcWeek} onChange={(e) => setSrcWeek(e.target.value.replace(/\D/g, ''))} style={{ ...inp, width: 32, padding: '4px 5px', textAlign: 'center' }} />
-              <button style={btn(true)} onClick={resolveAll} disabled={!!busy} title="run the real engine on every matchup — lights up the whole board">{busy === 'resolve all' || busy === 'resolving…' ? 'resolving…' : '▶▶ resolve all'}</button>
-              <button style={btn(false)} onClick={resetAll} disabled={!!busy} title="clear every matchup → scheduled, scores wiped">{busy === 'reset all' || busy === 'resetting…' ? 'resetting…' : '↺ reset all'}</button>
-              <button style={btn(false)} onClick={finalizeAll} disabled={!!busy} title="mark every matchup final">{'✓✓ finalize all'}</button>
-              <button style={{ ...btn(false), borderColor: 'var(--you)', color: 'var(--you)' }} onClick={replay} disabled={!!busy} title="reset all → resolve all in one click">{busy === 'resetting…' || busy === 'resolving…' ? busy : '↺▶ replay'}</button>
+              {admin && <button style={{ ...btn(true), background: 'var(--opp)', borderColor: 'var(--opp)' }} onClick={playLive} disabled={running} title="drive the REAL server feed — plays drip in and the board animates live (then ends final)">{busy === 'starting live feed…' ? 'starting…' : '▶ play LIVE'}</button>}
+              <button style={btn(true)} onClick={resolveAll} disabled={running} title="instant: run the real engine on every matchup — fills the whole board at once">{busy === 'resolve all' ? 'resolving…' : '▶▶ resolve all'}</button>
+              <button style={btn(false)} onClick={resetAll} disabled={running} title="clear every matchup → scheduled, scores wiped">{busy === 'reset all' ? 'resetting…' : '↺ reset all'}</button>
+              <button style={btn(false)} onClick={finalizeAll} disabled={running} title="mark every matchup final">{busy === 'finalize all' ? 'finalizing…' : '✓✓ finalize all'}</button>
+              <button style={{ ...btn(false), borderColor: 'var(--you)', color: 'var(--you)' }} onClick={replay} disabled={running} title="instant: reset all → resolve all in one click">{busy === 'replaying…' ? 'replaying…' : '↺▶ replay'}</button>
             </div>
           )}
           {matchups.length === 0 ? <Muted text="No matchups (run sync week)." /> : matchups.map((m) => (
