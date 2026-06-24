@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { WINDOWS, metricById } from '../data/metrics';
 import type { Pos } from '../types';
 import {
-  myRoster, myMatchup, getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, myPool,
+  myRoster, myMatchup, getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, myPool, matchupWallets,
   type LiveMatchup, type WindowScore, type RevealedPick, type PoolPlayer,
 } from '../data/liveApi';
 
@@ -16,6 +16,7 @@ export function LiveBoard({ userId, onBack }: { userId: string; onBack: () => vo
   const [scores, setScores] = useState<WindowScore[]>([]);
   const [picks, setPicks] = useState<RevealedPick[]>([]);
   const [pool, setPool] = useState<Record<string, PoolPlayer>>({});
+  const [wallets, setWallets] = useState<{ home: number | null; away: number | null } | null>(null);
   const [state, setState] = useState<'loading' | 'none' | 'ready'>('loading');
 
   useEffect(() => {
@@ -29,9 +30,9 @@ export function LiveBoard({ userId, onBack }: { userId: string; onBack: () => vo
       const pl = await myPool(r.leagueId, m.week, r.rosterId);
       setPool(Object.fromEntries(pl.map((p) => [p.slug, p])));
       const refresh = async () => {
-        const [mm, ss, pk] = await Promise.all([getMatchup(m.id), getMatchupState(m.id), getRevealedPicks(m.id)]);
+        const [mm, ss, pk, ww] = await Promise.all([getMatchup(m.id), getMatchupState(m.id), getRevealedPicks(m.id), matchupWallets(m.id).catch(() => null)]);
         if (mm) setMatchup(mm);
-        setScores(ss); setPicks(pk);
+        setScores(ss); setPicks(pk); setWallets(ww);
       };
       await refresh();
       setState('ready');
@@ -62,6 +63,8 @@ export function LiveBoard({ userId, onBack }: { userId: string; onBack: () => vo
   const theirs = picks.filter((p) => p.app_user_id !== userId);
   const myCoin = youAreHome ? matchup!.home_coin : matchup!.away_coin;
   const theirCoin = youAreHome ? matchup!.away_coin : matchup!.home_coin;
+  const myBank = youAreHome ? wallets?.home : wallets?.away;
+  const theirBank = youAreHome ? wallets?.away : wallets?.home;
 
   return (
     <div>
@@ -78,8 +81,14 @@ export function LiveBoard({ userId, onBack }: { userId: string; onBack: () => vo
         {status === 'scheduled' && <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', marginTop: 8 }}>Scores start ticking after kickoff.</div>}
         {(myCoin != null || theirCoin != null) && (
           <div className="mono" style={{ display: 'flex', justifyContent: 'center', gap: 18, fontSize: 9.5, color: 'var(--faint)', marginTop: 8 }}>
-            <span style={{ color: 'var(--you)' }}>◇ {round(Number(myCoin ?? 0))} drip coin</span>
+            <span style={{ color: 'var(--you)' }}>◇ {round(Number(myCoin ?? 0))} this week</span>
             <span style={{ color: 'var(--opp)' }}>◇ {round(Number(theirCoin ?? 0))}</span>
+          </div>
+        )}
+        {(myBank != null || theirBank != null) && (
+          <div className="mono" style={{ display: 'flex', justifyContent: 'center', gap: 18, fontSize: 9.5, color: 'var(--faint)', marginTop: 4 }}>
+            <span style={{ color: 'var(--you)' }}>◆ {round(Number(myBank ?? 0))} banked</span>
+            <span style={{ color: 'var(--opp)' }}>◆ {round(Number(theirBank ?? 0))}</span>
           </div>
         )}
       </div>

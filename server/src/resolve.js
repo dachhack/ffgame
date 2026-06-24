@@ -148,7 +148,24 @@ export async function resolveMatchup(matchup, playerIndex, override) {
   if (coin) { patch.home_coin = coin.home; patch.away_coin = coin.away; }
   if (matchup.status === 'final') { patch.home_final = round(homeTotal); patch.away_final = round(awayTotal); }
   if (Object.keys(patch).length) await db().from('matchup').update(patch).eq('id', matchup.id);
+
+  // Bank each side's weekly drip-coin into its persistent wallet, once, when the
+  // week settles. Idempotent (credit_wallet guards on an idem_key), so the repeated
+  // resolves of a final matchup don't double-credit. Roster-keyed → AI teams bank too.
+  if (matchup.status === 'final' && coin && !override) {
+    await creditWallet(matchup, matchup.home_roster_id, coin.home);
+    await creditWallet(matchup, matchup.away_roster_id, coin.away);
+  }
   return { home: round(homeTotal), away: round(awayTotal), coin };
+}
+
+/** Idempotently bank a side's weekly coin into its team wallet (service role). */
+async function creditWallet(matchup, rosterId, delta) {
+  if (delta == null) return;
+  await db().rpc('credit_wallet', {
+    p_league_id: matchup.league_id, p_roster_id: rosterId,
+    p_matchup_id: matchup.id, p_week: matchup.week, p_delta: delta, p_reason: 'earn',
+  });
 }
 
 const round = (n) => Math.round(n * 10) / 10;
