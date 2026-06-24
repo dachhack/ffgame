@@ -66,19 +66,41 @@ function baseScore(plays) {
 }
 
 /** Flatten baked pbp into one time-ordered feed of live_play-shaped rows. `at` is
- *  the release time (real wall-clock seconds since kickoff, ESPN's `t`). */
-function buildFeed(pbp, week) {
+ *  the release time (real wall-clock seconds since kickoff, ESPN's `t`). `jitter`
+ *  adds up to N seconds of random per-play delay to mimic real feed latency —
+ *  plays then arrive late and out of order, like the actual ESPN stat feed. */
+function buildFeed(pbp, week, jitter = 0) {
   const feed = [];
   for (const [slug, plays] of Object.entries(pbp)) {
     for (const p of plays) {
       feed.push({
-        at: p.t ?? p.c ?? 0,
+        at: (p.t ?? p.c ?? 0) + (jitter > 0 ? Math.random() * jitter : 0),
         row: { week, game_id: 'SIM', player_slug: slug, c: p.c, t: p.t ?? null, pid: p.pid ?? null, k: p.k, y: p.y, td: p.td, ca: p.ca, tg: p.tg, to: p.to ?? null },
       });
     }
   }
   feed.sort((a, b) => a.at - b.at);
   return feed;
+}
+
+// The live_play conflict key — the unit a re-poll reconciles on (week,game,pid,slug,kind).
+const keyOf = (r) => `${r.week}|${r.game_id}|${r.pid}|${r.player_slug}|${r.k}`;
+
+/** In-memory model of live_play under the worker's per-poll reconcile: each poll
+ *  carries a game's FULL current play set, so we upsert every row (corrections
+ *  overwrite by key) and drop rows no longer present (a play reclassified to a
+ *  different kind, or removed). Mirrors poll/plays.js exactly. */
+function makeStore() {
+  const m = new Map();
+  return {
+    poll(rows) {
+      const present = new Set(rows.map(keyOf));
+      for (const r of rows) m.set(keyOf(r), r);
+      for (const k of [...m.keys()]) if (!present.has(k)) m.delete(k);
+    },
+    size: () => m.size,
+    pointsFor: (slug) => baseScore([...m.values()].filter((r) => r.player_slug === slug)),
+  };
 }
 
 // Sample head-to-head pairs for the dry drip (real Week-N slugs + metric ids). We
@@ -90,10 +112,11 @@ const DRY_PAIRS = [
 ];
 
 // ── DRY: no DB. Time-released feed → real engine, then assert round-trip. ─────────
-async function simulateDry({ week, speed, tickMs }) {
+async function simulateDry({ week, speed, tickMs, jitter }) {
   const { pbp, points } = loadBaked(week);
-  const feed = buildFeed(pbp, week);
+  const feed = buildFeed(pbp, week, jitter);
   const maxAt = feed.length ? feed[feed.length - 1].at : 0;
+  if (jitter) log(`(latency: up to ${jitter}s of random per-play delay — plays arrive late + out of order)`);
   const pairs = DRY_PAIRS.filter((p) => pbp[p.youSlug]?.length && pbp[p.themSlug]?.length);
   log(`DRY · week ${week} · ${Object.keys(pbp).length} players · ${feed.length} plays over ${fmtClock(maxAt)} · speed ${speed}×`);
   log(`tracking ${pairs.length} head-to-head pairs through the real engine as the feed drips in:\n`);
@@ -122,13 +145,48 @@ async function simulateDry({ week, speed, tickMs }) {
     if (Math.abs(got - want) <= 0.05) ok++;
     else { off++; if (misses.length < 8) misses.push(`${slug} got ${got} want ${want}`); }
   }
-  log(`\nround-trip check (live_play shape → engine points vs baked): ${ok}/${ok + off} exact`);
+  log(`\nround-trip check${jitter ? ' (with latency)' : ''} (live_play shape → engine points vs baked): ${ok}/${ok + off} exact`);
   if (off) { log('MISMATCHES:', misses.join(' · ')); log(`\nFAIL — ${off} players differ; the feed round-trip is NOT lossless.`); process.exitCode = 1; }
-  else log(`PASS — every player's points reproduce exactly from the feed shape. The pipeline is ready for an ESPN source of the same shape.`);
+  else log(`round-trip PASS — every player's points reproduce exactly from the feed shape${jitter ? ', even with late/out-of-order delivery' : ''}.`);
+
+  // ── Reconciliation: what happens when ESPN re-sends a play corrected or with
+  // more data? Each poll carries the game's full current set, so we model that:
+  // upsert-by-key + drop-missing. Prove corrections, kind-flips and dupes reconcile.
+  const allRows = feed.map((f) => f.row);
+  const clone = (mut) => allRows.map((r) => ({ ...r })).map((r) => (mut(r), r));
+  // pick a player with a real reception to mutate
+  let P = null, recPid = null, recY = 0, recTd = 0;
+  for (const [slug, plays] of Object.entries(pbp)) { const rp = plays.find((p) => p.k === 'rec' && p.y > 0); if (rp) { P = slug; recPid = rp.pid; recY = rp.y; recTd = rp.td || 0; break; } }
+  const checks = [];
+  if (P) {
+    const base = baseScore(pbp[P]);
+    // 1) VALUE correction: ESPN revises that catch +50 yds on a later poll → +5.0 pts.
+    const sV = makeStore(); sV.poll(allRows); sV.poll(clone((r) => { if (r.player_slug === P && r.pid === recPid && r.k === 'rec') r.y += 50; }));
+    checks.push(['value-correction', sV.pointsFor(P), Math.round((base + 5) * 10) / 10, sV.size()]);
+    // 2) KIND-FLIP: the catch is overturned to incomplete → reception removed, no double-count.
+    const sK = makeStore(); sK.poll(allRows); sK.poll(clone((r) => { if (r.player_slug === P && r.pid === recPid && r.k === 'rec') { r.k = 'incomplete'; r.y = 0; r.td = 0; } }));
+    checks.push(['kind-flip', sK.pointsFor(P), Math.round((base - (1 + recY * 0.1 + recTd * 6)) * 10) / 10, sK.size()]);
+    // 3) DUPLICATE poll: re-sending identical data is a no-op (idempotent).
+    const sD = makeStore(); sD.poll(allRows); const before = sD.size(); sD.poll(allRows);
+    checks.push(['duplicate-idempotent', sD.size(), before, sD.size()]);
+  }
+  const baseSize = (() => { const s = makeStore(); s.poll(allRows); return s.size(); })();
+  let rOk = true; const rLines = [];
+  for (const [name, got, want, size] of checks) {
+    const pass = Math.abs(got - want) <= 0.05 && size === baseSize;
+    if (!pass) rOk = false;
+    rLines.push(`${name} ${pass ? '✓' : `✗ (got ${got} want ${want}, size ${size}/${baseSize})`}`);
+  }
+  log(`reconcile check: ${rLines.join(' · ')}`);
+  if (!P) log('reconcile SKIP — no reception found to mutate this week.');
+  else if (!rOk) { log(`\nFAIL — corrections do not reconcile correctly.`); process.exitCode = 1; }
+  else log(`reconcile PASS — corrected re-sends overwrite by key, reclassified plays drop the stale row, dupes are no-ops.`);
+
+  if ((off || (P && !rOk))) log(`\nFAIL`); else log(`\nPASS — feed round-trip + reconciliation both hold. Ready for a real ESPN source.`);
 }
 
 // ── LIVE: drive a real pilot matchup in Supabase. ────────────────────────────────
-async function simulateLive(leagueId, week, { srcWeek, speed, tickMs }) {
+async function simulateLive(leagueId, week, { srcWeek, speed, tickMs, jitter }) {
   const { db } = await import('./supabase.js');
   const { resolveMatchup } = await import('./resolve.js');
   const { buildPlayerIndex } = await import('./playerIndex.js');
@@ -179,15 +237,16 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs }) {
   }
   log(`lineups ready for ${live.length} matchups (${autoCount} sides, default metric per position) — full metric duel, no enrollment needed`);
 
-  const feed = buildFeed(pbp, week);
+  const feed = buildFeed(pbp, week, jitter);
   const maxAt = feed.length ? feed[feed.length - 1].at : 0;
-  log(`feed: ${feed.length} plays over ${fmtClock(maxAt)} game-time · speed ${speed}× · open the live board now\n`);
+  log(`feed: ${feed.length} plays over ${fmtClock(maxAt)} game-time · speed ${speed}×${jitter ? ` · latency ≤${jitter}s` : ''} · open the live board now\n`);
 
   let i = 0;
   for (let clk = 0; ; clk += speed) {
     const batch = [];
     while (i < feed.length && feed[i].at <= clk) batch.push(feed[i++].row);
-    if (batch.length) await db().from('live_play').insert(batch);
+    // Upsert (not insert) so a re-delivered correction reconciles by key — same as poll/plays.js.
+    if (batch.length) await db().from('live_play').upsert(batch, { onConflict: 'week,game_id,pid,player_slug,k' });
     for (const m of live) { try { await resolveMatchup(m, playerIndex, lineups.get(m.id)); } catch (e) { log('resolve', m.id, e.message); } }
     const { data: st } = await db().from('matchup_state').select('matchup_id,home_score,away_score').in('matchup_id', ids);
     const totals = new Map();
@@ -242,8 +301,9 @@ export async function simulate(args) {
   }
   const speed = Number(flags.speed ?? 600);    // game-seconds advanced per tick
   const tickMs = Number(flags.tick ?? 1000);   // real ms per tick
+  const jitter = Number(flags.jitter ?? 0);    // seconds of random per-play delivery delay (latency)
   if (flags.dry) {
-    await simulateDry({ week: Number(flags.week ?? pos[1] ?? 1), speed, tickMs });
+    await simulateDry({ week: Number(flags.week ?? pos[1] ?? 1), speed, tickMs, jitter });
     return;
   }
   if (flags.check) {
@@ -256,5 +316,5 @@ export async function simulate(args) {
   }
   const [leagueId, week] = pos;
   if (!leagueId || !week) throw new Error('usage: simulate <leagueId> <week> [--src=<wk>] [--speed=600] [--tick=1000]  |  simulate --dry [--week=1]');
-  await simulateLive(leagueId, Number(week), { srcWeek: Number(flags.src ?? week), speed, tickMs });
+  await simulateLive(leagueId, Number(week), { srcWeek: Number(flags.src ?? week), speed, tickMs, jitter });
 }

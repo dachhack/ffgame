@@ -32,10 +32,13 @@ baked plays into `live_play` exercises everything downstream for real — only t
 literal ESPN fetch in `poll/plays.js` is bypassed.
 
 ```bash
-# DRY — no DB. Time-released feed → real engine, then assert the live_play row
-# shape reproduces every player's baked points exactly (the property the swap
-# depends on). Runs offline; this is also the validate-feed CI gate.
-npm run cli -- simulate --dry --week=1 [--speed=900] [--tick=1000]
+# DRY — no DB. Time-released feed → real engine. Asserts (a) the live_play row
+# shape reproduces every player's baked points exactly, and (b) RECONCILIATION:
+# a re-sent corrected play overwrites by key, a reclassified play drops its stale
+# row (no double-count), and a duplicate re-send is a no-op. `--jitter=N` adds up
+# to N s of random per-play delay (latency) — late/out-of-order delivery must not
+# change the result. Runs offline; this is the validate-feed CI gate.
+npm run cli -- simulate --dry --week=1 [--jitter=60] [--speed=900] [--tick=1000]
 
 # CHECK — read-only: connect with the service key, count matchups, write nothing.
 npm run cli -- simulate --check [leagueId]
@@ -47,7 +50,7 @@ npm run cli -- simulate --check [leagueId]
 # Sleeper starters (default metric per position), so the full metric duel resolves
 # with NOBODY setting a lineup. A roster that set its own locked picks is honored;
 # the rest are auto-filled. → the only prep is `sync` + `sync-week`.
-npm run cli -- simulate <leagueId> <week> [--src=<bakedWeek>] [--speed=600] [--tick=1000]
+npm run cli -- simulate <leagueId> <week> [--src=<bakedWeek>] [--speed=600] [--tick=1000] [--jitter=10]
 
 # RESET — fully revert a live run: matchups → scheduled, picks unlocked, the SIM
 # feed + matchup_state cleared. Touches only the sim's own rows, never real ESPN.

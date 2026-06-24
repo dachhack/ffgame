@@ -1,10 +1,13 @@
 name: Validate live-feed round-trip
 
-# Proves the LIVE pipeline is lossless end to end without touching ESPN: replays
-# every baked week's plays through the live_play row shape → the real engine, and
-# asserts each player's points reproduce the baked total exactly. Together with
-# validate-espn (ESPN-feed ACCURACY vs baked) this covers the whole chain:
-#   ESPN → adapter (accurate) → live_play → engine (lossless) → scores.
+# Proves the LIVE pipeline end to end without touching ESPN: replays every baked
+# week's plays through the live_play row shape → the real engine, and asserts
+#   • round-trip: each player's points reproduce the baked total exactly,
+#   • latency (--jitter): late / out-of-order delivery doesn't change the result,
+#   • reconcile: a corrected re-send overwrites by key, a reclassified play drops
+#     its stale row (no double-count), a duplicate re-send is a no-op.
+# Together with validate-espn (ESPN-feed ACCURACY vs baked) this covers the chain:
+#   ESPN → adapter (accurate) → live_play (reconciled) → engine (lossless) → scores.
 # Runs when the worker, the engine, or the baked data changes.
 on:
   push:
@@ -34,7 +37,7 @@ jobs:
           for f in ../public/pbp/w*.json; do
             w=$(basename "$f" .json); w=${w#w}
             echo "── week $w ──"
-            out=$(npm run --silent cli -- simulate --dry --week="$w" --speed=100000 --tick=0); rc=$?
+            out=$(npm run --silent cli -- simulate --dry --week="$w" --jitter=60 --speed=100000 --tick=0); rc=$?
             echo "$out" | grep -E "round-trip|PASS|FAIL" || true
             [ $rc -eq 0 ] || { echo "::error::week $w feed round-trip FAILED"; fail=1; }
           done

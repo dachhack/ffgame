@@ -35,8 +35,19 @@ export async function pollGame(eventId, week, playerIndex) {
     }
   }
   if (rows.length) {
-    // Idempotent: UNIQUE(week,game_id,pid,player_slug,k) — re-polling a game is a no-op.
-    await db().from('live_play').upsert(rows, { onConflict: 'week,game_id,pid,player_slug,k', ignoreDuplicates: true });
+    // RECONCILE — each poll carries the game's FULL current play set, and ESPN
+    // revises plays mid-game (yardage corrections, a TD overturned on review, a
+    // fumble added, a catch ruled incomplete). So:
+    //   1) upsert by the unique key (week,game_id,pid,player_slug,k) — UPDATE on
+    //      conflict, NOT ignore, so corrected values overwrite the stale row;
+    //   2) delete any rows for this game no longer in the current set — a play
+    //      reclassified to a different kind, or removed, so it can't double-count.
+    // Re-polling unchanged plays is still a no-op (same key + same values).
+    await db().from('live_play').upsert(rows, { onConflict: 'week,game_id,pid,player_slug,k' });
+    const present = new Set(rows.map((r) => `${r.pid}|${r.player_slug}|${r.k}`));
+    const { data: existing } = await db().from('live_play').select('id,pid,player_slug,k').eq('week', week).eq('game_id', eventId);
+    const staleIds = (existing ?? []).filter((e) => !present.has(`${e.pid}|${e.player_slug}|${e.k}`)).map((e) => e.id);
+    if (staleIds.length) await db().from('live_play').delete().in('id', staleIds);
   }
   return rows.length;
 }
