@@ -66,17 +66,29 @@ function baseScore(plays) {
 }
 
 /** Flatten baked pbp into one time-ordered feed of live_play-shaped rows. `at` is
- *  the release time (real wall-clock seconds since kickoff, ESPN's `t`). `jitter`
- *  adds up to N seconds of random per-play delay to mimic real feed latency —
- *  plays then arrive late and out of order, like the actual ESPN stat feed. */
-function buildFeed(pbp, week, jitter = 0) {
+ *  the release time (real wall-clock seconds since kickoff, ESPN's `t`).
+ *   • jitter: up to N s of random per-play delay → plays arrive late + out of
+ *     order, like the real ESPN stat feed.
+ *   • corrections (0–1): that fraction of scoring plays arrive PROVISIONAL (a
+ *     wrong stat) first, then the TRUE baked value `correctionDelay` s later —
+ *     same key, so the upsert overwrites and the score self-corrects live. */
+function buildFeed(pbp, week, jitter = 0, corrections = 0, correctionDelay = 60) {
   const feed = [];
   for (const [slug, plays] of Object.entries(pbp)) {
     for (const p of plays) {
-      feed.push({
-        at: (p.t ?? p.c ?? 0) + (jitter > 0 ? Math.random() * jitter : 0),
-        row: { week, game_id: 'SIM', player_slug: slug, c: p.c, t: p.t ?? null, pid: p.pid ?? null, k: p.k, y: p.y, td: p.td, ca: p.ca, tg: p.tg, to: p.to ?? null },
-      });
+      const baseAt = (p.t ?? p.c ?? 0) + (jitter > 0 ? Math.random() * jitter : 0);
+      const row = { week, game_id: 'SIM', player_slug: slug, c: p.c, t: p.t ?? null, pid: p.pid ?? null, k: p.k, y: p.y, td: p.td, ca: p.ca, tg: p.tg, to: p.to ?? null };
+      if (corrections > 0 && (p.y > 0 || p.td > 0) && Math.random() < corrections) {
+        // A plausible early (wrong) stat: yards off by a few, or a TD not yet ruled.
+        const provY = p.y > 0 ? Math.max(0, p.y + (Math.random() < 0.5 ? -1 : 1) * (3 + Math.floor(Math.random() * 12))) : p.y;
+        const provTd = p.td > 0 && Math.random() < 0.4 ? 0 : p.td;
+        if (provY !== p.y || provTd !== p.td) {
+          feed.push({ at: baseAt, row: { ...row, y: provY, td: provTd }, corr: 'prov' });
+          feed.push({ at: baseAt + correctionDelay * (1 + Math.random()), row, corr: 'fix' });
+          continue;
+        }
+      }
+      feed.push({ at: baseAt, row });
     }
   }
   feed.sort((a, b) => a.at - b.at);
@@ -186,7 +198,7 @@ async function simulateDry({ week, speed, tickMs, jitter }) {
 }
 
 // ── LIVE: drive a real pilot matchup in Supabase. ────────────────────────────────
-async function simulateLive(leagueId, week, { srcWeek, speed, tickMs, jitter }) {
+async function simulateLive(leagueId, week, { srcWeek, speed, tickMs, jitter, corrections }) {
   const { db } = await import('./supabase.js');
   const { resolveMatchup } = await import('./resolve.js');
   const { buildPlayerIndex } = await import('./playerIndex.js');
@@ -237,22 +249,29 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs, jitter }) 
   }
   log(`lineups ready for ${live.length} matchups (${autoCount} sides, default metric per position) — full metric duel, no enrollment needed`);
 
-  const feed = buildFeed(pbp, week, jitter);
+  const feed = buildFeed(pbp, week, jitter, corrections, Math.max(60, speed * 3));
+  const nCorr = feed.filter((f) => f.corr === 'fix').length;
   const maxAt = feed.length ? feed[feed.length - 1].at : 0;
-  log(`feed: ${feed.length} plays over ${fmtClock(maxAt)} game-time · speed ${speed}×${jitter ? ` · latency ≤${jitter}s` : ''} · open the live board now\n`);
+  log(`feed: ${feed.length} deliveries over ${fmtClock(maxAt)} game-time · speed ${speed}×${jitter ? ` · latency ≤${jitter}s` : ''}${nCorr ? ` · ${nCorr} plays self-correct (watch the board)` : ''} · open the live board now\n`);
 
   let i = 0;
   for (let clk = 0; ; clk += speed) {
     const batch = [];
-    while (i < feed.length && feed[i].at <= clk) batch.push(feed[i++].row);
-    // Upsert (not insert) so a re-delivered correction reconciles by key — same as poll/plays.js.
-    if (batch.length) await db().from('live_play').upsert(batch, { onConflict: 'week,game_id,pid,player_slug,k' });
+    while (i < feed.length && feed[i].at <= clk) batch.push(feed[i++]);
+    // Dedupe within the batch by key (keep the latest delivery), then upsert — so a
+    // provisional + its later fix never collide in one write, and corrections
+    // reconcile by key exactly like poll/plays.js.
+    const byKey = new Map();
+    for (const b of batch) byKey.set(keyOf(b.row), b);
+    const rows = [...byKey.values()].map((b) => b.row);
+    if (rows.length) await db().from('live_play').upsert(rows, { onConflict: 'week,game_id,pid,player_slug,k' });
     for (const m of live) { try { await resolveMatchup(m, playerIndex, lineups.get(m.id)); } catch (e) { log('resolve', m.id, e.message); } }
     const { data: st } = await db().from('matchup_state').select('matchup_id,home_score,away_score').in('matchup_id', ids);
     const totals = new Map();
     for (const s of st ?? []) { const t = totals.get(s.matchup_id) ?? { h: 0, a: 0 }; t.h += s.home_score; t.a += s.away_score; totals.set(s.matchup_id, t); }
     const line = live.map((m) => { const t = totals.get(m.id) ?? { h: 0, a: 0 }; return `${round(t.h)}–${round(t.a)}`; }).join('  ');
-    log(`  ${fmtClock(Math.min(clk, maxAt)).padStart(5)}  +${batch.length} plays  ·  ${line}`);
+    const fixes = [...new Set(batch.filter((b) => b.corr === 'fix').map((b) => b.row.player_slug.split('-')[0]))];
+    log(`  ${fmtClock(Math.min(clk, maxAt)).padStart(5)}  +${rows.length} plays${fixes.length ? ` · ↻ ${fixes.slice(0, 3).join(',')}${fixes.length > 3 ? '…' : ''} corrected` : ''}  ·  ${line}`);
     if (i >= feed.length) break;
     await sleep(tickMs);
   }
@@ -302,6 +321,7 @@ export async function simulate(args) {
   const speed = Number(flags.speed ?? 600);    // game-seconds advanced per tick
   const tickMs = Number(flags.tick ?? 1000);   // real ms per tick
   const jitter = Number(flags.jitter ?? 0);    // seconds of random per-play delivery delay (latency)
+  const corrections = Number(flags.corrections ?? 0) / 100; // % of scoring plays that arrive provisional then self-correct
   if (flags.dry) {
     await simulateDry({ week: Number(flags.week ?? pos[1] ?? 1), speed, tickMs, jitter });
     return;
@@ -316,5 +336,5 @@ export async function simulate(args) {
   }
   const [leagueId, week] = pos;
   if (!leagueId || !week) throw new Error('usage: simulate <leagueId> <week> [--src=<wk>] [--speed=600] [--tick=1000]  |  simulate --dry [--week=1]');
-  await simulateLive(leagueId, Number(week), { srcWeek: Number(flags.src ?? week), speed, tickMs, jitter });
+  await simulateLive(leagueId, Number(week), { srcWeek: Number(flags.src ?? week), speed, tickMs, jitter, corrections });
 }

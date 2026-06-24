@@ -50,7 +50,11 @@ npm run cli -- simulate --check [leagueId]
 # Sleeper starters (default metric per position), so the full metric duel resolves
 # with NOBODY setting a lineup. A roster that set its own locked picks is honored;
 # the rest are auto-filled. → the only prep is `sync` + `sync-week`.
-npm run cli -- simulate <leagueId> <week> [--src=<bakedWeek>] [--speed=600] [--tick=1000] [--jitter=10]
+#   --jitter=N        up to N s of random per-play delivery delay (feed latency)
+#   --corrections=P   P% of scoring plays arrive PROVISIONAL (a wrong stat) then
+#                     self-correct a few ticks later — watch a score fix itself on
+#                     the admin board. It always ends on the true totals.
+npm run cli -- simulate <leagueId> <week> [--src=<bakedWeek>] [--speed=600] [--tick=1000] [--jitter=10] [--corrections=20]
 
 # RESET — fully revert a live run: matchups → scheduled, picks unlocked, the SIM
 # feed + matchup_state cleared. Touches only the sim's own rows, never real ESPN.
