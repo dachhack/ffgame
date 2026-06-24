@@ -8,6 +8,7 @@ import { METRICS } from '../data/metrics';
 import { loadRealWeek, realPointsFor } from '../data/realPbp';
 import { FX_COLOR, fmtClock, buildBeats, type Beat } from '../data/demoNarration';
 import { DemoViewToggle } from './DemoOverlay';
+import { SleeperHandoff } from './SleeperHandoff';
 import type { PbpEvent, WindowId } from '../types';
 
 // A best-in-class, zero-effort intro to Drip. Good game design is about CHOICES,
@@ -407,9 +408,9 @@ export function GuidedDemo() {
           {ended && (
             <div style={{ marginTop: 18, background: 'var(--surface)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: 18, textAlign: 'center' }}>
               <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>{youBank >= theirBank ? 'You took it.' : Math.abs(youBank - theirBank) <= 8 ? 'So close.' : 'That one got away.'} That’s one slot.</div>
-              <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>Every star, every hidden metric, every power-up — your call, across all eight slots. Try a different pick and watch it swing the other way.</div>
-              <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ ...cta, marginTop: 14 }}>◈ See your real league in the game →</button>
-              <button onClick={() => navigate({ name: 'live' })} className="mono" style={{ ...cta, marginTop: 9, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--bd)' }}>join the live H2H pilot →</button>
+              <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>Every star, every hidden metric, every power-up — your call, across all eight slots. Now run it with your own team:</div>
+              <div style={{ marginTop: 14 }}><SleeperHandoff /></div>
+              <button onClick={() => navigate({ name: 'live' })} className="mono" style={{ ...cta, marginTop: 12, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--bd)' }}>join the live H2H pilot →</button>
               <button onClick={restart} className="mono" style={{ background: 'none', border: 'none', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', cursor: 'pointer', marginTop: 12 }}>↩ make different picks</button>
             </div>
           )}
