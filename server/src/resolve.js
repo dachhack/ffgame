@@ -18,7 +18,7 @@
 // General + best-ball backups on top of per-slot resolveSlot. DEF suppress,
 // cross-window TE-TD nukes, and the K banker bonus remain simplified there.
 import { db } from './supabase.js';
-import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY } from './engine.js';
+import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, aiLiveBuffs, EMPTY } from './engine.js';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
 export function baseScore(plays) {
@@ -56,6 +56,16 @@ async function lineupSlugs(matchup, rosterId) {
   return ((data?.starters_json) ?? []).map((s) => s.player_slug).filter(Boolean);
 }
 
+/** A human's armed in-slot buffs for this matchup (applied_state.payload_json.buffs,
+ *  written via the arm_buff RPC). Empty when none armed or no enrolled user. */
+async function humanBuffs(matchupId, appUserId) {
+  if (!appUserId) return [];
+  const { data } = await db().from('applied_state').select('payload_json')
+    .eq('matchup_id', matchupId).eq('app_user_id', appUserId).maybeSingle();
+  const b = data?.payload_json?.buffs;
+  return Array.isArray(b) ? b : [];
+}
+
 /** The league's missed-pick policy: 'best_lineup' (default) | 'ai' | 'empty'. */
 async function lineupPolicy(leagueId) {
   const { data } = await db().from('league').select('lineup_policy').eq('id', leagueId).maybeSingle();
@@ -78,20 +88,27 @@ export async function resolveMatchup(matchup, playerIndex, override) {
   const byRoster = new Map((members ?? []).map((m) => [m.sleeper_roster_id, m]));
   const policy = await lineupPolicy(matchup.league_id);
 
-  // A side's effective lineup: explicit AI → auto-lineup; a human's sealed picks if
-  // set; an empty seat (no manager) → auto-lineup; an enrolled manager who missed →
-  // the league policy (best_lineup/ai → auto-lineup; empty → null, scores 0).
-  const sidePicks = async (rosterId) => {
+  // A side's effective lineup AND its armed in-slot buffs: explicit AI → auto-
+  // lineup + a deterministic free AI buff draw; a human's sealed picks if set +
+  // the buffs they armed (applied_state); an empty seat (no manager) → AI lineup
+  // + AI buffs; an enrolled manager who missed → the league policy (best_lineup/
+  // ai → AI lineup + AI buffs; empty → null, scores 0). AI/auto sides get free
+  // buffs in this milestone; a later one gates them behind a coin budget.
+  const aiSide = (rosterId) => lineupSlugs(matchup, rosterId).then((slugs) => ({
+    picks: autoLineup(slugs), buffs: aiLiveBuffs(String(rosterId), matchup.week),
+  }));
+  const sideLineup = async (rosterId) => {
     const mem = byRoster.get(rosterId);
-    if (mem?.controller === 'ai') return autoLineup(await lineupSlugs(matchup, rosterId));
+    if (mem?.controller === 'ai') return aiSide(rosterId);
     const picks = await enrolledPicks(matchup, mem);
-    if (picks) return picks;
-    if (!mem?.enrolled || !mem?.app_user_id) return autoLineup(await lineupSlugs(matchup, rosterId));
-    if (policy === 'empty') return null;
-    return autoLineup(await lineupSlugs(matchup, rosterId));
+    if (picks) return { picks, buffs: await humanBuffs(matchup.id, mem.app_user_id) };
+    if (!mem?.enrolled || !mem?.app_user_id) return aiSide(rosterId);
+    if (policy === 'empty') return { picks: null, buffs: [] };
+    return aiSide(rosterId);
   };
-  const homePicks = override ? override.home : await sidePicks(matchup.home_roster_id);
-  const awayPicks = override ? override.away : await sidePicks(matchup.away_roster_id);
+  const home = override ? { picks: override.home, buffs: [] } : await sideLineup(matchup.home_roster_id);
+  const away = override ? { picks: override.away, buffs: [] } : await sideLineup(matchup.away_roster_id);
+  const homePicks = home.picks, awayPicks = away.picks;
 
   const states = []; // { game_window, home_score, away_score }
   let homeTotal = 0, awayTotal = 0;
@@ -100,7 +117,8 @@ export async function resolveMatchup(matchup, playerIndex, override) {
 
   if (homePicks && awayPicks) {
     // ── Both sides have a lineup (human, AI, or auto-backup): real H2H engine ──
-    const r = resolveLiveMatchup(homePicks.map(toLive), awayPicks.map(toLive), matchup.week);
+    const r = resolveLiveMatchup(homePicks.map(toLive), awayPicks.map(toLive), matchup.week,
+      { homeBuffs: new Set(home.buffs), awayBuffs: new Set(away.buffs) });
     for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
     homeTotal = r.home; awayTotal = r.away; coin = r.coin;
   } else {

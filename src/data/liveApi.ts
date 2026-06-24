@@ -343,8 +343,14 @@ export async function dispatchSim(input: { mode?: 'live' | 'reset' | 'check' | '
 }
 export const adminLeagueMembers = (leagueId: string) => rpc<AdminMember[]>('admin_league_members', { p_league_id: leagueId });
 export const commishOverview = () => rpc<AdminLeague[]>('commish_overview');
-export interface MatchupPicks { home_roster_id: number; away_roster_id: number; home_app_user: string | null; away_app_user: string | null; picks: { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null }[]; home_lineup: { player_slug: string | null; pos: string | null }[]; away_lineup: { player_slug: string | null; pos: string | null }[]; }
+export interface MatchupPicks { home_roster_id: number; away_roster_id: number; home_app_user: string | null; away_app_user: string | null; picks: { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null }[]; home_lineup: { player_slug: string | null; pos: string | null }[]; away_lineup: { player_slug: string | null; pos: string | null }[]; home_buffs: string[]; away_buffs: string[]; }
 export const adminMatchupPicks = (matchupId: string) => rpc<MatchupPicks>('admin_matchup_picks', { p_matchup_id: matchupId });
+
+// ── Live power-up loadout (M1): arm/disarm in-slot team buffs, pre-lock ──────────
+export const LIVE_BUFFS = ['overtime', 'ot-shield', 'momentum', 'garbage-time', 'floodgates', 'counter-nuke', 'insurance', 'fg-stack'] as const;
+export const armBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; buffs?: string[] }>('arm_buff', { p_matchup_id: matchupId, p_buff: buff });
+export const disarmBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; buffs?: string[] }>('disarm_buff', { p_matchup_id: matchupId, p_buff: buff });
+export const myBuffs = (matchupId: string) => rpc<string[]>('my_buffs', { p_matchup_id: matchupId });
 export const adminSetState = (matchupId: string, states: { window: string; home: number; away: number }[], coin?: { home: number; away: number }, slotScores?: { win: string; side: string; slot: string; slug: string; metric: string | null; score: number }[]) =>
   rpc<{ ok: boolean }>('admin_set_state', { p_matchup_id: matchupId, p_states: states, p_home_coin: coin?.home ?? null, p_away_coin: coin?.away ?? null, p_slot_scores: slotScores ?? null });
 export const adminSetCoin = (matchupId: string, home: number, away: number) =>

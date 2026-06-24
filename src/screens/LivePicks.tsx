@@ -5,8 +5,10 @@ import { slugMeta } from '../data/slugMeta';
 import type { Pos, WindowId } from '../types';
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
+  myBuffs, armBuff, disarmBuff, LIVE_BUFFS,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller,
 } from '../data/liveApi';
+import { powerupById } from '../data/powerups';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16 };
 const sel: React.CSSProperties = { fontFamily: 'inherit', fontSize: 12.5, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 8px', outline: 'none', width: '100%', boxSizing: 'border-box' };
@@ -30,6 +32,8 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   const [aiBusy, setAiBusy] = useState(false);
   const [pool, setPool] = useState<PoolPlayer[]>([]);
   const [picks, setPicks] = useState<Record<string, { player_slug: string | null; metric_id: string | null }>>({});
+  const [buffs, setBuffs] = useState<Set<string>>(new Set());
+  const [buffBusy, setBuffBusy] = useState<string | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'none'>('loading');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -45,11 +49,12 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         const m = await myMatchup(r.leagueId, r.rosterId);
         if (!m) { setState('none'); return; }
         setMatchup(m);
-        const [pl, pk] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId)]);
+        const [pl, pk, bf] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId), myBuffs(m.id)]);
         setPool(pl);
         const map: Record<string, { player_slug: string | null; metric_id: string | null }> = {};
         for (const p of pk) map[`${p.game_window}-${p.roster_slot}`] = { player_slug: p.player_slug, metric_id: p.metric_id };
         setPicks(map);
+        setBuffs(new Set(bf ?? []));
         setState('ready');
       } catch (e) { setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('none'); }
     })();
@@ -102,6 +107,18 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
     finally { setSaving(false); }
   };
 
+  const toggleBuff = async (id: string) => {
+    if (!matchup || locked || buffBusy) return;
+    const armed = buffs.has(id);
+    setBuffBusy(id); setErr(null);
+    try {
+      const r = armed ? await disarmBuff(matchup.id, id) : await armBuff(matchup.id, id);
+      if (r.ok && r.buffs) setBuffs(new Set(r.buffs));
+      else if (r.error) setErr(r.error);
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Could not update power-ups.'); }
+    finally { setBuffBusy(null); }
+  };
+
   const toggleAi = async () => {
     if (!roster || aiBusy) return;
     const next: Controller = controller === 'ai' ? 'human' : 'ai';
@@ -148,6 +165,33 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         </div>
         {controller === 'ai' && <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8 }}>Auto-pilot is on — your manual picks below are paused until you turn it off.</div>}
       </div>
+
+      {/* Power-ups: arm whole-lineup team buffs before kickoff. Free this season
+          (no coin yet). AI teams arm their own, so hide the controls under auto-pilot. */}
+      {controller !== 'ai' && (
+        <div style={{ ...card, marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Power-ups</div>
+            <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{buffs.size} armed · free</span>
+          </div>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+            Arm before kickoff — each buffs your whole lineup all week. Locks at kickoff.
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+            {LIVE_BUFFS.map((id) => {
+              const pu = powerupById(id);
+              const on = buffs.has(id);
+              return (
+                <button key={id} onClick={() => toggleBuff(id)} disabled={locked || !!buffBusy} title={pu?.blurb}
+                  className="mono"
+                  style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : 'var(--text)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : 1 }}>
+                  {pu?.icon} {pu?.name ?? id}{on ? ' ✓' : ''}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {WINDOWS.map((w) => {
         const elig = gateOn ? pool.filter((pl) => winBySlug[pl.slug] === 'any' || winBySlug[pl.slug] === w.id).length : pool.length;

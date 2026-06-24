@@ -60,6 +60,34 @@ function applyFieldGeneral(picks: AiPick[]): void {
   }
 }
 
+// The in-slot buffs an AI team arms in a live week. Limited to whole-lineup
+// buffs that help whichever side arms them (drip/OT/clock buffs) — so the AI
+// always benefits — mirroring the demo's AI_BUFF_POOL (src/engine/matchup.ts).
+const AI_LIVE_BUFFS = ['momentum', 'garbage-time', 'floodgates', 'overtime', 'ot-shield'];
+
+/** Deterministic 32-bit hash for seeding the AI's draws (no Math.random, so the
+ *  worker and a preview agree and a re-resolve is stable). */
+function hashStr(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+/** An AI team's armed in-slot buffs for a live week — a deterministic draw
+ *  (seeded per team+week) from the buffs that benefit the arming side. Honest:
+ *  seeded only on identity + week, never on the week's results. In M1 these are
+ *  free; a later milestone gates them behind the team's coin budget. */
+export function aiLiveBuffs(teamKey: string, week: number, n = 3): string[] {
+  const pool = [...AI_LIVE_BUFFS];
+  const out: string[] = [];
+  let seed = hashStr(`${teamKey}|buffs|${week}`);
+  for (let i = 0; i < n && pool.length; i++) {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff; // LCG step for a varied draw
+    out.push(pool.splice(seed % pool.length, 1)[0]);
+  }
+  return out;
+}
+
 /** Build an AI lineup from a roster's starter slugs: lay them across the
  *  window/slot grid, each on its honest default metric, then run the
  *  Field-General read. The first QB is seated in the marquee multi-slot Sunday

@@ -106,11 +106,19 @@ function coinFor(slots: SlotRes[], side: 'home' | 'away'): number {
   return Math.round(c);
 }
 
+/** Pre-match team buffs each side has armed (overtime / ot-shield / momentum /
+ *  garbage-time / floodgates / counter-nuke / insurance / fg-stack). These are
+ *  the in-slot buffs resolveSlot + windowFgMult already understand — the live
+ *  path simply hands them through, the way the demo's buildMatchup does. */
+export interface LiveBuffs { homeBuffs?: Set<string>; awayBuffs?: Set<string>; }
+
 /** Resolve a full H2H week from each side's sealed picks (slug-keyed). Picks are
  *  paired by (window, slot). The week's plays must already be injected into the
  *  engine (loadRealWeek / injectWeek) so resolveSlot reads each player's PBP. */
-export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[], week: number): LiveResult {
+export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[], week: number, buffs: LiveBuffs = {}): LiveResult {
   const reg = REAL_WEEKS.has(week) ? 3600 : 3300;
+  const homeBuffs = buffs.homeBuffs ?? new Set<string>();
+  const awayBuffs = buffs.awayBuffs ?? new Set<string>();
   const key = (p: { win: string; slot: string }) => `${p.win}|${p.slot}`;
   const homeBy = new Map(homePicks.map((p) => [key(p), p]));
   const awayBy = new Map(awayPicks.map((p) => [key(p), p]));
@@ -123,8 +131,9 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     const homeIns: SlotInput[] = homePicks.filter((p) => p.win === w.id).map((p) => ({ player: p.player, metricId: p.metricId }));
     const awayIns: SlotInput[] = awayPicks.filter((p) => p.win === w.id).map((p) => ({ player: p.player, metricId: p.metricId }));
     // Field General builds its multiplier from every filled slot on its side.
-    const homeMult = windowFgMult(homeIns, week, { reg });
-    const awayMult = windowFgMult(awayIns, week, { reg });
+    // Overtime carries the multiplier past regulation; fg-stack stacks twin Generals.
+    const homeMult = windowFgMult(homeIns, week, { reg, carryOT: homeBuffs.has('overtime'), stack: homeBuffs.has('fg-stack') });
+    const awayMult = windowFgMult(awayIns, week, { reg, carryOT: awayBuffs.has('overtime'), stack: awayBuffs.has('fg-stack') });
     // TE-TD 8-PT NUKE clocks: a side's TE TDs knock the OPPONENT's drips.
     const homeTeTd = teTdNukeClocks(homeIns, week).map((n) => n.c);
     const awayTeTd = teTdNukeClocks(awayIns, week).map((n) => n.c);
@@ -145,6 +154,7 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
       const res = resolveSlot(you, them, week, label, {
         youMult: homeMult, theirMult: awayMult,
         youDripNukeClocks: awayTeTd, theirDripNukeClocks: homeTeTd,
+        youBuffs: homeBuffs, theirBuffs: awayBuffs,
       });
       let homeF = res.youFinal, awayF = res.theirFinal;
       // A suppress DST banks 0 itself — its points are spent as the threshold.

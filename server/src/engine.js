@@ -13,7 +13,7 @@
 import { resolveSlot, EMPTY_PLAYER } from '../../src/engine/sim.ts';
 import { resolveLiveMatchup } from '../../src/engine/liveResolve.ts';
 import { setSyntheticWeeks, clearSyntheticWeeks } from '../../src/data/realPbp.ts';
-import { aiLineup } from '../../src/data/aiLineup.ts';
+import { aiLineup, aiLiveBuffs } from '../../src/data/aiLineup.ts';
 
 const ZERO_STATS = {
   games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0,
@@ -26,7 +26,7 @@ export function makePlayer(slug, pos, team, full) {
 }
 
 export const EMPTY = EMPTY_PLAYER;
-export { clearSyntheticWeeks, resolveLiveMatchup };
+export { clearSyntheticWeeks, resolveLiveMatchup, aiLiveBuffs };
 
 /** AI auto-lineup for a real LIVE game — delegates to the shared honest builder
  *  (src/data/aiLineup.ts): spread a roster's Sleeper starters across the
