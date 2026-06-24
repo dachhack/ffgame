@@ -79,6 +79,11 @@ jobs:
           set -uo pipefail
           SRC="${SRC:-$WEEK}"
           JITTER="${JITTER:-0}"; CORRECTIONS="${CORRECTIONS:-0}"
+          case "$MODE" in check|live|reset)
+            if [ -z "${SUPABASE_URL:-}" ] || ! printf '%s' "$SUPABASE_URL" | grep -q '^https://'; then
+              echo "::error::SUPABASE_URL secret is missing or not an https:// URL. Set SUPABASE_URL (https://<ref>.supabase.co) and SUPABASE_SERVICE_ROLE_KEY in Settings → Secrets and variables → Actions."; exit 1
+            fi ;;
+          esac
           case "$MODE" in
             dry)
               npm run --silent cli -- simulate --dry --week="$WEEK" --jitter="$JITTER" --speed=100000 --tick=0 ;;

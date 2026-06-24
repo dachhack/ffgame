@@ -56,6 +56,9 @@ jobs:
         run: |
           set -uo pipefail
           if [ -z "$LEAGUE" ]; then echo "::error::a Sleeper league id is required (input: league)"; exit 1; fi
+          if [ -z "${SUPABASE_URL:-}" ] || ! printf '%s' "$SUPABASE_URL" | grep -q '^https://'; then
+            echo "::error::SUPABASE_URL secret is missing or not an https:// URL. Set SUPABASE_URL (https://<ref>.supabase.co) and SUPABASE_SERVICE_ROLE_KEY in Settings → Secrets and variables → Actions."; exit 1
+          fi
           case "$MODE" in
             league)
               npm run --silent cli -- sync "$LEAGUE" ;;
