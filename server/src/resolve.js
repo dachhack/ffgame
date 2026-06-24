@@ -18,7 +18,7 @@
 // General + best-ball backups on top of per-slot resolveSlot. DEF suppress,
 // cross-window TE-TD nukes, and the K banker bonus remain simplified there.
 import { db } from './supabase.js';
-import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, aiLiveBuffs, EMPTY } from './engine.js';
+import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY } from './engine.js';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
 export function baseScore(plays) {
@@ -56,14 +56,21 @@ async function lineupSlugs(matchup, rosterId) {
   return ((data?.starters_json) ?? []).map((s) => s.player_slug).filter(Boolean);
 }
 
-/** A human's armed in-slot buffs for this matchup (applied_state.payload_json.buffs,
- *  written via the arm_buff RPC). Empty when none armed or no enrolled user. */
-async function humanBuffs(matchupId, appUserId) {
-  if (!appUserId) return [];
+/** A side's armed loadout (applied_state.payload_json) for this matchup — buffs and
+ *  metric unlocks bought via the arm RPCs / the AI budget pass. Empty when none. */
+async function loadout(matchupId, appUserId) {
+  if (!appUserId) return {};
   const { data } = await db().from('applied_state').select('payload_json')
     .eq('matchup_id', matchupId).eq('app_user_id', appUserId).maybeSingle();
-  const b = data?.payload_json?.buffs;
+  return data?.payload_json ?? {};
+}
+async function humanBuffs(matchupId, appUserId) {
+  const b = (await loadout(matchupId, appUserId)).buffs;
   return Array.isArray(b) ? b : [];
+}
+async function humanUnlocks(matchupId, appUserId) {
+  const u = (await loadout(matchupId, appUserId)).unlocks;
+  return Array.isArray(u) ? u : [];
 }
 
 /** The league's missed-pick policy: 'best_lineup' (default) | 'ai' | 'empty'. */
@@ -88,23 +95,29 @@ export async function resolveMatchup(matchup, playerIndex, override) {
   const byRoster = new Map((members ?? []).map((m) => [m.sleeper_roster_id, m]));
   const policy = await lineupPolicy(matchup.league_id);
 
-  // A side's effective lineup AND its armed in-slot buffs: explicit AI → auto-
-  // lineup + a deterministic free AI buff draw; a human's sealed picks if set +
-  // the buffs they armed (applied_state); an empty seat (no manager) → AI lineup
-  // + AI buffs; an enrolled manager who missed → the league policy (best_lineup/
-  // ai → AI lineup + AI buffs; empty → null, scores 0). AI/auto sides get free
-  // buffs in this milestone; a later one gates them behind a coin budget.
-  const aiSide = (rosterId) => lineupSlugs(matchup, rosterId).then((slugs) => ({
-    picks: autoLineup(slugs, matchup.week), buffs: aiLiveBuffs(String(rosterId), matchup.week),
-  }));
+  // A side's effective lineup AND its armed in-slot buffs. Power-ups (buffs +
+  // metric unlocks) are PAID and live in applied_state, keyed by app_user — so any
+  // side with an app_user (human OR an AI team flipped from a manager) resolves
+  // with exactly what it bought; an app_user-less seat fields a plain lineup, no
+  // power-ups. The AI's purchases are made by the lock-time budget pass (it spends
+  // its own wallet, blind, on its own roster). Lineups: explicit AI / empty seat /
+  // missed-pick (per policy) → auto-lineup using the unlocks the team owns; a
+  // human's sealed picks if set.
+  const aiSide = async (rosterId, mem) => {
+    const owned = mem?.app_user_id ? new Set(await humanUnlocks(matchup.id, mem.app_user_id)) : new Set();
+    return {
+      picks: autoLineup(await lineupSlugs(matchup, rosterId), matchup.week, owned),
+      buffs: mem?.app_user_id ? await humanBuffs(matchup.id, mem.app_user_id) : [],
+    };
+  };
   const sideLineup = async (rosterId) => {
     const mem = byRoster.get(rosterId);
-    if (mem?.controller === 'ai') return aiSide(rosterId);
+    if (mem?.controller === 'ai') return aiSide(rosterId, mem);
     const picks = await enrolledPicks(matchup, mem);
     if (picks) return { picks, buffs: await humanBuffs(matchup.id, mem.app_user_id) };
-    if (!mem?.enrolled || !mem?.app_user_id) return aiSide(rosterId);
+    if (!mem?.enrolled || !mem?.app_user_id) return aiSide(rosterId, mem);
     if (policy === 'empty') return { picks: null, buffs: [] };
-    return aiSide(rosterId);
+    return aiSide(rosterId, mem);
   };
   const home = override ? { picks: override.home, buffs: [] } : await sideLineup(matchup.home_roster_id);
   const away = override ? { picks: override.away, buffs: [] } : await sideLineup(matchup.away_roster_id);

@@ -37,16 +37,21 @@ export function defaultAiMetric(pos: Pos): string {
 const COMBO_RUSH_YPG = 20;
 const COMBO_REC_YPG = 20;
 
-/** The metric the AI assigns a player pre-game: combodrip for a dual-threat
- *  RB/WR (real rush AND rec volume), otherwise the position default. Honest —
- *  reads only season totals, never the week's result. AI teams get unlocks free
- *  in this milestone; a later one charges coin for them. */
-export function aiMetric(slug: string, pos: Pos): string {
-  if (pos === 'RB' || pos === 'WR') {
-    const s = statsForSlug(slug, pos);
-    const g = Math.max(1, s.games);
-    if (s.rushYds / g >= COMBO_RUSH_YPG && s.recYds / g >= COMBO_REC_YPG) return 'combodrip';
-  }
+/** Whether a dual-threat RB/WR is worth Combo Drip — real season volume on BOTH
+ *  carries and catches. The pre-game read for the AI's combo-drip purchase. */
+export function wantsComboDrip(slug: string, pos: Pos): boolean {
+  if (pos !== 'RB' && pos !== 'WR') return false;
+  const s = statsForSlug(slug, pos);
+  const g = Math.max(1, s.games);
+  return s.rushYds / g >= COMBO_RUSH_YPG && s.recYds / g >= COMBO_REC_YPG;
+}
+
+/** The metric the AI assigns a player pre-game: combodrip for a dual-threat RB/WR
+ *  ONLY when the team actually OWNS the unlock (it's a paid power-up — the AI buys
+ *  it within its coin budget, like a human), otherwise the position default.
+ *  Honest — reads only season totals, never the week's result. */
+export function aiMetric(slug: string, pos: Pos, owned: Set<string> = new Set()): string {
+  if (owned.has('unlock-combo-drip') && wantsComboDrip(slug, pos)) return 'combodrip';
   return defaultAiMetric(pos);
 }
 
@@ -123,10 +128,10 @@ interface Tagged { slug: string; pos: Pos; team: string; metric: string }
  *  human can't use. Without a slate (weeks we have no schedule for) it falls back
  *  to the deterministic grid-fill. No hindsight either way — placement reads only
  *  the schedule and the AI's own roster, never the opponent or the week's result. */
-export function aiLineup(slugs: string[], week = 0): AiPick[] {
+export function aiLineup(slugs: string[], week = 0, owned: Set<string> = new Set()): AiPick[] {
   const tagged: Tagged[] = (slugs ?? []).filter(Boolean).map((slug) => {
     const { pos, team } = slugMeta(slug);
-    return { slug, pos, team, metric: aiMetric(slug, pos) };
+    return { slug, pos, team, metric: aiMetric(slug, pos, owned) };
   });
 
   const picks = hasSlate(week) ? slateGated(tagged, week) : gridFill(tagged);

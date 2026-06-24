@@ -7,6 +7,7 @@ import {
   myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
   myBuffs, armBuff, disarmBuff, LIVE_BUFFS,
   myUnlocks, armUnlock, disarmUnlock,
+  myWallet, ensureWallet,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller,
 } from '../data/liveApi';
 import { powerupById } from '../data/powerups';
@@ -38,6 +39,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   const [picks, setPicks] = useState<Record<string, { player_slug: string | null; metric_id: string | null }>>({});
   const [buffs, setBuffs] = useState<Set<string>>(new Set());
   const [unlocks, setUnlocks] = useState<Set<string>>(new Set());
+  const [coins, setCoins] = useState<number>(0);
   const [buffBusy, setBuffBusy] = useState<string | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'none'>('loading');
   const [saving, setSaving] = useState(false);
@@ -61,6 +63,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         setPicks(map);
         setBuffs(new Set(bf ?? []));
         setUnlocks(new Set(un ?? []));
+        ensureWallet(m.id).then((c) => setCoins(Number(c ?? 0))).catch(() => {}); // seeds once + balance
         setState('ready');
       } catch (e) { setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('none'); }
     })();
@@ -113,14 +116,19 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
     finally { setSaving(false); }
   };
 
+  const refreshCoins = () => { if (matchup) myWallet(matchup.id).then((c) => setCoins(Number(c ?? 0))).catch(() => {}); };
+  const priceOf = (id: string) => powerupById(id)?.price ?? 0;
+  const insufficientMsg = (id: string) => `Not enough drip coin — ${powerupById(id)?.name ?? id} costs ◆${priceOf(id)}, you have ◆${Math.round(coins)}.`;
+
   const toggleBuff = async (id: string) => {
     if (!matchup || locked || buffBusy) return;
     const armed = buffs.has(id);
+    if (!armed && coins < priceOf(id)) { setErr(insufficientMsg(id)); return; }
     setBuffBusy(id); setErr(null);
     try {
       const r = armed ? await disarmBuff(matchup.id, id) : await armBuff(matchup.id, id);
-      if (r.ok && r.buffs) setBuffs(new Set(r.buffs));
-      else if (r.error) setErr(r.error);
+      if (r.ok && r.buffs) { setBuffs(new Set(r.buffs)); refreshCoins(); }
+      else setErr(r.error === 'insufficient' ? insufficientMsg(id) : (r.error ?? 'Could not update power-ups.'));
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not update power-ups.'); }
     finally { setBuffBusy(null); }
   };
@@ -128,11 +136,13 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   const toggleUnlock = async (id: string) => {
     if (!matchup || locked || buffBusy) return;
     const armed = unlocks.has(id);
+    if (!armed && coins < priceOf(id)) { setErr(insufficientMsg(id)); return; }
     setBuffBusy(id); setErr(null);
     try {
       const r = armed ? await disarmUnlock(matchup.id, id) : await armUnlock(matchup.id, id);
       if (r.ok && r.unlocks) {
         setUnlocks(new Set(r.unlocks));
+        refreshCoins();
         // Disarming an unlock clears dependent picks server-side — mirror locally.
         if (armed) setPicks((prev) => {
           const next = { ...prev };
@@ -142,7 +152,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
           }
           return next;
         });
-      } else if (r.error) setErr(r.error);
+      } else setErr(r.error === 'insufficient' ? insufficientMsg(id) : (r.error ?? 'Could not update unlocks.'));
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not update unlocks.'); }
     finally { setBuffBusy(null); }
   };
@@ -200,20 +210,21 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         <div style={{ ...card, marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Power-ups</div>
-            <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{buffs.size} armed · free</span>
+            <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--you)' }}>◆ {Math.round(coins)} coin</span>
           </div>
           <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
-            Arm before kickoff — each buffs your whole lineup all week. Locks at kickoff.
+            Arm before kickoff — each buffs your whole lineup all week, spent from your drip coin. Locks at kickoff.
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
             {LIVE_BUFFS.map((id) => {
               const pu = powerupById(id);
               const on = buffs.has(id);
+              const afford = on || coins >= priceOf(id);
               return (
-                <button key={id} onClick={() => toggleBuff(id)} disabled={locked || !!buffBusy} title={pu?.blurb}
+                <button key={id} onClick={() => toggleBuff(id)} disabled={locked || !!buffBusy || !afford} title={pu?.blurb}
                   className="mono"
-                  style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : 'var(--text)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : 1 }}>
-                  {pu?.icon} {pu?.name ?? id}{on ? ' ✓' : ''}
+                  style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : afford ? 'var(--text)' : 'var(--faint)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked || !afford ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : afford ? 1 : 0.5 }}>
+                  {pu?.icon} {pu?.name ?? id} {on ? '✓' : `◆${priceOf(id)}`}
                 </button>
               );
             })}
@@ -226,11 +237,12 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
             {LIVE_UNLOCKS.map((id) => {
               const pu = powerupById(id);
               const on = unlocks.has(id);
+              const afford = on || coins >= priceOf(id);
               return (
-                <button key={id} onClick={() => toggleUnlock(id)} disabled={locked || !!buffBusy} title={pu?.blurb}
+                <button key={id} onClick={() => toggleUnlock(id)} disabled={locked || !!buffBusy || !afford} title={pu?.blurb}
                   className="mono"
-                  style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : 'var(--text)', background: on ? 'var(--streak, var(--you))' : 'var(--bg)', border: `1px solid ${on ? 'var(--streak, var(--you))' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : 1 }}>
-                  {pu?.icon} {pu?.name ?? id}{on ? ' ✓' : ''}
+                  style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : afford ? 'var(--text)' : 'var(--faint)', background: on ? 'var(--streak, var(--you))' : 'var(--bg)', border: `1px solid ${on ? 'var(--streak, var(--you))' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked || !afford ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : afford ? 1 : 0.5 }}>
+                  {pu?.icon} {pu?.name ?? id} {on ? '✓' : `◆${priceOf(id)}`}
                 </button>
               );
             })}

@@ -360,6 +360,11 @@ export const myUnlocks = (matchupId: string) => rpc<string[]>('my_unlocks', { p_
 
 // Persistent coin wallet (M3): both sides' banked balances for a matchup.
 export const matchupWallets = (matchupId: string) => rpc<{ home: number | null; away: number | null } | null>('matchup_wallets', { p_matchup_id: matchupId });
+
+// Spend (M4): the caller's team balance + a lazy season seed so there's coin to
+// spend before week 1. ensure_wallet seeds once (idempotent) and returns balance.
+export const myWallet = (matchupId: string) => rpc<number>('my_wallet', { p_matchup_id: matchupId });
+export const ensureWallet = (matchupId: string) => rpc<number>('ensure_wallet', { p_matchup_id: matchupId });
 export const adminSetState = (matchupId: string, states: { window: string; home: number; away: number }[], coin?: { home: number; away: number }, slotScores?: { win: string; side: string; slot: string; slug: string; metric: string | null; score: number }[]) =>
   rpc<{ ok: boolean }>('admin_set_state', { p_matchup_id: matchupId, p_states: states, p_home_coin: coin?.home ?? null, p_away_coin: coin?.away ?? null, p_slot_scores: slotScores ?? null });
 export const adminSetCoin = (matchupId: string, home: number, away: number) =>
