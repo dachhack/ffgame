@@ -81,15 +81,21 @@ function CoinPill({ amt }: { amt: number }) {
   );
 }
 
+// Power-ups the guided board demo arms so the authentic board shows them live:
+// Garbage Time (doubles points in the final 5 min — surfaces as a "×2" buff note
+// in the play log) plus an EMP aimed at the featured window (freezes the
+// opponent's drip clock, below).
+const DEMO_BUFFS: Record<string, boolean> = { 'garbage-time': true };
+
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
   const { youTeamId: YOU, navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
-  const buffs = applied[week]?.buffs ?? {};
+  const buffs = demo ? DEMO_BUFFS : (applied[week]?.buffs ?? {});
   const buffsKey = JSON.stringify(buffs);
   const extraSlots = applied[week]?.extraSlots ?? {};
   const swaps = applied[week]?.swaps ?? {};
   const backupAssign = applied[week]?.backups ?? {};
   const aw = applied[week];
-  const extras = { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, emp: aw?.emp };
+  const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, emp: aw?.emp };
   const extrasKey = JSON.stringify(extras);
   const oppId = gameForTeam(YOU, week)?.oppId ?? 'rock-tunnel';
   const you = getTeam(YOU)!;
@@ -266,15 +272,26 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   }, [phase, winPlaying, winTarget, speed]);
 
   // ── guided-demo mode: feature one window and auto-play it on the real board ──
-  // Pick the single richest head-to-head window (most effects / coin / signature
-  // plays) so the 60-second highlight always lands on the action.
+  // Pick the most EXCITING head-to-head window — the most back-and-forth duels
+  // (lead changes, tight margins) plus on-field action — so the 60-second
+  // highlight always lands on a thriller. The board carries the armed demo
+  // power-up (Garbage Time), so its "×2" notes surface live in the play log.
   const demoWin = useMemo(() => {
     if (!demo) return null;
     let best: typeof resolved.windows[number] | null = null;
-    let bestScore = -1;
+    let bestScore = -Infinity;
     for (const rw of resolved.windows) {
-      let score = 0;
-      for (const s of rw.slots) for (const e of s.events) score += (e.effect ? 3 : 0) + (e.coin ? 2 : 0) + (e.sig ? 1 : 0);
+      let action = 0, exc = 0;
+      for (const s of rw.slots) {
+        for (const e of s.events) action += (e.effect ? 3 : 0) + (e.coin ? 2 : 0) + (e.sig ? 1 : 0);
+        if (s.you && s.their) {
+          let flips = 0, prev = 0;
+          for (const e of s.events) { const d = (e.youBank ?? 0) - (e.theirBank ?? 0); if (Math.sign(d) && prev && Math.sign(d) !== prev) flips++; if (Math.sign(d)) prev = Math.sign(d); }
+          const last = s.events[s.events.length - 1];
+          exc += flips * 8 - (last ? Math.abs((last.youBank ?? 0) - (last.theirBank ?? 0)) : 0) * 0.3;
+        }
+      }
+      const score = exc + action;
       if (score > bestScore) { bestScore = score; best = rw; }
     }
     return best;

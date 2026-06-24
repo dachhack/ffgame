@@ -58,7 +58,7 @@ export function DemoOverlay(p: DemoOverlayProps) {
 
       {/* legend */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', justifyContent: 'center', marginTop: 12 }}>
-        {[['💧', 'DRIP'], ['💥', 'NUKE'], ['🩸', 'ERASE'], ['◇', 'COIN']].map(([icon, label]) => (
+        {[['💧', 'DRIP'], ['💥', 'NUKE'], ['🩸', 'ERASE'], ['🗑️', 'POWER-UP'], ['◇', 'COIN']].map(([icon, label]) => (
           <span key={label} className="mono" style={{ fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--faint)' }}>{icon} {label}</span>
         ))}
       </div>
@@ -74,7 +74,7 @@ export function DemoOverlay(p: DemoOverlayProps) {
       {p.ended && (
         <div style={{ marginTop: 18, background: 'var(--surface)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: 18, textAlign: 'center' }}>
           <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>That’s Drip.</div>
-          <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>That was the real in-game board. Pick a hidden metric for every player, then watch real NFL plays make your scores drip, nuke and swing live.</div>
+          <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>That was the real in-game board — the same screen you play on. Pick a hidden metric for every player, arm power-ups like Garbage Time, then watch real NFL plays make your scores drip, nuke and swing live.</div>
           <button onClick={p.onSeeLeague} className="mono" style={{ ...cta, marginTop: 14 }}>◈ See your real league in the game →</button>
           <button onClick={p.onJoinPilot} className="mono" style={{ ...cta, marginTop: 9, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--bd)' }}>join the live H2H pilot →</button>
           <button onClick={p.onReplay} className="mono" style={{ background: 'none', border: 'none', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', cursor: 'pointer', marginTop: 12 }}>↺ watch again</button>
