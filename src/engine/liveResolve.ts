@@ -30,8 +30,10 @@ import { resolveSlot, windowFgMult, teTdNukeClocks, defEarnScore, EMPTY_PLAYER, 
 
 export interface LivePick { win: string; slot: string; player: Player; metricId: string; }
 export interface LiveWindowScore { window: string; home: number; away: number; }
+export interface SlotScore { win: string; slot: string; side: 'home' | 'away'; slug: string; metric: string | null; score: number; }
 export interface LiveResult {
   states: LiveWindowScore[];          // per-window scores, post-backup (sum to the totals)
+  slots: SlotScore[];                 // per-player scores after all adjustments
   home: number; away: number;         // grand totals
   coin: { home: number; away: number };
 }
@@ -186,11 +188,14 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
 
   const byWin: Record<string, { home: number; away: number }> = {};
   let home = 0, away = 0;
+  const slotScores: SlotScore[] = [];
   for (const s of slots) {
     const b = (byWin[s.win] ||= { home: 0, away: 0 });
     b.home += s.home; b.away += s.away;
     home += s.home; away += s.away;
+    if (s.homeP) slotScores.push({ win: s.win, slot: s.slot, side: 'home', slug: s.homeP.id, metric: s.homeMetric, score: s.home });
+    if (s.awayP) slotScores.push({ win: s.win, slot: s.slot, side: 'away', slug: s.awayP.id, metric: s.awayMetric, score: s.away });
   }
   const states = Object.entries(byWin).map(([window, v]) => ({ window, home: round(v.home), away: round(v.away) }));
-  return { states, home: round(home), away: round(away), coin: { home: coinFor(slots, 'home'), away: coinFor(slots, 'away') } };
+  return { states, slots: slotScores, home: round(home), away: round(away), coin: { home: coinFor(slots, 'home'), away: coinFor(slots, 'away') } };
 }

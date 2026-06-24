@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup,
-  type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick,
+  type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
 } from '../data/liveApi';
 import { importLeague, syncWeek } from '../data/sleeperAdmin';
 import { forceResolve } from '../data/forceResolve';
@@ -370,7 +370,7 @@ function Users() {
 const fmtSlug = (slug: string) =>
   slug.replace(/-\d+$/, '').split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
-function PickPills({ picks }: { picks: BoardPick[]; align?: 'left' | 'right' }) {
+function PickPills({ picks }: { picks: BoardPick[] }) {
   if (!picks.length) return null;
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
@@ -379,6 +379,35 @@ function PickPills({ picks }: { picks: BoardPick[]; align?: 'left' | 'right' }) 
           {p.slug ? fmtSlug(p.slug) : '—'}
         </span>
       ))}
+    </div>
+  );
+}
+
+function SlotScoreRows({ slotScores, homeLeads, winTied }: { slotScores: BoardSlotScore[]; homeLeads: boolean; winTied: boolean }) {
+  if (!slotScores.length) return null;
+  const homeSlots = slotScores.filter((x) => x.side === 'home');
+  const awaySlots = slotScores.filter((x) => x.side === 'away');
+  const allSlots = [...new Set([...homeSlots.map((x) => x.slot), ...awaySlots.map((x) => x.slot)])].sort();
+  const rnd = (n: number) => Math.round(n * 10) / 10;
+  return (
+    <div style={{ borderTop: '1px solid var(--bd)', padding: '4px 8px 6px' }}>
+      {allSlots.map((slot) => {
+        const h = homeSlots.find((x) => x.slot === slot);
+        const a = awaySlots.find((x) => x.slot === slot);
+        return (
+          <div key={slot} style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 6, padding: '2px 0' }}>
+            <span className="mono" style={{ ...mono, fontSize: 8.5, color: homeLeads || winTied ? 'var(--text)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {h ? fmtSlug(h.slug ?? '') : <span style={{ color: 'var(--faint)' }}>—</span>}
+              {h && <span style={{ color: homeLeads ? 'var(--you)' : 'var(--faint)', marginLeft: 4 }}>{rnd(h.score)}</span>}
+            </span>
+            <span className="mono" style={{ ...mono, fontSize: 7.5, color: 'var(--faint)', textAlign: 'center', alignSelf: 'center' }}>{h?.metric ?? a?.metric ?? ''}</span>
+            <span className="mono" style={{ ...mono, fontSize: 8.5, color: !homeLeads || winTied ? 'var(--text)' : 'var(--dim)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {a && <span style={{ color: !homeLeads ? 'var(--you)' : 'var(--faint)', marginRight: 4 }}>{rnd(a.score)}</span>}
+              {a ? fmtSlug(a.slug ?? '') : <span style={{ color: 'var(--faint)' }}>—</span>}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -447,13 +476,14 @@ function AdminMatchupBoard({ matchupId, onClose }: { matchupId: string; onClose:
               <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', marginTop: 6 }}>◇ coin {rnd(m.home_coin ?? 0)} / {rnd(m.away_coin ?? 0)}</div>
             )}
 
-            {/* Per-window scores + player names */}
+            {/* Per-window scores + player detail */}
             <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 5 }}>
               {b.states.length === 0 ? <Muted text="No window scores yet — start the sim or a resolve." /> : b.states.map((s) => {
                 const hw = Number(s.home_score);
                 const aw = Number(s.away_score);
                 const winWin = hw > aw;
                 const winTied = hw === aw;
+                const hasSlots = s.slot_scores?.length > 0;
                 return (
                   <div key={s.game_window} style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 5, overflow: 'hidden' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, padding: '5px 8px' }}>
@@ -461,18 +491,21 @@ function AdminMatchupBoard({ matchupId, onClose }: { matchupId: string; onClose:
                       <span className="mono" style={{ ...mono, fontSize: 8.5, letterSpacing: '0.08em', color: 'var(--faint)', textAlign: 'center' }}>{winLabel(s.game_window)}</span>
                       <span className="mono" style={{ ...mono, fontSize: 13, fontWeight: 700, color: !winWin && !winTied ? 'var(--you)' : winTied ? 'var(--text)' : 'var(--dim)', textAlign: 'right' }}>{rnd(aw)}</span>
                     </div>
-                    {(s.home_picks.length > 0 || s.away_picks.length > 0) && (
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, padding: '0 8px 6px' }}>
-                        <PickPills picks={s.home_picks} />
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'flex-end' }}>
-                          {s.away_picks.map((p, i) => (
-                            <span key={i} className="mono" style={{ ...mono, fontSize: 8, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }} title={p.metric ?? ''}>
-                              {p.slug ? fmtSlug(p.slug) : '—'}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    {hasSlots
+                      ? <SlotScoreRows slotScores={s.slot_scores} homeLeads={winWin} winTied={winTied} />
+                      : (s.home_picks.length > 0 || s.away_picks.length > 0) && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, padding: '0 8px 6px' }}>
+                            <PickPills picks={s.home_picks} />
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'flex-end' }}>
+                              {s.away_picks.map((p, i) => (
+                                <span key={i} className="mono" style={{ ...mono, fontSize: 8, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }} title={p.metric ?? ''}>
+                                  {p.slug ? fmtSlug(p.slug) : '—'}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                    }
                   </div>
                 );
               })}
