@@ -255,9 +255,11 @@ export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[
 }
 
 // ── Super admin ─────────────────────────────────────────────────────────────────
-export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; }
+export type Controller = 'human' | 'ai';
+export type LineupPolicy = 'best_lineup' | 'ai' | 'empty';
+export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; }
 export interface AdminUser { id: string; email: string | null; sleeper_username: string | null; sleeper_user_id: string | null; enrolled: number; created_at: string; }
-export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; }
+export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; }
 export interface AdminAdmin { email: string; note: string | null; }
 export interface MemberRow { roster_id: number; owner_id: string | null; team_name: string; }
 export interface MatchupRow { sleeper_matchup_id: number | null; home_roster_id: number; away_roster_id: number; }
@@ -314,7 +316,7 @@ export const adminMatchupBoard = (matchupId: string) => rpc<MatchupBoard>('admin
 export const adminResetMatchup = (matchupId: string) => rpc<{ ok: boolean; error?: string }>('admin_reset_matchup', { p_matchup_id: matchupId });
 
 // ── Pilot ops (migration 0021) ───────────────────────────────────────────────
-export interface PickSide { roster_id: number; team: string | null; app_user_id: string | null; enrolled: boolean; email: string | null; sleeper: string | null; lineup_size: number; picks_set: number; }
+export interface PickSide { roster_id: number; team: string | null; app_user_id: string | null; enrolled: boolean; controller: Controller; email: string | null; sleeper: string | null; lineup_size: number; picks_set: number; }
 export interface PickReadiness { matchup_id: string; week: number; status: string; lock_at: string | null; home_roster_id: number; away_roster_id: number; home: PickSide; away: PickSide; }
 export const adminPickReadiness = (leagueId: string, week: number) => rpc<PickReadiness[]>('admin_pick_readiness', { p_league_id: leagueId, p_week: week });
 export interface AdminHealth { now: string; leagues: number; enrolled: number; matchups_by_status: Record<string, number>; live_matchups: number; live_play_count: number; sim_play_count: number; last_play_ingest: string | null; last_state_update: string | null; }
@@ -323,6 +325,14 @@ export const adminSetPicks = (matchupId: string, appUserId: string, rows: { game
   rpc<{ ok: boolean; count?: number; error?: string }>('admin_set_picks', { p_matchup_id: matchupId, p_app_user_id: appUserId, p_rows: rows });
 export const adminClearPicks = (matchupId: string, appUserId: string) =>
   rpc<{ ok: boolean; error?: string }>('admin_clear_picks', { p_matchup_id: matchupId, p_app_user_id: appUserId });
+
+// ── AI control (migration 0022) ──────────────────────────────────────────────
+export const setTeamController = (leagueId: string, rosterId: number, controller: Controller) =>
+  rpc<{ ok: boolean; error?: string; controller?: Controller }>('set_team_controller', { p_league_id: leagueId, p_roster_id: rosterId, p_controller: controller });
+export const setLineupPolicy = (leagueId: string, policy: LineupPolicy) =>
+  rpc<{ ok: boolean; error?: string; lineup_policy?: LineupPolicy }>('set_lineup_policy', { p_league_id: leagueId, p_policy: policy });
+export const myMembership = (leagueId: string, rosterId: number) =>
+  rpc<{ controller: Controller } | null>('my_membership', { p_league_id: leagueId, p_roster_id: rosterId });
 
 /** Launch the real server-driven live feed sim via the dispatch-sim edge function
  *  (admin-only; the function re-checks is_admin and holds the GitHub token). */

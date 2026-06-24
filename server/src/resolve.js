@@ -18,7 +18,7 @@
 // General + best-ball backups on top of per-slot resolveSlot. DEF suppress,
 // cross-window TE-TD nukes, and the K banker bonus remain simplified there.
 import { db } from './supabase.js';
-import { injectWeek, makePlayer, resolveLiveMatchup, rowsToPbp } from './engine.js';
+import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY } from './engine.js';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
 export function baseScore(plays) {
@@ -56,6 +56,12 @@ async function lineupSlugs(matchup, rosterId) {
   return ((data?.starters_json) ?? []).map((s) => s.player_slug).filter(Boolean);
 }
 
+/** The league's missed-pick policy: 'best_lineup' (default) | 'ai' | 'empty'. */
+async function lineupPolicy(leagueId) {
+  const { data } = await db().from('league').select('lineup_policy').eq('id', leagueId).maybeSingle();
+  return data?.lineup_policy ?? 'best_lineup';
+}
+
 /** Resolve one matchup → write matchup_state (per game_window) + finals when final.
  *  `override` (sim only): { home, away } pick arrays [{win,slot,slug,metric}] that
  *  bypass enrollment/sealed-pick gathering so both sides resolve with full metrics. */
@@ -63,35 +69,56 @@ export async function resolveMatchup(matchup, playerIndex, override) {
   const rows = await weekPlayRows(matchup.week);
   const bySlug = rowsToPbp(rows);
   injectWeek(matchup.week, bySlug);
-  const playsOf = (slug) => bySlug[slug] ?? [];
   const meta = (slug) => playerIndex?.metaForSlug(slug) ?? null;
   const player = (slug) => { const m = meta(slug); return makePlayer(slug, m?.pos, m?.team, m?.full); };
 
   const { data: members } = await db().from('league_membership')
-    .select('sleeper_roster_id,app_user_id,enrolled').eq('league_id', matchup.league_id)
+    .select('sleeper_roster_id,app_user_id,enrolled,controller').eq('league_id', matchup.league_id)
     .in('sleeper_roster_id', [matchup.home_roster_id, matchup.away_roster_id]);
   const byRoster = new Map((members ?? []).map((m) => [m.sleeper_roster_id, m]));
+  const policy = await lineupPolicy(matchup.league_id);
 
-  const homePicks = override ? override.home : await enrolledPicks(matchup, byRoster.get(matchup.home_roster_id));
-  const awayPicks = override ? override.away : await enrolledPicks(matchup, byRoster.get(matchup.away_roster_id));
+  // A side's effective lineup: explicit AI → auto-lineup; a human's sealed picks if
+  // set; an empty seat (no manager) → auto-lineup; an enrolled manager who missed →
+  // the league policy (best_lineup/ai → auto-lineup; empty → null, scores 0).
+  const sidePicks = async (rosterId) => {
+    const mem = byRoster.get(rosterId);
+    if (mem?.controller === 'ai') return autoLineup(await lineupSlugs(matchup, rosterId));
+    const picks = await enrolledPicks(matchup, mem);
+    if (picks) return picks;
+    if (!mem?.enrolled || !mem?.app_user_id) return autoLineup(await lineupSlugs(matchup, rosterId));
+    if (policy === 'empty') return null;
+    return autoLineup(await lineupSlugs(matchup, rosterId));
+  };
+  const homePicks = override ? override.home : await sidePicks(matchup.home_roster_id);
+  const awayPicks = override ? override.away : await sidePicks(matchup.away_roster_id);
 
   const states = []; // { game_window, home_score, away_score }
   let homeTotal = 0, awayTotal = 0;
   let coin = null; // weekly drip-coin per side (only the real-engine H2H path earns it)
+  const toLive = (p) => ({ win: p.win, slot: p.slot, player: player(p.slug), metricId: p.metric || 'rush' });
 
   if (homePicks && awayPicks) {
-    // ── Live H2H: shared resolver, paired by (window, slot) ──
-    const toLive = (p) => ({ win: p.win, slot: p.slot, player: player(p.slug), metricId: p.metric || 'rush' });
+    // ── Both sides have a lineup (human, AI, or auto-backup): real H2H engine ──
     const r = resolveLiveMatchup(homePicks.map(toLive), awayPicks.map(toLive), matchup.week);
     for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
     homeTotal = r.home; awayTotal = r.away; coin = r.coin;
   } else {
-    // ── Fallback: base points off whichever side(s) aren't enrolled picks ──
-    const homeSlugs = homePicks ? homePicks.map((p) => p.slug) : await lineupSlugs(matchup, matchup.home_roster_id);
-    const awaySlugs = awayPicks ? awayPicks.map((p) => p.slug) : await lineupSlugs(matchup, matchup.away_roster_id);
-    homeTotal = round(homeSlugs.reduce((t, s) => t + baseScore(playsOf(s)), 0));
-    awayTotal = round(awaySlugs.reduce((t, s) => t + baseScore(playsOf(s)), 0));
-    states.push({ game_window: 'ALL', home_score: homeTotal, away_score: awayTotal });
+    // ── 'empty' policy: a missed side scores 0; the other scores its lineup solo
+    //    (each slot vs an empty opponent) so the present side isn't corrupted. ──
+    const solo = (picks) => {
+      const byWin = {}; let total = 0;
+      for (const p of picks ?? []) {
+        const r = resolveWindow({ player: player(p.slug), metricId: p.metric || 'rush' }, { player: EMPTY, metricId: 'none' }, matchup.week, '', {});
+        byWin[p.win] = round((byWin[p.win] ?? 0) + r.youFinal); total += r.youFinal;
+      }
+      return { byWin, total: round(total) };
+    };
+    const h = solo(homePicks), a = solo(awayPicks);
+    const wins = new Set([...Object.keys(h.byWin), ...Object.keys(a.byWin)]);
+    for (const w of wins) states.push({ game_window: w, home_score: h.byWin[w] ?? 0, away_score: a.byWin[w] ?? 0 });
+    if (!states.length) states.push({ game_window: 'ALL', home_score: 0, away_score: 0 });
+    homeTotal = h.total; awayTotal = a.total;
   }
 
   const now = new Date().toISOString();

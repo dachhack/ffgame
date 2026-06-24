@@ -223,7 +223,7 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs, jitter, co
   // with full metric effects and nobody has to set a lineup to watch a real duel.
   const rosterIds = [...new Set(live.flatMap((m) => [m.home_roster_id, m.away_roster_id]))];
   const { data: members } = await db().from('league_membership')
-    .select('sleeper_roster_id,app_user_id,enrolled').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
+    .select('sleeper_roster_id,app_user_id,enrolled,controller').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
   const memByRoster = new Map((members ?? []).map((m) => [m.sleeper_roster_id, m]));
   const { data: lineupRows } = await db().from('sleeper_lineup').select('roster_id,starters_json').eq('league_id', leagueId).eq('week', week);
   const startersByRoster = new Map((lineupRows ?? []).map((r) => [r.roster_id, r.starters_json]));
@@ -235,7 +235,8 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs, jitter, co
   };
   const sideFor = async (matchupId, rosterId) => {
     const mem = memByRoster.get(rosterId);
-    if (mem?.enrolled && mem.app_user_id) { const sp = await sealedPicks(matchupId, mem.app_user_id); if (sp) return sp; }
+    // AI-controlled teams skip any human picks and auto-lineup.
+    if (mem?.controller !== 'ai' && mem?.enrolled && mem.app_user_id) { const sp = await sealedPicks(matchupId, mem.app_user_id); if (sp) return sp; }
     return autoLineup(startersByRoster.get(rosterId));
   };
   const lineups = new Map();

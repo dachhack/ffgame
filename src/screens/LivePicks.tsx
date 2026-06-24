@@ -4,8 +4,8 @@ import { windowForTeam, hasSlate } from '../data/nflSlate';
 import { slugMeta } from '../data/slugMeta';
 import type { Pos, WindowId } from '../types';
 import {
-  myRoster, myMatchup, myPool, myPicks, savePicks,
-  type LiveMatchup, type PoolPlayer, type PickRow,
+  myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
+  type LiveMatchup, type PoolPlayer, type PickRow, type Controller,
 } from '../data/liveApi';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16 };
@@ -25,6 +25,9 @@ const fmtLock = (iso: string | null) => {
 
 export function LivePicks({ userId, onBack }: { userId: string; onBack: () => void }) {
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
+  const [roster, setRoster] = useState<{ leagueId: string; rosterId: number } | null>(null);
+  const [controller, setController] = useState<Controller>('human');
+  const [aiBusy, setAiBusy] = useState(false);
   const [pool, setPool] = useState<PoolPlayer[]>([]);
   const [picks, setPicks] = useState<Record<string, { player_slug: string | null; metric_id: string | null }>>({});
   const [state, setState] = useState<'loading' | 'ready' | 'none'>('loading');
@@ -37,6 +40,8 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
       try {
         const r = await myRoster(userId);
         if (!r) { setState('none'); return; }
+        setRoster(r);
+        myMembership(r.leagueId, r.rosterId).then((mm) => { if (mm?.controller) setController(mm.controller); }).catch(() => {});
         const m = await myMatchup(r.leagueId, r.rosterId);
         if (!m) { setState('none'); return; }
         setMatchup(m);
@@ -97,6 +102,15 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
     finally { setSaving(false); }
   };
 
+  const toggleAi = async () => {
+    if (!roster || aiBusy) return;
+    const next: Controller = controller === 'ai' ? 'human' : 'ai';
+    setAiBusy(true);
+    try { const r = await setTeamController(roster.leagueId, roster.rosterId, next); if (r.ok) setController(next); }
+    catch { /* leave as-is */ }
+    finally { setAiBusy(false); }
+  };
+
   if (state === 'loading') return <Muted text="Loading your matchup…" />;
   if (state === 'none') return (
     <div style={card}>
@@ -121,6 +135,18 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
           Pick a player + a hidden metric per slot. Sealed picks stay hidden from your opponent until kickoff. {filled}/{SLOTS.length} set.
           {gateOn && <><br />Each slot only takes players whose real NFL team plays in that window. Players on a bye can’t be slotted.</>}
         </div>
+        {/* Season-long auto-pilot: AI sets the team's best lineup each week. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--bd)' }}>
+          <div style={{ minWidth: 0 }}>
+            <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: controller === 'ai' ? 'var(--you)' : 'var(--text)' }}>🤖 Auto-pilot {controller === 'ai' ? 'ON' : 'OFF'}</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>{controller === 'ai' ? 'AI sets your best lineup each week. Turn off to pick yourself.' : 'Let AI set your best lineup automatically every week.'}</div>
+          </div>
+          <button onClick={toggleAi} disabled={aiBusy} className="mono"
+            style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', color: controller === 'ai' ? 'var(--on-accent)' : 'var(--you)', background: controller === 'ai' ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--you)', borderRadius: 5, padding: '7px 11px', cursor: 'pointer' }}>
+            {aiBusy ? '…' : controller === 'ai' ? 'turn off' : 'turn on'}
+          </button>
+        </div>
+        {controller === 'ai' && <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8 }}>Auto-pilot is on — your manual picks below are paused until you turn it off.</div>}
       </div>
 
       {WINDOWS.map((w) => {

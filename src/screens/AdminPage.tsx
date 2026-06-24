@@ -4,8 +4,9 @@ import {
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
   adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink,
+  setTeamController, setLineupPolicy,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
-  type PickReadiness, type PickSide, type AdminHealth,
+  type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy,
 } from '../data/liveApi';
 import { importLeague, syncWeek } from '../data/sleeperAdmin';
 import { forceResolve } from '../data/forceResolve';
@@ -93,6 +94,12 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
   const [coinVals, setCoinVals] = useState<{ home: string; away: string }>({ home: '', away: '' });
   const [watch, setWatch] = useState<string | null>(null);
   const [sheet, setSheet] = useState<string | null>(null);
+  const [policy, setPolicy] = useState<LineupPolicy>(l.lineup_policy ?? 'best_lineup');
+  const changePolicy = async (p: LineupPolicy) => { setPolicy(p); try { await setLineupPolicy(l.league_id, p); } catch { /* keep optimistic */ } };
+  const toggleMemberAi = async (rosterId: number, cur: Controller | undefined) => {
+    const next: Controller = cur === 'ai' ? 'human' : 'ai';
+    try { await setTeamController(l.league_id, rosterId, next); await loadMembers(); } catch { /* noop */ }
+  };
   const [running, setRunning] = useState(false);
   const openCoin = (m: AdminMatchup) => { setCoinEdit(m.id); setCoinVals({ home: String(m.home_coin ?? ''), away: String(m.away_coin ?? '') }); };
   const saveCoin = async (id: string) => { await adminSetCoin(id, Number(coinVals.home || 0), Number(coinVals.away || 0)); setCoinEdit(null); await loadM(); };
@@ -185,7 +192,19 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
         <button onClick={sync} disabled={busy === 'sync'} className="mono" style={btn(true)}>{busy === 'sync' ? 'syncing…' : 'sync week'}</button>
       </div>
       {busy && busy !== 'sync' && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{busy}</div>}
-      {tab === 'ready' && <PickReadinessTab leagueId={l.league_id} week={Number(week) || 1} admin={admin} />}
+      {tab === 'ready' && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>on missed pick:</span>
+            <select value={policy} onChange={(e) => changePolicy(e.target.value as LineupPolicy)} style={{ ...inp, padding: '4px 6px', fontSize: 11 }}>
+              <option value="best_lineup">force best lineup (stay human)</option>
+              <option value="ai">flip to AI 🤖</option>
+              <option value="empty">leave empty</option>
+            </select>
+          </div>
+          <PickReadinessTab leagueId={l.league_id} week={Number(week) || 1} admin={admin} />
+        </div>
+      )}
       {tab === 'members' && members && (
         <div style={{ marginTop: 10 }}>
           {(() => { const nj = members.filter((m) => !m.enrolled).length; return (
@@ -201,6 +220,8 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
               </div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 {m.email && <SendLink email={m.email} />}
+                <button onClick={() => toggleMemberAi(m.roster_id, m.controller)} className="mono" title={m.controller === 'ai' ? 'hand back to manager' : 'set team to AI auto-pilot'}
+                  style={{ fontSize: 8.5, fontWeight: 700, color: m.controller === 'ai' ? 'var(--on-accent)' : 'var(--dim)', background: m.controller === 'ai' ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}>🤖 {m.controller === 'ai' ? 'AI' : 'off'}</button>
                 <span className="mono" style={{ fontSize: 8.5, color: m.enrolled ? 'var(--you)' : 'var(--faint)', border: `1px solid ${m.enrolled ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '2px 6px' }}>{m.enrolled ? 'JOINED' : '—'}</span>
               </div>
             </div>
@@ -584,6 +605,7 @@ function HealthPanel() {
 }
 
 const SIDE_STATUS = (s: PickSide): { label: string; color: string } => {
+  if (s.controller === 'ai') return { label: '🤖 AI', color: 'var(--you)' };
   if (!s.enrolled) return { label: 'not joined', color: 'var(--faint)' };
   if (s.picks_set === 0) return { label: 'EMPTY', color: 'var(--opp)' };
   if (s.lineup_size && s.picks_set < s.lineup_size) return { label: `PARTIAL ${s.picks_set}/${s.lineup_size}`, color: '#d9a23a' };
@@ -623,6 +645,13 @@ function PickReadinessTab({ leagueId, week, admin }: { leagueId: string; week: n
     try { await adminClearPicks(m.matchup_id, s.app_user_id); setBusy(`✓ cleared ${s.team}`); await load(); }
     catch (e) { setBusy(e instanceof Error ? e.message : 'clear failed'); }
   };
+  const toggleAi = async (m: PickReadiness, side: 'home' | 'away') => {
+    const s = side === 'home' ? m.home : m.away;
+    const next: Controller = s.controller === 'ai' ? 'human' : 'ai';
+    setBusy('ai…');
+    try { const r = await setTeamController(leagueId, s.roster_id, next); setBusy(r.ok ? `✓ ${s.team} → ${next}` : (r.error ?? 'failed')); await load(); }
+    catch (e) { setBusy(e instanceof Error ? e.message : 'ai toggle failed'); }
+  };
 
   const sideRow = (m: PickReadiness, side: 'home' | 'away') => {
     const s = side === 'home' ? m.home : m.away;
@@ -631,7 +660,8 @@ function PickReadinessTab({ leagueId, week, admin }: { leagueId: string; week: n
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0' }}>
         <span style={{ fontSize: 11, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.team ?? `roster ${s.roster_id}`}</span>
         <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, color: st.color, border: `1px solid ${st.color}`, borderRadius: 4, padding: '1px 5px', whiteSpace: 'nowrap' }}>{st.label}</span>
-        {admin && s.enrolled && (
+        <button style={{ ...btn(s.controller === 'ai'), padding: '3px 6px' }} onClick={() => toggleAi(m, side)} title={s.controller === 'ai' ? 'hand back to the manager' : 'set this team to AI auto-pilot'}>🤖</button>
+        {admin && s.enrolled && s.controller !== 'ai' && (
           <>
             <button style={{ ...btn(false), padding: '3px 6px' }} onClick={() => autofill(m, side)} title="fill picks from their synced Sleeper lineup">autofill</button>
             {s.picks_set > 0 && <button style={{ ...btn(false), padding: '3px 6px' }} onClick={() => clear(m, side)} title="clear their picks">✕</button>}
