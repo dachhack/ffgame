@@ -13,6 +13,8 @@ import {
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
+import { buildBeats, type Beat } from '../data/demoNarration';
+import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
 const TICK_MS = 700;
@@ -79,7 +81,7 @@ function CoinPill({ amt }: { amt: number }) {
   );
 }
 
-export function Matchup({ week, initialPhase }: { week: number; initialPhase: Phase }) {
+export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
   const { youTeamId: YOU, navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const buffs = applied[week]?.buffs ?? {};
   const buffsKey = JSON.stringify(buffs);
@@ -97,8 +99,9 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const [phase, setPhase] = useState<Phase>(initialPhase);
   // Seed from any persisted lineup edits so the FINAL screen replays the exact
   // lineup you fielded (Matchup remounts per week, so this initializer is fresh).
-  const [picks, setPicks] = useState<Record<string, Pick>>(() => applied[week]?.lineup ?? {});
-  useEffect(() => { setLineup(week, picks); }, [picks]); // eslint-disable-line react-hooks/exhaustive-deps -- persist lineup edits; setLineup isn't memoized
+  // Demo mode plays the canonical default lineup and never writes to the store.
+  const [picks, setPicks] = useState<Record<string, Pick>>(() => (demo ? {} : applied[week]?.lineup ?? {}));
+  useEffect(() => { if (!demo) setLineup(week, picks); }, [picks]); // eslint-disable-line react-hooks/exhaustive-deps -- persist lineup edits; setLineup isn't memoized
   const [selSlot, setSelSlot] = useState<string | null>(null);
   // Per-window playback: each window runs its own clock + play/pause. The clock
   // is game-elapsed seconds by default, or REAL wall-clock seconds since kickoff
@@ -194,6 +197,7 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
   const weekCoins = earnings.total;
   const [earnOpen, setEarnOpen] = useState(false);
   useEffect(() => {
+    if (demo) return; // the demo never touches the store's coin ledger
     if (phase === 'live' || phase === 'final') creditWeek(week, weekCoins);
   }, [phase, week, weekCoins]);
 
@@ -260,6 +264,31 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     }, TICK_MS);
     return () => clearInterval(id);
   }, [phase, winPlaying, winTarget, speed]);
+
+  // ── guided-demo mode: feature one window and auto-play it on the real board ──
+  // Pick the single richest head-to-head window (most effects / coin / signature
+  // plays) so the 60-second highlight always lands on the action.
+  const demoWin = useMemo(() => {
+    if (!demo) return null;
+    let best: typeof resolved.windows[number] | null = null;
+    let bestScore = -1;
+    for (const rw of resolved.windows) {
+      let score = 0;
+      for (const s of rw.slots) for (const e of s.events) score += (e.effect ? 3 : 0) + (e.coin ? 2 : 0) + (e.sig ? 1 : 0);
+      if (score > bestScore) { bestScore = score; best = rw; }
+    }
+    return best;
+  }, [demo, resolved]);
+  const demoBeats = useMemo<Beat[]>(() => (demoWin ? buildBeats(demoWin.slots.flatMap((s) => s.events)) : []), [demoWin]);
+  // Auto-start the featured window once (at ~2× ⇒ ~60s through a full game).
+  const demoStarted = useRef(false);
+  useEffect(() => {
+    if (!demo || !demoWin || demoStarted.current) return;
+    if (!(demoWin.window.id in winTarget)) return;
+    demoStarted.current = true;
+    setSpeed(2);
+    setWinPlay(demoWin.window.id, true);
+  }, [demo, demoWin, winTarget]); // eslint-disable-line react-hooks/exhaustive-deps -- setWinPlay is a stable hoisted fn
 
   // Auto-open a window's slot logs while it's in progress, auto-collapse them
   // when it finishes (or the board goes FINAL). Fires only on the transition,
@@ -501,6 +530,97 @@ export function Matchup({ week, initialPhase }: { week: number; initialPhase: Ph
     return (
       <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 240, color: 'var(--dim)', fontSize: 12, letterSpacing: '0.08em' }}>
         LOADING WEEK {week}…
+      </div>
+    );
+  }
+
+  // ── REAL-BOARD guided demo: the authentic live board for one featured window,
+  // auto-played and narrated. A separate slim render path so the full setup/live/
+  // final UI below is untouched; it reuses WindowSection + the live playback state.
+  if (demo) {
+    const fid = demoWin?.window.id;
+    if (!demoWin || !fid) {
+      return (
+        <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 240, color: 'var(--dim)', fontSize: 12 }}>
+          Demo unavailable. <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ marginLeft: 6, background: 'none', border: 'none', color: 'var(--you)', cursor: 'pointer' }}>← back</button>
+        </div>
+      );
+    }
+    const dClock = winClocks[fid] ?? 0;
+    const dMax = winTarget[fid] ?? GAME_SECONDS;
+    const dPlaying = !!winPlaying[fid];
+    const dEnded = dClock > 0 && dClock >= dMax;
+    const activeBeat = demoBeats.reduce<Beat | null>((acc, b) => (b.clock <= dClock ? b : acc), null);
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <header style={{ flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 8, padding: isMobile ? '8px 10px' : '8px 16px', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <Brand onClick={() => navigate({ name: 'splash' })} />
+            <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← back</button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <DemoViewToggle view="board" onSwitch={(v) => v === 'clean' && navigate({ name: 'demo', view: 'clean' })} />
+            <ThemeSwitcher />
+          </div>
+        </header>
+        <main style={{ flex: 1, overflow: 'auto', padding: isMobile ? '14px 10px 40px' : '18px 16px 48px' }}>
+          <div style={{ maxWidth: 720, margin: '0 auto' }}>
+            <div style={{ textAlign: 'center', marginBottom: 14 }}>
+              <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>This is the real board</div>
+              <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6 }}>One window of {you.name} vs {opp.name}, auto-playing off real NFL plays. The captions explain each swing as it lands.</div>
+            </div>
+            <WindowSection
+              rw={demoWin}
+              week={week}
+              phase={phase}
+              clock={dClock}
+              maxClock={dMax}
+              wallClock={wallClock}
+              realClock={realResolve}
+              wallSeconds={wallClock ? dClock : ((winMax[fid] ? dClock / winMax[fid] : 0) * (winRealMax[fid] ?? 0))}
+              playing={dPlaying}
+              onTogglePlay={() => setWinPlay(fid, !dPlaying)}
+              onReplay={() => replayWin(fid)}
+              canApplyExtra={false}
+              extraSlotQty={0}
+              onApplyExtra={() => {}}
+              onRemoveExtra={() => {}}
+              onAssignBackup={() => {}}
+              picks={effYouPicks}
+              selSlot={null}
+              pickMetricFor={() => {}}
+              onClearSlot={() => {}}
+              onOpenPicker={() => {}}
+              openPBP={openPBP}
+              togglePBP={(k) => setOpenPBP((o) => ({ ...o, [k]: !o[k] }))}
+              youPools={youPools}
+              inventory={inventory}
+              onAssign={() => {}}
+              turnoverCoin={turnoverCoin}
+              backups={backupAssign}
+              slotName={slotName}
+              armed={buffs}
+              aw={aw}
+              applyMode={null}
+              onApplyToSpot={() => {}}
+              onApplyToWindow={() => {}}
+              onScout={() => {}}
+            />
+            <DemoOverlay
+              beat={activeBeat}
+              clock={dClock}
+              maxClock={dMax}
+              playing={dPlaying}
+              ended={dEnded}
+              speed={speed}
+              onToggle={() => (dEnded ? replayWin(fid) : setWinPlay(fid, !dPlaying))}
+              onReplay={() => replayWin(fid)}
+              onCycleSpeed={() => setSpeed((s) => (s >= 4 ? 1 : s * 2))}
+              onSeeLeague={() => navigate({ name: 'splash' })}
+              onJoinPilot={() => navigate({ name: 'live' })}
+            />
+          </div>
+        </main>
       </div>
     );
   }

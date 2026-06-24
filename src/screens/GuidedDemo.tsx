@@ -6,45 +6,21 @@ import { YOU_TEAM_ID, gameForTeam } from '../data/league';
 import { DEMO_WEEK } from '../config';
 import { METRICS } from '../data/metrics';
 import { loadRealWeek } from '../data/realPbp';
+import { FX_COLOR, fmtClock, buildBeats, type Beat } from '../data/demoNarration';
+import { DemoViewToggle } from './DemoOverlay';
 import type { PbpEvent, Player } from '../types';
 
 // A best-in-class, zero-effort intro to Drip: it auto-plays one real resolved
 // duel (from the deterministic engine) and narrates the core mechanics in plain
 // English as they happen. No lineup-setting, no jargon up front — just watch.
+// This is the "clean" view; a toggle flips to the authentic in-game board.
 
 const TICK_MS = 400;
 const TARGET_TICKS = 130; // ~52s to play through at 1×
 
-interface Beat { clock: number; key: string; icon: string; title: string; body: string; }
 type SlotSide = { player: Player; metricId: string };
 interface Featured { gameLabel: string; winLabel: string; you: SlotSide; their: SlotSide; events: PbpEvent[]; }
 
-const FX_COLOR: Record<string, string> = {
-  nuke: 'var(--fx-nuke, #FF4F62)', erase: 'var(--fx-erase, #FF8A3D)', streak: 'var(--fx-streak, #36D399)',
-  cold: 'var(--fx-stop, #6E7B8C)', mult: 'var(--fx-mult, #C58BFF)', compression: 'var(--fx-compression, #F4C95D)',
-  reset: 'var(--fx-reset, #5BC0EB)', stop: 'var(--fx-stop, #6E7B8C)',
-};
-
-/** Map a play-by-play event to a plain-English teaching beat (or null). */
-function lessonFor(e: PbpEvent): Omit<Beat, 'clock'> | null {
-  if (e.effect) {
-    switch (e.effect.type) {
-      case 'nuke': return { key: 'nuke', icon: '💥', title: 'NUKE', body: 'A touchdown just wiped the other side’s entire banked score to zero.' };
-      case 'erase': return { key: 'erase', icon: '🩸', title: 'ERASE', body: 'That catch erased the last 10 minutes of the opponent’s drip.' };
-      case 'streak': return { key: 'hot', icon: '🔥', title: 'HOT', body: 'Scores keep coming with no answer — the drip rate just doubled.' };
-      case 'cold': return { key: 'cold', icon: '🧊', title: 'COLD', body: 'The opponent finally answered — the hot streak cooled back down.' };
-      case 'reset': return { key: 'reset', icon: '↺', title: 'RATE RESET', body: 'A catch zeroed the opponent’s drip rate — they keep the bank, but rebuild from scratch.' };
-      case 'stop': return { key: 'stop', icon: '⏸', title: 'CLOCK STOP', body: 'A target froze the opponent’s drip clock — pure denial, no erase.' };
-      case 'compression': return { key: 'compression', icon: '🗜️', title: 'COMPRESSION', body: 'A carry streak is trimming the opponent’s most recent score, bit by bit.' };
-      case 'mult': return { key: 'mult', icon: '⚡', title: 'MULTIPLIER', body: 'A Field General QB is multiplying his skill players’ drip — he scores nothing himself.' };
-    }
-  }
-  if (e.coin) return { key: 'coin', icon: '◇', title: 'DRIP COIN', body: 'Big “events of note” pay drip-coin — the currency you spend on power-ups.' };
-  if (e.drip) return { key: 'drip', icon: '💧', title: 'DRIP', body: 'Points trickle in every minute while this player’s team has the ball.' };
-  return null;
-}
-
-const fmtClock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const actionText = (play: string) => play.replace(/^[A-Z]{2,3}( D| TD)?:\s*/, '');
 
 export function GuidedDemo() {
@@ -87,19 +63,7 @@ export function GuidedDemo() {
   const maxClock = useMemo(() => events.reduce((a, e) => Math.max(a, e.clock), 0), [events]);
   const step = Math.max(1, Math.round(maxClock / TARGET_TICKS));
 
-  const beats = useMemo<Beat[]>(() => {
-    const out: Beat[] = [];
-    const taught = new Set<string>();
-    for (const e of events) {
-      const l = lessonFor(e);
-      if (!l) continue;
-      const repeatable = l.key === 'nuke' || l.key === 'erase';
-      if (!repeatable && taught.has(l.key)) continue;
-      taught.add(l.key);
-      out.push({ clock: e.clock, ...l });
-    }
-    return out;
-  }, [events]);
+  const beats = useMemo<Beat[]>(() => buildBeats(events), [events]);
 
   const [clock, setClock] = useState(0);
   const [playing, setPlaying] = useState(true);
@@ -144,7 +108,10 @@ export function GuidedDemo() {
         <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}>◈ DRIP LEAGUE FF · DEMO</span>
         <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← back</button>
       </div>
-      <ThemeSwitcher />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <DemoViewToggle view="clean" onSwitch={(v) => v === 'board' && navigate({ name: 'demo', view: 'board' })} />
+        <ThemeSwitcher />
+      </div>
     </header>
   );
 

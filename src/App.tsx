@@ -10,6 +10,7 @@ import { Leagues } from './screens/Leagues';
 import { SleeperLeague } from './screens/SleeperLeague';
 import { LiveOnboard } from './screens/LiveOnboard';
 import { GuidedDemo } from './screens/GuidedDemo';
+import { DEMO_WEEK } from './config';
 
 export function App() {
   const { theme, route, youTeamId, navigate } = useStore();
@@ -47,7 +48,9 @@ export function App() {
     >
       {route.name === 'splash' && <Splash />}
       {route.name === 'live' && <LiveOnboard />}
-      {route.name === 'demo' && <GuidedDemo />}
+      {route.name === 'demo' && (route.view === 'board'
+        ? <Matchup key="demo-board" week={DEMO_WEEK} initialPhase="live" demo />
+        : <GuidedDemo />)}
       {route.name === 'leagues' && <Leagues />}
       {route.name === 'sleeperLeague' && <SleeperLeague key={route.leagueId} leagueId={route.leagueId} leagueName={route.leagueName} />}
       {route.name === 'hub' && <LeagueHub />}
