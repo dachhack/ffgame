@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup,
-  type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard,
+  type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick,
 } from '../data/liveApi';
 import { importLeague, syncWeek } from '../data/sleeperAdmin';
 import { forceResolve } from '../data/forceResolve';
@@ -112,6 +112,25 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
     try { for (const m of matchups) await adminResetMatchup(m.id); setBusy(`✓ reset ${matchups.length} matchups`); await loadM(); }
     catch (e) { setBusy(e instanceof Error ? e.message : 'reset failed'); }
   };
+  const finalizeAll = async () => {
+    if (!matchups?.length) return;
+    setBusy('finalize all');
+    try { for (const m of matchups) await adminSetMatchup(m.id, 'final'); setBusy(`✓ finalized ${matchups.length} matchups`); await loadM(); }
+    catch (e) { setBusy(e instanceof Error ? e.message : 'finalize failed'); }
+  };
+  const replay = async () => {
+    if (!matchups?.length) return;
+    if (!confirm(`Replay: reset all ${matchups.length} matchups then resolve from 2025 wk ${srcWeek}?`)) return;
+    setBusy('resetting…');
+    try {
+      for (const m of matchups) await adminResetMatchup(m.id);
+      setBusy('resolving…');
+      for (const m of matchups) await forceResolve(m.id, Number(srcWeek));
+      setBusy(`✓ replayed ${matchups.length} matchups`);
+      await loadM();
+    }
+    catch (e) { setBusy(e instanceof Error ? e.message : 'replay failed'); }
+  };
 
   const loadM = async () => setMatchups(await adminMatchups(l.league_id));
   const loadMembers = async () => setMembers(await adminLeagueMembers(l.league_id));
@@ -180,8 +199,10 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
               <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>from 2025 wk</span>
               <input value={srcWeek} onChange={(e) => setSrcWeek(e.target.value.replace(/\D/g, ''))} style={{ ...inp, width: 32, padding: '4px 5px', textAlign: 'center' }} />
-              <button style={btn(true)} onClick={resolveAll} disabled={busy === 'resolve all'} title="run the real engine on every matchup — lights up the whole board">{busy === 'resolve all' ? 'resolving…' : '▶▶ resolve all'}</button>
-              <button style={btn(false)} onClick={resetAll} disabled={busy === 'reset all'} title="clear every matchup → scheduled, scores wiped">{busy === 'reset all' ? 'resetting…' : '↺ reset all'}</button>
+              <button style={btn(true)} onClick={resolveAll} disabled={!!busy} title="run the real engine on every matchup — lights up the whole board">{busy === 'resolve all' || busy === 'resolving…' ? 'resolving…' : '▶▶ resolve all'}</button>
+              <button style={btn(false)} onClick={resetAll} disabled={!!busy} title="clear every matchup → scheduled, scores wiped">{busy === 'reset all' || busy === 'resetting…' ? 'resetting…' : '↺ reset all'}</button>
+              <button style={btn(false)} onClick={finalizeAll} disabled={!!busy} title="mark every matchup final">{'✓✓ finalize all'}</button>
+              <button style={{ ...btn(false), borderColor: 'var(--you)', color: 'var(--you)' }} onClick={replay} disabled={!!busy} title="reset all → resolve all in one click">{busy === 'resetting…' || busy === 'resolving…' ? busy : '↺▶ replay'}</button>
             </div>
           )}
           {matchups.length === 0 ? <Muted text="No matchups (run sync week)." /> : matchups.map((m) => (
@@ -345,6 +366,23 @@ function Users() {
   );
 }
 
+// "patrick-mahomes-10" → "Patrick Mahomes"
+const fmtSlug = (slug: string) =>
+  slug.replace(/-\d+$/, '').split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+function PickPills({ picks }: { picks: BoardPick[]; align?: 'left' | 'right' }) {
+  if (!picks.length) return null;
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+      {picks.map((p, i) => (
+        <span key={i} className="mono" style={{ ...mono, fontSize: 8, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }} title={p.metric ?? ''}>
+          {p.slug ? fmtSlug(p.slug) : '—'}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // Watch ANY matchup's live board animate — polls admin_matchup_board every 2.5s.
 // No enrollment, no Sleeper mapping; works for a real game or a feed sim.
 function AdminMatchupBoard({ matchupId, onClose }: { matchupId: string; onClose: () => void }) {
@@ -366,10 +404,16 @@ function AdminMatchupBoard({ matchupId, onClose }: { matchupId: string; onClose:
   const awayTotal = (b?.states ?? []).reduce((t, s) => t + Number(s.away_score), 0);
   const rnd = (n: number) => Math.round(n * 10) / 10;
   const live = m?.status === 'live';
+  const isFinal = m?.status === 'final';
+  const homeScore = rnd(m?.home_final ?? homeTotal);
+  const awayScore = rnd(m?.away_final ?? awayTotal);
+  const homeLeads = homeScore > awayScore;
+  const tied = homeScore === awayScore;
+  const margin = rnd(Math.abs(homeScore - awayScore));
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--bg)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 10, padding: 18, maxHeight: '90vh', overflow: 'auto' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 440, background: 'var(--bg)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 10, padding: 18, maxHeight: '90vh', overflow: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <span className="mono" style={{ ...mono, fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)', fontWeight: 700 }}>
             LIVE BOARD{m ? ` · W${m.week}` : ''}
@@ -380,28 +424,58 @@ function AdminMatchupBoard({ matchupId, onClose }: { matchupId: string; onClose:
         {err && <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--opp)', marginBottom: 8 }}>{err}</div>}
         {!b && !err ? <Muted text="Loading…" /> : m && (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 10 }}>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.home_team ?? `roster ${m.home_roster_id}`}</div>
-                <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, color: 'var(--you)', lineHeight: 1.1 }}>{rnd(m.home_final ?? homeTotal)}</div>
+            {/* Scoreboard header */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'end', gap: 8 }}>
+              <div style={{ minWidth: 0 }}>
+                {isFinal && homeLeads && <div className="mono" style={{ ...mono, fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', marginBottom: 3 }}>WINNER ▲</div>}
+                <div style={{ fontSize: 12, fontWeight: 700, color: homeLeads ? 'var(--you)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.home_team ?? `roster ${m.home_roster_id}`}</div>
+                <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, color: homeLeads ? 'var(--you)' : tied ? 'var(--text)' : 'var(--dim)', lineHeight: 1.1 }}>{homeScore}</div>
               </div>
-              <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)', paddingBottom: 8 }}>vs</span>
-              <div style={{ minWidth: 0, flex: 1, textAlign: 'right' }}>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.away_team ?? `roster ${m.away_roster_id}`}</div>
-                <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, color: 'var(--text)', lineHeight: 1.1 }}>{rnd(m.away_final ?? awayTotal)}</div>
+              <div style={{ textAlign: 'center', paddingBottom: 6 }}>
+                <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}>vs</span>
+                {!tied && (homeScore > 0 || awayScore > 0) && (
+                  <div className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--dim)', marginTop: 2 }}>{homeLeads ? '←' : '→'} +{margin}</div>
+                )}
+              </div>
+              <div style={{ minWidth: 0, textAlign: 'right' }}>
+                {isFinal && !homeLeads && !tied && <div className="mono" style={{ ...mono, fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', marginBottom: 3, textAlign: 'right' }}>▲ WINNER</div>}
+                <div style={{ fontSize: 12, fontWeight: 700, color: !homeLeads && !tied ? 'var(--you)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{b.away_team ?? `roster ${m.away_roster_id}`}</div>
+                <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, color: !homeLeads && !tied ? 'var(--you)' : tied ? 'var(--text)' : 'var(--dim)', lineHeight: 1.1, textAlign: 'right' }}>{awayScore}</div>
               </div>
             </div>
             {(m.home_coin != null || m.away_coin != null) && (
               <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', marginTop: 6 }}>◇ coin {rnd(m.home_coin ?? 0)} / {rnd(m.away_coin ?? 0)}</div>
             )}
-            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {b.states.length === 0 ? <Muted text="No window scores yet — start the sim or a resolve." /> : b.states.map((s) => (
-                <div key={s.game_window} style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, padding: '5px 8px', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 5 }}>
-                  <span className="mono" style={{ ...mono, fontSize: 13, fontWeight: 700, color: 'var(--you)' }}>{rnd(Number(s.home_score))}</span>
-                  <span className="mono" style={{ ...mono, fontSize: 8.5, letterSpacing: '0.08em', color: 'var(--faint)', textAlign: 'center' }}>{winLabel(s.game_window)}</span>
-                  <span className="mono" style={{ ...mono, fontSize: 13, fontWeight: 700, color: 'var(--text)', textAlign: 'right' }}>{rnd(Number(s.away_score))}</span>
-                </div>
-              ))}
+
+            {/* Per-window scores + player names */}
+            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {b.states.length === 0 ? <Muted text="No window scores yet — start the sim or a resolve." /> : b.states.map((s) => {
+                const hw = Number(s.home_score);
+                const aw = Number(s.away_score);
+                const winWin = hw > aw;
+                const winTied = hw === aw;
+                return (
+                  <div key={s.game_window} style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 5, overflow: 'hidden' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, padding: '5px 8px' }}>
+                      <span className="mono" style={{ ...mono, fontSize: 13, fontWeight: 700, color: winWin ? 'var(--you)' : winTied ? 'var(--text)' : 'var(--dim)' }}>{rnd(hw)}</span>
+                      <span className="mono" style={{ ...mono, fontSize: 8.5, letterSpacing: '0.08em', color: 'var(--faint)', textAlign: 'center' }}>{winLabel(s.game_window)}</span>
+                      <span className="mono" style={{ ...mono, fontSize: 13, fontWeight: 700, color: !winWin && !winTied ? 'var(--you)' : winTied ? 'var(--text)' : 'var(--dim)', textAlign: 'right' }}>{rnd(aw)}</span>
+                    </div>
+                    {(s.home_picks.length > 0 || s.away_picks.length > 0) && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, padding: '0 8px 6px' }}>
+                        <PickPills picks={s.home_picks} />
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'flex-end' }}>
+                          {s.away_picks.map((p, i) => (
+                            <span key={i} className="mono" style={{ ...mono, fontSize: 8, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }} title={p.metric ?? ''}>
+                              {p.slug ? fmtSlug(p.slug) : '—'}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <div className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)', textAlign: 'center', marginTop: 10 }}>
               {live && <span style={{ color: 'var(--you)' }}>auto-refreshing every 2.5s · </span>}
