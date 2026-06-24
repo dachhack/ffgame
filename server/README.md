@@ -15,7 +15,9 @@ npm install
 npm start                   # the scheduler (src/index.js)
 ```
 
-Manual ops (CLI):
+Manual ops (CLI). No local shell? The **Sync pilot league** GitHub Action runs
+`sync` + `sync-week` from the UI (mode `both` = one-click prep), then **Simulate
+live feed** drives the run — the whole pilot without local creds.
 ```bash
 node src/cli.js sync <sleeperLeagueId>        # import league + memberships/enrollment
 node src/cli.js sync-week <leagueId> <week>   # mirror that week's schedule + lineups

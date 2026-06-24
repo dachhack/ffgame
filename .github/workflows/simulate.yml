@@ -1,6 +1,7 @@
 name: Simulate live feed
 
 # Manual dress-rehearsal of the live pipeline. Three modes (input `mode`):
+#   (Prep first: run the "Sync pilot league" workflow to mirror the league + week.)
 #   • dry   — offline; replays a baked week through the engine + asserts the
 #             live_play round-trip (no secrets, no DB). Safe anytime.
 #   • check — connects with the service-role secret and READS (counts matchups).
