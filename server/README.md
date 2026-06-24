@@ -21,7 +21,31 @@ node src/cli.js sync <sleeperLeagueId>        # import league + memberships/enro
 node src/cli.js sync-week <leagueId> <week>   # mirror that week's schedule + lineups
 node src/cli.js poll-once                     # one plays pass for the current week
 node src/cli.js inj-once                      # one injury poll
+node src/cli.js simulate <leagueId> <week>    # replay a baked week through the LIVE feed
+node src/cli.js simulate --dry --week=1       # feed round-trip check, no DB
 ```
+
+## Simulate the ESPN feed (dress rehearsal)
+Before pointing at real ESPN, prove the whole live path with our baked 2025 data.
+The baker and the ESPN adapter both emit the same `RealPlay` shape, so replaying
+baked plays into `live_play` exercises everything downstream for real — only the
+literal ESPN fetch in `poll/plays.js` is bypassed.
+
+```bash
+# DRY — no DB. Time-released feed → real engine, then assert the live_play row
+# shape reproduces every player's baked points exactly (the property the swap
+# depends on). Runs offline; this is also the validate-feed CI gate.
+npm run cli -- simulate --dry --week=1 [--speed=900] [--tick=1000]
+
+# LIVE — drive a real test matchup in Supabase. Locks picks, goes live, clears the
+# prior feed, then drips baked plays into live_play on a timer, re-resolving each
+# tick. Open that matchup's live board and watch it animate; ends FINAL.
+npm run cli -- simulate <leagueId> <week> [--src=<bakedWeek>] [--speed=600] [--tick=1000]
+```
+`--speed` = game-seconds advanced per tick; `--tick` = real ms per tick (use a big
+speed + `--tick=0` for an instant full-game pass). The slate is released on one
+concurrent timeline (all games from kickoff t=0); per-game kickoff staggering is a
+later refinement.
 
 ## Layout
 | File | Role |

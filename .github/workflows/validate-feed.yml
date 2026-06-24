@@ -1,0 +1,41 @@
+name: Validate live-feed round-trip
+
+# Proves the LIVE pipeline is lossless end to end without touching ESPN: replays
+# every baked week's plays through the live_play row shape → the real engine, and
+# asserts each player's points reproduce the baked total exactly. Together with
+# validate-espn (ESPN-feed ACCURACY vs baked) this covers the whole chain:
+#   ESPN → adapter (accurate) → live_play → engine (lossless) → scores.
+# Runs when the worker, the engine, or the baked data changes.
+on:
+  push:
+    paths:
+      - 'server/src/**'
+      - 'public/pbp/**'
+      - 'src/engine/**'
+      - 'src/data/realPbp.ts'
+      - '.github/workflows/validate-feed.yml'
+  workflow_dispatch:
+
+jobs:
+  feed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Install worker deps
+        working-directory: server
+        run: npm ci
+      - name: Feed round-trip — every baked week
+        working-directory: server
+        run: |
+          set -uo pipefail
+          fail=0
+          for f in ../public/pbp/w*.json; do
+            w=$(basename "$f" .json); w=${w#w}
+            echo "── week $w ──"
+            out=$(npm run --silent cli -- simulate --dry --week="$w" --speed=100000 --tick=0); rc=$?
+            echo "$out" | grep -E "round-trip|PASS|FAIL" || true
+            [ $rc -eq 0 ] || { echo "::error::week $w feed round-trip FAILED"; fail=1; }
+          done
+          exit $fail
