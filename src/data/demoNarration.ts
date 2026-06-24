@@ -12,6 +12,7 @@ export const FX_COLOR: Record<string, string> = {
   cold: 'var(--fx-stop, #6E7B8C)', mult: 'var(--fx-mult, #C58BFF)', compression: 'var(--fx-compression, #F4C95D)',
   reset: 'var(--fx-reset, #5BC0EB)', stop: 'var(--fx-stop, #6E7B8C)',
   hot: 'var(--fx-streak, #36D399)', coin: 'var(--you)', drip: 'var(--you)', intro: 'var(--you)',
+  power: 'var(--fx-streak, #36D399)', freeze: 'var(--fx-reset, #5BC0EB)',
 };
 
 /** Map a play-by-play event to a plain-English teaching beat (or null). */
@@ -28,6 +29,7 @@ export function lessonFor(e: PbpEvent): Omit<Beat, 'clock'> | null {
       case 'mult': return { key: 'mult', icon: '⚡', title: 'MULTIPLIER', body: 'A Field General QB is multiplying his skill players’ drip — he scores nothing himself.' };
     }
   }
+  if (e.buffNote) return { key: 'power', icon: '🗑️', title: 'POWER-UP', body: 'A power-up you armed before kickoff just fired — Garbage Time doubles every point scored in the final five minutes.' };
   if (e.coin) return { key: 'coin', icon: '◇', title: 'DRIP COIN', body: 'Big “events of note” pay drip-coin — the currency you spend on power-ups.' };
   if (e.drip) return { key: 'drip', icon: '💧', title: 'DRIP', body: 'Points trickle in every minute while this player’s team has the ball.' };
   return null;
