@@ -74,6 +74,19 @@ export function metricById(pos: Pos, id: string | null | undefined): Metric | un
   return (METRICS[pos] || []).find((m) => m.id === id);
 }
 
+/** Map every locked metric_id → the power-up that unlocks it, derived straight
+ *  from the catalog's own `lock:` fields so there's one source of truth. A
+ *  sealed pick on a locked metric is only legal once its unlock is armed; the DB
+ *  trigger (migration 0024) enforces the same map server-side, and a parity test
+ *  (scripts/check-locked-metrics.mjs) keeps the two in lockstep. */
+export const LOCKED_METRIC_UNLOCK: Record<string, string> = (() => {
+  const out: Record<string, string> = {};
+  for (const list of Object.values(METRICS)) {
+    for (const m of list) if (m.lock && !(m.id in out)) out[m.id] = m.lock;
+  }
+  return out;
+})();
+
 /** A sensible default metric for auto-filled / opponent lineups. */
 export function defaultMetric(pos: Pos): Metric {
   const list = (METRICS[pos] || METRICS.WR).filter((m) => !m.lock);

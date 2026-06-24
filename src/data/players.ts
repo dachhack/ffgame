@@ -93,6 +93,26 @@ export function statsForName(fullName: string, pos: Pos): PlayerStats {
   return { ...DEFAULTS[pos] };
 }
 
+// Season stats keyed by engine slug (normName(name) with spaces → hyphens), the
+// same id buildPlayer assigns. Lets the pre-game AI read a player's real season
+// volume from just a slug (it has no full name on hand).
+const SLUG_INDEX = new Map<string, StatRow>();
+for (const r of ALL_ROWS) {
+  const key = normName(r.name).replace(/\s+/g, '-');
+  if (!SLUG_INDEX.has(key)) SLUG_INDEX.set(key, r);
+}
+
+/** Season totals for an engine slug, falling back to the position's baseline
+ *  line when the slug isn't in the stats DB (deep bench / rookie). */
+export function statsForSlug(slug: string, pos: Pos): PlayerStats {
+  const row = SLUG_INDEX.get(slug);
+  if (row) {
+    const { name: _n, pos: _p, team: _t, ...stats } = row;
+    return stats;
+  }
+  return { ...DEFAULTS[pos] };
+}
+
 /** Real recent NFL team for a player, from the stats DB ('' if unknown). */
 export function teamForName(fullName: string): string {
   return STAT_INDEX.get(normName(fullName))?.team ?? '';

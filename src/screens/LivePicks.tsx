@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { WINDOWS, METRICS } from '../data/metrics';
+import { WINDOWS, METRICS, LOCKED_METRIC_UNLOCK } from '../data/metrics';
 import { windowForTeam, hasSlate } from '../data/nflSlate';
 import { slugMeta } from '../data/slugMeta';
 import type { Pos, WindowId } from '../types';
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
   myBuffs, armBuff, disarmBuff, LIVE_BUFFS,
+  myUnlocks, armUnlock, disarmUnlock,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller,
 } from '../data/liveApi';
 import { powerupById } from '../data/powerups';
+
+// The metric unlocks a manager can arm, in display order (ids match powerups.ts).
+const LIVE_UNLOCKS = ['unlock-combo-drip', 'unlock-return', 'unlock-pass-td10'] as const;
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16 };
 const sel: React.CSSProperties = { fontFamily: 'inherit', fontSize: 12.5, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 8px', outline: 'none', width: '100%', boxSizing: 'border-box' };
@@ -33,6 +37,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   const [pool, setPool] = useState<PoolPlayer[]>([]);
   const [picks, setPicks] = useState<Record<string, { player_slug: string | null; metric_id: string | null }>>({});
   const [buffs, setBuffs] = useState<Set<string>>(new Set());
+  const [unlocks, setUnlocks] = useState<Set<string>>(new Set());
   const [buffBusy, setBuffBusy] = useState<string | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'none'>('loading');
   const [saving, setSaving] = useState(false);
@@ -49,12 +54,13 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         const m = await myMatchup(r.leagueId, r.rosterId);
         if (!m) { setState('none'); return; }
         setMatchup(m);
-        const [pl, pk, bf] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId), myBuffs(m.id)]);
+        const [pl, pk, bf, un] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId), myBuffs(m.id), myUnlocks(m.id)]);
         setPool(pl);
         const map: Record<string, { player_slug: string | null; metric_id: string | null }> = {};
         for (const p of pk) map[`${p.game_window}-${p.roster_slot}`] = { player_slug: p.player_slug, metric_id: p.metric_id };
         setPicks(map);
         setBuffs(new Set(bf ?? []));
+        setUnlocks(new Set(un ?? []));
         setState('ready');
       } catch (e) { setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('none'); }
     })();
@@ -116,6 +122,28 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
       if (r.ok && r.buffs) setBuffs(new Set(r.buffs));
       else if (r.error) setErr(r.error);
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not update power-ups.'); }
+    finally { setBuffBusy(null); }
+  };
+
+  const toggleUnlock = async (id: string) => {
+    if (!matchup || locked || buffBusy) return;
+    const armed = unlocks.has(id);
+    setBuffBusy(id); setErr(null);
+    try {
+      const r = armed ? await disarmUnlock(matchup.id, id) : await armUnlock(matchup.id, id);
+      if (r.ok && r.unlocks) {
+        setUnlocks(new Set(r.unlocks));
+        // Disarming an unlock clears dependent picks server-side — mirror locally.
+        if (armed) setPicks((prev) => {
+          const next = { ...prev };
+          for (const k of Object.keys(next)) {
+            const mid = next[k].metric_id;
+            if (mid && LOCKED_METRIC_UNLOCK[mid] === id) next[k] = { ...next[k], metric_id: null };
+          }
+          return next;
+        });
+      } else if (r.error) setErr(r.error);
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Could not update unlocks.'); }
     finally { setBuffBusy(null); }
   };
 
@@ -190,6 +218,23 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
               );
             })}
           </div>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 14, marginBottom: 2, fontWeight: 700, letterSpacing: '0.06em' }}>METRIC UNLOCKS</div>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.5 }}>
+            Arm one to make its locked metric pickable (🔓) in the slots below.
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            {LIVE_UNLOCKS.map((id) => {
+              const pu = powerupById(id);
+              const on = unlocks.has(id);
+              return (
+                <button key={id} onClick={() => toggleUnlock(id)} disabled={locked || !!buffBusy} title={pu?.blurb}
+                  className="mono"
+                  style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : 'var(--text)', background: on ? 'var(--streak, var(--you))' : 'var(--bg)', border: `1px solid ${on ? 'var(--streak, var(--you))' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : 1 }}>
+                  {pu?.icon} {pu?.name ?? id}{on ? ' ✓' : ''}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -204,7 +249,8 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
           {SLOTS.filter((s) => s.win === w.id).map((s) => {
             const p = picks[s.key] ?? { player_slug: null, metric_id: null };
             const pos = (p.player_slug ? posBySlug[p.player_slug] : null) as Pos | null;
-            const metrics = pos ? (METRICS[pos] ?? []).filter((m) => !m.lock) : [];
+            // Locked metrics appear only once their unlock power-up is armed.
+            const metrics = pos ? (METRICS[pos] ?? []).filter((m) => !m.lock || unlocks.has(m.lock)) : [];
             const options = eligibleFor(w.id, p.player_slug);
             return (
               <div key={s.key} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
@@ -214,7 +260,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
                 </select>
                 <select value={p.metric_id ?? ''} disabled={locked || !pos} onChange={(e) => setSlot(s.key, { metric_id: e.target.value || null })} style={{ ...sel, flex: 1 }}>
                   <option value="">— metric —</option>
-                  {metrics.map((m) => <option key={m.id} value={m.id}>{m.name} · {m.tag}</option>)}
+                  {metrics.map((m) => <option key={m.id} value={m.id}>{m.lock ? '🔓 ' : ''}{m.name} · {m.tag}</option>)}
                 </select>
               </div>
             );

@@ -10,6 +10,7 @@
 import type { Pos } from '../types';
 import { WINDOWS, TOTAL_SLOTS, metricById } from './metrics';
 import { slugMeta } from './slugMeta';
+import { statsForSlug } from './players';
 
 // Sensible default metric per position. Each is a steady, predictable scorer for
 // that spot — chosen WITHOUT seeing the week's box score. This also fixes a real
@@ -25,6 +26,27 @@ export const DEFAULT_AI_METRIC: Record<Pos, string> = {
 /** The honest default scoring metric for a position. */
 export function defaultAiMetric(pos: Pos): string {
   return DEFAULT_AI_METRIC[pos] ?? 'rush';
+}
+
+// Combo Drip pays only for a genuine dual-threat: the default rush (RB) / recyd
+// (WR) drip counts ONE phase of touches, while combodrip feeds the drip from
+// BOTH carries and catches. So the AI arms it only when a player has real season
+// volume on each side — a pure runner or pure receiver gains nothing. Per-game
+// yard floors (tunable).
+const COMBO_RUSH_YPG = 20;
+const COMBO_REC_YPG = 20;
+
+/** The metric the AI assigns a player pre-game: combodrip for a dual-threat
+ *  RB/WR (real rush AND rec volume), otherwise the position default. Honest —
+ *  reads only season totals, never the week's result. AI teams get unlocks free
+ *  in this milestone; a later one charges coin for them. */
+export function aiMetric(slug: string, pos: Pos): string {
+  if (pos === 'RB' || pos === 'WR') {
+    const s = statsForSlug(slug, pos);
+    const g = Math.max(1, s.games);
+    if (s.rushYds / g >= COMBO_RUSH_YPG && s.recYds / g >= COMBO_REC_YPG) return 'combodrip';
+  }
+  return defaultAiMetric(pos);
 }
 
 export interface AiPick { win: string; slot: string; slug: string; metric: string }
@@ -95,9 +117,10 @@ export function aiLiveBuffs(teamKey: string, week: number, n = 3): string[] {
  *  1-slot window (e.g. TNF) could never run Field General. Returns
  *  [{ win, slot, slug, metric }] — the shape sealed picks resolve from. */
 export function aiLineup(slugs: string[]): AiPick[] {
-  const tagged = (slugs ?? []).filter(Boolean).slice(0, TOTAL_SLOTS).map((slug) => ({
-    slug, pos: slugMeta(slug).pos, metric: defaultAiMetric(slugMeta(slug).pos),
-  }));
+  const tagged = (slugs ?? []).filter(Boolean).slice(0, TOTAL_SLOTS).map((slug) => {
+    const pos = slugMeta(slug).pos;
+    return { slug, pos, metric: aiMetric(slug, pos) };
+  });
 
   // Reserve the first QB for slot 0 of the largest window (3-slot 'early'); the
   // rest fill the grid in roster order around it.
