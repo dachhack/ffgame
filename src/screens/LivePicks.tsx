@@ -8,8 +8,8 @@ import {
   myBuffs, armBuff, disarmBuff, LIVE_BUFFS,
   myUnlocks, armUnlock, disarmUnlock,
   myWallet, ensureWallet,
-  myExtra, buyExtraSlot, sellExtraSlot, liveSlate,
-  type LiveMatchup, type PoolPlayer, type PickRow, type Controller,
+  myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams,
+  type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
 } from '../data/liveApi';
 import { powerupById } from '../data/powerups';
 
@@ -33,6 +33,7 @@ const fmtLock = (iso: string | null) => {
 
 export function LivePicks({ userId, onBack }: { userId: string; onBack: () => void }) {
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
+  const [myTeam, setMyTeam] = useState<TeamInfo | null>(null);
   const [roster, setRoster] = useState<{ leagueId: string; rosterId: number } | null>(null);
   const [controller, setController] = useState<Controller>('human');
   const [aiBusy, setAiBusy] = useState(false);
@@ -60,6 +61,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         const m = await myMatchup(r.leagueId, r.rosterId);
         if (!m) { setState('none'); return; }
         setMatchup(m);
+        matchupTeams(r.leagueId, [r.rosterId]).then((t) => setMyTeam(t[r.rosterId] ?? null)).catch(() => {});
         const [pl, pk, bf, un, ex, slate] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId), myBuffs(m.id), myUnlocks(m.id), myExtra(m.id).catch(() => 0), liveSlate(m.week).catch(() => [])]);
         // Apply the live ESPN slate (overrides baked 2025) before gating below.
         setRuntimeSlate(m.week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId })));
@@ -240,8 +242,14 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
     <div>
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Week {matchup!.week} lineup</div>
-          <span className="mono" style={{ fontSize: 9, color: locked ? 'var(--opp)' : 'var(--you)', border: `1px solid ${locked ? 'var(--opp)' : 'var(--you)'}`, borderRadius: 4, padding: '3px 7px' }}>{locked ? 'LOCKED' : `LOCKS ${fmtLock(matchup!.lock_at)}`}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            {myTeam?.avatar && <img src={myTeam.avatar} alt="" width={32} height={32} style={{ borderRadius: 6, flexShrink: 0 }} />}
+            <div style={{ minWidth: 0 }}>
+              {myTeam?.team_name && <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{myTeam.team_name}</div>}
+              <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Week {matchup!.week} lineup</div>
+            </div>
+          </div>
+          <span className="mono" style={{ fontSize: 9, color: locked ? 'var(--opp)' : 'var(--you)', border: `1px solid ${locked ? 'var(--opp)' : 'var(--you)'}`, borderRadius: 4, padding: '3px 7px', flexShrink: 0 }}>{locked ? 'LOCKED' : `LOCKS ${fmtLock(matchup!.lock_at)}`}</span>
         </div>
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
           Pick a player + a hidden metric per slot. Sealed picks stay hidden from your opponent until kickoff. {filled}/{SLOTS.length} set.
