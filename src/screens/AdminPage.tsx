@@ -225,9 +225,12 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
           ); })()}
           {members.map((m) => (
             <div key={m.roster_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
-              <div>
-                <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{m.team}</div>
-                <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{m.enrolled ? (m.email ?? m.sleeper ?? 'enrolled') : 'not joined'}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                {m.avatar && <img src={m.avatar} alt="" width={24} height={24} style={{ borderRadius: 5, flexShrink: 0 }} />}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{m.team}</div>
+                  <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{m.enrolled ? (m.email ?? m.sleeper ?? 'enrolled') : 'not joined'}</div>
+                </div>
               </div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 {m.email && <SendLink email={m.email} />}
@@ -542,7 +545,10 @@ function AdminMatchupBoard({ matchupId, onClose }: { matchupId: string; onClose:
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'end', gap: 8 }}>
               <div style={{ minWidth: 0 }}>
                 {isFinal && homeLeads && <div className="mono" style={{ ...mono, fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', marginBottom: 3 }}>WINNER ▲</div>}
-                <div style={{ fontSize: 12, fontWeight: 700, color: homeLeads ? 'var(--you)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.home_team ?? `roster ${m.home_roster_id}`}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
+                  {b.home_avatar && <img src={b.home_avatar} alt="" width={20} height={20} style={{ borderRadius: 4, flexShrink: 0 }} />}
+                  <span style={{ fontSize: 12, fontWeight: 700, color: homeLeads ? 'var(--you)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.home_team ?? `roster ${m.home_roster_id}`}</span>
+                </div>
                 <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, color: homeLeads ? 'var(--you)' : tied ? 'var(--text)' : 'var(--dim)', lineHeight: 1.1 }}>{homeScore}</div>
               </div>
               <div style={{ textAlign: 'center', paddingBottom: 6 }}>
@@ -553,7 +559,10 @@ function AdminMatchupBoard({ matchupId, onClose }: { matchupId: string; onClose:
               </div>
               <div style={{ minWidth: 0, textAlign: 'right' }}>
                 {isFinal && !homeLeads && !tied && <div className="mono" style={{ ...mono, fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', marginBottom: 3, textAlign: 'right' }}>▲ WINNER</div>}
-                <div style={{ fontSize: 12, fontWeight: 700, color: !homeLeads && !tied ? 'var(--you)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{b.away_team ?? `roster ${m.away_roster_id}`}</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, overflow: 'hidden' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: !homeLeads && !tied ? 'var(--you)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{b.away_team ?? `roster ${m.away_roster_id}`}</span>
+                  {b.away_avatar && <img src={b.away_avatar} alt="" width={20} height={20} style={{ borderRadius: 4, flexShrink: 0 }} />}
+                </div>
                 <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, color: !homeLeads && !tied ? 'var(--you)' : tied ? 'var(--text)' : 'var(--dim)', lineHeight: 1.1, textAlign: 'right' }}>{awayScore}</div>
               </div>
             </div>

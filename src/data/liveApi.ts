@@ -268,7 +268,7 @@ export type Controller = 'human' | 'ai';
 export type LineupPolicy = 'best_lineup' | 'ai' | 'empty';
 export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; }
 export interface AdminUser { id: string; email: string | null; sleeper_username: string | null; sleeper_user_id: string | null; enrolled: number; created_at: string; }
-export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; }
+export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; }
 export interface AdminAdmin { email: string; note: string | null; }
 export interface MemberRow { roster_id: number; owner_id: string | null; team_name: string; }
 export interface MatchupRow { sleeper_matchup_id: number | null; home_roster_id: number; away_roster_id: number; }
@@ -318,6 +318,7 @@ export interface BoardState { game_window: string; home_score: number; away_scor
 export interface MatchupBoard {
   matchup: { id: string; week: number; status: string; home_roster_id: number; away_roster_id: number; home_final: number | null; away_final: number | null; home_coin: number | null; away_coin: number | null; lock_at: string | null };
   home_team: string | null; away_team: string | null;
+  home_avatar?: string | null; away_avatar?: string | null;
   states: BoardState[];
   updated_at: string | null;
 }
