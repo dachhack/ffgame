@@ -3,11 +3,12 @@
 // worker's resolver (server/src/resolve.js) but client-side, using the same
 // src/engine/sim.ts the demo runs. Writes per-window scores via admin_set_state.
 import type { Player } from '../types';
-import { WINDOWS, defaultMetric } from './metrics';
+import { defaultMetric } from './metrics';
 import { resolveLiveMatchup, type LivePick } from '../engine/liveResolve';
 import { loadRealWeek } from './realPbp';
 import { slugMeta as meta } from './slugMeta';
 import { adminMatchupPicks, adminSetMatchup, adminSetState, type MatchupPicks } from './liveApi';
+import { aiLineup } from './aiLineup';
 
 const ZERO = { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 };
 
@@ -18,24 +19,31 @@ function mkPlayer(slug: string): Player {
 
 interface Slot { win: string; slot: string; slug: string; metric: string }
 
-/** A side's slots: its sealed picks if enrolled, else its Sleeper lineup spread
- *  across the window grid with each position's default metric. */
-function sideSlots(data: MatchupPicks, side: 'home' | 'away'): Slot[] {
+/** A side's slots: its sealed picks if it set any, else an honest AI auto-lineup
+ *  from its Sleeper starters (src/data/aiLineup — sensible default metrics + a
+ *  pre-game Field-General read, NO hindsight). The auto path covers empty seats,
+ *  AI-controlled teams, and managers who didn't pick. */
+function sideSlots(data: MatchupPicks, side: 'home' | 'away', week: number): Slot[] {
   const appUser = side === 'home' ? data.home_app_user : data.away_app_user;
   const picks = appUser ? data.picks.filter((p) => p.app_user_id === appUser && p.player_slug) : [];
   if (picks.length) {
     return picks.map((p) => ({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug!, metric: p.metric_id || defaultMetric(meta(p.player_slug!).pos).id }));
   }
+  // starters_json entries are { slot, sleeper_id, player_slug, pos } (server/src/sync.js).
   const lineup = (side === 'home' ? data.home_lineup : data.away_lineup) ?? [];
-  const out: Slot[] = [];
-  let i = 0;
-  // starters_json entries are { slot, sleeper_id, player_slug, pos } (server/src/sync.js),
-  // so read player_slug — NOT slug — or every slot drops out and the side scores 0.
-  for (const w of WINDOWS) for (let s = 0; s < w.slots; s++) {
-    const e = lineup[i++];
-    if (e?.player_slug) out.push({ win: w.id, slot: String(s), slug: e.player_slug, metric: defaultMetric(meta(e.player_slug).pos).id });
-  }
-  return out;
+  const slugs = lineup.map((e) => e.player_slug).filter((s): s is string => !!s);
+  // Build the auto-lineup with the side's bought loadout (combo-drip unlock +
+  // extra slots), so the preview matches the live worker's resolution.
+  const owned = new Set((side === 'home' ? data.home_unlocks : data.away_unlocks) ?? []);
+  const extra = (side === 'home' ? data.home_extra : data.away_extra) ?? 0;
+  return aiLineup(slugs, week, owned, extra);
+}
+
+/** A side's armed in-slot buffs — whatever it has BOUGHT (applied_state, surfaced
+ *  via admin_matchup_picks). Power-ups are paid now, so there's no free AI draw;
+ *  an unbought side simply resolves with none. */
+function sideBuffs(data: MatchupPicks, side: 'home' | 'away'): string[] {
+  return (side === 'home' ? data.home_buffs : data.away_buffs) ?? [];
 }
 
 const toLivePick = (s: Slot): LivePick => ({ win: s.win, slot: s.slot, player: mkPlayer(s.slug), metricId: s.metric });
@@ -46,7 +54,10 @@ const toLivePick = (s: Slot): LivePick => ({ win: s.win, slot: s.slot, player: m
 export async function forceResolve(matchupId: string, sourceWeek: number): Promise<{ window: string; home: number; away: number }[]> {
   const data = await adminMatchupPicks(matchupId);
   await loadRealWeek(sourceWeek); // baked plays into the engine's cache
-  const { states, slots, coin } = resolveLiveMatchup(sideSlots(data, 'home').map(toLivePick), sideSlots(data, 'away').map(toLivePick), sourceWeek);
+  const { states, slots, coin } = resolveLiveMatchup(
+    sideSlots(data, 'home', sourceWeek).map(toLivePick), sideSlots(data, 'away', sourceWeek).map(toLivePick), sourceWeek,
+    { homeBuffs: new Set(sideBuffs(data, 'home')), awayBuffs: new Set(sideBuffs(data, 'away')) },
+  );
   await adminSetMatchup(matchupId, 'live', true); // reveal picks + show on the board
   await adminSetState(matchupId, states, coin, slots);
   return states;

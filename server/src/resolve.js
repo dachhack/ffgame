@@ -18,7 +18,7 @@
 // General + best-ball backups on top of per-slot resolveSlot. DEF suppress,
 // cross-window TE-TD nukes, and the K banker bonus remain simplified there.
 import { db } from './supabase.js';
-import { injectWeek, makePlayer, resolveLiveMatchup, rowsToPbp } from './engine.js';
+import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY } from './engine.js';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
 export function baseScore(plays) {
@@ -56,6 +56,25 @@ async function lineupSlugs(matchup, rosterId) {
   return ((data?.starters_json) ?? []).map((s) => s.player_slug).filter(Boolean);
 }
 
+/** A side's armed loadout (applied_state.payload_json) for this matchup — buffs and
+ *  metric unlocks bought via the arm RPCs / the AI budget pass. Empty when none. */
+async function loadout(matchupId, appUserId) {
+  if (!appUserId) return {};
+  const { data } = await db().from('applied_state').select('payload_json')
+    .eq('matchup_id', matchupId).eq('app_user_id', appUserId).maybeSingle();
+  return data?.payload_json ?? {};
+}
+async function humanBuffs(matchupId, appUserId) {
+  const b = (await loadout(matchupId, appUserId)).buffs;
+  return Array.isArray(b) ? b : [];
+}
+
+/** The league's missed-pick policy: 'best_lineup' (default) | 'ai' | 'empty'. */
+async function lineupPolicy(leagueId) {
+  const { data } = await db().from('league').select('lineup_policy').eq('id', leagueId).maybeSingle();
+  return data?.lineup_policy ?? 'best_lineup';
+}
+
 /** Resolve one matchup → write matchup_state (per game_window) + finals when final.
  *  `override` (sim only): { home, away } pick arrays [{win,slot,slug,metric}] that
  *  bypass enrollment/sealed-pick gathering so both sides resolve with full metrics. */
@@ -63,35 +82,74 @@ export async function resolveMatchup(matchup, playerIndex, override) {
   const rows = await weekPlayRows(matchup.week);
   const bySlug = rowsToPbp(rows);
   injectWeek(matchup.week, bySlug);
-  const playsOf = (slug) => bySlug[slug] ?? [];
   const meta = (slug) => playerIndex?.metaForSlug(slug) ?? null;
   const player = (slug) => { const m = meta(slug); return makePlayer(slug, m?.pos, m?.team, m?.full); };
 
   const { data: members } = await db().from('league_membership')
-    .select('sleeper_roster_id,app_user_id,enrolled').eq('league_id', matchup.league_id)
+    .select('sleeper_roster_id,app_user_id,enrolled,controller').eq('league_id', matchup.league_id)
     .in('sleeper_roster_id', [matchup.home_roster_id, matchup.away_roster_id]);
   const byRoster = new Map((members ?? []).map((m) => [m.sleeper_roster_id, m]));
+  const policy = await lineupPolicy(matchup.league_id);
 
-  const homePicks = override ? override.home : await enrolledPicks(matchup, byRoster.get(matchup.home_roster_id));
-  const awayPicks = override ? override.away : await enrolledPicks(matchup, byRoster.get(matchup.away_roster_id));
+  // A side's effective lineup AND its armed in-slot buffs. Power-ups (buffs +
+  // metric unlocks) are PAID and live in applied_state, keyed by app_user — so any
+  // side with an app_user (human OR an AI team flipped from a manager) resolves
+  // with exactly what it bought; an app_user-less seat fields a plain lineup, no
+  // power-ups. The AI's purchases are made by the lock-time budget pass (it spends
+  // its own wallet, blind, on its own roster). Lineups: explicit AI / empty seat /
+  // missed-pick (per policy) → auto-lineup using the unlocks the team owns; a
+  // human's sealed picks if set. The auto-lineup is rebuilt with exactly the
+  // owned unlocks + purchased extra slots in applied_state (written by the
+  // lock-time budget pass), so it matches the materialized board picks.
+  const aiSide = async (rosterId, mem) => {
+    const load = mem?.app_user_id ? await loadout(matchup.id, mem.app_user_id) : {};
+    const owned = new Set(Array.isArray(load.unlocks) ? load.unlocks : []);
+    const extra = Number.isFinite(load.extra) ? load.extra : 0;
+    return {
+      picks: autoLineup(await lineupSlugs(matchup, rosterId), matchup.week, owned, extra),
+      buffs: Array.isArray(load.buffs) ? load.buffs : [],
+    };
+  };
+  const sideLineup = async (rosterId) => {
+    const mem = byRoster.get(rosterId);
+    if (mem?.controller === 'ai') return aiSide(rosterId, mem);
+    const picks = await enrolledPicks(matchup, mem);
+    if (picks) return { picks, buffs: await humanBuffs(matchup.id, mem.app_user_id) };
+    if (!mem?.enrolled || !mem?.app_user_id) return aiSide(rosterId, mem);
+    if (policy === 'empty') return { picks: null, buffs: [] };
+    return aiSide(rosterId, mem);
+  };
+  const home = override ? { picks: override.home, buffs: [] } : await sideLineup(matchup.home_roster_id);
+  const away = override ? { picks: override.away, buffs: [] } : await sideLineup(matchup.away_roster_id);
+  const homePicks = home.picks, awayPicks = away.picks;
 
   const states = []; // { game_window, home_score, away_score }
   let homeTotal = 0, awayTotal = 0;
   let coin = null; // weekly drip-coin per side (only the real-engine H2H path earns it)
+  const toLive = (p) => ({ win: p.win, slot: p.slot, player: player(p.slug), metricId: p.metric || 'rush' });
 
   if (homePicks && awayPicks) {
-    // ── Live H2H: shared resolver, paired by (window, slot) ──
-    const toLive = (p) => ({ win: p.win, slot: p.slot, player: player(p.slug), metricId: p.metric || 'rush' });
-    const r = resolveLiveMatchup(homePicks.map(toLive), awayPicks.map(toLive), matchup.week);
+    // ── Both sides have a lineup (human, AI, or auto-backup): real H2H engine ──
+    const r = resolveLiveMatchup(homePicks.map(toLive), awayPicks.map(toLive), matchup.week,
+      { homeBuffs: new Set(home.buffs), awayBuffs: new Set(away.buffs) });
     for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
     homeTotal = r.home; awayTotal = r.away; coin = r.coin;
   } else {
-    // ── Fallback: base points off whichever side(s) aren't enrolled picks ──
-    const homeSlugs = homePicks ? homePicks.map((p) => p.slug) : await lineupSlugs(matchup, matchup.home_roster_id);
-    const awaySlugs = awayPicks ? awayPicks.map((p) => p.slug) : await lineupSlugs(matchup, matchup.away_roster_id);
-    homeTotal = round(homeSlugs.reduce((t, s) => t + baseScore(playsOf(s)), 0));
-    awayTotal = round(awaySlugs.reduce((t, s) => t + baseScore(playsOf(s)), 0));
-    states.push({ game_window: 'ALL', home_score: homeTotal, away_score: awayTotal });
+    // ── 'empty' policy: a missed side scores 0; the other scores its lineup solo
+    //    (each slot vs an empty opponent) so the present side isn't corrupted. ──
+    const solo = (picks) => {
+      const byWin = {}; let total = 0;
+      for (const p of picks ?? []) {
+        const r = resolveWindow({ player: player(p.slug), metricId: p.metric || 'rush' }, { player: EMPTY, metricId: 'none' }, matchup.week, '', {});
+        byWin[p.win] = round((byWin[p.win] ?? 0) + r.youFinal); total += r.youFinal;
+      }
+      return { byWin, total: round(total) };
+    };
+    const h = solo(homePicks), a = solo(awayPicks);
+    const wins = new Set([...Object.keys(h.byWin), ...Object.keys(a.byWin)]);
+    for (const w of wins) states.push({ game_window: w, home_score: h.byWin[w] ?? 0, away_score: a.byWin[w] ?? 0 });
+    if (!states.length) states.push({ game_window: 'ALL', home_score: 0, away_score: 0 });
+    homeTotal = h.total; awayTotal = a.total;
   }
 
   const now = new Date().toISOString();
@@ -103,7 +161,24 @@ export async function resolveMatchup(matchup, playerIndex, override) {
   if (coin) { patch.home_coin = coin.home; patch.away_coin = coin.away; }
   if (matchup.status === 'final') { patch.home_final = round(homeTotal); patch.away_final = round(awayTotal); }
   if (Object.keys(patch).length) await db().from('matchup').update(patch).eq('id', matchup.id);
+
+  // Bank each side's weekly drip-coin into its persistent wallet, once, when the
+  // week settles. Idempotent (credit_wallet guards on an idem_key), so the repeated
+  // resolves of a final matchup don't double-credit. Roster-keyed → AI teams bank too.
+  if (matchup.status === 'final' && coin && !override) {
+    await creditWallet(matchup, matchup.home_roster_id, coin.home);
+    await creditWallet(matchup, matchup.away_roster_id, coin.away);
+  }
   return { home: round(homeTotal), away: round(awayTotal), coin };
+}
+
+/** Idempotently bank a side's weekly coin into its team wallet (service role). */
+async function creditWallet(matchup, rosterId, delta) {
+  if (delta == null) return;
+  await db().rpc('credit_wallet', {
+    p_league_id: matchup.league_id, p_roster_id: rosterId,
+    p_matchup_id: matchup.id, p_week: matchup.week, p_delta: delta, p_reason: 'earn',
+  });
 }
 
 const round = (n) => Math.round(n * 10) / 10;

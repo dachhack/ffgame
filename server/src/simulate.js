@@ -21,21 +21,20 @@
 import { readFileSync } from 'node:fs';
 import { injectWeek, rowsToPbp, resolveWindow, makePlayer } from './engine.js';
 import { WINDOWS } from '../../src/data/metrics.ts';
+import { DEFAULT_AI_METRIC } from '../../src/data/aiLineup.ts';
 
-// Default metric per position for the self-contained sim's auto-built lineups —
-// a sensible, predictable scorer for each spot so the full metric duel resolves
-// without anyone setting a lineup.
-const DEFAULT_METRIC = { QB: 'pass', RB: 'rush', WR: 'recyd', TE: 'recyd', K: 'banker', DEF: 'earn', DL: 'idp_tackles', LB: 'idp_tackles', DB: 'idp_tackles' };
 // The lineup spots in window order (tnf, early×3, late×2, snf, mnf).
 const SLOTS = WINDOWS.flatMap((w) => Array.from({ length: w.slots }, (_, j) => ({ win: w.id, slot: String(j) })));
 
 /** Auto-build a roster's lineup from its synced Sleeper starters: fill the
- *  window/slot grid, default metric per position. Shape matches enrolledPicks. */
+ *  window/slot grid, honest default metric per position (shared DEFAULT_AI_METRIC).
+ *  No Field-General flip here — the dry round-trip asserts per-player points
+ *  reproduce the baked box score, and FG zeroes its QB. Shape matches enrolledPicks. */
 function autoLineup(starters) {
   return (starters ?? [])
     .filter((s) => s.player_slug)
     .slice(0, SLOTS.length)
-    .map((s, i) => ({ win: SLOTS[i].win, slot: SLOTS[i].slot, slug: s.player_slug, metric: DEFAULT_METRIC[s.pos] || 'rush' }));
+    .map((s, i) => ({ win: SLOTS[i].win, slot: SLOTS[i].slot, slug: s.player_slug, metric: DEFAULT_AI_METRIC[s.pos] || 'rush' }));
 }
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
@@ -223,7 +222,7 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs, jitter, co
   // with full metric effects and nobody has to set a lineup to watch a real duel.
   const rosterIds = [...new Set(live.flatMap((m) => [m.home_roster_id, m.away_roster_id]))];
   const { data: members } = await db().from('league_membership')
-    .select('sleeper_roster_id,app_user_id,enrolled').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
+    .select('sleeper_roster_id,app_user_id,enrolled,controller').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
   const memByRoster = new Map((members ?? []).map((m) => [m.sleeper_roster_id, m]));
   const { data: lineupRows } = await db().from('sleeper_lineup').select('roster_id,starters_json').eq('league_id', leagueId).eq('week', week);
   const startersByRoster = new Map((lineupRows ?? []).map((r) => [r.roster_id, r.starters_json]));
@@ -235,7 +234,8 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs, jitter, co
   };
   const sideFor = async (matchupId, rosterId) => {
     const mem = memByRoster.get(rosterId);
-    if (mem?.enrolled && mem.app_user_id) { const sp = await sealedPicks(matchupId, mem.app_user_id); if (sp) return sp; }
+    // AI-controlled teams skip any human picks and auto-lineup.
+    if (mem?.controller !== 'ai' && mem?.enrolled && mem.app_user_id) { const sp = await sealedPicks(matchupId, mem.app_user_id); if (sp) return sp; }
     return autoLineup(startersByRoster.get(rosterId));
   };
   const lineups = new Map();

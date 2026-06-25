@@ -255,9 +255,11 @@ export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[
 }
 
 // ── Super admin ─────────────────────────────────────────────────────────────────
-export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; }
+export type Controller = 'human' | 'ai';
+export type LineupPolicy = 'best_lineup' | 'ai' | 'empty';
+export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; }
 export interface AdminUser { id: string; email: string | null; sleeper_username: string | null; sleeper_user_id: string | null; enrolled: number; created_at: string; }
-export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; }
+export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; }
 export interface AdminAdmin { email: string; note: string | null; }
 export interface MemberRow { roster_id: number; owner_id: string | null; team_name: string; }
 export interface MatchupRow { sleeper_matchup_id: number | null; home_roster_id: number; away_roster_id: number; }
@@ -313,6 +315,25 @@ export interface MatchupBoard {
 export const adminMatchupBoard = (matchupId: string) => rpc<MatchupBoard>('admin_matchup_board', { p_matchup_id: matchupId });
 export const adminResetMatchup = (matchupId: string) => rpc<{ ok: boolean; error?: string }>('admin_reset_matchup', { p_matchup_id: matchupId });
 
+// ── Pilot ops (migration 0021) ───────────────────────────────────────────────
+export interface PickSide { roster_id: number; team: string | null; app_user_id: string | null; enrolled: boolean; controller: Controller; email: string | null; sleeper: string | null; lineup_size: number; picks_set: number; }
+export interface PickReadiness { matchup_id: string; week: number; status: string; lock_at: string | null; home_roster_id: number; away_roster_id: number; home: PickSide; away: PickSide; }
+export const adminPickReadiness = (leagueId: string, week: number) => rpc<PickReadiness[]>('admin_pick_readiness', { p_league_id: leagueId, p_week: week });
+export interface AdminHealth { now: string; leagues: number; enrolled: number; matchups_by_status: Record<string, number>; live_matchups: number; live_play_count: number; sim_play_count: number; last_play_ingest: string | null; last_state_update: string | null; }
+export const adminHealth = () => rpc<AdminHealth>('admin_health');
+export const adminSetPicks = (matchupId: string, appUserId: string, rows: { game_window: string; roster_slot: string; player_slug: string; metric_id: string }[]) =>
+  rpc<{ ok: boolean; count?: number; error?: string }>('admin_set_picks', { p_matchup_id: matchupId, p_app_user_id: appUserId, p_rows: rows });
+export const adminClearPicks = (matchupId: string, appUserId: string) =>
+  rpc<{ ok: boolean; error?: string }>('admin_clear_picks', { p_matchup_id: matchupId, p_app_user_id: appUserId });
+
+// ── AI control (migration 0022) ──────────────────────────────────────────────
+export const setTeamController = (leagueId: string, rosterId: number, controller: Controller) =>
+  rpc<{ ok: boolean; error?: string; controller?: Controller }>('set_team_controller', { p_league_id: leagueId, p_roster_id: rosterId, p_controller: controller });
+export const setLineupPolicy = (leagueId: string, policy: LineupPolicy) =>
+  rpc<{ ok: boolean; error?: string; lineup_policy?: LineupPolicy }>('set_lineup_policy', { p_league_id: leagueId, p_policy: policy });
+export const myMembership = (leagueId: string, rosterId: number) =>
+  rpc<{ controller: Controller } | null>('my_membership', { p_league_id: leagueId, p_roster_id: rosterId });
+
 /** Launch the real server-driven live feed sim via the dispatch-sim edge function
  *  (admin-only; the function re-checks is_admin and holds the GitHub token). */
 export async function dispatchSim(input: { mode?: 'live' | 'reset' | 'check' | 'dry'; league: string; week?: number | string; src?: number | string; speed?: number; jitter?: number; corrections?: number }): Promise<{ ok: boolean; error?: string }> {
@@ -322,8 +343,34 @@ export async function dispatchSim(input: { mode?: 'live' | 'reset' | 'check' | '
 }
 export const adminLeagueMembers = (leagueId: string) => rpc<AdminMember[]>('admin_league_members', { p_league_id: leagueId });
 export const commishOverview = () => rpc<AdminLeague[]>('commish_overview');
-export interface MatchupPicks { home_roster_id: number; away_roster_id: number; home_app_user: string | null; away_app_user: string | null; picks: { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null }[]; home_lineup: { player_slug: string | null; pos: string | null }[]; away_lineup: { player_slug: string | null; pos: string | null }[]; }
+export interface MatchupPicks { home_roster_id: number; away_roster_id: number; home_app_user: string | null; away_app_user: string | null; picks: { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null }[]; home_lineup: { player_slug: string | null; pos: string | null }[]; away_lineup: { player_slug: string | null; pos: string | null }[]; home_buffs: string[]; away_buffs: string[]; home_unlocks?: string[]; away_unlocks?: string[]; home_extra?: number; away_extra?: number; }
 export const adminMatchupPicks = (matchupId: string) => rpc<MatchupPicks>('admin_matchup_picks', { p_matchup_id: matchupId });
+
+// ── Live power-up loadout (M1): arm/disarm in-slot team buffs, pre-lock ──────────
+export const LIVE_BUFFS = ['overtime', 'ot-shield', 'momentum', 'garbage-time', 'floodgates', 'counter-nuke', 'insurance', 'fg-stack'] as const;
+export const armBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; buffs?: string[] }>('arm_buff', { p_matchup_id: matchupId, p_buff: buff });
+export const disarmBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; buffs?: string[] }>('disarm_buff', { p_matchup_id: matchupId, p_buff: buff });
+export const myBuffs = (matchupId: string) => rpc<string[]>('my_buffs', { p_matchup_id: matchupId });
+
+// Metric unlocks (M2): arm before a locked metric (Combo Drip / Return / Air Raid)
+// can be picked. Same applied_state store, free this season.
+export const armUnlock = (matchupId: string, unlock: string) => rpc<{ ok: boolean; error?: string; unlocks?: string[] }>('arm_unlock', { p_matchup_id: matchupId, p_unlock: unlock });
+export const disarmUnlock = (matchupId: string, unlock: string) => rpc<{ ok: boolean; error?: string; unlocks?: string[] }>('disarm_unlock', { p_matchup_id: matchupId, p_unlock: unlock });
+export const myUnlocks = (matchupId: string) => rpc<string[]>('my_unlocks', { p_matchup_id: matchupId });
+
+// Persistent coin wallet (M3): both sides' banked balances for a matchup.
+export const matchupWallets = (matchupId: string) => rpc<{ home: number | null; away: number | null } | null>('matchup_wallets', { p_matchup_id: matchupId });
+
+// Extra slots (M4c): a buyable power-up (cap 2) that adds lineup slots beyond the
+// base 8. A count in applied_state; bought/sold against the team wallet.
+export const myExtra = (matchupId: string) => rpc<number>('my_extra', { p_matchup_id: matchupId });
+export const buyExtraSlot = (matchupId: string) => rpc<{ ok: boolean; error?: string; extra?: number; charged?: number }>('buy_extra_slot', { p_matchup_id: matchupId });
+export const sellExtraSlot = (matchupId: string) => rpc<{ ok: boolean; error?: string; extra?: number }>('sell_extra_slot', { p_matchup_id: matchupId });
+
+// Spend (M4): the caller's team balance + a lazy season seed so there's coin to
+// spend before week 1. ensure_wallet seeds once (idempotent) and returns balance.
+export const myWallet = (matchupId: string) => rpc<number>('my_wallet', { p_matchup_id: matchupId });
+export const ensureWallet = (matchupId: string) => rpc<number>('ensure_wallet', { p_matchup_id: matchupId });
 export const adminSetState = (matchupId: string, states: { window: string; home: number; away: number }[], coin?: { home: number; away: number }, slotScores?: { win: string; side: string; slot: string; slug: string; metric: string | null; score: number }[]) =>
   rpc<{ ok: boolean }>('admin_set_state', { p_matchup_id: matchupId, p_states: states, p_home_coin: coin?.home ?? null, p_away_coin: coin?.away ?? null, p_slot_scores: slotScores ?? null });
 export const adminSetCoin = (matchupId: string, home: number, away: number) =>

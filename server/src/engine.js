@@ -13,6 +13,7 @@
 import { resolveSlot, EMPTY_PLAYER } from '../../src/engine/sim.ts';
 import { resolveLiveMatchup } from '../../src/engine/liveResolve.ts';
 import { setSyntheticWeeks, clearSyntheticWeeks } from '../../src/data/realPbp.ts';
+import { aiLineup, aiLiveBuffs } from '../../src/data/aiLineup.ts';
 
 const ZERO_STATS = {
   games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0,
@@ -25,7 +26,17 @@ export function makePlayer(slug, pos, team, full) {
 }
 
 export const EMPTY = EMPTY_PLAYER;
-export { clearSyntheticWeeks, resolveLiveMatchup };
+export { clearSyntheticWeeks, resolveLiveMatchup, aiLiveBuffs };
+
+/** AI auto-lineup for a real LIVE game — delegates to the shared honest builder
+ *  (src/data/aiLineup.ts): place a roster's Sleeper starters on sensible default
+ *  metrics (fixing the old QB→fg / DEF→suppress zero-scoring bug) plus a pre-game
+ *  Field-General read. With a `week` that has a known NFL slate, players are
+ *  slate-gated into the window their team actually plays, exactly like a human's
+ *  lineup. Returns [{ win, slot, slug, metric }] — the sealed-pick shape. */
+export function autoLineup(slugs, week = 0, owned = new Set(), extra = 0) {
+  return aiLineup(slugs ?? [], week, owned, extra);
+}
 
 /** Inject a week's plays so the engine sees them via realPbpFor(week, slug).
  *  bySlug: { [slug]: RealPlay[] } (the live_play rows in RealPlay shape). */
