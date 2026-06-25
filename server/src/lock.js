@@ -28,8 +28,11 @@ async function ownedLoadout(matchupId, appUserId) {
  *  afford. Purchases land in the team's applied_state (the same store the human
  *  shop writes, app_user-keyed), so resolve.js scores it with exactly what it
  *  bought. Idempotent per item, so a re-lock never double-charges. Returns the
- *  team's owned-unlock Set, used to build a lineup that only fields a `combodrip`
- *  pick when the unlock was actually purchased. */
+ *  team's owned-unlock Set + purchased extra-slot count, used to build a lineup
+ *  that only fields a `combodrip` pick when the unlock was bought and stacks a
+ *  window for each extra slot it could afford. */
+const EXTRA_SLOT_CAP = 2; // mirrors extra_slot_cap() in migration 0027.
+
 async function aiBudgetPass(m, rosterId, appUserId, starters, seed) {
   // 1. Seed the season starting balance (idempotent via the <league>:seed:<roster> key).
   await db().rpc('credit_wallet', {
@@ -38,33 +41,40 @@ async function aiBudgetPass(m, rosterId, appUserId, starters, seed) {
   });
 
   const own = await ownedLoadout(m.id, appUserId);
-
-  // 2. Decide desired purchases, blind + priority-ordered (own roster only).
-  const desired = [];
-  if (starters.some((s) => s.player_slug && wantsComboDrip(s.player_slug, s.pos))) desired.push('unlock-combo-drip');
-  for (const b of aiLiveBuffs(`${m.league_id}:${rosterId}`, m.week)) desired.push(b);
-
-  // 3. Spend within budget: each item charged once (idempotent). Items already
-  //    owned from a prior lock are kept without re-charging (skip the spend so a
-  //    depleted balance can't drop a previously-bought item off the loadout).
-  for (const item of desired) {
-    if (own.buffs.has(item) || own.unlocks.has(item)) continue;
+  const spend = async (item, idem) => {
     const price = powerupById(item)?.price ?? 9999;
     const { data: sp } = await db().rpc('spend_from_wallet', {
       p_league_id: m.league_id, p_roster_id: rosterId, p_price: price,
-      p_matchup_id: m.id, p_week: m.week, p_reason: 'spend:' + item,
-      p_idem: `${m.id}:ai:${item}:${rosterId}`,
+      p_matchup_id: m.id, p_week: m.week, p_reason: 'spend:' + item, p_idem: idem,
     });
-    if (sp?.ok) (item.startsWith('unlock-') ? own.unlocks : own.buffs).add(item);
+    return !!sp?.ok;
+  };
+
+  // 2. Buy power-ups blind + priority-ordered (own roster only): (a) Combo Drip
+  //    if the roster has a dual-threat, then (b) in-slot buffs. Each item charged
+  //    once (idempotent per item); items already owned from a prior lock are kept
+  //    without re-charging, so a depleted balance can't drop a bought item.
+  const desired = [];
+  if (starters.some((s) => s.player_slug && wantsComboDrip(s.player_slug, s.pos))) desired.push('unlock-combo-drip');
+  for (const b of aiLiveBuffs(`${m.league_id}:${rosterId}`, m.week)) desired.push(b);
+  for (const item of desired) {
+    if (own.buffs.has(item) || own.unlocks.has(item)) continue;
+    if (await spend(item, `${m.id}:ai:${item}:${rosterId}`)) (item.startsWith('unlock-') ? own.unlocks : own.buffs).add(item);
   }
 
-  // 4. Record the bought loadout (merge, don't clobber any other payload keys).
+  // 2c. Window-stacking: buy extra slots up to the cap if still affordable. Each
+  //     index has its own idem key so a re-lock never double-buys the same slot.
+  for (let i = own.extra; i < EXTRA_SLOT_CAP; i++) {
+    if (await spend('extra-slot', `${m.id}:ai:extra-slot:${i}:${rosterId}`)) own.extra = i + 1; else break;
+  }
+
+  // 3. Record the bought loadout (merge, don't clobber any other payload keys).
   await db().from('applied_state').upsert({
     matchup_id: m.id, app_user_id: appUserId, week: m.week,
-    payload_json: { ...own.payload, buffs: [...own.buffs], unlocks: [...own.unlocks] },
+    payload_json: { ...own.payload, buffs: [...own.buffs], unlocks: [...own.unlocks], extra: own.extra },
   }, { onConflict: 'matchup_id,app_user_id' });
 
-  return own.unlocks;
+  return { owned: own.unlocks, extra: own.extra };
 }
 
 /** Lock any scheduled matchups whose lock_at has passed. Returns count locked. */
@@ -116,14 +126,14 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       const aiDriven = isAi || (missed && policy === 'ai');
       const starters = (startersByRoster.get(rosterId)) ?? [];
       const slugs = starters.map((s) => s.player_slug).filter(Boolean);
-      const owned = aiDriven
-        ? await aiBudgetPass(m, rosterId, mem.app_user_id, starters, seed)
-        : (await ownedLoadout(m.id, mem.app_user_id)).unlocks;
-      // Arm-before-write: applied_state (the owned unlocks) is upserted by the
-      // budget pass BEFORE these rows, so a `combodrip` pick clears the
-      // enforce_locked_metric trigger.
+      let owned, extra;
+      if (aiDriven) { ({ owned, extra } = await aiBudgetPass(m, rosterId, mem.app_user_id, starters, seed)); }
+      else { const l = await ownedLoadout(m.id, mem.app_user_id); owned = l.unlocks; extra = l.extra; }
+      // Arm-before-write: applied_state (owned unlocks + the extra-slot count) is
+      // upserted by the budget pass BEFORE these rows, so a `combodrip` pick
+      // clears enforce_locked_metric and the extra 'x' rows clear enforce_slot_cap.
       if (isAi && hasPicks) await db().from('sealed_pick').delete().eq('matchup_id', m.id).eq('app_user_id', mem.app_user_id);
-      const rows = autoLineup(slugs, m.week, owned).map((p) => ({
+      const rows = autoLineup(slugs, m.week, owned, extra).map((p) => ({
         matchup_id: m.id, app_user_id: mem.app_user_id, game_window: p.win, roster_slot: p.slot,
         player_slug: p.slug, metric_id: p.metric, locked: true, revealed_at: iso,
       }));

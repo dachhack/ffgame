@@ -128,21 +128,46 @@ interface Tagged { slug: string; pos: Pos; team: string; metric: string }
  *  human can't use. Without a slate (weeks we have no schedule for) it falls back
  *  to the deterministic grid-fill. No hindsight either way — placement reads only
  *  the schedule and the AI's own roster, never the opponent or the week's result. */
-export function aiLineup(slugs: string[], week = 0, owned: Set<string> = new Set()): AiPick[] {
+export function aiLineup(slugs: string[], week = 0, owned: Set<string> = new Set(), extraSlots = 0): AiPick[] {
   const tagged: Tagged[] = (slugs ?? []).filter(Boolean).map((slug) => {
     const { pos, team } = slugMeta(slug);
     return { slug, pos, team, metric: aiMetric(slug, pos, owned) };
   });
 
-  const picks = hasSlate(week) ? slateGated(tagged, week) : gridFill(tagged);
+  const { picks, bench } = hasSlate(week) ? slateGated(tagged, week) : gridFill(tagged);
+  addExtraSlots(picks, bench, extraSlots);
   applyFieldGeneral(picks);
   return picks;
 }
 
+/** A player who didn't make the base lineup but CAN still be fielded — overflow
+ *  from a full window, tagged with the window it's eligible for. Never a bye. */
+interface Benched { win: string; p: Tagged }
+
+/** Window-stacking for purchased extra slots (M4c): spend each extra slot on the
+ *  deepest window — the one with the most benched players — fielding its next-best
+ *  bench player on a steady FLOOR metric (never combodrip; an attack/drip metric
+ *  is wasted in what becomes an unopposed best-ball slot). In-window + never-bye
+ *  by construction (bench only holds windowed overflow). Deterministic: window
+ *  order breaks ties, bench is in roster order. Extra slots are named 'x0','x1',…
+ *  to match the sell/cap SQL (roster_slot ~ '^x[0-9]+$'). */
+function addExtraSlots(picks: AiPick[], bench: Benched[], extraSlots: number): void {
+  for (let i = 0; i < extraSlots && bench.length; i++) {
+    const count = new Map<string, number>();
+    for (const b of bench) count.set(b.win, (count.get(b.win) ?? 0) + 1);
+    let deepest = bench[0].win, most = -1;
+    for (const w of WINDOWS) { const n = count.get(w.id) ?? 0; if (n > most) { most = n; deepest = w.id; } }
+    const idx = bench.findIndex((b) => b.win === deepest);
+    const { p } = bench.splice(idx, 1)[0];
+    picks.push({ win: deepest, slot: `x${i}`, slug: p.slug, metric: defaultAiMetric(p.pos) });
+  }
+}
+
 /** Slate-gated placement: each player into the window his NFL team plays; byes
- *  and window-overflow are benched. Flexible players (no resolvable team) fill
- *  whatever slots remain, in window order. */
-function slateGated(tagged: Tagged[], week: number): AiPick[] {
+ *  are unslottable; window-overflow is benched (returned for extra-slot stacking).
+ *  Flexible players (no resolvable team) fill whatever slots remain, in window
+ *  order, and overflow to the marquee window's bench. */
+function slateGated(tagged: Tagged[], week: number): { picks: AiPick[]; bench: Benched[] } {
   const free = new Map<string, number[]>();
   for (const w of WINDOWS) free.set(w.id, Array.from({ length: w.slots }, (_, i) => i));
   const place = (winId: string, p: Tagged): boolean => {
@@ -153,23 +178,27 @@ function slateGated(tagged: Tagged[], week: number): AiPick[] {
   };
 
   const picks: AiPick[] = [];
+  const bench: Benched[] = [];
+  const marquee = WINDOWS.reduce((a, b) => (b.slots > a.slots ? b : a)).id;
   const flexible: Tagged[] = [];
   for (const p of tagged) {
     if (!p.team) { flexible.push(p); continue; }      // unknown team → eligible anywhere
     const win = windowForTeam(week, p.team);           // WindowId | null (bye)
     if (!win) continue;                                // bye → unslottable
-    place(win, p);                                     // window full → benched (drop)
+    if (!place(win, p)) bench.push({ win, p });        // window full → bench (keep its window)
   }
-  for (const p of flexible) for (const w of WINDOWS) if (place(w.id, p)) break;
-  return picks;
+  for (const p of flexible) { let placed = false; for (const w of WINDOWS) if (place(w.id, p)) { placed = true; break; } if (!placed) bench.push({ win: marquee, p }); }
+  return { picks, bench };
 }
 
 /** No-slate fallback: lay players across the fixed window/slot grid, with the
  *  first QB seated in the marquee multi-slot window so Field General can still
- *  coordinate a QB that would otherwise be stranded in a 1-slot window. */
-function gridFill(tagged: Tagged[]): AiPick[] {
+ *  coordinate a QB that would otherwise be stranded in a 1-slot window. Leftover
+ *  pool players become bench (in the marquee window) for extra-slot stacking. */
+function gridFill(tagged: Tagged[]): { picks: AiPick[]; bench: Benched[] } {
   const pool = tagged.slice(0, TOTAL_SLOTS);
-  const fgWin = WINDOWS.reduce((a, b) => (b.slots > a.slots ? b : a));
+  const marquee = WINDOWS.reduce((a, b) => (b.slots > a.slots ? b : a));
+  const leftover = tagged.slice(TOTAL_SLOTS);
   const qbIdx = pool.findIndex((p) => p.pos === 'QB');
   const reserved = qbIdx >= 0 ? pool.splice(qbIdx, 1)[0] : undefined;
 
@@ -177,9 +206,9 @@ function gridFill(tagged: Tagged[]): AiPick[] {
   let i = 0;
   for (const w of WINDOWS) {
     for (let s = 0; s < w.slots; s++) {
-      const p = reserved && w.id === fgWin.id && s === 0 ? reserved : pool[i++];
+      const p = reserved && w.id === marquee.id && s === 0 ? reserved : pool[i++];
       if (p) picks.push({ win: w.id, slot: String(s), slug: p.slug, metric: p.metric });
     }
   }
-  return picks;
+  return { picks, bench: leftover.map((p) => ({ win: marquee.id, p })) };
 }

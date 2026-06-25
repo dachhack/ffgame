@@ -68,10 +68,6 @@ async function humanBuffs(matchupId, appUserId) {
   const b = (await loadout(matchupId, appUserId)).buffs;
   return Array.isArray(b) ? b : [];
 }
-async function humanUnlocks(matchupId, appUserId) {
-  const u = (await loadout(matchupId, appUserId)).unlocks;
-  return Array.isArray(u) ? u : [];
-}
 
 /** The league's missed-pick policy: 'best_lineup' (default) | 'ai' | 'empty'. */
 async function lineupPolicy(leagueId) {
@@ -102,12 +98,16 @@ export async function resolveMatchup(matchup, playerIndex, override) {
   // power-ups. The AI's purchases are made by the lock-time budget pass (it spends
   // its own wallet, blind, on its own roster). Lineups: explicit AI / empty seat /
   // missed-pick (per policy) → auto-lineup using the unlocks the team owns; a
-  // human's sealed picks if set.
+  // human's sealed picks if set. The auto-lineup is rebuilt with exactly the
+  // owned unlocks + purchased extra slots in applied_state (written by the
+  // lock-time budget pass), so it matches the materialized board picks.
   const aiSide = async (rosterId, mem) => {
-    const owned = mem?.app_user_id ? new Set(await humanUnlocks(matchup.id, mem.app_user_id)) : new Set();
+    const load = mem?.app_user_id ? await loadout(matchup.id, mem.app_user_id) : {};
+    const owned = new Set(Array.isArray(load.unlocks) ? load.unlocks : []);
+    const extra = Number.isFinite(load.extra) ? load.extra : 0;
     return {
-      picks: autoLineup(await lineupSlugs(matchup, rosterId), matchup.week, owned),
-      buffs: mem?.app_user_id ? await humanBuffs(matchup.id, mem.app_user_id) : [],
+      picks: autoLineup(await lineupSlugs(matchup, rosterId), matchup.week, owned, extra),
+      buffs: Array.isArray(load.buffs) ? load.buffs : [],
     };
   };
   const sideLineup = async (rosterId) => {

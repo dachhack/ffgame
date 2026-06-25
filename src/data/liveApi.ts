@@ -343,7 +343,7 @@ export async function dispatchSim(input: { mode?: 'live' | 'reset' | 'check' | '
 }
 export const adminLeagueMembers = (leagueId: string) => rpc<AdminMember[]>('admin_league_members', { p_league_id: leagueId });
 export const commishOverview = () => rpc<AdminLeague[]>('commish_overview');
-export interface MatchupPicks { home_roster_id: number; away_roster_id: number; home_app_user: string | null; away_app_user: string | null; picks: { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null }[]; home_lineup: { player_slug: string | null; pos: string | null }[]; away_lineup: { player_slug: string | null; pos: string | null }[]; home_buffs: string[]; away_buffs: string[]; }
+export interface MatchupPicks { home_roster_id: number; away_roster_id: number; home_app_user: string | null; away_app_user: string | null; picks: { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null }[]; home_lineup: { player_slug: string | null; pos: string | null }[]; away_lineup: { player_slug: string | null; pos: string | null }[]; home_buffs: string[]; away_buffs: string[]; home_unlocks?: string[]; away_unlocks?: string[]; home_extra?: number; away_extra?: number; }
 export const adminMatchupPicks = (matchupId: string) => rpc<MatchupPicks>('admin_matchup_picks', { p_matchup_id: matchupId });
 
 // ── Live power-up loadout (M1): arm/disarm in-slot team buffs, pre-lock ──────────
@@ -360,6 +360,12 @@ export const myUnlocks = (matchupId: string) => rpc<string[]>('my_unlocks', { p_
 
 // Persistent coin wallet (M3): both sides' banked balances for a matchup.
 export const matchupWallets = (matchupId: string) => rpc<{ home: number | null; away: number | null } | null>('matchup_wallets', { p_matchup_id: matchupId });
+
+// Extra slots (M4c): a buyable power-up (cap 2) that adds lineup slots beyond the
+// base 8. A count in applied_state; bought/sold against the team wallet.
+export const myExtra = (matchupId: string) => rpc<number>('my_extra', { p_matchup_id: matchupId });
+export const buyExtraSlot = (matchupId: string) => rpc<{ ok: boolean; error?: string; extra?: number; charged?: number }>('buy_extra_slot', { p_matchup_id: matchupId });
+export const sellExtraSlot = (matchupId: string) => rpc<{ ok: boolean; error?: string; extra?: number }>('sell_extra_slot', { p_matchup_id: matchupId });
 
 // Spend (M4): the caller's team balance + a lazy season seed so there's coin to
 // spend before week 1. ensure_wallet seeds once (idempotent) and returns balance.

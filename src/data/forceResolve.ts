@@ -32,7 +32,11 @@ function sideSlots(data: MatchupPicks, side: 'home' | 'away', week: number): Slo
   // starters_json entries are { slot, sleeper_id, player_slug, pos } (server/src/sync.js).
   const lineup = (side === 'home' ? data.home_lineup : data.away_lineup) ?? [];
   const slugs = lineup.map((e) => e.player_slug).filter((s): s is string => !!s);
-  return aiLineup(slugs, week);
+  // Build the auto-lineup with the side's bought loadout (combo-drip unlock +
+  // extra slots), so the preview matches the live worker's resolution.
+  const owned = new Set((side === 'home' ? data.home_unlocks : data.away_unlocks) ?? []);
+  const extra = (side === 'home' ? data.home_extra : data.away_extra) ?? 0;
+  return aiLineup(slugs, week, owned, extra);
 }
 
 /** A side's armed in-slot buffs — whatever it has BOUGHT (applied_state, surfaced
