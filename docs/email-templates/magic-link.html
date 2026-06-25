@@ -1,0 +1,36 @@
+<!--
+  Drip League FF — Magic Link (passwordless sign-in)
+  Supabase → Authentication → Emails → "Magic Link"
+  Subject:  Your Drip League sign-in link
+  Variables used: {{ .ConfirmationURL }}  {{ .Token }}
+  ICON: the 🔗 below is the hero icon — swap for <img src="https://www.dripfantasy.com/icons/magic.png" width="56" height="56" alt=""> if you want custom art.
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0;padding:0;background:#f4f3ef;">
+  <tr><td align="center" style="padding:32px 16px;">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;background:#ffffff;border:1px solid #e7e4dc;border-radius:14px;overflow:hidden;">
+      <!-- header -->
+      <tr><td style="background:#252116;padding:18px 28px;">
+        <span style="color:#36E59B;font-size:16px;vertical-align:middle;">&#9670;</span>
+        <span style="font-family:'Space Grotesk',Arial,Helvetica,sans-serif;color:#ffffff;font-weight:700;letter-spacing:2.5px;font-size:14px;vertical-align:middle;margin-left:8px;">DRIP LEAGUE FF</span>
+      </td></tr>
+      <!-- body -->
+      <tr><td style="padding:36px 32px 28px;font-family:Arial,Helvetica,sans-serif;color:#1c1a14;">
+        <div style="font-size:44px;line-height:1;">&#128279;</div>
+        <h1 style="margin:14px 0 6px;font-family:'Space Grotesk',Arial,sans-serif;font-size:22px;font-weight:700;color:#161510;">Your sign-in link</h1>
+        <p style="margin:0 0 24px;font-size:15px;line-height:1.55;color:#4a463c;">Tap the button to sign in to Drip League FF. This link is good for one sign-in and expires in 1 hour.</p>
+        <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+          <td style="background:#36E59B;border-radius:9px;">
+            <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 30px;font-family:'Space Grotesk',Arial,sans-serif;font-size:15px;font-weight:700;color:#161510;text-decoration:none;">Sign in &rarr;</a>
+          </td>
+        </tr></table>
+        <p style="margin:26px 0 4px;font-size:13px;color:#8a8678;">On a different device? Enter this code:</p>
+        <p style="margin:0;font-family:'Space Grotesk',monospace;font-size:26px;font-weight:700;letter-spacing:6px;color:#161510;">{{ .Token }}</p>
+        <p style="margin:26px 0 0;font-size:12px;line-height:1.5;color:#9a968a;">Didn&rsquo;t request this? You can safely ignore this email &mdash; nobody can sign in without the link.</p>
+      </td></tr>
+      <!-- footer -->
+      <tr><td style="background:#faf9f6;border-top:1px solid #eee;padding:16px 28px;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#9a968a;">
+        Drip League FF &middot; <a href="https://www.dripfantasy.com" style="color:#1f9e6b;text-decoration:none;">dripfantasy.com</a>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>

@@ -1,0 +1,31 @@
+<!--
+  Drip League FF — Invite user
+  Supabase → Authentication → Emails → "Invite user"
+  Subject:  You're invited to Drip League FF
+  Variables used: {{ .ConfirmationURL }}
+  ICON: the 🏈 below is the hero icon — swap for <img src="https://www.dripfantasy.com/icons/invite.png" width="56" height="56" alt="">.
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0;padding:0;background:#f4f3ef;">
+  <tr><td align="center" style="padding:32px 16px;">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;background:#ffffff;border:1px solid #e7e4dc;border-radius:14px;overflow:hidden;">
+      <tr><td style="background:#252116;padding:18px 28px;">
+        <span style="color:#36E59B;font-size:16px;vertical-align:middle;">&#9670;</span>
+        <span style="font-family:'Space Grotesk',Arial,Helvetica,sans-serif;color:#ffffff;font-weight:700;letter-spacing:2.5px;font-size:14px;vertical-align:middle;margin-left:8px;">DRIP LEAGUE FF</span>
+      </td></tr>
+      <tr><td style="padding:36px 32px 28px;font-family:Arial,Helvetica,sans-serif;color:#1c1a14;">
+        <div style="font-size:44px;line-height:1;">&#127944;</div>
+        <h1 style="margin:14px 0 6px;font-family:'Space Grotesk',Arial,sans-serif;font-size:22px;font-weight:700;color:#161510;">You&rsquo;re invited</h1>
+        <p style="margin:0 0 24px;font-size:15px;line-height:1.55;color:#4a463c;">You&rsquo;ve been invited to play Drip League FF &mdash; real-time fantasy with hidden picks and live effects. Accept to set up your team.</p>
+        <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+          <td style="background:#36E59B;border-radius:9px;">
+            <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 30px;font-family:'Space Grotesk',Arial,sans-serif;font-size:15px;font-weight:700;color:#161510;text-decoration:none;">Accept invite &rarr;</a>
+          </td>
+        </tr></table>
+        <p style="margin:26px 0 0;font-size:12px;line-height:1.5;color:#9a968a;">Not expecting this? You can ignore it &mdash; no account is created until you accept.</p>
+      </td></tr>
+      <tr><td style="background:#faf9f6;border-top:1px solid #eee;padding:16px 28px;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#9a968a;">
+        Drip League FF &middot; <a href="https://www.dripfantasy.com" style="color:#1f9e6b;text-decoration:none;">dripfantasy.com</a>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
