@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useStore } from '../app/store';
-import { Brand, Header, ThemeSwitcher, UserChip, Avatar, PosPill, PlayerImg, DemoControls } from '../app/ui';
+import { Brand, Header, SiteSettings, UserChip, Avatar, PosPill, PlayerImg, DemoControls } from '../app/ui';
 import { getTeam, teamRoster, gameForTeam, teamResults, freeAgents } from '../data/league';
 import { TOTAL_SLOTS } from '../data/metrics';
 import { POWERUPS } from '../data/powerups';
@@ -32,7 +32,7 @@ export function LeagueOverview() {
         left={
           <>
             <Brand onClick={() => navigate({ name: 'hub' })} />
-            <ThemeSwitcher />
+            <SiteSettings />
             <button
               onClick={() => navigate({ name: 'hub' })}
               className="mono"

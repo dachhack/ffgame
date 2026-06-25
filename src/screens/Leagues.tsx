@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
-import { ThemeSwitcher } from '../app/ui';
+import { SiteSettings } from '../app/ui';
 import { getLeagues, sleeperAvatarUrl, type SleeperLeague } from '../data/sleeper';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
 
@@ -68,7 +68,7 @@ export function Leagues() {
             <span style={{ fontSize: 8.5, color: 'var(--faint)', letterSpacing: '0.08em' }}>▾</span>
           </button>
         </div>
-        <ThemeSwitcher />
+        <SiteSettings />
       </header>
 
       <main style={{ flex: 1, overflow: 'auto', padding: '20px 16px 60px' }}>

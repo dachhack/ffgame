@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
-import { Brand, ThemeSwitcher, PosPill, useIsMobile } from '../app/ui';
+import { Brand, SiteSettings, PosPill, useIsMobile } from '../app/ui';
 import { getTeam, gameForTeam } from '../data/league';
 import { buildMatchup, defaultLineup, aiLineup, slotKey } from '../engine/matchup';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
@@ -62,7 +62,7 @@ export function MatchupFinal({ week }: { week: number }) {
       <header style={{ minHeight: 56, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 6, padding: '8px 14px', position: 'sticky', top: 0, zIndex: 40, gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Brand onClick={() => navigate({ name: 'league' })} />
-          <ThemeSwitcher />
+          <SiteSettings />
           <span className="mono" style={{ fontSize: 11, letterSpacing: '0.1em', color: 'var(--dim)' }}>WEEK {week} FINAL</span>
         </div>
         <button onClick={() => navigate({ name: 'league' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', padding: '6px 9px', borderRadius: 4 }}>← LEAGUE</button>

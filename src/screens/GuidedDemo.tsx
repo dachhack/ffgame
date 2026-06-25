@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { useStore } from '../app/store';
-import { ThemeSwitcher, PlayerImg } from '../app/ui';
+import { SiteSettings, PlayerImg } from '../app/ui';
 import { buildMatchup, defaultLineup, aiLineup, slotKey } from '../engine/matchup';
 import { YOU_TEAM_ID, gameForTeam } from '../data/league';
 import { DEMO_WEEK } from '../config';
@@ -186,7 +186,7 @@ export function GuidedDemo() {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <DemoViewToggle view="clean" onSwitch={(v) => v === 'board' && navigate({ name: 'demo', view: 'board' })} />
-        <ThemeSwitcher />
+        <SiteSettings />
       </div>
     </header>
   );
