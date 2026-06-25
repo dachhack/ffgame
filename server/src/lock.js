@@ -4,6 +4,68 @@
 // locked — which is the moment the opponent's picks first become readable.
 import { db } from './supabase.js';
 import { autoLineup } from './engine.js';
+import { wantsComboDrip, aiLiveBuffs } from '../../src/data/aiLineup.ts';
+import { powerupById } from '../../src/data/powerups.ts';
+
+/** A team's armed loadout (applied_state) — what it already OWNS coming into the
+ *  lock. Returns { buffs:Set, unlocks:Set, extra:int, payload }. */
+async function ownedLoadout(matchupId, appUserId) {
+  const { data } = await db().from('applied_state').select('payload_json')
+    .eq('matchup_id', matchupId).eq('app_user_id', appUserId).maybeSingle();
+  const payload = data?.payload_json ?? {};
+  return {
+    buffs: new Set(Array.isArray(payload.buffs) ? payload.buffs : []),
+    unlocks: new Set(Array.isArray(payload.unlocks) ? payload.unlocks : []),
+    extra: Number.isFinite(payload.extra) ? payload.extra : 0,
+    payload,
+  };
+}
+
+/** AI budget pass (M4b): an AI-driven team earns + spends coin exactly like a
+ *  human. Seeds its wallet (idempotent), then buys power-ups BLIND on its OWN
+ *  roster in priority order — (a) Combo Drip if it has a dual-threat, then
+ *  (b) in-slot buffs from the deterministic draw — spending only what it can
+ *  afford. Purchases land in the team's applied_state (the same store the human
+ *  shop writes, app_user-keyed), so resolve.js scores it with exactly what it
+ *  bought. Idempotent per item, so a re-lock never double-charges. Returns the
+ *  team's owned-unlock Set, used to build a lineup that only fields a `combodrip`
+ *  pick when the unlock was actually purchased. */
+async function aiBudgetPass(m, rosterId, appUserId, starters, seed) {
+  // 1. Seed the season starting balance (idempotent via the <league>:seed:<roster> key).
+  await db().rpc('credit_wallet', {
+    p_league_id: m.league_id, p_roster_id: rosterId, p_matchup_id: null,
+    p_week: null, p_delta: seed, p_reason: 'seed',
+  });
+
+  const own = await ownedLoadout(m.id, appUserId);
+
+  // 2. Decide desired purchases, blind + priority-ordered (own roster only).
+  const desired = [];
+  if (starters.some((s) => s.player_slug && wantsComboDrip(s.player_slug, s.pos))) desired.push('unlock-combo-drip');
+  for (const b of aiLiveBuffs(`${m.league_id}:${rosterId}`, m.week)) desired.push(b);
+
+  // 3. Spend within budget: each item charged once (idempotent). Items already
+  //    owned from a prior lock are kept without re-charging (skip the spend so a
+  //    depleted balance can't drop a previously-bought item off the loadout).
+  for (const item of desired) {
+    if (own.buffs.has(item) || own.unlocks.has(item)) continue;
+    const price = powerupById(item)?.price ?? 9999;
+    const { data: sp } = await db().rpc('spend_from_wallet', {
+      p_league_id: m.league_id, p_roster_id: rosterId, p_price: price,
+      p_matchup_id: m.id, p_week: m.week, p_reason: 'spend:' + item,
+      p_idem: `${m.id}:ai:${item}:${rosterId}`,
+    });
+    if (sp?.ok) (item.startsWith('unlock-') ? own.unlocks : own.buffs).add(item);
+  }
+
+  // 4. Record the bought loadout (merge, don't clobber any other payload keys).
+  await db().from('applied_state').upsert({
+    matchup_id: m.id, app_user_id: appUserId, week: m.week,
+    payload_json: { ...own.payload, buffs: [...own.buffs], unlocks: [...own.unlocks] },
+  }, { onConflict: 'matchup_id,app_user_id' });
+
+  return own.unlocks;
+}
 
 /** Lock any scheduled matchups whose lock_at has passed. Returns count locked. */
 export async function lockDueMatchups(now = new Date()) {
@@ -26,6 +88,9 @@ export async function lockDueMatchups(now = new Date()) {
 export async function materializeAutoLineups(matchupIds, iso = new Date().toISOString()) {
   const { data: ms } = await db().from('matchup')
     .select('id,league_id,week,home_roster_id,away_roster_id').in('id', matchupIds);
+  // The season starting balance, authoritative from the DB so the AI seeds the
+  // same amount a human's ensure_wallet does.
+  const seed = Number((await db().rpc('wallet_seed')).data ?? 150);
   let n = 0;
   for (const m of ms ?? []) {
     const policy = (await db().from('league').select('lineup_policy').eq('id', m.league_id).maybeSingle()).data?.lineup_policy ?? 'best_lineup';
@@ -44,9 +109,21 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       const isAi = mem.controller === 'ai';
       const missed = mem.enrolled && !hasPicks;
       if (!(isAi || (missed && policy !== 'empty'))) continue;
+      // An AI-controlled seat (always, or a missed manager flipped to AI for the
+      // week) plays the economy: it earns + spends coin. A missed 'best_lineup'
+      // manager just gets auto-filled with whatever they already own — we never
+      // spend their coin for them.
+      const aiDriven = isAi || (missed && policy === 'ai');
+      const starters = (startersByRoster.get(rosterId)) ?? [];
+      const slugs = starters.map((s) => s.player_slug).filter(Boolean);
+      const owned = aiDriven
+        ? await aiBudgetPass(m, rosterId, mem.app_user_id, starters, seed)
+        : (await ownedLoadout(m.id, mem.app_user_id)).unlocks;
+      // Arm-before-write: applied_state (the owned unlocks) is upserted by the
+      // budget pass BEFORE these rows, so a `combodrip` pick clears the
+      // enforce_locked_metric trigger.
       if (isAi && hasPicks) await db().from('sealed_pick').delete().eq('matchup_id', m.id).eq('app_user_id', mem.app_user_id);
-      const slugs = ((startersByRoster.get(rosterId)) ?? []).map((s) => s.player_slug).filter(Boolean);
-      const rows = autoLineup(slugs, m.week).map((p) => ({
+      const rows = autoLineup(slugs, m.week, owned).map((p) => ({
         matchup_id: m.id, app_user_id: mem.app_user_id, game_window: p.win, roster_slot: p.slot,
         player_slug: p.slug, metric_id: p.metric, locked: true, revealed_at: iso,
       }));
