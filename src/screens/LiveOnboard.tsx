@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
-import { ThemeSwitcher } from '../app/ui';
+import { SiteSettings } from '../app/ui';
 import { liveConfigured } from '../data/supabaseClient';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
@@ -38,17 +38,25 @@ function GoogleG() {
   );
 }
 
+type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin';
+
 export function LiveOnboard() {
   const { navigate } = useStore();
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [recovery, setRecovery] = useState(false);
+  const [admin, setAdmin] = useState(false);
+  const [view, setView] = useState<OnboardView>('home');
 
   useEffect(() => {
     if (!liveConfigured) { setReady(true); return; }
     getSession().then((s) => { setSession(s); setReady(true); });
     return onAuth((s, ev) => { setSession(s); if (ev === 'PASSWORD_RECOVERY') setRecovery(true); });
   }, []);
+  useEffect(() => {
+    if (!session) { setAdmin(false); return; }
+    isAdmin().then(setAdmin).catch(() => setAdmin(false));
+  }, [session]);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -59,7 +67,7 @@ export function LiveOnboard() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {session && <button onClick={() => signOut()} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>sign out</button>}
-          <ThemeSwitcher />
+          <SiteSettings superAdmin={session && admin ? () => setView('admin') : undefined} />
         </div>
       </header>
 
@@ -69,7 +77,7 @@ export function LiveOnboard() {
             : !ready ? <Muted text="Loading…" />
             : recovery ? <SetPassword onDone={() => setRecovery(false)} />
             : !session ? <AuthForm />
-            : <Enroll session={session} />}
+            : <Enroll session={session} view={view} setView={setView} />}
         </div>
       </main>
     </div>
@@ -234,11 +242,9 @@ function SetPassword({ onDone }: { onDone: () => void }) {
   );
 }
 
-function Enroll({ session }: { session: Session }) {
+function Enroll({ session, view, setView }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void }) {
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
-  const [admin, setAdmin] = useState(false);
   const [isCommish, setIsCommish] = useState(false);
-  const [view, setView] = useState<'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin'>('home');
   const [choice, setChoice] = useState<'none' | 'player'>('none');
 
   const refresh = async () => {
@@ -248,7 +254,6 @@ function Enroll({ session }: { session: Session }) {
   };
   useEffect(() => {
     refresh();
-    isAdmin().then(setAdmin).catch(() => setAdmin(false));
     /* eslint-disable-next-line */
   }, [session.user.id]);
 
@@ -266,9 +271,7 @@ function Enroll({ session }: { session: Session }) {
         ? <RoleChooser onPlayer={() => setChoice('player')} onCommish={() => setView('commish')} />
         : <RedeemForm onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
-        {admin && <button onClick={() => setView('admin')} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚙ super admin →</button>}
-      </div>
+        {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}      </div>
     </>
   );
 
@@ -279,9 +282,7 @@ function Enroll({ session }: { session: Session }) {
         <button onClick={() => setView('picks')} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◈ set your lineup →</button>
         <button onClick={() => setView('board')} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board →</button>
         {isCommish && <button onClick={() => setView('commishdash')} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚑ manage my league →</button>}
-        {!isCommish && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>I also run a league — verify as commissioner →</button>}
-        {admin && <button onClick={() => setView('admin')} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚙ super admin →</button>}
-      </div>
+        {!isCommish && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>I also run a league — verify as commissioner →</button>}      </div>
     </>
   );
 }

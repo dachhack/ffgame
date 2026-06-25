@@ -1,4 +1,4 @@
-import { useState, useEffect, type CSSProperties, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import type { Pos, ThemeName } from '../theme';
 import { THEMES } from '../theme';
 import { useStore } from './store';
@@ -107,65 +107,92 @@ export function Avatar({ name, accent = 'var(--you)', size = 30, src }: { name: 
   return fallback;
 }
 
-export function ThemeSwitcher() {
+/** Site settings — one gear chip that opens a popover with the theme picker + text
+ *  toggles (previously inline chips). `superAdmin`, when provided, adds a super-admin
+ *  entry at the bottom (shown only for admins in the live app). */
+export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
   const { theme, setTheme, bigText, setBigText, fullStats, setFullStats } = useStore();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+
   const opts: { id: ThemeName; label: string }[] = [
-    { id: 'prime', label: 'P' },
-    { id: 'tactical', label: 'T' },
-    { id: 'neon', label: 'N' },
-    { id: 'slate', label: 'S' },
-    { id: 'dusk', label: 'U' },
-    { id: 'daylight', label: 'D' },
-    { id: 'arctic', label: 'A' },
+    { id: 'prime', label: 'P' }, { id: 'tactical', label: 'T' }, { id: 'neon', label: 'N' },
+    { id: 'slate', label: 'S' }, { id: 'dusk', label: 'U' }, { id: 'daylight', label: 'D' }, { id: 'arctic', label: 'A' },
   ];
+  const lbl: CSSProperties = { fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--faint)' };
+  const toggle = (on: boolean): CSSProperties => ({
+    height: 24, padding: '0 9px', borderRadius: 4, fontFamily: MONO, fontWeight: 700, fontSize: 10.5, lineHeight: 1, cursor: 'pointer',
+    display: 'inline-flex', alignItems: 'center', gap: 5,
+    background: on ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, color: on ? 'var(--you)' : 'var(--dim)',
+  });
+
   return (
-    <div style={{ display: 'flex', gap: 3, flex: 'none', alignItems: 'center' }}>
-      {opts.map((o) => {
-        const active = theme === o.id;
-        return (
-          <button
-            key={o.id}
-            onClick={() => setTheme(o.id)}
-            title={o.id}
-            style={{
-              width: 22, height: 22, borderRadius: 4, fontFamily: MONO, fontSize: 10, fontWeight: 700,
-              background: active ? 'var(--sh)' : 'var(--surface)',
-              border: `1px solid ${active ? 'var(--you)' : 'var(--bd)'}`,
-              color: active ? 'var(--you)' : 'var(--dim)',
-            }}
-          >
-            {o.label}
-          </button>
-        );
-      })}
+    <div ref={ref} style={{ position: 'relative', flex: 'none' }}>
       <button
-        onClick={() => setBigText(!bigText)}
-        title={bigText ? 'Larger fine print (log + card labels): on' : 'Larger fine print (log + card labels): off'}
-        aria-pressed={bigText}
+        onClick={() => setOpen((o) => !o)}
+        title="Settings"
+        aria-expanded={open}
         style={{
-          height: 22, padding: '0 6px', marginLeft: 3, borderRadius: 4, fontFamily: MONO, fontWeight: 700, lineHeight: 1,
-          display: 'inline-flex', alignItems: 'baseline', gap: 1,
-          background: bigText ? 'var(--sh)' : 'var(--surface)',
-          border: `1px solid ${bigText ? 'var(--you)' : 'var(--bd)'}`,
-          color: bigText ? 'var(--you)' : 'var(--dim)',
+          width: 26, height: 22, borderRadius: 4, fontSize: 13, lineHeight: 1, cursor: 'pointer',
+          background: open ? 'var(--sh)' : 'var(--surface)', border: `1px solid ${open ? 'var(--you)' : 'var(--bd)'}`,
+          color: open ? 'var(--you)' : 'var(--dim)',
         }}
       >
-        <span style={{ fontSize: 9 }}>A</span><span style={{ fontSize: 12 }}>A</span>
+        ⚙
       </button>
-      <button
-        onClick={() => setFullStats(!fullStats)}
-        title={fullStats ? 'Full stat lines (wrap, no “…”): on' : 'Full stat lines (wrap, no “…”): off'}
-        aria-pressed={fullStats}
-        style={{
-          height: 22, padding: '0 7px', marginLeft: 3, borderRadius: 4, fontFamily: MONO, fontWeight: 700, fontSize: 11, lineHeight: 1,
-          display: 'inline-flex', alignItems: 'center',
-          background: fullStats ? 'var(--sh)' : 'var(--surface)',
-          border: `1px solid ${fullStats ? 'var(--you)' : 'var(--bd)'}`,
-          color: fullStats ? 'var(--you)' : 'var(--dim)',
-        }}
-      >
-        ↔
-      </button>
+      {open && (
+        <div
+          style={{
+            position: 'absolute', top: 28, right: 0, zIndex: 60, width: 208,
+            background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 12,
+            boxShadow: '0 10px 28px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column', gap: 14,
+          }}
+        >
+          <div>
+            <div style={lbl}>THEME</div>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 7 }}>
+              {opts.map((o) => {
+                const active = theme === o.id;
+                return (
+                  <button key={o.id} onClick={() => setTheme(o.id)} title={o.id}
+                    style={{ width: 24, height: 24, borderRadius: 4, fontFamily: MONO, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                      background: active ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${active ? 'var(--you)' : 'var(--bd)'}`, color: active ? 'var(--you)' : 'var(--dim)' }}>
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <div style={lbl}>TEXT</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+              <button onClick={() => setBigText(!bigText)} aria-pressed={bigText} style={toggle(bigText)}>
+                <span style={{ fontSize: 9 }}>A</span><span style={{ fontSize: 12 }}>A</span><span>larger</span>
+              </button>
+              <button onClick={() => setFullStats(!fullStats)} aria-pressed={fullStats} style={toggle(fullStats)}>
+                ↔ full
+              </button>
+            </div>
+          </div>
+          {superAdmin && (
+            <button
+              onClick={() => { setOpen(false); superAdmin(); }}
+              className="mono"
+              style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, marginTop: -2, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
+            >
+              ⚡ Super admin →
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

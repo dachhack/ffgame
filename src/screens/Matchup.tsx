@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
-import { Brand, ThemeSwitcher, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile } from '../app/ui';
+import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile } from '../app/ui';
 import { avatarUrl, teamLogo } from '../data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod } from '../data/nflSlate';
 import { WINDOWS, METRICS, metricById } from '../data/metrics';
@@ -590,7 +590,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <DemoViewToggle view="board" onSwitch={(v) => v === 'clean' && navigate({ name: 'demo', view: 'clean' })} />
-          <ThemeSwitcher />
+          <SiteSettings />
         </div>
       </header>
     );
@@ -728,7 +728,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               </button>
             ))}
           </div>
-          <ThemeSwitcher />
+          <SiteSettings />
           {resolved.real && (
             <span className="mono" title="This week resolves off real 2025 NFL play-by-play" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 3, padding: '3px 6px' }}>
               ● REAL PBP

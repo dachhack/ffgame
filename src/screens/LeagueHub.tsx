@@ -1,5 +1,5 @@
 import { useStore } from '../app/store';
-import { Brand, Header, ThemeSwitcher, UserChip, Avatar, DemoControls, fonts } from '../app/ui';
+import { Brand, Header, SiteSettings, UserChip, Avatar, DemoControls, fonts } from '../app/ui';
 import { getTeam, gameForTeam } from '../data/league';
 import { TOTAL_SLOTS } from '../data/metrics';
 import { SLEEPER_HANDLE } from '../config';
@@ -43,7 +43,7 @@ export function LeagueHub() {
             {sleeperUser && (
               <button onClick={() => navigate({ name: 'leagues' })} className="mono" title="Back to your leagues" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', padding: '6px 9px', borderRadius: 4, cursor: 'pointer' }}>← LEAGUES</button>
             )}
-            <Brand /><ThemeSwitcher />
+            <Brand /><SiteSettings />
           </>
         }
         right={
