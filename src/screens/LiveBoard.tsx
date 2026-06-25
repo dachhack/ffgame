@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { WINDOWS, metricById } from '../data/metrics';
 import type { Pos } from '../types';
 import {
-  myRoster, myMatchup, getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, myPool, matchupWallets,
-  type LiveMatchup, type WindowScore, type RevealedPick, type PoolPlayer,
+  myRoster, myMatchup, getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, myPool, matchupWallets, matchupTeams,
+  type LiveMatchup, type WindowScore, type RevealedPick, type PoolPlayer, type TeamInfo,
 } from '../data/liveApi';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16 };
@@ -17,6 +17,7 @@ export function LiveBoard({ userId, onBack }: { userId: string; onBack: () => vo
   const [picks, setPicks] = useState<RevealedPick[]>([]);
   const [pool, setPool] = useState<Record<string, PoolPlayer>>({});
   const [wallets, setWallets] = useState<{ home: number | null; away: number | null } | null>(null);
+  const [teams, setTeams] = useState<Record<number, TeamInfo>>({});
   const [state, setState] = useState<'loading' | 'none' | 'ready'>('loading');
 
   useEffect(() => {
@@ -29,6 +30,7 @@ export function LiveBoard({ userId, onBack }: { userId: string; onBack: () => vo
       setMatchup(m); setYouAreHome(m.home_roster_id === r.rosterId);
       const pl = await myPool(r.leagueId, m.week, r.rosterId);
       setPool(Object.fromEntries(pl.map((p) => [p.slug, p])));
+      matchupTeams(r.leagueId, [m.home_roster_id, m.away_roster_id]).then(setTeams).catch(() => {});
       const refresh = async () => {
         const [mm, ss, pk, ww] = await Promise.all([getMatchup(m.id), getMatchupState(m.id), getRevealedPicks(m.id), matchupWallets(m.id).catch(() => null)]);
         if (mm) setMatchup(mm);
@@ -73,10 +75,10 @@ export function LiveBoard({ userId, onBack }: { userId: string; onBack: () => vo
           <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Week {matchup!.week} · live board</div>
           <span className="mono" style={{ fontSize: 9, color: status === 'final' ? 'var(--dim)' : status === 'scheduled' ? 'var(--faint)' : 'var(--you)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 7px' }}>{status.toUpperCase()}</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, margin: '16px 0 4px' }}>
-          <Big label="YOU" value={round(totals.you)} color="var(--you)" />
-          <span className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>vs</span>
-          <Big label="OPP" value={round(totals.them)} color="var(--opp)" />
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 18, margin: '16px 0 4px' }}>
+          <Big label="YOU" value={round(totals.you)} color="var(--you)" team={teams[youAreHome ? matchup!.home_roster_id : matchup!.away_roster_id]} />
+          <span className="mono" style={{ fontSize: 11, color: 'var(--faint)', paddingTop: 14 }}>vs</span>
+          <Big label="OPP" value={round(totals.them)} color="var(--opp)" team={teams[youAreHome ? matchup!.away_roster_id : matchup!.home_roster_id]} />
         </div>
         {status === 'scheduled' && <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', marginTop: 8 }}>Scores start ticking after kickoff.</div>}
         {(myCoin != null || theirCoin != null) && (
@@ -118,11 +120,13 @@ export function LiveBoard({ userId, onBack }: { userId: string; onBack: () => vo
   );
 }
 
-function Big({ label, value, color }: { label: string; value: number; color: string }) {
+function Big({ label, value, color, team }: { label: string; value: number; color: string; team?: TeamInfo }) {
   return (
-    <div style={{ textAlign: 'center' }}>
+    <div style={{ textAlign: 'center', maxWidth: 120 }}>
+      {team?.avatar && <img src={team.avatar} alt="" width={28} height={28} style={{ borderRadius: 6, marginBottom: 4 }} />}
       <div className="grotesk" style={{ fontSize: 38, fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
       <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 4 }}>{label}</div>
+      {team?.team_name && <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.team_name}</div>}
     </div>
   );
 }

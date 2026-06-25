@@ -15,6 +15,7 @@ import { gamesToPoll } from './poll/scoreboard.js';
 import { pollGame } from './poll/plays.js';
 import { getState } from './sleeper.js';
 import { simulate } from './simulate.js';
+import { seedTestUsers } from './seedTestUsers.js';
 
 const [cmd, ...args] = process.argv.slice(2);
 
@@ -52,6 +53,12 @@ async function main() {
     }
     case 'simulate': {
       await simulate(args);
+      break;
+    }
+    case 'seed-test-users': {
+      const rows = await seedTestUsers(args[0], args[1]);
+      console.log(`seeded ${rows.length} test users (log in with these on the live site):`);
+      for (const r of rows) console.log(`  ${r.email}  /  ${r.password}   → roster ${r.roster} (${r.name})`);
       break;
     }
     default:
