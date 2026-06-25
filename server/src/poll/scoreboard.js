@@ -17,7 +17,8 @@ export async function getGames(season, week) {
   const d = await getJson(SB(season, week));
   return (d.events ?? []).map((e) => {
     const comp = e.competitions?.[0] ?? {};
-    const teams = (comp.competitors ?? []).map((c) => c.team?.abbreviation);
+    const cs = comp.competitors ?? [];
+    const teams = cs.map((c) => c.team?.abbreviation);
     return {
       eventId: String(e.id),
       date: e.date,                                    // ISO kickoff
@@ -25,8 +26,43 @@ export async function getGames(season, week) {
       state: e.status?.type?.state ?? comp.status?.type?.state ?? 'pre', // pre|in|post
       completed: !!(e.status?.type?.completed),
       teams,
+      home: cs.find((c) => c.homeAway === 'home')?.team?.abbreviation ?? teams[0],
+      away: cs.find((c) => c.homeAway === 'away')?.team?.abbreviation ?? teams[1],
     };
   });
+}
+
+/** Bucket an ISO kickoff into one of the 5 fantasy windows by its US-Eastern day
+ *  + hour (Intl handles EDT/EST). Mon → mnf; Sun by hour (early <3pm, late 3–6pm,
+ *  snf ≥6pm); any other weekday (Thu, plus Tue/Wed/Fri/Sat edge games) → tnf. */
+export function windowFromKickoff(iso) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', hour: 'numeric', hour12: false }).formatToParts(new Date(iso));
+  const wd = parts.find((p) => p.type === 'weekday')?.value;
+  let hr = Number(parts.find((p) => p.type === 'hour')?.value ?? 13);
+  if (hr === 24) hr = 0;
+  if (wd === 'Mon') return 'mnf';
+  if (wd !== 'Sun') return 'tnf';
+  if (hr < 15) return 'early';
+  if (hr < 18) return 'late';
+  return 'snf';
+}
+
+// ESPN team codes → our normalized codes (must match slugMeta.normTeam so a
+// slate team compares equal to a player's slugMeta team). Mainly WSH→WAS, LAR→LA.
+const TEAM_FIX = { LAR: 'LA', WSH: 'WAS', JAC: 'JAX', OAK: 'LV', SD: 'LAC', STL: 'LA' };
+const fixTeam = (t) => TEAM_FIX[t] ?? t;
+
+/** Normalized slate rows from already-fetched games: [{ away, home, win, kickoff }],
+ *  team codes mapped to ours. Source of truth for slate-gating + the K/DST bye check. */
+export function slateFromGames(games) {
+  return (games ?? [])
+    .filter((g) => g.home && g.away && g.date)
+    .map((g) => ({ away: fixTeam(g.away), home: fixTeam(g.home), win: windowFromKickoff(g.date), kickoff: g.date }));
+}
+
+/** The live slate for a season-week from ESPN (fetches the scoreboard). */
+export async function buildSlate(season, week) {
+  return slateFromGames(await getGames(season, week));
 }
 
 /** Earliest kickoff of the week (epoch ms), the matchup lock_at. */

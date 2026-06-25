@@ -21,13 +21,37 @@ export const NFL_SLATE: Record<number, NflGame[]> = {
   14: [{ away: "DAL", home: "DET", aScore: 30, hScore: 44, win: "tnf" }, { away: "SEA", home: "ATL", aScore: 37, hScore: 9, win: "early" }, { away: "PIT", home: "BAL", aScore: 27, hScore: 22, win: "early" }, { away: "CIN", home: "BUF", aScore: 34, hScore: 39, win: "early" }, { away: "TEN", home: "CLE", aScore: 31, hScore: 29, win: "early" }, { away: "IND", home: "JAX", aScore: 19, hScore: 36, win: "early" }, { away: "WAS", home: "MIN", aScore: 0, hScore: 31, win: "early" }, { away: "MIA", home: "NYJ", aScore: 34, hScore: 10, win: "early" }, { away: "NO", home: "TB", aScore: 24, hScore: 20, win: "early" }, { away: "DEN", home: "LV", aScore: 24, hScore: 17, win: "late" }, { away: "LA", home: "ARI", aScore: 45, hScore: 17, win: "late" }, { away: "CHI", home: "GB", aScore: 21, hScore: 28, win: "late" }, { away: "HOU", home: "KC", aScore: 20, hScore: 10, win: "snf" }, { away: "PHI", home: "LAC", aScore: 19, hScore: 22, win: "mnf" }],
 };
 
-/** Whether we have a real slate baked for a week (gates slate-aware UI). */
-export const hasSlate = (week: number): boolean => !!NFL_SLATE[week];
+// ── Live slate override ───────────────────────────────────────────────────────
+// The baked NFL_SLATE above is 2025 (the demo + the baked-2025 force-resolve
+// path). For LIVE play it would be wrong — a 2026 week reuses 2025's matchups and
+// byes because both are keyed by bare week number. So the live current-season
+// schedule is injected at runtime (mirrors realPbp's setSyntheticWeeks): the
+// worker derives it from the ESPN scoreboard (windowFromKickoff), and the client
+// loads it from the nfl_slate table — both call setRuntimeSlate. When a week is
+// overridden, every slate lookup below uses it; otherwise it falls back to the
+// baked 2025 data. (Scores are unknown for a future game → 0/0; only home/away/
+// win drive slate-gating + the K/DST bye check.)
+const RUNTIME_SLATE: Record<number, NflGame[]> = {};
+export function setRuntimeSlate(week: number, games: NflGame[]): void {
+  if (Array.isArray(games) && games.length) RUNTIME_SLATE[week] = games;
+}
+/** Drop all live overrides → revert to the baked 2025 slate (the force-resolve /
+ *  demo path resolves baked 2025 data, so it must use the 2025 slate). */
+export function clearRuntimeSlate(): void {
+  for (const k of Object.keys(RUNTIME_SLATE)) delete RUNTIME_SLATE[Number(k)];
+}
+/** The slate for a week — the live override if one's been set, else baked 2025. */
+function slateFor(week: number): NflGame[] | undefined {
+  return RUNTIME_SLATE[week] ?? NFL_SLATE[week];
+}
+
+/** Whether we have a slate for a week (live override or baked) — gates slate-aware UI. */
+export const hasSlate = (week: number): boolean => !!slateFor(week);
 
 /** The NFL game a team plays in a given week, or undefined (bye). */
 export function nflGameForTeam(week: number, team?: string | null): NflGame | undefined {
   if (!team) return undefined;
-  return (NFL_SLATE[week] || []).find((g) => g.home === team || g.away === team);
+  return (slateFor(week) || []).find((g) => g.home === team || g.away === team);
 }
 
 /** The time-slot window a team plays in for a given week, or null (bye). */
@@ -37,7 +61,7 @@ export function windowForTeam(week: number, team?: string | null): WindowId | nu
 
 /** Every real NFL game scheduled in a given time-slot window that week. */
 export function gamesInWindow(week: number, win: WindowId): NflGame[] {
-  return (NFL_SLATE[week] || []).filter((g) => g.win === win);
+  return (slateFor(week) || []).filter((g) => g.win === win);
 }
 
 // ── Calendar dates ──────────────────────────────────────────────────────────

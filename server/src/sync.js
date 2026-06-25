@@ -9,9 +9,10 @@
 import { db } from './supabase.js';
 import { config } from './config.js';
 import * as sleeper from './sleeper.js';
-import { weekKickoffMs } from './poll/scoreboard.js';
+import { weekKickoffMs, buildSlate } from './poll/scoreboard.js';
 import { buildPlayerIndex } from './playerIndex.js';
 import { assignKdst } from '../../src/data/kdst.ts';
+import { setRuntimeSlate } from '../../src/data/nflSlate.ts';
 
 /** Import one Sleeper league: league row, memberships, enrollment. */
 export async function importLeague(leagueId, season = config.season) {
@@ -59,6 +60,20 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
   const rows = await sleeper.getMatchups(leagueId, week); // one row per roster
   const lockMs = await weekKickoffMs(season, week);
   const lockAt = lockMs ? new Date(lockMs).toISOString() : null;
+
+  // Live NFL slate from ESPN → overrides the baked 2025 slate for this real
+  // season, so slate-gating + the K/DST bye check below use the correct windows
+  // and byes. Stored in nfl_slate so the client can load it too.
+  try {
+    const slate = await buildSlate(season, week);
+    if (slate.length) {
+      setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win })));
+      await db().from('nfl_slate').upsert(
+        slate.map((g) => ({ season, week, home: g.home, away: g.away, win: g.win, kickoff: g.kickoff })),
+        { onConflict: 'season,week,home' },
+      );
+    }
+  } catch (e) { console.error('[sync-week] slate', e?.message ?? e); }
 
   // Group by Sleeper matchup_id → opponent pairs.
   const byMatchup = new Map();

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { WINDOWS, METRICS, LOCKED_METRIC_UNLOCK } from '../data/metrics';
-import { windowForTeam, hasSlate } from '../data/nflSlate';
+import { windowForTeam, hasSlate, setRuntimeSlate } from '../data/nflSlate';
 import { slugMeta } from '../data/slugMeta';
 import type { Pos, WindowId } from '../types';
 import {
@@ -8,7 +8,7 @@ import {
   myBuffs, armBuff, disarmBuff, LIVE_BUFFS,
   myUnlocks, armUnlock, disarmUnlock,
   myWallet, ensureWallet,
-  myExtra, buyExtraSlot, sellExtraSlot,
+  myExtra, buyExtraSlot, sellExtraSlot, liveSlate,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller,
 } from '../data/liveApi';
 import { powerupById } from '../data/powerups';
@@ -60,7 +60,9 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         const m = await myMatchup(r.leagueId, r.rosterId);
         if (!m) { setState('none'); return; }
         setMatchup(m);
-        const [pl, pk, bf, un, ex] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId), myBuffs(m.id), myUnlocks(m.id), myExtra(m.id).catch(() => 0)]);
+        const [pl, pk, bf, un, ex, slate] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId), myBuffs(m.id), myUnlocks(m.id), myExtra(m.id).catch(() => 0), liveSlate(m.week).catch(() => [])]);
+        // Apply the live ESPN slate (overrides baked 2025) before gating below.
+        setRuntimeSlate(m.week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId })));
         setPool(pl);
         const map: Record<string, { player_slug: string | null; metric_id: string | null }> = {};
         const xs: { win: string | null; player_slug: string | null; metric_id: string | null }[] = [];
