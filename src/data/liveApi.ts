@@ -247,6 +247,15 @@ export async function getMatchupState(matchupId: string): Promise<WindowScore[]>
   return (data ?? []) as WindowScore[];
 }
 
+/** The live NFL slate for a week (worker-written from ESPN, migration 0029) —
+ *  drives slate-gating + the K/DST bye check for the real current season. Empty
+ *  until the worker has synced that week (then the client falls back to baked). */
+export interface SlateGame { away: string; home: string; win: string }
+export async function liveSlate(week: number): Promise<SlateGame[]> {
+  const { data } = await client().from('nfl_slate').select('away, home, win').eq('week', week);
+  return (data ?? []) as SlateGame[];
+}
+
 /** Sealed picks visible under RLS: always yours; the opponent's only once locked. */
 export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[]> {
   const { data } = await client().from('sealed_pick')

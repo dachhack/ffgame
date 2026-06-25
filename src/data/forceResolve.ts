@@ -6,6 +6,7 @@ import type { Player } from '../types';
 import { defaultMetric } from './metrics';
 import { resolveLiveMatchup, type LivePick } from '../engine/liveResolve';
 import { loadRealWeek } from './realPbp';
+import { clearRuntimeSlate } from './nflSlate';
 import { slugMeta as meta } from './slugMeta';
 import { adminMatchupPicks, adminSetMatchup, adminSetState, type MatchupPicks } from './liveApi';
 import { aiLineup } from './aiLineup';
@@ -53,6 +54,9 @@ const toLivePick = (s: Slot): LivePick => ({ win: s.win, slot: s.slot, player: m
  *  same one the worker uses, so this preview matches live scoring. */
 export async function forceResolve(matchupId: string, sourceWeek: number): Promise<{ window: string; home: number; away: number }[]> {
   const data = await adminMatchupPicks(matchupId);
+  // This previews from BAKED 2025 data, so it must use the baked 2025 slate —
+  // drop any live ESPN override a LivePicks visit set in this session.
+  clearRuntimeSlate();
   await loadRealWeek(sourceWeek); // baked plays into the engine's cache
   const { states, slots, coin } = resolveLiveMatchup(
     sideSlots(data, 'home', sourceWeek).map(toLivePick), sideSlots(data, 'away', sourceWeek).map(toLivePick), sourceWeek,
