@@ -11,7 +11,7 @@ Branded HTML for Supabase Auth emails. Paste each file's contents into
 | `invite.html` | Invite user | You're invited to Drip Fantasy |
 
 ## Brand
-- Accent: `#34E5D9` (mint) · header: `#221E33` (dark olive) · button text: `#161510`
+- Accent: `#34E5D9` (mint) · header: `#142A2E` (dark olive) · button text: `#161510`
 - Wordmark font: Space Grotesk (falls back to Arial in clients that block web fonts)
 - Brand mark: ◆ (`&#9670;`) in the accent color
 
