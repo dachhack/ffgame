@@ -11,6 +11,7 @@ import { config } from './config.js';
 import * as sleeper from './sleeper.js';
 import { weekKickoffMs } from './poll/scoreboard.js';
 import { buildPlayerIndex } from './playerIndex.js';
+import { assignKdst } from '../../src/data/kdst.ts';
 
 /** Import one Sleeper league: league row, memberships, enrollment. */
 export async function importLeague(leagueId, season = config.season) {
@@ -51,8 +52,10 @@ export async function importLeague(leagueId, season = config.season) {
 /** Mirror a week's Sleeper schedule into matchup rows + store starting lineups. */
 export async function syncWeek(leagueId, week, season = config.season, playerIndex = null) {
   const idx = playerIndex || (await buildPlayerIndex());
-  const { data: leagueRow } = await db().from('league').select('id').eq('sleeper_league_id', leagueId).eq('season', season).single();
+  const { data: leagueRow } = await db().from('league').select('id, kdst_mode, settings_json')
+    .eq('sleeper_league_id', leagueId).eq('season', season).single();
   const lid = leagueRow.id;
+  const kdstMode = leagueRow.kdst_mode ?? 'off';
   const rows = await sleeper.getMatchups(leagueId, week); // one row per roster
   const lockMs = await weekKickoffMs(season, week);
   const lockAt = lockMs ? new Date(lockMs).toISOString() : null;
@@ -85,6 +88,28 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
       return { slot: i, sleeper_id: sid, player_slug: p?.slug ?? null, pos: p?.pos ?? null };
     }),
   }));
+
+  // K/DST fill (migration 0028): if the commissioner enabled a fill mode and this
+  // league doesn't roster K and/or DEF, inject a team-keyed K/DST slug into each
+  // roster's pool so the Banker / Suppress metrics are playable. Detect missing
+  // positions from Sleeper roster_positions when present, else from the lineups.
+  if (kdstMode !== 'off') {
+    const rp = leagueRow.settings_json?.roster_positions;
+    const hasRp = Array.isArray(rp) && rp.length > 0;
+    const hasPos = (pos) => hasRp ? rp.includes(pos) : lineups.some((l) => l.starters_json.some((s) => s.pos === pos));
+    const needK = !hasPos('K'), needDef = !hasPos('DEF');
+    if (needK || needDef) {
+      const { data: manualRows } = await db().from('team_kdst').select('roster_id,k_slug,dst_slug').eq('league_id', lid);
+      const manualBy = new Map((manualRows ?? []).map((m) => [m.roster_id, m]));
+      for (const l of lineups) {
+        const fill = assignKdst({ leagueId: lid, rosterId: l.roster_id, week, mode: kdstMode, needK, needDef, manual: manualBy.get(l.roster_id) });
+        let slot = l.starters_json.length;
+        if (fill.kSlug) l.starters_json.push({ slot: slot++, sleeper_id: null, player_slug: fill.kSlug, pos: 'K' });
+        if (fill.dstSlug) l.starters_json.push({ slot: slot++, sleeper_id: null, player_slug: fill.dstSlug, pos: 'DEF' });
+      }
+    }
+  }
+
   if (lineups.length) await db().from('sleeper_lineup').upsert(lineups, { onConflict: 'league_id,week,roster_id' });
   return { matchups: matchups.length, lineups: lineups.length, lockAt };
 }

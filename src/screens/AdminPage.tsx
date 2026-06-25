@@ -5,13 +5,15 @@ import {
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
   adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink,
   setTeamController, setLineupPolicy,
+  leagueKdst, setKdstMode, setTeamKdst,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
-  type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy,
+  type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy, type LeagueKdst, type KdstMode,
 } from '../data/liveApi';
 import { importLeague, syncWeek } from '../data/sleeperAdmin';
 import { forceResolve } from '../data/forceResolve';
 import { FeedSheet } from './FeedSheet';
 import { WINDOWS, defaultMetric } from '../data/metrics';
+import { NFL_CODES } from '../data/kdst';
 import { slugMeta } from '../data/slugMeta';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
@@ -85,7 +87,14 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
   const [matchups, setMatchups] = useState<AdminMatchup[] | null>(null);
   const [members, setMembers] = useState<AdminMember[] | null>(null);
   const [audit, setAudit] = useState<AdminAudit[] | null>(null);
-  const [tab, setTab] = useState<'' | 'matchups' | 'members' | 'audit' | 'ready'>('');
+  const [tab, setTab] = useState<'' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst'>('');
+  const [kdst, setKdst] = useState<LeagueKdst | null>(null);
+  const loadKdst = async () => { try { setKdst(await leagueKdst(l.league_id)); } catch { setKdst(null); } };
+  const changeKdstMode = async (mode: KdstMode) => { setKdst((k) => (k ? { ...k, mode } : k)); try { await setKdstMode(l.league_id, mode); } catch { /* keep optimistic */ } };
+  const saveTeamKdst = async (rosterId: number, kSlug: string | null, dstSlug: string | null) => {
+    setKdst((k) => (k ? { ...k, teams: k.teams.map((t) => (t.roster_id === rosterId ? { ...t, k_slug: kSlug, dst_slug: dstSlug } : t)) } : k));
+    try { await setTeamKdst(l.league_id, rosterId, kSlug, dstSlug); } catch { /* keep optimistic */ }
+  };
   const [week, setWeek] = useState('1');
   const [srcWeek, setSrcWeek] = useState('1');
   const [busy, setBusy] = useState<string | null>(null);
@@ -145,11 +154,12 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
   const loadM = async () => setMatchups(await adminMatchups(l.league_id));
   const loadMembers = async () => setMembers(await adminLeagueMembers(l.league_id));
   const loadAudit = async () => setAudit(await commishAudit(l.league_id, 40));
-  const showTab = (t: 'matchups' | 'members' | 'audit' | 'ready') => {
+  const showTab = (t: 'matchups' | 'members' | 'audit' | 'ready' | 'kdst') => {
     setTab((cur) => (cur === t ? '' : t));
     if (t === 'matchups' && !matchups) loadM();
     if (t === 'members' && !members) loadMembers();
     if (t === 'audit') loadAudit();
+    if (t === 'kdst' && !kdst) loadKdst();
   };
   const set = async (id: string, status: string, lockNow = false) => { await adminSetMatchup(id, status, lockNow); await loadM(); };
   const sync = async () => {
@@ -175,6 +185,7 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => showTab('ready')} className="mono" style={linkBtn}>{tab === 'ready' ? 'hide' : 'picks'}</button>
           <button onClick={() => showTab('members')} className="mono" style={linkBtn}>{tab === 'members' ? 'hide' : 'members'}</button>
+          <button onClick={() => showTab('kdst')} className="mono" style={linkBtn}>{tab === 'kdst' ? 'hide' : 'K/DST'}</button>
           <button onClick={() => showTab('matchups')} className="mono" style={linkBtn}>{tab === 'matchups' ? 'hide' : 'matchups'}</button>
           <button onClick={() => showTab('audit')} className="mono" style={linkBtn}>{tab === 'audit' ? 'hide' : 'audit'}</button>
         </div>
@@ -226,6 +237,43 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
               </div>
             </div>
           ))}
+        </div>
+      )}
+      {tab === 'kdst' && (
+        <div style={{ marginTop: 10 }}>
+          {!kdst ? <Muted text="Loading…" /> : (
+            <>
+              <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
+                {kdst.needs_k || kdst.needs_def
+                  ? `This league doesn't roster ${[kdst.needs_k && 'kickers', kdst.needs_def && 'defenses'].filter(Boolean).join(' or ')} — fill them so the Banker / Suppress metrics are playable. Takes effect on the next sync.`
+                  : 'This league rosters both K and DEF — no fill needed.'}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>fill mode:</span>
+                <select value={kdst.mode} onChange={(e) => changeKdstMode(e.target.value as KdstMode)} style={{ ...inp, padding: '4px 6px', fontSize: 11 }}>
+                  <option value="off">off (do nothing)</option>
+                  <option value="random">random weekly (not on bye)</option>
+                  <option value="manual">manual per team</option>
+                </select>
+              </div>
+              {kdst.mode === 'manual' && (
+                <div style={{ marginTop: 8 }}>
+                  <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginBottom: 4 }}>Assign each team a K / DEF (season-long; auto-substituted on its bye week). Blank = random not-on-bye.</div>
+                  {kdst.teams.map((t) => (
+                    <div key={t.roster_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
+                      <span style={{ fontSize: 11, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.team}</span>
+                      {kdst.needs_k && (
+                        <KdstSelect suffix="k" value={t.k_slug} onChange={(v) => saveTeamKdst(t.roster_id, v, t.dst_slug)} />
+                      )}
+                      {kdst.needs_def && (
+                        <KdstSelect suffix="dst" value={t.dst_slug} onChange={(v) => saveTeamKdst(t.roster_id, t.k_slug, v)} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
       {tab === 'matchups' && matchups && (
@@ -709,4 +757,15 @@ function SendLink({ email }: { email: string }) {
 
 function Muted({ text }: { text: string }) {
   return <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)' }}>{text}</div>;
+}
+
+// A K or DST team picker — value is a '<team>-<suffix>' slug (or null = random).
+function KdstSelect({ suffix, value, onChange }: { suffix: 'k' | 'dst'; value: string | null; onChange: (v: string | null) => void }) {
+  return (
+    <select value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}
+      style={{ ...inp, padding: '3px 4px', fontSize: 10, width: 92 }} title={suffix === 'k' ? 'kicker team' : 'defense team'}>
+      <option value="">{suffix === 'k' ? 'K · random' : 'DEF · random'}</option>
+      {NFL_CODES.map((c) => <option key={c} value={`${c}-${suffix}`}>{c.toUpperCase()} {suffix === 'k' ? 'K' : 'DEF'}</option>)}
+    </select>
+  );
 }

@@ -334,6 +334,18 @@ export const setLineupPolicy = (leagueId: string, policy: LineupPolicy) =>
 export const myMembership = (leagueId: string, rosterId: number) =>
   rpc<{ controller: Controller } | null>('my_membership', { p_league_id: leagueId, p_roster_id: rosterId });
 
+// ── K/DST fill (migration 0028) ──────────────────────────────────────────────
+export type KdstMode = 'off' | 'random' | 'manual';
+export interface LeagueKdst {
+  mode: KdstMode; needs_k: boolean; needs_def: boolean;
+  teams: { roster_id: number; team: string | null; k_slug: string | null; dst_slug: string | null }[];
+}
+export const leagueKdst = (leagueId: string) => rpc<LeagueKdst>('league_kdst', { p_league_id: leagueId });
+export const setKdstMode = (leagueId: string, mode: KdstMode) =>
+  rpc<{ ok: boolean; error?: string; mode?: KdstMode }>('set_kdst_mode', { p_league_id: leagueId, p_mode: mode });
+export const setTeamKdst = (leagueId: string, rosterId: number, kSlug: string | null, dstSlug: string | null) =>
+  rpc<{ ok: boolean; error?: string }>('set_team_kdst', { p_league_id: leagueId, p_roster_id: rosterId, p_k_slug: kSlug, p_dst_slug: dstSlug });
+
 /** Launch the real server-driven live feed sim via the dispatch-sim edge function
  *  (admin-only; the function re-checks is_admin and holds the GitHub token). */
 export async function dispatchSim(input: { mode?: 'live' | 'reset' | 'check' | 'dry'; league: string; week?: number | string; src?: number | string; speed?: number; jitter?: number; corrections?: number }): Promise<{ ok: boolean; error?: string }> {
