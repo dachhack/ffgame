@@ -401,11 +401,14 @@ function Enrolled({ enrollments }: { enrollments: Enrollment[] }) {
       <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {enrollments.map((e, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px' }}>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{e.team_name}</div>
-              <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 2 }}>{e.league?.name ?? 'League'} · {e.league?.season ?? ''}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              {e.avatar_url && <img src={e.avatar_url} alt="" width={32} height={32} style={{ borderRadius: 6, flexShrink: 0 }} />}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{e.team_name}</div>
+                <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 2 }}>{e.league?.name ?? 'League'} · {e.league?.season ?? ''}</div>
+              </div>
             </div>
-            <span className="mono" style={{ fontSize: 9, color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '3px 7px' }}>ENROLLED</span>
+            <span className="mono" style={{ fontSize: 9, color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '3px 7px', flexShrink: 0 }}>ENROLLED</span>
           </div>
         ))}
       </div>
@@ -502,7 +505,10 @@ function RedeemForm({ onJoined }: { onJoined: () => void }) {
         {team && (
           <div style={{ marginTop: 14 }}>
             <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)' }}>You’ll join as</div>
-            <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--you)', margin: '4px 0 12px' }}>{team.team}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '6px 0 12px' }}>
+              {team.avatar && <img src={team.avatar} alt="" width={36} height={36} style={{ borderRadius: 7, flexShrink: 0 }} />}
+              <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--you)' }}>{team.team}</div>
+            </div>
             <button onClick={join} disabled={busy} className="mono" style={{ ...btn, width: '100%', padding: '11px 0', opacity: busy ? 0.6 : 1 }}>{busy ? 'JOINING…' : 'CONFIRM & JOIN'}</button>
             <div style={{ textAlign: 'center', marginTop: 10 }}>
               <button onClick={() => { setTeam(null); setErr(null); }} className="mono" style={linkBtn}>not me — change username</button>
