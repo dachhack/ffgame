@@ -1,17 +1,17 @@
-# Drip League FF — auth email templates
+# Drip Fantasy — auth email templates
 
 Branded HTML for Supabase Auth emails. Paste each file's contents into
 **Supabase → Authentication → Emails → [template]** and set the subject below.
 
 | File | Supabase template | Subject |
 |------|-------------------|---------|
-| `magic-link.html` | Magic Link | Your Drip League sign-in link |
-| `confirm-signup.html` | Confirm signup | Confirm your Drip League account |
-| `reset-password.html` | Reset Password | Reset your Drip League password |
-| `invite.html` | Invite user | You're invited to Drip League FF |
+| `magic-link.html` | Magic Link | Your Drip Fantasy sign-in link |
+| `confirm-signup.html` | Confirm signup | Confirm your Drip Fantasy account |
+| `reset-password.html` | Reset Password | Reset your Drip Fantasy password |
+| `invite.html` | Invite user | You're invited to Drip Fantasy |
 
 ## Brand
-- Accent: `#36E59B` (mint) · header: `#252116` (dark olive) · button text: `#161510`
+- Accent: `#34E5D9` (mint) · header: `#221E33` (dark olive) · button text: `#161510`
 - Wordmark font: Space Grotesk (falls back to Arial in clients that block web fonts)
 - Brand mark: ◆ (`&#9670;`) in the accent color
 

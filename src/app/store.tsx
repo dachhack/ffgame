@@ -144,7 +144,7 @@ function loadState(): SaveState {
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeName>(() => {
     const saved = typeof localStorage !== 'undefined' ? (localStorage.getItem(THEME_KEY) as ThemeName | null) : null;
-    return saved ?? 'prime';
+    return saved ?? 'neon';
   });
   const [sleeperUser, setSleeperUserState] = useState<SleeperUser | null>(() => {
     try { const s = localStorage.getItem(SLEEPER_KEY); return s ? JSON.parse(s) as SleeperUser : null; } catch { return null; }
