@@ -204,7 +204,7 @@ export function LeagueHub() {
           )}
 
           <div style={{ marginTop: 28, fontFamily: GROTESK, fontSize: 11, color: 'var(--faint)', textAlign: 'center', lineHeight: 1.7 }}>
-            {sleeperUser ? `${LEAGUE_REF.name} · real ${LEAGUE_REF.season} Sleeper data · simulated live scoring` : 'Drip League FF demo · real PeakedInDynasty 2025 data · simulated live scoring'}
+            {sleeperUser ? `${LEAGUE_REF.name} · real ${LEAGUE_REF.season} Sleeper data · simulated live scoring` : 'Drip Fantasy demo · real PeakedInDynasty 2025 data · simulated live scoring'}
           </div>
         </div>
       </main>
