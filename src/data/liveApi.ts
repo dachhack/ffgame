@@ -256,6 +256,19 @@ export async function liveSlate(week: number): Promise<SlateGame[]> {
   return (data ?? []) as SlateGame[];
 }
 
+/** Both teams' display identity (name + avatar) for a matchup — league members can
+ *  read all memberships (RLS), so this drives the live board's team headers. */
+export interface TeamInfo { roster_id: number; team_name: string | null; avatar: string | null }
+export async function matchupTeams(leagueId: string, rosterIds: number[]): Promise<Record<number, TeamInfo>> {
+  const { data } = await client().from('league_membership')
+    .select('sleeper_roster_id, team_name, avatar_url').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
+  const out: Record<number, TeamInfo> = {};
+  for (const m of (data ?? []) as { sleeper_roster_id: number; team_name: string | null; avatar_url: string | null }[]) {
+    out[m.sleeper_roster_id] = { roster_id: m.sleeper_roster_id, team_name: m.team_name, avatar: m.avatar_url };
+  }
+  return out;
+}
+
 /** Sealed picks visible under RLS: always yours; the opponent's only once locked. */
 export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[]> {
   const { data } = await client().from('sealed_pick')
