@@ -48,9 +48,9 @@ export const THEMES: Record<ThemeName, Theme> = {
     pos: POS_TACTICAL,
   },
   neon: {
-    bg: '#221E33', surface: '#2C2941', sh: '#363250', bd: '#3A3858', bdh: '#4A4870',
-    text: '#F1EEFB', dim: '#A29FC0', faint: '#726F8C', mid: '#BFBCD6', dimstrong: '#D6D3E8',
-    you: '#34E5D9', opp: '#FF3D88', warn: '#FFD24A', onAccent: '#14111F',
+    bg: '#142A2E', surface: '#1C3338', sh: '#234047', bd: '#284A52', bdh: '#356068',
+    text: '#ECF5F3', dim: '#9DB4B1', faint: '#688080', mid: '#B9CFCC', dimstrong: '#D2E3E0',
+    you: '#34E5D9', opp: '#FF5274', warn: '#FFD24A', onAccent: '#0C1A1C',
     fx: { nuke: '#FF3D88', erase: '#FF3D88', reset: '#FF7E5C', streak: '#C29BFF', mult: '#34E5D9', compression: '#7FE38A', stop: '#B0AEC6', sys: '#9290B0' },
     pos: {
       QB: { bg: '#0E2A48', fg: '#5BC4FF', bd: '#1B4775' },
