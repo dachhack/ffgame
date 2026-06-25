@@ -58,7 +58,7 @@ async function main() {
     case 'seed-test-users': {
       const rows = await seedTestUsers(args[0], args[1]);
       console.log(`seeded ${rows.length} test users (log in with these on the live site):`);
-      for (const r of rows) console.log(`  ${r.email}  /  ${r.password}   → roster ${r.roster} (${r.name})`);
+      for (const r of rows) console.log(`  ${r.email}  /  ${r.password}   → roster ${r.roster} (${r.name})${r.commish ? '  [COMMISSIONER]' : ''}`);
       break;
     }
     default:

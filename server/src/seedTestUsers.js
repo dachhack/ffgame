@@ -9,9 +9,10 @@
 import { db } from './supabase.js';
 
 const PW = 'DripTest!23';
-// roster → made-up identity (themed to the team's fake name / 2025 logo).
+// roster → made-up identity (themed to the team's fake name / 2025 logo). The
+// first is the league COMMISSIONER (owns a team AND gets the self-serve CommishDash).
 const USERS = [
-  { roster: 3, email: 'sandy@driptest.app',    name: 'Sandy Spiker' },
+  { roster: 3, email: 'commish@driptest.app',   name: 'Commish Cassidy', commish: true },
   { roster: 4, email: 'grillmaster@driptest.app', name: 'Grill Master' },
   { roster: 5, email: 'wavydave@driptest.app',  name: 'Wavy Dave' },
   { roster: 6, email: 'chlorinecarl@driptest.app', name: 'Chlorine Carl' },
@@ -29,6 +30,7 @@ export async function seedTestUsers(sleeperLeagueId = 'DRIPTEST-2026', season = 
   if (!lg) throw new Error(`no league for sleeper_league_id=${sleeperLeagueId} season=${season}`);
   const lid = lg.id;
   const out = [];
+  let commishUid = null;
   for (const u of USERS) {
     // Create the auth user (idempotent: reuse the existing one on a re-run).
     let uid = null;
@@ -44,7 +46,13 @@ export async function seedTestUsers(sleeperLeagueId = 'DRIPTEST-2026', season = 
       .update({ app_user_id: uid, enrolled: true, controller: 'human' })
       .eq('league_id', lid).eq('sleeper_roster_id', u.roster);
     if (lmErr) { console.error(`  ! link ${u.email} → roster ${u.roster}: ${lmErr.message}`); continue; }
-    out.push({ email: u.email, password: PW, name: u.name, roster: u.roster });
+    if (u.commish) commishUid = uid;
+    out.push({ email: u.email, password: PW, name: u.name, roster: u.roster, commish: !!u.commish });
+  }
+  // Make the made-up commish the league commissioner (unlocks the CommishDash).
+  if (commishUid) {
+    const { error } = await db().from('league').update({ commissioner_id: commishUid }).eq('id', lid);
+    if (error) console.error(`  ! set commissioner_id: ${error.message}`);
   }
   return out;
 }
