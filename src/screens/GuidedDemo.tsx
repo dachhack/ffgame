@@ -208,7 +208,7 @@ export function GuidedDemo() {
   if (step !== 'watch') {
     const order: Step[] = ['pick', 'metric', 'power'];
     const idx = order.indexOf(step);
-    const titles = ['Pick your star', 'Choose its hidden metric', 'Arm a power-up'];
+    const titles = ['Pick your Starter', 'Choose your metric', 'Arm a power-up'];
     const subs = [
       'Three star players, three positions — each a live, back-and-forth duel off real Week 4 plays. Pick one.',
       'Your metric is hidden from your opponent. It decides how this player scores — and how he attacks theirs.',
@@ -240,7 +240,6 @@ export function GuidedDemo() {
                       <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.playerName}</div>
                       <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.04em', marginTop: 2 }}>{d.pos} · {d.team} · vs {d.oppName}</div>
                     </div>
-                    <span className="mono" style={{ flex: 'none', fontSize: 7.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--fx-streak)', border: '1px solid color-mix(in srgb, var(--fx-streak) 45%, transparent)', background: 'color-mix(in srgb, var(--fx-streak) 12%, transparent)', borderRadius: 3, padding: '2px 5px' }}>🔥 {d.tag}</span>
                     {on && <span style={tick}>✓</span>}
                   </button>
                 );
@@ -254,7 +253,6 @@ export function GuidedDemo() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
                         <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{m.name}</span>
                         <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 45%, transparent)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', borderRadius: 3, padding: '1px 5px' }}>{m.tag}</span>
-                        {m.id === opt.bestMetric && <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--fx-streak)' }}>★ liveliest</span>}
                       </div>
                       <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 4, lineHeight: 1.4 }}>{m.ef}</div>
                     </div>
@@ -330,7 +328,7 @@ export function GuidedDemo() {
         <div style={{ width: '100%', maxWidth: 480, position: 'relative' }}>
           <div style={{ textAlign: 'center', marginBottom: 14 }}>
             <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>Your duel, live</div>
-            <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6 }}>The star, metric and power-up you chose — scored off real NFL plays.</div>
+            <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6 }}>Your player, metric and power-up you chose — scored off real NFL plays.</div>
           </div>
 
           {/* the duel */}
@@ -341,11 +339,9 @@ export function GuidedDemo() {
               <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.14em', paddingTop: 14 }}>VS</div>
               <Side side="their" />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
-              <span className="mono" style={{ fontSize: 9, color: 'var(--dim)', minWidth: 34 }}>{fmtClock(clock)}</span>
-              <div style={{ flex: 1, height: 3, background: 'var(--bd)', borderRadius: 3 }}>
-                <div style={{ height: 3, width: `${maxClock ? (clock / maxClock) * 100 : 0}%`, background: 'var(--you)', borderRadius: 3, transition: 'width .3s linear' }} />
-              </div>
+            <div style={{ textAlign: 'center', marginTop: 16 }}>
+              <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--faint)' }}>REAL GAME TIME</div>
+              <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, color: ended ? 'var(--you)' : 'var(--text)', marginTop: 3, lineHeight: 1 }}>{ended ? 'FINAL' : fmtClock(clock)}</div>
             </div>
           </div>
 
@@ -408,8 +404,10 @@ export function GuidedDemo() {
           {ended && (
             <div style={{ marginTop: 18, background: 'var(--surface)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: 18, textAlign: 'center' }}>
               <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>{youBank >= theirBank ? 'You took it.' : Math.abs(youBank - theirBank) <= 8 ? 'So close.' : 'That one got away.'} That’s one slot.</div>
-              <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>Every star, every hidden metric, every power-up — your call, across all eight slots. Now run it with your own team:</div>
-              <div style={{ marginTop: 14 }}><SleeperHandoff /></div>
+              <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>That was one slot. A real lineup is eight of them — every player, hidden metric, and power-up your call.</div>
+              <button onClick={() => navigate({ name: 'demo', view: 'board' })} className="mono" style={{ ...cta, marginTop: 14 }}>Show me a full board →</button>
+              <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 16, lineHeight: 1.5 }}>Or run it with your own team:</div>
+              <div style={{ marginTop: 10 }}><SleeperHandoff /></div>
               <button onClick={() => navigate({ name: 'live' })} className="mono" style={{ ...cta, marginTop: 12, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--bd)' }}>join the live H2H pilot →</button>
               <button onClick={restart} className="mono" style={{ background: 'none', border: 'none', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', cursor: 'pointer', marginTop: 12 }}>↩ make different picks</button>
             </div>
