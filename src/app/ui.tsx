@@ -125,9 +125,13 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
     return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
   }, [open]);
 
-  const opts: { id: ThemeName; label: string }[] = [
-    { id: 'prime', label: 'P' }, { id: 'tactical', label: 'T' }, { id: 'neon', label: 'N' },
-    { id: 'slate', label: 'S' }, { id: 'dusk', label: 'U' }, { id: 'daylight', label: 'D' }, { id: 'arctic', label: 'A' },
+  const opts: { id: ThemeName; name: string }[] = [
+    { id: 'neon', name: 'Drip' },
+    { id: 'slate', name: 'Night Rider' },
+    { id: 'dusk', name: 'Deep Thoughts' },
+    { id: 'prime', name: 'All Gold' },
+    { id: 'daylight', name: 'Feeling Lucky' },
+    { id: 'arctic', name: 'Arctic Journey' },
   ];
   const lbl: CSSProperties = { fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--faint)' };
   const toggle = (on: boolean): CSSProperties => ({
@@ -160,27 +164,27 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
         >
           <div>
             <div style={lbl}>THEME</div>
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 7 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 7 }}>
               {opts.map((o) => {
                 const active = theme === o.id;
                 return (
                   <button key={o.id} onClick={() => setTheme(o.id)} title={o.id}
-                    style={{ width: 24, height: 24, borderRadius: 4, fontFamily: MONO, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                    style={{ textAlign: 'left', padding: '7px 10px', borderRadius: 5, fontFamily: MONO, fontSize: 11, fontWeight: 700, cursor: 'pointer',
                       background: active ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${active ? 'var(--you)' : 'var(--bd)'}`, color: active ? 'var(--you)' : 'var(--dim)' }}>
-                    {o.label}
+                    {o.name}{active ? ' ✓' : ''}
                   </button>
                 );
               })}
             </div>
           </div>
           <div>
-            <div style={lbl}>TEXT</div>
+            <div style={lbl}>DISPLAY</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
-              <button onClick={() => setBigText(!bigText)} aria-pressed={bigText} style={toggle(bigText)}>
-                <span style={{ fontSize: 9 }}>A</span><span style={{ fontSize: 12 }}>A</span><span>larger</span>
+              <button onClick={() => setBigText(!bigText)} aria-pressed={bigText} title="Bigger fine print" style={toggle(bigText)}>
+                <span style={{ fontSize: 9 }}>A</span><span style={{ fontSize: 12 }}>A</span><span>Bigger</span>
               </button>
-              <button onClick={() => setFullStats(!fullStats)} aria-pressed={fullStats} style={toggle(fullStats)}>
-                ↔ full
+              <button onClick={() => setFullStats(!fullStats)} aria-pressed={fullStats} title="Show full stat lines instead of truncating" style={toggle(fullStats)}>
+                Full stats
               </button>
             </div>
           </div>
