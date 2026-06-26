@@ -30,7 +30,7 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
-          # Site is served from www.dripfantasy.com root, not /ffgame/.
+          # Site is served from dripfantasy.com root, not /ffgame/.
           VITE_BASE: /
       - uses: actions/configure-pages@v5
         with:
