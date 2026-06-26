@@ -41,6 +41,8 @@ export async function buildDripTestLeague(
   onProgress?: (note: string) => void,
 ): Promise<{ built: BuiltLeague; youTeamId: string }> {
   const { built } = await buildSleeperLeague(CONSOLE_WARRIORS_ID, '', onProgress, { addKdst: true });
+  // Re-skin the league identity too (the fetched name is the real source league).
+  built.league.name = 'Drip Test League';
   // Skin in roster-id order so the assignment matches the DB seed exactly.
   const inRosterOrder = [...built.league.teams].sort((a, b) => rosterNum(a.id) - rosterNum(b.id));
   inRosterOrder.forEach((t, i) => { const s = SKIN[i % SKIN.length]; t.name = s.name; t.owner = s.name; t.ownerId = s.owner; });
