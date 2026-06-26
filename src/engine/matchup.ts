@@ -305,6 +305,7 @@ export function buildMatchup(
   buffs: Record<string, boolean> = {},
   extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>> } = {},
   realResolve = false, // resolve cross-game effects (TE-TD drip nuke) in real-time order
+  oppBuffs?: string[], // live H2H: the opponent's REAL armed buffs (revealed at lock); AI default when omitted
 ): ResolvedMatchup {
   const youPools = windowPools(youTeamId, week);
   const oppPools = windowPools(oppTeamId, week);
@@ -323,9 +324,9 @@ export function buildMatchup(
   // Armed pre-match buffs that modify scoring (Momentum / Garbage Time /
   // Floodgates / Overtime). Only the human side carries buffs in the demo.
   const youBuffSet = new Set(Object.keys(buffs).filter((k) => buffs[k]));
-  // The AI opponent loads with its own three armed power-ups (deterministic per
-  // team+week), so its side gets the same buff treatment the human's does.
-  const theirBuffSet = new Set<string>(aiBuffs(oppTeamId, week));
+  // The opponent's armed power-ups: their REAL revealed loadout in a live H2H
+  // matchup, else the AI's deterministic three (demo / pre-reveal).
+  const theirBuffSet = new Set<string>(oppBuffs ?? aiBuffs(oppTeamId, week));
 
   for (const w of WINDOWS) {
     const nSlots = slotsFor(w.id, extraSlots);

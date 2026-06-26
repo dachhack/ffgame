@@ -14,7 +14,7 @@ import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type S
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
-import { myPicks, savePicks, getRevealedPicks, type PickRow } from '../data/liveApi';
+import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
@@ -188,18 +188,23 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // Live pilot: the opponent's REAL sealed lineup, revealed at lock (RLS hides it
   // until then). Polls so a reveal lands without a reload. Null → fall back to AI.
   const [liveOppPicks, setLiveOppPicks] = useState<Record<string, Pick> | null>(null);
+  // The opponent's REAL armed buffs, revealed at lock (null → keep AI buffs).
+  const [liveOppBuffs, setLiveOppBuffs] = useState<string[] | null>(null);
   useEffect(() => {
-    if (!liveCtx) { setLiveOppPicks(null); return; }
+    if (!liveCtx) { setLiveOppPicks(null); setLiveOppBuffs(null); return; }
     let alive = true;
     const load = async () => {
       try {
-        const rows = await getRevealedPicks(liveCtx.matchupId);
+        const [rows, oppBuffs] = await Promise.all([
+          getRevealedPicks(liveCtx.matchupId),
+          revealedOppBuffs(liveCtx.matchupId, liveCtx.userId).catch(() => null),
+        ]);
         const opp: Record<string, Pick> = {};
         for (const r of rows) {
           if (r.app_user_id === liveCtx.userId || !r.player_slug) continue; // skip mine / empty
           opp[`${r.game_window}#${r.roster_slot}`] = { playerId: r.player_slug, metricId: r.metric_id };
         }
-        if (alive) setLiveOppPicks(Object.keys(opp).length ? opp : null);
+        if (alive) { setLiveOppPicks(Object.keys(opp).length ? opp : null); setLiveOppBuffs(oppBuffs); }
       } catch { /* keep prior */ }
     };
     load();
@@ -235,8 +240,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const swapsKey = JSON.stringify(swaps);
   const backupsKey = JSON.stringify(backupAssign);
   const resolved = useMemo(
-    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps, backupAssign, buffs, extras, realResolve),
-    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, buffsKey, extrasKey, realResolve],
+    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps, backupAssign, buffs, extras, realResolve, liveOppBuffs ?? undefined),
+    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, buffsKey, extrasKey, realResolve, liveOppBuffs],
   );
 
   // Your player's name at each slot key — for showing a backup's chosen target

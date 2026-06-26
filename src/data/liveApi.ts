@@ -276,6 +276,17 @@ export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[
   return (data ?? []) as RevealedPick[];
 }
 
+/** The opponent's revealed armed buffs — readable only AFTER the matchup locks
+ *  (applied_read_after_lock RLS). Returns null when the opponent's row isn't
+ *  visible yet (pre-lock) so callers can keep the AI default; an array (possibly
+ *  empty) once revealed. */
+export async function revealedOppBuffs(matchupId: string, userId: string): Promise<string[] | null> {
+  const { data } = await client().from('applied_state').select('app_user_id, payload_json').eq('matchup_id', matchupId);
+  const opp = (data ?? []).find((r) => r.app_user_id && r.app_user_id !== userId) as { payload_json: { buffs?: string[] } | null } | undefined;
+  if (!opp) return null;
+  return opp.payload_json?.buffs ?? [];
+}
+
 // ── Super admin ─────────────────────────────────────────────────────────────────
 export type Controller = 'human' | 'ai';
 export type LineupPolicy = 'best_lineup' | 'ai' | 'empty';
