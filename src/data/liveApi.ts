@@ -276,6 +276,15 @@ export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[
   return (data ?? []) as RevealedPick[];
 }
 
+/** All worker-ingested plays for a week (live_play is readable by any authed user).
+ *  Drives the live full-board resolution off real plays. */
+export interface LivePlayRow { player_slug: string; c: number; t: number | null; pid: number | null; k: string; y: number; td: number; ca: number; tg: number; to: number | null; }
+export async function weekLivePlays(week: number): Promise<LivePlayRow[]> {
+  const { data } = await client().from('live_play')
+    .select('player_slug, c, t, pid, k, y, td, ca, tg, to').eq('week', week);
+  return (data ?? []) as LivePlayRow[];
+}
+
 /** The opponent's revealed armed buffs — readable only AFTER the matchup locks
  *  (applied_read_after_lock RLS). Returns null when the opponent's row isn't
  *  visible yet (pre-lock) so callers can keep the AI default; an array (possibly

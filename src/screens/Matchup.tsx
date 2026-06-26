@@ -11,10 +11,10 @@ import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
 } from '../engine/matchup';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type StatLine } from '../engine/sim';
-import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock } from '../data/realPbp';
+import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
-import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, type PickRow } from '../data/liveApi';
+import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
@@ -212,6 +212,25 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     return () => { alive = false; clearInterval(t); };
   }, [liveCtx]);
 
+  // Live pilot scoring: install the worker's ingested plays for the week so the
+  // board resolves the REAL game (DNP 0 pre-kickoff, accruing as plays land).
+  // Bumps livePbpVer so the resolution memo recomputes on each refresh.
+  const [livePbpVer, setLivePbpVer] = useState(0);
+  useEffect(() => {
+    if (!liveCtx) return;
+    let alive = true;
+    const load = async () => {
+      try {
+        const rows = await weekLivePlays(liveCtx.week);
+        setLivePlays(liveCtx.week, liveRowsToPbp(rows));
+        if (alive) setLivePbpVer((v) => v + 1);
+      } catch { /* keep prior */ }
+    };
+    load();
+    const t = setInterval(load, 15000); // ~worker poll cadence
+    return () => { alive = false; clearInterval(t); };
+  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // The AI scouts which players you CAN field each window (the pool, not your spot
   // assignments — those stay sealed) and defends each window accordingly. What the
   // opponent has armed is hidden, exactly as your loadout is hidden from it. In a
@@ -241,7 +260,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const backupsKey = JSON.stringify(backupAssign);
   const resolved = useMemo(
     () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps, backupAssign, buffs, extras, realResolve, liveOppBuffs ?? undefined),
-    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, buffsKey, extrasKey, realResolve, liveOppBuffs],
+    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, buffsKey, extrasKey, realResolve, liveOppBuffs, livePbpVer],
   );
 
   // Your player's name at each slot key — for showing a backup's chosen target

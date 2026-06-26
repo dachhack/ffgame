@@ -8,7 +8,7 @@
 //   node src/cli.js simulate --check [lg]      read-only DB connectivity probe
 //   node src/cli.js simulate --reset <lg> <wk> revert a sim'd week (scheduled, cleared)
 import { config } from './config.js';
-import { importLeague, syncWeek, syncAllLeagues } from './sync.js';
+import { importLeague, syncWeek, syncAllLeagues, cloneWeek } from './sync.js';
 import { buildPlayerIndex } from './playerIndex.js';
 import { pollInjuries } from './poll/injuries.js';
 import { gamesToPoll } from './poll/scoreboard.js';
@@ -65,6 +65,16 @@ async function main() {
     }
     case 'simulate': {
       await simulate(args);
+      break;
+    }
+    case 'clone-week': {
+      // Schedule a league's matchups + lineups at another week (e.g. a real
+      // preseason week the worker will poll). Idempotent.
+      //   node src/cli.js clone-week <sleeperLeagueId> <fromWeek> <toWeek>
+      const [leagueId, fromW, toW] = args;
+      if (!leagueId || !fromW || !toW) { console.error('usage: clone-week <sleeperLeagueId> <fromWeek> <toWeek>'); break; }
+      const r = await cloneWeek(leagueId, Number(fromW), Number(toW));
+      console.log(`clone-week: ${leagueId} wk${fromW} → wk${toW} — ${r.matchups} matchups, ${r.lineups} lineups`);
       break;
     }
     case 'seed-test-users': {

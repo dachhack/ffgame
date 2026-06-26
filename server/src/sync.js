@@ -144,3 +144,40 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
   if (lineups.length) await db().from('sleeper_lineup').upsert(lineups, { onConflict: 'league_id,week,roster_id' });
   return { matchups: matchups.length, lineups: lineups.length, lockAt };
 }
+
+// Copy a league's matchups + starting lineups from one week to another — so a
+// test league (whose Sleeper source has no preseason matchups) can be scheduled
+// against a real preseason week the worker will poll. Idempotent: clears any
+// prior clone at `toWeek` first. New matchups are 'scheduled' (unlocked).
+export async function cloneWeek(sleeperLeagueId, fromWeek, toWeek, season = config.season) {
+  const { data: lg } = await db().from('league').select('id')
+    .eq('sleeper_league_id', sleeperLeagueId).eq('season', season).maybeSingle();
+  if (!lg) throw new Error(`no league for sleeper_league_id=${sleeperLeagueId} season=${season}`);
+  const lid = lg.id;
+
+  // Wipe any existing clone at toWeek (children first).
+  const { data: existing } = await db().from('matchup').select('id').eq('league_id', lid).eq('week', toWeek);
+  const ids = (existing ?? []).map((m) => m.id);
+  if (ids.length) {
+    await db().from('sealed_pick').delete().in('matchup_id', ids);
+    await db().from('matchup_state').delete().in('matchup_id', ids);
+    await db().from('applied_state').delete().in('matchup_id', ids);
+    await db().from('matchup').delete().in('id', ids);
+  }
+  await db().from('sleeper_lineup').delete().eq('league_id', lid).eq('week', toWeek);
+
+  const { data: ms } = await db().from('matchup')
+    .select('sleeper_matchup_id, home_roster_id, away_roster_id').eq('league_id', lid).eq('week', fromWeek);
+  const newM = (ms ?? []).map((m) => ({
+    league_id: lid, week: toWeek, sleeper_matchup_id: m.sleeper_matchup_id,
+    home_roster_id: m.home_roster_id, away_roster_id: m.away_roster_id, status: 'scheduled', lock_at: null,
+  }));
+  if (newM.length) await db().from('matchup').insert(newM);
+
+  const { data: ls } = await db().from('sleeper_lineup')
+    .select('roster_id, starters_json').eq('league_id', lid).eq('week', fromWeek);
+  const newL = (ls ?? []).map((l) => ({ league_id: lid, week: toWeek, roster_id: l.roster_id, starters_json: l.starters_json }));
+  if (newL.length) await db().from('sleeper_lineup').insert(newL);
+
+  return { matchups: newM.length, lineups: newL.length };
+}

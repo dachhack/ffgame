@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import type { ThemeName } from '../theme';
 import type { WindowId, Pick } from '../types';
 import { LEAGUE, YOU_TEAM_ID, setActiveLeague, resetToDemoLeague, type BuiltLeague } from '../data/league';
-import { clearSyntheticWeeks } from '../data/realPbp';
+import { clearSyntheticWeeks, clearLivePlays } from '../data/realPbp';
 import { clearRuntimeHeadshots } from '../data/media';
 import type { League } from '../types';
 import { powerupById } from '../data/powerups';
@@ -185,6 +185,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [demoWeek, setDemoWeek] = useState<number>(DEMO_WEEK);
   const [liveCtx, setLiveCtx] = useState<LiveCtx | null>(null);
   const loadSimLeague = (built: BuiltLeague, youId: string, ctx: LiveCtx | null = null) => {
+    clearLivePlays();                   // drop any prior league's live overlay
     setActiveLeague(built);             // swap the engine registry (non-React reads)
     setActiveLeagueState(built.league); // re-render React consumers
     setIsSimLeague(true);
@@ -199,7 +200,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     persist({ coins: DEMO_GRANT, inv: {}, applied: {} });
   };
   const exitSimLeague = () => {
-    resetToDemoLeague(); clearSyntheticWeeks(); clearRuntimeHeadshots();
+    resetToDemoLeague(); clearSyntheticWeeks(); clearLivePlays(); clearRuntimeHeadshots();
     setActiveLeagueState(LEAGUE); setIsSimLeague(false); setYouTeam(YOU_TEAM_ID); setLiveCtx(null);
   };
   const [bigText, setBigTextState] = useState<boolean>(() => {

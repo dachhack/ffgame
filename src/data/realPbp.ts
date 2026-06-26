@@ -40,6 +40,27 @@ export function setSyntheticWeeks(weeks: { week: number; pbp: Record<string, Rea
 /** Drop all synthesized data (back to the baked demo league). */
 export function clearSyntheticWeeks(): void { synthPbp.clear(); synthPts.clear(); }
 
+// ── Live overlay (worker-ingested plays) ─────────────────────────────────────
+// For a real pilot matchup, the worker's live_play rows for the week are installed
+// here. A live week resolves ONLY from these (baked + synth suppressed) so the
+// board shows the actual game: no play yet = DNP 0, scores accrue as plays ingest.
+const livePbp = new Map<number, Record<string, RealPlay[]>>();
+const livePts = new Map<number, Record<string, number>>();
+/** Install the week's live (worker) play-by-play; makes that week resolve live. */
+export function setLivePlays(week: number, pbp: Record<string, RealPlay[]>, points: Record<string, number> = {}): void {
+  livePbp.set(week, pbp); livePts.set(week, points);
+}
+/** Drop all live overlays (back to baked/synth resolution). */
+export function clearLivePlays(): void { livePbp.clear(); livePts.clear(); }
+
+/** live_play DB rows → {slug: RealPlay[]} (mirrors the worker's rowsToPbp). */
+export function liveRowsToPbp(rows: { player_slug: string; c: number; t: number | null; pid: number | null; k: string; y: number; td: number; ca: number; tg: number; to: number | null }[]): Record<string, RealPlay[]> {
+  const by: Record<string, RealPlay[]> = {};
+  for (const r of rows) (by[r.player_slug] ||= []).push({ c: r.c, t: r.t ?? undefined, pid: r.pid ?? undefined, k: r.k as RealPlayKind, y: r.y, td: r.td, ca: r.ca, tg: r.tg, ...(r.to ? { to: r.to } : {}) });
+  for (const s of Object.keys(by)) by[s].sort((a, b) => a.c - b.c);
+  return by;
+}
+
 
 /** True once a real week's baked JSON has been fetched into the cache. NOTE:
  *  this gates the per-week fetch, so it must reflect ONLY the baked cache — the
@@ -68,15 +89,19 @@ export function loadRealWeek(week: number): Promise<void> {
 /** Per-player real fantasy points for a loaded week ({} if not loaded). Baked
  *  totals win; synthesized totals fill in players we didn't bake. */
 export function realPointsFor(week: number): Record<string, number> {
+  if (livePbp.has(week)) return livePts.get(week) ?? {}; // live week: only live points
   const synth = synthPts.get(week);
   const baked = cache.get(week)?.points;
   if (synth && baked) return { ...synth, ...baked };
   return baked ?? synth ?? {};
 }
 
-/** Real plays for a player in a loaded week, or null (→ engine simulates).
- *  Baked PBP wins; falls back to the synthesized overlay. */
+/** Real plays for a player in a loaded week, or null (→ DNP/sim per phase).
+ *  Live overlay wins and is exclusive (a live week ignores baked/synth, so a
+ *  player with no live play yet reads as 0); else baked PBP, then synth. */
 export function realPbpFor(week: number, playerId: string): RealPlay[] | null {
+  const live = livePbp.get(week);
+  if (live) { const lp = live[playerId]; return lp && lp.length ? lp : null; }
   const ps = cache.get(week)?.pbp[playerId];
   if (ps && ps.length) return ps;
   const sp = synthPbp.get(week)?.[playerId];
