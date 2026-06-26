@@ -4,6 +4,7 @@ import { SiteSettings } from '../app/ui';
 import { resolveUser } from '../data/sleeper';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
 import { getSession } from '../data/liveApi';
+import { RequestCodeModal } from './RequestCode';
 
 export function Splash() {
   const { navigate, setSleeperUser, sleeperUser, exitSimLeague } = useStore();
@@ -11,6 +12,7 @@ export function Splash() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [signedIn, setSignedIn] = useState(false);
+  const [requesting, setRequesting] = useState(false);
   useEffect(() => { getSession().then((s) => setSignedIn(!!s)).catch(() => {}); }, []);
 
   const submit = async () => {
@@ -21,15 +23,15 @@ export function Splash() {
       const user = await resolveUser(u);
       if (!user) { setErr(`No Sleeper user “${u}”. Check the spelling.`); setBusy(false); return; }
       setSleeperUser(user);
-      // Start the ~5MB player-directory download now so it overlaps with browsing
-      // leagues — by the time they hit RUN SIM it's cached and the build is fast.
-      prefetchPlayerDirectory();
+      prefetchPlayerDirectory(); // ~5MB directory downloads while they browse leagues
       navigate({ name: 'leagues' });
     } catch {
       setErr('Could not reach Sleeper. Check your connection and try again.');
       setBusy(false);
     }
   };
+
+  const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -45,22 +47,22 @@ export function Splash() {
         <div style={{ width: '100%', maxWidth: 440 }}>
           <div style={{ textAlign: 'center', marginBottom: 20 }}>
             <div className="grotesk" style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1.1 }}>
-              See <span style={{ color: 'var(--you)' }}>your real league</span> play out.
+              Add some <span style={{ color: 'var(--you)' }}>Drip</span> to your league.
             </div>
             <div style={{ fontSize: 13, color: 'var(--dim)', marginTop: 10, lineHeight: 1.5 }}>
-              Drop your Sleeper username — we’ll load your actual 2025 league, your team and your leaguemates, into the drip game in seconds.
+              Real-time fantasy of hidden picks and live effects. Drop in your Sleeper league and watch a week play out — in seconds.
             </div>
           </div>
 
+          {/* ── See it with your own league (primary) ───────────────────────── */}
           <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: 18 }}>
-            <label className="mono" style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)', fontWeight: 700 }}>SLEEPER USERNAME</label>
+            <label className="mono" style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)', fontWeight: 700 }}>SEE THE DEMO IN YOUR OWN LEAGUE</label>
             <div style={{ display: 'flex', gap: 8, marginTop: 7 }}>
               <input
-                value={name}
-                autoFocus
+                value={name} autoFocus
                 onChange={(e) => { setName(e.target.value); setErr(null); }}
                 onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
-                placeholder="e.g. dachhack"
+                placeholder="your Sleeper username"
                 spellCheck={false} autoCapitalize="none" autoCorrect="off"
                 style={{ flex: 1, minWidth: 0, fontFamily: 'inherit', fontSize: 14, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '10px 12px', outline: 'none' }}
               />
@@ -69,25 +71,29 @@ export function Splash() {
               </button>
             </div>
             {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', marginTop: 9, lineHeight: 1.4 }}>{err}</div>}
-            <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>
-              Pulled live from Sleeper’s public API. We never see a password — username only.
-            </div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>Sleeper public API — username only, never a password.</div>
           </div>
 
-          <button onClick={() => { exitSimLeague(); navigate({ name: 'demo' }); }} className="mono" style={{ width: '100%', marginTop: 14, fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 6, padding: '13px 0', cursor: 'pointer' }}>
-            ▶ New here? Watch the 60-second demo
+          {/* ── Or the prebuilt demo ────────────────────────────────────────── */}
+          <div className="mono" style={{ textAlign: 'center', fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)', margin: '16px 0 12px' }}>OR JUST EXPLORE</div>
+          <button onClick={() => { exitSimLeague(); navigate({ name: 'hub' }); }} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 6, padding: '13px 0', cursor: 'pointer' }}>
+            Explore the demo league →
           </button>
+          <div style={{ textAlign: 'center', marginTop: 10 }}>
+            <button onClick={() => { exitSimLeague(); navigate({ name: 'demo' }); }} className="mono" style={linkBtn}>▶ or watch the 60-second walkthrough</button>
+          </div>
 
-          <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* ── Pilot ───────────────────────────────────────────────────────── */}
+          <div style={{ borderTop: '1px solid var(--bd)', marginTop: 22, paddingTop: 18, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
             <button onClick={() => navigate({ name: 'live' })} className="mono" style={{ width: '100%', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '12px 0', cursor: 'pointer' }}>
-              {signedIn ? '↩ continue to your live H2H league →' : '◈ Have a pilot invite? Join the live H2H league →'}
+              {signedIn ? '↩ Continue to your live league →' : '◈ Already invited? Sign in →'}
             </button>
-            <button onClick={() => { exitSimLeague(); navigate({ name: 'hub' }); }} className="mono" style={{ background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', cursor: 'pointer' }}>
-              or explore the demo league hands-on →
-            </button>
+            {!signedIn && <button onClick={() => setRequesting(true)} className="mono" style={linkBtn}>Request an invite</button>}
           </div>
         </div>
       </main>
+
+      {requesting && <RequestCodeModal initialSleeper={sleeperUser?.username ?? ''} onClose={() => setRequesting(false)} />}
     </div>
   );
 }
