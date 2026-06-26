@@ -1708,18 +1708,23 @@ function TwinChip() {
   );
 }
 
-function SetupRow(props: {
+export function SetupRow(props: {
   slotKeyStr: string; winId: WindowId; week: number; pick?: Pick; selected: boolean; inventory: Record<string, number>; armed: Record<string, boolean>; twinLink?: boolean;
   appliedPu: string[];
   applyMode: string | null; onApplyToSpot: () => void;
   onOpenPicker: () => void; onPickMetric: (m: string) => void; onClearSlot: () => void; onDropPlayer: (id: string) => void; onScout: () => void;
   lockPlayer?: boolean;
+  // Player lookup — defaults to the baked demo registry; the live pilot injects
+  // its own (so the same card renders against live roster data). `hideScout`
+  // drops the SCOUT affordance where there's no opponent pool to scout (live pre-lock).
+  resolve?: (id: string) => Player | undefined;
+  hideScout?: boolean;
 }) {
-  const { winId, week, pick, selected, inventory, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout, lockPlayer } = props;
+  const { winId, week, pick, selected, inventory, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout, lockPlayer, resolve, hideScout } = props;
   const isMobile = useIsMobile();
   const gridCols = '1fr 1fr'; // no center gutter — your spot vs the sealed opponent
   const rowGap = isMobile ? 5 : 8;
-  const player = pick ? getPlayer(pick.playerId) : null;
+  const player = pick ? ((resolve ?? getPlayer)(pick.playerId) ?? null) : null;
   const metric = player && pick?.metricId ? metricById(player.pos, pick.metricId) : null;
   // Power-ups acting on THIS spot: armed team buffs that apply here, plus any
   // spot-specific applied powerup (Double or Nothing / Bye Steal).
@@ -1845,10 +1850,10 @@ function SetupRow(props: {
           <span className="mono" style={{ fontSize: 10, color: emptyEligible ? 'var(--warn)' : 'var(--faint)', letterSpacing: '0.12em', fontWeight: emptyEligible ? 700 : 400 }}>{emptyEligible ? 'TAP TO FIELD BYE' : 'TAP TO PICK PLAYER'}</span>
         </div>
       )}
-      <div onClick={onScout} title="Scout the opponent's possible players for this window" style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' }}>
+      <div onClick={hideScout ? undefined : onScout} title={hideScout ? 'Your opponent’s lineup is sealed until kickoff' : "Scout the opponent's possible players for this window"} style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: hideScout ? 'default' : 'pointer' }}>
         <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--dim)' }}>◆</span>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.16em', color: 'var(--faint)', fontWeight: 700 }}>SEALED · {winId.toUpperCase()}</span>
-        <span className="mono" style={{ fontSize: 7.5, letterSpacing: '0.12em', color: 'var(--opp)', fontWeight: 700 }}>🔍 SCOUT</span>
+        {!hideScout && <span className="mono" style={{ fontSize: 7.5, letterSpacing: '0.12em', color: 'var(--opp)', fontWeight: 700 }}>🔍 SCOUT</span>}
       </div>
     </div>
     {infoMetric && <MetricInfo metric={infoMetric} onClose={() => setInfoMetric(null)} />}
@@ -1886,7 +1891,7 @@ function MetricInfo({ metric, onClose }: { metric: Metric; onClose: () => void }
 }
 
 // ── Player picker (tap a spot in setup) — choose from this window's roster ──
-function PlayerPicker({ win, week, players, currentId, title = 'Pick a player', subtitle = 'YOUR PLAYERS WHOSE GAME FALLS IN THIS WINDOW', onPick, onRemove, onClose }: {
+export function PlayerPicker({ win, week, players, currentId, title = 'Pick a player', subtitle = 'YOUR PLAYERS WHOSE GAME FALLS IN THIS WINDOW', onPick, onRemove, onClose }: {
   win: WindowId; week: number; players: Player[]; currentId?: string; title?: string; subtitle?: string;
   onPick: (id: string) => void; onRemove: () => void; onClose: () => void;
 }) {
