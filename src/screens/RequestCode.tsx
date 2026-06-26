@@ -21,7 +21,7 @@ export function RequestCodeFab() {
   );
 }
 
-function RequestCodeModal({ initialSleeper, onClose }: { initialSleeper: string; onClose: () => void }) {
+export function RequestCodeModal({ initialSleeper, onClose }: { initialSleeper: string; onClose: () => void }) {
   const [email, setEmail] = useState('');
   const [sleeper, setSleeper] = useState(initialSleeper);
   const [league, setLeague] = useState('');

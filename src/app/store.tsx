@@ -155,6 +155,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
   // Boot to your leagues if a Sleeper user is remembered, else the welcome splash.
   const [route, setRoute] = useState<Route>(sleeperUser ? { name: 'leagues' } : { name: 'splash' });
+  // Browser back/forward: mirror each route into history state (URL unchanged) so the
+  // back button steps between in-app screens instead of dead-ending / leaving the site.
+  const navigate = (r: Route) => {
+    setRoute(r);
+    try { window.history.pushState({ __route: r }, ''); } catch { /* ignore */ }
+  };
+  useEffect(() => {
+    try { window.history.replaceState({ __route: route }, ''); } catch { /* ignore */ }
+    const onPop = (e: PopStateEvent) => { setRoute(((e.state as { __route?: Route } | null)?.__route) ?? { name: 'splash' }); };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // The active league (baked DRIP demo by default; swapped when a sim is loaded).
   const [activeLeague, setActiveLeagueState] = useState<League>(LEAGUE);
   const [isSimLeague, setIsSimLeague] = useState(false);
@@ -346,7 +359,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate: setRoute, sleeperUser, setSleeperUser, activeLeague, isSimLeague, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
     [theme, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
