@@ -129,8 +129,11 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
     if (needK || needDef) {
       const { data: manualRows } = await db().from('team_kdst').select('roster_id,k_slug,dst_slug').eq('league_id', lid);
       const manualBy = new Map((manualRows ?? []).map((m) => [m.roster_id, m]));
-      for (const l of lineups) {
-        const fill = assignKdst({ leagueId: lid, rosterId: l.roster_id, week, mode: kdstMode, needK, needDef, manual: manualBy.get(l.roster_id) });
+      // League-wide set of NFL teams handed out this week so random fills are drawn
+      // without replacement. Iterate by roster_id for a stable, deterministic draw.
+      const taken = new Set();
+      for (const l of [...lineups].sort((a, b) => a.roster_id - b.roster_id)) {
+        const fill = assignKdst({ leagueId: lid, rosterId: l.roster_id, week, mode: kdstMode, needK, needDef, manual: manualBy.get(l.roster_id), taken });
         let slot = l.starters_json.length;
         if (fill.kSlug) l.starters_json.push({ slot: slot++, sleeper_id: null, player_slug: fill.kSlug, pos: 'K' });
         if (fill.dstSlug) l.starters_json.push({ slot: slot++, sleeper_id: null, player_slug: fill.dstSlug, pos: 'DEF' });

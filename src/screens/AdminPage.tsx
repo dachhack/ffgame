@@ -87,11 +87,13 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
   );
 }
 
-export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload: () => void; admin?: boolean }) {
+export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: AdminLeague; reload: () => void; admin?: boolean; defaultTab?: '' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst' }) {
   const [matchups, setMatchups] = useState<AdminMatchup[] | null>(null);
   const [members, setMembers] = useState<AdminMember[] | null>(null);
   const [audit, setAudit] = useState<AdminAudit[] | null>(null);
-  const [tab, setTab] = useState<'' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst'>('');
+  const [tab, setTab] = useState<'' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst'>(defaultTab);
+  // roster_id → team name, from members (drives readable matchup labels).
+  const teamName = (rid: number) => members?.find((m) => m.roster_id === rid)?.team ?? `Roster ${rid}`;
   const [kdst, setKdst] = useState<LeagueKdst | null>(null);
   const loadKdst = async () => { try { setKdst(await leagueKdst(l.league_id)); } catch { setKdst(null); } };
   const changeKdstMode = async (mode: KdstMode) => { setKdst((k) => (k ? { ...k, mode } : k)); try { await setKdstMode(l.league_id, mode); } catch { /* keep optimistic */ } };
@@ -160,11 +162,19 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
   const loadAudit = async () => setAudit(await commishAudit(l.league_id, 40));
   const showTab = (t: 'matchups' | 'members' | 'audit' | 'ready' | 'kdst') => {
     setTab((cur) => (cur === t ? '' : t));
-    if (t === 'matchups' && !matchups) loadM();
+    if (t === 'matchups') { if (!matchups) loadM(); if (!members) loadMembers(); }
     if (t === 'members' && !members) loadMembers();
     if (t === 'audit') loadAudit();
     if (t === 'kdst' && !kdst) loadKdst();
   };
+  // Auto-load the initially-open tab (CommishDash opens straight on "members").
+  useEffect(() => {
+    if (defaultTab === 'members') loadMembers();
+    else if (defaultTab === 'matchups') { loadM(); loadMembers(); }
+    else if (defaultTab === 'kdst') loadKdst();
+    else if (defaultTab === 'audit') loadAudit();
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, []);
   const set = async (id: string, status: string, lockNow = false) => { await adminSetMatchup(id, status, lockNow); await loadM(); };
   const sync = async () => {
     setBusy('sync');
@@ -263,28 +273,52 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
                   <option value="manual">manual per team</option>
                 </select>
               </div>
-              {kdst.mode === 'manual' && (
+              {kdst.mode === 'manual' && (() => {
+                // Slugs already assigned to ANY team — used to flag (but not block) duplicates.
+                const kCount = new Map<string, number>();
+                const dstCount = new Map<string, number>();
+                for (const t of kdst.teams) {
+                  if (t.k_slug) kCount.set(t.k_slug, (kCount.get(t.k_slug) ?? 0) + 1);
+                  if (t.dst_slug) dstCount.set(t.dst_slug, (dstCount.get(t.dst_slug) ?? 0) + 1);
+                }
+                const takenK = new Set(kCount.keys());
+                const takenDst = new Set(dstCount.keys());
+                return (
                 <div style={{ marginTop: 8 }}>
-                  <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginBottom: 4 }}>Assign each team a K / DEF (season-long; auto-substituted on its bye week). Blank = random not-on-bye.</div>
-                  {kdst.teams.map((t) => (
+                  <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginBottom: 4 }}>Assign each team a K / DEF (season-long; auto-substituted on its bye week). Blank = random not-on-bye. Teams already taken are marked “• taken”; a ⚠ flags a duplicate (allowed, but each NFL K/DEF is usually unique).</div>
+                  {kdst.teams.map((t) => {
+                    const dupK = !!t.k_slug && (kCount.get(t.k_slug) ?? 0) > 1;
+                    const dupDst = !!t.dst_slug && (dstCount.get(t.dst_slug) ?? 0) > 1;
+                    return (
                     <div key={t.roster_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
-                      <span style={{ fontSize: 11, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.team}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {(dupK || dupDst) && <span title="duplicate K/DEF" style={{ color: 'var(--warn)' }}>⚠ </span>}{t.team}
+                      </span>
                       {kdst.needs_k && (
-                        <KdstSelect suffix="k" value={t.k_slug} onChange={(v) => saveTeamKdst(t.roster_id, v, t.dst_slug)} />
+                        <KdstSelect suffix="k" value={t.k_slug} taken={takenK} onChange={(v) => saveTeamKdst(t.roster_id, v, t.dst_slug)} />
                       )}
                       {kdst.needs_def && (
-                        <KdstSelect suffix="dst" value={t.dst_slug} onChange={(v) => saveTeamKdst(t.roster_id, t.k_slug, v)} />
+                        <KdstSelect suffix="dst" value={t.dst_slug} taken={takenDst} onChange={(v) => saveTeamKdst(t.roster_id, t.k_slug, v)} />
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
-              )}
+                );
+              })()}
             </>
           )}
         </div>
       )}
       {tab === 'matchups' && matchups && (
         <div style={{ marginTop: 10 }}>
+          <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', lineHeight: 1.6, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '7px 9px', marginBottom: 8 }}>
+            Run each matchup through the week:
+            {' '}<b style={{ color: 'var(--dim)' }}>sched</b> (picks open, pre-kickoff) →
+            {' '}<b style={{ color: 'var(--you)' }}>live+lock</b> (kickoff — seals both lineups, scoring starts) →
+            {' '}<b style={{ color: 'var(--dim)' }}>final</b>.
+            <br />◇ edit drip coin · ▦ watch the live board · ≣ play-by-play feed{admin ? ' · ▶ resolve from baked data · ↺ reset' : ''}.
+          </div>
           {admin && (
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
               <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>from 2025 wk</span>
@@ -299,7 +333,7 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
           {matchups.length === 0 ? <Muted text="No matchups (run sync week)." /> : matchups.map((m) => (
             <div key={m.id} style={{ borderTop: '1px solid var(--bd)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', flexWrap: 'wrap', gap: 6 }}>
-                <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)' }}>W{m.week} · {m.home_roster_id}v{m.away_roster_id} · <span style={{ color: 'var(--you)' }}>{m.status}</span>{m.home_final != null && <span style={{ color: 'var(--faint)' }}> · {m.home_final}-{m.away_final}</span>}{(m.home_coin != null || m.away_coin != null) && <span style={{ color: 'var(--faint)' }}> · ◇ {m.home_coin ?? 0}/{m.away_coin ?? 0}</span>}</span>
+                <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)' }}>W{m.week} · {teamName(m.home_roster_id)} v {teamName(m.away_roster_id)} · <span style={{ color: 'var(--you)' }}>{m.status}</span>{m.home_final != null && <span style={{ color: 'var(--faint)' }}> · {m.home_final}-{m.away_final}</span>}{(m.home_coin != null || m.away_coin != null) && <span style={{ color: 'var(--faint)' }}> · ◇ {m.home_coin ?? 0}/{m.away_coin ?? 0}</span>}</span>
                 <div style={{ display: 'flex', gap: 5 }}>
                   <button style={btn(m.status === 'scheduled')} onClick={() => set(m.id, 'scheduled')}>sched</button>
                   <button style={btn(m.status === 'live')} onClick={() => set(m.id, 'live', true)}>live+lock</button>
@@ -742,7 +776,7 @@ function PickReadinessTab({ leagueId, week, admin }: { leagueId: string; week: n
       {busy && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginBottom: 6 }}>{busy}</div>}
       {rows.length === 0 ? <Muted text="No matchups this week (run sync week)." /> : rows.map((m) => (
         <div key={m.matchup_id} style={{ borderTop: '1px solid var(--bd)', padding: '6px 0' }}>
-          <div className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)', marginBottom: 2 }}>{m.home_roster_id}v{m.away_roster_id} · {m.status}</div>
+          <div className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)', marginBottom: 2 }}>{m.home.team ?? `Roster ${m.home_roster_id}`} v {m.away.team ?? `Roster ${m.away_roster_id}`} · {m.status}</div>
           {sideRow(m, 'home')}
           {sideRow(m, 'away')}
         </div>
@@ -773,12 +807,18 @@ function Muted({ text }: { text: string }) {
 }
 
 // A K or DST team picker — value is a '<team>-<suffix>' slug (or null = random).
-function KdstSelect({ suffix, value, onChange }: { suffix: 'k' | 'dst'; value: string | null; onChange: (v: string | null) => void }) {
+// `taken` is the set of slugs already assigned to some team, so the picker can flag
+// options that are already in use elsewhere (duplicates are allowed, not blocked).
+function KdstSelect({ suffix, value, taken, onChange }: { suffix: 'k' | 'dst'; value: string | null; taken?: Set<string>; onChange: (v: string | null) => void }) {
   return (
     <select value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}
-      style={{ ...inp, padding: '3px 4px', fontSize: 10, width: 92 }} title={suffix === 'k' ? 'kicker team' : 'defense team'}>
+      style={{ ...inp, padding: '3px 4px', fontSize: 10, width: 104 }} title={suffix === 'k' ? 'kicker team' : 'defense team'}>
       <option value="">{suffix === 'k' ? 'K · random' : 'DEF · random'}</option>
-      {NFL_CODES.map((c) => <option key={c} value={`${c}-${suffix}`}>{c.toUpperCase()} {suffix === 'k' ? 'K' : 'DEF'}</option>)}
+      {NFL_CODES.map((c) => {
+        const slug = `${c}-${suffix}`;
+        const isTaken = taken?.has(slug) && slug !== value;
+        return <option key={c} value={slug}>{c.toUpperCase()} {suffix === 'k' ? 'K' : 'DEF'}{isTaken ? ' • taken' : ''}</option>;
+      })}
     </select>
   );
 }

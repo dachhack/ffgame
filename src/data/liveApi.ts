@@ -154,13 +154,13 @@ export async function requestCode(input: { email?: string; sleeper?: string; lea
   return data as { ok: boolean; error?: string };
 }
 
-export interface Enrollment { team_name: string; sleeper_roster_id: number; avatar_url: string | null; league: { name: string; season: string } | null; }
+export interface Enrollment { league_id: string; team_name: string; sleeper_roster_id: number; avatar_url: string | null; league: { name: string; season: string } | null; }
 
 /** The caller's enrolled memberships (RLS scopes to their own rows). */
 export async function myEnrollments(userId: string): Promise<Enrollment[]> {
   const { data, error } = await client()
     .from('league_membership')
-    .select('team_name, sleeper_roster_id, avatar_url, league:league_id(name, season)')
+    .select('league_id, team_name, sleeper_roster_id, avatar_url, league:league_id(name, season)')
     .eq('app_user_id', userId)
     .eq('enrolled', true);
   if (error) throw error;
