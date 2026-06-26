@@ -2,10 +2,12 @@ import type { League, FantasyTeam, Player, Pos, ScheduleGame } from '../types';
 import { statsForName, shortName, normName, teamForName, STAT_PLAYERS, type StatPlayer } from './players';
 
 // ─────────────────────────────────────────────────────────────────────────
-// PeakedInDynasty — real 2025 league (Sleeper id 1181483840740397056).
-// 10-team Dynasty, 2QB. Standings, rosters and schedule are the genuine
-// end-of-season data; the game layer on top is the Gridiron Clash demo.
-// "Happy Campers" (dachhack) is YOU.
+// Drip Test League — the public demo. A SANITIZED clone: the rosters,
+// schedule, scores and real 2025 play-by-play are genuine NFL data (so the
+// drip engine has real texture to chew on), but the league's identity —
+// team names, manager handles, avatars and league name — is fabricated, so
+// the demo never exposes a real person's league. "Taco Time Titans" is YOU.
+// (Internal team ids are kept stable so the schedule/KDST tables line up.)
 // ─────────────────────────────────────────────────────────────────────────
 
 export const YOU_TEAM_ID = 'happy-campers';
@@ -27,7 +29,7 @@ interface RawTeam {
 
 const RAW_TEAMS: RawTeam[] = [
   {
-    id: 'happy-campers', name: 'Happy Campers', owner: 'dachhack', ownerId: '765446581272072192',
+    id: 'happy-campers', name: 'Taco Time Titans', owner: 'tacotuesday', ownerId: 'dt-1',
     seed: 1, wins: 11, losses: 3, pf: 2406.58, pa: 2009.78,
     roster: [
       ['Dak Prescott', 'QB'], ['Trevor Lawrence', 'QB'], ['Christian McCaffrey', 'RB'], ['Travis Etienne', 'RB'],
@@ -39,7 +41,7 @@ const RAW_TEAMS: RawTeam[] = [
     ],
   },
   {
-    id: 'coolaak', name: 'Coolaak', owner: 'Coolaak', ownerId: '737067142029148160',
+    id: 'coolaak', name: 'Cheeseburger Chargers', owner: 'grillmaster', ownerId: 'dt-2',
     seed: 2, wins: 10, losses: 4, pf: 2496.46, pa: 2116.14,
     roster: [
       ['Jared Goff', 'QB'], ['Matthew Stafford', 'QB'], ['Jonathan Taylor', 'RB'], ['Breece Hall', 'RB'],
@@ -50,7 +52,7 @@ const RAW_TEAMS: RawTeam[] = [
     ],
   },
   {
-    id: 'next-year', name: 'There’s Always Next Year', owner: 'modus', ownerId: '316273968032018432',
+    id: 'next-year', name: 'Beach Day Ballers', owner: 'wavydave', ownerId: 'dt-3',
     seed: 3, wins: 9, losses: 5, pf: 2380.54, pa: 2264.40,
     roster: [
       ['Bo Nix', 'QB'], ['Drake Maye', 'QB'], ['Jahmyr Gibbs', 'RB'], ['RJ Harvey', 'RB'],
@@ -61,7 +63,7 @@ const RAW_TEAMS: RawTeam[] = [
     ],
   },
   {
-    id: 'rock-tunnel', name: 'Lost in Rock Tunnel', owner: 'KingChirp', ownerId: '737411069647142912',
+    id: 'rock-tunnel', name: 'Cookout Crew', owner: 'chlorinecarl', ownerId: 'dt-4',
     seed: 4, wins: 8, losses: 6, pf: 2404.48, pa: 2227,
     roster: [
       ['Jacoby Brissett', 'QB'], ['C.J. Stroud', 'QB'], ['De\'Von Achane', 'RB'], ['Chase Brown', 'RB'],
@@ -72,7 +74,7 @@ const RAW_TEAMS: RawTeam[] = [
     ],
   },
   {
-    id: 'skeptic-tank', name: '#1 Skeptic Tank', owner: 'betz4444', ownerId: '721059160816455680',
+    id: 'skeptic-tank', name: 'Surf’s Up Sharks', owner: 'peanutpete', ownerId: 'dt-5',
     seed: 5, wins: 7, losses: 7, pf: 2195.40, pa: 2079.98,
     roster: [
       ['Philip Rivers', 'QB'], ['Brady Cook', 'QB'], ['James Cook', 'RB'], ['Omarion Hampton', 'RB'],
@@ -83,7 +85,7 @@ const RAW_TEAMS: RawTeam[] = [
     ],
   },
   {
-    id: 'gadsden', name: '#1 Oronde Gadsden Enjoyer', owner: 'MarshallMustDie', ownerId: '564590438169468928',
+    id: 'gadsden', name: 'Poolside Punters', owner: 'mileagemike', ownerId: 'dt-6',
     seed: 6, wins: 7, losses: 7, pf: 2134.68, pa: 2090.58,
     roster: [
       ['Bryce Young', 'QB'], ['Josh Allen', 'QB'], ['Jaylen Warren', 'RB'], ['Kareem Hunt', 'RB'],
@@ -94,7 +96,7 @@ const RAW_TEAMS: RawTeam[] = [
     ],
   },
   {
-    id: 'rizzler', name: '#1 Rizzler ✨E n e r g y✨', owner: 'TheMesso', ownerId: '201719736654888960',
+    id: 'rizzler', name: 'Ballpark Blitz', owner: 'dugoutdan', ownerId: 'dt-7',
     seed: 7, wins: 7, losses: 7, pf: 2005.20, pa: 2172.44,
     roster: [
       ['Cam Ward', 'QB'], ['Tyler Shough', 'QB'], ['Bucky Irving', 'RB'], ['Saquon Barkley', 'RB'],
@@ -105,7 +107,7 @@ const RAW_TEAMS: RawTeam[] = [
     ],
   },
   {
-    id: 'spartandawgs', name: 'SpartanDawgs', owner: 'SpartanCards', ownerId: '641065208403525632',
+    id: 'spartandawgs', name: 'Road Trip Raiders', owner: 'roadtripron', ownerId: 'dt-8',
     seed: 8, wins: 6, losses: 8, pf: 1896.56, pa: 2140.50,
     roster: [
       ['Joe Burrow', 'QB'], ['Justin Herbert', 'QB'], ['Kenneth Walker', 'RB'], ['Kyren Williams', 'RB'],
@@ -116,7 +118,7 @@ const RAW_TEAMS: RawTeam[] = [
     ],
   },
   {
-    id: 'happier-camper', name: 'Happier Camper', owner: 'PeakedInHighSkool', ownerId: '723227693008637952',
+    id: 'happier-camper', name: 'Gone Fishing Phins', owner: 'gonefishing', ownerId: 'dt-9',
     seed: 9, wins: 5, losses: 9, pf: 1871.70, pa: 2055.16,
     roster: [
       ['Lamar Jackson', 'QB'], ['Jalen Hurts', 'QB'], ['Derrick Henry', 'RB'], ['Kenneth Gainwell', 'RB'],
@@ -127,7 +129,7 @@ const RAW_TEAMS: RawTeam[] = [
     ],
   },
   {
-    id: 'achilles', name: 'Achilles Heal Society', owner: 'CDicey', ownerId: '374789106846400512',
+    id: 'achilles', name: 'Chicken Nuggies', owner: 'nuggienate', ownerId: 'dt-10',
     seed: 10, wins: 0, losses: 14, pf: 1526.16, pa: 2161.78,
     roster: [
       ['Trey Lance', 'QB'], ['Kyle Monangai', 'RB'], ['Jordan Mason', 'RB'], ['Jaylen Waddle', 'WR'],
@@ -223,8 +225,8 @@ const DEMO_SCHEDULE: ScheduleGame[] = RAW_SCHEDULE.map(([week, homeId, awayId, h
 }));
 
 const DEMO_LEAGUE: League = {
-  id: '1181483840740397056',
-  name: 'PeakedInDynasty',
+  id: 'DRIPTEST-DEMO',
+  name: 'Drip Test League',
   format: 'Dynasty · 2QB · 10-team',
   season: 2025,
   teams: DEMO_TEAMS,
