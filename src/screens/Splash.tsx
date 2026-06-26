@@ -74,21 +74,24 @@ export function Splash() {
             <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>Sleeper public API — username only, never a password.</div>
           </div>
 
-          {/* ── Or the prebuilt demo ────────────────────────────────────────── */}
-          <div className="mono" style={{ textAlign: 'center', fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)', margin: '16px 0 12px' }}>OR JUST EXPLORE</div>
-          <button onClick={() => { exitSimLeague(); navigate({ name: 'hub' }); }} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 6, padding: '13px 0', cursor: 'pointer' }}>
-            Explore the demo league →
-          </button>
-          <div style={{ textAlign: 'center', marginTop: 10 }}>
-            <button onClick={() => { exitSimLeague(); navigate({ name: 'demo' }); }} className="mono" style={linkBtn}>▶ or watch the 60-second walkthrough</button>
+          {/* ── One demo door: the walkthrough leads into the full board + pilot ── */}
+          <div style={{ textAlign: 'center', marginTop: 14 }}>
+            <button onClick={() => { exitSimLeague(); navigate({ name: 'demo' }); }} className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'none', border: 'none', cursor: 'pointer' }}>
+              ▶ or just watch the 60-second demo →
+            </button>
           </div>
 
-          {/* ── Pilot ───────────────────────────────────────────────────────── */}
-          <div style={{ borderTop: '1px solid var(--bd)', marginTop: 22, paddingTop: 18, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
-            <button onClick={() => navigate({ name: 'live' })} className="mono" style={{ width: '100%', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '12px 0', cursor: 'pointer' }}>
-              {signedIn ? '↩ Continue to your live league →' : '◈ Already invited? Sign in →'}
-            </button>
-            {!signedIn && <button onClick={() => setRequesting(true)} className="mono" style={linkBtn}>Request an invite</button>}
+          {/* ── Pilot (invited players) — compact, secondary ─────────────────── */}
+          <div style={{ borderTop: '1px solid var(--bd)', marginTop: 22, paddingTop: 16, textAlign: 'center' }}>
+            {signedIn ? (
+              <button onClick={() => navigate({ name: 'live' })} className="mono" style={linkBtn}>↩ Continue to your live league →</button>
+            ) : (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <button onClick={() => navigate({ name: 'live' })} className="mono" style={linkBtn}>◈ Already invited? Sign in</button>
+                <span style={{ color: 'var(--faint)' }}>·</span>
+                <button onClick={() => setRequesting(true)} className="mono" style={{ ...linkBtn, color: 'var(--faint)' }}>request an invite</button>
+              </span>
+            )}
           </div>
         </div>
       </main>
