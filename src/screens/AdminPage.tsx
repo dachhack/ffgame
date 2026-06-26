@@ -29,10 +29,14 @@ const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontS
 const btn = (active = false): React.CSSProperties => ({ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: active ? 'var(--on-accent)' : 'var(--text)', background: active ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' });
 const inp: React.CSSProperties = { fontFamily: 'inherit', fontSize: 12, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 10px' };
 
-const code = (v: string) => (
-  <span className="mono" style={{ ...mono, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', cursor: 'pointer' }}
-    onClick={() => navigator.clipboard?.writeText(v)} title="copy">{v}</span>
-);
+function CodeChip({ v }: { v: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <span className="mono" style={{ ...mono, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', cursor: 'pointer' }}
+      onClick={() => { navigator.clipboard?.writeText(v); setDone(true); setTimeout(() => setDone(false), 1200); }}
+      title="click to copy">{done ? 'copied ✓' : v}</span>
+  );
+}
 
 export function AdminPage({ onBack }: { onBack: () => void }) {
   const [leagues, setLeagues] = useState<AdminLeague[] | null>(null);
@@ -191,9 +195,9 @@ export function LeagueRow({ l, reload, admin = true }: { l: AdminLeague; reload:
         </div>
       </div>
       <div style={{ display: 'flex', gap: 10, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <span style={{ ...chip }}>commish&nbsp;{code(l.commish_code)}</span>
+        <span style={{ ...chip }}>commish&nbsp;<CodeChip v={l.commish_code} /></span>
         {admin && <button onClick={() => regen('commish')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate">↻</button>}
-        <span style={{ ...chip }}>invite&nbsp;{code(l.invite_code)}</span>
+        <span style={{ ...chip }}>invite&nbsp;<CodeChip v={l.invite_code} /></span>
         <button onClick={() => regen('invite')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate">↻</button>
         <button onClick={() => { copy(shareLink(l.invite_code)); setCopied(true); }} className="mono" style={btn(false)}>{copied ? 'link copied' : 'copy invite link'}</button>
       </div>
