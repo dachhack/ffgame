@@ -14,7 +14,7 @@ import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type S
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
-import { myPicks, savePicks, type PickRow } from '../data/liveApi';
+import { myPicks, savePicks, getRevealedPicks, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
@@ -185,10 +185,33 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const youPools = useMemo(() => windowPools(YOU, week), [week]);
   const oppPools = useMemo(() => windowPools(oppId, week), [week, oppId]);
   const youDefault = useMemo(() => defaultLineup(YOU, week, extraSlots), [week, ready, extraKey]);
+  // Live pilot: the opponent's REAL sealed lineup, revealed at lock (RLS hides it
+  // until then). Polls so a reveal lands without a reload. Null → fall back to AI.
+  const [liveOppPicks, setLiveOppPicks] = useState<Record<string, Pick> | null>(null);
+  useEffect(() => {
+    if (!liveCtx) { setLiveOppPicks(null); return; }
+    let alive = true;
+    const load = async () => {
+      try {
+        const rows = await getRevealedPicks(liveCtx.matchupId);
+        const opp: Record<string, Pick> = {};
+        for (const r of rows) {
+          if (r.app_user_id === liveCtx.userId || !r.player_slug) continue; // skip mine / empty
+          opp[`${r.game_window}#${r.roster_slot}`] = { playerId: r.player_slug, metricId: r.metric_id };
+        }
+        if (alive) setLiveOppPicks(Object.keys(opp).length ? opp : null);
+      } catch { /* keep prior */ }
+    };
+    load();
+    const t = setInterval(load, 8000);
+    return () => { alive = false; clearInterval(t); };
+  }, [liveCtx]);
+
   // The AI scouts which players you CAN field each window (the pool, not your spot
   // assignments — those stay sealed) and defends each window accordingly. What the
-  // opponent has armed is hidden, exactly as your loadout is hidden from it.
-  const oppPicks = useMemo(() => aiLineup(oppId, YOU, week, extraSlots), [oppId, week, ready, extraKey]);
+  // opponent has armed is hidden, exactly as your loadout is hidden from it. In a
+  // live matchup, the opponent's revealed sealed lineup wins over the AI.
+  const oppPicks = useMemo(() => liveOppPicks ?? aiLineup(oppId, YOU, week, extraSlots), [liveOppPicks, oppId, week, ready, extraKey]);
   const byeYou = useMemo(() => byePlayers(YOU, week), [week]);
   const byeTheir = useMemo(() => byePlayers(oppId, week), [week, oppId]);
 
