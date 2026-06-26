@@ -38,6 +38,10 @@ export type Route =
   | { name: 'matchup'; week: number; phase: Phase }
   | { name: 'final'; week: number };
 
+/** Identifies the user's real pilot matchup behind a sim board, so the board can
+ *  persist its lineup to sealed_pick and align with the worker's scoring. */
+export interface LiveCtx { matchupId: string; userId: string; leagueId: string; rosterId: number; week: number; }
+
 interface Store {
   theme: ThemeName;
   setTheme: (t: ThemeName) => void;
@@ -55,8 +59,13 @@ interface Store {
   activeLeague: League;
   /** True when a real Sleeper league is loaded (vs the baked DRIP demo). */
   isSimLeague: boolean;
-  /** Make a freshly-built Sleeper league active and enter its sim as `youTeamId`. */
-  loadSimLeague: (built: BuiltLeague, youTeamId: string) => void;
+  /** When the active sim is a REAL pilot league (e.g. the Drip Test League), the
+   *  context needed to persist the lineup to Supabase sealed_pick + score it via
+   *  the worker. Null for the plain demo/sim (client-only). */
+  liveCtx: LiveCtx | null;
+  /** Make a freshly-built league active and enter its sim as `youTeamId`. Pass a
+   *  `liveCtx` to make it a real pilot league (sealed-pick persistence on). */
+  loadSimLeague: (built: BuiltLeague, youTeamId: string, liveCtx?: LiveCtx | null) => void;
   /** Drop back to the baked demo league. */
   exitSimLeague: () => void;
   /** Demo: which league team you're playing as (any team in the league). */
@@ -174,12 +183,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Demo role/week: pick any team and any week before heading into setup.
   const [youTeamId, setYouTeam] = useState<string>(YOU_TEAM_ID);
   const [demoWeek, setDemoWeek] = useState<number>(DEMO_WEEK);
-  const loadSimLeague = (built: BuiltLeague, youId: string) => {
+  const [liveCtx, setLiveCtx] = useState<LiveCtx | null>(null);
+  const loadSimLeague = (built: BuiltLeague, youId: string, ctx: LiveCtx | null = null) => {
     setActiveLeague(built);             // swap the engine registry (non-React reads)
     setActiveLeagueState(built.league); // re-render React consumers
     setIsSimLeague(true);
     setYouTeam(youId);
-    setDemoWeek(DEMO_WEEK);
+    setLiveCtx(ctx);
+    setDemoWeek(ctx ? ctx.week : DEMO_WEEK); // a pilot board opens on its real matchup week
     // A fresh sim starts with a clean economy: reset drip coin to the grant and
     // wipe owned + applied powerups and the per-week credit ledger, so nothing
     // carries over from the demo or a previously-run league.
@@ -189,7 +200,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
   const exitSimLeague = () => {
     resetToDemoLeague(); clearSyntheticWeeks(); clearRuntimeHeadshots();
-    setActiveLeagueState(LEAGUE); setIsSimLeague(false); setYouTeam(YOU_TEAM_ID);
+    setActiveLeagueState(LEAGUE); setIsSimLeague(false); setYouTeam(YOU_TEAM_ID); setLiveCtx(null);
   };
   const [bigText, setBigTextState] = useState<boolean>(() => {
     try {
@@ -359,8 +370,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
-    [theme, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, youTeamId, demoWeek, coins, inventory, applied],
+    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    [theme, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, liveCtx, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

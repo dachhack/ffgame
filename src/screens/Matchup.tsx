@@ -14,6 +14,7 @@ import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type S
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
+import { myPicks, savePicks, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
@@ -91,7 +92,7 @@ const DEMO_POWERUPS = [
 ];
 
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
-  const { youTeamId: YOU, navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
+  const { youTeamId: YOU, navigate, liveCtx, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const [demoBuff, setDemoBuff] = useState('garbage-time'); // the power-up the demo viewer armed
   const buffs = demo ? { [demoBuff]: true } : (applied[week]?.buffs ?? {});
   const buffsKey = JSON.stringify(buffs);
@@ -112,6 +113,22 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // Demo mode plays the canonical default lineup and never writes to the store.
   const [picks, setPicks] = useState<Record<string, Pick>>(() => (demo ? {} : applied[week]?.lineup ?? {}));
   useEffect(() => { if (!demo) setLineup(week, picks); }, [picks]); // eslint-disable-line react-hooks/exhaustive-deps -- persist lineup edits; setLineup isn't memoized
+
+  // Live pilot: hydrate this matchup's saved sealed picks from Supabase once, so a
+  // returning manager sees the lineup they sealed. Won't clobber in-progress edits.
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (!liveCtx || hydratedRef.current) return;
+    hydratedRef.current = true;
+    myPicks(liveCtx.matchupId, liveCtx.userId).then((rows) => {
+      const lineup: Record<string, Pick> = {};
+      for (const r of rows) {
+        if (!r.player_slug) continue;
+        lineup[`${r.game_window}#${r.roster_slot}`] = { playerId: r.player_slug, metricId: r.metric_id };
+      }
+      if (Object.keys(lineup).length) setPicks((prev) => (Object.keys(prev).length ? prev : lineup));
+    }).catch(() => {});
+  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
   const [selSlot, setSelSlot] = useState<string | null>(null);
   // Per-window playback: each window runs its own clock + play/pause. The clock
   // is game-elapsed seconds by default, or REAL wall-clock seconds since kickoff
@@ -546,7 +563,20 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     setSelSlot(null);
   }
 
-  function lockIn() { setPhase('live'); setSelSlot(null); setRosterOpen({ you: false, their: false }); }
+  function lockIn() {
+    // Live pilot: seal the chosen lineup to Supabase (the worker scores from this).
+    if (liveCtx) {
+      const rows: PickRow[] = [];
+      for (const [key, p] of Object.entries(effYouPicks)) {
+        if (!p?.playerId) continue;
+        const [win, slot] = key.split('#');
+        if (win == null || slot == null) continue;
+        rows.push({ game_window: win, roster_slot: slot, player_slug: p.playerId, metric_id: p.metricId ?? null });
+      }
+      savePicks(liveCtx.matchupId, liveCtx.userId, rows).catch(() => {});
+    }
+    setPhase('live'); setSelSlot(null); setRosterOpen({ you: false, their: false });
+  }
   // Demo kickoff (setup → live auto-play) and a way back to re-pick.
   function demoKick() { setSelSlot(null); setPhase('live'); }
   function demoBackToSetup() { demoStarted.current = false; setWinClocks({}); setWinPlaying({}); setSelSlot(null); setPhase('setup'); }

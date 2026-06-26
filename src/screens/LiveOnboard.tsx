@@ -308,6 +308,7 @@ function Enroll({ session, view, setView }: { session: Session; view: OnboardVie
       enrollments={enrollments}
       cards={cards}
       commishIds={commishIds}
+      userId={session.user.id}
       onPicks={() => setView('picks')}
       onBoard={() => setView('board')}
       onManage={() => setView('commishdash')}
@@ -319,8 +320,8 @@ function Enroll({ session, view, setView }: { session: Session; view: OnboardVie
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, cards, commishIds, onPicks, onBoard, onManage, onVerifyCommish, isCommish }: {
-  enrollments: Enrollment[]; cards: Record<string, MatchupCard>; commishIds: Set<string>;
+function LeagueHome({ enrollments, cards, commishIds, userId, onPicks, onBoard, onManage, onVerifyCommish, isCommish }: {
+  enrollments: Enrollment[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
   onPicks: () => void; onBoard: () => void; onManage: () => void; onVerifyCommish: () => void; isCommish: boolean;
 }) {
   return (
@@ -330,7 +331,7 @@ function LeagueHome({ enrollments, cards, commishIds, onPicks, onBoard, onManage
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {enrollments.map((e) => (
-          <LeagueCard key={e.league_id} e={e} card={cards[e.league_id]} commish={commishIds.has(e.league_id)}
+          <LeagueCard key={e.league_id} e={e} card={cards[e.league_id]} commish={commishIds.has(e.league_id)} userId={userId}
             onPicks={onPicks} onBoard={onBoard} onManage={onManage} />
         ))}
       </div>
@@ -341,8 +342,8 @@ function LeagueHome({ enrollments, cards, commishIds, onPicks, onBoard, onManage
   );
 }
 
-function LeagueCard({ e, card, commish, onPicks, onBoard, onManage }: {
-  e: Enrollment; card?: MatchupCard; commish: boolean;
+function LeagueCard({ e, card, commish, userId, onPicks, onBoard, onManage }: {
+  e: Enrollment; card?: MatchupCard; commish: boolean; userId: string;
   onPicks: () => void; onBoard: () => void; onManage: () => void;
 }) {
   const { loadSimLeague, navigate } = useStore();
@@ -356,9 +357,15 @@ function LeagueCard({ e, card, commish, onPicks, onBoard, onManage }: {
     if (building) return;
     setBuilding(true); setBuildErr(null);
     try {
-      const { built, youTeamId } = await buildDripTestLeague(e.sleeper_roster_id, setBuildNote);
-      loadSimLeague(built, youTeamId);
-      navigate({ name: 'matchup', week: DEMO_WEEK, phase: 'setup' });
+      const [{ built, youTeamId }, m] = await Promise.all([
+        buildDripTestLeague(e.sleeper_roster_id, setBuildNote),
+        myMatchup(e.league_id, e.sleeper_roster_id).catch(() => null),
+      ]);
+      // With a real matchup, run as a true pilot board (sealed-pick persistence on,
+      // opened on the matchup's week). Without one, fall back to a plain playtest.
+      const ctx = m ? { matchupId: m.id, userId, leagueId: e.league_id, rosterId: e.sleeper_roster_id, week: m.week } : null;
+      loadSimLeague(built, youTeamId, ctx);
+      navigate({ name: 'matchup', week: ctx ? ctx.week : DEMO_WEEK, phase: 'setup' });
     } catch {
       setBuildErr('Couldn’t load the board — check your connection and try again.');
       setBuilding(false);
