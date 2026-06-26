@@ -46,6 +46,8 @@ const TEAM_AVATAR: Record<string, string> = {
   'dt-8': SLEEPER_AVATAR('ccbb3f6090d4c7deb0d6b8f63a67ded6'),  // Road Trip Raiders
   'dt-9': SLEEPER_AVATAR('a11f2ed658865776c8087287eaf17d51'),  // Gone Fishing Phins
   'dt-10': SLEEPER_AVATAR('0da38888462c687a9b64d04079344b2f'), // Chicken Nuggies
+  'dt-11': SLEEPER_AVATAR('580df1d9bf71a3e817564ce0d4adbdeb'), // Smash Mouth Maulers
+  'dt-12': SLEEPER_AVATAR('5fc9f197eafa919d157000d0c7e0eb36'), // Dunder Mifflin Dynamos
 };
 export function avatarUrl(ownerId?: string | null): string | null {
   return (ownerId && TEAM_AVATAR[ownerId]) || null;

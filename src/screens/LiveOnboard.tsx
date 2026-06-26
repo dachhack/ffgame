@@ -10,6 +10,8 @@ import {
   myMatchup, matchupTeams,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo,
 } from '../data/liveApi';
+import { DEMO_WEEK } from '../config';
+import { buildDripTestLeague } from '../data/dripTest';
 import { LivePicks } from './LivePicks';
 import { LiveBoard } from './LiveBoard';
 import { AdminPage } from './AdminPage';
@@ -343,6 +345,25 @@ function LeagueCard({ e, card, commish, onPicks, onBoard, onManage }: {
   e: Enrollment; card?: MatchupCard; commish: boolean;
   onPicks: () => void; onBoard: () => void; onManage: () => void;
 }) {
+  const { loadSimLeague, navigate } = useStore();
+  const [building, setBuilding] = useState(false);
+  const [buildNote, setBuildNote] = useState('');
+  const [buildErr, setBuildErr] = useState<string | null>(null);
+  // The Drip Test League plays on the FULL app board: fetch the real source
+  // league, re-skin it, and enter the sim as this user's team.
+  const isDripTest = (e.league?.name ?? '').toLowerCase().includes('drip test');
+  const playFullBoard = async () => {
+    if (building) return;
+    setBuilding(true); setBuildErr(null);
+    try {
+      const { built, youTeamId } = await buildDripTestLeague(e.sleeper_roster_id, setBuildNote);
+      loadSimLeague(built, youTeamId);
+      navigate({ name: 'matchup', week: DEMO_WEEK, phase: 'setup' });
+    } catch {
+      setBuildErr('Couldn’t load the board — check your connection and try again.');
+      setBuilding(false);
+    }
+  };
   const m = card?.matchup;
   const youAreHome = m ? m.home_roster_id === e.sleeper_roster_id : true;
   const oppRoster = m ? (youAreHome ? m.away_roster_id : m.home_roster_id) : null;
@@ -378,11 +399,12 @@ function LeagueCard({ e, card, commish, onPicks, onBoard, onManage }: {
       </div>
 
       {/* actions */}
-      <button onClick={onPicks} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 12, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
-        ◈ SET YOUR LINEUP →
+      <button onClick={isDripTest ? playFullBoard : onPicks} disabled={building} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: building ? 'default' : 'pointer', marginTop: 12, opacity: building ? 0.7 : 1, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
+        {building ? (buildNote || 'LOADING BOARD…') : '◈ SET YOUR LINEUP →'}
       </button>
+      {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{buildErr}</div>}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 18, marginTop: 10 }}>
-        <button onClick={onBoard} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board</button>
+        {!isDripTest && <button onClick={onBoard} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board</button>}
         {commish && <button onClick={onManage} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚑ manage league</button>}
       </div>
     </div>
