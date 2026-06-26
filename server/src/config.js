@@ -13,6 +13,8 @@ export const config = {
   supabaseUrl: process.env.SUPABASE_URL || '',
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   season: process.env.PILOT_SEASON || '2026',
+  // ESPN seasontype the pollers query: 1=preseason, 2=regular (default), 3=postseason.
+  seasonType: Number(process.env.PILOT_SEASON_TYPE || 2),
   leagueIds: (process.env.PILOT_LEAGUE_IDS || '').split(',').map((s) => s.trim()).filter(Boolean),
   playsPollMs: Number(process.env.PLAYS_POLL_MS || 25000),
   scoreboardPollMs: Number(process.env.SCOREBOARD_POLL_MS || 60000),

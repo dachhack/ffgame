@@ -71,14 +71,14 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
   const lid = leagueRow.id;
   const kdstMode = leagueRow.kdst_mode ?? 'off';
   const rows = await sleeper.getMatchups(leagueId, week); // one row per roster
-  const lockMs = await weekKickoffMs(season, week);
+  const lockMs = await weekKickoffMs(season, week, config.seasonType);
   const lockAt = lockMs ? new Date(lockMs).toISOString() : null;
 
   // Live NFL slate from ESPN → overrides the baked 2025 slate for this real
   // season, so slate-gating + the K/DST bye check below use the correct windows
   // and byes. Stored in nfl_slate so the client can load it too.
   try {
-    const slate = await buildSlate(season, week);
+    const slate = await buildSlate(season, week, config.seasonType);
     if (slate.length) {
       setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win })));
       await db().from('nfl_slate').upsert(

@@ -57,7 +57,7 @@ async function main() {
       const idx = await buildPlayerIndex();
       const s = await getState();
       const week = Number(s.week) || 1;
-      const ids = await gamesToPoll(config.season, week);
+      const ids = await gamesToPoll(config.season, week, config.seasonType);
       let wrote = 0;
       for (const id of ids) wrote += await pollGame(id, week, idx);
       console.log('polled', ids.length, 'games,', wrote, 'rows');
