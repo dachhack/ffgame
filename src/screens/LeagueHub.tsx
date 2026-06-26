@@ -135,8 +135,10 @@ export function LeagueHub() {
             </div>
           </button>
 
-          {/* Bridge from "my league sim" to the real product: the live H2H pilot. */}
-          {isSimLeague && (
+          {/* Bridge from the demo / "my league sim" to the real product: the live
+              H2H board. Always shown so demo explorers have a way into the real
+              game board. */}
+          {(
             <button
               onClick={() => navigate({ name: 'live' })}
               style={{
