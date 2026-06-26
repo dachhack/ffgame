@@ -14,11 +14,33 @@ import { pollGame } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
 import { lockDueMatchups, finalizeMatchups } from './lock.js';
 import { resolveMatchup, injectWeekPlays } from './resolve.js';
+import { syncAllLeagues } from './sync.js';
 import { db } from './supabase.js';
 import { setRuntimeSlate } from '../../src/data/nflSlate.ts';
 
 let playerIndex = null;
 let lastInjuryPoll = 0;
+let lastSyncedWeek = null;
+let lastSyncAt = 0;
+let syncing = false;
+
+/** Auto weekly sync: mirror every configured league's schedule + lineups. Fires on
+ *  boot, on NFL week rollover, and every config.weeklySyncRefreshMs (to catch lineup
+ *  changes before lock). Guarded against overlap — at ~100 leagues a sync can run
+ *  longer than one play tick, so it lives on its own (slower) interval. */
+async function syncTick() {
+  if (syncing || !config.leagueIds.length) return;
+  const { season, week } = await currentWeek();
+  const due = week !== lastSyncedWeek || Date.now() - lastSyncAt >= config.weeklySyncRefreshMs;
+  if (!due) return;
+  syncing = true;
+  try {
+    const r = await syncAllLeagues(week, season, playerIndex, config.leagueIds);
+    lastSyncedWeek = week; lastSyncAt = Date.now();
+    log('weekly sync: week', week, '—', `${r.ok}/${r.total} leagues`);
+  } catch (e) { log('weekly sync error', e.message); }
+  finally { syncing = false; }
+}
 
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
@@ -86,6 +108,15 @@ async function main() {
 
   await tick().catch((e) => log('tick error', e.message));
   setInterval(() => tick().catch((e) => log('tick error', e.message)), config.playsPollMs);
+
+  // Weekly schedule + lineup auto-sync for all configured leagues (separate, slower
+  // loop — a 100-league sync can outlast one play tick).
+  if (config.leagueIds.length) {
+    await syncTick().catch((e) => log('sync tick error', e.message));
+    setInterval(() => syncTick().catch((e) => log('sync tick error', e.message)), config.syncCheckMs);
+  } else {
+    log('no PILOT_LEAGUE_IDS set — weekly auto-sync disabled');
+  }
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

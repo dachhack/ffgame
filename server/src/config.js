@@ -18,6 +18,10 @@ export const config = {
   scoreboardPollMs: Number(process.env.SCOREBOARD_POLL_MS || 60000),
   injuryPollDailyMs: Number(process.env.INJURY_POLL_MS_DAILY || 86400000),
   injuryPollGamedayMs: Number(process.env.INJURY_POLL_MS_GAMEDAY || 3600000),
+  // Weekly auto-sync: how often the worker checks if a sync is due, and the min gap
+  // between full re-syncs of the current week (re-syncs catch lineup changes pre-lock).
+  syncCheckMs: Number(process.env.SYNC_CHECK_MS || 3600000),         // 1h
+  weeklySyncRefreshMs: Number(process.env.WEEKLY_SYNC_MS || 21600000), // 6h
 };
 
 /** Throws unless the Supabase service credentials are present. */
