@@ -71,8 +71,8 @@ export function LiveOnboard() {
         </div>
       </header>
 
-      <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}>
-        <div style={{ width: '100%', maxWidth: 440 }}>
+      <main style={{ flex: 1, display: 'flex', alignItems: view === 'admin' ? 'flex-start' : 'center', justifyContent: 'center', padding: '24px 16px' }}>
+        <div style={{ width: '100%', maxWidth: view === 'admin' ? 1080 : 440 }}>
           {!liveConfigured ? <NotConfigured />
             : !ready ? <Muted text="Loading…" />
             : recovery ? <SetPassword onDone={() => setRecovery(false)} />
