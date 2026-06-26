@@ -6,6 +6,7 @@ import { headshot, teamLogo } from '../data/media';
 import { injuryFor } from '../data/injuries';
 import { REG_SEASON_WEEKS } from '../data/league';
 import { APP_VERSION, DATA_SOURCE } from './version';
+import { Rulebook } from '../screens/Rulebook';
 
 /** True when the viewport is at/below `maxWidth` — drives the mobile layout. */
 export function useIsMobile(maxWidth = 760): boolean {
@@ -113,6 +114,7 @@ export function Avatar({ name, accent = 'var(--you)', size = 30, src }: { name: 
 export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
   const { theme, setTheme, bigText, setBigText, fullStats, setFullStats } = useStore();
   const [open, setOpen] = useState(false);
+  const [rules, setRules] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -182,6 +184,13 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
               </button>
             </div>
           </div>
+          <button
+            onClick={() => { setOpen(false); setRules(true); }}
+            className="mono"
+            style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
+          >
+            📖 Rulebook
+          </button>
           {superAdmin && (
             <button
               onClick={() => { setOpen(false); superAdmin(); }}
@@ -193,6 +202,7 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
           )}
         </div>
       )}
+      {rules && <Rulebook onClose={() => setRules(false)} />}
     </div>
   );
 }

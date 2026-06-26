@@ -5,6 +5,12 @@ Drip Fantasy is head-to-head fantasy where **what** you start matters less than
 **metric** that decides how that player's real NFL game converts to points — and
 how it attacks or defends against your opponent. Picks stay sealed until kickoff.
 
+> **The §4 catalog and §6 power-up tables below are auto-generated** from
+> `src/data/metrics.ts` and `src/data/powerups.ts` (run `npm run gen:rulebook`),
+> so they can never drift from the live engine. The same data drives the in-app
+> Rulebook (Settings gear → Rulebook). Edit prose by hand; never edit between the
+> `AUTO-*` markers.
+
 ---
 
 ## 1. The shape of a week
@@ -38,9 +44,8 @@ Every metric does one or both of:
 - **Scores** — banks points for you (flat points, or a *drip* that accrues over time).
 - **Effects** — does something to the opponent slot (wipe, erase, halve, multiply…).
 
-The catalog below lists each. The big idea: **flat metrics are predictable, drips
-are explosive but fragile, and effect metrics win by denial.** It's
-rock-paper-scissors — see §5.
+The big idea: **flat metrics are predictable, drips are explosive but fragile, and
+effect metrics win by denial.** It's rock-paper-scissors — see §5.
 
 ---
 
@@ -51,18 +56,14 @@ don't score yards directly. Each productive touch raises a **rate** (points per
 minute), and that rate **accrues over time while your team has the ball.**
 
 - **Rate** = yards × **0.01**/min for a WR or RB · **0.005**/min for a TE (half).
-  So a WR with 100 receiving yards builds a 1.0/min rate; a TE needs 200 yards for
-  the same. Rate **builds gradually** — yards early in the game accrue over far more
-  time than yards late.
-- **Accrues only on offense** — the rate only ticks while that player's team
-  possesses the ball, on the real game clock (it pauses at every quarter and half).
+  Rate **builds gradually** — yards early in the game accrue over far more time than
+  yards late.
+- **Accrues only on offense**, on the real game clock (it pauses at quarter & half).
 - **HOT** — **3 straight productive touches with no opponent score in between**
-  doubles your drip (**×2**). A stuffed run (<3 yds), a short return (<10 yds), or
-  an incompletion breaks the streak and cools you back to normal. (Combo/Return
-  drips need **4** straight.)
-- **A touchdown wipes the bank** — scoring a TD on a drip metric zeroes everything
-  banked so far. The rate survives; the bank doesn't. (Drips reward *sustained
-  production*, not boom plays — use a flat metric for a TD hunter.)
+  doubles your drip (**×2**). A stuffed run (<3 yds), short return (<10 yds), or
+  incompletion breaks the streak. (Combo/Return drips need **4**.)
+- **A touchdown wipes the bank** — drips reward *sustained production*, not boom
+  plays. The rate survives; the bank doesn't.
 
 ### WR vs TE drip — the key difference
 
@@ -74,92 +75,152 @@ minute), and that rate **accrues over time while your team has the ball.**
 
 A TE drip can't be erased by an opposing receiver — but it builds at half rate, and
 its hot streak can still be **cooled** by an opponent who banks points every play
-(a passing QB). See the worked example in §6.
+(a passing QB). See the worked example in §7.
 
 ---
 
 ## 4. Metric catalog
 
-### QB
-| Metric | Scores | Effect |
-|---|---|---|
-| **Field General** (MULTIPLIER) | 0 direct | Passing yards set a **window-wide multiplier** on all *your* skill players (≈300 yds = 2.8×). The QB scores nothing himself. |
-| **Passing Yards** (FLAT) | 0.04/yd + 4/TD | None — predictable. |
-| **Rush Yards** (FLAT) | 0.1/yd + 6/TD | None. |
-| **Air Raid** (unlock) | 0.04/yd + **10**/TD | None — TD-heavy flat. |
+<!-- AUTO-CATALOG:START -->
 
-### RB
-| Metric | Scores | Effect |
-|---|---|---|
-| **Rush Yards** (DRIP) | 0.01/yd → rate | Standard drip (fragile). |
-| **Carries** (COMPRESSION) | 0.5/carry | A 3+ carry streak with no opponent score **trims the opponent's most recent score by 25% per further carry.** |
-| **Receptions** (RATE RESET) | 1/catch | Each catch **zeroes the opponent's drip *rate*** — they keep the bank but rebuild from scratch. |
-| **Touchdowns** (NUKE) | 6/TD | Each TD **wipes the opponent's entire bank to 0.** |
-| **Combo Drip / Return Yards** (unlocks) | 0.01/yd → rate | Two touch streams feed one drip; need 4 straight to go hot. |
+### Quarterback
 
-### WR
-| Metric | Scores | Effect |
-|---|---|---|
-| **Receiving Yards** (DRIP) | 0.01/yd → rate | Standard drip (fragile). |
-| **Receptions** (ERASE) | 1/catch | Each catch **erases the opponent's drip from the last 10 minutes.** |
-| **Targets** (CLOCK STOP) | 0.5/target | Every target **stops the opponent's drip clock** — pure denial, no erase. |
-| **Touchdowns** (NUKE) | 6/TD | Wipes the opponent's entire bank to 0. |
-| **Combo Drip / Return Yards** (unlocks) | 0.01/yd → rate | Two-stream drip; 4 straight to go hot. |
+| Metric | Tag | Scores | Effect |
+|---|---|---|---|
+| **Field General** | MULTIPLIER | 0 direct pts | Passing yards set a window-wide drip multiplier on all your skill players. 300 yds = 2.8×. The QB scores nothing himself. |
+| **Passing Yards** | FLAT | 0.04 pts / yd + 4 / TD | Flat points on passing yards and TDs. No drip, no nuke, no interaction. Predictable. |
+| **Rush Yards** | FLAT | 0.1 pts / yd + 6 / TD | Flat points on your scrambles and rushing TDs. Purely additive — no nuke, no erase, no interaction. |
+| **Air Raid** | TD HEAVY | 0.04 / yd + 10 / TD | Unlock (1 wk): passing yards at 0.04/yd plus a huge 10 pts per passing TD. Flat — no nuke or erase. |
 
-### TE
-| Metric | Scores | Effect |
-|---|---|---|
-| **Receiving Yards** (DRIP) | 0.005/yd → rate | Half rate, but **immune to WR/RB erases & pauses.** |
-| **Targets** (WIDE ERASE) | 1/target | Every target — catch *or* incompletion — **erases the opponent's last 15 minutes.** Fires on volume. |
-| **Receptions** (ERASE) | 1.5/catch | Erases the opponent's last 10 minutes. |
-| **Touchdowns** (**8-PT NUKE**) | 8/TD | The strongest play in the game: wipes the matched opponent's bank **AND** knocks **every** opposing drip in the window down 1.0/min. |
-| **Combo Drip / Return Yards** (unlocks) | 0.005/yd → rate | Half-rate two-stream drip; 4 straight to go hot. |
+### Running Back
 
-### K
-| Metric | Scores | Effect |
-|---|---|---|
-| **Banker** (XP BONUS) | FG by distance | Each **XP made adds +1 pt to ALL your TDs** that week. |
-| **Negation** (SHUTDOWN) | 0 | **6+ kicks → the matched opponent scores 0** and all their effects are negated. |
+| Metric | Tag | Scores | Effect |
+|---|---|---|---|
+| **Rush Yards** | DRIP | 0.01 / yd → rate (pts/min) | Each carry permanently raises a drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. An opponent catch erases the last 10 min and pauses it; a target pauses it; a TD wipes the bank. Rate survives erases. 3 straight (no opponent score) goes hot → drip doubles; cold when they score. |
+| **Carries** | COMPRESSION | 0.5 / carry | 0.5 per carry. A 3+ carry streak with no opponent score compresses: each further carry trims the opponent’s most recent score by 25%. |
+| **Receptions** | RATE RESET | 1 pt / catch | Each catch zeroes the opponent’s active drip rate. They keep the bank, rebuild from scratch. |
+| **Touchdowns** | NUKE | 6 pts / TD | Each TD wipes the opponent’s entire banked score to zero. |
+| **Combo Drip** | RUSH+REC DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk): carries AND catches both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; a TD wipes the bank. 4 straight productive touches goes hot → drip doubles (a stuffed run or incomplete cools it). |
+| **Return Yards** | RUSH+RET DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk): carries AND kick/punt return yards both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; 4 straight productive touches (rush 3+ / return 10+) goes hot → drip doubles, a stuffed run or short return cools it. |
 
-### DEF
-| Metric | Scores | Effect |
-|---|---|---|
-| **Suppress** (HALVING) | 0 | Banks nothing; its defensive score (sk1 / int3 / fr2 / TD6) becomes a **kill-bar — every opponent slot in *any* window that scores at or below it is halved.** |
-| **Earn Points** (FLAT) | sk1 / int3 / fr2 / TD6 / saf2 | Plain flat scoring. |
+### Wide Receiver
+
+| Metric | Tag | Scores | Effect |
+|---|---|---|---|
+| **Receiving Yards** | DRIP | 0.01 / yd → rate (pts/min) | Each catch permanently raises a drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. An opponent catch erases the last 10 min and pauses it; a target pauses it; a TD wipes the bank. Rate survives erases. 3 straight (no opponent score) goes hot → drip doubles; cold when they score. |
+| **Receptions** | ERASE | 1 pt / catch | Each catch erases the opponent’s drip from the last 10 clock-minutes. |
+| **Targets** | CLOCK STOP | 0.5 pts / target | Every target stops the opponent’s drip clock. No erase — pure denial. |
+| **Touchdowns** | NUKE | 6 pts / TD | Each TD wipes the opponent’s entire banked score to zero. |
+| **Combo Drip** | RUSH+REC DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk): catches AND carries both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; a TD wipes the bank. 4 straight productive touches goes hot → drip doubles (a stuffed run or incomplete cools it). |
+| **Return Yards** | REC+RET DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk): catches AND kick/punt return yards both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; 4 straight (catch / 10+ return) goes hot → drip doubles, an incomplete or short return cools it. |
+
+### Tight End
+
+| Metric | Tag | Scores | Effect |
+|---|---|---|---|
+| **Receiving Yards** | DRIP | 0.005 / yd → rate (pts/min) | Each catch raises a drip rate (yds × 0.005 pts/min) — half a WR’s — that accrues while your team has the ball. Immune to WR/RB pauses and erases: only a TD (or K shutdown) stops it. 3 straight (no opponent score) goes hot → drip doubles. |
+| **Targets** | WIDE ERASE | 1 pt / target | Every target — catch or incompletion — erases the opponent’s drip from the last 15 min. Wider than any WR, and fires on volume alone. |
+| **Receptions** | ERASE | 1.5 pts / catch | Each catch erases the opponent’s drip from the last 10 clock-minutes. |
+| **Touchdowns** | 8-PT NUKE | 8 pts / TD | The strongest single play in the game. Wipes the matched opponent’s entire bank AND instantly knocks every opposing drip in the window down by 1.0 pts/min (min 0). |
+| **Combo Drip** | RUSH+REC DRIP | 0.005 / yd → rate (pts/min) | Unlock (1 wk): catches AND carries both feed one drip rate (yds × 0.005 pts/min, TE rate) that accrues while your team has the ball. Immune to WR/RB pauses like any TE drip; a TD wipes the bank. 4 straight productive touches goes hot → drip doubles (an incomplete cools it). |
+| **Return Yards** | REC+RET DRIP | 0.005 / yd → rate (pts/min) | Unlock (1 wk): catches AND kick/punt return yards both feed one drip rate (yds × 0.005 pts/min, TE rate) that accrues while your team has the ball. Immune to WR/RB pauses like any TE drip; 4 straight (catch / 10+ return) goes hot → drip doubles, an incomplete or short return cools it. |
+
+### Kicker
+
+| Metric | Tag | Scores | Effect |
+|---|---|---|---|
+| **Banker** | XP BONUS | FG by distance | Each XP made adds +1 pt to ALL your TDs for the week. |
+| **Negation** | SHUTDOWN | 0 pts | 6+ kicks → the matched opponent scores 0 and all their effects are negated. |
+
+### Defense (DST)
+
+| Metric | Tag | Scores | Effect |
+|---|---|---|---|
+| **Suppress** | HALVING | 0 pts | Banks 0 itself — instead its own defensive week score (sk/int/fr/TD) becomes a kill-bar: EVERY opponent slot, in ANY window, that scores at or below it is halved. |
+| **Earn Points** | FLAT | sk1 / int3 / fr2 | Normal flat head-to-head scoring. No suppress, no halving. |
 
 ### IDP (DL / LB / DB)
-| Metric | Scores |
-|---|---|
-| **Tackles** (FLAT) | tkl1 / sk2 / int3 / FR2 / TD6 / saf2 — steady, volume-driven. |
-| **Splash Plays** (BIG PLAY) | sk4 / int6 / FR4 / TD6 / saf2 / tkl0.5 — boom-or-bust. |
+
+| Metric | Tag | Scores | Effect |
+|---|---|---|---|
+| **Tackles** | FLAT | tkl 1 · sk 2 · int 3 · FR 2 | Flat defensive scoring: 1 per tackle, 2 per sack, 3 per interception, 2 per fumble recovery, 6 per defensive/ST TD, 2 per safety. Volume-driven and steady. |
+| **Splash Plays** | BIG PLAY | sk 4 · int 6 · FR 4 · TD 6 | Rewards game-wreckers: 4 per sack, 6 per interception, 4 per fumble recovery, 6 per defensive/ST TD, 2 per safety, 0.5 per tackle. Boom-or-bust. |
+
+<!-- AUTO-CATALOG:END -->
 
 ---
 
 ## 5. Effects & counterplay
 
-The hidden-metric layer is a counter game. The core triangle:
+The hidden-metric layer is a counter game:
 
-- **Drips** rack up the highest ceilings — but they're **fragile**:
-  - **Receptions (ERASE)** wipes a drip's recent minutes.
-  - **Targets (CLOCK STOP / WIDE ERASE)** denies on volume alone.
-  - **RB Receptions (RATE RESET)** zeroes the rate itself.
-  - **Touchdowns (NUKE)** / **TE TD (8-PT NUKE)** wipe the whole bank.
-  - **Per-play scorers cool the HOT streak** — a flat passing QB that banks points
-    every completion keeps your drip from ever doubling. (TE drips shrug off WR/RB
-    scoring, but **not** a QB.)
+- **Drips** have the highest ceilings — but they're **fragile**: erasers
+  (Receptions / Targets), RB rate-reset, and TD nukes all gut them, and a **per-play
+  scorer cools the HOT streak** (a flat passing QB that banks points every
+  completion keeps your drip from ever doubling — TE drips shrug off WR/RB scoring,
+  but **not** a QB).
 - **Effect metrics** (erase / nuke / suppress / shutdown) win by **denial** — they
-  score little themselves, so they lose to **flat scorers** that just pile up points
-  and don't care about being erased.
-- **Flat scorers** are steady but have no ceiling and no defense — they lose the
-  big-points race to a drip that **goes hot**.
+  score little, so they lose to **flat scorers** that just pile up points.
+- **Flat scorers** are steady but capless — they lose the big-points race to a drip
+  that goes hot.
 
-Cross-window effects reach beyond their own pairing: **Field General** multiplies
-your whole window, **TE 8-PT NUKE** hits every drip in the window, **DEF Suppress**
-halves matching slots in *any* window, and **K Banker** boosts *all* your TDs.
+Cross-window reach: **Field General** multiplies your whole window, **TE 8-PT NUKE**
+hits every drip in the window, **DEF Suppress** halves matching slots in *any*
+window, and **K Banker** boosts *all* your TDs.
 
 ---
 
-## 6. Worked example — why 127 yards scored 4 points
+## 6. Power-ups (the drip-coin economy)
+
+You earn **drip-coin** each week and spend it on consumables — bought into your
+inventory and spent when applied. Two kinds: **action** (a one-time tactical effect)
+and **metric** (unlocks an extra metric for the current week only). **Timing** gates
+when a power-up can be applied: *pre* locks once a window starts; *live* fires only
+during a live window (never retroactive).
+
+<!-- AUTO-POWERUPS:START -->
+
+### Pre-kickoff
+*arm during setup; locks once a window starts*
+
+| Power-up | Cost | Kind | What it does |
+|---|---|---|---|
+| ➕ **Extra Slot** | ◎ 80 | action | Add a slot to any window — for you AND your opponent. Must be applied before any window starts. |
+| 🏈 **Return Yards** | ◎ 60 | metric | This week only: unlock the Return Yards metric for a kick/punt returner — flat 0.1 pts per real return yard + 6 per return TD. |
+| 💥 **WR/TE Carries** | ◎ 70 | action | Arm before kickoff: all week, every carry by a WR or TE in your starting spots wipes its matched opponent to 0 — a plus-up on TOP of whatever metric that slot is scoring. |
+| 🌀 **Combo Drip** | ◎ 65 | metric | This week only: unlock a Rush + Receiving combo drip for one player — both carries AND catches feed a single drip rate (yds × 0.01 pts/min). |
+| 🚀 **Air Raid** | ◎ 60 | metric | This week only: unlock a QB metric where passing TDs are worth 10 pts (plus 0.04 / passing yd). Flat — no nuke or erase. |
+| 🎺 **Trick Play** | ◎ 90 | action | Arm before kickoff: if ANY non-QB in your starting spots throws a TD pass this week, your lineup banks a flat +50. |
+| 🛡️ **Pick Six** | ◎ 45 | action | Arm before kickoff: if any of your DST starters returns an INT or fumble for a touchdown, bank a flat +25. |
+| 🙏 **Hail Mary** | ◎ 35 | action | Arm before kickoff: if a QB in your starting spots throws a touchdown of 40+ yards, bank a flat +15. |
+| 📈 **Momentum** | ◎ 70 | action | Arm before kickoff: all week, your drips run 3× when hot instead of 2×. |
+| 🗑️ **Garbage Time** | ◎ 75 | action | Arm before kickoff: any points your players score in the final 5 game-minutes count double. |
+| 🌊 **Floodgates** | ◎ 85 | action | Arm before kickoff: your drips are immune to opponent pauses and erases all week (TD wipes still apply). |
+| ⏱️ **Overtime** | ◎ 60 | action | Arm before kickoff: your Field General multiplier and drips carry into overtime. Without it they reset the moment regulation ends. |
+| 🧊 **Overtime Shield** | ◎ 70 | action | Arm before kickoff: any points your opponent scores in overtime this week are negated. |
+| 🎖️ **Twin Generals** | ◎ 85 | action | Arm before kickoff: a second Field General QB in the same window stacks — the top two multipliers multiply together instead of you taking just the higher one. |
+| ↩️ **Counter-Nuke** | ◎ 95 | action | Arm before kickoff: the first time an opponent nukes one of your slots, it is reflected back — their player is wiped instead. |
+| 🛟 **Insurance** | ◎ 80 | action | Arm before kickoff: the first time one of your slots is nuked, half its banked score is refunded instead of zeroed. |
+| ⚖️ **Double or Nothing** | ◎ 80 | action | Stake one of your slots before kickoff: at FINAL it scores double if it wins its head-to-head, or zero if it loses. |
+| 👁️ **Spy** | ◎ 40 | action | After rosters lock and before kickoff: pick any slate slot (blind) and reveal the opponent there — their player OR their chosen metric. |
+| 🪂 **Bye Steal** | ◎ 55 | action | Before kickoff, field one of your players who is on bye in an open slot for a flat projected score. |
+| 🦅 **Ball Hawk** | ◎ 55 | action | Arm before kickoff: raise the turnover coin swing from 10 to 25 this week, across all windows — your giveaways cost more, their giveaways pay more. |
+
+### In-game
+*fire anytime a window is live (not retroactive)*
+
+| Power-up | Cost | Kind | What it does |
+|---|---|---|---|
+| 🔀 **Metric Swap** | ◎ 30 | action | Change a slot’s effective metric. Real-time — applies going forward, not retroactive. |
+| 🔁 **Player Swap** | ◎ 50 | action | Swap a slotted player for one on your bench — anytime, even mid-game. |
+| 🎲 **Mulligan** | ◎ 30 | action | Re-roll one slot’s metric mid-game for free — does not spend a Metric Swap. |
+| 💥 **EMP** | ◎ 65 | action | Fire during a live window to freeze every opponent drip in that window for 10 minutes. |
+
+<!-- AUTO-POWERUPS:END -->
+
+---
+
+## 7. Worked example — why 127 yards scored 4 points
 
 A TE posts **127 receiving yards, 0 TD** and banks just **4.0**, while a WR with
 **60 yards + 2 TD** banks 16.0. Not a bug — a clean counter:
@@ -179,19 +240,17 @@ version of that read.
 
 ---
 
-## 7. Banks, backups & edge cases
+## 8. Banks, backups & edge cases
 
-- **Missed picks** — if you don't set a slot, your league's policy decides: your
-  best available lineup is auto-filled (default), an AI fills it, or it scores 0.
+- **Missed picks** — your league policy decides: best available lineup auto-filled
+  (default), an AI fills it, or it scores 0.
 - **Backups** — depth behind a beatable starter can sub in; with two-plus unopposed
   slots, the rest bank half credit.
-- **Overtime** — drip keeps ticking past regulation (with the Overtime power-up).
-- **Garbage Time / Momentum / EMP** — power-ups bought with **drip-coin** (earned
-  each week) can double late-game points, push a hot drip to ×3, or freeze an
-  opponent's drip for 10 minutes. See the power-up shop in-app.
+- **Overtime / Garbage Time / Momentum / EMP** — power-ups (above) can keep drips
+  ticking past regulation, double late points, push a hot drip to ×3, or freeze an
+  opponent's drip.
 
 ---
 
-*This rulebook mirrors the live scoring engine (`src/data/metrics.ts`,
-`src/engine/sim.ts`). If a number here disagrees with the game, the game wins —
-tell us and we'll fix the doc.*
+*This rulebook mirrors the live scoring engine. If a number here disagrees with the
+game, the game wins — tell us and we'll fix the doc.*
