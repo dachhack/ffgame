@@ -14,6 +14,19 @@ import { buildPlayerIndex } from './playerIndex.js';
 import { assignKdst } from '../../src/data/kdst.ts';
 import { setRuntimeSlate } from '../../src/data/nflSlate.ts';
 
+/** Sync a week's schedule + lineups for many leagues, throttled to stay under
+ *  Sleeper's rate limit. Returns { ok, total }. Shared by the CLI (`sync-week-all`)
+ *  and the worker's weekly auto-scheduler. */
+export async function syncAllLeagues(week, season, idx, ids) {
+  let ok = 0;
+  for (const id of ids) {
+    try { await syncWeek(id, week, season, idx); ok++; }
+    catch (e) { console.error(`[sync-all] ${id}: ${e?.message ?? e}`); }
+    await new Promise((r) => setTimeout(r, 400)); // ~2.5 leagues/sec
+  }
+  return { ok, total: ids.length };
+}
+
 /** Import one Sleeper league: league row, memberships, enrollment. */
 export async function importLeague(leagueId, season = config.season) {
   const [league, users, rosters] = await Promise.all([

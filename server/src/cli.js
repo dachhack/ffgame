@@ -8,7 +8,7 @@
 //   node src/cli.js simulate --check [lg]      read-only DB connectivity probe
 //   node src/cli.js simulate --reset <lg> <wk> revert a sim'd week (scheduled, cleared)
 import { config } from './config.js';
-import { importLeague, syncWeek } from './sync.js';
+import { importLeague, syncWeek, syncAllLeagues } from './sync.js';
 import { buildPlayerIndex } from './playerIndex.js';
 import { pollInjuries } from './poll/injuries.js';
 import { gamesToPoll } from './poll/scoreboard.js';
@@ -44,13 +44,8 @@ async function main() {
       const ids = args.slice(1).length ? args.slice(1) : config.leagueIds;
       if (!ids.length) { console.error('no leagues — set PILOT_LEAGUE_IDS or pass ids'); break; }
       const idx = await buildPlayerIndex();
-      let ok = 0;
-      for (const id of ids) {
-        try { await syncWeek(id, week, config.season, idx); ok++; console.log(`  ✓ ${id}`); }
-        catch (e) { console.error(`  ✗ ${id}: ${e.message}`); }
-        await new Promise((r) => setTimeout(r, 400)); // ~2.5 leagues/sec — gentle on Sleeper
-      }
-      console.log(`sync-week-all: week ${week} — ${ok}/${ids.length} leagues synced`);
+      const r = await syncAllLeagues(week, config.season, idx, ids);
+      console.log(`sync-week-all: week ${week} — ${r.ok}/${r.total} leagues synced`);
       break;
     }
     case 'inj-once': {
