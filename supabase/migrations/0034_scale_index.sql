@@ -1,0 +1,13 @@
+-- 0034: index for the worker's per-tick "live matchups this week" scan
+-- (select * from matchup where week = ? and status in ('live','final')). The
+-- existing matchup(league_id, week) index can't serve a week-without-league filter;
+-- this one does. Matters at ~100 leagues / ~600 matchups polled every tick.
+--
+-- Every other resolve-hot lookup is already covered by a PK/unique:
+--   sealed_pick   unique (matchup_id, app_user_id, game_window, roster_slot)
+--   applied_state pk (matchup_id, app_user_id)
+--   matchup_state pk (matchup_id, game_window)
+--   sleeper_lineup pk (league_id, week, roster_id)
+--   league_membership unique (league_id, sleeper_roster_id)
+--   live_play index (week, player_slug)
+create index if not exists matchup_week_status_idx on matchup(week, status);
