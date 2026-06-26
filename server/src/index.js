@@ -13,7 +13,7 @@ import { getGames, gamesToPoll, slateFromGames } from './poll/scoreboard.js';
 import { pollGame } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
 import { lockDueMatchups, finalizeMatchups } from './lock.js';
-import { resolveMatchup } from './resolve.js';
+import { resolveMatchup, injectWeekPlays } from './resolve.js';
 import { db } from './supabase.js';
 import { setRuntimeSlate } from '../../src/data/nflSlate.ts';
 
@@ -56,9 +56,19 @@ async function tick() {
   for (const eventId of toPoll) { try { wrote += await pollGame(eventId, week, playerIndex); } catch (e) { log('poll game', eventId, e.message); } }
   if (toPoll.length) log('polled', toPoll.length, 'games,', wrote, 'play rows');
 
-  // Resolve every live matchup for the week.
+  // Resolve every live matchup for the week. Plays are fetched ONCE per tick (shared
+  // across all matchups), then matchups resolve in parallel chunks so the loop stays
+  // well under the tick interval even at ~100 leagues (~600 matchups).
   const { data: live } = await db().from('matchup').select('*').eq('week', week).in('status', ['live', 'final']);
-  for (const m of live ?? []) { try { await resolveMatchup(m, playerIndex); } catch (e) { log('resolve', m.id, e.message); } }
+  if (live?.length) {
+    await injectWeekPlays(week);
+    let done = 0;
+    for (let i = 0; i < live.length; i += 20) {
+      await Promise.all(live.slice(i, i + 20).map((m) =>
+        resolveMatchup(m, playerIndex, undefined, { playsInjected: true }).then(() => { done++; }).catch((e) => log('resolve', m.id, e.message))));
+    }
+    log('resolved', done, '/', live.length, 'matchups');
+  }
 
   // Finalize when the slate is complete.
   if (games.length && games.every((g) => g.completed)) {

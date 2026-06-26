@@ -36,6 +36,23 @@ async function main() {
       console.log('synced week', week, await syncWeek(leagueId, Number(week), config.season, idx));
       break;
     }
+    case 'sync-week-all': {
+      // Mirror a week's schedule + lineups for EVERY configured league (PILOT_LEAGUE_IDS),
+      // or an explicit list after the week. Throttled to stay under Sleeper's rate limit.
+      //   node src/cli.js sync-week-all <wk> [leagueId ...]
+      const week = Number(args[0] || (await getState()).week);
+      const ids = args.slice(1).length ? args.slice(1) : config.leagueIds;
+      if (!ids.length) { console.error('no leagues — set PILOT_LEAGUE_IDS or pass ids'); break; }
+      const idx = await buildPlayerIndex();
+      let ok = 0;
+      for (const id of ids) {
+        try { await syncWeek(id, week, config.season, idx); ok++; console.log(`  ✓ ${id}`); }
+        catch (e) { console.error(`  ✗ ${id}: ${e.message}`); }
+        await new Promise((r) => setTimeout(r, 400)); // ~2.5 leagues/sec — gentle on Sleeper
+      }
+      console.log(`sync-week-all: week ${week} — ${ok}/${ids.length} leagues synced`);
+      break;
+    }
     case 'inj-once': {
       const idx = await buildPlayerIndex();
       console.log('injuries', await pollInjuries(idx));

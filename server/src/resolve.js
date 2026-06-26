@@ -40,6 +40,13 @@ async function weekPlayRows(week) {
   return data ?? [];
 }
 
+/** Fetch the week's plays ONCE and inject them into the engine's PBP cache. Call
+ *  this once per tick before resolving many matchups — they all read the same
+ *  global week feed, so per-matchup re-fetching is pure waste at scale. */
+export async function injectWeekPlays(week) {
+  injectWeek(week, rowsToPbp(await weekPlayRows(week)));
+}
+
 /** Enrolled side's revealed picks: [{ win, slot, slug, metric }] — or null if the
  *  manager isn't enrolled / picks aren't locked yet (caller uses the fallback). */
 async function enrolledPicks(matchup, membership) {
@@ -78,10 +85,11 @@ async function lineupPolicy(leagueId) {
 /** Resolve one matchup → write matchup_state (per game_window) + finals when final.
  *  `override` (sim only): { home, away } pick arrays [{win,slot,slug,metric}] that
  *  bypass enrollment/sealed-pick gathering so both sides resolve with full metrics. */
-export async function resolveMatchup(matchup, playerIndex, override) {
-  const rows = await weekPlayRows(matchup.week);
-  const bySlug = rowsToPbp(rows);
-  injectWeek(matchup.week, bySlug);
+export async function resolveMatchup(matchup, playerIndex, override, opts = {}) {
+  // Plays are global per week. The tick injects them once (injectWeekPlays) and
+  // passes playsInjected, so we skip the whole-week re-fetch per matchup. Standalone
+  // callers (sim / single-matchup CLI) omit it and self-fetch as before.
+  if (!opts.playsInjected) injectWeek(matchup.week, rowsToPbp(await weekPlayRows(matchup.week)));
   const meta = (slug) => playerIndex?.metaForSlug(slug) ?? null;
   const player = (slug) => { const m = meta(slug); return makePlayer(slug, m?.pos, m?.team, m?.full); };
 
