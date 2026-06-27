@@ -156,9 +156,22 @@ negligible (~100–300 ms). The real cost is **per-matchup DB round-trips** —
 `resolveMatchup` did ~6 sequential reads × 600 matchups ≈ 3,600 reads/tick. Fix
 landed: **`prefetchTick` bulk-loads those reads for the whole live set in ~5
 queries**, and the worker tick passes them in via `opts.ctx` (the per-matchup
-query path stays as a fallback for the sim/CLI callers). This is the single
-highest-leverage change for scaling the sweep; batching the per-matchup
-`matchup_state` writes is the next step if needed.
+query path stays as a fallback for the sim/CLI callers).
+
+**In-region re-measure (2026-06-27, deployed worker, 100 leagues / 600 matchups):**
+the sweep is **11.7 s p50 / 12.6 s max = 50 % of the 25 s tick** — pilot-safe with
+~50 % headroom; per-matchup resolve dropped to 108 ms (4×). But the bottleneck
+**moved** to the two per-tick bulk fetches: `inject+prefetch ≈ 7.5 s` (60 % of the
+sweep) — the full week's plays + all memberships/lineups, CPU-bound on
+`shared-cpu-1x`. The next levers, in order of bang-for-buck:
+- **Cache the static prefetch across ticks** — memberships/lineups/policies don't
+  change after lock; fetch once per week, re-pull only the volatile bits (sealed
+  picks pre-lock, new plays). Turns the ~7.5 s into near-zero on steady-state ticks.
+- **Incremental play fetch** — pull only `live_play` rows newer than the last tick
+  instead of re-fetching the whole week's ~3,100 every 25 s.
+- **Bigger Fly VM** — it's CPU-bound parsing thousands of rows; `shared-cpu-1x →
+  2x`/`performance-1x` is a few dollars and helps directly.
+- Batching the per-matchup `matchup_state` **writes** is a smaller follow-on.
 
 The pilot's single always-on worker polling every game each tick is fine at ~600
 matchups but is the first thing to break at, say, 1,000+ leagues:

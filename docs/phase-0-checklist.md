@@ -37,10 +37,8 @@ with no live games, via the **real** `resolveMatchup` sweep.
       indexed matchup-scan time, per-tick resolve-sweep p50/p95/max, and headroom
       vs the 25s `PLAYS_POLL_MS` tick budget.
 - [x] Tear down: `npx tsx scripts/loadtest.mjs reset`.
-- [ ] **Re-run from the deployed Fly worker** (`fly ssh console`) for the TRUE
-      number — the run below was from a remote sandbox across the internet; the
-      worker is co-located with the DB (iad = us-east-1). _This is the real exit
-      measurement for this item._
+- [x] **Re-run from the deployed Fly worker** (in-region, iad = us-east-1) — the
+      true exit measurement. **Result below.**
 - [ ] Keep the offline feed gates green in CI: `npm run validate` (ESPN adapter)
       and `simulate --dry` round-trip + reconciliation (`validate-feed.yml`).
 - [ ] _Refinement:_ load-test lineups are skill-only; add K/DST to exercise the
@@ -57,13 +55,26 @@ with no live games, via the **real** `resolveMatchup` sweep.
 | chunk=60 | 12.1 s (warm 10.3 s) | 15.2 s | 61 % ⚠ |
 
 ⚠ **TIGHT from here, but the number is pessimistic:** every round-trip paid full
-internet RTT (sandbox → proxy → Supabase us-east-1). The production worker runs in
-`iad` (same region as the DB), where RTT is ~1–5 ms instead of tens — and since
-the bottleneck is round-trip-bound, the co-located sweep should be **multiples
-faster → comfortable PASS at 100 leagues**. Raising concurrency helped (20→60
-cut ~30 %), confirming it's latency-bound. **Optimization landed:** bulk-prefetch
-of the per-tick reads (see plan §4 + `server/src/resolve.js:prefetchTick`),
-collapsing ~3,600 reads/tick into ~5. Re-measure from the worker to confirm.
+internet RTT (sandbox → proxy → Supabase us-east-1). **Optimization landed:**
+bulk-prefetch of the per-tick reads (`server/src/resolve.js:prefetchTick`),
+collapsing ~3,600 reads/tick into ~5.
+
+### Result — in-region, from the deployed worker (2026-06-27) ✅
+600 matchups, 5 sweeps, `shared-cpu-1x`. **100 leagues is safe — half the budget.**
+
+| metric | sandbox | **worker (in-region)** |
+|---|---|---|
+| 0034 indexed scan | ~100–300 ms | ~40–80 ms |
+| per-matchup resolve | 468 ms p50 | **108 ms p50** (4× — prefetch + co-location) |
+| sweep (600) | 15.8 s | **11.7 s p50 / 12.6 s max** |
+| % of 25 s budget | 71 % | **50.4 % (49.6 % headroom)** |
+
+⚠ **TIGHT (50 %), and the bottleneck moved.** Per-matchup resolve is now cheap;
+the cost is the two **per-tick bulk fetches** — `inject+prefetch ≈ 7.5 s` (60 % of
+the sweep): the full week's ~3,100 plays + all 1,200 memberships/lineups, CPU-bound
+parsing thousands of rows on `shared-cpu-1x`. Headroom runs out around ~200 leagues
+at the current cost. **Pilot (100) passes; next levers in plan §4** (cache static
+prefetch across ticks, incremental play fetch, bigger VM) before scaling further.
 
 ## 2c · Close the signup gate  _(DECISION: gate by leagues, not emails)_
 - [x] **Resolved:** access is gated by the **~100 invited leagues**, not a
