@@ -74,12 +74,10 @@ export function Splash() {
             <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>Sleeper public API — username only, never a password.</div>
           </div>
 
-          {/* ── One demo door: the walkthrough leads into the full board + pilot ── */}
-          <div style={{ textAlign: 'center', marginTop: 14 }}>
-            <button onClick={() => { exitSimLeague(); navigate({ name: 'demo' }); }} className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'none', border: 'none', cursor: 'pointer' }}>
-              ▶ or just watch the 60-second demo →
-            </button>
-          </div>
+          {/* ── Demo door: the sanitized demo league on the full board ───────── */}
+          <button onClick={() => { exitSimLeague(); navigate({ name: 'hub' }); }} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 16 }}>
+            Explore the demo league →
+          </button>
 
           {/* ── Pilot (invited players) — compact, secondary ─────────────────── */}
           <div style={{ borderTop: '1px solid var(--bd)', marginTop: 22, paddingTop: 16, textAlign: 'center' }}>
