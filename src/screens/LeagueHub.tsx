@@ -1,17 +1,19 @@
 import { useStore } from '../app/store';
 import { Brand, Header, SiteSettings, UserChip, Avatar, DemoControls, fonts } from '../app/ui';
 import { getTeam, gameForTeam } from '../data/league';
+import { avatarUrl } from '../data/media';
 import { TOTAL_SLOTS } from '../data/metrics';
 import { SLEEPER_HANDLE } from '../config';
 import { weekLockLabel } from '../data/nflSlate';
 
 const { MONO, GROTESK } = fonts;
 
-// A few of dachhack's other real Sleeper leagues, shown as a portfolio.
+// A few fabricated "other leagues", shown as demo portfolio flavor (sanitized —
+// no real league names).
 const OTHER_LEAGUES = [
-  { name: 'Smash Mouth All Stars', format: 'Dynasty · 2QB · 10', state: 'LOCKED' as const },
-  { name: 'Console Warriors BestBall Dynasty', format: 'Dynasty · SF · 12', state: 'LIVE' as const },
-  { name: 'Hogwart’s Champions', format: 'Dynasty · SF · 10', state: 'LOCKED' as const },
+  { name: 'Sunday Scaries Dynasty', format: 'Dynasty · 2QB · 10', state: 'LOCKED' as const },
+  { name: 'Best Ball Boys', format: 'Dynasty · SF · 12', state: 'LIVE' as const },
+  { name: 'Couch Coaches SF', format: 'Dynasty · SF · 10', state: 'LOCKED' as const },
 ];
 
 function StatePill({ state }: { state: 'OPEN' | 'LOCKED' | 'LIVE' }) {
@@ -112,7 +114,7 @@ export function LeagueHub() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--bd)', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Avatar name={you.name} accent="var(--you)" size={26} />
+                <Avatar name={you.name} accent="var(--you)" size={26} src={avatarUrl(you.ownerId)} />
                 <div>
                   <div className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--you)' }}>{you.name}</div>
                   <div className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>SEED {you.seed}</div>
@@ -120,7 +122,7 @@ export function LeagueHub() {
               </div>
               <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.14em' }}>VS</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Avatar name={opp.name} accent="var(--opp)" size={26} />
+                <Avatar name={opp.name} accent="var(--opp)" size={26} src={avatarUrl(opp.ownerId)} />
                 <div>
                   <div className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--dimstrong)' }}>{opp.name}</div>
                   <div className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>SEED {opp.seed}</div>
@@ -133,8 +135,10 @@ export function LeagueHub() {
             </div>
           </button>
 
-          {/* Bridge from "my league sim" to the real product: the live H2H pilot. */}
-          {isSimLeague && (
+          {/* Bridge from the demo / "my league sim" to the real product: the live
+              H2H board. Always shown so demo explorers have a way into the real
+              game board. */}
+          {(
             <button
               onClick={() => navigate({ name: 'live' })}
               style={{
@@ -204,7 +208,7 @@ export function LeagueHub() {
           )}
 
           <div style={{ marginTop: 28, fontFamily: GROTESK, fontSize: 11, color: 'var(--faint)', textAlign: 'center', lineHeight: 1.7 }}>
-            {sleeperUser ? `${LEAGUE_REF.name} · real ${LEAGUE_REF.season} Sleeper data · simulated live scoring` : 'Drip Fantasy demo · real PeakedInDynasty 2025 data · simulated live scoring'}
+            {sleeperUser ? `${LEAGUE_REF.name} · real ${LEAGUE_REF.season} Sleeper data · simulated live scoring` : 'Drip Fantasy demo · real 2025 NFL data · simulated live scoring'}
           </div>
         </div>
       </main>

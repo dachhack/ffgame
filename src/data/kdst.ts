@@ -46,14 +46,21 @@ export interface KdstManual { k_slug?: string | null; dst_slug?: string | null }
 
 /** Resolve a roster's K/DST fill for one week. Returns {} when the mode is 'off',
  *  there's no slate to bye-gate against, or nothing is needed. K and DST are
- *  always drawn from different NFL teams. */
+ *  always drawn from different NFL teams.
+ *
+ *  `taken` (random mode only): a league-wide set of NFL teams already handed out
+ *  this week. When provided it's used AND mutated, so a league's random fills are
+ *  drawn WITHOUT REPLACEMENT — no two fantasy teams share an NFL K or DEF. Manual
+ *  mode ignores it (a commissioner may intentionally double up). */
 export function assignKdst(opts: {
   leagueId: string; rosterId: number; week: number; mode: KdstMode;
-  needK: boolean; needDef: boolean; manual?: KdstManual | null;
+  needK: boolean; needDef: boolean; manual?: KdstManual | null; taken?: Set<string>;
 }): KdstFill {
   const { leagueId, rosterId, week, mode, needK, needDef } = opts;
   if (mode === 'off' || !hasSlate(week) || (!needK && !needDef)) return {};
-  const used = new Set<string>();
+  // Reuse the caller's league-wide set for random (without-replacement); manual gets
+  // a fresh per-team set so duplicates across teams are allowed.
+  const used = (mode === 'random' && opts.taken) ? opts.taken : new Set<string>();
   const out: KdstFill = {};
 
   const pick = (suffix: 'k' | 'dst', manualSlug?: string | null): string | undefined => {

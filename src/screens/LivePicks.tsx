@@ -12,6 +12,16 @@ import {
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
 } from '../data/liveApi';
 import { powerupById } from '../data/powerups';
+import { shortName } from '../data/players';
+import type { Player } from '../types';
+import { SetupRow, PlayerPicker } from './Matchup';
+
+// Live pool entries are slug/full/pos; the reused setup card wants a Player. Build
+// a light one (zero stats — the setup board only displays name/pos/team/headshot).
+const ZERO_STATS = { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 };
+function poolToPlayer(p: PoolPlayer): Player {
+  return { id: p.slug, name: shortName(p.full), full: p.full, pos: p.pos as Pos, team: slugMeta(p.slug).team, stats: { ...ZERO_STATS } };
+}
 
 // The metric unlocks a manager can arm, in display order (ids match powerups.ts).
 const LIVE_UNLOCKS = ['unlock-combo-drip', 'unlock-return', 'unlock-pass-td10'] as const;
@@ -50,6 +60,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -113,6 +124,23 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   const metricsFor = (slug: string | null) => {
     const pos = (slug ? posBySlug[slug] : null) as Pos | null;
     return pos ? (METRICS[pos] ?? []).filter((m) => !m.lock || unlocks.has(m.lock)) : [];
+  };
+
+  // Adapters so the reused demo setup card (SetupRow / PlayerPicker) renders live
+  // data: a slug→Player registry, locked-metric gating from armed unlocks, and the
+  // armed team buffs as spot chips.
+  const playersBySlug = useMemo(() => { const m: Record<string, Player> = {}; for (const p of pool) m[p.slug] = poolToPlayer(p); return m; }, [pool]);
+  const synthInv = useMemo(() => Object.fromEntries([...unlocks].map((id) => [id, 1])), [unlocks]);
+  const armedMap = useMemo(() => Object.fromEntries([...buffs].map((id) => [id, true])), [buffs]);
+  /** Slugs already slotted in a window (excluding one slot), to keep the picker dedup'd. */
+  const slottedInWin = (winId: string, exceptKey: string): Set<string> => {
+    const s = new Set<string>();
+    for (const sl of SLOTS.filter((x) => x.win === winId)) {
+      if (sl.key === exceptKey) continue;
+      const slug = picks[sl.key]?.player_slug;
+      if (slug) s.add(slug);
+    }
+    return s;
   };
 
   const setSlot = (key: string, patch: Partial<{ player_slug: string | null; metric_id: string | null }>) => {
@@ -316,32 +344,36 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
       )}
 
       {WINDOWS.map((w) => {
+        const winSlots = SLOTS.filter((s) => s.win === w.id);
         const elig = gateOn ? pool.filter((pl) => winBySlug[pl.slug] === 'any' || winBySlug[pl.slug] === w.id).length : pool.length;
+        const setN = winSlots.filter((s) => picks[s.key]?.player_slug && picks[s.key]?.metric_id).length;
         return (
         <div key={w.id} style={{ ...card, marginBottom: 10 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700 }}>{w.label} · {w.sub}</div>
-            {gateOn && <div className="mono" style={{ fontSize: 9, color: elig ? 'var(--faint)' : 'var(--opp)' }}>{elig} eligible</div>}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
+              {gateOn && <span className="mono" style={{ fontSize: 9, color: elig ? 'var(--faint)' : 'var(--opp)' }}>{elig} eligible</span>}
+              <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: setN === winSlots.length ? 'var(--you)' : 'var(--faint)' }}>{setN}/{winSlots.length} SET</span>
+            </div>
           </div>
-          {SLOTS.filter((s) => s.win === w.id).map((s) => {
-            const p = picks[s.key] ?? { player_slug: null, metric_id: null };
-            const pos = (p.player_slug ? posBySlug[p.player_slug] : null) as Pos | null;
-            // Locked metrics appear only once their unlock power-up is armed.
-            const metrics = pos ? (METRICS[pos] ?? []).filter((m) => !m.lock || unlocks.has(m.lock)) : [];
-            const options = eligibleFor(w.id, p.player_slug);
-            return (
-              <div key={s.key} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                <select value={p.player_slug ?? ''} disabled={locked} onChange={(e) => setSlot(s.key, { player_slug: e.target.value || null })} style={{ ...sel, flex: 1.3 }}>
-                  <option value="">{options.length ? '— player —' : '— none this window —'}</option>
-                  {options.map((pl) => <option key={pl.slug} value={pl.slug}>{pl.full} ({pl.pos}{teamBySlug[pl.slug] ? ` · ${teamBySlug[pl.slug]}` : ''})</option>)}
-                </select>
-                <select value={p.metric_id ?? ''} disabled={locked || !pos} onChange={(e) => setSlot(s.key, { metric_id: e.target.value || null })} style={{ ...sel, flex: 1 }}>
-                  <option value="">— metric —</option>
-                  {metrics.map((m) => <option key={m.id} value={m.id}>{m.lock ? '🔓 ' : ''}{m.name} · {m.tag}</option>)}
-                </select>
-              </div>
-            );
-          })}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {winSlots.map((s) => {
+              const p = picks[s.key];
+              const pick = p?.player_slug ? { playerId: p.player_slug, metricId: p.metric_id ?? null } : undefined;
+              return (
+                <SetupRow
+                  key={s.key} slotKeyStr={s.key} winId={w.id as WindowId} week={week} pick={pick}
+                  selected={false} inventory={synthInv} armed={armedMap} appliedPu={[]} applyMode={null}
+                  onApplyToSpot={() => {}}
+                  onOpenPicker={() => { if (!locked) setPickerSlot({ key: s.key, win: w.id as WindowId }); }}
+                  onPickMetric={(m) => setSlot(s.key, { metric_id: m })}
+                  onClearSlot={() => setSlot(s.key, { player_slug: null, metric_id: null })}
+                  onDropPlayer={() => {}} onScout={() => {}}
+                  lockPlayer={locked} resolve={(id) => playersBySlug[id]} hideScout
+                />
+              );
+            })}
+          </div>
         </div>
         );
       })}
@@ -397,6 +429,22 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
       {saved && !locked && <div className="mono" style={{ fontSize: 9.5, color: 'var(--you)', textAlign: 'center', marginTop: 8 }}>Saved. Editable until kickoff.</div>}
       {locked && <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', textAlign: 'center' }}>This week is locked — picks are final.</div>}
       <div style={{ textAlign: 'center', marginTop: 14 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
+
+      {pickerSlot && (() => {
+        const cur = picks[pickerSlot.key]?.player_slug ?? undefined;
+        const slotted = slottedInWin(pickerSlot.win, pickerSlot.key);
+        const players = eligibleFor(pickerSlot.win, cur ?? null)
+          .filter((p) => !slotted.has(p.slug) || p.slug === cur)
+          .map(poolToPlayer);
+        return (
+          <PlayerPicker
+            win={pickerSlot.win} week={week} players={players} currentId={cur}
+            onPick={(slug) => { setSlot(pickerSlot.key, { player_slug: slug }); setPickerSlot(null); }}
+            onRemove={() => { setSlot(pickerSlot.key, { player_slug: null, metric_id: null }); setPickerSlot(null); }}
+            onClose={() => setPickerSlot(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

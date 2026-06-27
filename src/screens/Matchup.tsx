@@ -11,9 +11,10 @@ import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
 } from '../engine/matchup';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type StatLine } from '../engine/sim';
-import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock } from '../data/realPbp';
+import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
+import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
@@ -91,7 +92,7 @@ const DEMO_POWERUPS = [
 ];
 
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
-  const { youTeamId: YOU, navigate, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
+  const { youTeamId: YOU, navigate, liveCtx, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const [demoBuff, setDemoBuff] = useState('garbage-time'); // the power-up the demo viewer armed
   const buffs = demo ? { [demoBuff]: true } : (applied[week]?.buffs ?? {});
   const buffsKey = JSON.stringify(buffs);
@@ -112,6 +113,22 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // Demo mode plays the canonical default lineup and never writes to the store.
   const [picks, setPicks] = useState<Record<string, Pick>>(() => (demo ? {} : applied[week]?.lineup ?? {}));
   useEffect(() => { if (!demo) setLineup(week, picks); }, [picks]); // eslint-disable-line react-hooks/exhaustive-deps -- persist lineup edits; setLineup isn't memoized
+
+  // Live pilot: hydrate this matchup's saved sealed picks from Supabase once, so a
+  // returning manager sees the lineup they sealed. Won't clobber in-progress edits.
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (!liveCtx || hydratedRef.current) return;
+    hydratedRef.current = true;
+    myPicks(liveCtx.matchupId, liveCtx.userId).then((rows) => {
+      const lineup: Record<string, Pick> = {};
+      for (const r of rows) {
+        if (!r.player_slug) continue;
+        lineup[`${r.game_window}#${r.roster_slot}`] = { playerId: r.player_slug, metricId: r.metric_id };
+      }
+      if (Object.keys(lineup).length) setPicks((prev) => (Object.keys(prev).length ? prev : lineup));
+    }).catch(() => {});
+  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
   const [selSlot, setSelSlot] = useState<string | null>(null);
   // Per-window playback: each window runs its own clock + play/pause. The clock
   // is game-elapsed seconds by default, or REAL wall-clock seconds since kickoff
@@ -168,10 +185,57 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const youPools = useMemo(() => windowPools(YOU, week), [week]);
   const oppPools = useMemo(() => windowPools(oppId, week), [week, oppId]);
   const youDefault = useMemo(() => defaultLineup(YOU, week, extraSlots), [week, ready, extraKey]);
+  // Live pilot: the opponent's REAL sealed lineup, revealed at lock (RLS hides it
+  // until then). Polls so a reveal lands without a reload. Null → fall back to AI.
+  const [liveOppPicks, setLiveOppPicks] = useState<Record<string, Pick> | null>(null);
+  // The opponent's REAL armed buffs, revealed at lock (null → keep AI buffs).
+  const [liveOppBuffs, setLiveOppBuffs] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!liveCtx) { setLiveOppPicks(null); setLiveOppBuffs(null); return; }
+    let alive = true;
+    const load = async () => {
+      try {
+        const [rows, oppBuffs] = await Promise.all([
+          getRevealedPicks(liveCtx.matchupId),
+          revealedOppBuffs(liveCtx.matchupId, liveCtx.userId).catch(() => null),
+        ]);
+        const opp: Record<string, Pick> = {};
+        for (const r of rows) {
+          if (r.app_user_id === liveCtx.userId || !r.player_slug) continue; // skip mine / empty
+          opp[`${r.game_window}#${r.roster_slot}`] = { playerId: r.player_slug, metricId: r.metric_id };
+        }
+        if (alive) { setLiveOppPicks(Object.keys(opp).length ? opp : null); setLiveOppBuffs(oppBuffs); }
+      } catch { /* keep prior */ }
+    };
+    load();
+    const t = setInterval(load, 8000);
+    return () => { alive = false; clearInterval(t); };
+  }, [liveCtx]);
+
+  // Live pilot scoring: install the worker's ingested plays for the week so the
+  // board resolves the REAL game (DNP 0 pre-kickoff, accruing as plays land).
+  // Bumps livePbpVer so the resolution memo recomputes on each refresh.
+  const [livePbpVer, setLivePbpVer] = useState(0);
+  useEffect(() => {
+    if (!liveCtx) return;
+    let alive = true;
+    const load = async () => {
+      try {
+        const rows = await weekLivePlays(liveCtx.week);
+        setLivePlays(liveCtx.week, liveRowsToPbp(rows));
+        if (alive) setLivePbpVer((v) => v + 1);
+      } catch { /* keep prior */ }
+    };
+    load();
+    const t = setInterval(load, 15000); // ~worker poll cadence
+    return () => { alive = false; clearInterval(t); };
+  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // The AI scouts which players you CAN field each window (the pool, not your spot
   // assignments — those stay sealed) and defends each window accordingly. What the
-  // opponent has armed is hidden, exactly as your loadout is hidden from it.
-  const oppPicks = useMemo(() => aiLineup(oppId, YOU, week, extraSlots), [oppId, week, ready, extraKey]);
+  // opponent has armed is hidden, exactly as your loadout is hidden from it. In a
+  // live matchup, the opponent's revealed sealed lineup wins over the AI.
+  const oppPicks = useMemo(() => liveOppPicks ?? aiLineup(oppId, YOU, week, extraSlots), [liveOppPicks, oppId, week, ready, extraKey]);
   const byeYou = useMemo(() => byePlayers(YOU, week), [week]);
   const byeTheir = useMemo(() => byePlayers(oppId, week), [week, oppId]);
 
@@ -195,8 +259,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const swapsKey = JSON.stringify(swaps);
   const backupsKey = JSON.stringify(backupAssign);
   const resolved = useMemo(
-    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps, backupAssign, buffs, extras, realResolve),
-    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, buffsKey, extrasKey, realResolve],
+    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps, backupAssign, buffs, extras, realResolve, liveOppBuffs ?? undefined),
+    [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, buffsKey, extrasKey, realResolve, liveOppBuffs, livePbpVer],
   );
 
   // Your player's name at each slot key — for showing a backup's chosen target
@@ -396,8 +460,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // On lock-in, walk through EVERY UNOPPOSED player (your player with no
   // head-to-head opponent) — they're best-ball backups that can sub in. The
   // prompt is a REQUIRED interrupt: it can't be dismissed, so you can't reach
-  // the live screen without making a call (challenge a starter, or take the 0 /
-  // bank half). Every sub-capable unopposed spot is prompted once per lock-in —
+  // the live screen without making a call (challenge a starter, or take the 0).
+  // Every sub-capable unopposed spot is prompted once per lock-in —
   // even ones with a saved assignment (the card pre-selects it to confirm or
   // change) — so you never have to hunt for the spot's reassign button.
   const backupPrompted = useRef<Set<string>>(new Set());
@@ -546,7 +610,20 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     setSelSlot(null);
   }
 
-  function lockIn() { setPhase('live'); setSelSlot(null); setRosterOpen({ you: false, their: false }); }
+  function lockIn() {
+    // Live pilot: seal the chosen lineup to Supabase (the worker scores from this).
+    if (liveCtx) {
+      const rows: PickRow[] = [];
+      for (const [key, p] of Object.entries(effYouPicks)) {
+        if (!p?.playerId) continue;
+        const [win, slot] = key.split('#');
+        if (win == null || slot == null) continue;
+        rows.push({ game_window: win, roster_slot: slot, player_slug: p.playerId, metric_id: p.metricId ?? null });
+      }
+      savePicks(liveCtx.matchupId, liveCtx.userId, rows).catch(() => {});
+    }
+    setPhase('live'); setSelSlot(null); setRosterOpen({ you: false, their: false });
+  }
   // Demo kickoff (setup → live auto-play) and a way back to re-pick.
   function demoKick() { setSelSlot(null); setPhase('live'); }
   function demoBackToSetup() { demoStarted.current = false; setWinClocks({}); setWinPlaying({}); setSelSlot(null); setPhase('setup'); }
@@ -589,6 +666,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← back</button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => navigate({ name: 'live' })} className="mono" title="See the real live head-to-head board"
+            style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 40%, var(--bd))', borderRadius: 4, padding: '5px 9px', cursor: 'pointer' }}>◫ live board →</button>
           <DemoViewToggle view="board" onSwitch={(v) => v === 'clean' && navigate({ name: 'demo', view: 'clean' })} />
           <SiteSettings />
         </div>
@@ -966,7 +1045,6 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             backupScore={liveOf(b)}
             live={phase !== 'final'}
             required={backupMenu.required}
-            half={!!b.backupHalfEligible}
             current={backupAssign[backupMenu.key]}
             starters={starters}
             onPick={(target) => { setBackupTarget(week, backupMenu.key, target); setBackupMenu(null); }}
@@ -1109,8 +1187,8 @@ function EarningsModal({ earnings, onReset, onClose }: { earnings: { stipend: nu
 }
 
 // ── Backup assignment menu (manual best-ball) ──
-function BackupMenu({ backupName, backupScore, live, required, half, current, starters, onPick, onClose }: {
-  backupName: string; backupScore: number; live: boolean; required?: boolean; half?: boolean; current?: string;
+function BackupMenu({ backupName, backupScore, live, required, current, starters, onPick, onClose }: {
+  backupName: string; backupScore: number; live: boolean; required?: boolean; current?: string;
   starters: { key: string; name: string; score: number; win: WindowId }[];
   onPick: (target: string | null) => void; onClose: () => void;
 }) {
@@ -1121,18 +1199,16 @@ function BackupMenu({ backupName, backupScore, live, required, half, current, st
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Backup · {backupName} <span style={{ color: 'var(--warn)' }}>{backupScore.toFixed(1)}</span> <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', fontWeight: 400 }}>{scoreTag}</span></div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{half ? 'UNOPPOSED — BANKS HALF UNLESS IT SUBS IN. CHALLENGE A STARTER FOR FULL VALUE.' : (required ? 'UNOPPOSED — BANKS 0 UNLESS IT SUBS IN. CHALLENGE A STARTER, OR TAKE THE 0.' : 'CHALLENGE A STARTER — SUBS IN AT FINAL ONLY IF IT OUTSCORES THEM')}</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{required ? 'UNOPPOSED — BANKS 0 UNLESS IT SUBS IN. CHALLENGE A STARTER, OR TAKE THE 0.' : 'CHALLENGE A STARTER — SUBS IN AT FINAL ONLY IF IT OUTSCORES THEM'}</div>
           </div>
           {!required && <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>}
         </div>
         <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 360, overflow: 'auto' }}>
           <div className="mono" style={{ fontSize: 9, lineHeight: 1.55, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px', marginBottom: 4 }}>
-            {half
-              ? <><b style={{ color: 'var(--warn)' }}>{backupName} banks half its score</b> if it sits — unopposed slots only pay full when they sub in. Point it at a starter and it'll <b style={{ color: 'var(--text)' }}>replace</b> that starter's score at FINAL, but only if it outscores them. It's a blind bet: numbers below are points {scoreTag}, not finals.</>
-              : <><b style={{ color: 'var(--warn)' }}>{backupName} banks 0 on its own</b> — unopposed points don't count. Point it at a starter and it'll <b style={{ color: 'var(--text)' }}>replace</b> that starter's score at FINAL, but only if it outscores them. It's a blind bet: numbers below are points {scoreTag}, not finals.</>}
+            <><b style={{ color: 'var(--warn)' }}>{backupName} banks 0 on its own</b> — unopposed points don't count. Point it at a starter and it'll <b style={{ color: 'var(--text)' }}>replace</b> that starter's score at FINAL, but only if it outscores them. It's a blind bet: numbers below are points {scoreTag}, not finals.</>
           </div>
           <button onClick={() => onPick(null)} className="mono" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, background: !current ? 'var(--sh)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px', color: 'var(--text)' }}>
-            <span style={{ fontSize: 11, fontWeight: 700 }}>{half ? `Bank half — ${backupName} doesn't sub` : `Take the 0 — ${backupName} doesn't sub`}</span>
+            <span style={{ fontSize: 11, fontWeight: 700 }}>{`Take the 0 — ${backupName} doesn't sub`}</span>
             {!current && <span style={{ fontSize: 9, color: 'var(--dim)' }}>✓</span>}
           </button>
           {starters.map((s) => {
@@ -1706,18 +1782,23 @@ function TwinChip() {
   );
 }
 
-function SetupRow(props: {
+export function SetupRow(props: {
   slotKeyStr: string; winId: WindowId; week: number; pick?: Pick; selected: boolean; inventory: Record<string, number>; armed: Record<string, boolean>; twinLink?: boolean;
   appliedPu: string[];
   applyMode: string | null; onApplyToSpot: () => void;
   onOpenPicker: () => void; onPickMetric: (m: string) => void; onClearSlot: () => void; onDropPlayer: (id: string) => void; onScout: () => void;
   lockPlayer?: boolean;
+  // Player lookup — defaults to the baked demo registry; the live pilot injects
+  // its own (so the same card renders against live roster data). `hideScout`
+  // drops the SCOUT affordance where there's no opponent pool to scout (live pre-lock).
+  resolve?: (id: string) => Player | undefined;
+  hideScout?: boolean;
 }) {
-  const { winId, week, pick, selected, inventory, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout, lockPlayer } = props;
+  const { winId, week, pick, selected, inventory, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout, lockPlayer, resolve, hideScout } = props;
   const isMobile = useIsMobile();
   const gridCols = '1fr 1fr'; // no center gutter — your spot vs the sealed opponent
   const rowGap = isMobile ? 5 : 8;
-  const player = pick ? getPlayer(pick.playerId) : null;
+  const player = pick ? ((resolve ?? getPlayer)(pick.playerId) ?? null) : null;
   const metric = player && pick?.metricId ? metricById(player.pos, pick.metricId) : null;
   // Power-ups acting on THIS spot: armed team buffs that apply here, plus any
   // spot-specific applied powerup (Double or Nothing / Bye Steal).
@@ -1843,10 +1924,10 @@ function SetupRow(props: {
           <span className="mono" style={{ fontSize: 10, color: emptyEligible ? 'var(--warn)' : 'var(--faint)', letterSpacing: '0.12em', fontWeight: emptyEligible ? 700 : 400 }}>{emptyEligible ? 'TAP TO FIELD BYE' : 'TAP TO PICK PLAYER'}</span>
         </div>
       )}
-      <div onClick={onScout} title="Scout the opponent's possible players for this window" style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' }}>
+      <div onClick={hideScout ? undefined : onScout} title={hideScout ? 'Your opponent’s lineup is sealed until kickoff' : "Scout the opponent's possible players for this window"} style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: hideScout ? 'default' : 'pointer' }}>
         <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--dim)' }}>◆</span>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.16em', color: 'var(--faint)', fontWeight: 700 }}>SEALED · {winId.toUpperCase()}</span>
-        <span className="mono" style={{ fontSize: 7.5, letterSpacing: '0.12em', color: 'var(--opp)', fontWeight: 700 }}>🔍 SCOUT</span>
+        {!hideScout && <span className="mono" style={{ fontSize: 7.5, letterSpacing: '0.12em', color: 'var(--opp)', fontWeight: 700 }}>🔍 SCOUT</span>}
       </div>
     </div>
     {infoMetric && <MetricInfo metric={infoMetric} onClose={() => setInfoMetric(null)} />}
@@ -1884,7 +1965,7 @@ function MetricInfo({ metric, onClose }: { metric: Metric; onClose: () => void }
 }
 
 // ── Player picker (tap a spot in setup) — choose from this window's roster ──
-function PlayerPicker({ win, week, players, currentId, title = 'Pick a player', subtitle = 'YOUR PLAYERS WHOSE GAME FALLS IN THIS WINDOW', onPick, onRemove, onClose }: {
+export function PlayerPicker({ win, week, players, currentId, title = 'Pick a player', subtitle = 'YOUR PLAYERS WHOSE GAME FALLS IN THIS WINDOW', onPick, onRemove, onClose }: {
   win: WindowId; week: number; players: Player[]; currentId?: string; title?: string; subtitle?: string;
   onPick: (id: string) => void; onRemove: () => void; onClose: () => void;
 }) {
@@ -2054,13 +2135,10 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
     const live = banksAtClock(slot.events, bclock);
     const isFinal = done || phase === 'final';
     const subbedIn = !!slot.backupUsed;
-    const halfCredit = !!slot.backupHalf;            // banked half (2+ unopposed, didn't sub)
-    const halfEligible = !!slot.backupHalfEligible;  // side has 2+ unopposed → half-credit applies
     const wouldBe = slot.backupScore ?? 0;           // full would-be score
-    const mineFinal = mineBackup ? slot.youFinal : slot.theirFinal; // what actually counted
-    // Live: running full points. Final: the half it banked, else its would-be
-    // (shown struck when benched, plain when it subbed in).
-    const liveBackup = !done ? (mineBackup ? live.you : live.their) : halfCredit ? mineFinal : wouldBe;
+    // Live: running points. Final: its would-be score — shown struck (0 counted)
+    // when it didn't sub in, plain when it subbed in for full value.
+    const liveBackup = !done ? (mineBackup ? live.you : live.their) : wouldBe;
     const bEvents = slot.events.filter((e) => e.clock <= bclock);
     const chip = canSub ? (mineBackup ? 'BACKUP' : 'OPP BACKUP') : (mineBackup ? 'UNOPPOSED' : 'OPP UNOPP');
     const showSuppress = isSuppress && (done || phase === 'final') ? (suppressSpent ?? undefined) : undefined;
@@ -2071,7 +2149,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
         side={mineBackup ? 'you' : 'their'} player={be.player} week={week} clock={bclock} metricId={be.metricId}
         metricName={bp?.name ?? ''} tag={bp?.tag ?? ''} bank={liveBackup} onClick={onToggle}
         chip={chip} suppressSpent={showSuppress} coin={slotCoin(slot, mineBackup ? 'you' : 'their', week, turnoverCoin, bclock)}
-        negated={canSub && isFinal && !subbedIn && !halfCredit ? true : undefined} fgMult={bFg}
+        negated={canSub && isFinal && !subbedIn ? true : undefined} fgMult={bFg}
       />
     );
     const blankBox = (
@@ -2109,19 +2187,17 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
             )}
           </div>
         )}
-        {/* Make the unopposed rule explicit: sub in for full value, else bank half
-            (when 2+ unopposed) or 0 (a lone unopposed slot). */}
+        {/* Make the unopposed rule explicit: sub in for full value, else score 0. */}
         {canSub && mineBackup && (() => {
           let txt: string; let col: string;
           if (isFinal) {
             if (subbedIn) { txt = '✓ subbed in — full points counted'; col = 'var(--you)'; }
-            else if (halfCredit) { txt = `½ unopposed credit — banked ${mineFinal.toFixed(1)} of ${wouldBe.toFixed(1)}`; col = 'var(--warn)'; }
             else { txt = '✕ scored 0 — did not sub in'; col = 'var(--fx-stop)'; }
           } else {
             const tgt = backups[ownKey] && slotName[backups[ownKey]];
             txt = tgt
-              ? `subs into ${tgt} at final if it wins${halfEligible ? ', else banks half' : ''}`
-              : (halfEligible ? 'banks half unless you sub it in for a starter' : 'banks 0 unless you sub it in for a starter');
+              ? `subs into ${tgt} at final if it wins, else 0`
+              : 'banks 0 unless you sub it in for a starter';
             col = 'var(--warn)';
           }
           return <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: col, textAlign: 'center', marginTop: 4 }}>{txt}</div>;
@@ -2153,7 +2229,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
     // During live, the starter plays its own head-to-head; the backup accrues
     // in its own row.
     const sub = side === 'you' ? slot.youSub : slot.theirSub;
-    if (phase === 'final' && sub) return sub.score;
+    if (final && sub) return sub.score;
     if (side === 'you' && slot.byeStolen) return slot.youFinal; // bye steal: flat projection
     // Negation/halving are end-of-game outcomes — only resolve them at FINAL;
     // during live the slot plays its own head-to-head (0 at kickoff).
@@ -2178,8 +2254,8 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
   const isFgSrc = (p: { player: Player; metricId: string }) => p.player.pos === 'QB' && p.metricId === 'fg';
   const youFg = slot.youFgMult && !isFgSrc(slot.you) ? slot.youFgMult(youClock) : undefined;
   const theirFg = slot.theirFgMult && !isFgSrc(slot.their) ? slot.theirFgMult(theirClock) : undefined;
-  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} twin={youTwin} />;
-  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} />;
+  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={final ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} twin={youTwin} />;
+  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={final ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} />;
   const centerKids = (
     <>
       {slot.events.length > 0 && (
@@ -2197,17 +2273,17 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
       {slot.events.length > 0 && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 14, marginTop: 4 }}>{centerKids}</div>
       )}
-      {incomingName && !(phase === 'final' && slot.youSub) && (
+      {incomingName && !(final && slot.youSub) && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', marginTop: 3 }}>
           🛟 backup {incomingName} on standby{final ? ' — did not sub in' : ''}
         </div>
       )}
-      {phase === 'final' && slot.youSub && (
+      {final && slot.youSub && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', marginTop: 3 }}>
           ⤴ BACKUP {slot.youSub.name} subs in for {slot.you.player.name} · {slot.youSub.from.toFixed(1)} → {slot.youSub.score.toFixed(1)}
         </div>
       )}
-      {phase === 'final' && slot.theirSub && (
+      {final && slot.theirSub && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--opp)', marginTop: 3, textAlign: 'right' }}>
           {slot.their.player.name} ← BACKUP {slot.theirSub.name} ⤴ · {slot.theirSub.from.toFixed(1)} → {slot.theirSub.score.toFixed(1)}
         </div>

@@ -7,8 +7,11 @@ import {
   getSession, onAuth, signOut, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, myEnrollments,
   startCommishVerify, confirmCommishVerify, isAdmin, commishOverview, friendlyError,
-  type Enrollment, type LeaguePreview, type PreviewRedeem,
+  myMatchup, matchupTeams,
+  type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo,
 } from '../data/liveApi';
+import { DEMO_WEEK } from '../config';
+import { buildDripTestLeague } from '../data/dripTest';
 import { LivePicks } from './LivePicks';
 import { LiveBoard } from './LiveBoard';
 import { AdminPage } from './AdminPage';
@@ -16,6 +19,7 @@ import { CommishDash } from './CommishDash';
 import type { Session } from '@supabase/supabase-js';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
+const card2: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: 16 };
 const label: React.CSSProperties = { fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)', fontWeight: 700 };
 const input: React.CSSProperties = { flex: 1, minWidth: 0, fontFamily: 'inherit', fontSize: 14, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '10px 12px', outline: 'none' };
 const btn: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 5, padding: '0 16px', cursor: 'pointer', whiteSpace: 'nowrap' };
@@ -66,6 +70,7 @@ export function LiveOnboard() {
           <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← demo</button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {session && <span className="mono" title={session.user.email ?? ''} style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 9px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>◢ {sessionName(session)}</span>}
           {session && <button onClick={() => signOut()} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>sign out</button>}
           <SiteSettings superAdmin={session && admin ? () => setView('admin') : undefined} />
         </div>
@@ -82,6 +87,15 @@ export function LiveOnboard() {
       </main>
     </div>
   );
+}
+
+/** A friendly display name for the header chip: the chosen display name, else the
+ *  local part of the email. */
+function sessionName(session: Session): string {
+  const dn = (session.user.user_metadata?.display_name as string | undefined)?.trim();
+  if (dn) return dn;
+  const email = session.user.email ?? '';
+  return email.includes('@') ? email.split('@')[0] : (email || 'you');
 }
 
 function Muted({ text }: { text: string }) {
@@ -242,15 +256,29 @@ function SetPassword({ onDone }: { onDone: () => void }) {
   );
 }
 
+// Per-league matchup snapshot for the home cards: the next matchup + both teams' identity.
+interface MatchupCard { matchup: LiveMatchup; teams: Record<number, TeamInfo>; }
+
 function Enroll({ session, view, setView }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void }) {
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
-  const [isCommish, setIsCommish] = useState(false);
+  const [commishIds, setCommishIds] = useState<Set<string>>(new Set());
+  const [cards, setCards] = useState<Record<string, MatchupCard>>({});
   const [choice, setChoice] = useState<'none' | 'player'>('none');
+  const isCommish = commishIds.size > 0;
 
   const refresh = async () => {
-    try { await ensureAppUser(session); setEnrollments(await myEnrollments(session.user.id)); }
+    let rows: Enrollment[] = [];
+    try { await ensureAppUser(session); rows = await myEnrollments(session.user.id); setEnrollments(rows); }
     catch { setEnrollments([]); }
-    commishOverview().then((l) => setIsCommish((l?.length ?? 0) > 0)).catch(() => setIsCommish(false));
+    commishOverview().then((l) => setCommishIds(new Set((l ?? []).map((x) => x.league_id)))).catch(() => setCommishIds(new Set()));
+    // Each league's next matchup + opponent, for the home cards.
+    for (const e of rows) {
+      myMatchup(e.league_id, e.sleeper_roster_id).then(async (m) => {
+        if (!m) return;
+        const teams = await matchupTeams(e.league_id, [m.home_roster_id, m.away_roster_id]).catch(() => ({}));
+        setCards((c) => ({ ...c, [e.league_id]: { matchup: m, teams } }));
+      }).catch(() => {});
+    }
   };
   useEffect(() => {
     refresh();
@@ -276,14 +304,117 @@ function Enroll({ session, view, setView }: { session: Session; view: OnboardVie
   );
 
   return (
+    <LeagueHome
+      enrollments={enrollments}
+      cards={cards}
+      commishIds={commishIds}
+      userId={session.user.id}
+      onPicks={() => setView('picks')}
+      onBoard={() => setView('board')}
+      onManage={() => setView('commishdash')}
+      onVerifyCommish={() => setView('commish')}
+      isCommish={isCommish}
+    />
+  );
+}
+
+// The signed-in home: one card per enrolled league showing your team, this week's
+// matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
+function LeagueHome({ enrollments, cards, commishIds, userId, onPicks, onBoard, onManage, onVerifyCommish, isCommish }: {
+  enrollments: Enrollment[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
+  onPicks: () => void; onBoard: () => void; onManage: () => void; onVerifyCommish: () => void; isCommish: boolean;
+}) {
+  return (
     <>
-      <Enrolled enrollments={enrollments} />
-      <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <button onClick={() => setView('picks')} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◈ set your lineup →</button>
-        <button onClick={() => setView('board')} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board →</button>
-        {isCommish && <button onClick={() => setView('commishdash')} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚑ manage my league →</button>}
-        {!isCommish && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>I also run a league — verify as commissioner →</button>}      </div>
+      <div className="grotesk" style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', marginBottom: 14 }}>
+        Your {enrollments.length === 1 ? 'league' : 'leagues'}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {enrollments.map((e) => (
+          <LeagueCard key={e.league_id} e={e} card={cards[e.league_id]} commish={commishIds.has(e.league_id)} userId={userId}
+            onPicks={onPicks} onBoard={onBoard} onManage={onManage} />
+        ))}
+      </div>
+      <div style={{ textAlign: 'center', marginTop: 16 }}>
+        {!isCommish && <button onClick={onVerifyCommish} className="mono" style={linkBtn}>I also run a league — verify as commissioner →</button>}
+      </div>
     </>
+  );
+}
+
+function LeagueCard({ e, card, commish, userId, onPicks, onBoard, onManage }: {
+  e: Enrollment; card?: MatchupCard; commish: boolean; userId: string;
+  onPicks: () => void; onBoard: () => void; onManage: () => void;
+}) {
+  const { loadSimLeague, navigate } = useStore();
+  const [building, setBuilding] = useState(false);
+  const [buildNote, setBuildNote] = useState('');
+  const [buildErr, setBuildErr] = useState<string | null>(null);
+  // The Drip Test League plays on the FULL app board: fetch the real source
+  // league, re-skin it, and enter the sim as this user's team.
+  const isDripTest = (e.league?.name ?? '').toLowerCase().includes('drip test');
+  const playFullBoard = async () => {
+    if (building) return;
+    setBuilding(true); setBuildErr(null);
+    try {
+      const [{ built, youTeamId }, m] = await Promise.all([
+        buildDripTestLeague(e.sleeper_roster_id, setBuildNote),
+        myMatchup(e.league_id, e.sleeper_roster_id).catch(() => null),
+      ]);
+      // With a real matchup, run as a true pilot board (sealed-pick persistence on,
+      // opened on the matchup's week). Without one, fall back to a plain playtest.
+      const ctx = m ? { matchupId: m.id, userId, leagueId: e.league_id, rosterId: e.sleeper_roster_id, week: m.week } : null;
+      loadSimLeague(built, youTeamId, ctx);
+      navigate({ name: 'matchup', week: ctx ? ctx.week : DEMO_WEEK, phase: 'setup' });
+    } catch {
+      setBuildErr('Couldn’t load the board — check your connection and try again.');
+      setBuilding(false);
+    }
+  };
+  const m = card?.matchup;
+  const youAreHome = m ? m.home_roster_id === e.sleeper_roster_id : true;
+  const oppRoster = m ? (youAreHome ? m.away_roster_id : m.home_roster_id) : null;
+  const opp = m && oppRoster != null ? card?.teams[oppRoster] : null;
+  const status = m?.status ?? 'scheduled';
+  const live = status === 'live';
+  const final = status === 'final';
+  const statusColor = live ? '#FF4F62' : final ? 'var(--dim)' : 'var(--warn)';
+  const statusLabel = live ? '● LIVE' : final ? 'FINAL' : 'PICKS OPEN';
+  return (
+    <div style={{ ...card2 }}>
+      {/* identity row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {e.avatar_url
+          ? <img src={e.avatar_url} alt="" width={38} height={38} style={{ borderRadius: 8, flexShrink: 0 }} />
+          : <div style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--bd)', flexShrink: 0 }} />}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+            <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{e.team_name}</span>
+            {commish && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', borderRadius: 4, padding: '2px 6px' }}>⚑ COMMISSIONER</span>}
+          </div>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'League'} · {e.league?.season ?? ''}</div>
+        </div>
+        <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: statusColor, border: `1px solid ${statusColor}`, borderRadius: 4, padding: '3px 7px', whiteSpace: 'nowrap', flexShrink: 0 }}>{statusLabel}</span>
+      </div>
+
+      {/* matchup row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '10px 12px', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6 }}>
+        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)', flexShrink: 0 }}>WK {m?.week ?? '—'}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.team_name}</span>
+        <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', flexShrink: 0 }}>vs</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{opp?.team_name ?? (m ? `Roster ${oppRoster}` : 'schedule pending')}</span>
+      </div>
+
+      {/* actions */}
+      <button onClick={isDripTest ? playFullBoard : onPicks} disabled={building} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: building ? 'default' : 'pointer', marginTop: 12, opacity: building ? 0.7 : 1, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
+        {building ? (buildNote || 'LOADING BOARD…') : '◈ SET YOUR LINEUP →'}
+      </button>
+      {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{buildErr}</div>}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 18, marginTop: 10 }}>
+        {!isDripTest && <button onClick={onBoard} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board</button>}
+        {commish && <button onClick={onManage} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚑ manage league</button>}
+      </div>
+    </div>
   );
 }
 
@@ -391,32 +522,6 @@ function CommishVerify({ onBack }: { onBack: () => void }) {
       </div>
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
     </>
-  );
-}
-
-function Enrolled({ enrollments }: { enrollments: Enrollment[] }) {
-  return (
-    <div style={card}>
-      <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--you)' }}>You’re in.</div>
-      <div className="mono" style={{ fontSize: 11, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Enrolled in:</div>
-      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {enrollments.map((e, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              {e.avatar_url && <img src={e.avatar_url} alt="" width={32} height={32} style={{ borderRadius: 6, flexShrink: 0 }} />}
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{e.team_name}</div>
-                <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 2 }}>{e.league?.name ?? 'League'} · {e.league?.season ?? ''}</div>
-              </div>
-            </div>
-            <span className="mono" style={{ fontSize: 9, color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '3px 7px', flexShrink: 0 }}>ENROLLED</span>
-          </div>
-        ))}
-      </div>
-      <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 14, lineHeight: 1.5 }}>
-        Set your sealed lineup below, then follow it on the live board once your games kick off.
-      </div>
-    </div>
   );
 }
 

@@ -13,7 +13,7 @@ import { getGames, gamesToPoll, slateFromGames } from './poll/scoreboard.js';
 import { pollGame } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
 import { lockDueMatchups, finalizeMatchups } from './lock.js';
-import { resolveMatchup, injectWeekPlays } from './resolve.js';
+import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues } from './sync.js';
 import { db } from './supabase.js';
 import { setRuntimeSlate } from '../../src/data/nflSlate.ts';
@@ -56,7 +56,7 @@ function gameDay(games, now = Date.now()) {
 
 async function tick() {
   const { season, week } = await currentWeek();
-  const games = await getGames(season, week);
+  const games = await getGames(season, week, config.seasonType);
   // Keep the live slate fresh (overrides baked 2025) so lock/resolve slate-gate
   // the AI lineup against the real current-season windows + byes.
   setRuntimeSlate(week, slateFromGames(games).map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win })));
@@ -73,7 +73,7 @@ async function tick() {
   if (locked) log('locked', locked, 'matchups');
 
   // Poll live games → persist plays.
-  const toPoll = await gamesToPoll(season, week);
+  const toPoll = await gamesToPoll(season, week, config.seasonType);
   let wrote = 0;
   for (const eventId of toPoll) { try { wrote += await pollGame(eventId, week, playerIndex); } catch (e) { log('poll game', eventId, e.message); } }
   if (toPoll.length) log('polled', toPoll.length, 'games,', wrote, 'play rows');
@@ -84,10 +84,11 @@ async function tick() {
   const { data: live } = await db().from('matchup').select('*').eq('week', week).in('status', ['live', 'final']);
   if (live?.length) {
     await injectWeekPlays(week);
+    const ctx = await prefetchTick(live, week); // ~5 bulk reads instead of ~6/matchup
     let done = 0;
     for (let i = 0; i < live.length; i += 20) {
       await Promise.all(live.slice(i, i + 20).map((m) =>
-        resolveMatchup(m, playerIndex, undefined, { playsInjected: true }).then(() => { done++; }).catch((e) => log('resolve', m.id, e.message))));
+        resolveMatchup(m, playerIndex, undefined, { playsInjected: true, ctx }).then(() => { done++; }).catch((e) => log('resolve', m.id, e.message))));
     }
     log('resolved', done, '/', live.length, 'matchups');
   }

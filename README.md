@@ -1,19 +1,19 @@
 # Drip League FF
 
-A **real-time fantasy football game** of hidden picks and live effect resolution — and a working web demo seeded with the real **PeakedInDynasty** 2025 season.
+A **real-time fantasy football game** of hidden picks and live effect resolution — and a working web demo, the **Drip Test League**, running on genuine 2025 NFL data.
 
 Instead of accumulating raw points, you assign each roster player to a game-time **window slot** and pair them with a **hidden scoring metric** that carries a strategic *effect* (nuke, erase, hot streak, multiplier…). Your opponent does the same, sealed. When games kick off, picks reveal and effects fire live — banks tick up, nukes wipe scores to zero, streaks double drip rates, erasures cancel windows of accumulation.
 
-👉 **Live demo:** `https://dachhack.github.io/ffgame/` (after the first Pages deploy — see below)
+👉 **Live demo:** https://dripfantasy.com
 
 ---
 
 ## What's in the demo
 
-Four screens, fully navigable, in three switchable themes (`tactical` / `neon` / `prime`):
+Four screens, fully navigable, in seven switchable themes (`tactical` / `neon` / `prime` / `daylight` / `arctic` / `slate` / `dusk`):
 
 1. **League Hub** — your Sleeper dynasty portfolio.
-2. **League Overview** — PeakedInDynasty standings, your week matchup, full-season schedule, every team's roster, and the waiver wire (all real 2025 data).
+2. **League Overview** — Drip Test League standings, your week matchup, full-season schedule, every team's roster, and the waiver wire (all real 2025 NFL data).
 3. **Matchup** — the core loop, one screen with **SETUP → LIVE → FINAL** phases. Build a lineup across the 5 windows, seal a hidden metric per slot, then watch it resolve live with play-by-play.
 4. **Matchup Final** — the whole-week result across all 5 windows.
 
@@ -32,10 +32,10 @@ Four screens, fully navigable, in three switchable themes (`tactical` / `neon` /
 
 ## Data provenance
 
-This is **not** mock data. Everything comes from the [Stathead MCP](https://www.stathead.com) (nflverse + Sleeper sources):
+The NFL stats, schedule and scores are **not** mock data — they come from the [Stathead MCP](https://www.stathead.com) (nflverse + Sleeper sources). The league wrapped around them, though, is **sanitized**: team names, manager handles, avatars and the league name are fabricated, so the demo never exposes a real person's private league (see the note at the top of `src/data/league.ts`).
 
-- **League, rosters, standings, schedule** — the genuine 2025 PeakedInDynasty dynasty league (Sleeper id `1181483840740397056`), a 10-team 2QB league. "Happy Campers" (dachhack) is you, the 11-3 regular-season #1 seed.
-- **Player box scores** — real 2025 season totals for ~320 skill players (`src/data/statsRaw.ts`), which seed every simulated game.
+- **League, rosters, standings, schedule** — the **Drip Test League**, a sanitized 10-team 2QB dynasty re-skin over a genuine 2025 season. "Taco Time Titans" (manager `tacotuesday`) is you, the 11-3 regular-season #1 seed.
+- **Player box scores** — real 2025 season totals for ~250 skill players (`src/data/statsRaw.ts`), which seed every simulated game.
 
 The live scoring is a **deterministic simulation**: each player's real season averages set a weekly baseline, seeded variance gives boom/bust texture, and the metric effects resolve over a generated play-by-play timeline. A given matchup always plays out identically — no backend required, which is what makes it a pure static site.
 
@@ -82,9 +82,9 @@ src/
 
 ## Deploying to GitHub Pages
 
-A workflow (`.github/workflows/deploy.yml`) builds and deploys on every push to `main` (and the working branch). **One-time setup:** in the repo's **Settings → Pages**, set **Source = GitHub Actions**. The site publishes to `https://dachhack.github.io/ffgame/`.
+A workflow (`.github/workflows/deploy.yml`) builds and deploys to GitHub Pages on every push to the deploy branch (currently `claude/youthful-albattani-s9kprl` — only the default/deploy branch may publish to the `github-pages` environment). **One-time setup:** in the repo's **Settings → Pages**, set **Source = GitHub Actions**.
 
-The Vite `base` is `/ffgame/` to match the repo name; override with `VITE_BASE` for a custom domain.
+The site is served from the custom domain **dripfantasy.com** (`public/CNAME`), so the workflow builds with `VITE_BASE=/`. The Vite `base` otherwise defaults to `/ffgame/` (matching the repo name) for a plain GitHub Pages path — override it with `VITE_BASE`, as the deploy does to serve from the domain root.
 
 ---
 
@@ -97,4 +97,4 @@ This demo is phase 1. The original ask runs further:
 
 ---
 
-*Gridiron Clash — built from the design handoff and real PeakedInDynasty 2025 data.*
+*Gridiron Clash — built from the design handoff and real 2025 NFL data.*

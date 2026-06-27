@@ -1,8 +1,10 @@
 // ESPN scoreboard: the schedule / kickoff / live game-state feed. Used to set
 // matchup lock_at (first kickoff of the week) and to decide which games to poll
 // for play-by-play right now.
-const SB = (season, week) =>
-  `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${season}&seasontype=2&week=${week}`;
+// ESPN seasontype: 1 = preseason, 2 = regular, 3 = postseason. Defaults to regular;
+// callers pass config.seasonType so a preseason game can be ingested for rehearsal.
+const SB = (season, week, seasonType = 2) =>
+  `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${season}&seasontype=${seasonType}&week=${week}`;
 
 async function getJson(url, tries = 4) {
   for (let i = 0; i < tries; i++) {
@@ -13,8 +15,8 @@ async function getJson(url, tries = 4) {
 }
 
 /** Normalized games for a season-week. state ∈ pre | in | post. */
-export async function getGames(season, week) {
-  const d = await getJson(SB(season, week));
+export async function getGames(season, week, seasonType = 2) {
+  const d = await getJson(SB(season, week, seasonType));
   return (d.events ?? []).map((e) => {
     const comp = e.competitions?.[0] ?? {};
     const cs = comp.competitors ?? [];
@@ -61,19 +63,19 @@ export function slateFromGames(games) {
 }
 
 /** The live slate for a season-week from ESPN (fetches the scoreboard). */
-export async function buildSlate(season, week) {
-  return slateFromGames(await getGames(season, week));
+export async function buildSlate(season, week, seasonType = 2) {
+  return slateFromGames(await getGames(season, week, seasonType));
 }
 
 /** Earliest kickoff of the week (epoch ms), the matchup lock_at. */
-export async function weekKickoffMs(season, week) {
-  const games = await getGames(season, week);
+export async function weekKickoffMs(season, week, seasonType = 2) {
+  const games = await getGames(season, week, seasonType);
   const ks = games.map((g) => g.kickoffMs).filter(Number.isFinite);
   return ks.length ? Math.min(...ks) : null;
 }
 
 /** Event ids worth polling for PBP now (live, or recently kicked off). */
-export async function gamesToPoll(season, week) {
-  const games = await getGames(season, week);
+export async function gamesToPoll(season, week, seasonType = 2) {
+  const games = await getGames(season, week, seasonType);
   return games.filter((g) => g.state === 'in' || (g.state === 'post' && !g.completed)).map((g) => g.eventId);
 }

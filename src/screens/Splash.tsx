@@ -40,13 +40,16 @@ export function Splash() {
           <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}>◈ DRIP FANTASY</span>
           {sleeperUser && <button onClick={() => navigate({ name: 'leagues' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← {sleeperUser.displayName}’s leagues</button>}
         </div>
-        <SiteSettings />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => { exitSimLeague(); navigate({ name: 'demo' }); }} className="mono" title="Watch the 60-second walkthrough" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 40%, var(--bd))', borderRadius: 999, padding: '5px 10px', cursor: 'pointer' }}>▶ 60-sec demo</button>
+          <SiteSettings />
+        </div>
       </header>
 
       <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}>
         <div style={{ width: '100%', maxWidth: 440 }}>
           <div style={{ textAlign: 'center', marginBottom: 20 }}>
-            <div className="grotesk" style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1.1 }}>
+            <div className="grotesk" style={{ fontSize: 'clamp(20px, 6vw, 30px)', whiteSpace: 'nowrap', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1.1 }}>
               Add some <span style={{ color: 'var(--you)' }}>Drip</span> to your league.
             </div>
             <div style={{ fontSize: 13, color: 'var(--dim)', marginTop: 10, lineHeight: 1.5 }}>
@@ -74,21 +77,22 @@ export function Splash() {
             <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>Sleeper public API — username only, never a password.</div>
           </div>
 
-          {/* ── Or the prebuilt demo ────────────────────────────────────────── */}
-          <div className="mono" style={{ textAlign: 'center', fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)', margin: '16px 0 12px' }}>OR JUST EXPLORE</div>
-          <button onClick={() => { exitSimLeague(); navigate({ name: 'hub' }); }} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 6, padding: '13px 0', cursor: 'pointer' }}>
+          {/* ── Demo door: the sanitized demo league on the full board ───────── */}
+          <button onClick={() => { exitSimLeague(); navigate({ name: 'hub' }); }} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 16 }}>
             Explore the demo league →
           </button>
-          <div style={{ textAlign: 'center', marginTop: 10 }}>
-            <button onClick={() => { exitSimLeague(); navigate({ name: 'demo' }); }} className="mono" style={linkBtn}>▶ or watch the 60-second walkthrough</button>
-          </div>
 
-          {/* ── Pilot ───────────────────────────────────────────────────────── */}
-          <div style={{ borderTop: '1px solid var(--bd)', marginTop: 22, paddingTop: 18, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
-            <button onClick={() => navigate({ name: 'live' })} className="mono" style={{ width: '100%', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '12px 0', cursor: 'pointer' }}>
-              {signedIn ? '↩ Continue to your live league →' : '◈ Already invited? Sign in →'}
-            </button>
-            {!signedIn && <button onClick={() => setRequesting(true)} className="mono" style={linkBtn}>Request an invite</button>}
+          {/* ── Pilot (invited players) — compact, secondary ─────────────────── */}
+          <div style={{ borderTop: '1px solid var(--bd)', marginTop: 22, paddingTop: 16, textAlign: 'center' }}>
+            {signedIn ? (
+              <button onClick={() => navigate({ name: 'live' })} className="mono" style={linkBtn}>↩ Continue to your live league →</button>
+            ) : (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <button onClick={() => navigate({ name: 'live' })} className="mono" style={linkBtn}>◈ Already invited? Sign in</button>
+                <span style={{ color: 'var(--faint)' }}>·</span>
+                <button onClick={() => setRequesting(true)} className="mono" style={{ ...linkBtn, color: 'var(--faint)' }}>request an invite</button>
+              </span>
+            )}
           </div>
         </div>
       </main>

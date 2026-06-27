@@ -71,14 +71,14 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
   const lid = leagueRow.id;
   const kdstMode = leagueRow.kdst_mode ?? 'off';
   const rows = await sleeper.getMatchups(leagueId, week); // one row per roster
-  const lockMs = await weekKickoffMs(season, week);
+  const lockMs = await weekKickoffMs(season, week, config.seasonType);
   const lockAt = lockMs ? new Date(lockMs).toISOString() : null;
 
   // Live NFL slate from ESPN → overrides the baked 2025 slate for this real
   // season, so slate-gating + the K/DST bye check below use the correct windows
   // and byes. Stored in nfl_slate so the client can load it too.
   try {
-    const slate = await buildSlate(season, week);
+    const slate = await buildSlate(season, week, config.seasonType);
     if (slate.length) {
       setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win })));
       await db().from('nfl_slate').upsert(
@@ -129,8 +129,11 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
     if (needK || needDef) {
       const { data: manualRows } = await db().from('team_kdst').select('roster_id,k_slug,dst_slug').eq('league_id', lid);
       const manualBy = new Map((manualRows ?? []).map((m) => [m.roster_id, m]));
-      for (const l of lineups) {
-        const fill = assignKdst({ leagueId: lid, rosterId: l.roster_id, week, mode: kdstMode, needK, needDef, manual: manualBy.get(l.roster_id) });
+      // League-wide set of NFL teams handed out this week so random fills are drawn
+      // without replacement. Iterate by roster_id for a stable, deterministic draw.
+      const taken = new Set();
+      for (const l of [...lineups].sort((a, b) => a.roster_id - b.roster_id)) {
+        const fill = assignKdst({ leagueId: lid, rosterId: l.roster_id, week, mode: kdstMode, needK, needDef, manual: manualBy.get(l.roster_id), taken });
         let slot = l.starters_json.length;
         if (fill.kSlug) l.starters_json.push({ slot: slot++, sleeper_id: null, player_slug: fill.kSlug, pos: 'K' });
         if (fill.dstSlug) l.starters_json.push({ slot: slot++, sleeper_id: null, player_slug: fill.dstSlug, pos: 'DEF' });
@@ -140,4 +143,41 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
 
   if (lineups.length) await db().from('sleeper_lineup').upsert(lineups, { onConflict: 'league_id,week,roster_id' });
   return { matchups: matchups.length, lineups: lineups.length, lockAt };
+}
+
+// Copy a league's matchups + starting lineups from one week to another — so a
+// test league (whose Sleeper source has no preseason matchups) can be scheduled
+// against a real preseason week the worker will poll. Idempotent: clears any
+// prior clone at `toWeek` first. New matchups are 'scheduled' (unlocked).
+export async function cloneWeek(sleeperLeagueId, fromWeek, toWeek, season = config.season) {
+  const { data: lg } = await db().from('league').select('id')
+    .eq('sleeper_league_id', sleeperLeagueId).eq('season', season).maybeSingle();
+  if (!lg) throw new Error(`no league for sleeper_league_id=${sleeperLeagueId} season=${season}`);
+  const lid = lg.id;
+
+  // Wipe any existing clone at toWeek (children first).
+  const { data: existing } = await db().from('matchup').select('id').eq('league_id', lid).eq('week', toWeek);
+  const ids = (existing ?? []).map((m) => m.id);
+  if (ids.length) {
+    await db().from('sealed_pick').delete().in('matchup_id', ids);
+    await db().from('matchup_state').delete().in('matchup_id', ids);
+    await db().from('applied_state').delete().in('matchup_id', ids);
+    await db().from('matchup').delete().in('id', ids);
+  }
+  await db().from('sleeper_lineup').delete().eq('league_id', lid).eq('week', toWeek);
+
+  const { data: ms } = await db().from('matchup')
+    .select('sleeper_matchup_id, home_roster_id, away_roster_id').eq('league_id', lid).eq('week', fromWeek);
+  const newM = (ms ?? []).map((m) => ({
+    league_id: lid, week: toWeek, sleeper_matchup_id: m.sleeper_matchup_id,
+    home_roster_id: m.home_roster_id, away_roster_id: m.away_roster_id, status: 'scheduled', lock_at: null,
+  }));
+  if (newM.length) await db().from('matchup').insert(newM);
+
+  const { data: ls } = await db().from('sleeper_lineup')
+    .select('roster_id, starters_json').eq('league_id', lid).eq('week', fromWeek);
+  const newL = (ls ?? []).map((l) => ({ league_id: lid, week: toWeek, roster_id: l.roster_id, starters_json: l.starters_json }));
+  if (newL.length) await db().from('sleeper_lineup').insert(newL);
+
+  return { matchups: newM.length, lineups: newL.length };
 }

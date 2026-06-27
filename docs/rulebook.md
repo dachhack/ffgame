@@ -244,8 +244,8 @@ version of that read.
 
 - **Missed picks** — your league policy decides: best available lineup auto-filled
   (default), an AI fills it, or it scores 0.
-- **Backups** — depth behind a beatable starter can sub in; with two-plus unopposed
-  slots, the rest bank half credit.
+- **Backups** — depth behind a beatable starter can sub in for full value if it
+  outscores them; otherwise it scores 0 (all-or-nothing — no partial credit).
 - **Overtime / Garbage Time / Momentum / EMP** — power-ups (above) can keep drips
   ticking past regulation, double late points, push a hot drip to ×3, or freeze an
   opponent's drip.

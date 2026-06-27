@@ -154,13 +154,13 @@ export async function requestCode(input: { email?: string; sleeper?: string; lea
   return data as { ok: boolean; error?: string };
 }
 
-export interface Enrollment { team_name: string; sleeper_roster_id: number; avatar_url: string | null; league: { name: string; season: string } | null; }
+export interface Enrollment { league_id: string; team_name: string; sleeper_roster_id: number; avatar_url: string | null; league: { name: string; season: string } | null; }
 
 /** The caller's enrolled memberships (RLS scopes to their own rows). */
 export async function myEnrollments(userId: string): Promise<Enrollment[]> {
   const { data, error } = await client()
     .from('league_membership')
-    .select('team_name, sleeper_roster_id, avatar_url, league:league_id(name, season)')
+    .select('league_id, team_name, sleeper_roster_id, avatar_url, league:league_id(name, season)')
     .eq('app_user_id', userId)
     .eq('enrolled', true);
   if (error) throw error;
@@ -274,6 +274,26 @@ export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[
   const { data } = await client().from('sealed_pick')
     .select('app_user_id, game_window, roster_slot, player_slug, metric_id, locked').eq('matchup_id', matchupId);
   return (data ?? []) as RevealedPick[];
+}
+
+/** All worker-ingested plays for a week (live_play is readable by any authed user).
+ *  Drives the live full-board resolution off real plays. */
+export interface LivePlayRow { player_slug: string; c: number; t: number | null; pid: number | null; k: string; y: number; td: number; ca: number; tg: number; to: number | null; }
+export async function weekLivePlays(week: number): Promise<LivePlayRow[]> {
+  const { data } = await client().from('live_play')
+    .select('player_slug, c, t, pid, k, y, td, ca, tg, to').eq('week', week);
+  return (data ?? []) as LivePlayRow[];
+}
+
+/** The opponent's revealed armed buffs — readable only AFTER the matchup locks
+ *  (applied_read_after_lock RLS). Returns null when the opponent's row isn't
+ *  visible yet (pre-lock) so callers can keep the AI default; an array (possibly
+ *  empty) once revealed. */
+export async function revealedOppBuffs(matchupId: string, userId: string): Promise<string[] | null> {
+  const { data } = await client().from('applied_state').select('app_user_id, payload_json').eq('matchup_id', matchupId);
+  const opp = (data ?? []).find((r) => r.app_user_id && r.app_user_id !== userId) as { payload_json: { buffs?: string[] } | null } | undefined;
+  if (!opp) return null;
+  return opp.payload_json?.buffs ?? [];
 }
 
 // ── Super admin ─────────────────────────────────────────────────────────────────
