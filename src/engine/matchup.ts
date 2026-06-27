@@ -231,8 +231,6 @@ export interface ResolvedSlot {
   backup?: boolean;
   backupScore?: number;   // the score this backup would post
   backupUsed?: boolean;   // it was subbed into a starter slot
-  backupHalf?: boolean;        // not subbed, but banked half its score (2+ unopposed)
-  backupHalfEligible?: boolean; // this side has 2+ unopposed slots, so half-credit applies
   // A backup subbed INTO this slot, per side (the backup's score replaces the
   // starter's). Side-aware so a yours-vs-theirs slot can show each correctly.
   youSub?: { name: string; score: number; from: number };
@@ -598,20 +596,8 @@ function applyBackups(windows: ResolvedWindow[], side: 'you' | 'their', assign: 
   // A backup doesn't score on its own — record its would-be score, zero it out.
   for (const b of backups) { b.backup = true; b.backupScore = getF(b); setF(b, 0); }
 
-  // With 2+ unopposed slots you're not all-or-nothing: every unopposed slot that
-  // doesn't sub in still banks HALF its score. (A single unopposed slot is a pure
-  // best-ball backup — 0 unless it subs in.)
-  const multi = backups.length >= 2;
-  for (const b of backups) b.backupHalfEligible = multi || undefined;
-  const halfCredit = () => {
-    if (!multi) return;
-    for (const b of backups) {
-      if (b.backupUsed) continue; // it subbed in for full value — no double count
-      setF(b, Math.round((b.backupScore ?? 0) * 0.5 * 10) / 10);
-      b.backupHalf = true;
-    }
-  };
-
+  // All-or-nothing: a backup either subs in for full value (below) or scores 0
+  // (already zeroed above) — no partial/half credit.
   const starters = all.filter((s) => mine(s) && opp(s));
   const used = new Set<ResolvedSlot>();
 
@@ -627,7 +613,7 @@ function applyBackups(windows: ResolvedWindow[], side: 'you' | 'their', assign: 
 
   // 2) Auto-maximize the rest — only when auto (the AI opponent). Your own
   // backups stay benched until you assign them (it's your choice).
-  if (!auto) { halfCredit(); return; }
+  if (!auto) return;
   const remStarters = starters.filter((s) => !used.has(s)).sort((a, b) => getF(a) - getF(b));
   autoBackups.sort((a, b) => (b.backupScore ?? 0) - (a.backupScore ?? 0));
   let si = 0;
@@ -637,7 +623,6 @@ function applyBackups(windows: ResolvedWindow[], side: 'you' | 'their', assign: 
     if ((b.backupScore ?? 0) > getF(st)) { sub(b, st); si++; }
     else break;
   }
-  halfCredit();
 }
 
 /** Running banks at a given clock (live phase) for one slot's event feed. */

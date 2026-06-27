@@ -142,7 +142,7 @@ export function Rulebook({ onClose }: { onClose: () => void }) {
           <div style={h2}>The fine print</div>
           <ul style={{ ...p, paddingLeft: 18 }}>
             <li><b>Missed picks</b> — your league policy fills an empty slot with your best available lineup (default), an AI, or scores 0.</li>
-            <li><b>Backups</b> — depth behind a beatable starter can sub in; with 2+ unopposed slots, the rest bank half credit.</li>
+            <li><b>Backups</b> — depth behind a beatable starter can sub in for full value if it outscores them; otherwise it scores 0 (all-or-nothing — no partial credit).</li>
             <li><b>Overtime / Garbage Time</b> — power-ups can keep drips ticking past regulation or double final-5-minute points.</li>
           </ul>
         </div>

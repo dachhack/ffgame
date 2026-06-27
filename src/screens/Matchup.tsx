@@ -460,8 +460,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // On lock-in, walk through EVERY UNOPPOSED player (your player with no
   // head-to-head opponent) — they're best-ball backups that can sub in. The
   // prompt is a REQUIRED interrupt: it can't be dismissed, so you can't reach
-  // the live screen without making a call (challenge a starter, or take the 0 /
-  // bank half). Every sub-capable unopposed spot is prompted once per lock-in —
+  // the live screen without making a call (challenge a starter, or take the 0).
+  // Every sub-capable unopposed spot is prompted once per lock-in —
   // even ones with a saved assignment (the card pre-selects it to confirm or
   // change) — so you never have to hunt for the spot's reassign button.
   const backupPrompted = useRef<Set<string>>(new Set());
@@ -1045,7 +1045,6 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             backupScore={liveOf(b)}
             live={phase !== 'final'}
             required={backupMenu.required}
-            half={!!b.backupHalfEligible}
             current={backupAssign[backupMenu.key]}
             starters={starters}
             onPick={(target) => { setBackupTarget(week, backupMenu.key, target); setBackupMenu(null); }}
@@ -1188,8 +1187,8 @@ function EarningsModal({ earnings, onReset, onClose }: { earnings: { stipend: nu
 }
 
 // ── Backup assignment menu (manual best-ball) ──
-function BackupMenu({ backupName, backupScore, live, required, half, current, starters, onPick, onClose }: {
-  backupName: string; backupScore: number; live: boolean; required?: boolean; half?: boolean; current?: string;
+function BackupMenu({ backupName, backupScore, live, required, current, starters, onPick, onClose }: {
+  backupName: string; backupScore: number; live: boolean; required?: boolean; current?: string;
   starters: { key: string; name: string; score: number; win: WindowId }[];
   onPick: (target: string | null) => void; onClose: () => void;
 }) {
@@ -1200,18 +1199,16 @@ function BackupMenu({ backupName, backupScore, live, required, half, current, st
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Backup · {backupName} <span style={{ color: 'var(--warn)' }}>{backupScore.toFixed(1)}</span> <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', fontWeight: 400 }}>{scoreTag}</span></div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{half ? 'UNOPPOSED — BANKS HALF UNLESS IT SUBS IN. CHALLENGE A STARTER FOR FULL VALUE.' : (required ? 'UNOPPOSED — BANKS 0 UNLESS IT SUBS IN. CHALLENGE A STARTER, OR TAKE THE 0.' : 'CHALLENGE A STARTER — SUBS IN AT FINAL ONLY IF IT OUTSCORES THEM')}</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{required ? 'UNOPPOSED — BANKS 0 UNLESS IT SUBS IN. CHALLENGE A STARTER, OR TAKE THE 0.' : 'CHALLENGE A STARTER — SUBS IN AT FINAL ONLY IF IT OUTSCORES THEM'}</div>
           </div>
           {!required && <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>}
         </div>
         <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 360, overflow: 'auto' }}>
           <div className="mono" style={{ fontSize: 9, lineHeight: 1.55, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px', marginBottom: 4 }}>
-            {half
-              ? <><b style={{ color: 'var(--warn)' }}>{backupName} banks half its score</b> if it sits — unopposed slots only pay full when they sub in. Point it at a starter and it'll <b style={{ color: 'var(--text)' }}>replace</b> that starter's score at FINAL, but only if it outscores them. It's a blind bet: numbers below are points {scoreTag}, not finals.</>
-              : <><b style={{ color: 'var(--warn)' }}>{backupName} banks 0 on its own</b> — unopposed points don't count. Point it at a starter and it'll <b style={{ color: 'var(--text)' }}>replace</b> that starter's score at FINAL, but only if it outscores them. It's a blind bet: numbers below are points {scoreTag}, not finals.</>}
+            <><b style={{ color: 'var(--warn)' }}>{backupName} banks 0 on its own</b> — unopposed points don't count. Point it at a starter and it'll <b style={{ color: 'var(--text)' }}>replace</b> that starter's score at FINAL, but only if it outscores them. It's a blind bet: numbers below are points {scoreTag}, not finals.</>
           </div>
           <button onClick={() => onPick(null)} className="mono" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, background: !current ? 'var(--sh)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px', color: 'var(--text)' }}>
-            <span style={{ fontSize: 11, fontWeight: 700 }}>{half ? `Bank half — ${backupName} doesn't sub` : `Take the 0 — ${backupName} doesn't sub`}</span>
+            <span style={{ fontSize: 11, fontWeight: 700 }}>{`Take the 0 — ${backupName} doesn't sub`}</span>
             {!current && <span style={{ fontSize: 9, color: 'var(--dim)' }}>✓</span>}
           </button>
           {starters.map((s) => {
@@ -2138,13 +2135,10 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
     const live = banksAtClock(slot.events, bclock);
     const isFinal = done || phase === 'final';
     const subbedIn = !!slot.backupUsed;
-    const halfCredit = !!slot.backupHalf;            // banked half (2+ unopposed, didn't sub)
-    const halfEligible = !!slot.backupHalfEligible;  // side has 2+ unopposed → half-credit applies
     const wouldBe = slot.backupScore ?? 0;           // full would-be score
-    const mineFinal = mineBackup ? slot.youFinal : slot.theirFinal; // what actually counted
-    // Live: running full points. Final: the half it banked, else its would-be
-    // (shown struck when benched, plain when it subbed in).
-    const liveBackup = !done ? (mineBackup ? live.you : live.their) : halfCredit ? mineFinal : wouldBe;
+    // Live: running points. Final: its would-be score — shown struck (0 counted)
+    // when it didn't sub in, plain when it subbed in for full value.
+    const liveBackup = !done ? (mineBackup ? live.you : live.their) : wouldBe;
     const bEvents = slot.events.filter((e) => e.clock <= bclock);
     const chip = canSub ? (mineBackup ? 'BACKUP' : 'OPP BACKUP') : (mineBackup ? 'UNOPPOSED' : 'OPP UNOPP');
     const showSuppress = isSuppress && (done || phase === 'final') ? (suppressSpent ?? undefined) : undefined;
@@ -2155,7 +2149,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
         side={mineBackup ? 'you' : 'their'} player={be.player} week={week} clock={bclock} metricId={be.metricId}
         metricName={bp?.name ?? ''} tag={bp?.tag ?? ''} bank={liveBackup} onClick={onToggle}
         chip={chip} suppressSpent={showSuppress} coin={slotCoin(slot, mineBackup ? 'you' : 'their', week, turnoverCoin, bclock)}
-        negated={canSub && isFinal && !subbedIn && !halfCredit ? true : undefined} fgMult={bFg}
+        negated={canSub && isFinal && !subbedIn ? true : undefined} fgMult={bFg}
       />
     );
     const blankBox = (
@@ -2193,19 +2187,17 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
             )}
           </div>
         )}
-        {/* Make the unopposed rule explicit: sub in for full value, else bank half
-            (when 2+ unopposed) or 0 (a lone unopposed slot). */}
+        {/* Make the unopposed rule explicit: sub in for full value, else score 0. */}
         {canSub && mineBackup && (() => {
           let txt: string; let col: string;
           if (isFinal) {
             if (subbedIn) { txt = '✓ subbed in — full points counted'; col = 'var(--you)'; }
-            else if (halfCredit) { txt = `½ unopposed credit — banked ${mineFinal.toFixed(1)} of ${wouldBe.toFixed(1)}`; col = 'var(--warn)'; }
             else { txt = '✕ scored 0 — did not sub in'; col = 'var(--fx-stop)'; }
           } else {
             const tgt = backups[ownKey] && slotName[backups[ownKey]];
             txt = tgt
-              ? `subs into ${tgt} at final if it wins${halfEligible ? ', else banks half' : ''}`
-              : (halfEligible ? 'banks half unless you sub it in for a starter' : 'banks 0 unless you sub it in for a starter');
+              ? `subs into ${tgt} at final if it wins, else 0`
+              : 'banks 0 unless you sub it in for a starter';
             col = 'var(--warn)';
           }
           return <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: col, textAlign: 'center', marginTop: 4 }}>{txt}</div>;

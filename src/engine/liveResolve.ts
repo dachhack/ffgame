@@ -10,8 +10,8 @@
 //   • Cross-window Field General — a QB on the `fg` metric builds a window-wide
 //     multiplier on its own side's other slots in that window (scores 0 itself).
 //   • Best-ball backups — an unopposed player doesn't score in place; the biggest
-//     such backup subs for the side's lowest beatable starter, and with 2+
-//     unopposed the rest bank half-credit.
+//     such backup subs for the side's lowest beatable starter. All-or-nothing:
+//     a backup that doesn't sub in scores 0.
 //   • TE Touchdown 8-PT NUKE — each TE TD in a window knocks every opposing
 //     drip rate down by 1.0 across that window (wired through resolveSlot's
 //     drip-nuke clocks).
@@ -62,7 +62,7 @@ interface SlotRes {
 
 /** Best-ball backups for one side: unopposed players (present, no opponent in
  *  the slot) don't score in place; the biggest backup subs for the lowest
- *  beatable starter, and with 2+ unopposed the rest bank half their score. */
+ *  beatable starter. All-or-nothing — a backup that doesn't sub in scores 0. */
 function applyBackups(slots: SlotRes[], side: 'home' | 'away'): void {
   const meP = (s: SlotRes) => (side === 'home' ? s.homeP : s.awayP);
   const opP = (s: SlotRes) => (side === 'home' ? s.awayP : s.homeP);
@@ -85,8 +85,7 @@ function applyBackups(slots: SlotRes[], side: 'home' | 'away'): void {
     const st = starters[si];
     if (score.get(b)! > getF(st)) { setF(st, round(score.get(b)!)); used.add(b); si++; } else break;
   }
-  // With 2+ unopposed slots, every backup that didn't sub in still banks half.
-  if (backups.length >= 2) for (const b of backups) if (!used.has(b)) setF(b, round(score.get(b)! * 0.5));
+  // All-or-nothing: backups that didn't sub in stay 0 (zeroed above).
 }
 
 function coinFor(slots: SlotRes[], side: 'home' | 'away'): number {
