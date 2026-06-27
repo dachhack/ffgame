@@ -73,6 +73,17 @@ buy the EV offensive buffs (momentum/overtime/garbage-time) instead of the old r
 npx tsx tools/playtester/iterate.mjs --week=1-14 --n=120
 ```
 
+## `form.mjs` — does recent form beat season projection?
+Tests whether trailing weekly stats (the baked PBP *is* per-week 2025 data) improve AI
+player selection, before wiring live weekly stats. Mirror roster, both blind, recent-form
+vs season-to-date selection. Result: form has predictive signal (~70%) but recency loses
+to the fuller prior sample, and selection rarely binds — so wire weekly stats only as a
+season-to-date *freshness* upgrade, not a hot-hand selector (findings §7).
+
+```
+npx tsx tools/playtester/form.mjs --from=4 --to=14 --n=200 --lookback=3
+```
+
 ## `scenario.mjs` — targeted suspect probes
 Hand-built best-case lines for the handoff's "prime suspects" (TE-TD nuke trigger
 rate + cascade, Twin Generals fg-stack multiplier, unilateral extra-slot coin farm) —

@@ -195,6 +195,40 @@ NUKE, §4) — the next lever.
 _Next: a mechanics retune (drip-amplifier diminishing returns and/or a Combo-Drip limit) driven
 by the adversary's ceiling, then re-validate that the oracle's margin actually falls._
 
+## 7. Does recent form help the AI? (`form.mjs`) — measured, mostly NO
+Question: wire in 2025 weekly stats so the AI makes "crude predictions from the weeks
+leading up" to optimize player / metric / power-up choices. The baked PBP *is* per-week
+2025 data, so we tested it before building any live-data plumbing. Mirror roster, both
+blind, weeks 4–14, lookback 2–4.
+
+- **Recent form has real predictive signal** — trailing weeks rank next-week production
+  correctly **~70%** of the time (50% = none).
+- **But recency LOSES to season-to-date for selection** (form win-rate 19–29%, both
+  no-hindsight): last-2-to-4-weeks is a smaller, noisier sample than the full prior
+  sample. "Start your hot players" underperforms "use all the data you have."
+- **Selection rarely binds anyway** — huge tie counts (the lineup is slate-gated, so most
+  windows have ≤ slots eligible and both policies field the same players). Player selection
+  is mostly *not* the AI's lever in this game.
+- Full-season totals (hindsight) beat both, as expected — more accuracy always wins.
+
+**Takeaways for wiring Stathead weekly stats (`get_player_weekly_stats`, confirmed
+available for 2025):**
+- The value is **data freshness, not the hot hand**: the AI today reads a *static* season
+  projection (`statsForSlug`). In a live 2026 week that projection is *stale prior-season*
+  data — replacing it with **season-TO-DATE accumulation** from live weekly stats gives the
+  blind AI a *current* no-hindsight projection it otherwise lacks. Use the **full accumulated
+  sample, not last-3 recency** (the harness shows the bigger sample predicts better).
+- Do **not** build a "recent-form / hot-hand" selector — measured to *hurt*.
+- Metric/power-up tuning from form is low-headroom here (§4–§5): the engine rewards the drip
+  defaults, lineups are slate-bound, and the AI's real win was buying the EV buffs (§5),
+  which is roster-independent. Combodrip targeting could use to-date dual-threat detection,
+  but that's a marginal gain.
+
+_Net: weekly stats are worth wiring only as a **freshness upgrade** to the AI's projection
+(season-to-date), and mainly matters once the static projection is a season stale. The
+"crude recent-weeks prediction" framing specifically does not pay — the playtester saved
+us from building it._
+
 ## 6. Mechanics retune #1 — revive NUKE as a drip counter (shipped, `sim.ts`)
 The dead NUKE class (§2/§4) was the first mechanic retuned. Root cause confirmed: a TD wiped
 the victim's banked points but left its drip **rate** intact, so the drip rebuilt and
