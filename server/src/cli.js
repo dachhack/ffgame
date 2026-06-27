@@ -7,6 +7,7 @@
 //   node src/cli.js simulate --dry [--week=1]  feed round-trip check, no DB
 //   node src/cli.js simulate --check [lg]      read-only DB connectivity probe
 //   node src/cli.js simulate --reset <lg> <wk> revert a sim'd week (scheduled, cleared)
+//   node src/cli.js leagues                    list leagues (id + sleeper id) + matchup weeks
 import { config } from './config.js';
 import { importLeague, syncWeek, syncAllLeagues, cloneWeek } from './sync.js';
 import { buildPlayerIndex } from './playerIndex.js';
@@ -63,6 +64,34 @@ async function main() {
       console.log('polled', ids.length, 'games,', wrote, 'rows');
       break;
     }
+    case 'leagues': {
+      // Read-only: list leagues (internal id + sleeper id) with a per-week matchup
+      // status summary — so you can pick a (league-id, week) to simulate/rehearse.
+      const { db } = await import('./supabase.js');
+      const [{ data: leagues }, { data: ms }] = await Promise.all([
+        db().from('league').select('id,name,sleeper_league_id,season'),
+        db().from('matchup').select('league_id,week,status'),
+      ]);
+      const wk = new Map(); // leagueId -> Map(week -> {status: count})
+      for (const m of ms ?? []) {
+        if (!wk.has(m.league_id)) wk.set(m.league_id, new Map());
+        const wm = wk.get(m.league_id);
+        if (!wm.has(m.week)) wm.set(m.week, {});
+        const c = wm.get(m.week); c[m.status] = (c[m.status] ?? 0) + 1;
+      }
+      if (!leagues?.length) { console.log('no leagues — import one first (cli sync <sleeperLeagueId>)'); break; }
+      for (const l of leagues.sort((a, b) => (a.name > b.name ? 1 : -1))) {
+        console.log(`\n${l.id}  ${l.name}  (sleeper ${l.sleeper_league_id} · ${l.season})`);
+        const wm = wk.get(l.id);
+        if (!wm?.size) { console.log('    (no matchups)'); continue; }
+        for (const week of [...wm.keys()].sort((a, b) => a - b)) {
+          const c = wm.get(week);
+          console.log(`    week ${week}: ${Object.entries(c).map(([s, n]) => `${n} ${s}`).join(', ')}`);
+        }
+      }
+      console.log('\nrehearse:  npx tsx src/cli.js simulate <league-id> <week> --speed=1200 --tick=1500 --jitter=10 --corrections=20');
+      break;
+    }
     case 'simulate': {
       await simulate(args);
       break;
@@ -84,7 +113,7 @@ async function main() {
       break;
     }
     default:
-      console.log('commands: sync <leagueId> | sync-week <leagueId> <wk> | poll-once | inj-once | simulate <lg> <wk> [--dry]');
+      console.log('commands: leagues | sync <leagueId> | sync-week <leagueId> <wk> | poll-once | inj-once | simulate <lg> <wk> [--dry]');
   }
 }
 
