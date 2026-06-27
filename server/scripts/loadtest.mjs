@@ -64,7 +64,9 @@ async function seed() {
   const leagues = num(flags.leagues, 100);
   const teams = num(flags.teams, 12);          // 12-team → 6 matchups/league → 600 @ 100
   const week = num(flags.week, 1);
-  const src = num(flags.src, week);
+  // Isolated/high weeks (99) have no baked slate of their own → source plays + the
+  // slate from a real baked week (default 1) so --week=99 works without --src.
+  const src = num(flags.src, NFL_SLATE[week] ? week : 1);
   if (teams % 2) throw new Error('--teams must be even (each matchup pairs two)');
   if (!NFL_SLATE[src]) throw new Error(`no baked slate for week ${src} (use --src=1..14)`);
 
