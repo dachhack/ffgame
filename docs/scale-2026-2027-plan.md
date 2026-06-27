@@ -163,6 +163,12 @@ highest-leverage change for scaling the sweep; batching the per-matchup
 The pilot's single always-on worker polling every game each tick is fine at ~600
 matchups but is the first thing to break at, say, 1,000+ leagues:
 
+- **Stop re-resolving settled matchups** — the tick re-resolves every `live`/`final`
+  matchup each cycle, so once a week's games end the worker keeps running the engine
+  + writing `matchup_state` for finalized matchups 24/7 (harmless — idempotent — but
+  ~600 wasted resolves/writes per tick at 100 leagues). Skip matchups already `final`
+  with state written (a `settled` flag, or resolve `final` once then drop it from the
+  scan). Cheap; worth doing even before sharding. _(Observed live, 2026-06-27.)_
 - **Shard / queue the poll loop** — multiple workers, each owning a slice of
   games; resolve fan-out off a work queue rather than one serial pass.
 - **Feed rate-limits** — a licensed feed has quotas; centralize polling per
