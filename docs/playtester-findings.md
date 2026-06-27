@@ -188,28 +188,31 @@ by the adversary's ceiling, then re-validate that the oracle's margin actually f
 ## 6. Mechanics retune #1 — revive NUKE as a drip counter (shipped, `sim.ts`)
 The dead NUKE class (§2/§4) was the first mechanic retuned. Root cause confirmed: a TD wiped
 the victim's banked points but left its drip **rate** intact, so the drip rebuilt and
-out-accrued the wipe within a few catches. Changes:
-- **A TD nuke now KILLS the matched opposing slot's drip** — zeroes the rate AND marks the
-  slot dead, so it stays 0 (a mere rate-reset rebuilds; measured to move nothing). Also
-  nullifies any Field-General-boosted accrual on that drip.
-- **A TE TD additionally kills the HOT STREAK** of every opposing drip in the window (on top
-  of the existing −1.0/min rate knock).
+out-accrued the wipe within a few catches. Final design (after trying a permanent slot-kill,
+then softening it to bound the variance):
+- **A TD nuke wipes the bank, RESETS the drip rate to 0, and SUPPRESSES all scoring in that
+  slot for the next 10 game-minutes** (`nukedUntil`; the slot is inert during the blackout, then
+  rebuilds the rate from scratch). The blackout is what makes the wipe stick — a bare rate-reset
+  is rebuilt within a few catches. Also nullifies FG-boosted accrual meanwhile (0 rate × mult).
+- **A TE TD additionally kills the HOT STREAK** of every opposing drip in the window (on top of
+  the existing −1.0/min rate knock).
+- Composes with the defensive buffs: counter-nuke reflects the wipe + blackout onto the
+  attacker; insurance keeps half the bank but the slot is still suppressed.
 
 Validation:
-- Cascade probe: stacked TE-TDs vs a drip window now wipe the matched drips to **0.0** (was
-  47–54, out-accrued).
+- Cascade probe: stacked TE-TDs vs a drip window cut the matched drips to **2–38** (was 47–54
+  unmitigated; the spread reflects WHEN the TE scored — an early TD leaves time to rebuild after
+  the blackout, a late one doesn't).
 - `te-nuke` went from strictly-bad to **neutral** in blind play (50.9% → ~51%, conditional
   win-when-fired 43% → 48%): a real situational counter now, not a trap. `rb/wr-nuke-all` stays
   bad (forfeiting your *entire* drip corps is still self-sabotage — correct).
-- No economy regression (season: wallet bounded 91–99, home WR 50.0%, cancellation intact).
+- No economy regression (season: wallet bounded 91–99, home WR 50.0%, cancellation r=0.97).
 
-**Trade-off to watch (measured, not hidden):** reviving NUKE hands the *hindsight* adversary a
-new free weapon — its FREE (0-coin) exploit margin rose +10.7 → **+20.3** and `RB/WR→td` now
-appear in 27–30% of its lines, because perfect TD foresight turns the kill into a precision
-drip-snipe. This is **hindsight-only** (no real player has it; blind EV is neutral), but it
-flags NUKE as now **swingy / outcome-dependent**. If that variance is unwanted, soften the kill
-to a strong *suppress* (halve, or rate-reset + suppress for a window) instead of a permanent
-slot death — `aggregate.mjs`/`adversary.mjs` can dial it in.
+**Trade-off (measured, not hidden):** reviving NUKE hands the *hindsight* adversary a new free
+weapon — its FREE (0-coin) exploit margin rose +10.7 → **+17.4** (the earlier permanent-kill
+variant was +20.3; the 10-minute blackout is less swingy), and `RB/WR→td` appear in its lines,
+because perfect TD foresight makes it a precision drip-snipe. This is **hindsight-only** (no
+real player has it; blind EV is neutral) — it just flags NUKE as somewhat outcome-dependent now.
 
 _Still pending: the ceiling-lowering retune (cap Twin Generals' mult×mult, soften the FG curve,
 diminishing amplifier stacks) — that's what actually pulls the oracle's PAID margin down, which
