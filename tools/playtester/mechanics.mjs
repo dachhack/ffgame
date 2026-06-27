@@ -63,4 +63,6 @@ console.log(`  → stacked ×${fmt(stack, 2)} vs additive-expectation ×${fmt(ad
 // ── Probe 3: FG multiplier curve + Twin Generals (formula + measured) ─────────
 console.log(`\nPROBE 3 — Field General curve (1 + 0.003·passYds) & Twin Generals stacking\n`);
 for (const y of [150, 250, 350, 450]) console.log(`  ${y} passYds → single ×${fmt(1 + 0.003 * y, 2)}   ·   twin (two ${y}-yd QBs) ×${fmt((1 + 0.003 * y) ** 2, 2)}`);
-console.log(`  → one elite QB already ~2×; Twin Generals multiplies two curves (mult×mult), the explosive corner`);
+console.log(`  → the twin multiplier looks explosive, but this IGNORES the opportunity cost: both QBs`);
+console.log(`    score 0 and eat two slots to boost the one drip left in the window. Net of that, Twin`);
+console.log(`    Generals beats its best alternative only ~10/14 weeks and loses 4/14 — NOT degenerate.`);

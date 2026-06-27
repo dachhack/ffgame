@@ -77,11 +77,18 @@ balance (§1 covers that). 1,680 pairs/lever, seed 4242.
    stacked 2×TE-TD window banks a feeble **16–24 pts** while the opponent's drip **out-accrues
    the temporary wipe** (the −1.0/min knock barely dents a 3.0/min elite drip). This is **dead
    design space**, not a breaker — but worth a retune so NUKE is a viable counter.
-5. **Field General + drip is the blow-up ceiling.** One FG QB turns a single WR drip slot into
-   **60–150 pts**; **Twin Generals (`fg-stack`) multiplies that 1.5–1.8× more** → 100–240 on
-   one slot. The honest AI never assembles it (needs 2 QBs in a window, both on `fg`, + the
-   buy), so it's a **latent degenerate line for the adversary** (step 3) and the prime tuning
-   candidate (the `1 + 0.003·passYds` curve stacked on itself is the explosive part).
+5. **A single Field General + drip is the blow-up engine — but it's slot-efficient and self-
+   limiting, so it is NOT a balance bug.** One FG QB turns a WR drip slot into **60–150 pts**
+   for one QB slot. _Twin Generals (`fg-stack`) is NOT the degenerate corner an early draft
+   implied_ — that framing measured only the boosted slot and ignored that **both QBs score 0**.
+   Measured NET of the two dead slots, Twin Generals beats its best alternative (usually a
+   single general) in just **10/14 weeks and only modestly (+3 to +24)**, *loses* 4/14 (down to
+   −24 when a QB underperforms), and the single-general line is consistently competitive — and
+   this is the *best case* (top-2 QBs, hindsight). It also needs 2 QBs in the *same* game window
+   and eats two slots to boost the *one* drip that remains in a 3-slot window. That's why the
+   hindsight adversary (step 3) **never picks it**. **Verdict: keep it — the opportunity cost
+   balances it.** Any FG ceiling concern is about the *single* FG curve (`1 + 0.003·passYds`) +
+   amplifier compounding (§ probe 2), not Twin Generals — and even that cancels in symmetric play (§1).
 
 ### Harness limitations (be honest)
 - The pure resolver does **not** model `double-or-nothing`, `turnover-boost`, `spy`,
@@ -140,8 +147,11 @@ RB stacks + a drip amplifier (momentum/overtime/garbage-time)**.
    opportunity cost, then confirm `td` lands near 50% in `aggregate.mjs` without overshooting.
 3. **Re-price the dead defensive buffs** (§2 finding 3) — floodgates/counter-nuke/insurance
    are traps vs non-nuking opponents; give them an honest-field use or drop their price.
-4. **De-prioritise the FG / Twin-Generals and TE-TD-cascade retunes.** They're real ceilings
-   but the adversary doesn't choose them — combodrip+amplifiers dominate. Watch, don't rush.
+4. **Do NOT nerf Twin Generals (`fg-stack`)** — measured net of its two zeroed QB slots it's a
+   high-variance, slot-expensive gamble that wins only modestly and loses 4/14 weeks (§2 finding
+   5); the opportunity cost already balances it and the adversary never picks it. If any FG
+   tuning is wanted at all, it's the *single* FG curve + amplifier compounding — and even that
+   cancels symmetrically (§1), so it's a feel/variance call, not a balance fix.
 5. **Decide the 100-coin / extra-slot interaction** (§1): at 100 the AI never reaches an
    80-coin extra slot. Fine if intended; raise the seed or re-order the budget pass otherwise.
 
@@ -214,6 +224,7 @@ variant was +20.3; the 10-minute blackout is less swingy), and `RB/WR→td` appe
 because perfect TD foresight makes it a precision drip-snipe. This is **hindsight-only** (no
 real player has it; blind EV is neutral) — it just flags NUKE as somewhat outcome-dependent now.
 
-_Still pending: the ceiling-lowering retune (cap Twin Generals' mult×mult, soften the FG curve,
-diminishing amplifier stacks) — that's what actually pulls the oracle's PAID margin down, which
-the NUKE change (by design a counter, not a cap) does not._
+_On the ceiling: Twin Generals was ruled OUT as a nerf target (§2 finding 5 — opportunity cost
+balances it). The only remaining ceiling lever is the single-FG curve + amplifier compounding
+(§ probe 2), and since everything cancels in symmetric play (§1) that's a feel/variance choice,
+not a balance fix — left to the designer's taste rather than recommended._
