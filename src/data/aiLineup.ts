@@ -138,6 +138,10 @@ export function aiLineup(slugs: string[], week = 0, owned: Set<string> = new Set
     const { pos, team } = slugMeta(slug);
     return { slug, pos, team, metric: aiMetric(slug, pos, owned) };
   });
+  // Field the BEST players first: place/overflow in descending season projection so a
+  // full window keeps its higher-projected starters and benches the weaker ones — never
+  // sitting a WR ranked 23rd behind one ranked 65th just because of roster order.
+  tagged.sort((a, b) => statsForSlug(b.slug, b.pos).ppr - statsForSlug(a.slug, a.pos).ppr);
 
   const { picks, bench } = hasSlate(week) ? slateGated(tagged, week) : gridFill(tagged);
   addExtraSlots(picks, bench, extraSlots);
