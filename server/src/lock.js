@@ -50,13 +50,15 @@ async function aiBudgetPass(m, rosterId, appUserId, starters, seed) {
     return !!sp?.ok;
   };
 
-  // 2. Buy power-ups blind + priority-ordered (own roster only): (a) Combo Drip
-  //    if the roster has a dual-threat, then (b) in-slot buffs. Each item charged
-  //    once (idempotent per item); items already owned from a prior lock are kept
-  //    without re-charging, so a depleted balance can't drop a bought item.
-  const desired = [];
+  // 2. Buy power-ups blind + priority-ordered (own roster only): (a) the EV in-slot
+  //    buffs first, then (b) the Combo Drip unlock if the roster has a dual-threat.
+  //    The playtester (tools/playtester) shows that at the season coin seed a drip
+  //    amplifier is a better single buy than the combodrip unlock — which only pays
+  //    for a genuine dual-threat and otherwise crowds out the buff — so buffs lead.
+  //    Each item charged once (idempotent per item); items already owned from a prior
+  //    lock are kept without re-charging, so a depleted balance can't drop a bought item.
+  const desired = [...aiLiveBuffs(`${m.league_id}:${rosterId}`, m.week)];
   if (starters.some((s) => s.player_slug && wantsComboDrip(s.player_slug, s.pos))) desired.push('unlock-combo-drip');
-  for (const b of aiLiveBuffs(`${m.league_id}:${rosterId}`, m.week)) desired.push(b);
   for (const item of desired) {
     if (own.buffs.has(item) || own.unlocks.has(item)) continue;
     if (await spend(item, `${m.id}:ai:${item}:${rosterId}`)) (item.startsWith('unlock-') ? own.unlocks : own.buffs).add(item);

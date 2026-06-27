@@ -107,9 +107,9 @@ export function aiLoadout(slugs, key, week) {
   let bal = WALLET_SEED;
   const owned = new Set(), buffs = new Set();
   let extra = 0;
-  const desired = [];
+  // Mirror server/src/lock.js:aiBudgetPass — EV buffs first, then combodrip, then extra.
+  const desired = [...aiLiveBuffs(key, week)];
   if (slugs.some((s) => wantsComboDrip(s, slugMeta(s).pos))) desired.push('unlock-combo-drip');
-  for (const b of aiLiveBuffs(key, week)) desired.push(b);
   for (const item of desired) {
     const price = powerupById(item)?.price ?? 9999;
     if (bal >= price) { bal -= price; (item.startsWith('unlock-') ? owned : buffs).add(item); }

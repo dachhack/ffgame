@@ -88,10 +88,15 @@ function applyFieldGeneral(picks: AiPick[]): void {
   }
 }
 
-// The in-slot buffs an AI team arms in a live week. Limited to whole-lineup
-// buffs that help whichever side arms them (drip/OT/clock buffs) — so the AI
-// always benefits — mirroring the demo's AI_BUFF_POOL (src/engine/matchup.ts).
-const AI_LIVE_BUFFS = ['momentum', 'garbage-time', 'floodgates', 'overtime', 'ot-shield'];
+// The in-slot buffs an AI team arms in a live week, in EXPECTED-VALUE order. The
+// automated playtester (tools/playtester) shows these three drip AMPLIFIERS are the
+// only buffs that actually lift honest win-rate — momentum (3× when hot), overtime
+// (drips + Field General carry past regulation), garbage-time (final-5-min ×2) — while
+// the defensive buffs (floodgates / ot-shield) are dead against the honest field
+// (nobody nukes) and only waste coin. Dropping them and buying these first is a measured
+// +6.6-margin / ~59% blind win-rate improvement vs the old random draw (docs/playtester-
+// findings.md §5). The demo AI keeps its own AI_BUFF_POOL in src/engine/matchup.ts.
+const AI_LIVE_BUFFS = ['momentum', 'overtime', 'garbage-time'];
 
 /** Deterministic 32-bit hash for seeding the AI's draws (no Math.random, so the
  *  worker and a preview agree and a re-resolve is stable). */
@@ -106,13 +111,13 @@ function hashStr(s: string): number {
  *  seeded only on identity + week, never on the week's results. In M1 these are
  *  free; a later milestone gates them behind the team's coin budget. */
 export function aiLiveBuffs(teamKey: string, week: number, n = 3): string[] {
-  const pool = [...AI_LIVE_BUFFS];
+  // EV-ordered, rotated per team+week so different AI teams lead with a different
+  // amplifier (harmless variety) without ever leaving the proven-good set. The budget
+  // pass buys the first it can afford, so the lead buff is what most teams end up with.
+  const pool = AI_LIVE_BUFFS;
+  const start = hashStr(`${teamKey}|buffs|${week}`) % pool.length;
   const out: string[] = [];
-  let seed = hashStr(`${teamKey}|buffs|${week}`);
-  for (let i = 0; i < n && pool.length; i++) {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff; // LCG step for a varied draw
-    out.push(pool.splice(seed % pool.length, 1)[0]);
-  }
+  for (let i = 0; i < Math.min(n, pool.length); i++) out.push(pool[(start + i) % pool.length]);
   return out;
 }
 

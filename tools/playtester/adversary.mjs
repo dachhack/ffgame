@@ -17,7 +17,7 @@
 // + greedy buff add within budget + unlock-metric options priced into the tab.
 //
 //   npx tsx tools/playtester/adversary.mjs --week=1-14 --n=40 --budget=200
-import { rng, useWeek, drawRoster, buildMatchup, resolve, slugMeta, powerupById, parseWeeks, mean, fmt } from './lib.mjs';
+import { rng, useWeek, drawRoster, buildMatchup, resolve, aiLoadout, slugMeta, powerupById, parseWeeks, mean, fmt } from './lib.mjs';
 
 const flags = {};
 for (const a of process.argv.slice(2)) { const m = /^--([^=]+)(?:=(.*))?$/.exec(a); if (m) flags[m[1]] = m[2] ?? true; }
@@ -39,29 +39,34 @@ const UNLOCK_FOR = { QB: ['passbig'], RB: ['combodrip', 'retyd'], WR: ['combodri
 const BUFFS = ['overtime', 'garbage-time', 'momentum', 'floodgates', 'ot-shield', 'fg-stack', 'counter-nuke', 'insurance', 'unlock-carries-wipe'];
 const price = (id) => powerupById(id)?.price ?? 0;
 
-/** Coin cost of a chosen loadout = unlocks actually used + bought buffs. */
-function costOf(metrics, slugs, buffs) {
+/** Coin the adversary spends BEYOND the honest loadout = unlocks it adds + buffs it
+ *  arms that the honest AI didn't already buy. (Honest buys are matched for free, so
+ *  cost reflects only the adversary's deviation — what the exploit actually costs.) */
+function costOf(metrics, buffs, honest) {
   const unlocks = new Set();
   metrics.forEach((m) => { if (UNLOCK_METRIC[m]) unlocks.add(UNLOCK_METRIC[m]); });
   let c = 0;
-  for (const u of unlocks) c += price(u);
-  for (const b of buffs) c += price(b);
+  for (const u of unlocks) if (!honest.owned.has(u)) c += price(u);
+  for (const b of buffs) if (!honest.buffs.has(b)) c += price(b);
   return c;
 }
 
-/** Search the adversary's best loadout vs a fixed honest opponent on a mirror roster. */
+/** Search the adversary's best loadout vs the REAL shipping honest AI on a mirror
+ *  roster. Both start from the honest AI's actual loadout (aiLoadout) → baseline margin
+ *  is 0, so any margin the search opens is the exploit the oracle finds OVER the
+ *  shipping AI. Re-running this before/after an AI change shows the exploit shrink. */
 function searchLoadout(R, week, allowPaid) {
-  // Build the mirror once: adv (home) and opp (away) both honest, identical picks.
-  const { homePicks, awayPicks } = buildMatchup(R, R, week, {}, {});
+  const honest = aiLoadout(R, `adv:${week}`, week);      // the real shipping loadout (owned/buffs/extra)
+  const { homePicks, awayPicks } = buildMatchup(R, R, week, honest, honest);
   const adv = homePicks.map((p) => ({ win: p.win, slot: p.slot, player: p.player, metricId: p.metricId }));
   const opp = awayPicks;
-  const honestBuffs = new Set();                          // opponent (and FREE adv) run no buffs → clean 0 baseline
+  const oppBuffs = honest.buffs;                          // opponent runs its honest buffs
   const pos = adv.map((p) => slugMeta(p.player.id).pos);
-  const ev = (metrics, buffs) => resolve(adv.map((p, i) => ({ ...p, metricId: metrics[i] })), opp, week, buffs, honestBuffs).margin;
+  const ev = (metrics, buffs) => resolve(adv.map((p, i) => ({ ...p, metricId: metrics[i] })), opp, week, buffs, oppBuffs).margin;
 
   let metrics = adv.map((p) => p.metricId);              // honest start
-  let buffs = new Set();
-  let best = ev(metrics, buffs);                          // == 0 at honest mirror
+  let buffs = new Set(honest.buffs);                      // start matched to honest → baseline 0
+  let best = ev(metrics, buffs);
 
   const ascend = (withUnlocks) => {
     for (let pass = 0; pass < 2; pass++) {
@@ -71,7 +76,7 @@ function searchLoadout(R, week, allowPaid) {
         for (const m of opts) {
           if (metrics[i] === m) continue;
           const trial = metrics.slice(); trial[i] = m;
-          if (allowPaid && costOf(trial, null, buffs) > BUDGET) continue;
+          if (allowPaid && costOf(trial, buffs, honest) > BUDGET) continue;
           const v = ev(trial, buffs);
           if (v > best + 1e-6) { best = v; metrics = trial; }
         }
@@ -90,7 +95,7 @@ function searchLoadout(R, week, allowPaid) {
       for (const b of BUFFS) {
         if (buffs.has(b)) continue;
         const trial = new Set(buffs); trial.add(b);
-        if (costOf(metrics, null, trial) > BUDGET) continue;
+        if (costOf(metrics, trial, honest) > BUDGET) continue;
         const v = ev(metrics, trial);
         if (v > pickV + 1e-6) { pickV = v; pick = b; }
       }
@@ -100,11 +105,12 @@ function searchLoadout(R, week, allowPaid) {
     ascend(true);                                         // re-tune metrics after buffs (FG-stack etc.)
   }
 
-  // Describe the loadout deltas vs honest for lever tallying.
+  // Describe the loadout deltas vs honest for lever tallying (only what the oracle
+  // changed FROM the shipping AI: re-picked metrics + buffs it armed beyond honest).
   const deltas = [];
   for (let i = 0; i < adv.length; i++) if (metrics[i] !== adv[i].metricId) deltas.push(`${pos[i]}→${metrics[i]}`);
-  for (const b of buffs) deltas.push(`+${b}`);
-  return { freeMargin, freeWin: freeMargin > 0, paidMargin: best, paidWin: best > 0, cost: costOf(metrics, null, buffs), deltas };
+  for (const b of buffs) if (!honest.buffs.has(b)) deltas.push(`+${b}`);
+  return { freeMargin, freeWin: freeMargin > 0, paidMargin: best, paidWin: best > 0, cost: costOf(metrics, buffs, honest), deltas };
 }
 
 // ── Run ──────────────────────────────────────────────────────────────────────

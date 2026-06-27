@@ -65,15 +65,14 @@ function schedule(M, W) {
 }
 
 /** Blind budget pass with a CARRIED-OVER wallet (no per-week reseed). Mirrors
- *  server/src/lock.js:aiBudgetPass priority order: combo-drip → buffs → extra slots. */
+ *  server/src/lock.js:aiBudgetPass priority order: EV buffs → combo-drip → extra slots. */
 function seasonBudget(wallet, roster, key, week) {
   let bal = wallet;
   const owned = new Set(), buffs = new Set();
   let extra = 0;
   const buy = (item) => { const p = powerupById(item)?.price ?? 9999; if (bal >= p) { bal -= p; return true; } return false; };
-  const desired = [];
+  const desired = [...aiLiveBuffs(key, week)];
   if (roster.some((s) => wantsComboDrip(s, slugMeta(s).pos))) desired.push('unlock-combo-drip');
-  for (const b of aiLiveBuffs(key, week)) desired.push(b);
   for (const item of desired) if (buy(item)) (item.startsWith('unlock-') ? owned : buffs).add(item);
   for (let i = 0; i < EXTRA_SLOT_CAP; i++) { if (buy('extra-slot')) extra++; else break; }
   return { owned, buffs, extra, wallet: bal };

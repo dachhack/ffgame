@@ -63,6 +63,16 @@ the top exploit lines.
 npx tsx tools/playtester/adversary.mjs --week=1-14 --n=40 --budget=200
 ```
 
+## `iterate.mjs` — step 4: AI policy A/B
+Pits a candidate AI policy against the current shipping one on a MIRROR roster (both blind,
+same players → the margin is the pure policy edge). Sweeps combodrip thresholds and buy
+order to choose a change *before* touching `src/data/aiLineup.ts`. The first shipped win:
+buy the EV offensive buffs (momentum/overtime/garbage-time) instead of the old random draw.
+
+```
+npx tsx tools/playtester/iterate.mjs --week=1-14 --n=120
+```
+
 ## `scenario.mjs` — targeted suspect probes
 Hand-built best-case lines for the handoff's "prime suspects" (TE-TD nuke trigger
 rate + cascade, Twin Generals fg-stack multiplier, unilateral extra-slot coin farm) —

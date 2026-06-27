@@ -145,17 +145,42 @@ RB stacks + a drip amplifier (momentum/overtime/garbage-time)**.
 5. **Decide the 100-coin / extra-slot interaction** (§1): at 100 the AI never reaches an
    80-coin extra slot. Fine if intended; raise the seed or re-order the budget pass otherwise.
 
-**AI rule set — the one clear, blind-legal win: arm Combo Drip more aggressively.** The
-season sim shows the current blind AI is already balanced and roster-driven (no honest win
-from opponent-awareness, which would break the blind rule anyway — retracted). But §3 shows
-the AI's combodrip gate (`wantsComboDrip`, 20/20 ypg) is **too conservative**: Combo Drip is
-broadly strong and is **pre-game knowable** (it reads season stats, not the week's result),
-so a smarter AI captures most of the adversary's edge *without hindsight*. Concrete next step:
-- **Loosen `COMBO_RUSH_YPG` / `COMBO_REC_YPG`** (and/or prioritise the `unlock-combo-drip` buy
-  in `aiBudgetPass`), then validate the honest win-rate lift with `aggregate.mjs` and confirm
-  the adversary's margin over the improved AI **shrinks**.
-- Still blind: the AI reads only its own roster + the opponent's roster-by-window, never the
-  opponent's starters/metrics/buys.
+**AI rule set** — see §5: the first iteration is **done and validated**. (Note: the §3
+hypothesis "loosen Combo Drip" was tested in `iterate.mjs` and **rejected** — at the 100-coin
+seed combodrip crowds out a better buff and only helps a genuine dual-threat. The actual win
+was fixing the AI's buff buying. This is exactly why we measure before shipping.)
 
-_Next: drive the Combo-Drip AI loosening through `aggregate.mjs` (does honest win-rate rise
-and the adversary's edge fall?), then the NUKE retune._
+## 5. AI iteration — first validated change (`iterate.mjs`, step 4)
+Method: pit a candidate AI policy against the current one on a **mirror roster, both blind**
+(same players → the margin is the pure policy edge). Sweep, pick the winner, ship it, re-check
+for regressions. 1,680 mirror draws/policy.
+
+| candidate vs current | win vs current | avg margin |
+|---|--:|--:|
+| loosen combodrip gate (10/6, 8/5, …) | 39–41% | ~0 | _(rejected — no edge)_ |
+| **buy EV buffs (momentum/overtime/garbage-time), drop the random draw** | **59.5%** | **+6.6** |
+| combodrip-first then EV buffs | 24% | +3.0 | _(crowds out the buff)_ |
+
+**Root cause:** the shipping AI drew 3 buffs at *random* from a pool that included the
+defensive buffs `floodgates`/`ot-shield` — **dead vs the honest field (§2)** — and bought the
+`combodrip` unlock *first*. At a 100-coin seed you can afford only one thing, so it often
+bought a dead buff or spent on combodrip (which only pays for a true dual-threat) instead of a
+drip amplifier that always helps. **Fix (shipped):**
+- `src/data/aiLineup.ts` — `AI_LIVE_BUFFS` → `['momentum','overtime','garbage-time']` (EV
+  order, dead defensive buffs dropped); `aiLiveBuffs` returns them rotated per team, not sampled.
+- `server/src/lock.js` (`aiBudgetPass`) + the harness mirror — **buy buffs before the combodrip
+  unlock**.
+
+**Validation (no regression):** season sim after the change — economy still bounded (wallet
+94–101), cancellation r=0.95, wins-vs-roster r=0.60, home WR 50.4%, mean team score 58→60; buy
+mix is now all EV buffs (no dead buffs), combodrip only when a team banks enough (~1/season).
+
+**On the adversary:** its margin over the AI is **unchanged** (FREE ~flat, PAID +68→+72) — and
+that's expected. We improved the AI's *blind buying*, not the game's *mechanics*; a hindsight
+oracle with 2× the budget inherits the better buffs for free and exploits past them, so its
+ceiling is mechanic-bound. The right proof of this change is the **head-to-head** above, not the
+oracle margin. To pull the oracle's ceiling down you must retune mechanics (the drip economy /
+NUKE, §4) — the next lever.
+
+_Next: a mechanics retune (drip-amplifier diminishing returns and/or a Combo-Drip limit) driven
+by the adversary's ceiling, then re-validate that the oracle's margin actually falls._
