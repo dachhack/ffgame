@@ -84,17 +84,20 @@ prefetch across ticks, incremental play fetch, bigger VM) before scaling further
 - [ ] Operational cap: don't `sync` more than ~100 leagues (worker
       `PILOT_LEAGUE_IDS` / admin imports) — the only thing to watch.
 
-## 2d · Observability + ops runbook  _(days, parallel to 2b)_
-- [ ] Error alerting on the worker (failed polls, resolve exceptions, stuck
-      locks) beyond `fly logs`.
-- [ ] Wire an on-call health view onto the existing pilot-ops RPCs
-      (`supabase/migrations/0021_pilot_ops.sql`: pick-readiness / system-health).
-- [ ] Write the weekly Sunday ops runbook: when `sync` / `sync-week` run, how to
-      confirm lock, what to watch live. Note the `sync.yml` / `simulate.yml`
-      GitHub Actions run ops without local creds.
-- [ ] Decide: enable the built-but-not-defaulted weekly auto-sync
-      (`SYNC_CHECK_MS` / `WEEKLY_SYNC_MS` in `server/src/config.js`) vs. running
-      `sync-week` manually each week.
+## 2d · Observability + ops runbook  ✅ mostly done
+- [x] **On-call health view already exists:** `AdminPage.tsx` surfaces
+      `admin_health()` (ingest/resolve freshness, status mix, live counts) +
+      `admin_pick_readiness()` (straggler chasing), from `0021_pilot_ops`.
+- [x] **Sunday ops runbook written:** `docs/sunday-ops-runbook.md` — weekly
+      cadence, the freshness-timestamp heartbeat, incident playbook, quick ref.
+- [ ] **One gap — push alerting** (optional for the pilot): nothing pages you;
+      you watch the Health panel + `fly logs` during games. Cheap fix when wanted:
+      a dead-man's-switch polling `admin_health()` that alerts if
+      `last_state_update` goes stale in a live window. (Logged in plan + runbook.)
+- [ ] **Decide weekly auto-sync:** worker currently logs `no PILOT_LEAGUE_IDS set
+      — weekly auto-sync disabled`. Either set `PILOT_LEAGUE_IDS` (enables the
+      built-in `SYNC_CHECK_MS`/`WEEKLY_SYNC_MS` loop) or run `sync-week-all`
+      manually each week (runbook covers both).
 
 ## Exit criteria → unlocks Phase 1 (preseason live-fire)
 - [ ] Worker live on Fly, scheduler ticking, **service-role key rotated**.
