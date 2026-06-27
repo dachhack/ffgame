@@ -90,29 +90,72 @@ balance (§1 covers that). 1,680 pairs/lever, seed 4242.
 - §2's defensive-buff verdict is **vs the honest field only**; price them vs a nuking
   adversary (step 3).
 
-## 3. Recommendations
-**Balance (retune targets), in priority order:**
-1. **Revive NUKE as a counter** (finding 4). Options: make the TE-TD drip-knock *permanent
-   and larger* (it's currently out-accrued), or scale the wipe to a share of the opponent's
-   *rate* not just the banked total, or cut NUKE's opportunity cost so a `td` pick doesn't
-   forfeit all drip. Use `aggregate.mjs` to confirm `td` lands near 50% (a real choice) without
-   overshooting.
-2. **Re-price the dead defensive buffs** (finding 3) or give them an honest-field use, so
-   they aren't trap purchases vs non-nuking opponents.
-3. **Watch the FG / Twin-Generals ceiling** (finding 5) once the adversary (step 3) shows how
-   far a searching opponent can push it; the multiplier-on-multiplier is the thing to cap.
-4. **Decide on the 100-coin / extra-slot interaction** (§1): at 100 the AI never reaches
-   extra slots. Fine if intended; if you want extra-slots in the AI's repertoire, either
-   raise the seed or re-order the budget pass.
+## 3. The adversary — hindsight exploit oracle (`adversary.mjs`)
+A search tool (not what ships): a MIRROR roster vs a fixed honest opponent (baseline
+margin **exactly 0**, verified), where the adversary searches its loadout WITH hindsight.
+Any margin is a pure loadout exploit on identical material. 560 draws (40/wk × 14).
 
-**AI rule set** — the season sim shows the *current* blind AI is already balanced and
-roster-driven, so there's **no honest-play win to chase from opponent-awareness** (and it
-would violate the blind rule anyway — retracted from the earlier draft). The remaining AI
-work is about **playing the retuned mechanics well**, measured by the harness:
-- Once NUKE is a viable counter, teach the AI when to field it (still blind — off its own
-  roster + the opponent's roster-by-window, never their starters/metrics).
-- Lean into Field General (the highest honest ceiling): test lowering `FG_DRIP_THRESHOLD`
-  and buying `fg-stack` when the roster has 2 QBs sharing a window.
+| budget | adversary win | avg margin | avg cost |
+|---|--:|--:|--:|
+| **0 (metrics only, FREE)** | **94.6%** | +11.8 | 0 |
+| 65 (one unlock) | 100% | +23.4 | 61 |
+| 135 | 100% | +39.6 | 127 |
+| 200 | 100% | +62.7 | 191 |
 
-_Next: build the adversary (step 3) to price the defensive buffs and the FG/Twin-General
-ceiling against a searching opponent, then drive the NUKE retune through `aggregate.mjs`._
+**Recurring exploit levers** (share of draws the search adopts): `RB→combodrip` (>100% —
+it stacks *multiple* RBs onto Combo Drip), `QB→passbig` (air-raid) 65%, `+garbage-time`
+53%, `+overtime` 41%, `+momentum` 30%, plus `WR/TE→tgt` (denial) as a counter to the
+opponent's drip. **Top lines reach +160 to +260** for ~195 coin — all built on **Combo-Drip
+RB stacks + a drip amplifier (momentum/overtime/garbage-time)**.
+
+### What the adversary teaches
+1. **The degenerate engine is the DRIP ECONOMY — Combo Drip + amplifiers — not the
+   handoff's suspects.** The search almost never reaches for FG×FG / Twin Generals or TE-TD
+   nuke cascades; it pours points through stacked Combo Drip amplified by momentum/overtime.
+   `td` (NUKE) shows up only as a situational counter (~15% of draws), never as the engine —
+   confirming §2's "NUKE is weak" from the other direction.
+2. **Honest play is reliably beatable by an INFORMED opponent, and the cheapest exploit is
+   already reachable** (100% win for one 65-coin unlock). Two honest caveats: (a) it's
+   hindsight, so on identical material with a 0 baseline *some* positive margin is expected —
+   the **structural** signal (the narrow combodrip+amplifier region) is the takeaway, not the
+   raw margin; (b) the opponent here runs no buffs (for a clean 0 baseline), so PAID margins
+   are an upper bound. **In symmetric play these buys cancel (§1)** — the exploit bites only
+   a *fixed*, non-adapting opponent.
+3. **Combo Drip is largely PRE-GAME knowable** (`wantsComboDrip` reads season stats, not
+   hindsight), so most of this edge is **blind-legal** — i.e. a smarter shipping AI could
+   capture it without cheating. The honest AI's 20/20-ypg combodrip gate is **too
+   conservative**: the adversary arms combodrip far more widely and wins.
+
+## 4. Recommendations
+**Balance (retune targets), in priority order — now informed by the adversary (§3):**
+1. **The drip economy is the dominant strategy region — tune it first.** Combo Drip stacked
+   with momentum/overtime/garbage-time is where every exploit line lives (§3). It doesn't
+   *break* symmetric play (it cancels, §1), but it's the gravity well: the most rewarding,
+   least diverse path. Consider a Combo-Drip cost/limit (one per lineup?), a softer amplifier
+   stack (diminishing returns when momentum+overtime+garbage-time pile on the same drip), or
+   a drip-rate cap, and re-measure the adversary's ceiling.
+2. **Revive NUKE as a counter** (§2 finding 4). It's strictly bad today (RB/WR→`td` is −26/−30;
+   TE-TD fires 31% and *lowers* win-rate) and the adversary only touches it situationally.
+   Make the TE-TD drip-knock permanent/larger (it's currently out-accrued) or cut NUKE's
+   opportunity cost, then confirm `td` lands near 50% in `aggregate.mjs` without overshooting.
+3. **Re-price the dead defensive buffs** (§2 finding 3) — floodgates/counter-nuke/insurance
+   are traps vs non-nuking opponents; give them an honest-field use or drop their price.
+4. **De-prioritise the FG / Twin-Generals and TE-TD-cascade retunes.** They're real ceilings
+   but the adversary doesn't choose them — combodrip+amplifiers dominate. Watch, don't rush.
+5. **Decide the 100-coin / extra-slot interaction** (§1): at 100 the AI never reaches an
+   80-coin extra slot. Fine if intended; raise the seed or re-order the budget pass otherwise.
+
+**AI rule set — the one clear, blind-legal win: arm Combo Drip more aggressively.** The
+season sim shows the current blind AI is already balanced and roster-driven (no honest win
+from opponent-awareness, which would break the blind rule anyway — retracted). But §3 shows
+the AI's combodrip gate (`wantsComboDrip`, 20/20 ypg) is **too conservative**: Combo Drip is
+broadly strong and is **pre-game knowable** (it reads season stats, not the week's result),
+so a smarter AI captures most of the adversary's edge *without hindsight*. Concrete next step:
+- **Loosen `COMBO_RUSH_YPG` / `COMBO_REC_YPG`** (and/or prioritise the `unlock-combo-drip` buy
+  in `aiBudgetPass`), then validate the honest win-rate lift with `aggregate.mjs` and confirm
+  the adversary's margin over the improved AI **shrinks**.
+- Still blind: the AI reads only its own roster + the opponent's roster-by-window, never the
+  opponent's starters/metrics/buys.
+
+_Next: drive the Combo-Drip AI loosening through `aggregate.mjs` (does honest win-rate rise
+and the adversary's edge fall?), then the NUKE retune._

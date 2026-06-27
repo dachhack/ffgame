@@ -51,6 +51,18 @@ npx tsx tools/playtester/aggregate.mjs --week=1-14 --n=120
 npx tsx tools/playtester/aggregate.mjs --week=1 --n=300 --only=te-nuke-all,momentum
 ```
 
+## `adversary.mjs` — step 3: hindsight exploit oracle
+A search *tool* (not what ships). Plays a MIRROR roster against a fixed honest opponent
+(baseline margin exactly 0) and searches its own loadout WITH hindsight of the baked week
+— coordinate ascent on per-slot metric + greedy buff add + priced metric-unlocks — to find
+the strongest line. Any margin is a pure loadout exploit on identical material. Reports a
+FREE (0-coin, metrics only) and PAID (≤budget) reading, the recurring exploit levers, and
+the top exploit lines.
+
+```
+npx tsx tools/playtester/adversary.mjs --week=1-14 --n=40 --budget=200
+```
+
 ## `scenario.mjs` — targeted suspect probes
 Hand-built best-case lines for the handoff's "prime suspects" (TE-TD nuke trigger
 rate + cascade, Twin Generals fg-stack multiplier, unilateral extra-slot coin farm) —
