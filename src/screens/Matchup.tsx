@@ -2237,7 +2237,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
     // During live, the starter plays its own head-to-head; the backup accrues
     // in its own row.
     const sub = side === 'you' ? slot.youSub : slot.theirSub;
-    if (phase === 'final' && sub) return sub.score;
+    if (final && sub) return sub.score;
     if (side === 'you' && slot.byeStolen) return slot.youFinal; // bye steal: flat projection
     // Negation/halving are end-of-game outcomes — only resolve them at FINAL;
     // during live the slot plays its own head-to-head (0 at kickoff).
@@ -2262,8 +2262,8 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
   const isFgSrc = (p: { player: Player; metricId: string }) => p.player.pos === 'QB' && p.metricId === 'fg';
   const youFg = slot.youFgMult && !isFgSrc(slot.you) ? slot.youFgMult(youClock) : undefined;
   const theirFg = slot.theirFgMult && !isFgSrc(slot.their) ? slot.theirFgMult(theirClock) : undefined;
-  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} twin={youTwin} />;
-  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={phase === 'final' ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} />;
+  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={final ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} twin={youTwin} />;
+  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={final ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} />;
   const centerKids = (
     <>
       {slot.events.length > 0 && (
@@ -2281,17 +2281,17 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
       {slot.events.length > 0 && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 14, marginTop: 4 }}>{centerKids}</div>
       )}
-      {incomingName && !(phase === 'final' && slot.youSub) && (
+      {incomingName && !(final && slot.youSub) && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', marginTop: 3 }}>
           🛟 backup {incomingName} on standby{final ? ' — did not sub in' : ''}
         </div>
       )}
-      {phase === 'final' && slot.youSub && (
+      {final && slot.youSub && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', marginTop: 3 }}>
           ⤴ BACKUP {slot.youSub.name} subs in for {slot.you.player.name} · {slot.youSub.from.toFixed(1)} → {slot.youSub.score.toFixed(1)}
         </div>
       )}
-      {phase === 'final' && slot.theirSub && (
+      {final && slot.theirSub && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--opp)', marginTop: 3, textAlign: 'right' }}>
           {slot.their.player.name} ← BACKUP {slot.theirSub.name} ⤴ · {slot.theirSub.from.toFixed(1)} → {slot.theirSub.score.toFixed(1)}
         </div>
