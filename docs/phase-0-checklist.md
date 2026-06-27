@@ -10,21 +10,23 @@ weeks; the load test (2b) is the long pole. Tick boxes as they land; the
 > normal network or the deployed worker. Sandbox can still build, syntax-check,
 > and run the offline `validate`/`simulate --dry` gates.
 
-## 2a · Deploy the worker to Fly  _(days — the blocker)_
-- [ ] **Rotate the Supabase service-role key** (Supabase → Project Settings →
-      API). The old one was shared in chat during setup — rotate before it ever
-      ships. _(`docs/pilot-handoff.md` flags this.)_
-- [ ] `fly auth login`; create the app if needed (`drip-pilot-worker`).
-- [ ] `fly secrets set SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=<rotated>`
-      (+ optional `PILOT_LEAGUE_IDS` for the weekly auto-sync loop).
-- [ ] Deploy from the repo root: **`server/scripts/deploy.sh`** (wraps
-      `server/DEPLOY.md` with preflight + the rotation reminder).
-- [ ] Confirm the scheduler ticks in `fly logs` (player index → injuries → lock →
-      poll → resolve). Offseason caveat: no live scoring until preseason.
+## 2a · Deploy the worker to Fly  ✅ DONE + verified (2026-06-27)
+- [x] **Rotated** the service-role key (twice — see note). GitHub secret updated
+      + verified green; Fly secret set. _(A further rotation is pending: the key
+      was visible in a deploy screenshot — re-rotate + update GitHub + Fly when done.)_
+- [x] `fly auth login`; app `drip-pilot-worker` created (iad / us-east-1).
+- [x] `fly secrets set SUPABASE_URL … SUPABASE_SERVICE_ROLE_KEY …`.
+- [x] Deployed (`fly deploy`); machine `e82e9e0b600668` running.
+- [x] Scheduler verified in `fly logs`: `player index built: 12200 players` →
+      `injuries 140` → `resolved 6 / 6 matchups` every ~25s. Full pipeline
+      (query → prefetch → resolve → write) live against the DB. No live scoring
+      (offseason) — expected.
 - [x] Dockerfile now also bundles `public/pbp`, `server/scripts`, `server/test`,
       so the on-worker dress rehearsal (`fly ssh … simulate`), `npm run smoke`,
       and the 2b scale re-run (`loadtest.mjs`) work in the deployed image.
-      `SUPABASE_SERVICE_ROLE_KEY` GitHub secret already rotated + verified green.
+- [ ] **Re-deploy from this branch** before the 2b load-test re-run: the running
+      image predates the Dockerfile fix above (the secrets-set restart reused the
+      same image sha), so it lacks `public/pbp` + `server/scripts`. `fly deploy`.
 
 ## 2b · Load-test at 100-league scale, offline  _(1–2 weeks — long pole)_
 Proves the bottleneck `supabase/migrations/0034_scale_index.sql` was written for,
