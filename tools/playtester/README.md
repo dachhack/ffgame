@@ -13,8 +13,21 @@ Run everything under `tsx` (resolves the `.ts` engine imports), from the repo ro
 ## `lib.mjs` — substrate
 Baked-week loader + player pool, seeded RNG, projection-weighted roster draw, the
 `AiPick → LivePick` adapter, a pure mirror of the AI's coin budget pass
-(`aiLoadout`, matching `server/src/lock.js:aiBudgetPass`), and `resolve()` which
-annotates a `LiveResult` with margin / winner / biggest-slot swing.
+(`aiLoadout`, matching `server/src/lock.js:aiBudgetPass`, season seed **100**), and
+`resolve()` which annotates a `LiveResult` with margin / winner / biggest-slot swing.
+`buildMatchup()` builds both lineups together so **Extra Slot is symmetric** — a bought
+slot is contested (both sides field a bench player there), not a free unopposed slot.
+
+## `season.mjs` — full-season AI-vs-AI economy (primary balance lens)
+A league of full-logic blind AI teams over a whole season with a **persistent,
+carried-over** wallet (start 100). Answers what single-week runs can't: does coin run
+away, do symmetric power-ups cancel out, are they a mandatory tax? Reports the wallet
+trajectory, buy mix, a standings-correlation cancellation test, and a one-team opt-out
+mandatory-tax probe.
+
+```
+npx tsx tools/playtester/season.mjs --teams=12 --weeks=14 --seasons=40
+```
 
 ## `harness.mjs` — step 1: honest-field meta
 Both sides field the shipping AI's real loadout (no hindsight). Reports score /

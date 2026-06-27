@@ -11,8 +11,9 @@
 // (single-lever A/B) are thin CLIs over it. Run anything that imports it under tsx.
 import { readFileSync } from 'node:fs';
 import { injectWeek, resolveLiveMatchup, makePlayer } from '../../server/src/engine.js';
-import { aiLineup, aiLiveBuffs, wantsComboDrip } from '../../src/data/aiLineup.ts';
+import { aiLineup, aiLiveBuffs, wantsComboDrip, defaultAiMetric } from '../../src/data/aiLineup.ts';
 import { slugMeta } from '../../src/data/slugMeta.ts';
+import { hasSlate, windowForTeam } from '../../src/data/nflSlate.ts';
 import { statsForSlug } from '../../src/data/players.ts';
 import { powerupById } from '../../src/data/powerups.ts';
 
@@ -101,7 +102,7 @@ export function toLive(picks) {
 // roster has a dual-threat, then up to 3 in-slot buffs from the deterministic
 // aiLiveBuffs draw, then extra slots up to the cap — spending only what it can
 // afford. Returns { owned, buffs, extra } to feed aiLineup + resolveLiveMatchup.
-const WALLET_SEED = 150, EXTRA_SLOT_CAP = 2;
+export const WALLET_SEED = 100, EXTRA_SLOT_CAP = 2; // season-start balance (mirrors wallet_seed())
 export function aiLoadout(slugs, key, week) {
   let bal = WALLET_SEED;
   const owned = new Set(), buffs = new Set();
@@ -134,6 +135,65 @@ export function buildSide(roster, week, { owned = new Set(), extra = 0, metricOv
   return toLive(picks);
 }
 
+// ── Coordinated matchup builder — SYMMETRIC extra slots ──────────────────────
+// Extra Slot adds a slot to a window "for you AND your opponent": a bought slot is
+// CONTESTED, not unopposed. So we build both lineups together — each buyer picks
+// its deepest-bench windows, and EVERY created slot is filled by BOTH sides from
+// their own bench (or left empty if a side is thin there). This is the correct
+// model (the unilateral "buildSide(extra)" over-credits the buyer with the 15-coin
+// unopposed bounty + a free best-ball slot, which the symmetric slot denies).
+//   load = { owned?:Set, extra?:int, metricOverride?:fn } per side.
+function sideLineup(roster, week, load, c) {
+  let picks = aiLineup(roster, week, load.owned ?? new Set(), 0); // base 8 — extra handled below
+  if (load.metricOverride) picks = picks.map((p) => { const o = load.metricOverride(p, slugMeta(p.slug).pos); return o ? { ...p, metric: o } : p; });
+  const slotted = new Set(picks.map((p) => p.slug));
+  const bench = [];
+  for (const slug of roster) {
+    if (slotted.has(slug)) continue;
+    const { pos, team } = slugMeta(slug);
+    const win = hasSlate(week) ? windowForTeam(week, team) : null;
+    if (!win) continue; // bye / no slate → unfieldable this week
+    bench.push({ slug, pos, win, proj: c.proj.get(slug) || 0 });
+  }
+  bench.sort((a, b) => b.proj - a.proj); // best bench fielded first
+  return { picks: [...picks], bench, extra: load.extra ?? 0 };
+}
+
+function deepestWindows(bench, n) {
+  const avail = new Map();
+  for (const b of bench) avail.set(b.win, (avail.get(b.win) || 0) + 1);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    let best = null, bc = 0;
+    for (const [w, k] of avail) if (k > bc) { best = w; bc = k; }
+    if (!best) break;
+    out.push(best); avail.set(best, avail.get(best) - 1);
+  }
+  return out;
+}
+
+export function buildMatchup(homeRoster, awayRoster, week, homeLoad = {}, awayLoad = {}) {
+  const c = useWeek(week);
+  const H = sideLineup(homeRoster, week, homeLoad, c);
+  const A = sideLineup(awayRoster, week, awayLoad, c);
+
+  // Union the two buyers' chosen windows; each gets x0,x1,… and BOTH sides fill it.
+  const winCounts = new Map();
+  for (const w of [...deepestWindows(H.bench, H.extra), ...deepestWindows(A.bench, A.extra)]) winCounts.set(w, (winCounts.get(w) || 0) + 1);
+  const byWin = (s) => { const m = new Map(); for (const b of s.bench) { if (!m.has(b.win)) m.set(b.win, []); m.get(b.win).push(b); } return m; };
+  const hbw = byWin(H), abw = byWin(A);
+  for (const [w, count] of winCounts) {
+    for (let k = 0; k < count; k++) {
+      const slot = `x${k}`;
+      const hp = (hbw.get(w) || []).shift();
+      const ap = (abw.get(w) || []).shift();
+      if (hp) H.picks.push({ win: w, slot, slug: hp.slug, metric: defaultAiMetric(hp.pos) });
+      if (ap) A.picks.push({ win: w, slot, slug: ap.slug, metric: defaultAiMetric(ap.pos) });
+    }
+  }
+  return { homePicks: toLive(H.picks), awayPicks: toLive(A.picks) };
+}
+
 // ── Resolve + enrich ─────────────────────────────────────────────────────────
 /** Resolve a full matchup from already-built LivePicks and per-side buff sets,
  *  and annotate the raw LiveResult with the signals the aggregator scans. */
@@ -154,14 +214,14 @@ export function resolve(homePicks, awayPicks, week, homeBuffs = new Set(), awayB
   };
 }
 
-/** One fully-honest matchup (both sides field the shipping AI's real loadout). */
+/** One fully-honest matchup (both sides field the shipping AI's real loadout,
+ *  with extra slots resolved symmetrically). */
 export function honestMatch(rand, week, key = 'm') {
   const c = useWeek(week);
   const hr = drawRoster(rand, c), ar = drawRoster(rand, c);
   const hl = aiLoadout(hr, `${key}:home`, week), al = aiLoadout(ar, `${key}:away`, week);
-  const home = buildSide(hr, week, { owned: hl.owned, extra: hl.extra });
-  const away = buildSide(ar, week, { owned: al.owned, extra: al.extra });
-  const r = resolve(home, away, week, hl.buffs, al.buffs);
+  const { homePicks, awayPicks } = buildMatchup(hr, ar, week, { owned: hl.owned, extra: hl.extra }, { owned: al.owned, extra: al.extra });
+  const r = resolve(homePicks, awayPicks, week, hl.buffs, al.buffs);
   return { ...r, homeRoster: hr, awayRoster: ar, homeLoad: hl, awayLoad: al };
 }
 

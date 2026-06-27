@@ -1,0 +1,13 @@
+-- Lower the season starting drip-coin balance 150 → 100.
+--
+-- wallet_seed() is the single source of truth for the season-start balance (used by
+-- both ensure_wallet() for humans and the worker's AI budget pass in lock.js), so
+-- redefining it here changes it everywhere at once. Existing wallets already seeded
+-- at 150 keep their balance (the 'seed' credit is idempotent and not re-run); this
+-- sets the amount for teams seeded from now on.
+--
+-- Rationale: the automated playtester's full-season AI-vs-AI economy sim
+-- (tools/playtester/season.mjs) shows 100 keeps coin SCARCE — weekly spend ≈ weekly
+-- earnings, so the wallet stays bounded near 100 all season instead of accumulating,
+-- and power-up choices become real budget trade-offs rather than auto-buy-everything.
+create or replace function wallet_seed() returns numeric language sql immutable as $$ select 100::numeric $$;

@@ -13,7 +13,7 @@
 //   npx tsx tools/playtester/aggregate.mjs --week=1 --n=300 --only=te-nuke-all,momentum
 //
 // Flags: --week  --n (paired matchups/week/lever)  --seed  --only=a,b,c
-import { rng, useWeek, drawRoster, buildSide, resolve, slugMeta, powerupById, parseWeeks, mean, fmt } from './lib.mjs';
+import { rng, useWeek, drawRoster, buildMatchup, resolve, slugMeta, powerupById, parseWeeks, mean, fmt } from './lib.mjs';
 
 const flags = {};
 for (const a of process.argv.slice(2)) { const m = /^--([^=]+)(?:=(.*))?$/.exec(a); if (m) flags[m[1]] = m[2] ?? true; }
@@ -79,13 +79,14 @@ for (const week of weeks) {
   const rand = rng(seed + week * 7919);
   for (let i = 0; i < N; i++) {
     const hr = drawRoster(rand, c), ar = drawRoster(rand, c);
-    // Stripped-honest away side (rebuilt identically for control + every treatment).
-    const awayPicks = buildSide(ar, week, {});
-    // Control: stripped-honest home too.
-    const ctrl = resolve(buildSide(hr, week, {}), awayPicks, week);
+    // Control: both sides stripped honest (no loadout). Symmetric builder.
+    const ctrlPair = buildMatchup(hr, ar, week, {}, {});
+    const ctrl = resolve(ctrlPair.homePicks, ctrlPair.awayPicks, week);
     for (const l of levers) {
       const t = l.build(hr, c) || {};
-      const homePicks = buildSide(hr, week, { owned: t.owned, extra: t.extra || 0, metricOverride: t.metricOverride });
+      // Home arms one lever; away stays stripped honest. Extra slots resolve
+      // SYMMETRICALLY (away fields a bench player in any slot home creates).
+      const { homePicks, awayPicks } = buildMatchup(hr, ar, week, { owned: t.owned, extra: t.extra || 0, metricOverride: t.metricOverride }, {});
       const r = resolve(homePicks, awayPicks, week, t.buffs ?? new Set(), new Set());
       const st = stats.get(l.id);
       st.n++;
