@@ -195,6 +195,38 @@ NUKE, §4) — the next lever.
 _Next: a mechanics retune (drip-amplifier diminishing returns and/or a Combo-Drip limit) driven
 by the adversary's ceiling, then re-validate that the oracle's margin actually falls._
 
+## 8. Window-level metric optimization (`window.mjs`) — already near-optimal
+Question: have the AI find optimal combinations of players/metrics/power-ups *within a
+window*. The one real in-window synergy is **Field General** (a QB on `fg` scores 0 but
+multiplies its window's drips), so we A/B'd candidate FG rules — count- and projected-yard-
+weighted — vs the shipping "≥2 drip teammates" rule (mirror roster, blind).
+
+- **No rule beats the current one.** Every alternative is within noise or worse: `never`
+  and `count≥3` *lose* (−3.0 margin — the FG flips do help), `count≥1`/`yds≥40` slightly
+  over-flip (−1 to −1.4), and the best alternative (`yds≥100`) is a statistical tie (+0.4,
+  5% decisive wins). The shipping `count≥2` sits at the optimum.
+- Combined with §4 (metric defaults near-optimal), §5 (the AI's real win was buying EV
+  buffs, not metrics), and the best-player fielding fix (§ commit), **the blind within-window
+  metric space is essentially flat** — there's no free win left from a smarter heuristic.
+
+**Why blind window-optimization is flat here:** (a) the engine rewards the drip defaults, so
+non-drip metrics are mostly opportunity cost; (b) the FG synergy is already captured at its
+optimum; (c) the genuinely strong plays are *opponent-dependent* (NUKE as a counter, §6), and
+the blind rule forbids reading the opponent's starters/metrics pre-lock; (d) everything cancels
+in symmetric play anyway (§1). We then tested the one lever that *might* have added value — **opponent-
+ROSTER-aware counters** (`counter.mjs`): the blind rule allows seeing the opponent's players per
+window, so meet a drip-heavy opponent window with a now-viable NUKE. **Measured: it hurts**
+(home win-rate 43.5%, margin lift −11 across thresholds). Sacrificing a skill player to `td`
+loses because you forfeit its drip, your player rarely scores the TD the nuke needs, and a
+drip-heavy *roster* doesn't mean the *starter* in your matched slot is the big drip — the read
+is too noisy. So even opponent-roster awareness doesn't beat the honest defaults blind.
+
+**Conclusion: the AI's within-window optimization is at its blind ceiling.** Best-player
+fielding (§ commit) + drip defaults (§4) + the tuned FG rule (§8) + EV-buff buying (§5) is
+already near-optimal; every richer "combination optimizer" tested (yard-weighted FG, opponent-
+roster nuke counters) is neutral-to-negative. The headroom that exists is *hindsight-only* (§3)
+or *symmetric-cancelling* (§1) — neither is a shippable blind win.
+
 ## 7. Does recent form help the AI? (`form.mjs`) — measured, mostly NO
 Question: wire in 2025 weekly stats so the AI makes "crude predictions from the weeks
 leading up" to optimize player / metric / power-up choices. The baked PBP *is* per-week

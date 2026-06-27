@@ -73,6 +73,17 @@ buy the EV offensive buffs (momentum/overtime/garbage-time) instead of the old r
 npx tsx tools/playtester/iterate.mjs --week=1-14 --n=120
 ```
 
+## `window.mjs` / `counter.mjs` — within-window optimization
+`window.mjs` A/Bs Field General rules (the main in-window synergy) vs the shipping "≥2
+drips" rule; `counter.mjs` tests opponent-roster-aware NUKE counters. Both find the
+current AI is at its blind ceiling — no rule beats `count≥2`, and counters hurt (findings
+§8). Useful as the evidence that within-window metric optimization has no free win blind.
+
+```
+npx tsx tools/playtester/window.mjs  --week=1-14 --n=200
+npx tsx tools/playtester/counter.mjs --week=1-14 --n=300
+```
+
 ## `form.mjs` — does recent form beat season projection?
 Tests whether trailing weekly stats (the baked PBP *is* per-week 2025 data) improve AI
 player selection, before wiring live weekly stats. Mirror roster, both blind, recent-form
