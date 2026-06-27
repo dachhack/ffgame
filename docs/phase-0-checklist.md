@@ -21,6 +21,10 @@ weeks; the load test (2b) is the long pole. Tick boxes as they land; the
       `server/DEPLOY.md` with preflight + the rotation reminder).
 - [ ] Confirm the scheduler ticks in `fly logs` (player index → injuries → lock →
       poll → resolve). Offseason caveat: no live scoring until preseason.
+- [x] Dockerfile now also bundles `public/pbp`, `server/scripts`, `server/test`,
+      so the on-worker dress rehearsal (`fly ssh … simulate`), `npm run smoke`,
+      and the 2b scale re-run (`loadtest.mjs`) work in the deployed image.
+      `SUPABASE_SERVICE_ROLE_KEY` GitHub secret already rotated + verified green.
 
 ## 2b · Load-test at 100-league scale, offline  _(1–2 weeks — long pole)_
 Proves the bottleneck `supabase/migrations/0034_scale_index.sql` was written for,
@@ -59,12 +63,13 @@ cut ~30 %), confirming it's latency-bound. **Optimization landed:** bulk-prefetc
 of the per-tick reads (see plan §4 + `server/src/resolve.js:prefetchTick`),
 collapsing ~3,600 reads/tick into ~5. Re-measure from the worker to confirm.
 
-## 2c · Close the signup gate  _(days)_
-- [ ] Add the **email-allowlist / closed-signup** check so only approved emails
-      can create an account (invite codes already gate *league* entry, not account
-      creation). New RPC/table + a check in `LiveOnboard.tsx` /
-      `liveApi.ts`; ship as a `supabase/migrations/00NN_*.sql` (auto-applies on
-      push). _(Listed open in `docs/pilot-handoff.md`.)_
+## 2c · Close the signup gate  _(DECISION: gate by leagues, not emails)_
+- [x] **Resolved:** access is gated by the **~100 invited leagues**, not a
+      per-account email allowlist. Invite codes already gate league entry, and a
+      tester is only useful inside an enrolled league — so capping enrolled
+      leagues at ~100 caps the pilot population. No email-allowlist migration.
+- [ ] Operational cap: don't `sync` more than ~100 leagues (worker
+      `PILOT_LEAGUE_IDS` / admin imports) — the only thing to watch.
 
 ## 2d · Observability + ops runbook  _(days, parallel to 2b)_
 - [ ] Error alerting on the worker (failed polls, resolve exceptions, stuck

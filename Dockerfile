@@ -12,8 +12,13 @@ RUN cd server && npm ci
 # Shared engine + ESPN adapters (imported by the worker through tsx).
 COPY src ./src
 COPY scripts/espn ./scripts/espn
-# Worker source.
+# Baked play-by-play — needed by the on-worker dress rehearsal (`fly ssh … simulate`)
+# and the scale re-run (`scripts/loadtest.mjs`); the live tick reads plays from the DB.
+COPY public/pbp ./public/pbp
+# Worker source + ops scripts + tests (so `fly ssh … npm run smoke` / loadtest / simulate work).
 COPY server/src ./server/src
+COPY server/scripts ./server/scripts
+COPY server/test ./server/test
 
 WORKDIR /app/server
 ENV NODE_ENV=production
