@@ -15,6 +15,10 @@
 //   npx tsx scripts/loadtest.mjs run    [--week=1] [--iters=5] [--chunk=20]
 //   npx tsx scripts/loadtest.mjs reset
 //
+// `seed --dry` builds the real player pool / rosters / feed and tallies what it
+// WOULD write, with NO Supabase and NO service key — a smoke test of the seeding
+// logic. (Needs Sleeper egress for the player index, which the sandbox has.)
+//
 // Typical flow:  seed → run → (read the report) → reset.
 // Everything it creates is namespaced `LOADTEST-*` and torn down by `reset`; it
 // never touches real leagues. Plays are tagged game_id='LOADTEST'.
@@ -88,14 +92,19 @@ async function seed() {
     ...take(byPos.WR, r * 6, 6), ...take(byPos.TE, r * 2, 2),
   ].map((p, slot) => ({ slot, player_slug: p.slug, slug: p.slug, full: p.full, pos: p.pos }));
 
-  log(`seeding ${leagues} leagues × ${teams} teams (${leagues * teams / 2} matchups) at week ${week}…`);
+  const dry = !!flags.dry;
+  log(`${dry ? '[DRY] ' : ''}seeding ${leagues} leagues × ${teams} teams (${leagues * teams / 2} matchups) at week ${week}…`);
+  if (dry) log(`  sample roster (team 1): ${rosterFor(1).map((p) => `${p.pos}:${p.slug.split('-')[0]}`).join(' ')}`);
   let madeMatchups = 0;
   for (let lg = 0; lg < leagues; lg++) {
-    const { data: league, error } = await db().from('league')
-      .insert({ sleeper_league_id: `${PREFIX}${lg}`, season: '2026', name: `Load Test ${lg}`, kdst_mode: 'random' })
-      .select('id').single();
-    if (error) throw new Error(`league insert: ${error.message}`);
-    const leagueId = league.id;
+    let leagueId = `dry-${lg}`;
+    if (!dry) {
+      const { data: league, error } = await db().from('league')
+        .insert({ sleeper_league_id: `${PREFIX}${lg}`, season: '2026', name: `Load Test ${lg}`, kdst_mode: 'random' })
+        .select('id').single();
+      if (error) throw new Error(`league insert: ${error.message}`);
+      leagueId = league.id;
+    }
 
     const members = [], lineups = [], matchups = [];
     for (let r = 1; r <= teams; r++) {
@@ -108,11 +117,13 @@ async function seed() {
         home_roster_id: p * 2 + 1, away_roster_id: p * 2 + 2, status: 'live',
         lock_at: new Date().toISOString() });
     }
-    await insertBatched('league_membership', members);
-    await insertBatched('sleeper_lineup', lineups);
-    await insertBatched('matchup', matchups);
+    if (!dry) {
+      await insertBatched('league_membership', members);
+      await insertBatched('sleeper_lineup', lineups);
+      await insertBatched('matchup', matchups);
+      if ((lg + 1) % 10 === 0) log(`  …${lg + 1}/${leagues} leagues`);
+    }
     madeMatchups += matchups.length;
-    if ((lg + 1) % 10 === 0) log(`  …${lg + 1}/${leagues} leagues`);
   }
 
   // The week's plays — inserted ONCE, shared by every matchup (polling is per-game,
@@ -121,6 +132,10 @@ async function seed() {
   for (const [slug, plays] of Object.entries(pbp)) {
     for (const pl of plays) playRows.push({ week, game_id: GAME_ID, player_slug: slug,
       c: pl.c, t: pl.t ?? null, pid: pl.pid ?? null, k: pl.k, y: pl.y, td: pl.td, ca: pl.ca, tg: pl.tg, to: pl.to ?? null });
+  }
+  if (dry) {
+    log(`✓ [DRY] would seed ${leagues} leagues · ${madeMatchups} live matchups · ${playRows.length} play rows (week ${week}). No DB writes.`);
+    return;
   }
   await db().from('live_play').delete().eq('week', week).eq('game_id', GAME_ID);
   await insertBatched('live_play', playRows);
