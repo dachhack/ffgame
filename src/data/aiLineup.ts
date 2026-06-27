@@ -70,10 +70,20 @@ function isDrip(pos: Pos, metric: string): boolean {
   return !!m && m.tag.includes('DRIP');
 }
 
+/** Positions that CAN run a drip (and so benefit from a Field General). K/DEF cannot —
+ *  they are the lone "special situation" where a non-drip shares an FG window. */
+const DRIP_POS = new Set<Pos>(['RB', 'WR', 'TE']);
+
 /** Field-General coordination: in any window holding a QB plus ≥ threshold non-QB
  *  drip slots, flip that QB onto `fg` so its passing yards multiply the window's
  *  drip instead of banking flat points. Honest — it's a pre-game read of the
- *  lineup's own composition, not the opponent's or the week's result. */
+ *  lineup's own composition, not the opponent's or the week's result.
+ *
+ *  Guarantee: a deployed Field General never shares its window with a wasted slot —
+ *  every drip-CAPABLE teammate (RB/WR/TE) there is forced onto its drip metric, since
+ *  the multiplier only amplifies drips. K/DEF have no drip and are the sole exception.
+ *  Today the position defaults already drip, so this only hardens the invariant against
+ *  a future default/override change ever sneaking a non-drip into a General's window. */
 function applyFieldGeneral(picks: AiPick[]): void {
   const byWin = new Map<string, AiPick[]>();
   for (const p of picks) {
@@ -83,8 +93,12 @@ function applyFieldGeneral(picks: AiPick[]): void {
   for (const group of byWin.values()) {
     const qb = group.find((p) => slugMeta(p.slug).pos === 'QB');
     if (!qb) continue;
-    const drips = group.filter((p) => p !== qb && isDrip(slugMeta(p.slug).pos, p.metric));
-    if (drips.length >= FG_DRIP_THRESHOLD) qb.metric = 'fg';
+    const skill = group.filter((p) => p !== qb && DRIP_POS.has(slugMeta(p.slug).pos));
+    const drips = skill.filter((p) => isDrip(slugMeta(p.slug).pos, p.metric));
+    if (drips.length >= FG_DRIP_THRESHOLD) {
+      qb.metric = 'fg';
+      for (const p of skill) if (!isDrip(slugMeta(p.slug).pos, p.metric)) p.metric = defaultAiMetric(slugMeta(p.slug).pos);
+    }
   }
 }
 
