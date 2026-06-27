@@ -184,3 +184,33 @@ NUKE, §4) — the next lever.
 
 _Next: a mechanics retune (drip-amplifier diminishing returns and/or a Combo-Drip limit) driven
 by the adversary's ceiling, then re-validate that the oracle's margin actually falls._
+
+## 6. Mechanics retune #1 — revive NUKE as a drip counter (shipped, `sim.ts`)
+The dead NUKE class (§2/§4) was the first mechanic retuned. Root cause confirmed: a TD wiped
+the victim's banked points but left its drip **rate** intact, so the drip rebuilt and
+out-accrued the wipe within a few catches. Changes:
+- **A TD nuke now KILLS the matched opposing slot's drip** — zeroes the rate AND marks the
+  slot dead, so it stays 0 (a mere rate-reset rebuilds; measured to move nothing). Also
+  nullifies any Field-General-boosted accrual on that drip.
+- **A TE TD additionally kills the HOT STREAK** of every opposing drip in the window (on top
+  of the existing −1.0/min rate knock).
+
+Validation:
+- Cascade probe: stacked TE-TDs vs a drip window now wipe the matched drips to **0.0** (was
+  47–54, out-accrued).
+- `te-nuke` went from strictly-bad to **neutral** in blind play (50.9% → ~51%, conditional
+  win-when-fired 43% → 48%): a real situational counter now, not a trap. `rb/wr-nuke-all` stays
+  bad (forfeiting your *entire* drip corps is still self-sabotage — correct).
+- No economy regression (season: wallet bounded 91–99, home WR 50.0%, cancellation intact).
+
+**Trade-off to watch (measured, not hidden):** reviving NUKE hands the *hindsight* adversary a
+new free weapon — its FREE (0-coin) exploit margin rose +10.7 → **+20.3** and `RB/WR→td` now
+appear in 27–30% of its lines, because perfect TD foresight turns the kill into a precision
+drip-snipe. This is **hindsight-only** (no real player has it; blind EV is neutral), but it
+flags NUKE as now **swingy / outcome-dependent**. If that variance is unwanted, soften the kill
+to a strong *suppress* (halve, or rate-reset + suppress for a window) instead of a permanent
+slot death — `aggregate.mjs`/`adversary.mjs` can dial it in.
+
+_Still pending: the ceiling-lowering retune (cap Twin Generals' mult×mult, soften the FG curve,
+diminishing amplifier stacks) — that's what actually pulls the oracle's PAID margin down, which
+the NUKE change (by design a counter, not a cap) does not._
