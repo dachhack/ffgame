@@ -1,6 +1,109 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-06-20 · Build `v0.9.8.0`_
+_Last updated: 2026-06-27 — pilot dogfooding + live H2H on the full board._
+
+---
+
+# Session 2026-06-27 (read this first)
+
+## TL;DR
+Turned the sanitized **Drip Test League** into a real, playable pilot league on
+the **full app board** with true H2H (sealed picks persisted, opponent picks +
+buffs revealed at lock, worker scoring wired in), simplified the welcome screen,
+added preseason-ingest tooling, and made backups all-or-nothing. Branch work is
+on `claude/sweet-franklin-6bqqky`; HEAD = `eafe1de`.
+
+## ⚠️ Deploy model (IMPORTANT — not obvious)
+- **Work branch:** `claude/sweet-franklin-6bqqky`. All commits go here first.
+- **Site (GitHub Pages → dripfantasy.com):** `deploy.yml` only deploys on push to
+  the **deploy branch `claude/youthful-albattani-s9kprl`** (env-locked). To ship
+  the site, **fast-forward the deploy branch to the work HEAD**:
+  `git push origin <sha>:refs/heads/claude/youthful-albattani-s9kprl`
+  (clean fast-forward; the work branch started from the deploy branch's base).
+  The deploy branch is currently caught up to `eafe1de`.
+- **Worker (Fly app `drip-pilot-worker`):** deploys via `fly deploy` from repo
+  root on the FOUNDER's machine (`git pull && fly deploy`). Bundles `src/` +
+  `server/`. **The worker likely needs a deploy** — this session changed worker code.
+- **DB (Supabase):** migrations in `supabase/migrations/`. **No new migrations
+  this session.** (`migrate.yml` auto-applies only on specific branches.)
+
+## What shipped this session (16 commits, da4e40c..eafe1de)
+1. **Drip Test League = sanitized Console Warriors clone** (demo + live pilot).
+   - Baked client demo re-skinned (`src/data/league.ts`, `media.ts`): fake team
+     names + 2025 crest avatars (`dt-1..dt-12`), league "Drip Test League".
+   - `src/data/dripTest.ts` `buildDripTestLeague()`: fetches the REAL Console
+     Warriors league (`CONSOLE_WARRIORS_ID`) via `buildSleeperLeague`, overrides
+     team names/avatars (roster-id order, matches the DB seed). Real players/scoring.
+2. **Full app board for the live pilot.** Signed-in Drip Test League card →
+   SET YOUR LINEUP builds the league + `loadSimLeague` → the real `Matchup` board
+   as the user's team (`src/screens/LiveOnboard.tsx`).
+3. **True H2H on the board:**
+   - **Persistence:** store `LiveCtx` (`src/app/store.tsx`); `Matchup` hydrates
+     saved sealed picks on mount + writes the lineup to `sealed_pick` on LOCK IN.
+   - **Opponent reveal:** opponent's real picks (`getRevealedPicks`) + buffs
+     (`revealedOppBuffs`, post-lock RLS) feed the board; `buildMatchup` takes an
+     `oppBuffs` param (else AI buffs).
+   - **Worker scoring:** `realPbp.ts` live overlay (`setLivePlays`/`liveRowsToPbp`,
+     exclusive top precedence so a live week reads ONLY worker `live_play`; DNP=0
+     pre-kickoff). `Matchup` polls `weekLivePlays(week)` (~15s). Same engine the
+     worker uses → full board parity.
+4. **Pilot dogfood UX:** league-home cards (matchup + commish badges), username
+   chip, commish dash opens on members, team-name matchup labels, K/DST random
+   WITHOUT replacement + manual "• taken" flags, live lineup uses the demo
+   `SetupRow`/`PlayerPicker`.
+5. **Welcome screen simplified:** one hero (load your league) + "Explore the demo
+   league" (→ full board) + compact pilot row; a small "▶ 60-sec demo" header
+   chip (the walkthrough is now a standalone flow ending with a "Get started →"
+   CTA back to welcome); headline forced to one line.
+6. **Preseason tooling (worker):** `PILOT_SEASON_TYPE` env (1=pre/2=reg/3=post)
+   threaded through the scoreboard pollers; `clone-week <sleeperLeagueId> <from>
+   <to>` CLI to schedule the test league at a preseason week (Sleeper has no
+   preseason matchups).
+7. **Backups are all-or-nothing:** removed the "2+ unopposed banks half" rule
+   from BOTH engines (`matchup.ts` demo + `liveResolve.ts` live/worker), display,
+   and rulebook. Sub in for full or score 0. AI auto-sub unchanged.
+8. **Bug fix:** live-done backup sub-status display was contradictory (starter
+   side used `phase==='final'`, backup side used the broader `final`) — aligned.
+
+## Founder action items
+- **`git pull && fly deploy`** the worker — touched `server/` + shared
+  `src/engine/liveResolve.ts` (all-or-nothing backups; K/DST dedupe, seasontype,
+  clone-week are worker). Needed before any live scoring; not required for
+  demo-board dogfooding.
+- Site is already deployed (deploy branch == `eafe1de`).
+- Test logins (already seeded): `commish@driptest.app` + grillmaster/wavydave/
+  chlorinecarl/peanutpete/mileagemike `@driptest.app`, pw `DripTest!23`.
+
+## How to dogfood now
+Sign in (welcome → "Already invited? Sign in") as a `@driptest.app` user →
+league card → **SET YOUR LINEUP** → full board (setup → live → final, real 2025
+data). Lock in to persist sealed picks; commish (`Manage league → matchups →
+live+lock`) reveals the opponent.
+
+## Known limitations / next
+- **Worker live scoring is untested** (offseason). Verify in August preseason via
+  the run-book below, or rehearse with the **Simulate live feed** GH workflow.
+- **Preseason run-book (August):** `fly secrets set PILOT_SEASON_TYPE=1` →
+  `clone-week DRIPTEST-2026 1 <poll-week>` → set lineup + LOCK IN → commish locks
+  → board scores off the live game. Flip back to `2` before Week 1.
+- Opponent **extra-slots** not reflected in reveal (buffs are).
+- Non-baked bench players persist a sim id the worker can't score (starters are
+  baked → normal lineups fine).
+- The DB Drip Test League is seeded at **week 1**; the board opens on the matchup
+  week. `server/scripts/gen-fake-league.mjs` regenerates the seed.
+
+## Key files
+`src/data/dripTest.ts` · `src/data/league.ts` · `src/data/media.ts` ·
+`src/data/realPbp.ts` (live overlay) · `src/data/liveApi.ts` (weekLivePlays,
+revealedOppBuffs) · `src/app/store.tsx` (LiveCtx) · `src/screens/LiveOnboard.tsx`
+· `src/screens/Matchup.tsx` (hydrate/save, reveal, live overlay, backups) ·
+`src/screens/Splash.tsx` · `src/engine/matchup.ts` + `src/engine/liveResolve.ts`
+(backups) · `server/src/poll/scoreboard.js` (seasontype) · `server/src/sync.js`
+(cloneWeek, K/DST dedupe) · `server/src/cli.js`.
+
+---
+
+# Previous sessions
 
 ## Zero synthetic player data (v0.9.8.0)
 All player production is now real 2025 nflverse PBP — the synthetic simulation
