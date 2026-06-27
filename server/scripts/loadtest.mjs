@@ -138,7 +138,10 @@ async function seed() {
     return;
   }
   await db().from('live_play').delete().eq('week', week).eq('game_id', GAME_ID);
-  await insertBatched('live_play', playRows);
+  for (let i = 0; i < playRows.length; i += 500) {
+    const { error } = await db().from('live_play').upsert(playRows.slice(i, i + 500), { onConflict: 'week,game_id,pid,player_slug,k' });
+    if (error) throw new Error(`live_play upsert: ${error.message}`);
+  }
 
   log(`✓ seeded ${leagues} leagues · ${madeMatchups} live matchups · ${playRows.length} play rows (week ${week}).`);
   log(`  next:  npx tsx scripts/loadtest.mjs run --week=${week}`);
