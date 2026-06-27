@@ -13,7 +13,7 @@ import { getGames, gamesToPoll, slateFromGames } from './poll/scoreboard.js';
 import { pollGame } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
 import { lockDueMatchups, finalizeMatchups } from './lock.js';
-import { resolveMatchup, injectWeekPlays } from './resolve.js';
+import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues } from './sync.js';
 import { db } from './supabase.js';
 import { setRuntimeSlate } from '../../src/data/nflSlate.ts';
@@ -84,10 +84,11 @@ async function tick() {
   const { data: live } = await db().from('matchup').select('*').eq('week', week).in('status', ['live', 'final']);
   if (live?.length) {
     await injectWeekPlays(week);
+    const ctx = await prefetchTick(live, week); // ~5 bulk reads instead of ~6/matchup
     let done = 0;
     for (let i = 0; i < live.length; i += 20) {
       await Promise.all(live.slice(i, i + 20).map((m) =>
-        resolveMatchup(m, playerIndex, undefined, { playsInjected: true }).then(() => { done++; }).catch((e) => log('resolve', m.id, e.message))));
+        resolveMatchup(m, playerIndex, undefined, { playsInjected: true, ctx }).then(() => { done++; }).catch((e) => log('resolve', m.id, e.message))));
     }
     log('resolved', done, '/', live.length, 'matchups');
   }

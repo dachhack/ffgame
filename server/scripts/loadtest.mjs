@@ -29,7 +29,7 @@ import { performance } from 'node:perf_hooks';
 import { readFileSync } from 'node:fs';
 import { db } from '../src/supabase.js';
 import { buildPlayerIndex } from '../src/playerIndex.js';
-import { injectWeekPlays, resolveMatchup } from '../src/resolve.js';
+import { injectWeekPlays, resolveMatchup, prefetchTick } from '../src/resolve.js';
 import { NFL_SLATE, setRuntimeSlate } from '../../src/data/nflSlate.ts';
 
 const PREFIX = 'LOADTEST-';     // every seeded league id starts with this
@@ -168,20 +168,21 @@ async function run() {
 
     const tSweep = performance.now();
     await injectWeekPlays(week);               // fetched ONCE per tick, as in the worker
-    const injectMs = performance.now() - tSweep;
+    const ctx = await prefetchTick(live, week); // bulk reads ONCE per tick, as in the worker
+    const setupMs = performance.now() - tSweep;
 
     let done = 0;
     for (let i = 0; i < live.length; i += chunk) {
       await Promise.all(live.slice(i, i + chunk).map(async (m) => {
         const t = performance.now();
-        try { await resolveMatchup(m, idx, undefined, { playsInjected: true }); done++; }
+        try { await resolveMatchup(m, idx, undefined, { playsInjected: true, ctx }); done++; }
         catch (e) { log('  resolve error', m.id, e.message); }
         perMatchup.push(performance.now() - t);
       }));
     }
     const sweepMs = performance.now() - tSweep;
     sweepTimes.push(sweepMs);
-    log(`  sweep ${it + 1}: ${live.length} matchups · query ${ms(queryMs)} · inject ${ms(injectMs)} · resolve+write ${ms(sweepMs)} (${done} ok)`);
+    log(`  sweep ${it + 1}: ${live.length} matchups · query ${ms(queryMs)} · inject+prefetch ${ms(setupMs)} · resolve+write ${ms(sweepMs)} (${done} ok)`);
   }
 
   const sortedSweep = [...sweepTimes].sort((a, b) => a - b);

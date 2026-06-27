@@ -25,20 +25,39 @@ weeks; the load test (2b) is the long pole. Tick boxes as they land; the
 ## 2b · Load-test at 100-league scale, offline  _(1–2 weeks — long pole)_
 Proves the bottleneck `supabase/migrations/0034_scale_index.sql` was written for,
 with no live games, via the **real** `resolveMatchup` sweep.
-- [ ] Seed: `npx tsx scripts/loadtest.mjs seed --leagues=100 --teams=12 --week=1`
+- [x] Seed: `npx tsx scripts/loadtest.mjs seed --leagues=100 --teams=12 --week=99`
       (100 leagues / 600 AI-vs-AI live matchups + one baked week of plays).
-- [ ] Run: `npx tsx scripts/loadtest.mjs run --week=1 --iters=5` — reports the
+- [x] Run: `npx tsx scripts/loadtest.mjs run --week=99 --iters=5` — reports the
       indexed matchup-scan time, per-tick resolve-sweep p50/p95/max, and headroom
       vs the 25s `PLAYS_POLL_MS` tick budget.
-- [ ] Verify the sweep stays **well under** the tick budget; watch Supabase
-      connection-pool limits + Realtime fan-out at ~600 matchups.
-- [ ] If TIGHT/FAIL: bump `fly.toml` memory, raise `PLAYS_POLL_MS`, or shard the
-      poll loop (decision point, not a rewrite — see plan §4).
-- [ ] Tear down: `npx tsx scripts/loadtest.mjs reset`.
+- [x] Tear down: `npx tsx scripts/loadtest.mjs reset`.
+- [ ] **Re-run from the deployed Fly worker** (`fly ssh console`) for the TRUE
+      number — the run below was from a remote sandbox across the internet; the
+      worker is co-located with the DB (iad = us-east-1). _This is the real exit
+      measurement for this item._
 - [ ] Keep the offline feed gates green in CI: `npm run validate` (ESPN adapter)
       and `simulate --dry` round-trip + reconciliation (`validate-feed.yml`).
 - [ ] _Refinement:_ load-test lineups are skill-only; add K/DST to exercise the
       banker/suppress paths if their cost looks material.
+
+### Result — first run (2026-06-27, from a remote sandbox)
+600 matchups, 5 sweeps. **The `0034` index is vindicated** — the matchup scan is
+~100–300 ms, negligible. The cost is **per-matchup DB round-trips** in
+`resolveMatchup` (~6 sequential reads each), not CPU or the scan.
+
+| concurrency | sweep p50 | worst | % of 25 s budget |
+|---|---|---|---|
+| chunk=20 | 15.8 s | 17.8 s | 71 % ⚠ |
+| chunk=60 | 12.1 s (warm 10.3 s) | 15.2 s | 61 % ⚠ |
+
+⚠ **TIGHT from here, but the number is pessimistic:** every round-trip paid full
+internet RTT (sandbox → proxy → Supabase us-east-1). The production worker runs in
+`iad` (same region as the DB), where RTT is ~1–5 ms instead of tens — and since
+the bottleneck is round-trip-bound, the co-located sweep should be **multiples
+faster → comfortable PASS at 100 leagues**. Raising concurrency helped (20→60
+cut ~30 %), confirming it's latency-bound. **Optimization landed:** bulk-prefetch
+of the per-tick reads (see plan §4 + `server/src/resolve.js:prefetchTick`),
+collapsing ~3,600 reads/tick into ~5. Re-measure from the worker to confirm.
 
 ## 2c · Close the signup gate  _(days)_
 - [ ] Add the **email-allowlist / closed-signup** check so only approved emails

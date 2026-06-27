@@ -47,17 +47,25 @@ export async function injectWeekPlays(week) {
   injectWeek(week, rowsToPbp(await weekPlayRows(week)));
 }
 
+// The per-matchup gatherers below take an optional `ctx` (from prefetchTick). When
+// present they read from the bulk-prefetched maps — no per-matchup query — which is
+// what keeps the Sunday tick fast at ~100 leagues (one tick = ~5 bulk reads instead
+// of ~6 × 600). When `ctx` is absent (sim / single-matchup CLI) they self-fetch,
+// byte-identical to before.
+
 /** Enrolled side's revealed picks: [{ win, slot, slug, metric }] — or null if the
  *  manager isn't enrolled / picks aren't locked yet (caller uses the fallback). */
-async function enrolledPicks(matchup, membership) {
+async function enrolledPicks(matchup, membership, ctx) {
   if (!(membership?.enrolled && membership.app_user_id && matchup.status !== 'scheduled')) return null;
+  if (ctx) { const ps = ctx.picks.get(`${matchup.id}:${membership.app_user_id}`); return ps && ps.length ? ps : null; }
   const { data } = await db().from('sealed_pick').select('game_window,roster_slot,player_slug,metric_id')
     .eq('matchup_id', matchup.id).eq('app_user_id', membership.app_user_id).eq('locked', true);
   return data && data.length ? data.map((p) => ({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id })) : null;
 }
 
 /** A roster's real Sleeper starters (the unenrolled-opponent fallback / player pool). */
-async function lineupSlugs(matchup, rosterId) {
+async function lineupSlugs(matchup, rosterId, ctx) {
+  if (ctx) return ctx.lineups.get(`${matchup.league_id}:${rosterId}`) ?? [];
   const { data } = await db().from('sleeper_lineup').select('starters_json')
     .eq('league_id', matchup.league_id).eq('week', matchup.week).eq('roster_id', rosterId).maybeSingle();
   return ((data?.starters_json) ?? []).map((s) => s.player_slug).filter(Boolean);
@@ -65,21 +73,58 @@ async function lineupSlugs(matchup, rosterId) {
 
 /** A side's armed loadout (applied_state.payload_json) for this matchup — buffs and
  *  metric unlocks bought via the arm RPCs / the AI budget pass. Empty when none. */
-async function loadout(matchupId, appUserId) {
+async function loadout(matchupId, appUserId, ctx) {
   if (!appUserId) return {};
+  if (ctx) return ctx.applied.get(`${matchupId}:${appUserId}`) ?? {};
   const { data } = await db().from('applied_state').select('payload_json')
     .eq('matchup_id', matchupId).eq('app_user_id', appUserId).maybeSingle();
   return data?.payload_json ?? {};
 }
-async function humanBuffs(matchupId, appUserId) {
-  const b = (await loadout(matchupId, appUserId)).buffs;
+async function humanBuffs(matchupId, appUserId, ctx) {
+  const b = (await loadout(matchupId, appUserId, ctx)).buffs;
   return Array.isArray(b) ? b : [];
 }
 
 /** The league's missed-pick policy: 'best_lineup' (default) | 'ai' | 'empty'. */
-async function lineupPolicy(leagueId) {
+async function lineupPolicy(leagueId, ctx) {
+  if (ctx) return ctx.policy.get(leagueId) ?? 'best_lineup';
   const { data } = await db().from('league').select('lineup_policy').eq('id', leagueId).maybeSingle();
   return data?.lineup_policy ?? 'best_lineup';
+}
+
+/** Bulk-load everything the gatherers above read, for a whole tick's live matchups,
+ *  in ~5 queries instead of ~6 per matchup — the round-trip cost the 100-league
+ *  load test surfaced (the 0034-indexed scan itself is negligible). Returns a `ctx`
+ *  to pass as resolveMatchup's `opts.ctx`. `week` is the tick's week (lineups are
+ *  week-scoped; a tick's live matchups all share one week). Without it, resolveMatchup
+ *  self-fetches per matchup exactly as before. */
+export async function prefetchTick(live, week) {
+  const leagueIds = [...new Set(live.map((m) => m.league_id))];
+  const matchupIds = live.map((m) => m.id);
+  const [mem, lg, lu, ap, pk] = await Promise.all([
+    db().from('league_membership').select('league_id,sleeper_roster_id,app_user_id,enrolled,controller').in('league_id', leagueIds),
+    db().from('league').select('id,lineup_policy').in('id', leagueIds),
+    db().from('sleeper_lineup').select('league_id,roster_id,starters_json').in('league_id', leagueIds).eq('week', week),
+    db().from('applied_state').select('matchup_id,app_user_id,payload_json').in('matchup_id', matchupIds),
+    db().from('sealed_pick').select('matchup_id,app_user_id,game_window,roster_slot,player_slug,metric_id').in('matchup_id', matchupIds).eq('locked', true),
+  ]);
+  const members = new Map();   // leagueId -> Map(roster -> member)
+  for (const m of mem.data ?? []) {
+    if (!members.has(m.league_id)) members.set(m.league_id, new Map());
+    members.get(m.league_id).set(m.sleeper_roster_id, m);
+  }
+  const policy = new Map((lg.data ?? []).map((r) => [r.id, r.lineup_policy ?? 'best_lineup']));
+  const lineups = new Map();   // `${leagueId}:${roster}` -> slugs[]
+  for (const r of lu.data ?? []) lineups.set(`${r.league_id}:${r.roster_id}`, (r.starters_json ?? []).map((s) => s.player_slug).filter(Boolean));
+  const applied = new Map();   // `${matchupId}:${appUser}` -> payload
+  for (const r of ap.data ?? []) applied.set(`${r.matchup_id}:${r.app_user_id}`, r.payload_json ?? {});
+  const picks = new Map();     // `${matchupId}:${appUser}` -> [{win,slot,slug,metric}]
+  for (const p of pk.data ?? []) {
+    const k = `${p.matchup_id}:${p.app_user_id}`;
+    if (!picks.has(k)) picks.set(k, []);
+    picks.get(k).push({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id });
+  }
+  return { members, policy, lineups, applied, picks };
 }
 
 /** Resolve one matchup → write matchup_state (per game_window) + finals when final.
@@ -93,11 +138,18 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   const meta = (slug) => playerIndex?.metaForSlug(slug) ?? null;
   const player = (slug) => { const m = meta(slug); return makePlayer(slug, m?.pos, m?.team, m?.full); };
 
-  const { data: members } = await db().from('league_membership')
-    .select('sleeper_roster_id,app_user_id,enrolled,controller').eq('league_id', matchup.league_id)
-    .in('sleeper_roster_id', [matchup.home_roster_id, matchup.away_roster_id]);
+  const ctx = opts.ctx;
+  let members;
+  if (ctx) {
+    const lm = ctx.members.get(matchup.league_id);
+    members = [matchup.home_roster_id, matchup.away_roster_id].map((r) => lm?.get(r)).filter(Boolean);
+  } else {
+    ({ data: members } = await db().from('league_membership')
+      .select('sleeper_roster_id,app_user_id,enrolled,controller').eq('league_id', matchup.league_id)
+      .in('sleeper_roster_id', [matchup.home_roster_id, matchup.away_roster_id]));
+  }
   const byRoster = new Map((members ?? []).map((m) => [m.sleeper_roster_id, m]));
-  const policy = await lineupPolicy(matchup.league_id);
+  const policy = await lineupPolicy(matchup.league_id, ctx);
 
   // A side's effective lineup AND its armed in-slot buffs. Power-ups (buffs +
   // metric unlocks) are PAID and live in applied_state, keyed by app_user — so any
@@ -110,19 +162,19 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   // owned unlocks + purchased extra slots in applied_state (written by the
   // lock-time budget pass), so it matches the materialized board picks.
   const aiSide = async (rosterId, mem) => {
-    const load = mem?.app_user_id ? await loadout(matchup.id, mem.app_user_id) : {};
+    const load = mem?.app_user_id ? await loadout(matchup.id, mem.app_user_id, ctx) : {};
     const owned = new Set(Array.isArray(load.unlocks) ? load.unlocks : []);
     const extra = Number.isFinite(load.extra) ? load.extra : 0;
     return {
-      picks: autoLineup(await lineupSlugs(matchup, rosterId), matchup.week, owned, extra),
+      picks: autoLineup(await lineupSlugs(matchup, rosterId, ctx), matchup.week, owned, extra),
       buffs: Array.isArray(load.buffs) ? load.buffs : [],
     };
   };
   const sideLineup = async (rosterId) => {
     const mem = byRoster.get(rosterId);
     if (mem?.controller === 'ai') return aiSide(rosterId, mem);
-    const picks = await enrolledPicks(matchup, mem);
-    if (picks) return { picks, buffs: await humanBuffs(matchup.id, mem.app_user_id) };
+    const picks = await enrolledPicks(matchup, mem, ctx);
+    if (picks) return { picks, buffs: await humanBuffs(matchup.id, mem.app_user_id, ctx) };
     if (!mem?.enrolled || !mem?.app_user_id) return aiSide(rosterId, mem);
     if (policy === 'empty') return { picks: null, buffs: [] };
     return aiSide(rosterId, mem);

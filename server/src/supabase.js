@@ -6,6 +6,9 @@ import { config, requireSupabase } from './config.js';
 
 let client = null;
 
+/** Test-only: inject a fake client (see test/resolve-batch.mjs). Never used in prod. */
+export function __setClientForTest(c) { client = c; }
+
 export function db() {
   if (!client) {
     requireSupabase();

@@ -150,6 +150,16 @@ enough paying leagues must clear that fixed cost before anything else — so the
 
 ## 4. Scaling past 100 leagues (the 2027 infra note)
 
+**Measured (2026-06):** a 100-league / 600-matchup load test (`server/scripts/
+loadtest.mjs`) confirmed the `0034` index makes the per-tick matchup scan
+negligible (~100–300 ms). The real cost is **per-matchup DB round-trips** —
+`resolveMatchup` did ~6 sequential reads × 600 matchups ≈ 3,600 reads/tick. Fix
+landed: **`prefetchTick` bulk-loads those reads for the whole live set in ~5
+queries**, and the worker tick passes them in via `opts.ctx` (the per-matchup
+query path stays as a fallback for the sim/CLI callers). This is the single
+highest-leverage change for scaling the sweep; batching the per-matchup
+`matchup_state` writes is the next step if needed.
+
 The pilot's single always-on worker polling every game each tick is fine at ~600
 matchups but is the first thing to break at, say, 1,000+ leagues:
 
