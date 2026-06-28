@@ -95,6 +95,25 @@ season-to-date *freshness* upgrade, not a hot-hand selector (findings §7).
 npx tsx tools/playtester/form.mjs --from=4 --to=14 --n=200 --lookback=3
 ```
 
+## `invariants.mjs` — regression guard (run me after engine/AI edits)
+Asserts the structural + balance properties the harness and the shipped changes rely on —
+mirror baseline is exactly 0, Field General windows are all-drip, best players are fielded
+on overflow, honest home win-rate ≈50%, a TD nuke suppresses the matched drip, and insurance
+keeps a nuked drip alive. Exits non-zero on any failure (CI-friendly).
+
+```
+npx tsx tools/playtester/invariants.mjs
+```
+
+## `defense.mjs` — defensive buffs vs a nuker
+Measures counter-nuke / insurance / floodgates / ot-shield against a nuking opponent (the
+threat they counter), to price them. Found they're situational counters, not mis-priced
+(findings §9).
+
+```
+npx tsx tools/playtester/defense.mjs --week=1-14 --n=200
+```
+
 ## `scenario.mjs` — targeted suspect probes
 Hand-built best-case lines for the handoff's "prime suspects" (TE-TD nuke trigger
 rate + cascade, Twin Generals fg-stack multiplier, unilateral extra-slot coin farm) —

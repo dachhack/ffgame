@@ -186,8 +186,10 @@ drip amplifier that always helps. **Fix (shipped):**
   unlock**.
 
 **Validation (no regression):** season sim after the change — economy still bounded (wallet
-94–101), cancellation r=0.95, wins-vs-roster r=0.60, home WR 50.4%, mean team score 58→60; buy
-mix is now all EV buffs (no dead buffs), combodrip only when a team banks enough (~1/season).
+~100), cancellation r≈0.96, wins-vs-roster r≈0.65, home WR ~50%; buy mix is now all EV buffs
+(no dead buffs), combodrip only when a team banks enough (~1/season). _(Season mean team score
+later rose ~58→~97 once best-player fielding shipped — the § fielding commit — which raised the
+wins-vs-roster correlation too; the balance conclusions are version-independent.)_
 
 **On the adversary:** its margin over the AI is **unchanged** (FREE ~flat, PAID +68→+72) — and
 that's expected. We improved the AI's *blind buying*, not the game's *mechanics*; a hindsight
