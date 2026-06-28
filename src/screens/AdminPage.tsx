@@ -16,6 +16,8 @@ import { WINDOWS, defaultMetric } from '../data/metrics';
 import { NFL_CODES } from '../data/kdst';
 import { slugMeta } from '../data/slugMeta';
 import { isMarkFree, setMarkFree } from '../data/markFree';
+import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '../data/liveApi';
+import { POWERUPS } from '../data/powerups';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
 
@@ -61,6 +63,50 @@ function MarkFreeToggle() {
   );
 }
 
+// Super-admin control of the FREE vs PREMIUM split (positions + power-ups). Edits the
+// global premium_tier config (migration 0037) the worker enforces and the client paywall
+// reads. Highlighted = free; the rest need premium. Saves on each toggle.
+const ALL_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'];
+
+function PremiumTierPanel() {
+  const [tier, setTier] = useState<PremiumTier | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { getPremiumTier().then(setTier).catch((e) => setErr(e instanceof Error ? e.message : 'load failed')); }, []);
+
+  const save = async (next: PremiumTier) => {
+    setTier(next); setBusy(true); setErr(null);
+    try { const r = await adminSetPremiumTier(next.free_positions, next.free_powerups); if (!r.ok) setErr(r.error ?? 'save failed'); }
+    catch (e) { setErr(e instanceof Error ? e.message : 'save failed'); }
+    finally { setBusy(false); }
+  };
+  const flip = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+
+  return (
+    <div style={card}>
+      <div style={h}>PREMIUM TIER{busy ? ' · saving…' : ''}</div>
+      <div style={{ fontSize: 9.5, color: 'var(--dim)', marginBottom: 8 }}>Tap to toggle FREE ↔ premium. Highlighted = free (no payment); the rest need premium. Both sides of a premium matchup get the full set.</div>
+      {!tier ? <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)' }}>loading…</div> : (
+        <>
+          <div style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: 5 }}>POSITIONS</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+            {ALL_POSITIONS.map((p) => { const free = tier.free_positions.includes(p); return (
+              <button key={p} onClick={() => save({ ...tier, free_positions: flip(tier.free_positions, p) })} style={btn(free)}>{p === 'DEF' ? 'DST' : p}{free ? ' · free' : ' · 🔒'}</button>
+            ); })}
+          </div>
+          <div style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: 5 }}>POWER-UPS</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {POWERUPS.map((pu) => { const free = tier.free_powerups.includes(pu.id); return (
+              <button key={pu.id} onClick={() => save({ ...tier, free_powerups: flip(tier.free_powerups, pu.id) })} style={btn(free)} title={pu.name}>{pu.icon} {pu.name}{free ? ' · free' : ' · 🔒'}</button>
+            ); })}
+          </div>
+        </>
+      )}
+      {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8 }}>{err}</div>}
+    </div>
+  );
+}
+
 export function AdminPage({ onBack }: { onBack: () => void }) {
   const [leagues, setLeagues] = useState<AdminLeague[] | null>(null);
   const [overrides, setOverrides] = useState<AdminOverride[]>([]);
@@ -83,6 +129,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 
       <HealthPanel />
       <MarkFreeToggle />
+      <PremiumTierPanel />
       <ImportLeague reload={load} />
 
       <div style={card}>

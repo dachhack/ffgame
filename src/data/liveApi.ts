@@ -317,6 +317,13 @@ async function rpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T
 }
 
 export const isAdmin = () => rpc<boolean>('is_admin');
+
+// Global premium-tier config (which positions / power-ups are free vs premium).
+export interface PremiumTier { free_positions: string[]; free_powerups: string[]; updated_at?: string }
+export const getPremiumTier = () => rpc<PremiumTier>('get_premium_tier');
+export const adminSetPremiumTier = (freePositions: string[], freePowerups: string[]) =>
+  rpc<{ ok: boolean; error?: string }>('admin_set_premium_tier', { p_free_positions: freePositions, p_free_powerups: freePowerups });
+
 export const adminOverview = () => rpc<AdminLeague[]>('admin_overview');
 export const adminMatchups = (leagueId: string) => rpc<AdminMatchup[]>('admin_matchups', { p_league_id: leagueId });
 export const adminSetMatchup = (matchupId: string, status: string, lockNow = false) =>
