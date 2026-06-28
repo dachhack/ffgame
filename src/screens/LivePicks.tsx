@@ -12,7 +12,7 @@ import {
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
 } from '../data/liveApi';
 import { powerupById } from '../data/powerups';
-import { ensurePremiumTier, isFreePowerup, markGatedAttempt } from '../data/premiumClient';
+import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } from '../data/premiumClient';
 import { shortName } from '../data/players';
 import type { Player } from '../types';
 import { SetupRow, PlayerPicker } from './Matchup';
@@ -454,6 +454,8 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         return (
           <PlayerPicker
             win={pickerSlot.win} week={week} players={players} currentId={cur}
+            gated={(p) => !matchPremium && !isFreePosition(p.pos)}
+            onGated={(p) => { markGatedAttempt('position:' + p.pos); setErr(`Premium position (${p.pos}) — unlock premium ($5 you · $30 league) to field K/DST/IDP.`); setPickerSlot(null); }}
             onPick={(slug) => { setSlot(pickerSlot.key, { player_slug: slug }); setPickerSlot(null); }}
             onRemove={() => { setSlot(pickerSlot.key, { player_slug: null, metric_id: null }); setPickerSlot(null); }}
             onClose={() => setPickerSlot(null)}

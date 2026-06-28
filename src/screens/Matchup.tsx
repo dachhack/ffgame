@@ -1965,9 +1965,10 @@ function MetricInfo({ metric, onClose }: { metric: Metric; onClose: () => void }
 }
 
 // ── Player picker (tap a spot in setup) — choose from this window's roster ──
-export function PlayerPicker({ win, week, players, currentId, title = 'Pick a player', subtitle = 'YOUR PLAYERS WHOSE GAME FALLS IN THIS WINDOW', onPick, onRemove, onClose }: {
+export function PlayerPicker({ win, week, players, currentId, title = 'Pick a player', subtitle = 'YOUR PLAYERS WHOSE GAME FALLS IN THIS WINDOW', onPick, onRemove, onClose, gated, onGated }: {
   win: WindowId; week: number; players: Player[]; currentId?: string; title?: string; subtitle?: string;
   onPick: (id: string) => void; onRemove: () => void; onClose: () => void;
+  gated?: (p: Player) => boolean; onGated?: (p: Player) => void; // opt-in premium lock (default: none)
 }) {
   const label = WINDOWS.find((w) => w.id === win)?.label ?? win.toUpperCase();
   return (
@@ -1984,8 +1985,9 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
           {players.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', textAlign: 'center', padding: '16px 0' }}>— no eligible players in this window —</div>}
           {players.map((p) => {
             const sel = p.id === currentId;
+            const isGated = !sel && !!gated?.(p); // premium position → locked
             return (
-              <button key={p.id} onClick={() => onPick(p.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, background: sel ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${sel ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '8px 10px', color: 'var(--text)', textAlign: 'left', cursor: 'pointer' }}>
+              <button key={p.id} onClick={() => (isGated ? onGated?.(p) : onPick(p.id))} style={{ display: 'flex', alignItems: 'center', gap: 10, background: sel ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${sel ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '8px 10px', color: 'var(--text)', textAlign: 'left', cursor: 'pointer', opacity: isGated ? 0.6 : 1 }}>
                 <PlayerImg playerId={p.id} team={p.team} pos={p.pos} size={34} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -1994,7 +1996,8 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
                   </div>
                   <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
                 </div>
-                {sel && <span className="mono" style={{ fontSize: 8, color: 'var(--you)', flex: 'none' }}>CURRENT ✓</span>}
+                {sel ? <span className="mono" style={{ fontSize: 8, color: 'var(--you)', flex: 'none' }}>CURRENT ✓</span>
+                  : isGated ? <span title="Premium position — unlock premium" style={{ fontSize: 12, flex: 'none' }}>🔒</span> : null}
               </button>
             );
           })}
