@@ -47,6 +47,12 @@ big fixed costs:**
 
 1. **Launch mark-free on the free ESPN feed.** Fixed costs ≈ infra only → breakeven at a few
    hundred paying leagues. The volume model works here comfortably and it's bootstrap-able.
+   _Shipped: **mark-free mode** (`src/data/markFree.ts`) — when on, the imagery resolvers in
+   `media.ts` suppress NFL team logos + player headshots and the UI falls back to generic
+   position pills / abbreviation badges / initials (team abbrs + player names are text/facts,
+   kept). Default OFF; flip via `VITE_MARK_FREE=true` (ship), `?markfree=1` (demo), or
+   `setMarkFree()`. This is the concrete switch that makes the "launch without licenses" path
+   real._
 2. **Buy a cheap commercial real-time API** (~$500/mo) the moment ToS/availability risk on the
    free feed actually bites — ~640 paying leagues covers it. This kills the legal/uptime risk
    *without* official-NFL pricing.

@@ -1,17 +1,19 @@
 // Image URLs: ESPN team logos + player headshots, plus per-team crest avatars
 // for the sanitized Drip Test League demo (2025 league logos, no real owners).
 import { HEADSHOTS } from './headshots';
+import { isMarkFree } from './markFree';
 
 // ESPN team logo by NFL abbreviation. ESPN accepts the standard abbr lowercased
 // for every team in this league (la/lar/was/wsh all resolve), so no remap.
+// Mark-free mode suppresses the logo (NFL trademark) → the UI falls back to the abbr badge.
 export function teamLogo(abbr?: string | null): string | null {
-  if (!abbr) return null;
+  if (!abbr || isMarkFree()) return null;
   return `https://a.espncdn.com/i/teamlogos/nfl/500/${abbr.toLowerCase()}.png`;
 }
 
-/** Build an ESPN headshot URL from a raw ESPN player id. */
+/** Build an ESPN headshot URL from a raw ESPN player id (suppressed when mark-free). */
 export function espnHeadshot(espnId?: string | null): string | null {
-  if (!espnId) return null;
+  if (!espnId || isMarkFree()) return null;
   return `https://a.espncdn.com/i/headshots/nfl/players/full/${espnId}.png`;
 }
 
@@ -24,9 +26,10 @@ export function setRuntimeHeadshots(map: Record<string, string>): void { runtime
 /** Drop runtime headshots (back to the baked demo league). */
 export function clearRuntimeHeadshots(): void { runtimeHeadshots = {}; }
 
-/** ESPN headshot for a player slug, or null (→ fall back to the team logo). */
+/** ESPN headshot for a player slug, or null (→ fall back to the team logo). Mark-free
+ *  mode suppresses it (NFLPA likeness) → the UI falls back to a generic position pill. */
 export function headshot(playerId?: string | null): string | null {
-  if (!playerId) return null;
+  if (!playerId || isMarkFree()) return null;
   return HEADSHOTS[playerId] ?? runtimeHeadshots[playerId] ?? null;
 }
 
