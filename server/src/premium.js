@@ -11,11 +11,25 @@
 // playtester measured skill-only at a fair 50.7% home win-rate).
 import { db } from './supabase.js';
 
+// Defaults / fallback. The live values are edited from the super-admin control panel and
+// stored in the premium_tier table (migration 0037); premiumTier() reads them (cached).
 export const FREE_POSITIONS = ['QB', 'RB', 'WR', 'TE'];
 // A limited but genuinely useful starter set — the live tactical swaps + one EV amplifier
 // (momentum is a proven win, §playtester). Everything else (defensive/counter buffs, the
-// metric unlocks, extra-slot, events) is premium. Tune freely.
+// metric unlocks, extra-slot, events) is premium. Tune freely from the admin panel.
 export const FREE_POWERUPS = ['metric-swap', 'player-swap', 'momentum'];
+
+// Cached read of the admin-edited free tier (60s TTL; falls back to the constants above).
+let _tier = null, _tierAt = 0;
+const TIER_TTL_MS = 60_000;
+export async function premiumTier() {
+  if (_tier && Date.now() - _tierAt < TIER_TTL_MS) return _tier;
+  try {
+    const { data, error } = await db().rpc('get_premium_tier');
+    if (!error && data) { _tier = { positions: data.free_positions ?? FREE_POSITIONS, powerups: data.free_powerups ?? FREE_POWERUPS }; _tierAt = Date.now(); }
+  } catch (e) { console.error('[premium] tier', e?.message ?? e); }
+  return _tier ?? { positions: FREE_POSITIONS, powerups: FREE_POWERUPS };
+}
 
 /** Is this matchup premium? Fail CLOSED (basic) on error so a hiccup never hands out premium. */
 export async function matchupPremium(matchupId) {
@@ -32,15 +46,16 @@ export const grantLeague = (leagueId, season, ref) => db().rpc('grant_league', {
 export const contributeToPool = (leagueId, season, uid, cents, ref) => db().rpc('contribute_to_pool', { p_league: leagueId, p_season: season, p_uid: uid, p_cents: cents, p_ref: ref });
 
 // ── Content gating (apply when premium === false) ────────────────────────────
-/** Drop free-tier-ineligible positions from a roster's slugs. posOf(slug) → 'QB'|'RB'|… */
-export function gateFreePositions(slugs, premium, posOf) {
+/** Drop free-tier-ineligible positions when not premium. Pass the admin tier's `positions`
+ *  (from premiumTier()) or omit to use the default constants. posOf(slug) → 'QB'|'RB'|… */
+export function gateFreePositions(slugs, premium, posOf, freePositions = FREE_POSITIONS) {
   if (premium) return slugs;
-  return (slugs ?? []).filter((s) => FREE_POSITIONS.includes(posOf(s)));
+  return (slugs ?? []).filter((s) => freePositions.includes(posOf(s)));
 }
-/** Keep only free-tier power-ups when not premium (ids → filtered ids). */
-export function gateFreePowerups(ids, premium) {
+/** Keep only free-tier power-ups when not premium. Pass the admin tier's `powerups` or omit. */
+export function gateFreePowerups(ids, premium, freePowerups = FREE_POWERUPS) {
   if (premium) return ids;
-  return (ids ?? []).filter((id) => FREE_POWERUPS.includes(id));
+  return (ids ?? []).filter((id) => freePowerups.includes(id));
 }
 
 // ── INTEGRATION SEAMS (where to call the above when the gating ships) ────────

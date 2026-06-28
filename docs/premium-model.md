@@ -60,9 +60,14 @@ the enforcement wiring, Stripe webhook, and paywall UI are the next implementati
   and the mutations `grant_personal` / `grant_league` / `contribute_to_pool` (atomic split-pay
   funding) / `set_league_premium_disabled`.
 - **`server/src/premium.js`** — `matchupPremium(id)` (fails *closed*), the grant helpers, the
-  free-tier config (`FREE_POSITIONS` = QB/RB/WR/TE, `FREE_POWERUPS`), `gateFreePositions` /
-  `gateFreePowerups`, and the four documented integration seams (lock.js, resolve.js, the
-  client paywall, the Stripe webhook).
+  free-tier defaults, `premiumTier()` (cached read of the admin config), `gateFreePositions` /
+  `gateFreePowerups` (take the tier's free lists), and the four documented integration seams
+  (lock.js, resolve.js, the client paywall, the Stripe webhook).
+- **`premium_tier` config (migration 0037) + super-admin control panel** — the FREE vs
+  premium split for **positions** and **power-ups** is editable from the admin UI
+  (`AdminPage` → PREMIUM TIER card → `admin_set_premium_tier`, admin-gated), stored globally,
+  read by the worker (`premiumTier()`) and the client paywall. Defaults: free QB/RB/WR/TE +
+  metric-swap/player-swap/momentum.
 
 ### Data model
 
