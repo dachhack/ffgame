@@ -664,7 +664,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         return back > 0 ? ` · ↩ COUNTER-NUKE −${back.toFixed(1)}` : ' · ↩ COUNTER-NUKE';
       }
       if (oppSide === 'you' && youBuffs.has('insurance') && !insUsed) {
-        insUsed = true; opp.bank = Math.round(wiped * 0.5 * 10) / 10; opp.hist = []; nukeDrip(opp, play.clock); // bank half-refunded, but the slot is still suppressed
+        insUsed = true; opp.bank = Math.round(wiped * 0.5 * 10) / 10; opp.hist = []; // half the bank refunded AND the drip survives (no rate-reset/blackout) — the "soften" counter to counter-nuke's "reflect"
         recBuff('you', 'insurance', opp.bank); // half your bank refunded instead of zeroed
         return ` · 🛟 INSURED ${opp.bank.toFixed(1)}`;
       }
