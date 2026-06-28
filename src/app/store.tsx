@@ -8,6 +8,7 @@ import type { League } from '../types';
 import { powerupById } from '../data/powerups';
 import { DEMO_WEEK } from '../config';
 import type { SleeperUser } from '../data/sleeper';
+import { track, identify, Ev } from './analytics';
 
 import type { SlotSwap } from '../engine/matchup';
 export type { SlotSwap };
@@ -160,6 +161,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   });
   const setSleeperUser = (u: SleeperUser | null) => {
     setSleeperUserState(u);
+    if (u) { identify(u.userId, { username: u.username }); track(Ev.sleeperConnected); }
     try { if (u) localStorage.setItem(SLEEPER_KEY, JSON.stringify(u)); else localStorage.removeItem(SLEEPER_KEY); } catch { /* ignore */ }
   };
   // Boot to your leagues if a Sleeper user is remembered, else the welcome splash.
@@ -168,6 +170,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // back button steps between in-app screens instead of dead-ending / leaving the site.
   const navigate = (r: Route) => {
     setRoute(r);
+    track(Ev.screenView, { screen: r.name });
     try { window.history.pushState({ __route: r }, ''); } catch { /* ignore */ }
   };
   useEffect(() => {
@@ -185,6 +188,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [demoWeek, setDemoWeek] = useState<number>(DEMO_WEEK);
   const [liveCtx, setLiveCtx] = useState<LiveCtx | null>(null);
   const loadSimLeague = (built: BuiltLeague, youId: string, ctx: LiveCtx | null = null) => {
+    track(Ev.leagueOpened, { live: !!ctx, teams: built.league.teams?.length ?? null });
     clearLivePlays();                   // drop any prior league's live overlay
     setActiveLeague(built);             // swap the engine registry (non-React reads)
     setActiveLeagueState(built.league); // re-render React consumers
@@ -267,6 +271,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const nextCoins = coins - pu.price;
     const nextInv = { ...inventory, [id]: (inventory[id] ?? 0) + 1 };
     setInventory(nextInv); setCoins(nextCoins); persist({ coins: nextCoins, inv: nextInv });
+    track(Ev.powerupBought, { id, price: pu.price });
     return true;
   };
 
@@ -363,6 +368,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const cur: AppliedWeek = applied[week] ?? { extraSlots: {}, swaps: {}, backups: {} };
     const nextApplied = { ...applied, [week]: { ...cur, extraSlots: cur.extraSlots ?? {}, swaps: cur.swaps ?? {}, backups: cur.backups ?? {}, lineup } };
     setApplied(nextApplied); persist({ applied: nextApplied });
+    track(Ev.lineupSet, { week, slots: Object.keys(lineup).length });
   };
 
   const resetDripCoin = (): void => {
