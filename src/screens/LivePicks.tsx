@@ -12,6 +12,7 @@ import {
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
 } from '../data/liveApi';
 import { powerupById } from '../data/powerups';
+import { ensurePremiumTier, isFreePowerup, markGatedAttempt } from '../data/premiumClient';
 import { shortName } from '../data/players';
 import type { Player } from '../types';
 import { SetupRow, PlayerPicker } from './Matchup';
@@ -62,6 +63,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   const [err, setErr] = useState<string | null>(null);
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
 
+  useEffect(() => { ensurePremiumTier(); }, []); // load the free/premium split for intent gating
   useEffect(() => {
     (async () => {
       try {
@@ -210,6 +212,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   const toggleBuff = async (id: string) => {
     if (!matchup || locked || buffBusy) return;
     const armed = buffs.has(id);
+    if (!armed && !isFreePowerup(id)) markGatedAttempt('powerup:' + id); // upgrade-intent signal (non-blocking)
     if (!armed && coins < priceOf(id)) { setErr(insufficientMsg(id)); return; }
     setBuffBusy(id); setErr(null);
     try {
@@ -223,6 +226,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   const toggleUnlock = async (id: string) => {
     if (!matchup || locked || buffBusy) return;
     const armed = unlocks.has(id);
+    if (!armed && !isFreePowerup(id)) markGatedAttempt('powerup:' + id); // upgrade-intent signal (non-blocking)
     if (!armed && coins < priceOf(id)) { setErr(insufficientMsg(id)); return; }
     setBuffBusy(id); setErr(null);
     try {
