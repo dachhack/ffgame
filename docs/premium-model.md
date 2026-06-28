@@ -69,6 +69,22 @@ the enforcement wiring, Stripe webhook, and paywall UI are the next implementati
   read by the worker (`premiumTier()`) and the client paywall. Defaults: free QB/RB/WR/TE +
   metric-swap/player-swap/momentum.
 
+### Payments — SCAFFOLDED (Stripe, Supabase Edge Functions)
+- **`supabase/functions/stripe-checkout`** — auth'd user → a Stripe Checkout Session for
+  `personal` ($5) / `league` ($30) / `split` (a contribution). Derives the season from the
+  league server-side; stamps the grant metadata. Client helper `startCheckout()` (liveApi)
+  redirects to Stripe; the LivePicks CTA wires the $5 / $30 buttons.
+- **`supabase/functions/stripe-webhook`** — verifies the Stripe signature, and on
+  `checkout.session.completed` calls `grant_personal` / `grant_league` / `contribute_to_pool`
+  (service role). Idempotent: the grants ON CONFLICT, and `contribute_to_pool` now no-ops on a
+  repeated Stripe ref (migration 0038), so webhook retries can't double-charge a pool.
+- **Deploy (ops):** `supabase functions deploy stripe-checkout` and
+  `supabase functions deploy stripe-webhook --no-verify-jwt` (the webhook's auth is the Stripe
+  signature, not a Supabase JWT). Secrets: `supabase secrets set STRIPE_SECRET_KEY=… STRIPE_WEBHOOK_SECRET=… APP_URL=https://dripfantasy.com`. Then add a Stripe webhook endpoint
+  pointing at the function URL for the `checkout.session.completed` event. Apply migration 0038.
+- **Test mode first** — use Stripe test keys + a test webhook secret until the pilot validates
+  intent; flip to live keys when you turn payments on.
+
 ### Data model
 
 

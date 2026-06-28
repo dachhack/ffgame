@@ -322,6 +322,14 @@ export const isAdmin = () => rpc<boolean>('is_admin');
 export interface PremiumTier { free_positions: string[]; free_powerups: string[]; updated_at?: string }
 export const getPremiumTier = () => rpc<PremiumTier>('get_premium_tier');
 export const matchupPremium = (matchupId: string) => rpc<boolean>('matchup_premium', { m_id: matchupId });
+/** Start a Stripe Checkout for a premium purchase → redirects to Stripe. The edge
+ *  function derives the season from the league; the webhook grants on payment. */
+export async function startCheckout(kind: 'personal' | 'league' | 'split', leagueId: string, amountCents?: number): Promise<void> {
+  const { data, error } = await client().functions.invoke('stripe-checkout', { body: { kind, leagueId, amountCents } });
+  if (error) throw error;
+  const url = (data as { url?: string } | null)?.url;
+  if (url) window.location.href = url;
+}
 export const adminSetPremiumTier = (freePositions: string[], freePowerups: string[]) =>
   rpc<{ ok: boolean; error?: string }>('admin_set_premium_tier', { p_free_positions: freePositions, p_free_powerups: freePowerups });
 
