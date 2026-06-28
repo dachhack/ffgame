@@ -70,10 +70,20 @@ function isDrip(pos: Pos, metric: string): boolean {
   return !!m && m.tag.includes('DRIP');
 }
 
+/** Positions that CAN run a drip (and so benefit from a Field General). K/DEF cannot —
+ *  they are the lone "special situation" where a non-drip shares an FG window. */
+const DRIP_POS = new Set<Pos>(['RB', 'WR', 'TE']);
+
 /** Field-General coordination: in any window holding a QB plus ≥ threshold non-QB
  *  drip slots, flip that QB onto `fg` so its passing yards multiply the window's
  *  drip instead of banking flat points. Honest — it's a pre-game read of the
- *  lineup's own composition, not the opponent's or the week's result. */
+ *  lineup's own composition, not the opponent's or the week's result.
+ *
+ *  Guarantee: a deployed Field General never shares its window with a wasted slot —
+ *  every drip-CAPABLE teammate (RB/WR/TE) there is forced onto its drip metric, since
+ *  the multiplier only amplifies drips. K/DEF have no drip and are the sole exception.
+ *  Today the position defaults already drip, so this only hardens the invariant against
+ *  a future default/override change ever sneaking a non-drip into a General's window. */
 function applyFieldGeneral(picks: AiPick[]): void {
   const byWin = new Map<string, AiPick[]>();
   for (const p of picks) {
@@ -83,15 +93,24 @@ function applyFieldGeneral(picks: AiPick[]): void {
   for (const group of byWin.values()) {
     const qb = group.find((p) => slugMeta(p.slug).pos === 'QB');
     if (!qb) continue;
-    const drips = group.filter((p) => p !== qb && isDrip(slugMeta(p.slug).pos, p.metric));
-    if (drips.length >= FG_DRIP_THRESHOLD) qb.metric = 'fg';
+    const skill = group.filter((p) => p !== qb && DRIP_POS.has(slugMeta(p.slug).pos));
+    const drips = skill.filter((p) => isDrip(slugMeta(p.slug).pos, p.metric));
+    if (drips.length >= FG_DRIP_THRESHOLD) {
+      qb.metric = 'fg';
+      for (const p of skill) if (!isDrip(slugMeta(p.slug).pos, p.metric)) p.metric = defaultAiMetric(slugMeta(p.slug).pos);
+    }
   }
 }
 
-// The in-slot buffs an AI team arms in a live week. Limited to whole-lineup
-// buffs that help whichever side arms them (drip/OT/clock buffs) — so the AI
-// always benefits — mirroring the demo's AI_BUFF_POOL (src/engine/matchup.ts).
-const AI_LIVE_BUFFS = ['momentum', 'garbage-time', 'floodgates', 'overtime', 'ot-shield'];
+// The in-slot buffs an AI team arms in a live week, in EXPECTED-VALUE order. The
+// automated playtester (tools/playtester) shows these three drip AMPLIFIERS are the
+// only buffs that actually lift honest win-rate — momentum (3× when hot), overtime
+// (drips + Field General carry past regulation), garbage-time (final-5-min ×2) — while
+// the defensive buffs (floodgates / ot-shield) are dead against the honest field
+// (nobody nukes) and only waste coin. Dropping them and buying these first is a measured
+// +6.6-margin / ~59% blind win-rate improvement vs the old random draw (docs/playtester-
+// findings.md §5). The demo AI keeps its own AI_BUFF_POOL in src/engine/matchup.ts.
+const AI_LIVE_BUFFS = ['momentum', 'overtime', 'garbage-time'];
 
 /** Deterministic 32-bit hash for seeding the AI's draws (no Math.random, so the
  *  worker and a preview agree and a re-resolve is stable). */
@@ -106,13 +125,13 @@ function hashStr(s: string): number {
  *  seeded only on identity + week, never on the week's results. In M1 these are
  *  free; a later milestone gates them behind the team's coin budget. */
 export function aiLiveBuffs(teamKey: string, week: number, n = 3): string[] {
-  const pool = [...AI_LIVE_BUFFS];
+  // EV-ordered, rotated per team+week so different AI teams lead with a different
+  // amplifier (harmless variety) without ever leaving the proven-good set. The budget
+  // pass buys the first it can afford, so the lead buff is what most teams end up with.
+  const pool = AI_LIVE_BUFFS;
+  const start = hashStr(`${teamKey}|buffs|${week}`) % pool.length;
   const out: string[] = [];
-  let seed = hashStr(`${teamKey}|buffs|${week}`);
-  for (let i = 0; i < n && pool.length; i++) {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff; // LCG step for a varied draw
-    out.push(pool.splice(seed % pool.length, 1)[0]);
-  }
+  for (let i = 0; i < Math.min(n, pool.length); i++) out.push(pool[(start + i) % pool.length]);
   return out;
 }
 
@@ -133,6 +152,10 @@ export function aiLineup(slugs: string[], week = 0, owned: Set<string> = new Set
     const { pos, team } = slugMeta(slug);
     return { slug, pos, team, metric: aiMetric(slug, pos, owned) };
   });
+  // Field the BEST players first: place/overflow in descending season projection so a
+  // full window keeps its higher-projected starters and benches the weaker ones — never
+  // sitting a WR ranked 23rd behind one ranked 65th just because of roster order.
+  tagged.sort((a, b) => statsForSlug(b.slug, b.pos).ppr - statsForSlug(a.slug, a.pos).ppr);
 
   const { picks, bench } = hasSlate(week) ? slateGated(tagged, week) : gridFill(tagged);
   addExtraSlots(picks, bench, extraSlots);

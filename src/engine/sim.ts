@@ -140,6 +140,7 @@ interface SideState {
   dead: boolean;   // negated by an opponent K-neg shutdown → scores 0
   rate: number;    // WR drip rate (pts/min), grows per catch
   paused: boolean; // drip paused until the WR's next catch
+  nukedUntil: number; // game-clock (s) through which a TD nuke suppresses ALL scoring here
 }
 
 interface MergedPlay extends RawPlay {
@@ -463,8 +464,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     ...tPlays.map((p) => ({ ...p, side: 'their' as const })),
   ].sort((a, b) => a.clock - b.clock);
 
-  const Y: SideState = { bank: 0, hist: [], streak: 0, hot: false, kicks: 0, dead: false, rate: 0, paused: false };
-  const T: SideState = { bank: 0, hist: [], streak: 0, hot: false, kicks: 0, dead: false, rate: 0, paused: false };
+  const Y: SideState = { bank: 0, hist: [], streak: 0, hot: false, kicks: 0, dead: false, rate: 0, paused: false, nukedUntil: 0 };
+  const T: SideState = { bank: 0, hist: [], streak: 0, hot: false, kicks: 0, dead: false, rate: 0, paused: false, nukedUntil: 0 };
   const youFam = familyOf(you.player.pos, you.metricId);
   const theirFam = familyOf(their.player.pos, their.metricId);
 
@@ -605,9 +606,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     }
   };
   const dripNuke = (s: SideState, side: 'you' | 'their', clock: number) => {
-    if (s.rate <= 0) return;
+    if (s.rate <= 0 && !s.hot) return;
     s.rate = Math.max(0, s.rate - DRIP_NUKE);
-    events.push({ clock, side, play: `${(side === 'you' ? you : their).player.team || 'NFL'}: drip nuked`, delta: 0, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, effect: { type: 'nuke', text: `DRIP NUKED −${DRIP_NUKE.toFixed(1)}/min → ${s.rate.toFixed(2)}` } });
+    const killedHot = s.hot;
+    s.streak = 0; s.hot = false; // a TE TD also KILLS the hot streak for every opposing drip in the window
+    events.push({ clock, side, play: `${(side === 'you' ? you : their).player.team || 'NFL'}: drip nuked`, delta: 0, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, effect: { type: 'nuke', text: `DRIP NUKED −${DRIP_NUKE.toFixed(1)}/min → ${s.rate.toFixed(2)}${killedHot ? ' · HOT killed' : ''}` } });
   };
   const accrue = (to: number) => {
     // Gather this segment's drip-nuke clocks (a TE TD on the opposing side),
@@ -633,6 +636,13 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   let youOtPts = 0, theirOtPts = 0;
   // Counter-Nuke / Insurance fire once per slot, on the human side only.
   let cnUsed = false, insUsed = false;
+  // A TD nuke RESETS the victim's drip AND suppresses ALL scoring in that slot for the
+  // next 10 game-minutes. A bare rate-reset is rebuilt within a few catches (the reason
+  // NUKE was dead), so the 10-minute blackout is what makes the wipe stick — the slot
+  // banks/builds nothing until it lifts, then must rebuild the rate from scratch. (Also
+  // nullifies any Field-General-boosted accrual meanwhile: 0 rate × any mult = 0.)
+  const NUKE_SUPPRESS = 600; // 10 game-minutes, in seconds
+  const nukeDrip = (s: SideState, clock: number) => { s.rate = 0; s.streak = 0; s.hot = false; s.paused = true; s.nukedUntil = Math.max(s.nukedUntil, clock + NUKE_SUPPRESS); };
 
   for (const play of merged) {
     accrue(play.clock);
@@ -640,20 +650,25 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const mine = play.side === 'you' ? Y : T;
     const opp = play.side === 'you' ? T : Y;
     const oppSide: 'you' | 'their' = play.side === 'you' ? 'their' : 'you';
+    // A nuke-suppressed slot is INERT until its 10-minute blackout lifts: this play
+    // builds no drip rate, banks no points, and triggers no effects. The opponent's
+    // drip accrual over [lastClock, play.clock] already ran in accrue() above, and the
+    // slot's rate was zeroed at the nuke, so nothing accrues here either.
+    if (play.clock < mine.nukedUntil) continue;
     // A big bank wipe of the victim (`opp`). Counter-Nuke (reflect onto the
     // attacker) and Insurance (keep half) protect YOUR slot the first time.
     const nukeWipe = (wiped: number): string => {
       if (oppSide === 'you' && youBuffs.has('counter-nuke') && !cnUsed) {
-        cnUsed = true; const back = mine.bank; mine.bank = 0; mine.hist = [];
+        cnUsed = true; const back = mine.bank; mine.bank = 0; mine.hist = []; nukeDrip(mine, play.clock); // reflected: the attacker is wiped + drip-suppressed instead
         recBuff('you', 'counter-nuke', back, true); // reflected the nuke back onto the attacker
         return back > 0 ? ` · ↩ COUNTER-NUKE −${back.toFixed(1)}` : ' · ↩ COUNTER-NUKE';
       }
       if (oppSide === 'you' && youBuffs.has('insurance') && !insUsed) {
-        insUsed = true; opp.bank = Math.round(wiped * 0.5 * 10) / 10; opp.hist = [];
+        insUsed = true; opp.bank = Math.round(wiped * 0.5 * 10) / 10; opp.hist = []; nukeDrip(opp, play.clock); // bank half-refunded, but the slot is still suppressed
         recBuff('you', 'insurance', opp.bank); // half your bank refunded instead of zeroed
         return ` · 🛟 INSURED ${opp.bank.toFixed(1)}`;
       }
-      opp.bank = 0; opp.hist = [];
+      opp.bank = 0; opp.hist = []; nukeDrip(opp, play.clock);
       return '';
     };
     const myFam = play.side === 'you' ? youFam : theirFam;
