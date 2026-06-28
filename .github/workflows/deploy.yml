@@ -32,6 +32,10 @@ jobs:
         env:
           # Site is served from dripfantasy.com root, not /ffgame/.
           VITE_BASE: /
+          # PostHog project token (phc_…, public/write-only). Set as a repo Variable:
+          # Settings → Secrets and variables → Actions → Variables → VITE_POSTHOG_KEY.
+          # Unset → analytics is a no-op (posthog-js isn't even loaded).
+          VITE_POSTHOG_KEY: ${{ vars.VITE_POSTHOG_KEY }}
       - uses: actions/configure-pages@v5
         with:
           enablement: true
