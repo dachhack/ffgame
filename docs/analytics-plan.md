@@ -1,5 +1,11 @@
 # Analytics & retention plan (pilot instrumentation)
 
+> **DEFERRED (decided):** the analytics *layer* is shipped (`src/app/analytics.ts`), but
+> wiring an actual provider (**PostHog** recommended) is parked for later — add
+> `posthog-js` + `VITE_POSTHOG_KEY` and call `registerSink()` when ready (snippet below).
+> Until then events log in dev and no-op in prod; nothing else depends on it.
+
+
 _Goal: before spending on payments, licensing, or GTM, **measure whether people come
 back** and **whether they want the paid tier**. This doc is the event taxonomy + what to
 watch. The code is `src/app/analytics.ts` (a provider-agnostic layer) wired into the store._
