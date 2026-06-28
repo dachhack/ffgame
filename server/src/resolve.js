@@ -19,6 +19,8 @@
 // cross-window TE-TD nukes, and the K banker bonus remain simplified there.
 import { db } from './supabase.js';
 import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY } from './engine.js';
+import { matchupPremium, premiumTier, hasPremiumContent, gateSide } from './premium.js';
+import { slugMeta } from '../../src/data/slugMeta.ts';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
 export function baseScore(plays) {
@@ -181,7 +183,23 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   };
   const home = override ? { picks: override.home, buffs: [] } : await sideLineup(matchup.home_roster_id);
   const away = override ? { picks: override.away, buffs: [] } : await sideLineup(matchup.away_roster_id);
-  const homePicks = home.picks, awayPicks = away.picks;
+  let homePicks = home.picks, awayPicks = away.picks;
+  let homeBuffs = home.buffs, awayBuffs = away.buffs;
+
+  // Premium enforcement (docs/premium-model.md): a NON-premium matchup can't field premium
+  // positions (K/DST/IDP), premium-unlock metrics, or premium power-ups. Stripped here at the
+  // authoritative resolve regardless of how the rows were written. The cheap pre-check skips
+  // the matchup_premium() RPC unless a side actually holds premium content.
+  {
+    const tier = await premiumTier();
+    const posOf = (slug) => slugMeta(slug).pos;
+    if (hasPremiumContent(homePicks, homeBuffs, tier, posOf) || hasPremiumContent(awayPicks, awayBuffs, tier, posOf)) {
+      if (!(await matchupPremium(matchup.id))) {
+        if (homePicks) { const g = gateSide(homePicks, homeBuffs, tier, posOf); homePicks = g.picks; homeBuffs = g.buffs; }
+        if (awayPicks) { const g = gateSide(awayPicks, awayBuffs, tier, posOf); awayPicks = g.picks; awayBuffs = g.buffs; }
+      }
+    }
+  }
 
   const states = []; // { game_window, home_score, away_score }
   let homeTotal = 0, awayTotal = 0;
@@ -191,7 +209,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   if (homePicks && awayPicks) {
     // ── Both sides have a lineup (human, AI, or auto-backup): real H2H engine ──
     const r = resolveLiveMatchup(homePicks.map(toLive), awayPicks.map(toLive), matchup.week,
-      { homeBuffs: new Set(home.buffs), awayBuffs: new Set(away.buffs) });
+      { homeBuffs: new Set(homeBuffs), awayBuffs: new Set(awayBuffs) });
     for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
     homeTotal = r.home; awayTotal = r.away; coin = r.coin;
   } else {

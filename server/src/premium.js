@@ -10,6 +10,8 @@
 // power-up set + special events; the free tier is a complete, balanced game on its own (the
 // playtester measured skill-only at a fair 50.7% home win-rate).
 import { db } from './supabase.js';
+import { LOCKED_METRIC_UNLOCK } from '../../src/data/metrics.ts';
+import { defaultAiMetric } from '../../src/data/aiLineup.ts';
 
 // Defaults / fallback. The live values are edited from the super-admin control panel and
 // stored in the premium_tier table (migration 0037); premiumTier() reads them (cached).
@@ -56,6 +58,26 @@ export function gateFreePositions(slugs, premium, posOf, freePositions = FREE_PO
 export function gateFreePowerups(ids, premium, freePowerups = FREE_POWERUPS) {
   if (premium) return ids;
   return (ids ?? []).filter((id) => freePowerups.includes(id));
+}
+
+// A metric is premium when it needs an unlock power-up that isn't in the free tier.
+const premiumMetric = (metric, freePowerups) => { const u = LOCKED_METRIC_UNLOCK[metric]; return !!u && !freePowerups.includes(u); };
+
+/** Does a side field anything premium — a non-free POSITION, a premium-unlock METRIC, or a
+ *  premium BUFF? Cheap local pre-check so resolve only spends a matchup_premium() RPC when it
+ *  could actually matter (most pilot ticks field only free content). tier = {positions,powerups}. */
+export function hasPremiumContent(picks, buffs, tier, posOf) {
+  return (picks ?? []).some((p) => !tier.positions.includes(posOf(p.slug)) || premiumMetric(p.metric, tier.powerups))
+    || (buffs ?? []).some((b) => !tier.powerups.includes(b));
+}
+
+/** Strip premium content from a side ({win,slot,slug,metric}[] + buff ids[]) for a NON-premium
+ *  matchup: drop non-free positions, downgrade premium-unlock metrics to the position default,
+ *  keep only free buffs. Authoritative — runs at resolve regardless of how the rows were written. */
+export function gateSide(picks, buffs, tier, posOf) {
+  const gPicks = (picks ?? []).filter((p) => tier.positions.includes(posOf(p.slug)))
+    .map((p) => (premiumMetric(p.metric, tier.powerups) ? { ...p, metric: defaultAiMetric(posOf(p.slug)) } : p));
+  return { picks: gPicks, buffs: (buffs ?? []).filter((b) => tier.powerups.includes(b)) };
 }
 
 // ── INTEGRATION SEAMS (where to call the above when the gating ships) ────────

@@ -8,10 +8,11 @@ import {
   myBuffs, armBuff, disarmBuff, LIVE_BUFFS,
   myUnlocks, armUnlock, disarmUnlock,
   myWallet, ensureWallet,
-  myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams,
+  myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
 } from '../data/liveApi';
 import { powerupById } from '../data/powerups';
+import { ensurePremiumTier, isFreePowerup, markGatedAttempt } from '../data/premiumClient';
 import { shortName } from '../data/players';
 import type { Player } from '../types';
 import { SetupRow, PlayerPicker } from './Matchup';
@@ -61,7 +62,9 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
+  const [matchPremium, setMatchPremium] = useState(true); // default true = no false locks until we know
 
+  useEffect(() => { ensurePremiumTier(); }, []); // load the free/premium split for intent gating
   useEffect(() => {
     (async () => {
       try {
@@ -72,6 +75,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         const m = await myMatchup(r.leagueId, r.rosterId);
         if (!m) { setState('none'); return; }
         setMatchup(m);
+        matchupPremium(m.id).then(setMatchPremium).catch(() => {}); // premium → no power-up locks (both sides get the full set)
         matchupTeams(r.leagueId, [r.rosterId]).then((t) => setMyTeam(t[r.rosterId] ?? null)).catch(() => {});
         const [pl, pk, bf, un, ex, slate] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId), myBuffs(m.id), myUnlocks(m.id), myExtra(m.id).catch(() => 0), liveSlate(m.week).catch(() => [])]);
         // Apply the live ESPN slate (overrides baked 2025) before gating below.
@@ -207,9 +211,14 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   const priceOf = (id: string) => powerupById(id)?.price ?? 0;
   const insufficientMsg = (id: string) => `Not enough drip coin — ${powerupById(id)?.name ?? id} costs ◆${priceOf(id)}, you have ◆${Math.round(coins)}.`;
 
+  // A power-up is paywalled when this matchup isn't premium and it's not in the free tier.
+  const puLocked = (id: string) => !matchPremium && !isFreePowerup(id);
+  const upgradeMsg = 'Premium power-up — unlock premium ($5 you · $30 league) to arm it.';
+
   const toggleBuff = async (id: string) => {
     if (!matchup || locked || buffBusy) return;
     const armed = buffs.has(id);
+    if (!armed && puLocked(id)) { markGatedAttempt('powerup:' + id); setErr(upgradeMsg); return; }
     if (!armed && coins < priceOf(id)) { setErr(insufficientMsg(id)); return; }
     setBuffBusy(id); setErr(null);
     try {
@@ -223,6 +232,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   const toggleUnlock = async (id: string) => {
     if (!matchup || locked || buffBusy) return;
     const armed = unlocks.has(id);
+    if (!armed && puLocked(id)) { markGatedAttempt('powerup:' + id); setErr(upgradeMsg); return; }
     if (!armed && coins < priceOf(id)) { setErr(insufficientMsg(id)); return; }
     setBuffBusy(id); setErr(null);
     try {
@@ -308,6 +318,11 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
           <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
             Arm before kickoff — each buffs your whole lineup all week, spent from your drip coin. Locks at kickoff.
           </div>
+          {!matchPremium && (
+            <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 35%, transparent)', borderRadius: 8, padding: '7px 9px', marginTop: 8, lineHeight: 1.55 }}>
+              🔒 Premium unlocks K/DST/IDP + the full power-up set + special events. $5 covers all your leagues · $30 unlocks your whole league (split it ~$3/head). Both sides of a premium matchup get the full set — never pay-to-win.
+            </div>
+          )}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
             {LIVE_BUFFS.map((id) => {
               const pu = powerupById(id);
@@ -317,7 +332,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
                 <button key={id} onClick={() => toggleBuff(id)} disabled={locked || !!buffBusy || !afford} title={pu?.blurb}
                   className="mono"
                   style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : afford ? 'var(--text)' : 'var(--faint)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked || !afford ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : afford ? 1 : 0.5 }}>
-                  {pu?.icon} {pu?.name ?? id} {on ? '✓' : `◆${priceOf(id)}`}
+                  {pu?.icon} {pu?.name ?? id} {on ? '✓' : puLocked(id) ? '🔒' : `◆${priceOf(id)}`}
                 </button>
               );
             })}
@@ -335,7 +350,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
                 <button key={id} onClick={() => toggleUnlock(id)} disabled={locked || !!buffBusy || !afford} title={pu?.blurb}
                   className="mono"
                   style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : afford ? 'var(--text)' : 'var(--faint)', background: on ? 'var(--streak, var(--you))' : 'var(--bg)', border: `1px solid ${on ? 'var(--streak, var(--you))' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked || !afford ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : afford ? 1 : 0.5 }}>
-                  {pu?.icon} {pu?.name ?? id} {on ? '✓' : `◆${priceOf(id)}`}
+                  {pu?.icon} {pu?.name ?? id} {on ? '✓' : puLocked(id) ? '🔒' : `◆${priceOf(id)}`}
                 </button>
               );
             })}
