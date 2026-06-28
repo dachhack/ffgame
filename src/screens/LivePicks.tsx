@@ -8,7 +8,7 @@ import {
   myBuffs, armBuff, disarmBuff, LIVE_BUFFS,
   myUnlocks, armUnlock, disarmUnlock,
   myWallet, ensureWallet,
-  myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium,
+  myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium, startCheckout,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
 } from '../data/liveApi';
 import { powerupById } from '../data/powerups';
@@ -214,6 +214,11 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   // A power-up is paywalled when this matchup isn't premium and it's not in the free tier.
   const puLocked = (id: string) => !matchPremium && !isFreePowerup(id);
   const upgradeMsg = 'Premium power-up — unlock premium ($5 you · $30 league) to arm it.';
+  const checkout = (kind: 'personal' | 'league') => {
+    if (!roster) return;
+    markGatedAttempt('checkout:' + kind);
+    startCheckout(kind, roster.leagueId).catch((e) => setErr(e instanceof Error ? e.message : 'Checkout failed.'));
+  };
 
   const toggleBuff = async (id: string) => {
     if (!matchup || locked || buffBusy) return;
@@ -319,8 +324,14 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
             Arm before kickoff — each buffs your whole lineup all week, spent from your drip coin. Locks at kickoff.
           </div>
           {!matchPremium && (
-            <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 35%, transparent)', borderRadius: 8, padding: '7px 9px', marginTop: 8, lineHeight: 1.55 }}>
-              🔒 Premium unlocks K/DST/IDP + the full power-up set + special events. $5 covers all your leagues · $30 unlocks your whole league (split it ~$3/head). Both sides of a premium matchup get the full set — never pay-to-win.
+            <div style={{ background: 'color-mix(in srgb, var(--you) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 35%, transparent)', borderRadius: 8, padding: '8px 9px', marginTop: 8 }}>
+              <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--you)', lineHeight: 1.55 }}>
+                🔒 Premium unlocks K/DST/IDP + the full power-up set + special events. Both sides of a premium matchup get the full set — never pay-to-win.
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+                <button onClick={() => checkout('personal')} className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>Unlock for $5 · all your leagues</button>
+                <button onClick={() => checkout('league')} className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--you)', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>Unlock league · $30</button>
+              </div>
             </div>
           )}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
