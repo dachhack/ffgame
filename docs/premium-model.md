@@ -51,7 +51,22 @@ disable rate as a health signal, but it isn't fixing an imbalance.)
   cheaper than $5 personal *and* unlocks everyone — the best deal for a coordinated league),
   while $5 personal stays the frictionless solo / multi-league买 (covers N leagues at once).
 
-## Entitlements — data model to build (server-authoritative)
+## Entitlements — SCAFFOLDED (migration 0036 + server/src/premium.js)
+Shipped as a scaffold (schema + the resolution rule + the worker helper + the gating seams);
+the enforcement wiring, Stripe webhook, and paywall UI are the next implementation step.
+- **`supabase/migrations/0036_premium_entitlements.sql`** — the tables below + RLS (member-
+  scoped reads; entitlement writes are service-role only; the commish toggle is commissioner-
+  gated), the read functions `user_premium` / `league_premium` / `matchup_premium` (the rule),
+  and the mutations `grant_personal` / `grant_league` / `contribute_to_pool` (atomic split-pay
+  funding) / `set_league_premium_disabled`.
+- **`server/src/premium.js`** — `matchupPremium(id)` (fails *closed*), the grant helpers, the
+  free-tier config (`FREE_POSITIONS` = QB/RB/WR/TE, `FREE_POWERUPS`), `gateFreePositions` /
+  `gateFreePowerups`, and the four documented integration seams (lock.js, resolve.js, the
+  client paywall, the Stripe webhook).
+
+### Data model
+
+
 ```
 entitlement   id · subject_type ('user'|'league') · subject_id · product ('personal'|'league')
               · season · source ('stripe'|'split'|'grant') · created_at · expires_at
