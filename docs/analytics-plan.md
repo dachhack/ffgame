@@ -10,6 +10,10 @@ _Goal: before spending on payments, licensing, or GTM, **measure whether people 
 back** and **whether they want the paid tier**. This doc is the event taxonomy + what to
 watch. The code is `src/app/analytics.ts` (a provider-agnostic layer) wired into the store._
 
+> **Model of record:** see **`docs/premium-model.md`** — $5 personal / $30 league / split-pay
+> / opponent **spillover** / commish-disable. The section below is the earlier simpler sketch;
+> the premium-model doc supersedes the tier mechanics and the event list (`Ev.*` updated).
+
 ## Freemium model (the thing we're measuring toward)
 Founder's proposal, which fits the game's structure unusually well:
 

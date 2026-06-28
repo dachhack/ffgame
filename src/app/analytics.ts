@@ -23,13 +23,15 @@ export const Ev = {
   leagueOpened: 'league_opened',
   lineupSet: 'lineup_set',
   powerupBought: 'powerup_bought',
-  // freemium funnel (fire once the gating ships)
-  gatedFeatureAttempted: 'gated_feature_attempted', // tried K/DST/IDP/locked power-up → upgrade INTENT
-  upgradePromptShown: 'upgrade_prompt_shown',
-  upgradeViewed: 'upgrade_viewed',
-  upgradeStarted: 'upgrade_started',
-  upgradeCompleted: 'upgrade_completed',
-  leagueUpgraded: 'league_upgraded',
+  // premium funnel (docs/premium-model.md; fire once the gating + entitlements ship)
+  gatedFeatureAttempted: 'gated_feature_attempted', // tried K/DST/IDP/locked power-up → premium INTENT
+  premiumTierViewed: 'premium_tier_viewed',         // {tier:'personal'|'league'}
+  premiumPurchased: 'premium_purchased',            // {tier, amount}
+  spilloverGranted: 'spillover_granted',            // a matchup went premium because the opponent paid
+  splitStarted: 'split_started',                    // a league split-pay pool opened
+  splitContributed: 'split_contributed',            // {amount}
+  splitCompleted: 'split_completed',                // pool reached $30 → league unlocked
+  commishPremiumToggled: 'commish_premium_toggled', // {on}
 } as const;
 
 let sink: AnalyticsSink | null = null;
