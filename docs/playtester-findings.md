@@ -145,8 +145,12 @@ RB stacks + a drip amplifier (momentum/overtime/garbage-time)**.
    TE-TD fires 31% and *lowers* win-rate) and the adversary only touches it situationally.
    Make the TE-TD drip-knock permanent/larger (it's currently out-accrued) or cut NUKE's
    opportunity cost, then confirm `td` lands near 50% in `aggregate.mjs` without overshooting.
-3. **Re-price the dead defensive buffs** (§2 finding 3) — floodgates/counter-nuke/insurance
-   are traps vs non-nuking opponents; give them an honest-field use or drop their price.
+3. **Defensive buffs — DONE (§9): they're situational counters, not mis-priced.** Re-measured
+   vs a nuker now that NUKE is lethal: `counter-nuke` is strong and correctly priced (77% / +33),
+   `insurance` was broken by the nuke retune and was fixed to also protect the drip (now +15,
+   earns its cost). `floodgates`/`ot-shield` counter erase-stop/OT metas the honest AI doesn't
+   run — dead now, but that's correct for a counter (like counter-nuke vs a non-nuker). No price
+   changes. The §2 "DEAD vs honest = trap" framing was wrong.
 4. **Do NOT nerf Twin Generals (`fg-stack`)** — measured net of its two zeroed QB slots it's a
    high-variance, slot-expensive gamble that wins only modestly and loses 4/14 weeks (§2 finding
    5); the opportunity cost already balances it and the adversary never picks it. If any FG
@@ -194,6 +198,31 @@ NUKE, §4) — the next lever.
 
 _Next: a mechanics retune (drip-amplifier diminishing returns and/or a Combo-Drip limit) driven
 by the adversary's ceiling, then re-validate that the oracle's margin actually falls._
+
+## 9. Defensive buffs vs a nuker (`defense.mjs`) — situational counters, insurance fixed
+§2/§4 flagged the defensive buffs as "dead vs the honest field." With NUKE now lethal (§6) we
+re-measured them against a **nuker** (away flips its actual-TD-scorers to `td` so the nukes land;
+a TD-landing nuker beats an unbuffed honest home by ~10 pts). Home (the victim) arms one buff,
+paired vs unbuffed. Yardstick: the offensive buffs are ~2 pts/10c.
+
+| buff | cost | home WR vs nuker | margin lift | pts/10c | verdict |
+|---|--:|--:|--:|--:|---|
+| `counter-nuke` | 95 | **77.2%** | +33.1 | 3.49 | strong, correctly priced (reflect) |
+| `insurance` | 80 | **67.1%** | +15.4 | 1.92 | **fixed** → earns its cost (soften) |
+| `floodgates` | 85 | 55.3% | +0.0 | 0.00 | not a nuke counter (counters erase/stop) |
+| `ot-shield` | 70 | 56.8% | +2.0 | 0.28 | niche (counters OT scoring) |
+
+**Takeaways:**
+- The "dead defensive buffs" finding was **wrong**: they're *situational counters*, dead only
+  when their threat is absent — which is correct (`counter-nuke` proves it: dead vs a non-nuker,
+  77% vs a nuker). No re-pricing needed.
+- **`insurance` was genuinely broken by the nuke retune** (it refunded half the bank, but the
+  slot died anyway from the rate-reset/blackout). Fixed: an insured slot now **keeps its drip**
+  (no reset/blackout) on top of the half-bank refund — a cheaper "soften" counter (67% / +15)
+  next to counter-nuke's pricier "reflect" (77% / +33). Both now viable and differentiated.
+- `floodgates` (immune to erase/stop) and `ot-shield` (negates OT points) counter metas the
+  blind honest AI doesn't deploy, so they're dead *now* but not mis-priced — they'd matter if a
+  denial/OT meta emerges, the same way counter-nuke matters once someone nukes.
 
 ## 8. Window-level metric optimization (`window.mjs`) — already near-optimal
 Question: have the AI find optimal combinations of players/metrics/power-ups *within a
