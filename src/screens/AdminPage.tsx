@@ -15,6 +15,7 @@ import { FeedSheet } from './FeedSheet';
 import { WINDOWS, defaultMetric } from '../data/metrics';
 import { NFL_CODES } from '../data/kdst';
 import { slugMeta } from '../data/slugMeta';
+import { isMarkFree, setMarkFree } from '../data/markFree';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
 
@@ -35,6 +36,28 @@ function CodeChip({ v }: { v: string }) {
     <span className="mono" style={{ ...mono, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', cursor: 'pointer' }}
       onClick={() => { navigator.clipboard?.writeText(v); setDone(true); setTimeout(() => setDone(false), 1200); }}
       title="click to copy">{done ? 'copied ✓' : v}</span>
+  );
+}
+
+// Branding switch: flip mark-free mode (hide NFL logos + player headshots → generic
+// pills/initials) for a licensing-free / commercial build. Reloads so all imagery across
+// the app re-resolves consistently. Persists via localStorage (src/data/markFree.ts).
+function MarkFreeToggle() {
+  const [on, setOn] = useState(isMarkFree());
+  const flip = () => { const next = !on; setOn(next); setMarkFree(next); try { window.location.reload(); } catch { /* ignore */ } };
+  return (
+    <div style={card}>
+      <div style={h}>BRANDING</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <span className="mono" style={{ fontSize: 11, color: 'var(--text)' }}>
+          Mark-free mode · <b>{on ? 'ON' : 'OFF'}</b>
+          <span style={{ display: 'block', fontSize: 9.5, color: 'var(--dim)', marginTop: 3, maxWidth: 360 }}>
+            Hides NFL team logos + player headshots (shows generic position pills / abbreviations / initials). For licensing-free commercial builds. Reloads to apply everywhere.
+          </span>
+        </span>
+        <button onClick={flip} style={btn(on)}>{on ? 'turn off' : 'turn on'}</button>
+      </div>
+    </div>
   );
 }
 
@@ -59,6 +82,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
       {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', marginBottom: 10 }}>{err}</div>}
 
       <HealthPanel />
+      <MarkFreeToggle />
       <ImportLeague reload={load} />
 
       <div style={card}>
