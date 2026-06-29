@@ -109,6 +109,17 @@ export async function ensureAppUser(session: Session): Promise<void> {
   );
 }
 
+/** The signed-in user's previously-linked Sleeper account, if any (set on a prior
+ *  join or commish-verify). Lets a returning player skip re-typing their username.
+ *  RLS (`app_user_self`) restricts this to the caller's own row. */
+export async function myLinkedSleeper(userId: string): Promise<{ userId: string; username: string } | null> {
+  const { data } = await client().from('app_user')
+    .select('sleeper_user_id, sleeper_username').eq('id', userId).maybeSingle();
+  return data?.sleeper_user_id
+    ? { userId: data.sleeper_user_id as string, username: (data.sleeper_username as string | null) ?? '' }
+    : null;
+}
+
 export interface LeaguePreview { league_id: string; name: string; season: string; }
 
 /** Preview a league by invite code (so we can show "You're joining <name>"). */
