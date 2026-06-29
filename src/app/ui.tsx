@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import type { Pos, ThemeName } from '../theme';
 import { THEMES } from '../theme';
 import { useStore } from './store';
@@ -7,6 +8,8 @@ import { injuryFor } from '../data/injuries';
 import { REG_SEASON_WEEKS } from '../data/league';
 import { APP_VERSION, DATA_SOURCE } from './version';
 import { Rulebook } from '../screens/Rulebook';
+import { liveConfigured } from '../data/supabaseClient';
+import { getSession, onAuth, signOut } from '../data/liveApi';
 
 /** True when the viewport is at/below `maxWidth` — drives the mobile layout. */
 export function useIsMobile(maxWidth = 760): boolean {
@@ -115,7 +118,15 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
   const { theme, setTheme, bigText, setBigText, fullStats, setFullStats } = useStore();
   const [open, setOpen] = useState(false);
   const [rules, setRules] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  // Mirror the Supabase auth session so a signed-in player can sign out from any
+  // page (this gear lives in every screen's header). No-op for the static build.
+  useEffect(() => {
+    if (!liveConfigured) return;
+    getSession().then(setSession).catch(() => {});
+    return onAuth((s) => setSession(s));
+  }, []);
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
@@ -202,6 +213,16 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
               style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, marginTop: -2, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
             >
               ⚡ Super admin →
+            </button>
+          )}
+          {session && (
+            <button
+              onClick={() => { setOpen(false); signOut().catch(() => {}); }}
+              className="mono"
+              title={session.user.email ?? 'Sign out'}
+              style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--dim)', cursor: 'pointer' }}
+            >
+              ⏻ Sign out
             </button>
           )}
         </div>
