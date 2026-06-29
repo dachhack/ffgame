@@ -12,7 +12,7 @@ import { buildPlayerIndex } from './playerIndex.js';
 import { getGames, gamesToPoll, slateFromGames } from './poll/scoreboard.js';
 import { pollGame } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
-import { lockDueMatchups, finalizeMatchups } from './lock.js';
+import { lockDueMatchups, finalizeMatchups, backfillLockAt } from './lock.js';
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues } from './sync.js';
 import { db } from './supabase.js';
@@ -66,6 +66,16 @@ async function tick() {
   if (Date.now() - lastInjuryPoll >= injEvery) {
     try { const r = await pollInjuries(playerIndex); lastInjuryPoll = Date.now(); log('injuries', r.count, '@', r.feedTimestamp); }
     catch (e) { log('injury poll error', e.message); }
+  }
+
+  // Fill lock_at on any scheduled matchups created without it (in-app "sync week"
+  // and clone pass null) using this week's first kickoff — already in `games`, no
+  // extra fetch — so they auto-lock too. Runs before the lock check so a matchup
+  // whose kickoff already passed seals this same tick.
+  const kicks = games.map((g) => g.kickoffMs).filter(Number.isFinite);
+  if (kicks.length) {
+    const filled = await backfillLockAt(week, Math.min(...kicks));
+    if (filled) log('backfilled lock_at on', filled, 'matchups');
   }
 
   // Lock any matchups whose kickoff has passed (reveals sealed picks).
