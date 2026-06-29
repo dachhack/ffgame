@@ -288,7 +288,9 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
         {admin && <button onClick={() => regen('commish')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate">↻</button>}
         <span style={{ ...chip }}>invite&nbsp;<CodeChip v={l.invite_code} /></span>
         <button onClick={() => regen('invite')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate">↻</button>
-        <button onClick={() => { copy(shareLink(l.invite_code)); setCopied(true); }} className="mono" style={btn(false)}>{copied ? 'link copied' : 'copy invite link'}</button>
+        {/* Primary way to invite players — the join link (no code to type). The
+            invite code chip above remains as a fallback for manual entry. */}
+        <button onClick={() => { copy(shareLink(l.invite_code)); setCopied(true); }} className="mono" style={btn(true)}>{copied ? '✓ invite link copied' : '⛓ share invite link'}</button>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
         <span style={{ flex: 1 }} />
