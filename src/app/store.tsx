@@ -7,7 +7,7 @@ import { clearRuntimeHeadshots } from '../data/media';
 import type { League } from '../types';
 import { powerupById } from '../data/powerups';
 import { DEMO_WEEK } from '../config';
-import type { SleeperUser } from '../data/sleeper';
+import { DEFAULT_PROVIDER_ID, type ProviderUser } from '../data/providers';
 import { track, identify, Ev } from './analytics';
 
 import type { SlotSwap } from '../engine/matchup';
@@ -54,8 +54,8 @@ interface Store {
   route: Route;
   navigate: (r: Route) => void;
   /** The Sleeper account whose leagues we're browsing (null → welcome splash). */
-  sleeperUser: SleeperUser | null;
-  setSleeperUser: (u: SleeperUser | null) => void;
+  sleeperUser: ProviderUser | null;
+  setSleeperUser: (u: ProviderUser | null) => void;
   /** The league the sim is currently running on (the baked DRIP demo by default). */
   activeLeague: League;
   /** True when a real Sleeper league is loaded (vs the baked DRIP demo). */
@@ -156,10 +156,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const saved = typeof localStorage !== 'undefined' ? (localStorage.getItem(THEME_KEY) as ThemeName | null) : null;
     return saved ?? 'neon';
   });
-  const [sleeperUser, setSleeperUserState] = useState<SleeperUser | null>(() => {
-    try { const s = localStorage.getItem(SLEEPER_KEY); return s ? JSON.parse(s) as SleeperUser : null; } catch { return null; }
+  const [sleeperUser, setSleeperUserState] = useState<ProviderUser | null>(() => {
+    try {
+      const s = localStorage.getItem(SLEEPER_KEY);
+      if (!s) return null;
+      const u = JSON.parse(s) as ProviderUser;
+      // Backfill `provider` for accounts persisted before the provider seam.
+      return u.provider ? u : { ...u, provider: DEFAULT_PROVIDER_ID };
+    } catch { return null; }
   });
-  const setSleeperUser = (u: SleeperUser | null) => {
+  const setSleeperUser = (u: ProviderUser | null) => {
     setSleeperUserState(u);
     if (u) { identify(u.userId, { username: u.username }); track(Ev.sleeperConnected); }
     try { if (u) localStorage.setItem(SLEEPER_KEY, JSON.stringify(u)); else localStorage.removeItem(SLEEPER_KEY); } catch { /* ignore */ }

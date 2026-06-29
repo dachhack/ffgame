@@ -245,6 +245,41 @@ Effort-to-payoff ordering:
 4. **Phase D — Yahoo.** Most work (OAuth + attribution) but most durable.
 5. **Drop NFL.com** unless users specifically demand it.
 
+---
+
+## 7. Implementation status
+
+**Phase A — landed.** The provider seam exists and Sleeper runs through it, with
+zero behavior change (same `gc-sleeper` persistence, same Sleeper public API):
+
+- `src/data/providers/types.ts` — `LeagueProvider` interface + the
+  platform-agnostic `ProviderUser` / `ProviderLeague` / `ProviderStanding` /
+  `ProviderAuth` types.
+- `src/data/providers/sleeper.ts` — the Sleeper provider, delegating to the
+  existing `src/data/sleeper.ts` driver + `buildSleeperLeague`. `clientSide:
+  true`, `auth: 'handle'`.
+- `src/data/providers/index.ts` — the registry (`getProvider`,
+  `AVAILABLE_PROVIDERS`, `DEFAULT_PROVIDER_ID`); ESPN/Yahoo/Fleaflicker/MFL are
+  registered as `undefined` placeholders.
+- Call sites routed through `getProvider(...)`: `store.tsx` (`sleeperUser` is now
+  a generic `ProviderUser`, tagged `provider:'sleeper'`, backfilled on load),
+  `Splash.tsx`, `SleeperHandoff.tsx`, `Leagues.tsx`, `SleeperLeague.tsx`.
+
+> **Deliberately deferred to Phase B:** the internal `NormalizedLeague`
+> fetch→normalize→build split sketched in §5. Today each provider returns the
+> engine's `BuiltLeague` directly via `buildLeague()`. The shared normalizer is
+> best introduced alongside **ESPN**, where a *second* provider validates that
+> the build step is genuinely platform-agnostic — extracting it now, against a
+> single Sleeper-shaped consumer, would be a guess with no way to verify it
+> preserves the sim output. The interface boundary (`buildLeague`) is already in
+> place, so that refactor is internal and non-breaking when it lands.
+
+**Next (Phase B — ESPN):** stand up the `server/` proxy route + cookie-handoff
+UX, add an `espnProvider` implementing `LeagueProvider`, and split
+`buildLeague` into a shared `buildFromNormalized()` once ESPN gives the second
+data point. The `espnId` crosswalk is mostly already present
+(`sleeperPlayers.ts:70`).
+
 ### What's genuinely *stopping* us, in one line each
 
 - **All four viable providers:** need the Phase-A abstraction + a server proxy

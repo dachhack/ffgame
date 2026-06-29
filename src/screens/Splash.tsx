@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
 import { SiteSettings } from '../app/ui';
-import { resolveUser } from '../data/sleeper';
+import { getProvider } from '../data/providers';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
 import { getSession } from '../data/liveApi';
 import { RequestCodeModal } from './RequestCode';
@@ -23,7 +23,7 @@ export function Splash() {
     if (!u || busy) return;
     setBusy(true); setErr(null);
     try {
-      const user = await resolveUser(u);
+      const user = await getProvider().resolveUser(u);
       if (!user) { setErr(`No Sleeper user “${u}”. Check the spelling.`); setBusy(false); return; }
       setSleeperUser(user);
       prefetchPlayerDirectory(); // ~5MB directory downloads while they browse leagues
