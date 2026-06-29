@@ -29,8 +29,9 @@ const TEAM: Record<number, string> = {
   28: 'WSH', 29: 'CAR', 30: 'JAX', 33: 'BAL', 34: 'HOU',
 };
 
-interface EspnPlayer { id: number; fullName?: string; defaultPositionId?: number; proTeamId?: number; }
-interface EspnEntry { playerId?: number; playerPoolEntry?: { player?: EspnPlayer }; appliedStatTotal?: number; }
+interface EspnStat { scoringPeriodId?: number; statSourceId?: number; appliedTotal?: number; }
+interface EspnPlayer { id: number; fullName?: string; defaultPositionId?: number; proTeamId?: number; stats?: EspnStat[]; }
+interface EspnEntry { playerId?: number; playerPoolEntry?: { player?: EspnPlayer; appliedStatTotal?: number }; appliedStatTotal?: number; }
 interface EspnTeam {
   id: number; name?: string; location?: string; nickname?: string; abbrev?: string;
   owners?: string[];
@@ -149,17 +150,29 @@ export async function espnNormalize(creds: EspnCreds, onProgress?: (note: string
 
   // Per-week per-player applied points, pulled from the boxscore views, keyed by
   // teamId → { playerKey → points }. Tolerant: missing data just omits texture.
+  // Per-player weekly points come from the player's own stats array, filtered to
+  // (scoringPeriodId === week, statSourceId === 0 = actual) → appliedTotal — the
+  // robust path the espn-api reference uses (the entry-level appliedStatTotal is a
+  // fallback). Only read the boxscore row whose matchupPeriodId IS the week, so a
+  // team's lineup is counted once.
   const weekPlayerPoints: Map<number, Map<number, Record<string, number>>> = new Map();
   for (let w = 1; w <= weeks; w++) {
     const box = full.weeks?.[String(w)];
     const byTeam = new Map<number, Record<string, number>>();
     for (const g of box?.schedule ?? []) {
+      if ((g.matchupPeriodId ?? 0) !== w) continue;
       for (const side of [g.home, g.away]) {
         if (!side) continue;
         const rec: Record<string, number> = byTeam.get(side.teamId) ?? {};
         for (const e of side.rosterForCurrentScoringPeriod?.entries ?? []) {
-          const k = addPlayer(e.playerPoolEntry?.player);
-          if (k && typeof e.appliedStatTotal === 'number') rec[k] = (rec[k] ?? 0) + e.appliedStatTotal;
+          const player = e.playerPoolEntry?.player;
+          const k = addPlayer(player);
+          if (!k) continue;
+          const stat = player?.stats?.find((s) => s.statSourceId === 0 && s.scoringPeriodId === w);
+          const pts = typeof stat?.appliedTotal === 'number' ? stat.appliedTotal
+            : typeof e.playerPoolEntry?.appliedStatTotal === 'number' ? e.playerPoolEntry.appliedStatTotal
+            : typeof e.appliedStatTotal === 'number' ? e.appliedStatTotal : undefined;
+          if (typeof pts === 'number') rec[k] = (rec[k] ?? 0) + pts;
         }
         byTeam.set(side.teamId, rec);
       }
