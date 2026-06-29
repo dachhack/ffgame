@@ -32,6 +32,12 @@ const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontS
 const btn = (active = false): React.CSSProperties => ({ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: active ? 'var(--on-accent)' : 'var(--text)', background: active ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' });
 const inp: React.CSSProperties = { fontFamily: 'inherit', fontSize: 12, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 10px' };
 
+/** Friendly local time for a matchup's auto-lock (kickoff), e.g. "Sun 1:00 PM". */
+function fmtLock(iso: string): string {
+  try { return new Date(iso).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }); }
+  catch { return iso; }
+}
+
 function CodeChip({ v }: { v: string }) {
   const [done, setDone] = useState(false);
   return (
@@ -268,11 +274,13 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
           <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 3 }}>{l.enrolled}/{l.rosters} enrolled · commish {l.commissioner ? '✓' : '—'}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => showTab('ready')} className="mono" style={linkBtn}>{tab === 'ready' ? 'hide' : 'picks'}</button>
-          <button onClick={() => showTab('members')} className="mono" style={linkBtn}>{tab === 'members' ? 'hide' : 'members'}</button>
-          <button onClick={() => showTab('kdst')} className="mono" style={linkBtn}>{tab === 'kdst' ? 'hide' : 'K/DST'}</button>
-          <button onClick={() => showTab('matchups')} className="mono" style={linkBtn}>{tab === 'matchups' ? 'hide' : 'matchups'}</button>
-          <button onClick={() => showTab('audit')} className="mono" style={linkBtn}>{tab === 'audit' ? 'hide' : 'audit'}</button>
+          {/* Tabs highlight the active one in place (and toggle it closed on a second
+              click) rather than relabeling to "hide", which read as the tab vanishing. */}
+          <button onClick={() => showTab('ready')} className="mono" style={btn(tab === 'ready')} aria-pressed={tab === 'ready'}>picks</button>
+          <button onClick={() => showTab('members')} className="mono" style={btn(tab === 'members')} aria-pressed={tab === 'members'}>members</button>
+          <button onClick={() => showTab('kdst')} className="mono" style={btn(tab === 'kdst')} aria-pressed={tab === 'kdst'}>K/DST</button>
+          <button onClick={() => showTab('matchups')} className="mono" style={btn(tab === 'matchups')} aria-pressed={tab === 'matchups'}>matchups</button>
+          <button onClick={() => showTab('audit')} className="mono" style={btn(tab === 'audit')} aria-pressed={tab === 'audit'}>audit</button>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 10, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -280,7 +288,9 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
         {admin && <button onClick={() => regen('commish')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate">↻</button>}
         <span style={{ ...chip }}>invite&nbsp;<CodeChip v={l.invite_code} /></span>
         <button onClick={() => regen('invite')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate">↻</button>
-        <button onClick={() => { copy(shareLink(l.invite_code)); setCopied(true); }} className="mono" style={btn(false)}>{copied ? 'link copied' : 'copy invite link'}</button>
+        {/* Primary way to invite players — the join link (no code to type). The
+            invite code chip above remains as a fallback for manual entry. */}
+        <button onClick={() => { copy(shareLink(l.invite_code)); setCopied(true); }} className="mono" style={btn(true)}>{copied ? '✓ invite link copied' : '⛓ share invite link'}</button>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
         <span style={{ flex: 1 }} />
@@ -384,10 +394,10 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
       {tab === 'matchups' && matchups && (
         <div style={{ marginTop: 10 }}>
           <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', lineHeight: 1.6, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '7px 9px', marginBottom: 8 }}>
-            Run each matchup through the week:
-            {' '}<b style={{ color: 'var(--dim)' }}>sched</b> (picks open, pre-kickoff) →
-            {' '}<b style={{ color: 'var(--you)' }}>live+lock</b> (kickoff — seals both lineups, scoring starts) →
-            {' '}<b style={{ color: 'var(--dim)' }}>final</b>.
+            Each matchup auto-advances at the real kickoff, or set it manually:
+            {' '}<b style={{ color: 'var(--dim)' }}>Open</b> (picks open, pre-kickoff) →
+            {' '}<b style={{ color: 'var(--you)' }}>Lock</b> (kickoff — seals both lineups, scoring starts) →
+            {' '}<b style={{ color: 'var(--dim)' }}>Final</b>.
             <br />◇ edit drip coin · ▦ watch the live board · ≣ play-by-play feed{admin ? ' · ▶ resolve from baked data · ↺ reset' : ''}.
           </div>
           {admin && (
@@ -404,11 +414,13 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
           {matchups.length === 0 ? <Muted text="No matchups (run sync week)." /> : matchups.map((m) => (
             <div key={m.id} style={{ borderTop: '1px solid var(--bd)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', flexWrap: 'wrap', gap: 6 }}>
-                <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)' }}>W{m.week} · {teamName(m.home_roster_id)} v {teamName(m.away_roster_id)} · <span style={{ color: 'var(--you)' }}>{m.status}</span>{m.home_final != null && <span style={{ color: 'var(--faint)' }}> · {m.home_final}-{m.away_final}</span>}{(m.home_coin != null || m.away_coin != null) && <span style={{ color: 'var(--faint)' }}> · ◇ {m.home_coin ?? 0}/{m.away_coin ?? 0}</span>}</span>
+                <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)' }}>W{m.week} · {teamName(m.home_roster_id)} v {teamName(m.away_roster_id)} · <span style={{ color: 'var(--you)' }}>{m.status}</span>{m.home_final != null && <span style={{ color: 'var(--faint)' }}> · {m.home_final}-{m.away_final}</span>}{(m.home_coin != null || m.away_coin != null) && <span style={{ color: 'var(--faint)' }}> · ◇ {m.home_coin ?? 0}/{m.away_coin ?? 0}</span>}{m.status === 'scheduled' && (m.lock_at
+                  ? <span style={{ color: 'var(--faint)' }} title="The worker seals lineups and starts scoring automatically at kickoff."> · 🔒 auto-locks {fmtLock(m.lock_at)}</span>
+                  : <span style={{ color: 'var(--warn)' }} title="No kickoff time yet. The worker backfills it from the live NFL schedule once the week is current, and it auto-locks then. Until it appears you can set Lock manually."> · ⏳ kickoff pending — auto-locks once set</span>)}</span>
                 <div style={{ display: 'flex', gap: 5 }}>
-                  <button style={btn(m.status === 'scheduled')} onClick={() => set(m.id, 'scheduled')}>sched</button>
-                  <button style={btn(m.status === 'live')} onClick={() => set(m.id, 'live', true)}>live+lock</button>
-                  <button style={btn(m.status === 'final')} onClick={() => set(m.id, 'final')}>final</button>
+                  <button style={btn(m.status === 'scheduled')} onClick={() => set(m.id, 'scheduled')} title="Picks open — pre-kickoff">Open</button>
+                  <button style={btn(m.status === 'live')} onClick={() => set(m.id, 'live', true)} title="Lock & score — seals both lineups at kickoff, scoring starts">Lock</button>
+                  <button style={btn(m.status === 'final')} onClick={() => set(m.id, 'final')} title="Final — week complete">Final</button>
                   <button style={btn(coinEdit === m.id)} onClick={() => (coinEdit === m.id ? setCoinEdit(null) : openCoin(m))} title="edit drip coin">◇</button>
                   <button style={btn(false)} onClick={() => setWatch(m.id)} title="watch the live board">▦</button>
                   <button style={btn(false)} onClick={() => setSheet(m.id)} title={`feed sheet — per-player play log (2025 wk ${srcWeek})`}>≣</button>

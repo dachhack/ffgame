@@ -61,13 +61,12 @@ economy. No backend — everything is deterministic from `(playerId, week)` plus
 baked real play-by-play.
 
 ## Branches & shipping
-- **Develop on:** `claude/elegant-allen-j85njq` (the checked-out working branch).
-- **Mirror every ship to all three:** `claude/elegant-allen-j85njq`,
-  `claude/youthful-albattani-s9kprl` (triggers the Pages deploy), and `main`.
+- **Develop on:** a working branch, then open a PR to `main`.
+- **Deploy:** merging to `main` publishes to GitHub Pages automatically
+  (`.github/workflows/deploy.yml` triggers on every push to `main`).
   ```
-  git push -u origin claude/elegant-allen-j85njq
-  git push origin claude/elegant-allen-j85njq:claude/youthful-albattani-s9kprl
-  git push origin claude/elegant-allen-j85njq:main
+  git push -u origin <your-branch>
+  # open a PR and merge to main → Pages deploys automatically
   ```
 - **Bump `src/app/version.ts` (`APP_VERSION`) on every change.** Versioning is
   4-segment now (`v0.9.5.N`) to leave headroom before a real 1.0. The version

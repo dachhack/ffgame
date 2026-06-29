@@ -5,7 +5,7 @@ import { liveConfigured } from '../data/supabaseClient';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   getSession, onAuth, signOut, ensureAppUser,
-  previewLeague, redeemPreview, redeemInvite, myEnrollments,
+  previewLeague, redeemPreview, redeemInvite, myEnrollments, myLinkedSleeper,
   startCommishVerify, confirmCommishVerify, isAdmin, commishOverview, friendlyError,
   myMatchup, matchupTeams,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo,
@@ -297,7 +297,7 @@ function Enroll({ session, view, setView }: { session: Session; view: OnboardVie
     <>
       {choice === 'none'
         ? <RoleChooser onPlayer={() => setChoice('player')} onCommish={() => setView('commish')} />
-        : <RedeemForm onJoined={refresh} />}
+        : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}      </div>
     </>
@@ -449,6 +449,7 @@ function CommishVerify({ onBack }: { onBack: () => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
 
   const start = async () => {
     if (!code.trim() || !username.trim() || busy) return;
@@ -468,22 +469,24 @@ function CommishVerify({ onBack }: { onBack: () => void }) {
     setInvite(r.invite_code ?? null); setLeague(r.league ?? league);
   };
 
-  if (invite) return (
-    <div style={card}>
-      <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--you)' }}>Verified — you’re the commissioner.</div>
-      <div className="mono" style={{ fontSize: 11, color: 'var(--dim)', marginTop: 8 }}>{league}. Share this player invite code with your league:</div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <div className="mono" style={{ flex: 1, fontSize: 20, fontWeight: 700, letterSpacing: '0.15em', color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '12px 14px', textAlign: 'center' }}>{invite}</div>
-        <button onClick={() => { navigator.clipboard?.writeText(invite); setCopied(true); }} className="mono" style={{ ...btn, padding: '0 14px' }}>{copied ? 'COPIED' : 'COPY'}</button>
+  if (invite) {
+    // One way to invite the league: the join link (no code to type). The raw code
+    // stays available as an inline fallback for anyone who'd rather type it.
+    const joinLink = `${window.location.origin}${window.location.pathname}?live=1&code=${invite}`;
+    return (
+      <div style={card}>
+        <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--you)' }}>Verified — you’re the commissioner.</div>
+        <div className="mono" style={{ fontSize: 11, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>{league}. Invite your league with one link — players who open it just sign in and confirm, no code to type.</div>
+        <button onClick={() => { navigator.clipboard?.writeText(joinLink); setCopied(true); }}
+          className="mono" style={{ ...btn, width: '100%', padding: '12px 0', marginTop: 14 }}>{copied ? '✓ invite link copied' : '⛓ Copy invite link'}</button>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>
+          Prefer a code? Share <span onClick={() => { navigator.clipboard?.writeText(invite); setCodeCopied(true); }} title="click to copy" style={{ color: 'var(--text)', fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer' }}>{codeCopied ? 'copied ✓' : invite}</span> — players enter it on the join screen.
+        </div>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>You can remove the tag from your Sleeper team name now.</div>
+        <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={onBack} className="mono" style={linkBtn}>← done</button></div>
       </div>
-      <button onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}${window.location.pathname}?live=1&code=${invite}`); setCopied(true); }}
-        className="mono" style={{ ...btn, width: '100%', padding: '10px 0', marginTop: 8, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--bd)' }}>
-        ⛓ copy one-tap join link
-      </button>
-      <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>Players who open the link just sign in and confirm — no code to type. You can remove the tag from your Sleeper team name now.</div>
-      <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={onBack} className="mono" style={linkBtn}>← done</button></div>
-    </div>
-  );
+    );
+  }
 
   return (
     <>
@@ -525,13 +528,26 @@ function CommishVerify({ onBack }: { onBack: () => void }) {
   );
 }
 
-function RedeemForm({ onJoined }: { onJoined: () => void }) {
+function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void }) {
   const [code, setCode] = useState('');
   const [preview, setPreview] = useState<LeaguePreview | null>(null);
   const [username, setUsername] = useState('');
+  const [linked, setLinked] = useState(false); // username came from a prior link
   const [team, setTeam] = useState<PreviewRedeem | null>(null); // confirm step
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Returning player: pre-fill the Sleeper username they linked on a prior join
+  // so they don't have to type it again (still editable via "not me").
+  useEffect(() => {
+    let cancelled = false;
+    myLinkedSleeper(userId).then((s) => {
+      if (cancelled || !s?.username) return;
+      setUsername((u) => (u ? u : s.username));
+      setLinked(true);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [userId]);
 
   const find = async (c0?: string) => {
     const c = (c0 ?? code).trim();
@@ -598,13 +614,13 @@ function RedeemForm({ onJoined }: { onJoined: () => void }) {
             </div>
             <label className="mono" style={label}>SLEEPER USERNAME</label>
             <div style={{ display: 'flex', gap: 8, marginTop: 7 }}>
-              <input value={username} autoFocus autoCapitalize="none" autoCorrect="off" spellCheck={false}
-                onChange={(e) => { setUsername(e.target.value); setErr(null); }}
+              <input value={username} autoFocus={!linked} autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                onChange={(e) => { setUsername(e.target.value); setLinked(false); setErr(null); }}
                 onKeyDown={(e) => { if (e.key === 'Enter') check(); }}
                 placeholder="your Sleeper handle" style={input} />
               <button onClick={check} disabled={busy || !username.trim()} className="mono" style={{ ...btn, opacity: busy || !username.trim() ? 0.6 : 1 }}>{busy ? '…' : 'NEXT →'}</button>
             </div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>We match your Sleeper account to your team in this league.</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>{linked ? 'Using the Sleeper account you linked before — edit if this league uses a different one.' : 'We match your Sleeper account to your team in this league.'}</div>
           </div>
         )}
 

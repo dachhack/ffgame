@@ -104,7 +104,11 @@ export function GuidedDemo() {
   const [chosenBuff, setChosenBuff] = useState<string>('garbage-time');
   const opt = duels[optIdx] ?? null;
   const effMetric = chosenMetric ?? opt?.bestMetric ?? null;
-  const metricOptions = useMemo(() => (opt ? (METRICS[opt.pos as keyof typeof METRICS] ?? []).filter((m) => !m.lock).slice(0, 4) : []), [opt]);
+  // Exclude Field General (`fg`): it's a window-wide multiplier that scores the QB
+  // itself nothing and only boosts other skill slots — meaningless (and reads as
+  // "broken, scored 0") in this single-slot 1v1 duel. Mirrors the AI exclusion in
+  // engine/matchup.ts.
+  const metricOptions = useMemo(() => (opt ? (METRICS[opt.pos as keyof typeof METRICS] ?? []).filter((m) => !m.lock && m.id !== 'fg').slice(0, 4) : []), [opt]);
   const empClock = useMemo(() => (opt ? Math.max(60, Math.round((opt.maxClock * 0.5) / 60) * 60) : 0), [opt]);
 
   // Resolve the duel the viewer built.
@@ -314,7 +318,7 @@ export function GuidedDemo() {
         </div>
         <div className="grotesk" style={{ fontSize: 34, fontWeight: 700, color, marginTop: 8, lineHeight: 1, opacity: leading ? 1 : 0.78, textAlign: right ? 'right' : 'left' }}>{bank.toFixed(1)}</div>
         <div style={{ height: 4, background: 'var(--bd)', borderRadius: 3, marginTop: 8 }}>
-          <div style={{ height: 4, width: `${Math.max(2, (bank / lead) * 100)}%`, background: isFrozen ? 'var(--fx-reset)' : color, borderRadius: 3, transition: 'width .3s ease', marginLeft: right ? 'auto' : 0 }} />
+          <div style={{ height: 4, width: `${bank > 0 ? Math.max(2, (bank / lead) * 100) : 0}%`, background: isFrozen ? 'var(--fx-reset)' : color, borderRadius: 3, transition: 'width .3s ease', marginLeft: right ? 'auto' : 0 }} />
         </div>
       </div>
     );
@@ -342,6 +346,13 @@ export function GuidedDemo() {
               <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--faint)' }}>REAL GAME TIME</div>
               <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, color: ended ? 'var(--you)' : 'var(--text)', marginTop: 3, lineHeight: 1 }}>{ended ? 'FINAL' : fmtClock(clock)}</div>
             </div>
+          </div>
+
+          {/* legend — kept above the play log so the key stays visible while the action is up top */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', justifyContent: 'center', marginTop: 12 }}>
+            {[['💧', 'DRIP'], ['💥', 'NUKE'], ['🩸', 'ERASE'], ['🗑️', 'POWER-UP'], ['❄️', 'EMP FREEZE'], ['◇', 'COIN']].map(([icon, label]) => (
+              <span key={label} className="mono" style={{ fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--faint)' }}>{icon} {label}</span>
+            ))}
           </div>
 
           {/* narration callout */}
@@ -382,13 +393,6 @@ export function GuidedDemo() {
                 );
               })}
             </div>
-          </div>
-
-          {/* legend */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', justifyContent: 'center', marginTop: 14 }}>
-            {[['💧', 'DRIP'], ['💥', 'NUKE'], ['🩸', 'ERASE'], ['🗑️', 'POWER-UP'], ['❄️', 'EMP FREEZE'], ['◇', 'COIN']].map(([icon, label]) => (
-              <span key={label} className="mono" style={{ fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--faint)' }}>{icon} {label}</span>
-            ))}
           </div>
 
           {/* controls */}
