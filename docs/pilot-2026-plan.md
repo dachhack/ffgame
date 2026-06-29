@@ -13,8 +13,8 @@ actual code (`src/data/realPbp.ts`, `src/engine/sim.ts`, `scripts/pbp/genRealPbp
 which fully defines the data contract, so nothing was blocked — but if those docs
 exist elsewhere, hand them over and I'll reconcile.
 
-Also: `docs/handoff.md` names `claude/youthful-albattani-s9kprl` as the Pages
-deploy branch; this session's working branch is `claude/admiring-brown-x5limu`. I
+Also: the Pages deploy now runs on every push to `main` (the default branch); this
+session's working branch is `claude/admiring-brown-x5limu`. I
 have **not** touched the deploy pipeline. New backend code lives in new dirs
 (`server/`, `supabase/`, `scripts/espn/`) that don't deploy to Pages, so the
 static demo "shop window" is untouched.

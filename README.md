@@ -82,7 +82,7 @@ src/
 
 ## Deploying to GitHub Pages
 
-A workflow (`.github/workflows/deploy.yml`) builds and deploys to GitHub Pages on every push to the deploy branch (currently `claude/youthful-albattani-s9kprl` — only the default/deploy branch may publish to the `github-pages` environment). **One-time setup:** in the repo's **Settings → Pages**, set **Source = GitHub Actions**.
+A workflow (`.github/workflows/deploy.yml`) builds and deploys to GitHub Pages on every push to `main` (the default branch, which is allowed to publish to the `github-pages` environment). Merging a PR into `main` deploys automatically. **One-time setup:** in the repo's **Settings → Pages**, set **Source = GitHub Actions**.
 
 The site is served from the custom domain **dripfantasy.com** (`public/CNAME`), so the workflow builds with `VITE_BASE=/`. The Vite `base` otherwise defaults to `/ffgame/` (matching the repo name) for a plain GitHub Pages path — override it with `VITE_BASE`, as the deploy does to serve from the domain root.
 
