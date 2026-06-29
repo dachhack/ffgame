@@ -441,6 +441,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // counted only metric-complete picks, so the "SLOTS SET" tally appeared frozen
   // after placing a player but before choosing the hidden metric.
   const filledCount = Object.values(picks).filter((p) => p.playerId).length;
+  // Placed players still missing their (required) hidden metric — those slots
+  // score 0 until a metric is chosen, so surface them as an interim step.
+  const metriclessCount = Object.values(picks).filter((p) => p.playerId && !p.metricId).length;
   const totalSlots = totalSlotsWith(extraSlots);
   const anyPlaying = Object.values(winPlaying).some(Boolean);
   const extraSlotQty = inventory['extra-slot'] ?? 0;
@@ -810,6 +813,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               </button>
             ))}
           </div>
+          {!liveCtx && (
+            <span className="mono" title="A deterministic replay of real 2025 games — Setup builds a lineup, Live watches it play, Final jumps to the result. Switch freely; nothing here is a live game in progress." style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 6px' }}>
+              ⟳ REPLAY
+            </span>
+          )}
           <SiteSettings />
           {resolved.real && (
             <span className="mono" title="This week resolves off real 2025 NFL play-by-play" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 3, padding: '3px 6px' }}>
@@ -846,7 +854,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ display: 'inline-block', width: 8, height: 8, background: '#FF4F62', borderRadius: '50%', animation: 'lpulse 1.2s ease infinite' }} />
               <span className="mono" style={{ color: '#FF4F62', fontWeight: 700, letterSpacing: '0.14em', fontSize: 11 }}>LIVE</span>
-              <button onClick={toggleAll} className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px' }}>
+              <button onClick={toggleAll} title="Play — or pause — every game window at once" className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px' }}>
                 {anyPlaying ? '❚❚ PAUSE ALL' : '▶ RUN ALL'}
               </button>
               <button
@@ -918,6 +926,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               </div>
               <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{headline}</div>
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, maxWidth: 520, lineHeight: 1.5 }}>{subhead}</div>
+              {preKickPhase && (
+                <div className="mono" style={{ marginTop: 7, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))', border: '1px solid var(--warn)', borderRadius: 6, padding: '6px 10px' }}>
+                  ▶ Nothing's kicked yet — press <span style={{ color: 'var(--text)' }}>RUN ALL</span> (or ▶ on a window) to play the week out.
+                </div>
+              )}
               {phase === 'live' && (
                 <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, fontSize: 10, color: 'var(--dim)' }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', flex: 'none', background: clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--faint)' }} />
@@ -948,6 +961,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             <div style={{ textAlign: 'right', flex: 'none' }}>
               <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>{phase === 'setup' ? 'SLOTS SET' : 'WEEK ' + week}</div>
               <div className="mono" style={{ fontSize: 12, color: 'var(--text)' }}>{phase === 'setup' ? `${filledCount}/${totalSlots}` : phase.toUpperCase()}</div>
+              {phase === 'setup' && metriclessCount > 0 && <div className="mono" title="Each placed player needs a hidden metric to score." style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--warn)', letterSpacing: '0.04em' }}>{metriclessCount} need a metric</div>}
             </div>
           </div>
 
@@ -1684,7 +1698,7 @@ function WindowSection(props: {
               done ? (
                 <button onClick={onReplay} className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 8px' }}>↺ REPLAY</button>
               ) : (
-                <button onClick={onTogglePlay} className="mono" style={{ fontSize: 11, color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 9px' }}>{playing ? '❚❚' : '▶'}</button>
+                <button onClick={onTogglePlay} title={playing ? 'Pause this window' : 'Play this window'} className="mono" style={{ fontSize: 11, color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 9px' }}>{playing ? '❚❚' : '▶'}</button>
               )
             )}
             <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: phase === 'final' || done ? 'var(--you)' : '#FF4F62' }}>
@@ -1893,6 +1907,9 @@ export function SetupRow(props: {
           {/* metric picker — full card width, stacks cleanly */}
           {showPicker && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {!pick?.metricId && !editing && (
+                <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--warn)' }}>② PICK A METRIC ↓</div>
+              )}
               {editing && (
                 <button onClick={() => setEditing(false)} className="mono" style={{ width: '100%', textAlign: 'center', background: 'none', border: '1px dashed var(--bd)', borderRadius: 3, padding: '3px', fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)' }}>✕ KEEP {metric?.name?.toUpperCase()}</button>
               )}
@@ -2392,6 +2409,9 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
   const isMobile = useIsMobile();
+  // Plain-English explanation of the (often jargony) metric, for a hover tooltip
+  // on the chip — the board otherwise shows only the tag (DRIP/NUKE/SUPPRESS…).
+  const metricEf = metricId ? (metricById(player.pos, metricId)?.ef ?? '') : '';
   const { bigText, fullStats } = useStore();
   const fs = (n: number) => bigText ? Math.round(n * 1.3 * 10) / 10 : n; // larger-text mode bumps the small card labels
   const nuked = fx === 'nuke' && bank === 0 && !subName && suppressSpent == null;
@@ -2427,7 +2447,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // On mobile the chip is anchored to two lines (name over tag) so it's always
   // the same height regardless of label length; desktop keeps it inline.
   const metricChip = (
-    <div style={{ display: 'inline-flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? (side === 'you' ? 'flex-end' : 'flex-start') : 'baseline', maxWidth: '100%', gap: isMobile ? 0 : 5, marginTop: isMobile ? 2 : 0, padding: isMobile ? '2px 7px' : '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)` }}>
+    <div title={metricEf || undefined} style={{ display: 'inline-flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? (side === 'you' ? 'flex-end' : 'flex-start') : 'baseline', maxWidth: '100%', gap: isMobile ? 0 : 5, marginTop: isMobile ? 2 : 0, padding: isMobile ? '2px 7px' : '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)`, cursor: metricEf ? 'help' : undefined }}>
       <span className="grotesk" style={{ fontSize: isMobile ? 10.5 : 13, fontWeight: 700, color: accent, letterSpacing: '0.01em', lineHeight: 1.25, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{metricName}</span>
       <span className="mono" style={{ fontSize: fs(7), fontWeight: 700, letterSpacing: '0.1em', color: accent, opacity: 0.85, whiteSpace: 'nowrap', lineHeight: 1.25 }}>{tag}</span>
     </div>
@@ -2435,7 +2455,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // Statline: justified to the card's outer edge. Mobile uses a small fixed size
   // (not bumped by bigText) and wraps rather than ellipsing — so it never truncates.
   const statLine = suppressSpent != null
-    ? <div className="mono" style={{ fontSize: fs(9), color: 'var(--fx-stop)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>✕ {suppressSpent.toFixed(1)} spent on SUPPRESS</div>
+    ? <div className="mono" title="Suppress (a DST metric): it spends its own points to halve the opponent's drip in this window." style={{ fontSize: fs(9), color: 'var(--fx-stop)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge, cursor: 'help' }}>✕ {suppressSpent.toFixed(1)} spent on SUPPRESS</div>
     : subName
       ? <div className="mono" style={{ fontSize: fs(9.5), color: accent, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>⤴ {subName} scoring</div>
       : <div className="mono" style={isMobile

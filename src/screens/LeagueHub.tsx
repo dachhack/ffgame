@@ -31,7 +31,9 @@ function StatePill({ state }: { state: 'OPEN' | 'LOCKED' | 'LIVE' }) {
 }
 
 export function LeagueHub() {
-  const { navigate, youTeamId, demoWeek, activeLeague: LEAGUE_REF, sleeperUser, isSimLeague } = useStore();
+  const { navigate, youTeamId, demoWeek, activeLeague: LEAGUE_REF, sleeperUser, isSimLeague, applied } = useStore();
+  // Real saved-lineup count (was a hardcoded 0/8 that looked like a wiped lineup).
+  const slotsSet = Object.values(applied[demoWeek]?.lineup ?? {}).filter((p) => p.playerId).length;
   const you = getTeam(youTeamId)!;
   const game = gameForTeam(youTeamId, demoWeek)!;
   const opp = getTeam(game.oppId)!;
@@ -130,7 +132,7 @@ export function LeagueHub() {
               </div>
               <div style={{ flex: 1 }} />
               <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', letterSpacing: '0.06em' }}>
-                0/{TOTAL_SLOTS} SLOTS · H2H 1–1
+                {slotsSet}/{TOTAL_SLOTS} SLOTS · H2H 1–1
               </div>
             </div>
           </button>

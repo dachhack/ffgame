@@ -18,7 +18,10 @@ type ModalState =
   | { type: 'shop' };
 
 export function LeagueOverview() {
-  const { navigate, coins, youTeamId: YOU, demoWeek, activeLeague: LEAGUE_REF, sleeperUser } = useStore();
+  const { navigate, coins, youTeamId: YOU, demoWeek, activeLeague: LEAGUE_REF, sleeperUser, applied } = useStore();
+  // Real saved-lineup count for the week (was a hardcoded 0/8, which read as
+  // "your lineup got wiped" after you'd actually set it).
+  const slotsSet = Object.values(applied[demoWeek]?.lineup ?? {}).filter((p) => p.playerId).length;
   const [modal, setModal] = useState<ModalState>(null);
   const teams = [...LEAGUE_REF.teams].sort((a, b) => a.seed - b.seed);
   const you = getTeam(YOU)!;
@@ -85,7 +88,7 @@ export function LeagueOverview() {
                   <TeamMini team={opp} accent="var(--opp)" right />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid var(--bd)' }}>
-                  <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>0/{TOTAL_SLOTS} SLOTS SET · LOCKS {weekLockLabel(demoWeek)}</span>
+                  <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>{slotsSet}/{TOTAL_SLOTS} SLOTS SET · LOCKS {weekLockLabel(demoWeek)}</span>
                   <button
                     onClick={() => navigate({ name: 'matchup', week: demoWeek, phase: 'setup' })}
                     className="mono"

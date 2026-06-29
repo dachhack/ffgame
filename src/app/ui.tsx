@@ -241,7 +241,11 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
 
 /** Demo role/week picker — assume any team and jump to any week before setup. */
 export function DemoControls({ compact }: { compact?: boolean }) {
-  const { youTeamId, setYouTeam, demoWeek, setDemoWeek, activeLeague } = useStore();
+  const { youTeamId, setYouTeam, demoWeek, setDemoWeek, activeLeague, isSimLeague } = useStore();
+  // "Play as any team" + the DEMO badge belong to the built-in sandbox demo only.
+  // For a real Sleeper-loaded league (or a live pilot) you ARE your team, so those
+  // affordances read as demo bleed — keep just the week navigator there.
+  const sandbox = !isSimLeague;
   const teams = [...activeLeague.teams].sort((a, b) => a.seed - b.seed);
   const selStyle: CSSProperties = {
     fontFamily: MONO, fontSize: 11, fontWeight: 700, color: 'var(--text)',
@@ -253,17 +257,19 @@ export function DemoControls({ compact }: { compact?: boolean }) {
     <div
       style={{
         display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-        background: 'var(--surface)', border: '1px dashed var(--bdh)', borderRadius: 6,
+        background: 'var(--surface)', border: `1px ${sandbox ? 'dashed var(--bdh)' : 'solid var(--bd)'}`, borderRadius: 6,
         padding: compact ? '8px 12px' : '10px 14px',
       }}
     >
-      <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 3, padding: '2px 6px' }}>DEMO</span>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-        <span style={lbl}>PLAY AS</span>
-        <select value={youTeamId} onChange={(e) => setYouTeam(e.target.value)} style={selStyle}>
-          {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-      </div>
+      {sandbox && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 3, padding: '2px 6px' }}>DEMO</span>}
+      {sandbox && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+          <span style={lbl}>PLAY AS</span>
+          <select value={youTeamId} onChange={(e) => setYouTeam(e.target.value)} style={selStyle}>
+            {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         <span style={lbl}>WEEK</span>
         <select value={demoWeek} onChange={(e) => setDemoWeek(Number(e.target.value))} style={selStyle}>
