@@ -128,3 +128,17 @@ export async function loadPlayerDirectory(onProgress?: (note: string) => void): 
 export function prefetchPlayerDirectory(): void {
   loadPlayerDirectory().catch(() => { /* best-effort warm-up */ });
 }
+
+let byEspn: Map<string, PlayerMeta> | null = null;
+/** The player directory re-indexed by ESPN athlete id — the crosswalk hub that
+ *  lets a non-Sleeper provider (ESPN) reuse Sleeper's baked-slug mapping: ESPN
+ *  athlete id → this PlayerMeta (whose `id` is the Sleeper id). Built once from
+ *  the same directory load, so it's free after the first fetch. */
+export async function loadDirectoryByEspn(onProgress?: (note: string) => void): Promise<Map<string, PlayerMeta>> {
+  const dir = await loadPlayerDirectory(onProgress);
+  if (byEspn && byEspn.size) return byEspn;
+  const m = new Map<string, PlayerMeta>();
+  for (const meta of dir.values()) if (meta.espnId) m.set(meta.espnId, meta);
+  byEspn = m;
+  return m;
+}

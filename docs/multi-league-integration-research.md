@@ -274,11 +274,43 @@ zero behavior change (same `gc-sleeper` persistence, same Sleeper public API):
 > preserves the sim output. The interface boundary (`buildLeague`) is already in
 > place, so that refactor is internal and non-breaking when it lands.
 
-**Next (Phase B — ESPN):** stand up the `server/` proxy route + cookie-handoff
-UX, add an `espnProvider` implementing `LeagueProvider`, and split
-`buildLeague` into a shared `buildFromNormalized()` once ESPN gives the second
-data point. The `espnId` crosswalk is mostly already present
-(`sleeperPlayers.ts:70`).
+**Phase B keystone — landed.** `buildLeague.ts` is split into the shared,
+provider-agnostic `buildFromNormalized()` + a per-provider fetch
+(`sleeperNormalize()`), bridged by `NormalizedLeague` (`src/data/normalized.ts`).
+The crosswalk resolver is generalized to consume cross-ids; Sleeper behavior is
+preserved (its `sleeperId` still drives the baked-slug lookup), and ESPN players
+reuse the same path by joining their athlete id to a Sleeper id via the
+directory hub (`loadDirectoryByEspn()` in `sleeperPlayers.ts`).
+
+**Phase B ESPN — landed (code-complete; needs live validation).**
+
+- `supabase/functions/espn-league/index.ts` — anonymous CORS proxy to ESPN's v3
+  read API; attaches the caller's `espn_s2`/`SWID` cookies server-side, returns
+  the league + per-week boxscores. Holds no secrets of its own.
+- `src/data/espn.ts` — `espnNormalize()` maps ESPN's v3 JSON → `NormalizedLeague`
+  (position/pro-team maps, member/owner join, schedule pairing, per-week boxscore
+  player points), crosswalking athlete ids via the directory.
+- `src/data/providers/espn.ts` — `espnProvider` (`clientSide: false`,
+  `auth: 'cookie'`), registered in the provider registry.
+- `src/screens/EspnConnect.tsx` — league-id-centric connect form (id + season +
+  optional cookies), reachable from the Splash Sleeper card.
+
+> **Before this works in production, two steps remain — both require things this
+> environment can't do:**
+> 1. **Deploy the proxy:** `supabase functions deploy espn-league --no-verify-jwt`
+>    (it must allow anonymous invocation — demo visitors aren't signed in).
+> 2. **Validate against a real league:** the ESPN v3 field paths — especially the
+>    per-week boxscore player points (`rosterForCurrentScoringPeriod` /
+>    `appliedStatTotal`) and the private-league cookie round-trip — are mapped to
+>    ESPN's documented shape but have not been run against a live league. The
+>    mapping degrades gracefully (missing data → less synth texture, baked
+>    players still use real PBP), so it won't crash, but the per-player weekly
+>    numbers need a real-league check.
+
+**Next (Phase C — MFL + Fleaflicker):** both are documented read APIs, so each is
+an `xNormalize()` + a `LeagueProvider` on the same proxy pattern — no new
+architecture. **Phase D — Yahoo:** OAuth 2.0 (app registration + token refresh in
+the proxy) + the "Fantasy data provided by Yahoo" attribution.
 
 ### What's genuinely *stopping* us, in one line each
 

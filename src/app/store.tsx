@@ -34,6 +34,7 @@ export type Route =
   | { name: 'demo'; view?: 'clean' | 'board' } // narrated guided demo: 'clean' explainer (default) or the real in-game board
   | { name: 'leagues' }
   | { name: 'sleeperLeague'; leagueId: string; leagueName: string }
+  | { name: 'espnConnect' }
   | { name: 'hub' }
   | { name: 'league' }
   | { name: 'matchup'; week: number; phase: Phase }

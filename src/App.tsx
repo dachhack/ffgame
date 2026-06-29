@@ -8,6 +8,7 @@ import { MatchupFinal } from './screens/MatchupFinal';
 import { Splash } from './screens/Splash';
 import { Leagues } from './screens/Leagues';
 import { SleeperLeague } from './screens/SleeperLeague';
+import { EspnConnect } from './screens/EspnConnect';
 import { LiveOnboard } from './screens/LiveOnboard';
 import { GuidedDemo } from './screens/GuidedDemo';
 import { RequestCodeFab } from './screens/RequestCode';
@@ -54,6 +55,7 @@ export function App() {
         : <GuidedDemo />)}
       {route.name === 'leagues' && <Leagues />}
       {route.name === 'sleeperLeague' && <SleeperLeague key={route.leagueId} leagueId={route.leagueId} leagueName={route.leagueName} />}
+      {route.name === 'espnConnect' && <EspnConnect />}
       {route.name === 'hub' && <LeagueHub />}
       {route.name === 'league' && <LeagueOverview />}
       {route.name === 'matchup' && <Matchup key={`m${route.week}-${youTeamId}`} week={route.week} initialPhase={route.phase} />}

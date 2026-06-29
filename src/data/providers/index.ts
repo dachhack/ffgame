@@ -4,12 +4,13 @@
 // (see docs/multi-league-integration-research.md for the rollout plan).
 import type { LeagueProvider, ProviderId } from './types';
 import { sleeperProvider } from './sleeper';
+import { espnProvider } from './espn';
 
 export const DEFAULT_PROVIDER_ID: ProviderId = 'sleeper';
 
 const REGISTRY: Record<ProviderId, LeagueProvider | undefined> = {
   sleeper: sleeperProvider,
-  espn: undefined,        // Phase B — unofficial v3 API via proxy (cookies for private)
+  espn: espnProvider,     // Phase B — unofficial v3 API via the espn-league proxy
   yahoo: undefined,       // Phase D — official OAuth 2.0 API via proxy
   fleaflicker: undefined, // Phase C — documented read API via proxy
   mfl: undefined,         // Phase C — documented export API via proxy
@@ -27,4 +28,5 @@ export function getProvider(id: ProviderId = DEFAULT_PROVIDER_ID): LeagueProvide
   return p;
 }
 
+export { espnAuth } from './espn';
 export * from './types';
