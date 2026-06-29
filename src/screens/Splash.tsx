@@ -44,7 +44,6 @@ export function Splash() {
           {sleeperUser && <button onClick={() => navigate({ name: 'leagues' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← {sleeperUser.displayName}’s leagues</button>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={() => { exitSimLeague(); navigate({ name: 'demo' }); }} className="mono" title="Watch the 60-second walkthrough" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 40%, var(--bd))', borderRadius: 999, padding: '5px 10px', cursor: 'pointer' }}>▶ 60-sec demo</button>
           <SiteSettings />
         </div>
       </header>
@@ -60,12 +59,21 @@ export function Splash() {
             </div>
           </div>
 
-          {/* ── See it with your own league (primary) ───────────────────────── */}
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: 18 }}>
-            <label className="mono" style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)', fontWeight: 700 }}>SEE THE DEMO IN YOUR OWN LEAGUE</label>
+          {/* One funnel: 1) learn (watch the demo) → 2) personalize (your league)
+              → 3) fallback (sample league). Avoids three co-equal "demo" CTAs. */}
+
+          {/* ── 1. Learn — watch the 60-second demo (primary) ────────────────── */}
+          <button onClick={() => { exitSimLeague(); navigate({ name: 'demo' }); }} className="mono" style={{ width: '100%', fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 8, padding: '15px 0', cursor: 'pointer' }}>
+            ▶  Watch the 60-second demo
+          </button>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', marginTop: 8, lineHeight: 1.5 }}>A full week of hidden picks + live effects, scored off real plays — in 60 seconds.</div>
+
+          {/* ── 2. Personalize — run it with your own Sleeper league ──────────── */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18, marginTop: 18 }}>
+            <label className="mono" style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)', fontWeight: 700 }}>RUN IT WITH YOUR LEAGUE</label>
             <div style={{ display: 'flex', gap: 8, marginTop: 7 }}>
               <input
-                value={name} autoFocus
+                value={name}
                 onChange={(e) => { setName(e.target.value); setErr(null); }}
                 onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
                 placeholder="your Sleeper username"
@@ -80,10 +88,10 @@ export function Splash() {
             <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>Sleeper public API — username only, never a password.</div>
           </div>
 
-          {/* ── Demo door: the sanitized demo league on the full board ───────── */}
-          <button onClick={() => { exitSimLeague(); navigate({ name: 'hub' }); }} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 16 }}>
-            Explore the demo league →
-          </button>
+          {/* ── 3. Fallback — no Sleeper account → browse a sample league ─────── */}
+          <div style={{ textAlign: 'center', marginTop: 14 }}>
+            <button onClick={() => { exitSimLeague(); navigate({ name: 'hub' }); }} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>No Sleeper account? Browse a sample league →</button>
+          </div>
 
           {/* ── Pilot (invited players) — compact, secondary ─────────────────── */}
           <div style={{ borderTop: '1px solid var(--bd)', marginTop: 22, paddingTop: 16, textAlign: 'center' }}>
