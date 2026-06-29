@@ -51,23 +51,37 @@ Deno.serve(async (req) => {
     // Only attach cookies for private leagues; public leagues read without them.
     if (swid && s2) headers.Cookie = `espn_s2=${s2}; SWID=${swid}`;
 
-    const base = `${HOST}/${season}/segments/0/leagues/${leagueId}`;
-    const fetchJson = async (url: string) => {
+    const raw = async (url: string) => {
       const r = await fetch(url, { headers });
       if (r.status === 401) throw new Error('ESPN rejected the credentials (401). For a private league, re-copy espn_s2 and SWID.');
-      if (r.status === 404) throw new Error('ESPN returned 404 — check the league id and season.');
-      if (!r.ok) throw new Error(`ESPN ${r.status}`);
+      if (!r.ok && r.status !== 404) throw new Error(`ESPN ${r.status}`);
+      return r;
+    };
+
+    // Current seasons live under seasons/{year}; completed/past seasons under
+    // leagueHistory/{id}?seasonId={year} (which returns an ARRAY). Try the
+    // seasons path first, fall back to history on 404, and unwrap the array.
+    const seasonsUrl = (qs: string) => `${HOST}/${season}/segments/0/leagues/${leagueId}?${qs}`;
+    const historyUrl = (qs: string) => `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/leagueHistory/${leagueId}?seasonId=${season}&${qs}`;
+    const getLeague = async (qs: string) => {
+      let r = await raw(seasonsUrl(qs));
+      if (r.status === 404) {
+        r = await raw(historyUrl(qs));
+        if (r.status === 404) throw new Error('ESPN returned 404 — check the league id and season.');
+        const arr = await r.json();
+        return Array.isArray(arr) ? arr[0] : arr;
+      }
       return r.json();
     };
 
     const qs = views.map((v) => `view=${encodeURIComponent(v)}`).join('&');
-    const league = await fetchJson(`${base}?${qs}`);
+    const league = await getLeague(qs);
 
     // Per-week boxscores (best-effort: a failed week just omits its texture).
     const weekData: Record<string, unknown> = {};
     await Promise.all(
       weeks.map(async (w) => {
-        try { weekData[w] = await fetchJson(`${base}?view=mBoxscore&scoringPeriodId=${w}`); }
+        try { weekData[w] = await getLeague(`view=mBoxscore&scoringPeriodId=${w}`); }
         catch { /* skip this week */ }
       }),
     );

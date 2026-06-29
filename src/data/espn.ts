@@ -63,11 +63,14 @@ async function fetchEspn(creds: EspnCreds, weeks: number[]): Promise<ProxyRespon
   return res;
 }
 
-// ESPN PPR detection: the reception scoring item (statId 53) point value.
+// ESPN PPR detection: the reception scoring item (statId 53). Reception points
+// may live in the base `points` OR in per-position overrides (PPR applied by
+// position / TE-premium), so take the top value seen across both.
 function scoringLabel(lg: EspnLeague): string {
   const items = lg.settings?.scoringSettings?.scoringItems ?? [];
   const rec = items.find((i) => i.statId === 53);
-  const pts = rec?.points ?? rec?.pointsOverrides?.['0'] ?? 0;
+  const vals = rec ? [rec.points ?? 0, ...Object.values(rec.pointsOverrides ?? {})] : [0];
+  const pts = Math.max(...vals);
   return pts >= 1 ? 'PPR' : pts >= 0.5 ? 'Half-PPR' : 'Standard';
 }
 
