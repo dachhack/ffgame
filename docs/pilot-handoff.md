@@ -38,12 +38,12 @@ everything except the live worker running on a real NFL Sunday (it's the offseas
   (`…pooler.supabase.com`, IPv4). To watch a new branch, add it to that workflow's
   `push.branches`. (The Claude GitHub token lacks `actions: write`, so I can't trigger
   `workflow_dispatch` — push-triggered runs are the way.)
-- **Pages deploy** (`.github/workflows/deploy.yml`) triggers on
-  `claude/youthful-albattani-s9kprl` and builds with **`VITE_BASE=/`** (custom domain is
-  served at root, not `/ffgame/`). Mirror client changes there:
+- **Pages deploy** (`.github/workflows/deploy.yml`) triggers on every push to
+  `main` and builds with **`VITE_BASE=/`** (custom domain is served at root, not
+  `/ffgame/`). Ship client changes by merging to `main`:
   ```
   git push origin <work-branch>
-  git push origin <work-branch>:claude/youthful-albattani-s9kprl   # client changes
+  # open a PR and merge to main → Pages deploys automatically
   ```
   `public/CNAME` pins `www.dripfantasy.com` so deploys don't drop the custom domain.
 - **Bump `src/app/version.ts`** every client change; confirm via the version chip.
