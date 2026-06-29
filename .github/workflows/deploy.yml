@@ -2,11 +2,13 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    # Only the default branch may deploy to the github-pages environment
-    # (environment protection rules). Other branches racing this workflow get
-    # cancelled by the `pages` concurrency group and fail the deploy gate, so
-    # they're intentionally excluded.
-    branches: [claude/youthful-albattani-s9kprl]
+    # `main` is the active integration branch, so merges there should publish.
+    # The legacy `claude/youthful-albattani-s9kprl` branch is kept as a trigger
+    # so deploys keep working until the repo's default branch is switched to
+    # `main`. NOTE: the github-pages environment restricts deployments to the
+    # default branch, so a `main` push only publishes once `main` is set as the
+    # default branch in repo settings (until then its deploy job is gated).
+    branches: [main, claude/youthful-albattani-s9kprl]
   workflow_dispatch:
 
 permissions:
