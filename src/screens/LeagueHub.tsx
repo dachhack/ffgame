@@ -191,19 +191,23 @@ export function LeagueHub() {
                     </div>
                     <div className="mono" style={{ fontSize: 10, letterSpacing: '0.06em', color: 'var(--faint)', marginTop: 4 }}>{l.format}</div>
                   </div>
-                  <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', border: '1px solid var(--bd)', padding: '8px 12px', borderRadius: 4 }}>
-                    {l.state === 'LIVE' ? 'OPEN LIVE' : 'REVIEW LINEUP'}
+                  {/* Passive status label — these portfolio cards are illustrative
+                      sample leagues, not navigable, so don't present a button-style CTA. */}
+                  <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)' }}>
+                    {l.state === 'LIVE' ? 'live now' : 'lineup locked'}
                   </span>
                 </div>
               ))}
-              <button
+              {/* Illustrative caption (not an action) — connecting more leagues is a
+                  future capability, so this is a note rather than a dead button. */}
+              <div
                 style={{
-                  width: '100%', background: 'transparent', border: '1px dashed var(--bdh)', borderRadius: 5,
-                  padding: '16px', color: 'var(--faint)', fontFamily: MONO, fontSize: 11, letterSpacing: '0.12em', marginTop: 4,
+                  width: '100%', boxSizing: 'border-box', background: 'transparent', border: '1px dashed var(--bdh)', borderRadius: 5,
+                  padding: '16px', color: 'var(--faint)', fontFamily: MONO, fontSize: 11, letterSpacing: '0.12em', marginTop: 4, textAlign: 'center',
                 }}
               >
-                + CONNECT ANOTHER SLEEPER LEAGUE
-              </button>
+                SAMPLE LEAGUES — YOURS APPEAR HERE ONCE CONNECTED
+              </div>
             </>
           )}
 
