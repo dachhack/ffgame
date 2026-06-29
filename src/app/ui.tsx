@@ -115,7 +115,7 @@ export function Avatar({ name, accent = 'var(--you)', size = 30, src }: { name: 
  *  toggles (previously inline chips). `superAdmin`, when provided, adds a super-admin
  *  entry at the bottom (shown only for admins in the live app). */
 export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
-  const { theme, setTheme, bigText, setBigText, fullStats, setFullStats } = useStore();
+  const { theme, setTheme, bigText, setBigText, fullStats, setFullStats, setSleeperUser, navigate } = useStore();
   const [open, setOpen] = useState(false);
   const [rules, setRules] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
@@ -217,7 +217,14 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
           )}
           {session && (
             <button
-              onClick={() => { setOpen(false); signOut().catch(() => {}); }}
+              onClick={() => {
+                setOpen(false);
+                signOut().catch(() => {});
+                // A clean logout also forgets the cached Sleeper "example" user
+                // (kept separately from the auth session) and returns to splash.
+                setSleeperUser(null);
+                navigate({ name: 'splash' });
+              }}
               className="mono"
               title={session.user.email ?? 'Sign out'}
               style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--dim)', cursor: 'pointer' }}

@@ -14,6 +14,9 @@ export function Splash() {
   const [signedIn, setSignedIn] = useState(false);
   const [requesting, setRequesting] = useState(false);
   useEffect(() => { getSession().then((s) => setSignedIn(!!s)).catch(() => {}); }, []);
+  // When the Sleeper user is cleared (e.g. on sign-out) while Splash is already
+  // mounted, reset the pre-filled username so it doesn't linger as an example.
+  useEffect(() => { if (!sleeperUser) setName(''); }, [sleeperUser]);
 
   const submit = async () => {
     const u = name.trim();
