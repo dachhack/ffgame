@@ -59,8 +59,9 @@ export function App() {
       {route.name === 'matchup' && <Matchup key={`m${route.week}-${youTeamId}`} week={route.week} initialPhase={route.phase} />}
       {route.name === 'final' && <MatchupFinal key={`f${route.week}-${youTeamId}`} week={route.week} />}
       {/* Persistent "out" across the funnel — request a pilot code for your league.
-          Hidden inside the live pilot itself (you're already in). */}
-      {route.name !== 'live' && <RequestCodeFab />}
+          Hidden inside the live pilot itself (you're already in), and on splash,
+          which has its own "request an invite" link (avoid two CTAs for one action). */}
+      {route.name !== 'live' && route.name !== 'splash' && <RequestCodeFab />}
     </div>
   );
 }

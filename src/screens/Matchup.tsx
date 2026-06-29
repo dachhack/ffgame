@@ -437,7 +437,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   }, [winClocks, winTarget]);
   const boardFinal = phase === 'final' || (phase === 'live' && allWindowsDone);
 
-  const filledCount = Object.values(picks).filter((p) => p.metricId).length;
+  // Count slots that have a player placed (the visible action). Previously this
+  // counted only metric-complete picks, so the "SLOTS SET" tally appeared frozen
+  // after placing a player but before choosing the hidden metric.
+  const filledCount = Object.values(picks).filter((p) => p.playerId).length;
   const totalSlots = totalSlotsWith(extraSlots);
   const anyPlaying = Object.values(winPlaying).some(Boolean);
   const extraSlotQty = inventory['extra-slot'] ?? 0;
