@@ -5,6 +5,8 @@ import { useState, type ReactNode } from 'react';
 // safe / can I play" questions a first-time visitor actually asks. Keep answers
 // short and point at the Rulebook for mechanics rather than duplicating them.
 
+const SUPPORT_EMAIL = 'hi@dripfantasy.com';
+
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: '4px 16px', marginBottom: 14 };
 const kicker: React.CSSProperties = { fontFamily: 'monospace', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--you)', padding: '14px 0 2px' };
 
@@ -38,6 +40,7 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
     onOpenRulebook
       ? <button onClick={() => { onClose(); onOpenRulebook(); }} className="mono" style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontWeight: 700, color: 'var(--you)', cursor: 'pointer' }}>{label}</button>
       : <b style={{ color: 'var(--you)' }}>{label}</b>;
+  const mailLink = <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: 'var(--you)', fontWeight: 700, textDecoration: 'none' }}>{SUPPORT_EMAIL}</a>;
 
   const SECTIONS: Section[] = [
     {
@@ -77,6 +80,13 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
           q: 'Do you need my Sleeper password?',
           a: <>Never. We only ask for your <b>Sleeper username</b>, which we use to read your public league info through Sleeper's
             public API. We never ask for, see, or store a password.</>,
+        },
+        {
+          q: 'Is my data shared or sold?',
+          a: <>No — and here's exactly what we do with it. Your Sleeper username is only used to read your league's <b>public</b> info
+            through Sleeper's read-only API. We collect <b>anonymous usage analytics</b> (which screens get used, so we can improve the
+            game). If you ask to join the live pilot, we store the email and handle you give us <b>solely to reach you about it</b>. We
+            don't sell your data or hand it to advertisers — if you ever want yours removed, email {mailLink}.</>,
         },
         {
           q: 'Is the NFL data real?',
@@ -142,14 +152,21 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
             the game engine is built to be portable so the same play loop can ship to phones later.</>,
         },
         {
-          q: 'Does it cost anything?',
-          a: <>The demo is completely free and always will be. The drip-coin and power-ups in the demo are in-game currency, not real
-            money. Pricing for the live, full-league product is still being worked out as part of the pilot.</>,
+          q: 'Is it free? Will it ever cost money?',
+          a: <>It's free, and we want to keep it that way. The demo is completely free, and the drip-coin and power-ups inside it are
+            in-game currency, not real money. We're committed to keeping Drip Fantasy <b>free as much as possible</b>. The one honest
+            caveat: live, real-time NFL data feeds get expensive at scale, so if a lot of people start playing, we may need some kind of
+            paid option to cover that cost. Keeping the core game free is the goal.</>,
         },
         {
           q: 'I have an invite code — where do I enter it?',
           a: <>On the splash screen choose <b>Already invited? Sign in</b> to start the live pilot. If your commissioner sent you a share
             link with a code, opening that link pre-fills it for you after you sign in with your email.</>,
+        },
+        {
+          q: 'I found a bug or have a question — how do I reach you?',
+          a: <>Email us at {mailLink} — that reaches the team directly and we read every message. If your question is specifically about
+            getting your league into the live pilot, the <b>request an invite</b> button is the fastest path.</>,
         },
       ],
     },
@@ -175,7 +192,7 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
         ))}
 
         <p style={{ fontSize: 11, lineHeight: 1.6, color: 'var(--dim)', textAlign: 'center', marginTop: 4 }}>
-          Still stuck? Use the <b>request an invite</b> button to get in touch.
+          Still have a question? Email {mailLink} — we read every message.
         </p>
       </div>
     </div>
