@@ -11,6 +11,12 @@ const autoEntered = new Set<string>();
 
 // The base league type (drops the "· Superflex" sub-tag), for filtering.
 const baseType = (lg: ProviderLeague) => lg.format.split(' · ')[0];
+
+// Sort key: leagues with real data (completed / in-season) before pre-draft ones.
+const STATUS_RANK: Record<string, number> = { complete: 0, in_season: 1, drafting: 2, pre_draft: 3 };
+const statusRank = (s: string) => STATUS_RANK[s] ?? 4;
+const statusLabel = (s: string) =>
+  s === 'complete' ? 'COMPLETE' : s === 'in_season' ? 'IN SEASON' : s === 'drafting' ? 'DRAFTING' : s === 'pre_draft' ? 'PRE-DRAFT' : '';
 // Display order for the filter chips.
 const TYPE_ORDER = ['Dynasty', 'Keeper', 'Redraft', 'Best Ball'];
 
@@ -36,8 +42,11 @@ export function Leagues() {
     setLeagues(null); setErr(null);
     prefetchPlayerDirectory(); // backstop: warm the directory if we booted straight here
     getProvider(sleeperUser.provider).getLeagues(sleeperUser)
-      .then((ls) => {
+      .then((raw) => {
         if (!alive) return;
+        // Surface playable (completed / in-season) leagues first, newest season
+        // first — so a pre-draft current-year league doesn't lead with no data.
+        const ls = [...raw].sort((a, b) => statusRank(a.status) - statusRank(b.status) || b.season.localeCompare(a.season));
         // One league? Skip the list and drop them straight in (first visit only —
         // so a back-tap can still reach the list/switch user).
         if (ls.length === 1 && !autoEntered.has(ls[0].leagueId)) {
@@ -75,7 +84,7 @@ export function Leagues() {
       <main style={{ flex: 1, overflow: 'auto', padding: '20px 16px 60px' }}>
         <div style={{ maxWidth: 1000, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-            <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>Your 2025 Leagues</div>
+            <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>Your Leagues</div>
             {leagues && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.08em' }}>{shown.length} LEAGUE{shown.length === 1 ? '' : 'S'}{filter !== 'All' ? '' : ' · NFL'}</span>}
           </div>
 
@@ -125,7 +134,7 @@ export function Leagues() {
                         : <span style={{ width: 36, height: 36, borderRadius: 7, background: 'var(--sh)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: 'var(--you)', flex: 'none' }} className="grotesk">{lg.name.slice(0, 1).toUpperCase()}</span>}
                       <div style={{ minWidth: 0 }}>
                         <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lg.name}</div>
-                        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.06em', marginTop: 2 }}>{lg.totalRosters}-TEAM{lg.status === 'complete' ? ' · COMPLETE' : lg.status === 'in_season' ? ' · IN SEASON' : ''}</div>
+                        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.06em', marginTop: 2 }}>{lg.season} · {lg.totalRosters}-TEAM{statusLabel(lg.status) ? ` · ${statusLabel(lg.status)}` : ''}</div>
                       </div>
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>

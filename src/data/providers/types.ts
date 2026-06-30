@@ -30,6 +30,7 @@ export interface ProviderLeague {
   provider: ProviderId;
   leagueId: string;
   name: string;
+  season: string;   // NFL season year, e.g. "2025"
   totalRosters: number;
   status: string;
   avatar: string | null;
