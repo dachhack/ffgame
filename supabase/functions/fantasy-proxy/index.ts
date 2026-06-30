@@ -21,8 +21,13 @@ const cors = {
 const json = (o: unknown, status = 200) =>
   new Response(JSON.stringify(o), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
-// Hosts this proxy is allowed to reach.
-const ALLOW = new Set(['www.fleaflicker.com', 'api.myfantasyleague.com']);
+// Hosts this proxy is allowed to reach. MFL league calls 302-redirect from the
+// api host to a per-league server (www##.myfantasyleague.com), which Deno's fetch
+// follows — so the whole myfantasyleague.com domain is allowed.
+const isAllowed = (host: string) =>
+  host === 'www.fleaflicker.com' ||
+  host === 'myfantasyleague.com' ||
+  host.endsWith('.myfantasyleague.com');
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -34,7 +39,7 @@ Deno.serve(async (req) => {
     let u: URL;
     try { u = new URL(target); } catch { return json({ ok: false, error: 'A valid url is required.' }); }
     if (u.protocol !== 'https:') return json({ ok: false, error: 'https only.' });
-    if (!ALLOW.has(u.hostname)) return json({ ok: false, error: `Host not allowed: ${u.hostname}` });
+    if (!isAllowed(u.hostname)) return json({ ok: false, error: `Host not allowed: ${u.hostname}` });
 
     const r = await fetch(u.toString(), {
       headers: { 'User-Agent': 'Mozilla/5.0 (drip-fantasy-proxy)', Accept: 'application/json' },

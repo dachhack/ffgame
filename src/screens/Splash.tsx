@@ -89,6 +89,7 @@ export function Splash() {
             <div style={{ borderTop: '1px solid var(--bd)', marginTop: 14, paddingTop: 12, textAlign: 'center', display: 'flex', flexWrap: 'wrap', gap: '4px 14px', justifyContent: 'center' }}>
               <button onClick={() => navigate({ name: 'connect', provider: 'espn' })} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>On ESPN? →</button>
               <button onClick={() => navigate({ name: 'connect', provider: 'fleaflicker' })} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>On Fleaflicker? →</button>
+              <button onClick={() => navigate({ name: 'connect', provider: 'mfl' })} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>On MFL? →</button>
             </div>
           </div>
 

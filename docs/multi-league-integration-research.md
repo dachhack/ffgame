@@ -307,10 +307,34 @@ directory hub (`loadDirectoryByEspn()` in `sleeperPlayers.ts`).
 >    players still use real PBP), so it won't crash, but the per-player weekly
 >    numbers need a real-league check.
 
-**Next (Phase C — MFL + Fleaflicker):** both are documented read APIs, so each is
-an `xNormalize()` + a `LeagueProvider` on the same proxy pattern — no new
-architecture. **Phase D — Yahoo:** OAuth 2.0 (app registration + token refresh in
-the proxy) + the "Fantasy data provided by Yahoo" attribution.
+**Phase C — Fleaflicker + MFL — landed.** Both reuse the shared
+`buildFromNormalized()` pipeline through a single generic proxy:
+
+- `supabase/functions/fantasy-proxy/index.ts` — anonymous CORS GET proxy with a
+  host allowlist (Fleaflicker + the whole `myfantasyleague.com` domain, since MFL
+  league calls 302-redirect to per-league `www##` servers).
+- `src/data/fleaflicker.ts` + `providers/fleaflicker.ts` — **validated
+  end-to-end against a real public league** (NFL Legends Lounge, 174892): 12
+  teams, correct records/points/schedule, 162/187 players resolved to baked PBP
+  by name-match. Found + fixed a real bug (the boxscore endpoint 400s on a
+  `season` param).
+- `src/data/mfl.ts` + `providers/mfl.ts` — mapped to MFL's documented export API
+  (league/leagueStandings/players/weeklyResults; "Last, First" name flip;
+  non-standard team-code map). **Built and typechecked; live validation pending**
+  — MFL league calls redirect to `www##.myfantasyleague.com`, which this
+  environment's egress doesn't yet reach (the deployed proxy follows the
+  redirect fine).
+- `src/screens/ProviderConnect.tsx` — one provider-parameterized connect screen
+  (replaces the ESPN-specific one); Splash links ESPN / Fleaflicker / MFL.
+
+Crosswalk note confirmed in practice: providers with no Sleeper/ESPN id
+(Fleaflicker, MFL) resolve to baked play-by-play purely by **name-match**, and on
+a real Fleaflicker league that still mapped ~87% of players to real PBP.
+
+**Next — Phase D — Yahoo:** OAuth 2.0 (app registration + token refresh in the
+proxy) + the "Fantasy data provided by Yahoo" attribution. This is the one
+remaining provider with real new architecture (the OAuth dance), vs. Phase C's
+drop-in adapters.
 
 ### What's genuinely *stopping* us, in one line each
 
