@@ -49,10 +49,11 @@ interface EspnLeague {
   };
   teams?: EspnTeam[]; schedule?: EspnSchedule[]; members?: EspnMember[];
 }
-interface ProxyResponse { ok: boolean; error?: string; league?: EspnLeague; weeks?: Record<string, { schedule?: EspnSchedule[] }> }
+export interface ProxyResponse { ok: boolean; error?: string; league?: EspnLeague; weeks?: Record<string, { schedule?: EspnSchedule[] }> }
+export type EspnFetch = (creds: EspnCreds, weeks: number[]) => Promise<ProxyResponse>;
 
-/** Call the espn-league proxy for the base league + per-week boxscores. */
-async function fetchEspn(creds: EspnCreds, weeks: number[]): Promise<ProxyResponse> {
+/** Default fetcher: call the espn-league proxy for the base league + boxscores. */
+export const espnProxyFetch: EspnFetch = async (creds, weeks) => {
   if (!supabase) throw new Error('ESPN import needs the backend, which isn’t configured here.');
   const { data, error } = await supabase.functions.invoke('espn-league', {
     body: { leagueId: creds.leagueId, season: creds.season, swid: creds.swid ?? '', s2: creds.s2 ?? '', weeks },
@@ -61,7 +62,7 @@ async function fetchEspn(creds: EspnCreds, weeks: number[]): Promise<ProxyRespon
   const res = data as ProxyResponse;
   if (!res?.ok) throw new Error(res?.error || 'ESPN returned an error.');
   return res;
-}
+};
 
 // ESPN PPR detection: the reception scoring item (statId 53). Reception points
 // may live in the base `points` OR in per-position overrides (PPR applied by
@@ -79,18 +80,18 @@ function teamName(t: EspnTeam): string {
 }
 
 /** Fetch an ESPN league and map it into the platform-agnostic NormalizedLeague. */
-export async function espnNormalize(creds: EspnCreds, onProgress?: (note: string) => void): Promise<NormalizedLeague> {
+export async function espnNormalize(creds: EspnCreds, fetcher: EspnFetch = espnProxyFetch, onProgress?: (note: string) => void): Promise<NormalizedLeague> {
   onProgress?.('Reading ESPN league…');
   const byEspn = await loadDirectoryByEspn(onProgress);
 
   // Probe the league first (no week boxscores) to learn the regular-season length.
-  const probe = await fetchEspn(creds, []);
+  const probe = await fetcher(creds, []);
   const lg = probe.league!;
   const matchupCount = lg.settings?.scheduleSettings?.matchupPeriodCount ?? REG_SEASON_WEEKS;
   const weeks = Math.min(REG_SEASON_WEEKS, Math.max(1, matchupCount));
 
   onProgress?.(`Loading ${weeks} weeks of results…`);
-  const full = await fetchEspn(creds, Array.from({ length: weeks }, (_, i) => i + 1));
+  const full = await fetcher(creds, Array.from({ length: weeks }, (_, i) => i + 1));
   const league = full.league ?? lg;
 
   // Members (owner guid → display name).

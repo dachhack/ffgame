@@ -282,7 +282,10 @@ preserved (its `sleeperId` still drives the baked-slug lookup), and ESPN players
 reuse the same path by joining their athlete id to a Sleeper id via the
 directory hub (`loadDirectoryByEspn()` in `sleeperPlayers.ts`).
 
-**Phase B ESPN — landed (code-complete; needs live validation).**
+**Phase B ESPN — landed + validated end-to-end** against a real private league
+(`1606063852`, 2024, cookie auth): PPR detected via position overrides, correct
+records/rosters/schedule, and 153/170 players resolved to baked PBP via the
+espnId→Sleeper-id directory join. The cookie round-trip works.
 
 - `supabase/functions/espn-league/index.ts` — anonymous CORS proxy to ESPN's v3
   read API; attaches the caller's `espn_s2`/`SWID` cookies server-side, returns
@@ -361,7 +364,7 @@ Yahoo is the only official API, and the only one needing OAuth 2.0:
 | **Sleeper** | ✅ live (client-side, unchanged) |
 | **Fleaflicker** | ✅ built + **validated end-to-end** vs. a real league |
 | **MFL** | ✅ built + **validated end-to-end** vs. a real league |
-| **ESPN** | ✅ built; structurally validated vs. a real league; live roster/boxscore check pending (cookies/deploy) |
+| **ESPN** | ✅ built + **validated end-to-end** vs. a real private league (cookie auth) |
 | **Yahoo** | ✅ built; **unvalidated** — needs app registration + OAuth login |
 | **NFL.com** | ❌ dropped — no usable league API (the original blocker) |
 

@@ -7,7 +7,7 @@
 // (the ESPN connect form collects league id + season + optional cookies and
 // calls buildLeague directly). resolveUser/getLeagues are therefore minimal —
 // they exist to satisfy the interface, not to drive a Sleeper-style list.
-import { espnNormalize, type EspnCreds } from '../espn';
+import { espnNormalize, espnProxyFetch, type EspnCreds } from '../espn';
 import { buildFromNormalized } from '../buildLeague';
 import type { LeagueProvider, ProviderStanding } from './types';
 
@@ -36,7 +36,7 @@ export const espnProvider: LeagueProvider = {
   async getLeagues() { return []; },
 
   async getStandings(leagueId, auth) {
-    const norm = await espnNormalize({ leagueId, season: auth?.season ?? '2025', swid: auth?.swid, s2: auth?.s2 });
+    const norm = await espnNormalize({ leagueId, season: auth?.season ?? '2025', swid: auth?.swid, s2: auth?.s2 }, espnProxyFetch);
     const standings: ProviderStanding[] = norm.teams
       .map((t) => ({
         rosterId: t.rosterId, teamName: t.teamName, owner: t.owner, avatar: null,
@@ -49,7 +49,7 @@ export const espnProvider: LeagueProvider = {
   async buildLeague(leagueId, _userId, onProgress, opts) {
     const auth = opts?.auth ?? {};
     const creds: EspnCreds = { leagueId, season: auth.season ?? '2025', swid: auth.swid, s2: auth.s2 };
-    const norm = await espnNormalize(creds, onProgress);
+    const norm = await espnNormalize(creds, espnProxyFetch, onProgress);
     return buildFromNormalized(norm, { addKdst: opts?.addKdst });
   },
 };
