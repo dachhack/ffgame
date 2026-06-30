@@ -19,21 +19,41 @@ const statusLabel = (s: string) =>
   s === 'complete' ? 'COMPLETE' : s === 'in_season' ? 'IN SEASON' : s === 'drafting' ? 'DRAFTING' : s === 'pre_draft' ? 'PRE-DRAFT' : '';
 // Display order for the filter chips.
 const TYPE_ORDER = ['Dynasty', 'Keeper', 'Redraft', 'Best Ball'];
+// The season to land on by default (this year's), auto-advancing each year.
+const CURRENT_SEASON = String(new Date().getFullYear());
 
 export function Leagues() {
   const { navigate, sleeperUser } = useStore();
   const [leagues, setLeagues] = useState<ProviderLeague[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('All');
+  // null until leagues load, then defaulted to the current season (or the newest
+  // season the user actually has). 'All' shows every season.
+  const [season, setSeason] = useState<string | null>(null);
 
-  // Type chips present in this user's leagues, in a stable order.
+  // Seasons present in this user's leagues, newest first.
+  const seasons = useMemo(
+    () => [...new Set((leagues ?? []).map((l) => l.season))].sort((a, b) => b.localeCompare(a)),
+    [leagues],
+  );
+  useEffect(() => {
+    if (leagues && season === null) setSeason(seasons.includes(CURRENT_SEASON) ? CURRENT_SEASON : (seasons[0] ?? 'All'));
+  }, [leagues, seasons, season]);
+  const effSeason = season ?? CURRENT_SEASON;
+
+  // Leagues in the selected season (drives both the type chips and the grid).
+  const inSeason = useMemo(
+    () => (leagues ?? []).filter((lg) => effSeason === 'All' || lg.season === effSeason),
+    [leagues, effSeason],
+  );
+  // Type chips present in the selected season, in a stable order.
   const types = useMemo(() => {
-    const set = new Set((leagues ?? []).map(baseType));
+    const set = new Set(inSeason.map(baseType));
     return TYPE_ORDER.filter((t) => set.has(t)).concat([...set].filter((t) => !TYPE_ORDER.includes(t)));
-  }, [leagues]);
+  }, [inSeason]);
   const shown = useMemo(
-    () => (leagues ?? []).filter((lg) => filter === 'All' || baseType(lg) === filter),
-    [leagues, filter],
+    () => inSeason.filter((lg) => filter === 'All' || baseType(lg) === filter),
+    [inSeason, filter],
   );
 
   useEffect(() => {
@@ -85,15 +105,41 @@ export function Leagues() {
         <div style={{ maxWidth: 1000, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
             <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>Your Leagues</div>
-            {leagues && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.08em' }}>{shown.length} LEAGUE{shown.length === 1 ? '' : 'S'}{filter !== 'All' ? '' : ' · NFL'}</span>}
+            {leagues && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.08em' }}>{shown.length} LEAGUE{shown.length === 1 ? '' : 'S'} · {effSeason === 'All' ? 'NFL' : effSeason}</span>}
           </div>
+
+          {/* Season filter chips (only shown when the user has more than one season) */}
+          {leagues && seasons.length > 1 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+              {['All', ...seasons].map((s) => {
+                const active = effSeason === s;
+                const n = s === 'All' ? leagues.length : leagues.filter((lg) => lg.season === s).length;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => { setSeason(s); setFilter('All'); }}
+                    className="mono"
+                    style={{
+                      fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
+                      color: active ? 'var(--on-accent)' : 'var(--dim)',
+                      background: active ? 'var(--you)' : 'var(--surface)',
+                      border: `1px solid ${active ? 'var(--you)' : 'var(--bd)'}`,
+                      borderRadius: 999, padding: '5px 11px',
+                    }}
+                  >
+                    {s === 'All' ? 'ALL SEASONS' : s} <span style={{ opacity: 0.6 }}>{n}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {/* Type filter chips (only shown when there's more than one type) */}
           {leagues && types.length > 1 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
               {['All', ...types].map((t) => {
                 const active = filter === t;
-                const n = t === 'All' ? leagues.length : leagues.filter((lg) => baseType(lg) === t).length;
+                const n = t === 'All' ? inSeason.length : inSeason.filter((lg) => baseType(lg) === t).length;
                 return (
                   <button
                     key={t}
@@ -116,7 +162,7 @@ export function Leagues() {
 
           {err && <div className="mono" style={{ fontSize: 12, color: 'var(--opp)' }}>{err}</div>}
           {!leagues && !err && <div className="mono" style={{ fontSize: 12, color: 'var(--dim)', letterSpacing: '0.08em' }}>Loading {sleeperUser.displayName}’s leagues…</div>}
-          {leagues && leagues.length === 0 && <div className="mono" style={{ fontSize: 12, color: 'var(--dim)' }}>No 2025 NFL leagues found for this user.</div>}
+          {leagues && leagues.length === 0 && <div className="mono" style={{ fontSize: 12, color: 'var(--dim)' }}>No recent NFL leagues found for this user.</div>}
 
           {leagues && leagues.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
