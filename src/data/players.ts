@@ -64,7 +64,7 @@ for (const r of ALL_ROWS) {
   if (!STAT_INDEX.has(key)) STAT_INDEX.set(key, r);
 }
 
-/** Lightweight descriptor for every player in the stats DB (waiver pool source). */
+/** Lightweight descriptor for every player in the stats DB. */
 export interface StatPlayer { name: string; pos: Pos; team: string; ppr: number; }
 export const STAT_PLAYERS: StatPlayer[] = ALL_ROWS.map((r) => ({ name: r.name, pos: r.pos, team: r.team, ppr: r.ppr }));
 

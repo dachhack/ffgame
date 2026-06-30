@@ -1,5 +1,5 @@
 import type { League, FantasyTeam, Player, Pos, ScheduleGame } from '../types';
-import { statsForName, shortName, normName, teamForName, STAT_PLAYERS, type StatPlayer } from './players';
+import { statsForName, shortName, normName, teamForName } from './players';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Drip Test League — the public demo. A SANITIZED clone: the rosters,
@@ -272,22 +272,6 @@ export function teamRoster(teamId: string): Player[] {
   const t = getTeam(teamId);
   if (!t) return [];
   return t.roster.map((id) => activePlayers[id]).filter(Boolean);
-}
-
-/** All players rostered league-wide (for waiver-wire exclusion). */
-export function allRosteredIds(): Set<string> {
-  const s = new Set<string>();
-  for (const t of activeLeague.teams) for (const id of t.roster) s.add(id);
-  return s;
-}
-
-/** Top available free agents (in stats DB, not on any roster). */
-export function freeAgents(limit = 24): StatPlayer[] {
-  const rostered = allRosteredIds();
-  return STAT_PLAYERS
-    .filter((sp) => !rostered.has(normName(sp.name).replace(/\s+/g, '-')))
-    .sort((a, b) => b.ppr - a.ppr)
-    .slice(0, limit);
 }
 
 /** A team's week-by-week results from its own POV across the regular season. */
