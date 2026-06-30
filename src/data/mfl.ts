@@ -97,7 +97,7 @@ export async function mflNormalize(creds: MflCreds, getJson: GetJson, onProgress
         const teamId = rid(f.id);
         const pp: Record<string, number> = {};
         const keys: string[] = [];
-        for (const pl of arr<any>(f.players?.player)) {
+        for (const pl of arr<any>(f.player)) {
           const k = addPlayer(String(pl.id));
           if (!k) continue;
           pp[k] = (pp[k] ?? 0) + Number(pl.score ?? 0);

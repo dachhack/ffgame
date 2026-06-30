@@ -318,12 +318,12 @@ directory hub (`loadDirectoryByEspn()` in `sleeperPlayers.ts`).
   teams, correct records/points/schedule, 162/187 players resolved to baked PBP
   by name-match. Found + fixed a real bug (the boxscore endpoint 400s on a
   `season` param).
-- `src/data/mfl.ts` + `providers/mfl.ts` — mapped to MFL's documented export API
-  (league/leagueStandings/players/weeklyResults; "Last, First" name flip;
-  non-standard team-code map). **Built and typechecked; live validation pending**
-  — MFL league calls redirect to `www##.myfantasyleague.com`, which this
-  environment's egress doesn't yet reach (the deployed proxy follows the
-  redirect fine).
+- `src/data/mfl.ts` + `providers/mfl.ts` — **validated end-to-end against a real
+  public league** (Masters Copper Dynasty, 10005): 10 teams with correct
+  records/points/schedule, 179/207 players resolved to baked PBP by name-match,
+  "Last, First" names flipped, non-standard team codes mapped. Found + fixed a
+  real bug (weeklyResults per-player scores are under `franchise.player`, not
+  `franchise.players.player`).
 - `src/screens/ProviderConnect.tsx` — one provider-parameterized connect screen
   (replaces the ESPN-specific one); Splash links ESPN / Fleaflicker / MFL.
 
