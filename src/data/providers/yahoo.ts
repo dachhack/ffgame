@@ -25,7 +25,7 @@ export const yahooProvider: LeagueProvider = {
   async getLeagues() {
     const ls = await yahooLeagues(yahooApi);
     return ls.map((l): ProviderLeague => ({
-      provider: 'yahoo', leagueId: l.leagueKey, name: l.name, totalRosters: 0, status: '',
+      provider: 'yahoo', leagueId: l.leagueKey, name: l.name, season: l.season, totalRosters: 0, status: '',
       avatar: null, format: 'Yahoo', scoring: '', starters: 0,
     }));
   },
