@@ -90,6 +90,7 @@ export function Splash() {
               <button onClick={() => navigate({ name: 'connect', provider: 'espn' })} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>On ESPN? →</button>
               <button onClick={() => navigate({ name: 'connect', provider: 'fleaflicker' })} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>On Fleaflicker? →</button>
               <button onClick={() => navigate({ name: 'connect', provider: 'mfl' })} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>On MFL? →</button>
+              <button onClick={() => navigate({ name: 'connect', provider: 'yahoo' })} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>On Yahoo? →</button>
             </div>
           </div>
 

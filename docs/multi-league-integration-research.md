@@ -331,10 +331,44 @@ Crosswalk note confirmed in practice: providers with no Sleeper/ESPN id
 (Fleaflicker, MFL) resolve to baked play-by-play purely by **name-match**, and on
 a real Fleaflicker league that still mapped ~87% of players to real PBP.
 
-**Next — Phase D — Yahoo:** OAuth 2.0 (app registration + token refresh in the
-proxy) + the "Fantasy data provided by Yahoo" attribution. This is the one
-remaining provider with real new architecture (the OAuth dance), vs. Phase C's
-drop-in adapters.
+**Phase D — Yahoo — landed (code-complete; needs an app + live validation).**
+Yahoo is the only official API, and the only one needing OAuth 2.0:
+
+- `supabase/functions/yahoo-oauth/index.ts` — holds the app client id/secret and
+  does token `exchange` / `refresh` plus authenticated API `get`s. The browser
+  only ever holds the user's own tokens.
+- `src/data/providers/yahooClient.ts` — the redirect/exchange/refresh glue +
+  token cache; `src/data/yahoo.ts` — `yahooNormalize()` with helpers that tame
+  Yahoo's awkward JSON (lists keyed "0","1",…,"count"; team/player metadata as
+  arrays of single-key fragments).
+- `src/data/providers/yahoo.ts` — the provider (`clientSide:false`,
+  `auth:'oauth'`); `src/screens/YahooConnect.tsx` — sign-in → league-picker; the
+  `?code` callback is exchanged in `App.tsx`.
+
+> **Before Yahoo works, two things only you can do:** (1) register an app at
+> developer.yahoo.com (Fantasy read scope) and set `YAHOO_CLIENT_ID` /
+> `YAHOO_CLIENT_SECRET` as function secrets + `VITE_YAHOO_CLIENT_ID` in the
+> build; (2) validate against a real league — unlike the others I could not test
+> Yahoo at all from here (it requires the OAuth login), and Yahoo's JSON is the
+> most surprise-prone, so the exact field paths in `yahoo.ts` should be expected
+> to need fixes against live data. The "Fantasy data provided by Yahoo"
+> attribution is included on the connect screen per Yahoo's terms.
+
+### Final status — all five platforms
+
+| Platform | State |
+|---|---|
+| **Sleeper** | ✅ live (client-side, unchanged) |
+| **Fleaflicker** | ✅ built + **validated end-to-end** vs. a real league |
+| **MFL** | ✅ built + **validated end-to-end** vs. a real league |
+| **ESPN** | ✅ built; structurally validated vs. a real league; live roster/boxscore check pending (cookies/deploy) |
+| **Yahoo** | ✅ built; **unvalidated** — needs app registration + OAuth login |
+| **NFL.com** | ❌ dropped — no usable league API (the original blocker) |
+
+**Deploy checklist** (can't be done from this environment):
+`supabase functions deploy espn-league --no-verify-jwt`,
+`fantasy-proxy --no-verify-jwt`, `yahoo-oauth --no-verify-jwt`; set the Yahoo
+secrets; add `VITE_YAHOO_CLIENT_ID` to the build.
 
 ### What's genuinely *stopping* us, in one line each
 

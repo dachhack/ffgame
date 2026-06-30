@@ -7,6 +7,7 @@ import { sleeperProvider } from './sleeper';
 import { espnProvider } from './espn';
 import { fleaflickerProvider } from './fleaflicker';
 import { mflProvider } from './mfl';
+import { yahooProvider } from './yahoo';
 
 export const DEFAULT_PROVIDER_ID: ProviderId = 'sleeper';
 
@@ -15,7 +16,7 @@ const REGISTRY: Record<ProviderId, LeagueProvider | undefined> = {
   espn: espnProvider,            // Phase B — unofficial v3 API via the espn-league proxy
   fleaflicker: fleaflickerProvider, // Phase C — public read API via the fantasy-proxy
   mfl: mflProvider,              // Phase C — documented export API via the fantasy-proxy
-  yahoo: undefined,              // Phase D — official OAuth 2.0 API via proxy
+  yahoo: yahooProvider,          // Phase D — official OAuth 2.0 API via the yahoo-oauth fn
 };
 
 /** Providers with a live adapter, in registration order. */
