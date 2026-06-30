@@ -158,6 +158,11 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
             interested, use the <b>request an invite</b> link on the splash screen (or the floating request button) and we'll be in touch.</>,
         },
         {
+          q: 'Is there a waitlist for the live pilot?',
+          a: <>The live head-to-head pilot is invite-only and intentionally small while we tune it, so we onboard leagues in batches.
+            Use <b>request an invite</b> and we'll bring your league in as spots open — you'll get a code to redeem by email.</>,
+        },
+        {
           q: 'Is there a mobile app?',
           a: <>Not yet — Drip Fantasy is a web app today and works in your phone's browser. Native iOS and Android apps are on the roadmap;
             the game engine is built to be portable so the same play loop can ship to phones later.</>,
