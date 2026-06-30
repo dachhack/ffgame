@@ -158,6 +158,12 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
             interested, use the <b>request an invite</b> link on the splash screen (or the floating request button) and we'll be in touch.</>,
         },
         {
+          q: 'What if my league isn’t on Sleeper?',
+          a: <>You're covered — alongside Sleeper we support <b>ESPN</b>, <b>MyFantasyLeague (MFL)</b> and <b>Fleaflicker</b>, with
+            <b> Yahoo</b> landing next. If your league is on a platform we haven't connected yet, use <b>request an invite</b> and
+            we'll let you know the moment it's ready.</>,
+        },
+        {
           q: 'Is there a waitlist for the live pilot?',
           a: <>The live head-to-head pilot is invite-only and intentionally small while we tune it, so we onboard leagues in batches.
             Use <b>request an invite</b> and we'll bring your league in as spots open — you'll get a code to redeem by email.</>,
