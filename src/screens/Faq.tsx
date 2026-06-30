@@ -71,6 +71,12 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
             metric on each slot), <b>LIVE</b> (picks reveal at kickoff and effects fire on the real game clock), and <b>FINAL</b>
             (the week's result across all slots). The {rulebookLink('Rulebook')} walks through the full flow.</>,
         },
+        {
+          q: 'Can I play solo, or do I need leaguemates?',
+          a: <>You can play the demo entirely solo — pick any team and any week and a full slate resolves against a built-in opponent,
+            so you can learn the flow without waiting on anyone. The live, head-to-head version is where you face your real
+            leaguemates with sealed picks.</>,
+        },
       ],
     },
     {
@@ -93,6 +99,11 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
           a: <>Yes. The stats, schedule and scores come from genuine 2025 NFL data (nflverse / Sleeper sources via Stathead) — real
             season box scores for around 250 skill players seed every simulated game. The data is real; the <i>league</i> wrapped
             around the demo is sanitized.</>,
+        },
+        {
+          q: 'What NFL season and weeks does the demo cover?',
+          a: <>The real 2025 NFL regular season — 14 weeks. The demo opens on <b>Week 4</b>: weeks 1–3 are already in the books, and
+            Week 4 is the live one you set a lineup for and watch resolve. Every stat, score and schedule entry is genuine 2025 data.</>,
         },
         {
           q: 'Whose league is the demo based on?',
