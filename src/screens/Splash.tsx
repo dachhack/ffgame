@@ -86,8 +86,9 @@ export function Splash() {
             </div>
             {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', marginTop: 9, lineHeight: 1.4 }}>{err}</div>}
             <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>Sleeper public API — username only, never a password.</div>
-            <div style={{ borderTop: '1px solid var(--bd)', marginTop: 14, paddingTop: 12, textAlign: 'center' }}>
-              <button onClick={() => navigate({ name: 'espnConnect' })} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>On ESPN instead? Connect an ESPN league →</button>
+            <div style={{ borderTop: '1px solid var(--bd)', marginTop: 14, paddingTop: 12, textAlign: 'center', display: 'flex', flexWrap: 'wrap', gap: '4px 14px', justifyContent: 'center' }}>
+              <button onClick={() => navigate({ name: 'connect', provider: 'espn' })} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>On ESPN? →</button>
+              <button onClick={() => navigate({ name: 'connect', provider: 'fleaflicker' })} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>On Fleaflicker? →</button>
             </div>
           </div>
 

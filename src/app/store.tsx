@@ -7,7 +7,7 @@ import { clearRuntimeHeadshots } from '../data/media';
 import type { League } from '../types';
 import { powerupById } from '../data/powerups';
 import { DEMO_WEEK } from '../config';
-import { DEFAULT_PROVIDER_ID, type ProviderUser } from '../data/providers';
+import { DEFAULT_PROVIDER_ID, type ProviderUser, type ProviderId } from '../data/providers';
 import { track, identify, Ev } from './analytics';
 
 import type { SlotSwap } from '../engine/matchup';
@@ -34,7 +34,7 @@ export type Route =
   | { name: 'demo'; view?: 'clean' | 'board' } // narrated guided demo: 'clean' explainer (default) or the real in-game board
   | { name: 'leagues' }
   | { name: 'sleeperLeague'; leagueId: string; leagueName: string }
-  | { name: 'espnConnect' }
+  | { name: 'connect'; provider: ProviderId }
   | { name: 'hub' }
   | { name: 'league' }
   | { name: 'matchup'; week: number; phase: Phase }
