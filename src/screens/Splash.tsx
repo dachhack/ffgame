@@ -5,6 +5,7 @@ import { getProvider } from '../data/providers';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
 import { getSession } from '../data/liveApi';
 import { RequestCodeModal } from './RequestCode';
+import { Faq } from './Faq';
 
 export function Splash() {
   const { navigate, setSleeperUser, sleeperUser, exitSimLeague } = useStore();
@@ -13,6 +14,7 @@ export function Splash() {
   const [err, setErr] = useState<string | null>(null);
   const [signedIn, setSignedIn] = useState(false);
   const [requesting, setRequesting] = useState(false);
+  const [faq, setFaq] = useState(false);
   useEffect(() => { getSession().then((s) => setSignedIn(!!s)).catch(() => {}); }, []);
   // When the Sleeper user is cleared (e.g. on sign-out) while Splash is already
   // mounted, reset the pre-filled username so it doesn't linger as an example.
@@ -110,11 +112,15 @@ export function Splash() {
                 <button onClick={() => setRequesting(true)} className="mono" style={{ ...linkBtn, color: 'var(--faint)' }}>get a league code</button>
               </span>
             )}
+            <div style={{ marginTop: 14 }}>
+              <button onClick={() => setFaq(true)} className="mono" style={{ ...linkBtn, color: 'var(--faint)' }}>New here? Read the FAQ →</button>
+            </div>
           </div>
         </div>
       </main>
 
       {requesting && <RequestCodeModal initialSleeper={sleeperUser?.username ?? ''} onClose={() => setRequesting(false)} />}
+      {faq && <Faq onClose={() => setFaq(false)} />}
     </div>
   );
 }

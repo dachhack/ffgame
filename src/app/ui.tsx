@@ -8,6 +8,7 @@ import { injuryFor } from '../data/injuries';
 import { REG_SEASON_WEEKS } from '../data/league';
 import { APP_VERSION, DATA_SOURCE } from './version';
 import { Rulebook } from '../screens/Rulebook';
+import { Faq } from '../screens/Faq';
 import { liveConfigured } from '../data/supabaseClient';
 import { getSession, onAuth, signOut } from '../data/liveApi';
 
@@ -118,6 +119,7 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
   const { theme, setTheme, bigText, setBigText, fullStats, setFullStats, setSleeperUser, navigate } = useStore();
   const [open, setOpen] = useState(false);
   const [rules, setRules] = useState(false);
+  const [faq, setFaq] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   // Mirror the Supabase auth session so a signed-in player can sign out from any
@@ -206,6 +208,13 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
           >
             📖 Rulebook
           </button>
+          <button
+            onClick={() => { setOpen(false); setFaq(true); }}
+            className="mono"
+            style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, marginTop: -2, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
+          >
+            ❓ FAQ
+          </button>
           {superAdmin && (
             <button
               onClick={() => { setOpen(false); superAdmin(); }}
@@ -235,6 +244,7 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
         </div>
       )}
       {rules && <Rulebook onClose={() => setRules(false)} />}
+      {faq && <Faq onClose={() => setFaq(false)} onOpenRulebook={() => setRules(true)} />}
     </div>
   );
 }
