@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
 import { SiteSettings } from '../app/ui';
-import { getLeagues, sleeperAvatarUrl, type SleeperLeague } from '../data/sleeper';
+import { getProvider, type ProviderLeague } from '../data/providers';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
 
 // Leagues we've already auto-forwarded into (single-league shortcut). Tracked so
@@ -10,13 +10,13 @@ import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
 const autoEntered = new Set<string>();
 
 // The base league type (drops the "· Superflex" sub-tag), for filtering.
-const baseType = (lg: SleeperLeague) => lg.format.split(' · ')[0];
+const baseType = (lg: ProviderLeague) => lg.format.split(' · ')[0];
 // Display order for the filter chips.
 const TYPE_ORDER = ['Dynasty', 'Keeper', 'Redraft', 'Best Ball'];
 
 export function Leagues() {
   const { navigate, sleeperUser } = useStore();
-  const [leagues, setLeagues] = useState<SleeperLeague[] | null>(null);
+  const [leagues, setLeagues] = useState<ProviderLeague[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('All');
 
@@ -35,7 +35,7 @@ export function Leagues() {
     let alive = true;
     setLeagues(null); setErr(null);
     prefetchPlayerDirectory(); // backstop: warm the directory if we booted straight here
-    getLeagues(sleeperUser.userId)
+    getProvider(sleeperUser.provider).getLeagues(sleeperUser)
       .then((ls) => {
         if (!alive) return;
         // One league? Skip the list and drop them straight in (first visit only —
@@ -52,7 +52,8 @@ export function Leagues() {
   }, [sleeperUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!sleeperUser) return null;
-  const av = sleeperAvatarUrl(sleeperUser.avatar);
+  const provider = getProvider(sleeperUser.provider);
+  const av = provider.avatarUrl(sleeperUser.avatar);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -111,7 +112,7 @@ export function Leagues() {
           {leagues && leagues.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
               {shown.map((lg) => {
-                const la = sleeperAvatarUrl(lg.avatar);
+                const la = provider.avatarUrl(lg.avatar);
                 return (
                   <button
                     key={lg.leagueId}

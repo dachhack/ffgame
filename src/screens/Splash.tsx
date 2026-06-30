@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
 import { SiteSettings } from '../app/ui';
-import { resolveUser } from '../data/sleeper';
+import { getProvider } from '../data/providers';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
 import { getSession } from '../data/liveApi';
 import { RequestCodeModal } from './RequestCode';
@@ -23,7 +23,7 @@ export function Splash() {
     if (!u || busy) return;
     setBusy(true); setErr(null);
     try {
-      const user = await resolveUser(u);
+      const user = await getProvider().resolveUser(u);
       if (!user) { setErr(`No Sleeper user “${u}”. Check the spelling.`); setBusy(false); return; }
       setSleeperUser(user);
       prefetchPlayerDirectory(); // ~5MB directory downloads while they browse leagues
@@ -86,6 +86,12 @@ export function Splash() {
             </div>
             {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', marginTop: 9, lineHeight: 1.4 }}>{err}</div>}
             <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>Sleeper public API — username only, never a password.</div>
+            <div style={{ borderTop: '1px solid var(--bd)', marginTop: 14, paddingTop: 12, textAlign: 'center', display: 'flex', flexWrap: 'wrap', gap: '4px 14px', justifyContent: 'center' }}>
+              <button onClick={() => navigate({ name: 'connect', provider: 'espn' })} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>On ESPN? →</button>
+              <button onClick={() => navigate({ name: 'connect', provider: 'fleaflicker' })} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>On Fleaflicker? →</button>
+              <button onClick={() => navigate({ name: 'connect', provider: 'mfl' })} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>On MFL? →</button>
+              <button onClick={() => navigate({ name: 'connect', provider: 'yahoo' })} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>On Yahoo? →</button>
+            </div>
           </div>
 
           {/* ── 3. Fallback — no Sleeper account → browse a sample league ─────── */}

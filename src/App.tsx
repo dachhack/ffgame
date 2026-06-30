@@ -8,6 +8,9 @@ import { MatchupFinal } from './screens/MatchupFinal';
 import { Splash } from './screens/Splash';
 import { Leagues } from './screens/Leagues';
 import { SleeperLeague } from './screens/SleeperLeague';
+import { ProviderConnect } from './screens/ProviderConnect';
+import { YahooConnect } from './screens/YahooConnect';
+import { yahooExchange } from './data/providers/yahooClient';
 import { LiveOnboard } from './screens/LiveOnboard';
 import { GuidedDemo } from './screens/GuidedDemo';
 import { RequestCodeFab } from './screens/RequestCode';
@@ -27,6 +30,17 @@ export function App() {
   // is stashed so it survives the magic-link round trip and pre-fills the join form.
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
+    // Yahoo OAuth redirect: ?code=…&state=yahoo → exchange for tokens, then land
+    // on the Yahoo league picker (strip the query so a refresh doesn't re-run it).
+    if (p.get('state') === 'yahoo' && p.get('code')) {
+      yahooExchange(p.get('code')!)
+        .catch(() => { /* surfaced on the connect screen */ })
+        .finally(() => {
+          try { window.history.replaceState({}, '', window.location.pathname); } catch { /* ignore */ }
+          navigate({ name: 'connect', provider: 'yahoo' });
+        });
+      return;
+    }
     if (p.get('live') === '1') {
       const code = p.get('code');
       if (code) { try { localStorage.setItem('dripInviteCode', code.toUpperCase()); } catch { /* ignore */ } }
@@ -54,6 +68,9 @@ export function App() {
         : <GuidedDemo />)}
       {route.name === 'leagues' && <Leagues />}
       {route.name === 'sleeperLeague' && <SleeperLeague key={route.leagueId} leagueId={route.leagueId} leagueName={route.leagueName} />}
+      {route.name === 'connect' && (route.provider === 'yahoo'
+        ? <YahooConnect />
+        : <ProviderConnect key={route.provider} provider={route.provider} />)}
       {route.name === 'hub' && <LeagueHub />}
       {route.name === 'league' && <LeagueOverview />}
       {route.name === 'matchup' && <Matchup key={`m${route.week}-${youTeamId}`} week={route.week} initialPhase={route.phase} />}
