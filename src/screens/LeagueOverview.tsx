@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useStore } from '../app/store';
-import { Brand, Header, SiteSettings, UserChip, Avatar, PosPill, PlayerImg, DemoControls } from '../app/ui';
-import { getTeam, teamRoster, gameForTeam, teamResults, freeAgents } from '../data/league';
+import { Brand, Header, SiteSettings, UserChip, Avatar, PlayerImg, DemoControls } from '../app/ui';
+import { getTeam, teamRoster, gameForTeam, teamResults } from '../data/league';
 import { TOTAL_SLOTS } from '../data/metrics';
 import { POWERUPS } from '../data/powerups';
 import { avatarUrl } from '../data/media';
@@ -13,7 +13,6 @@ import type { FantasyTeam } from '../types';
 type ModalState =
   | null
   | { type: 'roster'; teamId: string }
-  | { type: 'waivers' }
   | { type: 'schedule' }
   | { type: 'shop' };
 
@@ -69,7 +68,6 @@ export function LeagueOverview() {
           {/* toolbar */}
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
             <ToolButton onClick={() => setModal({ type: 'schedule' })}>📅 ALL MATCHUPS</ToolButton>
-            <ToolButton onClick={() => setModal({ type: 'waivers' })}>🔁 WAIVER WIRE</ToolButton>
             <ToolButton onClick={() => setModal({ type: 'shop' })}>🛒 POWER-UP SHOP</ToolButton>
             <span style={{ fontSize: 11, color: 'var(--faint)' }}>Tap any team in standings to see their roster &amp; schedule.</span>
           </div>
@@ -168,7 +166,6 @@ export function LeagueOverview() {
       </main>
 
       {modal?.type === 'roster' && <TeamModal teamId={modal.teamId} onClose={() => setModal(null)} onOpenTeam={(id) => setModal({ type: 'roster', teamId: id })} />}
-      {modal?.type === 'waivers' && <WaiverModal onClose={() => setModal(null)} />}
       {modal?.type === 'schedule' && <ScheduleModal onClose={() => setModal(null)} onOpenTeam={(id) => setModal({ type: 'roster', teamId: id })} />}
       {modal?.type === 'shop' && <ShopModal onClose={() => setModal(null)} />}
     </>
@@ -316,30 +313,6 @@ function TeamModal({ teamId, onClose, onOpenTeam }: { teamId: string; onClose: (
           })}
         </div>
       )}
-    </Modal>
-  );
-}
-
-function WaiverModal({ onClose }: { onClose: () => void }) {
-  const fa = freeAgents(28);
-  return (
-    <Modal title="Waiver Wire" sub="TOP AVAILABLE FREE AGENTS · FAAB" onClose={onClose}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 460, overflow: 'auto' }}>
-        {fa.map((p, i) => {
-          const trend = i < 4 ? { t: '▲▲', c: 'var(--warn)' } : i < 10 ? { t: '▲', c: 'var(--you)' } : i < 20 ? { t: '—', c: 'var(--faint)' } : { t: '▼', c: 'var(--opp)' };
-          const faab = Math.max(1, Math.round((fa.length - i) / fa.length * 38));
-          return (
-            <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '7px 10px' }}>
-              <PosPill pos={p.pos} />
-              <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', flex: 1 }}>{p.name}</span>
-              <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 30 }}>{p.team}</span>
-              <span className="mono" style={{ fontSize: 11, color: trend.c, width: 24, textAlign: 'center' }}>{trend.t}</span>
-              <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 36, textAlign: 'right' }}>{faab}%</span>
-              <button className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 3, padding: '6px 9px' }}>CLAIM</button>
-            </div>
-          );
-        })}
-      </div>
     </Modal>
   );
 }
