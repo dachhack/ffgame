@@ -94,9 +94,17 @@ it can break without notice. Biggest user base, cheapest API. **Medium effort.**
 ### Yahoo
 The **only officially supported** option: Yahoo Fantasy Sports API, OAuth 2.0.
 Most durable legally, heaviest to build — register an app (consumer key/secret),
-run a 3-legged OAuth flow, refresh tokens server-side, parse XML-ish responses.
-Yahoo **requires attribution** ("Fantasy data provided by Yahoo"). **High
-effort, lowest risk.**
+run a 3-legged OAuth flow, refresh tokens server-side, parse JSON. Yahoo
+**requires attribution** ("Fantasy data provided by Yahoo").
+
+> **⚠️ Access is now gated (confirmed live, 2026).** Yahoo moved the Fantasy
+> Sports API behind an **application + manual approval** process
+> ("Application Submission → Review → Access"). A self-serve OAuth app no longer
+> gets a Fantasy permission — the API Permissions list is empty, and any Fantasy
+> call with such a token returns `oauth_problem="additional_authorization_required"`
+> (verified: even `game/nfl` fails). So Yahoo is **not** plug-and-play like it
+> used to be — it requires an approved developer application before any league
+> data is reachable. **High effort + an approval gate, lowest legal risk.**
 
 ### Fleaflicker
 Documented public read API (`https://www.fleaflicker.com/api/...`, e.g.
@@ -348,14 +356,18 @@ Yahoo is the only official API, and the only one needing OAuth 2.0:
   `auth:'oauth'`); `src/screens/YahooConnect.tsx` — sign-in → league-picker; the
   `?code` callback is exchanged in `App.tsx`.
 
-> **Before Yahoo works, two things only you can do:** (1) register an app at
-> developer.yahoo.com (Fantasy read scope) and set `YAHOO_CLIENT_ID` /
-> `YAHOO_CLIENT_SECRET` as function secrets + `VITE_YAHOO_CLIENT_ID` in the
-> build; (2) validate against a real league — unlike the others I could not test
-> Yahoo at all from here (it requires the OAuth login), and Yahoo's JSON is the
-> most surprise-prone, so the exact field paths in `yahoo.ts` should be expected
-> to need fixes against live data. The "Fantasy data provided by Yahoo"
-> attribution is included on the connect screen per Yahoo's terms.
+> **Yahoo status (tested live, 2026):** the **OAuth handshake is validated** —
+> a real auth-code → access/refresh-token exchange via the exact flow the
+> `yahoo-oauth` function uses (200, tokens returned). But the **Fantasy API is
+> now gated**: Yahoo moved Fantasy access behind a manual application/approval
+> (§3), so a self-serve app's token can't read any league
+> (`additional_authorization_required` on every Fantasy call, incl. `game/nfl`).
+> The league/roster mapping in `yahoo.ts` is therefore built-to-spec but
+> **unvalidated** — it needs (1) an approved Yahoo developer application, then
+> (2) a real-league check (Yahoo's JSON is the most surprise-prone, so expect
+> field-path fixes), plus `YAHOO_CLIENT_ID`/`SECRET` as function secrets +
+> `VITE_YAHOO_CLIENT_ID` in the build. The "Fantasy data provided by Yahoo"
+> attribution is on the connect screen per Yahoo's terms.
 
 ### Final status — all five platforms
 
@@ -365,7 +377,7 @@ Yahoo is the only official API, and the only one needing OAuth 2.0:
 | **Fleaflicker** | ✅ built + **validated end-to-end** vs. a real league |
 | **MFL** | ✅ built + **validated end-to-end** vs. a real league |
 | **ESPN** | ✅ built + **validated end-to-end** vs. a real private league (cookie auth) |
-| **Yahoo** | ✅ built; **unvalidated** — needs app registration + OAuth login |
+| **Yahoo** | ✅ built; **OAuth token exchange validated live**; Fantasy data unreachable — Yahoo now gates the Fantasy API behind a manual application/approval (confirmed 2026) |
 | **NFL.com** | ❌ dropped — no usable league API (the original blocker) |
 
 **Deploy checklist** (can't be done from this environment):
