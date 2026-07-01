@@ -427,7 +427,16 @@ export async function dispatchSim(input: { mode?: 'live' | 'reset' | 'check' | '
  *  function (admin-only; the function re-checks is_admin and sends through Gmail). */
 export async function sendInvite(input: { to: string; code: string; link: string; leagueName?: string }): Promise<{ ok: boolean; error?: string }> {
   const { data, error } = await client().functions.invoke('send-invite', { body: input });
-  if (error) return { ok: false, error: friendlyError(error) };
+  if (error) {
+    // On a non-2xx the FunctionsHttpError only says "non-2xx status code"; the real
+    // reason is in the response body (.context is the Response). Surface it.
+    let detail = '';
+    try {
+      const ctx = (error as { context?: Response }).context;
+      if (ctx && typeof ctx.json === 'function') detail = (await ctx.json())?.error ?? '';
+    } catch { /* body wasn't JSON — fall back to the generic message */ }
+    return { ok: false, error: detail || friendlyError(error) };
+  }
   return data as { ok: boolean; error?: string };
 }
 export const adminLeagueMembers = (leagueId: string) => rpc<AdminMember[]>('admin_league_members', { p_league_id: leagueId });
