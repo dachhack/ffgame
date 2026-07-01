@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, type LeagueJoiner,
   setTeamController, setLineupPolicy,
   leagueKdst, setKdstMode, setTeamKdst,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
@@ -315,6 +315,8 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
         {/* Primary way to invite players — the join link (no code to type). The
             invite code chip above remains as a fallback for manual entry. */}
         <button onClick={() => { copy(shareLink(l.invite_code)); setCopied(true); }} className="mono" style={btn(true)}>{copied ? '✓ invite link copied' : '⛓ share invite link'}</button>
+        {admin && <span style={{ flex: 1 }} />}
+        {admin && <DeleteLeague name={l.name} onDelete={async () => { const r = await adminDeleteLeague(l.league_id); if (r.ok) reload(); return r; }} />}
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
         <span style={{ flex: 1 }} />
@@ -739,6 +741,37 @@ function AssignRoster({ initial, joiners = [], onAssign }: { initial: string; jo
         style={{ ...inp, fontSize: 10, padding: '5px 7px', flex: 1, minWidth: 0 }} />
       <button onClick={go} disabled={busy} className="mono" style={{ ...btn(false), opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'assign'}</button>
       {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp, #e5484d)' }}>{msg}</span>}
+    </div>
+  );
+}
+
+// Super-admin only: permanently delete a league. Two-step, type-the-name guard so
+// it can't be a stray click — the whole league + its matchups/picks/members go.
+function DeleteLeague({ name, onDelete }: { name: string; onDelete: () => Promise<{ ok: boolean; error?: string }> }) {
+  const [open, setOpen] = useState(false);
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const danger = 'var(--opp, #e5484d)';
+  const go = async () => {
+    if (busy || confirm.trim() !== name) return;
+    setBusy(true); setErr(null);
+    const r = await onDelete();
+    if (!r.ok) { setErr(r.error ?? 'failed'); setBusy(false); }
+    // on success the row unmounts (parent reloads) — no need to reset state
+  };
+  if (!open) return (
+    <button onClick={() => setOpen(true)} className="mono" style={{ ...linkBtn, fontSize: 9, color: danger }} title="permanently delete this league">🗑 delete league</button>
+  );
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span className="mono" style={{ ...mono, fontSize: 9, color: danger }}>type “{name}” to confirm:</span>
+      <input value={confirm} onChange={(e) => { setConfirm(e.target.value); setErr(null); }} onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
+        autoFocus spellCheck={false} style={{ ...inp, fontSize: 10, padding: '4px 7px', minWidth: 140, borderColor: danger }} />
+      <button onClick={go} disabled={busy || confirm.trim() !== name} className="mono"
+        style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-accent, #fff)', background: danger, border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', opacity: busy || confirm.trim() !== name ? 0.5 : 1 }}>{busy ? 'deleting…' : 'delete forever'}</button>
+      <button onClick={() => { setOpen(false); setConfirm(''); setErr(null); }} className="mono" style={{ ...linkBtn, fontSize: 9 }}>cancel</button>
+      {err && <span className="mono" style={{ ...mono, fontSize: 9, color: danger }}>{err}</span>}
     </div>
   );
 }

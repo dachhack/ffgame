@@ -460,6 +460,9 @@ export async function sendInvite(input: { to: string; code: string; link: string
   return data as { ok: boolean; error?: string };
 }
 export const adminLeagueMembers = (leagueId: string) => rpc<AdminMember[]>('admin_league_members', { p_league_id: leagueId });
+/** Super-admin: permanently delete a league and all its data (cascades). */
+export const adminDeleteLeague = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; name?: string }>('admin_delete_league', { p_league_id: leagueId });
 /** Admin/commish-map a roster to a person — by a joined-user id (picked from the
  *  pool) or by email (immediate enroll if signed in, else a pending claim that
  *  links on their next sign-in). Empty email + no id clears the roster. */
