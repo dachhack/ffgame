@@ -423,6 +423,13 @@ export async function dispatchSim(input: { mode?: 'live' | 'reset' | 'check' | '
   if (error) return { ok: false, error: friendlyError(error) };
   return data as { ok: boolean; error?: string };
 }
+/** Email an invite (share link + code) to a code-request, via the send-invite edge
+ *  function (admin-only; the function re-checks is_admin and sends through Gmail). */
+export async function sendInvite(input: { to: string; code: string; link: string; leagueName?: string }): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await client().functions.invoke('send-invite', { body: input });
+  if (error) return { ok: false, error: friendlyError(error) };
+  return data as { ok: boolean; error?: string };
+}
 export const adminLeagueMembers = (leagueId: string) => rpc<AdminMember[]>('admin_league_members', { p_league_id: leagueId });
 export const commishOverview = () => rpc<AdminLeague[]>('commish_overview');
 export interface MatchupPicks { home_roster_id: number; away_roster_id: number; home_app_user: string | null; away_app_user: string | null; picks: { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null }[]; home_lineup: { player_slug: string | null; pos: string | null }[]; away_lineup: { player_slug: string | null; pos: string | null }[]; home_buffs: string[]; away_buffs: string[]; home_unlocks?: string[]; away_unlocks?: string[]; home_extra?: number; away_extra?: number; }

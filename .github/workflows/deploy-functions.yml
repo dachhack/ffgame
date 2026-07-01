@@ -10,8 +10,14 @@ name: Deploy Edge Functions
 #   fantasy-proxy — Fleaflicker + MFL GET proxy. No secrets.
 #   yahoo-oauth   — Yahoo OAuth/token/proxy. Needs YAHOO_CLIENT_ID/SECRET secrets
 #                   AND an approved Yahoo Fantasy app to actually return data.
+#   send-invite   — Admin-only invite emailer (Gmail API). Deployed WITH JWT
+#                   verification (only signed-in admins call it). Reads its own
+#                   secrets (GOOGLE_SA_EMAIL / GOOGLE_SA_PRIVATE_KEY / GMAIL_SENDER
+#                   / GMAIL_FROM_NAME) — set those in the Supabase dashboard
+#                   (Edge Functions → Secrets), so the Google key never touches CI.
 #
-# All deploy with --no-verify-jwt so anonymous demo visitors can invoke them.
+# The demo proxies deploy with --no-verify-jwt so anonymous visitors can invoke
+# them; send-invite keeps JWT verification on. See the per-function logic below.
 #
 # Requires repo secret: SUPABASE_ACCESS_TOKEN (Supabase → Account → Access Tokens).
 on:
@@ -31,6 +37,7 @@ on:
           - 'espn-league'
           - 'fantasy-proxy'
           - 'yahoo-oauth'
+          - 'send-invite'
 
 concurrency: supabase-functions-deploy
 
@@ -52,8 +59,12 @@ jobs:
           fi
           for fn in ${{ github.event.inputs.functions }}; do
             echo "── deploying $fn ──"
-            supabase functions deploy "$fn" \
-              --project-ref "${{ github.event.inputs.project_ref }}" \
-              --no-verify-jwt
+            # send-invite is admin-only → keep JWT verification on; the demo
+            # proxies stay anonymous (--no-verify-jwt).
+            if [ "$fn" = "send-invite" ]; then
+              supabase functions deploy "$fn" --project-ref "${{ github.event.inputs.project_ref }}"
+            else
+              supabase functions deploy "$fn" --project-ref "${{ github.event.inputs.project_ref }}" --no-verify-jwt
+            fi
           done
           echo "done."
