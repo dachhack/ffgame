@@ -82,6 +82,10 @@ export function LiveOnboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
+  // Management views (super-admin + commissioner dashboard) get the full desktop
+  // width; the onboarding/player screens stay a comfortable single column.
+  const wide = view === 'admin' || view === 'commishdash';
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', flexWrap: 'wrap', gap: 10 }}>
@@ -96,8 +100,8 @@ export function LiveOnboard() {
         </div>
       </header>
 
-      <main style={{ flex: 1, display: 'flex', alignItems: view === 'admin' ? 'flex-start' : 'center', justifyContent: 'center', padding: '24px 16px' }}>
-        <div style={{ width: '100%', maxWidth: view === 'admin' ? 1080 : 440 }}>
+      <main style={{ flex: 1, display: 'flex', alignItems: wide ? 'flex-start' : 'center', justifyContent: 'center', padding: '24px 16px' }}>
+        <div style={{ width: '100%', maxWidth: wide ? 1080 : 440 }}>
           {!liveConfigured ? <NotConfigured />
             : !ready ? <Muted text="Loading…" />
             : recovery ? <SetPassword onDone={() => setRecovery(false)} />
