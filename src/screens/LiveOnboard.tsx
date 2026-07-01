@@ -8,7 +8,7 @@ import {
   previewLeague, redeemPreview, redeemInvite, myEnrollments, myLinkedSleeper, claimMyRosters,
   redeemCommish, isAdmin, commishOverview, friendlyError,
   myMatchup, matchupTeams,
-  type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo,
+  type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague,
 } from '../data/liveApi';
 import { DEMO_WEEK } from '../config';
 import { buildDripTestLeague } from '../data/dripTest';
@@ -101,7 +101,7 @@ export function LiveOnboard() {
       </header>
 
       <main style={{ flex: 1, display: 'flex', alignItems: wide ? 'flex-start' : 'center', justifyContent: 'center', padding: '24px 16px' }}>
-        <div style={{ width: '100%', maxWidth: wide ? 1080 : 440 }}>
+        <div style={{ width: '100%', maxWidth: wide ? 1080 : view === 'home' ? 960 : 440 }}>
           {!liveConfigured ? <NotConfigured />
             : !ready ? <Muted text="Loading…" />
             : recovery ? <SetPassword onDone={() => setRecovery(false)} />
@@ -286,10 +286,11 @@ interface MatchupCard { matchup: LiveMatchup; teams: Record<number, TeamInfo>; }
 
 function Enroll({ session, view, setView, commishCode }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void; commishCode?: string | null }) {
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
-  const [commishIds, setCommishIds] = useState<Set<string>>(new Set());
+  const [commishLeagues, setCommishLeagues] = useState<AdminLeague[]>([]);
   const [commishLoaded, setCommishLoaded] = useState(false);
   const [cards, setCards] = useState<Record<string, MatchupCard>>({});
   const [choice, setChoice] = useState<'none' | 'player'>('none');
+  const commishIds = new Set(commishLeagues.map((l) => l.league_id));
   const isCommish = commishIds.size > 0;
 
   const refresh = async () => {
@@ -301,7 +302,7 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
       await claimMyRosters().catch(() => {});
       rows = await myEnrollments(session.user.id); setEnrollments(rows);
     } catch { setEnrollments([]); }
-    commishOverview().then((l) => setCommishIds(new Set((l ?? []).map((x) => x.league_id)))).catch(() => setCommishIds(new Set())).finally(() => setCommishLoaded(true));
+    commishOverview().then((l) => setCommishLeagues(l ?? [])).catch(() => setCommishLeagues([])).finally(() => setCommishLoaded(true));
     // Each league's next matchup + opponent, for the home cards.
     for (const e of rows) {
       myMatchup(e.league_id, e.sleeper_roster_id).then(async (m) => {
@@ -343,18 +344,20 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
 
   // Genuinely new (no leagues at all) → fork by role.
   if (enrollments.length === 0) return (
-    <>
+    <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
         ? <RoleChooser onPlayer={() => setChoice('player')} onCommish={() => setView('commish')} />
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}      </div>
-    </>
+        {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
+      </div>
+    </div>
   );
 
   return (
     <LeagueHome
       enrollments={enrollments}
+      commishLeagues={commishLeagues}
       cards={cards}
       commishIds={commishIds}
       userId={session.user.id}
@@ -369,26 +372,68 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, cards, commishIds, userId, onPicks, onBoard, onManage, onAdd, isCommish }: {
-  enrollments: Enrollment[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
+function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onPicks, onBoard, onManage, onAdd, isCommish }: {
+  enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
   onPicks: () => void; onBoard: () => void; onManage: () => void; onAdd: () => void; isCommish: boolean;
 }) {
+  const [filter, setFilter] = useState<'all' | 'commish'>('all');
+  const enrolledIds = new Set(enrollments.map((e) => e.league_id));
+  // Leagues you commission but have no player roster in (no enrollment card).
+  const commishOnly = commishLeagues.filter((l) => !enrolledIds.has(l.league_id));
+  const enrolledCommish = enrollments.filter((e) => commishIds.has(e.league_id));
+  const enrolledPlayer = enrollments.filter((e) => !commishIds.has(e.league_id));
+  const total = enrollments.length + commishOnly.length;
+  const commishCount = enrolledCommish.length + commishOnly.length;
+
+  const chip = (id: 'all' | 'commish', label: string, n: number) => (
+    <button onClick={() => setFilter(id)} className="mono" style={{
+      fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
+      color: filter === id ? 'var(--on-accent)' : 'var(--dim)', background: filter === id ? 'var(--you)' : 'var(--surface)',
+      border: `1px solid ${filter === id ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 999, padding: '5px 11px',
+    }}>{label} <span style={{ opacity: 0.6 }}>{n}</span></button>
+  );
+
   return (
     <>
-      <div className="grotesk" style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', marginBottom: 14 }}>
-        Your {enrollments.length === 1 ? 'league' : 'leagues'}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+        <div className="grotesk" style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>Your {total === 1 ? 'league' : 'leagues'}</div>
+        <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.08em' }}>{total} LEAGUE{total === 1 ? '' : 'S'}</span>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {enrollments.map((e) => (
-          <LeagueCard key={e.league_id} e={e} card={cards[e.league_id]} commish={commishIds.has(e.league_id)} userId={userId}
-            onPicks={onPicks} onBoard={onBoard} onManage={onManage} />
+      {/* Commish/all filter — only when you run at least one league. */}
+      {isCommish && <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>{chip('all', 'ALL', total)}{chip('commish', 'COMMISH', commishCount)}</div>}
+      {/* Commissioned leagues on top; players below (hidden under the commish filter). */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12, alignItems: 'start' }}>
+        {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={onManage} />)}
+        {enrolledCommish.map((e) => (
+          <LeagueCard key={e.league_id} e={e} card={cards[e.league_id]} commish userId={userId} onPicks={onPicks} onBoard={onBoard} onManage={onManage} />
+        ))}
+        {filter === 'all' && enrolledPlayer.map((e) => (
+          <LeagueCard key={e.league_id} e={e} card={cards[e.league_id]} commish={false} userId={userId} onPicks={onPicks} onBoard={onBoard} onManage={onManage} />
         ))}
       </div>
-      <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ textAlign: 'center', marginTop: 18 }}>
         <button onClick={onAdd} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>＋ add a league</button>
-        {isCommish && <button onClick={onManage} className="mono" style={linkBtn}>⚑ leagues you run →</button>}
       </div>
     </>
+  );
+}
+
+// A league you commission but don't play in — no matchup card, just a way in to manage it.
+function CommishOnlyCard({ l, onManage }: { l: AdminLeague; onManage: () => void }) {
+  return (
+    <div style={{ ...card2 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="grotesk" style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>{l.name.slice(0, 1).toUpperCase()}</div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+            <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</span>
+            <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', borderRadius: 4, padding: '2px 6px' }}>⚑ COMMISSIONER</span>
+          </div>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 3 }}>{l.season} · {l.enrolled}/{l.rosters} joined</div>
+        </div>
+      </div>
+      <button onClick={onManage} className="mono" style={{ ...btn, width: '100%', padding: '10px 0', marginTop: 12 }}>⚑ manage league</button>
+    </div>
   );
 }
 
