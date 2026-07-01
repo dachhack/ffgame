@@ -319,7 +319,7 @@ export async function revealedOppBuffs(matchupId: string, userId: string): Promi
 // ── Super admin ─────────────────────────────────────────────────────────────────
 export type Controller = 'human' | 'ai';
 export type LineupPolicy = 'best_lineup' | 'ai' | 'empty';
-export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; }
+export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; provider?: string; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; }
 export interface AdminUser { id: string; email: string | null; sleeper_username: string | null; sleeper_user_id: string | null; enrolled: number; created_at: string; }
 export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; }
 export interface AdminAdmin { email: string; note: string | null; }
@@ -364,8 +364,8 @@ export const adminAudit = (limit = 50) => rpc<AdminAudit[]>('admin_audit', { p_l
 export const commishAudit = (leagueId: string, limit = 50) => rpc<AdminAudit[]>('commish_audit', { p_league_id: leagueId, p_limit: limit });
 
 // Setup writers (the client fetches/parses Sleeper, these just persist).
-export const adminUpsertLeague = (sleeperId: string, season: string, name: string, settings: unknown) =>
-  rpc<{ ok: boolean; error?: string; league_id?: string }>('admin_upsert_league', { p_sleeper_id: sleeperId, p_season: season, p_name: name, p_settings: settings });
+export const adminUpsertLeague = (sleeperId: string, season: string, name: string, settings: unknown, provider?: string) =>
+  rpc<{ ok: boolean; error?: string; league_id?: string }>('admin_upsert_league', { p_sleeper_id: sleeperId, p_season: season, p_name: name, p_settings: settings, ...(provider ? { p_provider: provider } : {}) });
 export const adminUpsertMemberships = (leagueId: string, members: MemberRow[]) =>
   rpc<{ ok: boolean; count?: number }>('admin_upsert_memberships', { p_league_id: leagueId, p_members: members });
 export const adminUpsertMatchups = (leagueId: string, week: number, matchups: MatchupRow[], lockAt: string | null) =>
