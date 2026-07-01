@@ -56,10 +56,45 @@ Supabase Pro needed.
 - Squarespace DNS → Add Custom Record → **CNAME**: host `auth` → that target.
 - Wait 5–10 min → click **Verify** in the Supabase dashboard.
 
-### Email forwarding (free)
-Squarespace Domains includes free email forwarding under **Email → Email
-Forwarding**. Add `hi@dripfantasy.com` → `mlporritt@gmail.com`. Useful for
-OAuth's "App support email" looking professional.
+### Email — `hi@dripfantasy.com` (Google Workspace)
+
+The FAQ + OAuth "App support email" point at **`hi@dripfantasy.com`**, so that
+mailbox has to be real. We run it on **Google Workspace** (a full mailbox you
+can send *from*, not just forward). Squarespace groups the Workspace records
+under a separate **"Google records"** block (with its own ADD RECORD button),
+distinct from Custom Records.
+
+**Records (all live + verified):**
+
+| Type | Host | Priority | Value | Purpose |
+|------|------|---------|-------|---------|
+| MX | `@` | 1 | `smtp.google.com` | Inbound mail → Google |
+| TXT | `@` | — | `v=spf1 include:_spf.google.com ~all` | SPF for outbound `hi@` |
+| TXT | `google._domainkey` | — | `v=DKIM1;k=rsa;p=…` (from Workspace) | Google DKIM |
+| TXT | `_dmarc` | — | `v=DMARC1; p=none; rua=mailto:hi@dripfantasy.com` | *(optional)* DMARC monitoring |
+
+**Setup steps:**
+1. Google Workspace Admin → verify the domain, then create `hi@` as a **user**
+   or an **alias** on your account (alias = free shared inbox).
+2. Add the MX + DKIM from the Workspace wizard. Add the **root SPF manually** —
+   the wizard only covers MX + DKIM, and the app's existing SPF lives on the
+   `send` host, so `@` has none until you add it.
+3. Admin → **Apps → Google Workspace → Gmail → Authenticate email** →
+   **Start authentication** once the DKIM TXT is live.
+4. Finish **Activate Gmail** in the wizard; test both directions
+   (send *to* `hi@`, and *from* `hi@` — check `dkim=pass` / `spf=pass`).
+
+**Gotchas (both bit us):**
+- **Delete the old Squarespace email forwarding** for `hi@` first. Its MX runs
+  separately (often hidden from the Custom Records editor) and conflicts with
+  Google's MX → "Unable to verify."
+- Google verification fails if you Retry **before MX propagates**. Check with
+  `whatsmydns.net` (type MX → `dripfantasy.com`); once `smtp.google.com` shows
+  globally, Retry passes. Squarespace TTL is 4h, so allow up to ~an hour.
+
+**Leave the app's own mail records alone** — these are Resend/Amazon SES for
+transactional email (magic links / invites), unrelated to Workspace:
+`resend._domainkey` (DKIM) and the `send` host SPF (`v=spf1 include:amazonses.com ~all`).
 
 ## 4. Flip three configs (auth-domain only — site cutover is in §3 above)
 
@@ -98,7 +133,8 @@ OAuth's "App support email" looking professional.
 | Domain (Squarespace `.com`) | ~$20/yr |
 | Supabase Pro (base plan) | $25/mo |
 | Supabase Custom Domains add-on | $10/mo |
-| Squarespace DNS + email forwarding | $0 |
+| Squarespace DNS | $0 |
+| Google Workspace (`hi@` mailbox) | ~$6/user/mo |
 | GitHub Pages | $0 |
 | **Site only (no auth domain)** | **~$20/yr** |
 | **Full custom auth** | **~$440/yr** ($20 + $35×12) |
