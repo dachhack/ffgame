@@ -531,27 +531,77 @@ function Admins() {
 
 function CodeRequests() {
   const [rows, setRows] = useState<CodeRequest[] | null>(null);
+  const [leagues, setLeagues] = useState<AdminLeague[]>([]);
+  const [showHandled, setShowHandled] = useState(false);
   const load = async () => { try { setRows(await adminCodeRequests()); } catch { setRows([]); } };
   useEffect(() => { load(); }, []);
+  // Existing leagues' invite codes feed the per-request "send code" picker.
+  useEffect(() => { adminOverview().then(setLeagues).catch(() => setLeagues([])); }, []);
   const toggle = async (id: string, handled: boolean) => { await adminSetCodeRequestHandled(id, handled); load(); };
   const pending = rows?.filter((r) => !r.handled).length ?? 0;
+  const hasHandled = rows?.some((r) => r.handled) ?? false;
+  const visible = (rows ?? []).filter((r) => showHandled || !r.handled);
   return (
     <div style={card}>
-      <div style={h}>CODE REQUESTS{pending ? ` · ${pending} NEW` : ''}</div>
-      {rows === null ? <Muted text="Loading…" /> : rows.length === 0 ? <Muted text="No requests yet." /> : rows.map((r) => (
-        <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '6px 0', borderTop: '1px solid var(--bd)', gap: 8, opacity: r.handled ? 0.5 : 1 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 11.5, color: 'var(--text)' }}>
-              {r.email ? <span className="mono" style={{ ...mono, cursor: 'pointer' }} onClick={() => copy(r.email!)} title="copy">{r.email}</span> : '—'}
-              {r.sleeper_username && <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}> · @{r.sleeper_username}</span>}
-            </div>
-            {r.league_name && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 2 }}>{r.league_name}</div>}
-            {r.note && <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 2, lineHeight: 1.4 }}>{r.note}</div>}
-            <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>{new Date(r.created_at).toLocaleString()}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+        <div style={{ ...h, marginBottom: 0 }}>CODE REQUESTS{pending ? ` · ${pending} NEW` : ''}</div>
+        {hasHandled && <button onClick={() => setShowHandled((s) => !s)} className="mono" style={linkBtn}>{showHandled ? 'hide handled' : 'show handled'}</button>}
+      </div>
+      {rows === null ? <Muted text="Loading…" />
+        : visible.length === 0 ? <Muted text={pending === 0 && !rows.length ? 'No requests yet.' : 'All caught up.'} />
+        : visible.map((r) => <CodeRequestRow key={r.id} r={r} leagues={leagues} onToggle={toggle} />)}
+    </div>
+  );
+}
+
+function CodeRequestRow({ r, leagues, onToggle }: { r: CodeRequest; leagues: AdminLeague[]; onToggle: (id: string, handled: boolean) => void }) {
+  const [code, setCode] = useState(leagues[0]?.invite_code ?? '');
+  const [copied, setCopied] = useState(false);
+  // Adopt the first league's code once leagues load (initial render may precede the fetch).
+  useEffect(() => { setCode((c) => c || leagues[0]?.invite_code || ''); }, [leagues]);
+  const link = code ? shareLink(code) : '';
+  const mailto = () => {
+    const subject = "You're in — your Drip Fantasy invite";
+    const body = [
+      `You're in! Here's your invite to the Drip Fantasy live head-to-head pilot.`,
+      ``,
+      `Join here: ${link}`,
+      `Or sign in at https://www.dripfantasy.com and enter code ${code}.`,
+      ``,
+      `See you on the field,`,
+      `Drip Fantasy`,
+    ].join('\n');
+    return `mailto:${r.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  };
+  const canSend = !!code;
+  const anchorBtn: React.CSSProperties = { ...btn(false), textDecoration: 'none', display: 'inline-block', lineHeight: 1.4 };
+  return (
+    <div style={{ padding: '8px 0', borderTop: '1px solid var(--bd)', opacity: r.handled ? 0.5 : 1 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 11.5, color: 'var(--text)' }}>
+            {r.email ? <span className="mono" style={{ ...mono, cursor: 'pointer' }} onClick={() => copy(r.email!)} title="copy">{r.email}</span> : '—'}
+            {r.sleeper_username && <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}> · @{r.sleeper_username}</span>}
           </div>
-          <button onClick={() => toggle(r.id, !r.handled)} className="mono" style={btn(r.handled)}>{r.handled ? 'handled' : 'mark done'}</button>
+          {r.league_name && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 2 }}>{r.league_name}</div>}
+          {r.note && <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 2, lineHeight: 1.4 }}>{r.note}</div>}
+          <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>{new Date(r.created_at).toLocaleString()}</div>
         </div>
-      ))}
+        <button onClick={() => onToggle(r.id, !r.handled)} className="mono" style={btn(r.handled)}>{r.handled ? 'handled' : 'mark done'}</button>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 8 }}>
+        {leagues.length > 0 ? (
+          <select value={code} onChange={(e) => setCode(e.target.value)} className="mono" style={{ ...inp, fontSize: 10, padding: '5px 6px', maxWidth: 200 }} title="Invite code to send">
+            {leagues.map((l) => <option key={l.league_id} value={l.invite_code}>{l.name} · {l.invite_code}</option>)}
+          </select>
+        ) : (
+          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="invite code" className="mono" style={{ ...inp, fontSize: 10, padding: '5px 6px', width: 130 }} />
+        )}
+        {r.email && canSend
+          ? <a href={mailto()} style={anchorBtn} title={`Email the code to ${r.email}`}>✉ email code</a>
+          : <span style={{ ...anchorBtn, opacity: 0.4, cursor: 'default' }} title={!r.email ? 'No email on this request' : 'Pick or enter a code first'}>✉ email code</span>}
+        <button onClick={() => { if (link) { copy(link); setCopied(true); setTimeout(() => setCopied(false), 1200); } }} disabled={!canSend} className="mono" style={{ ...btn(false), opacity: canSend ? 1 : 0.4, cursor: canSend ? 'pointer' : 'default' }} title="Copy the invite share link">{copied ? '✓ link copied' : '⛓ copy link'}</button>
+      </div>
     </div>
   );
 }
