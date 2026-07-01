@@ -50,14 +50,11 @@ export function LiveOnboard() {
   const [ready, setReady] = useState(false);
   const [recovery, setRecovery] = useState(false);
   const [admin, setAdmin] = useState(false);
-  // Honor deep links: the gear menu's "Super admin" (view:'admin'), and a
-  // commissioner invite link (?live=1&commish=CODE → dripCommishCode) which opens
-  // the commissioner claim screen. Otherwise land on the onboarding home.
-  const [view, setView] = useState<OnboardView>(() => {
-    if (route.name === 'live' && route.view === 'admin') return 'admin';
-    try { if (localStorage.getItem('dripCommishCode')) return 'commish'; } catch { /* ignore */ }
-    return 'home';
-  });
+  const [claiming, setClaiming] = useState(false);
+  const [pendingCommish, setPendingCommish] = useState<string | null>(null);
+  // Honor the gear menu's "Super admin" deep link (view:'admin'); a commissioner
+  // invite link is handled by the auto-claim effect below.
+  const [view, setView] = useState<OnboardView>(() => (route.name === 'live' && route.view === 'admin' ? 'admin' : 'home'));
 
   useEffect(() => {
     if (!liveConfigured) { setReady(true); return; }
@@ -67,6 +64,22 @@ export function LiveOnboard() {
   useEffect(() => {
     if (!session) { setAdmin(false); return; }
     isAdmin().then(setAdmin).catch(() => setAdmin(false));
+  }, [session]);
+  // Commissioner invite link: once signed in, auto-claim the league from the pending
+  // commish code (URL → dripCommishCode) and drop straight into league management —
+  // no role chooser, no code re-entry. On failure, fall back to the manual verify
+  // form with the code prefilled.
+  useEffect(() => {
+    if (!session) return;
+    let code: string | null = null;
+    try { code = localStorage.getItem('dripCommishCode'); localStorage.removeItem('dripCommishCode'); } catch { /* ignore */ }
+    if (!code) return;
+    setPendingCommish(code); setClaiming(true);
+    redeemCommish(code)
+      .then((r) => { if (r.ok) { setPendingCommish(null); setView('commishdash'); } else setView('commish'); })
+      .catch(() => setView('commish'))
+      .finally(() => setClaiming(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
   return (
@@ -89,7 +102,8 @@ export function LiveOnboard() {
             : !ready ? <Muted text="Loading…" />
             : recovery ? <SetPassword onDone={() => setRecovery(false)} />
             : !session ? <AuthForm />
-            : <Enroll session={session} view={view} setView={setView} />}
+            : claiming ? <Muted text="Setting up your league…" />
+            : <Enroll session={session} view={view} setView={setView} commishCode={pendingCommish} />}
         </div>
       </main>
     </div>
@@ -266,9 +280,10 @@ function SetPassword({ onDone }: { onDone: () => void }) {
 // Per-league matchup snapshot for the home cards: the next matchup + both teams' identity.
 interface MatchupCard { matchup: LiveMatchup; teams: Record<number, TeamInfo>; }
 
-function Enroll({ session, view, setView }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void }) {
+function Enroll({ session, view, setView, commishCode }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void; commishCode?: string | null }) {
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
   const [commishIds, setCommishIds] = useState<Set<string>>(new Set());
+  const [commishLoaded, setCommishLoaded] = useState(false);
   const [cards, setCards] = useState<Record<string, MatchupCard>>({});
   const [choice, setChoice] = useState<'none' | 'player'>('none');
   const isCommish = commishIds.size > 0;
@@ -282,7 +297,7 @@ function Enroll({ session, view, setView }: { session: Session; view: OnboardVie
       await claimMyRosters().catch(() => {});
       rows = await myEnrollments(session.user.id); setEnrollments(rows);
     } catch { setEnrollments([]); }
-    commishOverview().then((l) => setCommishIds(new Set((l ?? []).map((x) => x.league_id)))).catch(() => setCommishIds(new Set()));
+    commishOverview().then((l) => setCommishIds(new Set((l ?? []).map((x) => x.league_id)))).catch(() => setCommishIds(new Set())).finally(() => setCommishLoaded(true));
     // Each league's next matchup + opponent, for the home cards.
     for (const e of rows) {
       myMatchup(e.league_id, e.sleeper_roster_id).then(async (m) => {
@@ -297,14 +312,18 @@ function Enroll({ session, view, setView }: { session: Session; view: OnboardVie
     /* eslint-disable-next-line */
   }, [session.user.id]);
 
-  if (view === 'commish') return <CommishVerify onBack={() => { setView('home'); refresh(); }} />;
+  if (view === 'commish') return <CommishVerify initialCode={commishCode ?? undefined} onBack={() => { setView('home'); refresh(); }} />;
   if (view === 'commishdash') return <CommishDash onBack={() => setView('home')} />;
   if (view === 'picks') return <LivePicks userId={session.user.id} onBack={() => setView('home')} />;
   if (view === 'board') return <LiveBoard userId={session.user.id} onBack={() => setView('home')} />;
   if (view === 'admin') return <AdminPage onBack={() => setView('home')} />;
-  if (enrollments === null) return <Muted text="Loading your leagues…" />;
+  if (enrollments === null || !commishLoaded) return <Muted text="Loading your leagues…" />;
 
-  // Not enrolled yet → fork by role instead of defaulting everyone into the player form.
+  // A signed-in commissioner with no player roster of their own → straight to
+  // league management instead of the "how are you joining?" chooser.
+  if (enrollments.length === 0 && isCommish) return <CommishDash onBack={() => setView('home')} />;
+
+  // Genuinely new (no leagues at all) → fork by role.
   if (enrollments.length === 0) return (
     <>
       {choice === 'none'
@@ -474,14 +493,6 @@ function CommishVerify({ onBack, initialCode }: { onBack: () => void; initialCod
     try { localStorage.removeItem('dripCommishCode'); } catch { /* ignore */ }
   };
 
-  // A commissioner invite link pre-fills the code (survives the magic-link bounce)
-  // and redeems on its own.
-  useEffect(() => {
-    let c: string | null = initialCode ?? null;
-    if (!c) { try { c = localStorage.getItem('dripCommishCode'); } catch { /* ignore */ } }
-    if (c) { setCode(c); redeem(c); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   if (invite) {
     // One way to invite the league: the join link (no code to type). The raw code

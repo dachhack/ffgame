@@ -89,7 +89,7 @@ const esc = (s: string) => s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt
 function inviteHtml(kind: 'player' | 'commish', link: string, code: string, leagueName?: string | null): string {
   const forLeague = leagueName ? ` for <strong>${esc(leagueName)}</strong>` : '';
   const commish = kind === 'commish';
-  const heading = commish ? 'You&rsquo;re the commissioner.' : 'You&rsquo;re in.';
+  const heading = commish ? 'Your Drip Fantasy league.' : 'You&rsquo;re in.';
   const intro = commish
     ? `You&rsquo;ve been set up to run your league${forLeague} on the Drip Fantasy live head-to-head pilot. Tap below to sign in and claim it &mdash; then invite your league mates.`
     : `Here&rsquo;s your invite to the Drip Fantasy live head-to-head pilot${forLeague}. Tap below to sign in and set your team.`;
@@ -169,7 +169,7 @@ Deno.serve(async (req) => {
     const token = await getAccessToken(saEmail, saKey, sender);
 
     const subject = kind === 'commish'
-      ? "You're the commissioner — your Drip Fantasy league"
+      ? "Your Drip Fantasy League"
       : "You're in — your Drip Fantasy invite";
     const mime = [
       `From: ${encodeHeader(fromName)} <${fromAddr}>`,
