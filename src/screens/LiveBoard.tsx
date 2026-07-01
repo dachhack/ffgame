@@ -5,6 +5,7 @@ import {
   myRoster, myMatchup, getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, myPool, matchupWallets, matchupTeams,
   type LiveMatchup, type WindowScore, type RevealedPick, type PoolPlayer, type TeamInfo,
 } from '../data/liveApi';
+import { REG_SEASON_WEEKS } from '../data/league';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16 };
 const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
@@ -19,14 +20,16 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
   const [wallets, setWallets] = useState<{ home: number | null; away: number | null } | null>(null);
   const [teams, setTeams] = useState<Record<number, TeamInfo>>({});
   const [state, setState] = useState<'loading' | 'none' | 'ready'>('loading');
+  const [weekSel, setWeekSel] = useState<number | null>(null); // null = default (earliest) week
 
   useEffect(() => {
     let unsub = () => {};
     (async () => {
+      setState('loading');
       const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
       if (!r) { setState('none'); return; }
-      const m = await myMatchup(r.leagueId, r.rosterId);
-      if (!m) { setState('none'); return; }
+      const m = await myMatchup(r.leagueId, r.rosterId, weekSel ?? undefined);
+      if (!m) { setMatchup(null); setState('none'); return; }
       setMatchup(m); setYouAreHome(m.home_roster_id === r.rosterId);
       const pl = await myPool(r.leagueId, m.week, r.rosterId);
       setPool(Object.fromEntries(pl.map((p) => [p.slug, p])));
@@ -41,7 +44,7 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
       unsub = subscribeMatchup(m.id, refresh); // live push on score/status change
     })();
     return () => unsub();
-  }, [userId, leagueId, rosterId]);
+  }, [userId, leagueId, rosterId, weekSel]);
 
   const totals = useMemo(() => {
     const home = scores.reduce((t, s) => t + Number(s.home_score), 0);
@@ -49,11 +52,24 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
     return { you: youAreHome ? home : away, them: youAreHome ? away : home };
   }, [scores, youAreHome]);
 
+  // Week stepper: page through the scheduled season's boards.
+  const curWeek = matchup?.week ?? weekSel ?? 1;
+  const weekNav = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+      <button onClick={() => setWeekSel(Math.max(1, curWeek - 1))} disabled={curWeek <= 1} className="mono" title="previous week" style={{ ...linkBtn, fontSize: 13, padding: '0 4px', opacity: curWeek <= 1 ? 0.35 : 1 }}>‹</button>
+      <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)' }}>WK {curWeek}</span>
+      <button onClick={() => setWeekSel(Math.min(REG_SEASON_WEEKS, curWeek + 1))} disabled={curWeek >= REG_SEASON_WEEKS} className="mono" title="next week" style={{ ...linkBtn, fontSize: 13, padding: '0 4px', opacity: curWeek >= REG_SEASON_WEEKS ? 0.35 : 1 }}>›</button>
+    </div>
+  );
+
   if (state === 'loading') return <Muted text="Loading the board…" />;
   if (state === 'none') return (
     <div style={card}>
-      <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>No matchup yet</div>
-      <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 10 }}>Your schedule hasn’t synced yet.</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>No week {curWeek} matchup</div>
+        {weekNav}
+      </div>
+      <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 10 }}>Use ‹ › to page through the season, or check back once the schedule syncs.</div>
       <div style={{ textAlign: 'center', marginTop: 14 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
     </div>
   );
@@ -73,7 +89,10 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Week {matchup!.week} · live board</div>
-          <span className="mono" style={{ fontSize: 9, color: status === 'final' ? 'var(--dim)' : status === 'scheduled' ? 'var(--faint)' : 'var(--you)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 7px' }}>{status.toUpperCase()}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            {weekNav}
+            <span className="mono" style={{ fontSize: 9, color: status === 'final' ? 'var(--dim)' : status === 'scheduled' ? 'var(--faint)' : 'var(--you)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 7px' }}>{status.toUpperCase()}</span>
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 18, margin: '16px 0 4px' }}>
           <Big label="YOU" value={round(totals.you)} color="var(--you)" team={teams[youAreHome ? matchup!.home_roster_id : matchup!.away_roster_id]} />

@@ -233,10 +233,11 @@ export async function myRoster(userId: string): Promise<{ leagueId: string; rost
 }
 
 /** The caller's next/earliest matchup in a league. */
-export async function myMatchup(leagueId: string, rosterId: number): Promise<LiveMatchup | null> {
-  const { data } = await client().from('matchup').select('*')
-    .eq('league_id', leagueId).or(`home_roster_id.eq.${rosterId},away_roster_id.eq.${rosterId}`)
-    .order('week').limit(1).maybeSingle();
+export async function myMatchup(leagueId: string, rosterId: number, week?: number): Promise<LiveMatchup | null> {
+  let q = client().from('matchup').select('*')
+    .eq('league_id', leagueId).or(`home_roster_id.eq.${rosterId},away_roster_id.eq.${rosterId}`);
+  if (week != null) q = q.eq('week', week);
+  const { data } = await q.order('week').limit(1).maybeSingle();
   return (data as LiveMatchup) ?? null;
 }
 
