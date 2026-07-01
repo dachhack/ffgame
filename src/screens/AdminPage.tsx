@@ -25,6 +25,12 @@ const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.t
 const shareLink = (code: string) => `${window.location.origin}${window.location.pathname}?live=1&code=${code}`;
 // Commissioner claim link — opens the "verify as commissioner" screen prefilled.
 const commishLink = (code: string) => `${window.location.origin}${window.location.pathname}?live=1&commish=${code}`;
+// Pull a platform league id out of whatever the requester pasted (raw id or a URL).
+function extractLeagueId(raw: string, platform: string): string {
+  const s = raw.trim();
+  if (platform === 'espn') return (s.match(/leagueId=(\d+)/i) ?? s.match(/(\d{3,})/) ?? [])[1] ?? s;
+  return (s.match(/leagues?\/(\d+)/i) ?? s.match(/(\d{5,})/) ?? [])[1] ?? s;
+}
 const copy = (v: string) => navigator.clipboard?.writeText(v);
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 14, marginBottom: 12 };
@@ -577,6 +583,7 @@ function CodeRequests() {
   useEffect(() => { load(); }, []);
   // Existing leagues' invite codes feed the per-request "send code" picker.
   useEffect(() => { adminOverview().then(setLeagues).catch(() => setLeagues([])); }, []);
+  const reloadLeagues = async () => { const l = await adminOverview().catch(() => [] as AdminLeague[]); setLeagues(l); return l; };
   const toggle = async (id: string, handled: boolean) => { await adminSetCodeRequestHandled(id, handled); load(); };
   const pending = rows?.filter((r) => !r.handled).length ?? 0;
   const hasHandled = rows?.some((r) => r.handled) ?? false;
@@ -589,12 +596,12 @@ function CodeRequests() {
       </div>
       {rows === null ? <Muted text="Loading…" />
         : visible.length === 0 ? <Muted text={pending === 0 && !rows.length ? 'No requests yet.' : 'All caught up.'} />
-        : visible.map((r) => <CodeRequestRow key={r.id} r={r} leagues={leagues} onToggle={toggle} />)}
+        : visible.map((r) => <CodeRequestRow key={r.id} r={r} leagues={leagues} onToggle={toggle} reloadLeagues={reloadLeagues} />)}
     </div>
   );
 }
 
-function CodeRequestRow({ r, leagues, onToggle }: { r: CodeRequest; leagues: AdminLeague[]; onToggle: (id: string, handled: boolean) => void }) {
+function CodeRequestRow({ r, leagues, onToggle, reloadLeagues }: { r: CodeRequest; leagues: AdminLeague[]; onToggle: (id: string, handled: boolean) => void; reloadLeagues: () => Promise<AdminLeague[]> }) {
   const [leagueId, setLeagueId] = useState(leagues[0]?.league_id ?? '');
   const [manual, setManual] = useState('');
   // Default to commissioner: requesters are usually league runners, who need the
@@ -603,9 +610,28 @@ function CodeRequestRow({ r, leagues, onToggle }: { r: CodeRequest; leagues: Adm
   const [copied, setCopied] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // Adopt the first league once leagues load (initial render may precede the fetch).
-  useEffect(() => { setLeagueId((id) => id || leagues[0]?.league_id || ''); }, [leagues]);
+  // The request's platform ('sleeper' | 'espn' | …) and whether we can import it here.
+  const platform = (r.sleeper_username ?? '').toLowerCase();
+  const refId = r.league_ref ? extractLeagueId(r.league_ref, platform) : '';
+  // The already-imported league that matches this request's ref, if any.
+  const ownLeague = r.league_ref ? leagues.find((l) => l.sleeper_league_id === refId || l.sleeper_league_id === `espn-${refId}`) : undefined;
+  const importable = !!r.league_ref && (platform === 'sleeper' || platform === 'espn' || platform === '');
+  // Prefer this request's own league in the picker once it's imported; else first.
+  useEffect(() => { setLeagueId((id) => ownLeague?.league_id || id || leagues[0]?.league_id || ''); /* eslint-disable-next-line */ }, [leagues]);
+  const doImport = async () => {
+    if (!r.league_ref || importing) return;
+    setImporting(true); setErr(null);
+    try {
+      const ref = extractLeagueId(r.league_ref, platform);
+      const res = platform === 'espn' ? await importEspnLeague(ref, '2026') : await importLeague(ref, '2026');
+      const newId = typeof res === 'string' ? res : res.leagueId;
+      await reloadLeagues();
+      setLeagueId(newId); setKind('commish'); setSent(false);
+    } catch (e) { setErr(e instanceof Error ? e.message : 'import failed'); }
+    finally { setImporting(false); }
+  };
 
   const league = leagues.find((l) => l.league_id === leagueId);
   const code = league ? (kind === 'commish' ? league.commish_code : league.invite_code) : manual.trim();
@@ -641,6 +667,13 @@ function CodeRequestRow({ r, leagues, onToggle }: { r: CodeRequest; leagues: Adm
         <button onClick={() => onToggle(r.id, !r.handled)} className="mono" style={btn(r.handled)}>{r.handled ? 'handled' : 'mark done'}</button>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 8 }}>
+        {importable && !ownLeague && (
+          <button onClick={doImport} disabled={importing} className="mono" style={{ ...btn(true), opacity: importing ? 0.6 : 1 }}
+            title={`Import this ${platform || 'Sleeper'} league (${refId}) so you can send its commish code`}>
+            {importing ? 'importing…' : '⤓ import this league'}
+          </button>
+        )}
+        {ownLeague && <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--you)' }}>✓ imported</span>}
         <div style={{ display: 'flex', gap: 4 }} title="Commissioner invite (claims the league) or player join invite">
           {kindBtn('commish', 'Commish')}
           {kindBtn('player', 'Player')}
