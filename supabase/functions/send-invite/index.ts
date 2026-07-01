@@ -86,8 +86,15 @@ async function getAccessToken(saEmail: string, privateKeyPem: string, sub: strin
 
 // ── Branded invite email (ASCII/entities only, so the body is 7-bit clean) ────
 const esc = (s: string) => s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]!));
-function inviteHtml(link: string, code: string, leagueName?: string | null): string {
+function inviteHtml(kind: 'player' | 'commish', link: string, code: string, leagueName?: string | null): string {
   const forLeague = leagueName ? ` for <strong>${esc(leagueName)}</strong>` : '';
+  const commish = kind === 'commish';
+  const heading = commish ? 'You&rsquo;re the commissioner.' : 'You&rsquo;re in.';
+  const intro = commish
+    ? `You&rsquo;ve been set up to run your league${forLeague} on the Drip Fantasy live head-to-head pilot. Tap below to sign in and claim it &mdash; then invite your league mates.`
+    : `Here&rsquo;s your invite to the Drip Fantasy live head-to-head pilot${forLeague}. Tap below to sign in and set your team.`;
+  const cta = commish ? 'Claim your league &rarr;' : 'Accept invite &rarr;';
+  const codeLabel = commish ? 'Or sign in and enter your commissioner code:' : 'Or sign in and enter this code:';
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0;padding:0;background:#f4f3ef;">
   <tr><td align="center" style="padding:32px 16px;">
     <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;background:#ffffff;border:1px solid #e7e4dc;border-radius:14px;overflow:hidden;">
@@ -97,14 +104,14 @@ function inviteHtml(link: string, code: string, leagueName?: string | null): str
       </td></tr>
       <tr><td style="padding:36px 32px 28px;font-family:Arial,Helvetica,sans-serif;color:#1c1a14;">
         <div style="font-size:44px;line-height:1;">&#127944;</div>
-        <h1 style="margin:14px 0 6px;font-size:22px;font-weight:700;color:#14111F;">You&rsquo;re in.</h1>
-        <p style="margin:0 0 22px;font-size:15px;line-height:1.55;color:#4a463c;">Here&rsquo;s your invite to the Drip Fantasy live head-to-head pilot${forLeague}. Tap below to sign in and set your team.</p>
+        <h1 style="margin:14px 0 6px;font-size:22px;font-weight:700;color:#14111F;">${heading}</h1>
+        <p style="margin:0 0 22px;font-size:15px;line-height:1.55;color:#4a463c;">${intro}</p>
         <table role="presentation" cellpadding="0" cellspacing="0"><tr>
           <td style="background:#34E5D9;border-radius:9px;">
-            <a href="${esc(link)}" style="display:inline-block;padding:14px 30px;font-size:15px;font-weight:700;color:#14111F;text-decoration:none;">Accept invite &rarr;</a>
+            <a href="${esc(link)}" style="display:inline-block;padding:14px 30px;font-size:15px;font-weight:700;color:#14111F;text-decoration:none;">${cta}</a>
           </td>
         </tr></table>
-        <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#4a463c;">Or sign in at <a href="https://www.dripfantasy.com" style="color:#0E8C7A;text-decoration:none;">dripfantasy.com</a> and enter this code:</p>
+        <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#4a463c;">${codeLabel}</p>
         <div style="margin:8px 0 0;font-family:'Courier New',monospace;font-size:22px;font-weight:700;letter-spacing:4px;color:#142A2E;">${esc(code)}</div>
         <p style="margin:26px 0 0;font-size:12px;line-height:1.5;color:#9a968a;">Didn&rsquo;t request this? You can ignore it &mdash; nothing happens until you sign in.</p>
       </td></tr>
@@ -141,6 +148,7 @@ Deno.serve(async (req) => {
     const code = String(body.code ?? '').trim();
     const link = String(body.link ?? '').trim();
     const leagueName = body.leagueName ? String(body.leagueName) : null;
+    const kind: 'player' | 'commish' = body.kind === 'commish' ? 'commish' : 'player';
     if (!EMAIL_RE.test(to)) return json({ ok: false, error: 'A valid recipient email is required.' });
     if (!code) return json({ ok: false, error: 'An invite code is required.' });
     if (!/^https?:\/\//.test(link)) return json({ ok: false, error: 'A valid invite link is required.' });
@@ -160,7 +168,9 @@ Deno.serve(async (req) => {
 
     const token = await getAccessToken(saEmail, saKey, sender);
 
-    const subject = "You're in — your Drip Fantasy invite";
+    const subject = kind === 'commish'
+      ? "You're the commissioner — your Drip Fantasy league"
+      : "You're in — your Drip Fantasy invite";
     const mime = [
       `From: ${encodeHeader(fromName)} <${fromAddr}>`,
       `To: ${to}`,
@@ -169,7 +179,7 @@ Deno.serve(async (req) => {
       'Content-Type: text/html; charset="UTF-8"',
       'Content-Transfer-Encoding: 7bit',
       '',
-      inviteHtml(link, code, leagueName),
+      inviteHtml(kind, link, code, leagueName),
     ].join('\r\n');
 
     const send = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
