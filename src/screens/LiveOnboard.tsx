@@ -131,6 +131,10 @@ function Muted({ text }: { text: string }) {
   return <div className="mono" style={{ textAlign: 'center', fontSize: 11, color: 'var(--dim)' }}>{text}</div>;
 }
 
+// A stable per-team key (a commissioner can hold several rosters in one league,
+// so league_id alone isn't unique across enrollment cards).
+const enrollKey = (e: Enrollment) => `${e.league_id}:${e.sleeper_roster_id}`;
+
 function NotConfigured() {
   return (
     <div style={card}>
@@ -145,6 +149,18 @@ function NotConfigured() {
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'magic';
 
 function AuthForm() {
+  // Framing from the invite link (persisted by App.tsx). A commissioner who
+  // clicked ?commish=… should see league-setup copy, not the player pitch — so
+  // signing in doesn't feel like a gate. Read-only; the code is consumed later.
+  const inviteContext: 'commish' | 'player' | null = (() => {
+    try {
+      if (localStorage.getItem('dripCommishCode')) return 'commish';
+      if (localStorage.getItem('dripInviteCode')) return 'player';
+    } catch { /* ignore */ }
+    return null;
+  })();
+  const commishCtx = inviteContext === 'commish';
+  const playerCtx = inviteContext === 'player';
   const [mode, setMode] = useState<AuthMode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -202,9 +218,16 @@ function AuthForm() {
     <>
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
         <div className="grotesk" style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1.1 }}>
-          {mode === 'signin' ? <>The <span style={{ color: 'var(--you)' }}>live H2H</span> pilot.</> : title}
+          {mode !== 'signin' ? title
+            : commishCtx ? <>Set up your <span style={{ color: 'var(--you)' }}>league</span>.</>
+            : playerCtx ? <>Join your <span style={{ color: 'var(--you)' }}>league</span>.</>
+            : <>The <span style={{ color: 'var(--you)' }}>live H2H</span> pilot.</>}
         </div>
-        {mode === 'signin' && <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 10 }}>Sign in to set your lineup and watch it play live.</div>}
+        {mode === 'signin' && <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 10 }}>
+          {commishCtx ? 'Sign in to claim and manage your league.'
+            : playerCtx ? 'Sign in to claim your team and set your lineup.'
+            : 'Sign in to set your lineup and watch it play live.'}
+        </div>}
       </div>
       <div style={card}>
         {showPw && (SHOW_GOOGLE || SHOW_APPLE) && (
@@ -245,7 +268,9 @@ function AuthForm() {
         </div>
         {showPw && (
           <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 14, lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
-            To join a league you’ll also need your <span style={{ color: 'var(--dim)' }}>invite code</span> (from your commissioner) and your <span style={{ color: 'var(--dim)' }}>Sleeper username</span>.
+            {commishCtx
+              ? <>Signing in claims this league from your invite — then you’ll manage rosters, invites and weekly matchups.</>
+              : <>To join a league you’ll also need your <span style={{ color: 'var(--dim)' }}>invite code</span> (from your commissioner) and your <span style={{ color: 'var(--dim)' }}>Sleeper username</span>.</>}
           </div>
         )}
       </div>
@@ -314,7 +339,7 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
       myMatchup(e.league_id, e.sleeper_roster_id).then(async (m) => {
         if (!m) return;
         const teams = await matchupTeams(e.league_id, [m.home_roster_id, m.away_roster_id]).catch(() => ({}));
-        setCards((c) => ({ ...c, [e.league_id]: { matchup: m, teams } }));
+        setCards((c) => ({ ...c, [enrollKey(e)]: { matchup: m, teams } }));
       }).catch(() => {});
     }
   };
@@ -411,10 +436,10 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12, alignItems: 'start' }}>
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} />)}
         {enrolledCommish.map((e) => (
-          <LeagueCard key={e.league_id} e={e} card={cards[e.league_id]} commish userId={userId} onPicks={onPicks} onBoard={onBoard} onManage={() => onManage(e.league_id)} />
+          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onPicks={onPicks} onBoard={onBoard} onManage={() => onManage(e.league_id)} />
         ))}
         {filter === 'all' && enrolledPlayer.map((e) => (
-          <LeagueCard key={e.league_id} e={e} card={cards[e.league_id]} commish={false} userId={userId} onPicks={onPicks} onBoard={onBoard} onManage={() => onManage(e.league_id)} />
+          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onPicks={onPicks} onBoard={onBoard} onManage={() => onManage(e.league_id)} />
         ))}
       </div>
       <div style={{ textAlign: 'center', marginTop: 18 }}>
