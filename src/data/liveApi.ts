@@ -156,10 +156,11 @@ export async function redeemInvite(code: string, sleeperUsername: string): Promi
 // ── "Request a code" lead capture (migration 0016) ───────────────────────────────
 /** Pre-auth request to have a pilot code set up for the visitor's league. Routes
  *  through a SECURITY DEFINER RPC granted to anon, so it works before sign-in. */
-export async function requestCode(input: { email?: string; sleeper?: string; league?: string; note?: string }): Promise<{ ok: boolean; error?: string }> {
+export async function requestCode(input: { email?: string; sleeper?: string; league?: string; leagueRef?: string; note?: string }): Promise<{ ok: boolean; error?: string }> {
   if (!supabase) return { ok: false, error: 'Live mode is not configured.' };
   const { data, error } = await client().rpc('request_code', {
-    p_email: input.email ?? null, p_sleeper: input.sleeper ?? null, p_league: input.league ?? null, p_note: input.note ?? null,
+    p_email: input.email ?? null, p_sleeper: input.sleeper ?? null, p_league: input.league ?? null,
+    p_league_ref: input.leagueRef ?? null, p_note: input.note ?? null,
   });
   if (error) return { ok: false, error: friendlyError(error) };
   return data as { ok: boolean; error?: string };
@@ -377,7 +378,7 @@ export const adminAdmins = () => rpc<AdminAdmin[]>('admin_admins');
 export const adminSetAdmin = (email: string, note: string, remove = false) =>
   rpc<{ ok: boolean; error?: string }>('admin_set_admin', { p_email: email, p_note: note, p_remove: remove });
 export const adminUsers = () => rpc<AdminUser[]>('admin_users');
-export interface CodeRequest { id: string; created_at: string; email: string | null; sleeper_username: string | null; league_name: string | null; note: string | null; handled: boolean; }
+export interface CodeRequest { id: string; created_at: string; email: string | null; sleeper_username: string | null; league_name: string | null; league_ref: string | null; note: string | null; handled: boolean; }
 export const adminCodeRequests = () => rpc<CodeRequest[]>('admin_code_requests');
 export const adminSetCodeRequestHandled = (id: string, handled: boolean) => rpc<{ ok: boolean }>('admin_set_code_request_handled', { p_id: id, p_handled: handled });
 export interface BoardPick { slug: string; metric: string | null; }

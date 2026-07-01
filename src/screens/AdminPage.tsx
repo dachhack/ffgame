@@ -596,6 +596,7 @@ function CodeRequestRow({ r, leagues, onToggle }: { r: CodeRequest; leagues: Adm
             {r.sleeper_username && <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}> · {r.sleeper_username}</span>}
           </div>
           {r.league_name && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 2 }}>{r.league_name}</div>}
+          {r.league_ref && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--you)', marginTop: 2, cursor: 'pointer', wordBreak: 'break-all' }} onClick={() => copy(r.league_ref!)} title="copy — paste into Import">⛓ {r.league_ref}</div>}
           {r.note && <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 2, lineHeight: 1.4 }}>{r.note}</div>}
           <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>{new Date(r.created_at).toLocaleString()}</div>
         </div>
