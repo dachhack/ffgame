@@ -50,19 +50,25 @@ plays — no schema rewrite.
    don't expose league H2H pairings — we'd infer from schedule/standings or have the
    commissioner enter weekly pairings. Non-H2H leagues can't run the pilot at all.
 
-3. **Live plays.** Only **ESPN + Sleeper** have real play feeds. Yahoo/Fleaflicker/MFL
-   have **no play-by-play API** → they'd run on engine-resolved (synthetic-texture)
-   scoring, same as the baked demo. Functional, just less live-play animation.
+3. **Live plays — NOT a per-platform problem.** The **ESPN play-by-play feed drives real
+   NFL scoring for every league regardless of platform.** We only ever import league
+   *structure* (rosters, schedule, pairings) from the host platform; the actual per-player
+   live scoring always comes from the ESPN feed → `live_play` → resolution. So Yahoo/
+   Fleaflicker/MFL are **not** blocked on plays — they get the same real live scoring as
+   Sleeper/ESPN. This removes the biggest supposed blocker for the "read-only" platforms.
 
 ## 4. Per-platform feasibility
 
-| Platform | Read (demo) | Live effort | Main blockers |
+Play-by-play is ESPN-sourced for all of them, so "blockers" below are only about
+importing league *structure* + identity — never scoring.
+
+| Platform | Read (demo) | Live effort | Main blockers (structure + identity only) |
 |---|---|---|---|
 | Sleeper | ✅ | done | — |
-| **ESPN** | ✅ public | **Medium** | admin-mapped enrollment (no public user id); server-side ESPN adapter + matchup inference; provider tagging |
-| Yahoo | ✅ (after app approval) | High | OAuth app gate; OAuth-driven claim; no play API (synthetic) |
-| Fleaflicker | ✅ public | High | no user-id API; H2H inference; no play API |
-| MFL | ✅ public | High | same as Fleaflicker + multi-subdomain redirects/rate limits |
+| **ESPN** | ✅ public | **Medium** | admin-mapped enrollment (no public user id); ESPN structure adapter + matchup inference; provider tagging |
+| Yahoo | ✅ (after app approval) | Medium | OAuth app gate; OAuth-driven claim |
+| Fleaflicker | ✅ public | Medium | no user-id API → admin-mapped; H2H pairing inference |
+| MFL | ✅ public | Medium | admin-mapped; multi-subdomain redirects/rate limits |
 
 ## 5. Recommended plan
 
@@ -81,10 +87,10 @@ Rename intent only (leave `sleeper_lineup` as-is to avoid churn). No rewrite, no
 - Live plays: reuse the validated ESPN adapter → `live_play` → existing resolution.
 
 **Phase 2 — Yahoo (OAuth claim).** OAuth sign-in → list the user's leagues → pick team →
-enroll. Scores/standings from Yahoo; **plays from the ESPN feed** (cross-source) or synthetic.
+enroll. Structure from Yahoo; **live scoring from the ESPN feed** (same as everyone).
 
 **Phase 3 — Fleaflicker / MFL.** Public reads via `fantasy-proxy`; admin-mapped enrollment;
-synthetic plays. Lowest priority (no play feed, weaker identity).
+ESPN feed for scoring. Structure-only work, so effort is similar to ESPN once Phase 1 exists.
 
 ## 6. Key decisions to make first
 

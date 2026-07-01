@@ -10,6 +10,7 @@ import {
   type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy, type LeagueKdst, type KdstMode,
 } from '../data/liveApi';
 import { importLeague, syncWeek } from '../data/sleeperAdmin';
+import { importEspnLeague, syncEspnWeek, stripProvider } from '../data/providerAdmin';
 import { forceResolve } from '../data/forceResolve';
 import { FeedSheet } from './FeedSheet';
 import { WINDOWS, defaultMetric } from '../data/metrics';
@@ -257,8 +258,14 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
   const set = async (id: string, status: string, lockNow = false) => { await adminSetMatchup(id, status, lockNow); await loadM(); };
   const sync = async () => {
     setBusy('sync');
-    try { const r = await syncWeek(l.league_id, l.sleeper_league_id, Number(week)); setBusy(`✓ ${r.pairs} matchups`); setTab('matchups'); await loadM(); }
-    catch (e) { setBusy(e instanceof Error ? e.message : 'sync failed'); }
+    try {
+      // Non-Sleeper leagues re-fetch via their provider (structure only; scoring
+      // still comes from the ESPN play feed). Public ESPN needs no creds here.
+      const r = l.provider === 'espn'
+        ? await syncEspnWeek(l.league_id, stripProvider(l.sleeper_league_id), l.season, Number(week))
+        : await syncWeek(l.league_id, l.sleeper_league_id, Number(week));
+      setBusy(`✓ ${r.pairs} matchups`); setTab('matchups'); await loadM();
+    } catch (e) { setBusy(e instanceof Error ? e.message : 'sync failed'); }
   };
   const regen = async (which: 'invite' | 'commish') => {
     if (!confirm(`Regenerate the ${which} code? The old one stops working.`)) return;
@@ -272,7 +279,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
       {sheet && <FeedSheet matchupId={sheet} week={Number(srcWeek) || 1} onClose={() => setSheet(null)} />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{l.name} <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>· {l.season}</span></div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{l.name} <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>· {l.season}</span>{l.provider && l.provider !== 'sleeper' && <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px', marginLeft: 6, textTransform: 'uppercase' }}>{l.provider}</span>}</div>
           <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 3 }}>{l.enrolled}/{l.rosters} enrolled · commish {l.commissioner ? '✓' : '—'}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -482,27 +489,48 @@ function Overrides({ overrides, reload }: { overrides: AdminOverride[]; reload: 
 }
 
 function ImportLeague({ reload }: { reload: () => void }) {
+  const [platform, setPlatform] = useState<'sleeper' | 'espn'>('sleeper');
   const [sid, setSid] = useState('');
   const [season, setSeason] = useState('2026');
+  const [swid, setSwid] = useState('');
+  const [s2, setS2] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const espn = platform === 'espn';
   const go = async () => {
     if (!sid.trim() || busy) return;
     setBusy(true); setMsg(null);
-    try { await importLeague(sid.trim(), season.trim() || '2026'); setMsg('✓ imported'); setSid(''); reload(); }
-    catch (e) { setMsg(e instanceof Error ? e.message : 'import failed'); }
+    try {
+      if (espn) await importEspnLeague(sid.trim(), season.trim() || '2026', { swid: swid.trim() || undefined, s2: s2.trim() || undefined });
+      else await importLeague(sid.trim(), season.trim() || '2026');
+      setMsg('✓ imported'); setSid(''); reload();
+    } catch (e) { setMsg(e instanceof Error ? e.message : 'import failed'); }
     finally { setBusy(false); }
   };
+  const pill = (p: 'sleeper' | 'espn', label: string) => (
+    <button onClick={() => { setPlatform(p); setMsg(null); }} className="mono" style={btn(platform === p)}>{label}</button>
+  );
   return (
     <div style={card}>
-      <div style={h}>IMPORT A SLEEPER LEAGUE</div>
+      <div style={h}>IMPORT A LEAGUE</div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>{pill('sleeper', 'Sleeper')}{pill('espn', 'ESPN')}</div>
       <div style={{ display: 'flex', gap: 6 }}>
-        <input value={sid} onChange={(e) => setSid(e.target.value)} placeholder="Sleeper league id" style={{ ...inp, flex: 1, minWidth: 0 }} />
+        <input value={sid} onChange={(e) => setSid(e.target.value)} placeholder={espn ? 'ESPN league id' : 'Sleeper league id'} style={{ ...inp, flex: 1, minWidth: 0 }} />
         <input value={season} onChange={(e) => setSeason(e.target.value)} placeholder="season" style={{ ...inp, width: 56 }} />
         <button onClick={go} disabled={busy} className="mono" style={btn(true)}>{busy ? '…' : 'import'}</button>
       </div>
+      {espn && (
+        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          <input value={swid} onChange={(e) => setSwid(e.target.value)} placeholder="SWID (private only)" style={{ ...inp, flex: 1, minWidth: 0 }} />
+          <input value={s2} onChange={(e) => setS2(e.target.value)} placeholder="espn_s2 (private only)" style={{ ...inp, flex: 1, minWidth: 0 }} />
+        </div>
+      )}
       {msg && <div className="mono" style={{ ...mono, fontSize: 9.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{msg}</div>}
-      <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 8 }}>Pulls league + rosters from Sleeper, generates the commish/invite codes, and enrolls any managers already signed in. Then “sync week” per league for matchups + lineups.</div>
+      <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 8 }}>
+        {espn
+          ? 'Pulls the ESPN league + rosters + schedule. Public leagues need no cookies; private ones take SWID + espn_s2. Enrollment is admin-mapped (ESPN has no public user id). Then “sync week” for matchups + pick pools. Live scoring runs off the ESPN play feed.'
+          : 'Pulls league + rosters from Sleeper, generates the commish/invite codes, and enrolls any managers already signed in. Then “sync week” per league for matchups + lineups.'}
+      </div>
     </div>
   );
 }
