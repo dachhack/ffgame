@@ -119,7 +119,7 @@ export function Splash() {
         </div>
       </main>
 
-      {requesting && <RequestCodeModal initialSleeper={sleeperUser?.username ?? ''} onClose={() => setRequesting(false)} />}
+      {requesting && <RequestCodeModal initialPlatform={sleeperUser ? 'Sleeper' : ''} onClose={() => setRequesting(false)} />}
       {faq && <Faq onClose={() => setFaq(false)} />}
     </div>
   );

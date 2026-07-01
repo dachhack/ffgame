@@ -16,14 +16,17 @@ export function RequestCodeFab() {
       <button onClick={() => setOpen(true)} className="mono" style={fab} title="Request a pilot code for your league">
         ◈ get a league code
       </button>
-      {open && <RequestCodeModal initialSleeper={sleeperUser?.username ?? ''} onClose={() => setOpen(false)} />}
+      {open && <RequestCodeModal initialPlatform={sleeperUser ? 'Sleeper' : ''} onClose={() => setOpen(false)} />}
     </>
   );
 }
 
-export function RequestCodeModal({ initialSleeper, onClose }: { initialSleeper: string; onClose: () => void }) {
+// The pilot supports leagues from any of these platforms.
+const PLATFORMS = ['Sleeper', 'ESPN', 'Yahoo', 'Fleaflicker', 'MFL', 'Other'];
+
+export function RequestCodeModal({ initialPlatform, onClose }: { initialPlatform: string; onClose: () => void }) {
   const [email, setEmail] = useState('');
-  const [sleeper, setSleeper] = useState(initialSleeper);
+  const [platform, setPlatform] = useState(initialPlatform);
   const [league, setLeague] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -32,9 +35,10 @@ export function RequestCodeModal({ initialSleeper, onClose }: { initialSleeper: 
 
   const submit = async () => {
     if (busy) return;
-    if (!email.trim() && !sleeper.trim()) { setErr('Add an email or your Sleeper username so we can reach you.'); return; }
+    if (!email.trim()) { setErr('Add your email so we can send your code.'); return; }
     setBusy(true); setErr(null);
-    const r = await requestCode({ email, sleeper, league, note });
+    // `sleeper` on the API is the generic contact/handle field; we send the platform.
+    const r = await requestCode({ email, sleeper: platform, league, note });
     if (r.ok) setDone(true);
     else { setErr(r.error ?? 'Could not send — try again.'); setBusy(false); }
   };
@@ -56,15 +60,17 @@ export function RequestCodeModal({ initialSleeper, onClose }: { initialSleeper: 
               <input value={email} onChange={(e) => { setEmail(e.target.value); setErr(null); }} type="email" inputMode="email" placeholder="you@example.com"
                 spellCheck={false} autoCapitalize="none" autoCorrect="off" style={input} />
             </Field>
-            <Field label="SLEEPER USERNAME">
-              <input value={sleeper} onChange={(e) => { setSleeper(e.target.value); setErr(null); }} placeholder="your Sleeper handle"
-                spellCheck={false} autoCapitalize="none" autoCorrect="off" style={input} />
+            <Field label="FANTASY PLATFORM">
+              <select value={platform} onChange={(e) => { setPlatform(e.target.value); setErr(null); }} style={input}>
+                <option value="">select your platform…</option>
+                {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
             </Field>
             <Field label="LEAGUE NAME (OPTIONAL)">
               <input value={league} onChange={(e) => setLeague(e.target.value)} placeholder="e.g. Sunday Scaries Dynasty" style={input} />
             </Field>
             <Field label="ANYTHING ELSE (OPTIONAL)">
-              <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="league size, when you play, questions…" rows={2} style={{ ...input, resize: 'vertical' }} />
+              <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="league link or ID, size, when you play…" rows={2} style={{ ...input, resize: 'vertical' }} />
             </Field>
             {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', marginTop: 4, lineHeight: 1.4 }}>{err}</div>}
             <button onClick={submit} disabled={busy} className="mono" style={{ ...primaryBtn, marginTop: 14, opacity: busy ? 0.6 : 1 }}>{busy ? 'sending…' : 'request a code →'}</button>
