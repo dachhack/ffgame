@@ -42,7 +42,7 @@ const fmtLock = (iso: string | null) => {
   catch { return iso; }
 };
 
-export function LivePicks({ userId, onBack }: { userId: string; onBack: () => void }) {
+export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: string; leagueId?: string; rosterId?: number; onBack: () => void }) {
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
   const [myTeam, setMyTeam] = useState<TeamInfo | null>(null);
   const [roster, setRoster] = useState<{ leagueId: string; rosterId: number } | null>(null);
@@ -68,7 +68,9 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   useEffect(() => {
     (async () => {
       try {
-        const r = await myRoster(userId);
+        // Open the specific league/roster the card asked for; fall back to the
+        // user's default roster when none is given.
+        const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
         if (!r) { setState('none'); return; }
         setRoster(r);
         myMembership(r.leagueId, r.rosterId).then((mm) => { if (mm?.controller) setController(mm.controller); }).catch(() => {});
@@ -98,7 +100,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         setState('ready');
       } catch (e) { setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('none'); }
     })();
-  }, [userId]);
+  }, [userId, leagueId, rosterId]);
 
   const posBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, p.pos])), [pool]);
   const locked = !!matchup && (matchup.status !== 'scheduled' || (!!matchup.lock_at && new Date(matchup.lock_at) <= new Date()));
