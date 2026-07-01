@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster,
+  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, type LeagueJoiner,
   setTeamController, setLineupPolicy,
   leagueKdst, setKdstMode, setTeamKdst,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
@@ -176,6 +176,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: AdminLeague; reload: () => void; admin?: boolean; defaultTab?: '' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst' }) {
   const [matchups, setMatchups] = useState<AdminMatchup[] | null>(null);
   const [members, setMembers] = useState<AdminMember[] | null>(null);
+  const [joiners, setJoiners] = useState<LeagueJoiner[]>([]);
   const [audit, setAudit] = useState<AdminAudit[] | null>(null);
   const [tab, setTab] = useState<'' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst'>(defaultTab);
   // roster_id → team name, from members (drives readable matchup labels).
@@ -201,8 +202,8 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
     const next: Controller = cur === 'ai' ? 'human' : 'ai';
     try { await setTeamController(l.league_id, rosterId, next); await loadMembers(); } catch { /* noop */ }
   };
-  const assign = async (rosterId: number, email: string) => {
-    const r = await adminAssignRoster(l.league_id, rosterId, email);
+  const assign = async (rosterId: number, a: { email?: string; appUserId?: string }) => {
+    const r = await adminAssignRoster(l.league_id, rosterId, a.email ?? '', a.appUserId);
     await loadMembers();
     return r;
   };
@@ -249,7 +250,10 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
   };
 
   const loadM = async () => setMatchups(await adminMatchups(l.league_id));
-  const loadMembers = async () => setMembers(await adminLeagueMembers(l.league_id));
+  const loadMembers = async () => {
+    setMembers(await adminLeagueMembers(l.league_id));
+    adminLeagueJoiners(l.league_id).then(setJoiners).catch(() => setJoiners([]));
+  };
   const loadAudit = async () => setAudit(await commishAudit(l.league_id, 40));
   const showTab = (t: 'matchups' | 'members' | 'audit' | 'ready' | 'kdst') => {
     setTab((cur) => (cur === t ? '' : t));
@@ -357,7 +361,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
                   <span className="mono" style={{ fontSize: 8.5, color: m.enrolled ? 'var(--you)' : m.claim_email ? 'var(--dim)' : 'var(--faint)', border: `1px solid ${m.enrolled ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '2px 6px' }}>{m.enrolled ? 'JOINED' : m.claim_email ? 'PENDING' : '—'}</span>
                 </div>
               </div>
-              <AssignRoster initial={m.email ?? m.claim_email ?? ''} onAssign={(email) => assign(m.roster_id, email)} />
+              <AssignRoster initial={m.email ?? m.claim_email ?? ''} joiners={joiners} onAssign={(a) => assign(m.roster_id, a)} />
             </div>
           ))}
         </div>
@@ -699,19 +703,37 @@ function CodeRequestRow({ r, leagues, onToggle, reloadLeagues }: { r: CodeReques
 
 // Admin/commish-map a roster to a person by email. Enrolls now if they've signed
 // in, otherwise records a pending claim that auto-links on their next sign-in.
-function AssignRoster({ initial, onAssign }: { initial: string; onAssign: (email: string) => Promise<{ ok: boolean; error?: string; status?: string }> }) {
+function AssignRoster({ initial, joiners = [], onAssign }: { initial: string; joiners?: LeagueJoiner[]; onAssign: (a: { email?: string; appUserId?: string }) => Promise<{ ok: boolean; error?: string; status?: string }> }) {
   const [email, setEmail] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const result = (r: { ok: boolean; error?: string; status?: string }) =>
+    setMsg(!r.ok ? (r.error ?? 'failed') : r.status === 'pending' ? '✓ pending — links on sign-in' : r.status === 'cleared' ? '✓ cleared' : '✓ enrolled');
   const go = async () => {
     if (busy) return;
     setBusy(true); setMsg(null);
-    const r = await onAssign(email.trim());
-    setBusy(false);
-    setMsg(!r.ok ? (r.error ?? 'failed') : r.status === 'pending' ? '✓ pending — links on sign-in' : r.status === 'cleared' ? '✓ cleared' : '✓ enrolled');
+    const r = await onAssign({ email: email.trim() });
+    setBusy(false); result(r);
+  };
+  // Pick a player who already tapped the invite link (join pool) — no typing.
+  const pick = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const appUserId = e.target.value;
+    if (busy || !appUserId) return;
+    const j = joiners.find((x) => x.app_user_id === appUserId);
+    setBusy(true); setMsg(null);
+    const r = await onAssign({ appUserId, email: j?.email ?? undefined });
+    setBusy(false); result(r);
+    if (r.ok && j?.email) setEmail(j.email);
   };
   return (
-    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+      {joiners.length > 0 && (
+        <select value="" onChange={pick} disabled={busy} className="mono"
+          title="assign a player who joined the pool" style={{ ...inp, fontSize: 10, padding: '5px 7px', maxWidth: 160 }}>
+          <option value="">joined players…</option>
+          {joiners.map((j) => <option key={j.app_user_id} value={j.app_user_id}>{j.email ?? j.app_user_id.slice(0, 8)}</option>)}
+        </select>
+      )}
       <input value={email} onChange={(e) => { setEmail(e.target.value); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
         placeholder="assign to email…" type="email" spellCheck={false} autoCapitalize="none" autoCorrect="off"
         style={{ ...inp, fontSize: 10, padding: '5px 7px', flex: 1, minWidth: 0 }} />
