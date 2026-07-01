@@ -45,12 +45,14 @@ function GoogleG() {
 type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin';
 
 export function LiveOnboard() {
-  const { navigate } = useStore();
+  const { navigate, route } = useStore();
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [recovery, setRecovery] = useState(false);
   const [admin, setAdmin] = useState(false);
-  const [view, setView] = useState<OnboardView>('home');
+  // Honor a deep link into the admin panel (gear menu → "Super admin" from any
+  // screen navigates here with view:'admin'); default to the onboarding home.
+  const [view, setView] = useState<OnboardView>(route.name === 'live' && route.view === 'admin' ? 'admin' : 'home');
 
   useEffect(() => {
     if (!liveConfigured) { setReady(true); return; }

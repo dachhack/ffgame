@@ -30,7 +30,7 @@ export type Phase = 'setup' | 'live' | 'final';
 
 export type Route =
   | { name: 'splash' }
-  | { name: 'live' }            // authenticated live-H2H pilot (separate from the demo)
+  | { name: 'live'; view?: 'admin' } // authenticated live-H2H pilot (separate from the demo); `view:'admin'` deep-links straight to the super-admin panel
   | { name: 'demo'; view?: 'clean' | 'board' } // narrated guided demo: 'clean' explainer (default) or the real in-game board
   | { name: 'leagues' }
   | { name: 'sleeperLeague'; leagueId: string; leagueName: string }
