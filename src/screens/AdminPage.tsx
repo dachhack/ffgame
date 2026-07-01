@@ -10,7 +10,7 @@ import {
   type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy, type LeagueKdst, type KdstMode,
 } from '../data/liveApi';
 import { importLeague, syncWeek } from '../data/sleeperAdmin';
-import { importEspnLeague, syncEspnWeek, stripProvider } from '../data/providerAdmin';
+import { importEspnSeason, syncEspnSeason, stripProvider } from '../data/providerAdmin';
 import { forceResolve } from '../data/forceResolve';
 import { FeedSheet } from './FeedSheet';
 import { WINDOWS, defaultMetric } from '../data/metrics';
@@ -277,15 +277,17 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, []);
   const set = async (id: string, status: string, lockNow = false) => { await adminSetMatchup(id, status, lockNow); await loadM(); };
+  // Schedule the WHOLE regular season (all weeks) in one go — ESPN publishes the
+  // full fantasy schedule up front, so there's no reason to sync week by week.
+  // Scoring still comes from the ESPN play feed. Public ESPN needs no creds here.
   const sync = async () => {
+    if (busy === 'sync') return;
     setBusy('sync');
     try {
-      // Non-Sleeper leagues re-fetch via their provider (structure only; scoring
-      // still comes from the ESPN play feed). Public ESPN needs no creds here.
       const r = l.provider === 'espn'
-        ? await syncEspnWeek(l.league_id, stripProvider(l.sleeper_league_id), l.season, Number(week))
-        : await syncWeek(l.league_id, l.sleeper_league_id, Number(week));
-      setBusy(`✓ ${r.pairs} matchups`); setTab('matchups'); await loadM();
+        ? await syncEspnSeason(l.league_id, stripProvider(l.sleeper_league_id), l.season)
+        : await (async () => { let pairs = 0; for (let w = 1; w <= 14; w++) pairs += (await syncWeek(l.league_id, l.sleeper_league_id, w)).pairs; return { weeks: 14, pairs }; })();
+      setBusy(`✓ ${r.weeks} weeks · ${r.pairs} matchups`); setTab('matchups'); await loadM();
     } catch (e) { setBusy(e instanceof Error ? e.message : 'sync failed'); }
   };
   const regen = async (which: 'invite' | 'commish') => {
@@ -326,8 +328,11 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
         <span style={{ flex: 1 }} />
+        {/* This week box drives the picks-readiness view below; the sync button
+            schedules the ENTIRE season's matchups in one pass. */}
+        <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>picks wk</span>
         <input value={week} onChange={(e) => setWeek(e.target.value.replace(/\D/g, ''))} style={{ ...inp, width: 38, padding: '5px 6px', textAlign: 'center' }} />
-        <button onClick={sync} disabled={busy === 'sync'} className="mono" style={btn(true)}>{busy === 'sync' ? 'syncing…' : 'sync week'}</button>
+        <button onClick={sync} disabled={busy === 'sync'} className="mono" style={btn(true)} title="schedule every week's matchups">{busy === 'sync' ? 'scheduling…' : '⟳ sync season'}</button>
       </div>
       {busy && busy !== 'sync' && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{busy}</div>}
       {tab === 'ready' && (
@@ -529,9 +534,9 @@ function ImportLeague({ reload }: { reload: () => void }) {
     if (!sid.trim() || busy) return;
     setBusy(true); setMsg(null);
     try {
-      if (espn) await importEspnLeague(sid.trim(), season.trim() || '2026', { swid: swid.trim() || undefined, s2: s2.trim() || undefined });
-      else await importLeague(sid.trim(), season.trim() || '2026');
-      setMsg('✓ imported'); setSid(''); reload();
+      if (espn) { const r = await importEspnSeason(sid.trim(), season.trim() || '2026', { swid: swid.trim() || undefined, s2: s2.trim() || undefined }); setMsg(`✓ imported · ${r.weeks} weeks scheduled`); }
+      else { await importLeague(sid.trim(), season.trim() || '2026'); setMsg('✓ imported'); }
+      setSid(''); reload();
     } catch (e) { setMsg(e instanceof Error ? e.message : 'import failed'); }
     finally { setBusy(false); }
   };
@@ -637,7 +642,7 @@ function CodeRequestRow({ r, leagues, onToggle, reloadLeagues }: { r: CodeReques
     setImporting(true); setErr(null);
     try {
       const ref = extractLeagueId(r.league_ref, platform);
-      const res = platform === 'espn' ? await importEspnLeague(ref, '2026') : await importLeague(ref, '2026');
+      const res = platform === 'espn' ? await importEspnSeason(ref, '2026') : await importLeague(ref, '2026');
       const newId = typeof res === 'string' ? res : res.leagueId;
       await reloadLeagues();
       setLeagueId(newId); setKind('commish'); setSent(false);

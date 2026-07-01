@@ -86,3 +86,29 @@ export async function syncEspnWeek(dbLeagueId: string, espnLeagueId: string, sea
   const norm = await espnNormalize({ leagueId: espnLeagueId, season, swid: creds?.swid, s2: creds?.s2 });
   return syncNormalizedWeek(dbLeagueId, norm, week);
 }
+
+/** Schedule the WHOLE regular season in one pass: one fetch, every week's matchups
+ *  written. ESPN generates the full-season fantasy schedule up front, so this
+ *  populates all weeks (even unplayed ones) — no per-week syncing. */
+export async function syncEspnSeason(dbLeagueId: string, espnLeagueId: string, season: string, creds?: EspnImportCreds, onProgress?: (note: string) => void): Promise<{ weeks: number; pairs: number }> {
+  const norm = await espnNormalize({ leagueId: espnLeagueId, season, swid: creds?.swid, s2: creds?.s2 });
+  let pairs = 0;
+  for (let w = 1; w <= norm.weeks; w++) {
+    onProgress?.(`Scheduling week ${w}/${norm.weeks}…`);
+    pairs += (await syncNormalizedWeek(dbLeagueId, norm, w)).pairs;
+  }
+  return { weeks: norm.weeks, pairs };
+}
+
+/** Import an ESPN league AND schedule its full regular season immediately, so
+ *  every matchup exists the moment it's imported (no manual sync). */
+export async function importEspnSeason(leagueId: string, season: string, creds?: EspnImportCreds, onProgress?: (note: string) => void): Promise<{ leagueId: string; rosters: number; weeks: number; pairs: number }> {
+  const norm = await espnNormalize({ leagueId, season, swid: creds?.swid, s2: creds?.s2 });
+  const { leagueId: dbId, rosters } = await persistLeague('espn', leagueId, season, norm);
+  let pairs = 0;
+  for (let w = 1; w <= norm.weeks; w++) {
+    onProgress?.(`Scheduling week ${w}/${norm.weeks}…`);
+    pairs += (await syncNormalizedWeek(dbId, norm, w)).pairs;
+  }
+  return { leagueId: dbId, rosters, weeks: norm.weeks, pairs };
+}
