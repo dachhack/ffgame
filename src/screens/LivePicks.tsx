@@ -16,6 +16,7 @@ import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } fr
 import { shortName } from '../data/players';
 import type { Player } from '../types';
 import { SetupRow, PlayerPicker } from './Matchup';
+import { REG_SEASON_WEEKS } from '../data/league';
 
 // Live pool entries are slug/full/pos; the reused setup card wants a Player. Build
 // a light one (zero stats — the setup board only displays name/pos/team/headshot).
@@ -63,6 +64,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
   const [err, setErr] = useState<string | null>(null);
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   const [matchPremium, setMatchPremium] = useState(true); // default true = no false locks until we know
+  const [weekSel, setWeekSel] = useState<number | null>(null); // null = default (earliest) week
 
   useEffect(() => { ensurePremiumTier(); }, []); // load the free/premium split for intent gating
   useEffect(() => {
@@ -70,12 +72,13 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
       try {
         // Open the specific league/roster the card asked for; fall back to the
         // user's default roster when none is given.
+        setState('loading');
         const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
         if (!r) { setState('none'); return; }
         setRoster(r);
         myMembership(r.leagueId, r.rosterId).then((mm) => { if (mm?.controller) setController(mm.controller); }).catch(() => {});
-        const m = await myMatchup(r.leagueId, r.rosterId);
-        if (!m) { setState('none'); return; }
+        const m = await myMatchup(r.leagueId, r.rosterId, weekSel ?? undefined);
+        if (!m) { setMatchup(null); setState('none'); return; }
         setMatchup(m);
         matchupPremium(m.id).then(setMatchPremium).catch(() => {}); // premium → no power-up locks (both sides get the full set)
         matchupTeams(r.leagueId, [r.rosterId]).then((t) => setMyTeam(t[r.rosterId] ?? null)).catch(() => {});
@@ -100,7 +103,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
         setState('ready');
       } catch (e) { setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('none'); }
     })();
-  }, [userId, leagueId, rosterId]);
+  }, [userId, leagueId, rosterId, weekSel]);
 
   const posBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, p.pos])), [pool]);
   const locked = !!matchup && (matchup.status !== 'scheduled' || (!!matchup.lock_at && new Date(matchup.lock_at) <= new Date()));
@@ -270,12 +273,26 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
     finally { setAiBusy(false); }
   };
 
+  // Week stepper: page through the whole scheduled season (matchup?.week while
+  // viewing a week, else the selected week; defaults to the earliest).
+  const curWeek = matchup?.week ?? weekSel ?? 1;
+  const weekNav = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+      <button onClick={() => setWeekSel(Math.max(1, curWeek - 1))} disabled={curWeek <= 1} className="mono" title="previous week" style={{ ...linkBtn, fontSize: 13, padding: '0 4px', opacity: curWeek <= 1 ? 0.35 : 1 }}>‹</button>
+      <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)' }}>WK {curWeek}</span>
+      <button onClick={() => setWeekSel(Math.min(REG_SEASON_WEEKS, curWeek + 1))} disabled={curWeek >= REG_SEASON_WEEKS} className="mono" title="next week" style={{ ...linkBtn, fontSize: 13, padding: '0 4px', opacity: curWeek >= REG_SEASON_WEEKS ? 0.35 : 1 }}>›</button>
+    </div>
+  );
+
   if (state === 'loading') return <Muted text="Loading your matchup…" />;
   if (state === 'none') return (
     <div style={card}>
-      <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>You’re all set — no matchup yet</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>No week {curWeek} matchup yet</div>
+        {weekNav}
+      </div>
       <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 10, lineHeight: 1.5 }}>
-        Your team is enrolled. Your week-1 matchup appears here once your commissioner syncs the schedule — check back closer to kickoff. {err && <><br />— {err}</>}
+        Your team is enrolled. Matchups appear here once your commissioner syncs the schedule — use ‹ › to page through the season, or check back closer to kickoff. {err && <><br />— {err}</>}
       </div>
       <div style={{ textAlign: 'center', marginTop: 14 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
     </div>
@@ -294,7 +311,10 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
               <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Week {matchup!.week} lineup</div>
             </div>
           </div>
-          <span className="mono" style={{ fontSize: 9, color: locked ? 'var(--opp)' : 'var(--you)', border: `1px solid ${locked ? 'var(--opp)' : 'var(--you)'}`, borderRadius: 4, padding: '3px 7px', flexShrink: 0 }}>{locked ? 'LOCKED' : `LOCKS ${fmtLock(matchup!.lock_at)}`}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            {weekNav}
+            <span className="mono" style={{ fontSize: 9, color: locked ? 'var(--opp)' : 'var(--you)', border: `1px solid ${locked ? 'var(--opp)' : 'var(--you)'}`, borderRadius: 4, padding: '3px 7px' }}>{locked ? 'LOCKED' : `LOCKS ${fmtLock(matchup!.lock_at)}`}</span>
+          </div>
         </div>
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
           Pick a player + a hidden metric per slot. Sealed picks stay hidden from your opponent until kickoff. {filled}/{SLOTS.length} set.
