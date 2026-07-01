@@ -44,9 +44,20 @@ export function friendlyError(x: unknown): string {
 }
 
 /** Where the magic-link returns the user — back into Live mode (?live=1). Must be
- *  added to Supabase Auth → URL Configuration → Redirect URLs. */
+ *  added to Supabase Auth → URL Configuration → Redirect URLs. Carries a pending
+ *  commish/invite code in the URL so it survives the round trip even when the
+ *  redirect lands on a different origin (e.g. apex → www), where localStorage
+ *  wouldn't carry over. */
 function redirectTo(): string {
-  return `${window.location.origin}${window.location.pathname}?live=1`;
+  let extra = '';
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const commish = p.get('commish') || localStorage.getItem('dripCommishCode');
+    const code = p.get('code') || localStorage.getItem('dripInviteCode');
+    if (commish) extra = `&commish=${encodeURIComponent(commish)}`;
+    else if (code) extra = `&code=${encodeURIComponent(code)}`;
+  } catch { /* ignore */ }
+  return `${window.location.origin}${window.location.pathname}?live=1${extra}`;
 }
 
 export async function sendMagicLink(email: string): Promise<void> {
