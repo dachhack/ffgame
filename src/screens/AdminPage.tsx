@@ -593,7 +593,7 @@ function CodeRequestRow({ r, leagues, onToggle }: { r: CodeRequest; leagues: Adm
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 11.5, color: 'var(--text)' }}>
             {r.email ? <span className="mono" style={{ ...mono, cursor: 'pointer' }} onClick={() => copy(r.email!)} title="copy">{r.email}</span> : '—'}
-            {r.sleeper_username && <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}> · @{r.sleeper_username}</span>}
+            {r.sleeper_username && <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}> · {r.sleeper_username}</span>}
           </div>
           {r.league_name && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 2 }}>{r.league_name}</div>}
           {r.note && <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 2, lineHeight: 1.4 }}>{r.note}</div>}
