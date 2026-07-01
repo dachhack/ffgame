@@ -460,12 +460,21 @@ export async function sendInvite(input: { to: string; code: string; link: string
   return data as { ok: boolean; error?: string };
 }
 export const adminLeagueMembers = (leagueId: string) => rpc<AdminMember[]>('admin_league_members', { p_league_id: leagueId });
-/** Admin/commish-map a roster to a person by email (immediate enroll if they've
- *  signed in, else a pending claim that auto-links on their next sign-in). Empty email clears it. */
-export const adminAssignRoster = (leagueId: string, rosterId: number, email: string) =>
-  rpc<{ ok: boolean; error?: string; status?: 'enrolled' | 'pending' | 'cleared' }>('admin_assign_roster', { p_league_id: leagueId, p_roster_id: rosterId, p_email: email });
+/** Admin/commish-map a roster to a person — by a joined-user id (picked from the
+ *  pool) or by email (immediate enroll if signed in, else a pending claim that
+ *  links on their next sign-in). Empty email + no id clears the roster. */
+export const adminAssignRoster = (leagueId: string, rosterId: number, email: string, appUserId?: string) =>
+  rpc<{ ok: boolean; error?: string; status?: 'enrolled' | 'pending' | 'cleared' }>('admin_assign_roster',
+    { p_league_id: leagueId, p_roster_id: rosterId, p_email: email, ...(appUserId ? { p_app_user_id: appUserId } : {}) });
 /** Claim any rosters pre-assigned to my email (called after sign-in). */
 export const claimMyRosters = () => rpc<{ ok: boolean; claimed?: number }>('claim_my_rosters');
+/** Player joins a league's pool by invite code (any platform); the commissioner
+ *  then assigns them a roster from the pool. */
+export const joinLeague = (code: string) =>
+  rpc<{ ok: boolean; error?: string; league?: string; status?: 'joined' | 'enrolled' }>('join_league', { p_code: code.trim() });
+export interface LeagueJoiner { app_user_id: string; email: string | null; }
+/** Admin/commish: users who've joined a league's pool but aren't rostered yet. */
+export const adminLeagueJoiners = (leagueId: string) => rpc<LeagueJoiner[]>('admin_league_joiners', { p_league_id: leagueId });
 export const commishOverview = () => rpc<AdminLeague[]>('commish_overview');
 export interface MatchupPicks { home_roster_id: number; away_roster_id: number; home_app_user: string | null; away_app_user: string | null; picks: { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null }[]; home_lineup: { player_slug: string | null; pos: string | null }[]; away_lineup: { player_slug: string | null; pos: string | null }[]; home_buffs: string[]; away_buffs: string[]; home_unlocks?: string[]; away_unlocks?: string[]; home_extra?: number; away_extra?: number; }
 export const adminMatchupPicks = (matchupId: string) => rpc<MatchupPicks>('admin_matchup_picks', { p_matchup_id: matchupId });

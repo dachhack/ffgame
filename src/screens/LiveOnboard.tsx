@@ -5,7 +5,7 @@ import { liveConfigured } from '../data/supabaseClient';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   getSession, onAuth, signOut, ensureAppUser,
-  previewLeague, redeemPreview, redeemInvite, myEnrollments, myLinkedSleeper, claimMyRosters,
+  previewLeague, redeemPreview, redeemInvite, joinLeague, myEnrollments, myLinkedSleeper, claimMyRosters,
   redeemCommish, isAdmin, commishOverview, friendlyError,
   myMatchup, matchupTeams,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague,
@@ -661,6 +661,19 @@ function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void
     } catch (x) { setErr(friendlyError(x)); setBusy(false); }
   };
 
+  // Join the pool without picking a team (ESPN/Yahoo/etc., or anyone) — the
+  // commissioner assigns you a roster from the joined list. No Sleeper handle.
+  const joinPool = async () => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await joinLeague(code);
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not join.')); setBusy(false); return; }
+      try { localStorage.removeItem('dripInviteCode'); } catch { /* ignore */ }
+      onJoined();
+    } catch (x) { setErr(friendlyError(x)); setBusy(false); }
+  };
+
   return (
     <>
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
@@ -691,6 +704,15 @@ function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void
               <button onClick={check} disabled={busy || !username.trim()} className="mono" style={{ ...btn, opacity: busy || !username.trim() ? 0.6 : 1 }}>{busy ? '…' : 'NEXT →'}</button>
             </div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>{linked ? 'Using the Sleeper account you linked before — edit if this league uses a different one.' : 'We match your Sleeper account to your team in this league.'}</div>
+            {/* Not on Sleeper (ESPN/Yahoo/etc.)? Join the pool and let the commish
+                assign your team — no handle needed. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0 10px' }}>
+              <span style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
+              <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', letterSpacing: '0.08em' }}>NOT ON SLEEPER?</span>
+              <span style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
+            </div>
+            <button onClick={joinPool} disabled={busy} className="mono" style={{ ...btn, width: '100%', padding: '10px 0', background: 'var(--bg)', color: 'var(--text)', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'JOIN & LET THE COMMISH ASSIGN ME'}</button>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5, textAlign: 'center' }}>Your commissioner maps you to your team from the joined list.</div>
           </div>
         )}
 
