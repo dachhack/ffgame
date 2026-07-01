@@ -10,6 +10,13 @@ Branded HTML for Supabase Auth emails. Paste each file's contents into
 | `reset-password.html` | Reset Password | Reset your Drip Fantasy password |
 | `invite.html` | Invite user | You're invited to Drip Fantasy |
 
+## Signature
+`signature.html` is a personal email signature (not a Supabase template). Paste it into
+**Gmail → Settings → General → Signature → "Create new"**, then fill in the `[Your Name]`,
+`[Title]` (default: Founder) and `[Phone]` tokens — or delete the phone `<span>` to drop it.
+It's inline-styled and Arial-safe because Gmail strips `<style>` blocks and web fonts, so the
+Space Grotesk wordmark falls back to Arial while keeping the ◆ mark and brand colors.
+
 ## Brand
 - Accent: `#34E5D9` (mint) · header: `#142A2E` (dark olive) · button text: `#161510`
 - Wordmark font: Space Grotesk (falls back to Arial in clients that block web fonts)

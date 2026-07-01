@@ -10,7 +10,7 @@ import { APP_VERSION, DATA_SOURCE } from './version';
 import { Rulebook } from '../screens/Rulebook';
 import { Faq } from '../screens/Faq';
 import { liveConfigured } from '../data/supabaseClient';
-import { getSession, onAuth, signOut } from '../data/liveApi';
+import { getSession, onAuth, signOut, isAdmin } from '../data/liveApi';
 
 /** True when the viewport is at/below `maxWidth` — drives the mobile layout. */
 export function useIsMobile(maxWidth = 760): boolean {
@@ -121,6 +121,7 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
   const [rules, setRules] = useState(false);
   const [faq, setFaq] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
+  const [admin, setAdmin] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   // Mirror the Supabase auth session so a signed-in player can sign out from any
   // page (this gear lives in every screen's header). No-op for the static build.
@@ -129,6 +130,13 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
     getSession().then(setSession).catch(() => {});
     return onAuth((s) => setSession(s));
   }, []);
+  // Resolve super-admin status from the session so the admin entry is reachable
+  // from the gear on ANY screen, not just the Live onboarding header. Server-side
+  // is_admin() + RLS are the real gate; this only decides whether to show the link.
+  useEffect(() => {
+    if (!session) { setAdmin(false); return; }
+    isAdmin().then(setAdmin).catch(() => setAdmin(false));
+  }, [session]);
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
@@ -215,13 +223,29 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
           >
             ❓ FAQ
           </button>
-          {superAdmin && (
+          {(superAdmin || admin) && (
             <button
-              onClick={() => { setOpen(false); superAdmin(); }}
+              onClick={() => {
+                setOpen(false);
+                // On the Live screen the parent passes an in-place opener (swaps the
+                // onboarding view); elsewhere, deep-link into the Live admin panel.
+                if (superAdmin) superAdmin();
+                else navigate({ name: 'live', view: 'admin' });
+              }}
               className="mono"
               style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, marginTop: -2, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
             >
               ⚡ Super admin →
+            </button>
+          )}
+          {liveConfigured && !session && (
+            <button
+              onClick={() => { setOpen(false); navigate({ name: 'live' }); }}
+              className="mono"
+              title="Sign in to the live H2H pilot"
+              style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, marginTop: -2, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
+            >
+              ◢ Sign in
             </button>
           )}
           {session && (
