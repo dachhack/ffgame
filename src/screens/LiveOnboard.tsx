@@ -42,7 +42,7 @@ function GoogleG() {
   );
 }
 
-type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin';
+type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin' | 'add' | 'join';
 
 export function LiveOnboard() {
   const { navigate, route } = useStore();
@@ -314,6 +314,20 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
 
   if (view === 'commish') return <CommishVerify initialCode={commishCode ?? undefined} onBack={() => { setView('home'); refresh(); }} />;
   if (view === 'commishdash') return <CommishDash onBack={() => setView('home')} />;
+  // Add another league from My Leagues: fork by role (join with an invite code, or
+  // claim with a commish code), then return home refreshed.
+  if (view === 'add') return (
+    <>
+      <RoleChooser onPlayer={() => setView('join')} onCommish={() => setView('commish')} />
+      <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
+    </>
+  );
+  if (view === 'join') return (
+    <>
+      <RedeemForm userId={session.user.id} onJoined={() => { setView('home'); refresh(); }} />
+      <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
+    </>
+  );
   if (view === 'picks') return <LivePicks userId={session.user.id} onBack={() => setView('home')} />;
   if (view === 'board') return <LiveBoard userId={session.user.id} onBack={() => setView('home')} />;
   if (view === 'admin') return <AdminPage onBack={() => setView('home')} />;
@@ -343,7 +357,7 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
       onPicks={() => setView('picks')}
       onBoard={() => setView('board')}
       onManage={() => setView('commishdash')}
-      onVerifyCommish={() => setView('commish')}
+      onAdd={() => setView('add')}
       isCommish={isCommish}
     />
   );
@@ -351,9 +365,9 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, cards, commishIds, userId, onPicks, onBoard, onManage, onVerifyCommish, isCommish }: {
+function LeagueHome({ enrollments, cards, commishIds, userId, onPicks, onBoard, onManage, onAdd, isCommish }: {
   enrollments: Enrollment[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
-  onPicks: () => void; onBoard: () => void; onManage: () => void; onVerifyCommish: () => void; isCommish: boolean;
+  onPicks: () => void; onBoard: () => void; onManage: () => void; onAdd: () => void; isCommish: boolean;
 }) {
   return (
     <>
@@ -366,8 +380,9 @@ function LeagueHome({ enrollments, cards, commishIds, userId, onPicks, onBoard, 
             onPicks={onPicks} onBoard={onBoard} onManage={onManage} />
         ))}
       </div>
-      <div style={{ textAlign: 'center', marginTop: 16 }}>
-        {!isCommish && <button onClick={onVerifyCommish} className="mono" style={linkBtn}>I also run a league — verify as commissioner →</button>}
+      <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <button onClick={onAdd} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>＋ add a league</button>
+        {isCommish && <button onClick={onManage} className="mono" style={linkBtn}>⚑ leagues you run →</button>}
       </div>
     </>
   );
