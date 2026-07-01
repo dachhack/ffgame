@@ -10,7 +10,7 @@ const card: React.CSSProperties = { background: 'var(--surface)', border: '1px s
 const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
 
-export function LiveBoard({ userId, onBack }: { userId: string; onBack: () => void }) {
+export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: string; leagueId?: string; rosterId?: number; onBack: () => void }) {
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
   const [youAreHome, setYouAreHome] = useState(true);
   const [scores, setScores] = useState<WindowScore[]>([]);
@@ -23,7 +23,7 @@ export function LiveBoard({ userId, onBack }: { userId: string; onBack: () => vo
   useEffect(() => {
     let unsub = () => {};
     (async () => {
-      const r = await myRoster(userId);
+      const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
       if (!r) { setState('none'); return; }
       const m = await myMatchup(r.leagueId, r.rosterId);
       if (!m) { setState('none'); return; }
@@ -41,7 +41,7 @@ export function LiveBoard({ userId, onBack }: { userId: string; onBack: () => vo
       unsub = subscribeMatchup(m.id, refresh); // live push on score/status change
     })();
     return () => unsub();
-  }, [userId]);
+  }, [userId, leagueId, rosterId]);
 
   const totals = useMemo(() => {
     const home = scores.reduce((t, s) => t + Number(s.home_score), 0);

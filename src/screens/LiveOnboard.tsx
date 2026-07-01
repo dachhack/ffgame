@@ -321,6 +321,8 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
   const [choice, setChoice] = useState<'none' | 'player'>('none');
   // Which league "manage" opened — so the dashboard focuses that one, not all.
   const [manageId, setManageId] = useState<string | null>(null);
+  // Which team's live board/picks a card opened (a manager can be in several).
+  const [target, setTarget] = useState<{ leagueId: string; rosterId: number } | null>(null);
   const commishIds = new Set(commishLeagues.map((l) => l.league_id));
   const isCommish = commishIds.size > 0;
 
@@ -364,8 +366,8 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
     </>
   );
-  if (view === 'picks') return <LivePicks userId={session.user.id} onBack={() => setView('home')} />;
-  if (view === 'board') return <LiveBoard userId={session.user.id} onBack={() => setView('home')} />;
+  if (view === 'picks') return <LivePicks userId={session.user.id} leagueId={target?.leagueId} rosterId={target?.rosterId} onBack={() => setView('home')} />;
+  if (view === 'board') return <LiveBoard userId={session.user.id} leagueId={target?.leagueId} rosterId={target?.rosterId} onBack={() => setView('home')} />;
   if (view === 'admin') return <AdminPage onBack={() => setView('home')} />;
   if (enrollments === null || !commishLoaded) return <Muted text="Loading your leagues…" />;
 
@@ -392,8 +394,8 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
       cards={cards}
       commishIds={commishIds}
       userId={session.user.id}
-      onPicks={() => setView('picks')}
-      onBoard={() => setView('board')}
+      onPicks={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('picks'); }}
+      onBoard={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('board'); }}
       onManage={(id) => { setManageId(id); setView('commishdash'); }}
       onAdd={() => setView('add')}
       isCommish={isCommish}
@@ -405,7 +407,7 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
 function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onPicks, onBoard, onManage, onAdd, isCommish }: {
   enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
-  onPicks: () => void; onBoard: () => void; onManage: (leagueId: string) => void; onAdd: () => void; isCommish: boolean;
+  onPicks: (leagueId: string, rosterId: number) => void; onBoard: (leagueId: string, rosterId: number) => void; onManage: (leagueId: string) => void; onAdd: () => void; isCommish: boolean;
 }) {
   const [filter, setFilter] = useState<'all' | 'commish'>('all');
   const enrolledIds = new Set(enrollments.map((e) => e.league_id));
@@ -436,10 +438,10 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12, alignItems: 'start' }}>
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} />)}
         {enrolledCommish.map((e) => (
-          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onPicks={onPicks} onBoard={onBoard} onManage={() => onManage(e.league_id)} />
+          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onPicks={() => onPicks(e.league_id, e.sleeper_roster_id)} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onManage={() => onManage(e.league_id)} />
         ))}
         {filter === 'all' && enrolledPlayer.map((e) => (
-          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onPicks={onPicks} onBoard={onBoard} onManage={() => onManage(e.league_id)} />
+          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onPicks={() => onPicks(e.league_id, e.sleeper_roster_id)} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onManage={() => onManage(e.league_id)} />
         ))}
       </div>
       <div style={{ textAlign: 'center', marginTop: 18 }}>
@@ -493,9 +495,9 @@ function LeagueCard({ e, card, commish, userId, onPicks, onBoard, onManage }: {
   const [building, setBuilding] = useState(false);
   const [buildNote, setBuildNote] = useState('');
   const [buildErr, setBuildErr] = useState<string | null>(null);
-  // The Drip Test League plays on the FULL app board: fetch the real source
-  // league, re-skin it, and enter the sim as this user's team.
-  const isDripTest = (e.league?.name ?? '').toLowerCase().includes('drip test');
+  // The optional 2025 demo: fetch a real source league, re-skin it, and enter the
+  // full sim board as this user's team (a "see it play" preview until the season
+  // starts). The default action is the real live board for this league.
   const playFullBoard = async () => {
     if (building) return;
     setBuilding(true); setBuildErr(null);
@@ -548,13 +550,16 @@ function LeagueCard({ e, card, commish, userId, onPicks, onBoard, onManage }: {
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{opp?.team_name ?? (m ? `Roster ${oppRoster}` : 'schedule pending')}</span>
       </div>
 
-      {/* actions */}
-      <button onClick={isDripTest ? playFullBoard : onPicks} disabled={building} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: building ? 'default' : 'pointer', marginTop: 12, opacity: building ? 0.7 : 1, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
-        {building ? (buildNote || 'LOADING BOARD…') : '◈ SET YOUR LINEUP →'}
+      {/* actions — default goes to the REAL board for this league's season (the
+          live 2026 slate once the week is synced). The 2025 full-board sim is an
+          optional "see it play" demo until the season starts. */}
+      <button onClick={onPicks} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 12, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
+        ◈ SET YOUR LINEUP →
       </button>
       {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{buildErr}</div>}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 18, marginTop: 10 }}>
-        {!isDripTest && <button onClick={onBoard} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board</button>}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>
+        <button onClick={onBoard} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board</button>
+        <button onClick={playFullBoard} disabled={building} className="mono" title="try the full board on last year's data" style={{ ...linkBtn, color: 'var(--dim)', opacity: building ? 0.6 : 1 }}>{building ? (buildNote || 'loading…') : '▷ demo (2025)'}</button>
         {commish && <button onClick={onManage} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚑ manage league</button>}
       </div>
     </div>
