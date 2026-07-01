@@ -19,6 +19,8 @@
 //                          to GMAIL_SENDER. (Gmail rewrites an unverified From.)
 //   GMAIL_FROM_NAME        optional display name (default: "Drip Fantasy")
 // SUPABASE_URL / SUPABASE_ANON_KEY are injected automatically.
+//
+// Deploy: CI redeploys this on push (see .github/workflows/deploy-functions.yml).
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const cors = {
