@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, type LeagueJoiner,
   setTeamController, setLineupPolicy,
   leagueKdst, setKdstMode, setTeamKdst,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
@@ -207,6 +207,12 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
     await loadMembers();
     return r;
   };
+  // Commissioner/admin claims a roster for themselves (a team to play).
+  const claimSelf = async (rosterId: number) => {
+    const r = await commishClaimRoster(l.league_id, rosterId);
+    await loadMembers();
+    return r;
+  };
   const [running, setRunning] = useState(false);
   const openCoin = (m: AdminMatchup) => { setCoinEdit(m.id); setCoinVals({ home: String(m.home_coin ?? ''), away: String(m.away_coin ?? '') }); };
   const saveCoin = async (id: string) => { await adminSetCoin(id, Number(coinVals.home || 0), Number(coinVals.away || 0)); setCoinEdit(null); await loadM(); };
@@ -363,7 +369,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
                   <span className="mono" style={{ fontSize: 8.5, color: m.enrolled ? 'var(--you)' : m.claim_email ? 'var(--dim)' : 'var(--faint)', border: `1px solid ${m.enrolled ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '2px 6px' }}>{m.enrolled ? 'JOINED' : m.claim_email ? 'PENDING' : '—'}</span>
                 </div>
               </div>
-              <AssignRoster initial={m.email ?? m.claim_email ?? ''} joiners={joiners} onAssign={(a) => assign(m.roster_id, a)} />
+              <AssignRoster initial={m.email ?? m.claim_email ?? ''} joiners={joiners} onAssign={(a) => assign(m.roster_id, a)} onClaimSelf={() => claimSelf(m.roster_id)} />
             </div>
           ))}
         </div>
@@ -705,7 +711,7 @@ function CodeRequestRow({ r, leagues, onToggle, reloadLeagues }: { r: CodeReques
 
 // Admin/commish-map a roster to a person by email. Enrolls now if they've signed
 // in, otherwise records a pending claim that auto-links on their next sign-in.
-function AssignRoster({ initial, joiners = [], onAssign }: { initial: string; joiners?: LeagueJoiner[]; onAssign: (a: { email?: string; appUserId?: string }) => Promise<{ ok: boolean; error?: string; status?: string }> }) {
+function AssignRoster({ initial, joiners = [], onAssign, onClaimSelf }: { initial: string; joiners?: LeagueJoiner[]; onAssign: (a: { email?: string; appUserId?: string }) => Promise<{ ok: boolean; error?: string; status?: string }>; onClaimSelf?: () => Promise<{ ok: boolean; error?: string; status?: string }> }) {
   const [email, setEmail] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -716,6 +722,13 @@ function AssignRoster({ initial, joiners = [], onAssign }: { initial: string; jo
     setBusy(true); setMsg(null);
     const r = await onAssign({ email: email.trim() });
     setBusy(false); result(r);
+  };
+  // Commissioner claims this team for themselves (to play, not just manage).
+  const claim = async () => {
+    if (busy || !onClaimSelf) return;
+    setBusy(true); setMsg(null);
+    const r = await onClaimSelf();
+    setBusy(false); setMsg(!r.ok ? (r.error ?? 'failed') : '✓ claimed — this team is yours');
   };
   // Pick a player who already tapped the invite link (join pool) — no typing.
   const pick = async (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -740,6 +753,7 @@ function AssignRoster({ initial, joiners = [], onAssign }: { initial: string; jo
         placeholder="assign to email…" type="email" spellCheck={false} autoCapitalize="none" autoCorrect="off"
         style={{ ...inp, fontSize: 10, padding: '5px 7px', flex: 1, minWidth: 0 }} />
       <button onClick={go} disabled={busy} className="mono" style={{ ...btn(false), opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'assign'}</button>
+      {onClaimSelf && <button onClick={claim} disabled={busy} className="mono" title="claim this team for yourself" style={{ ...btn(true), opacity: busy ? 0.6 : 1 }}>＋ me</button>}
       {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp, #e5484d)' }}>{msg}</span>}
     </div>
   );

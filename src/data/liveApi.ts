@@ -463,6 +463,10 @@ export const adminLeagueMembers = (leagueId: string) => rpc<AdminMember[]>('admi
 /** Super-admin: permanently delete a league and all its data (cascades). */
 export const adminDeleteLeague = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; name?: string }>('admin_delete_league', { p_league_id: leagueId });
+/** Commissioner/admin enrolls THEMSELVES on a roster — claim a team to play.
+ *  Call once per roster to claim multiple teams. */
+export const commishClaimRoster = (leagueId: string, rosterId: number) =>
+  rpc<{ ok: boolean; error?: string; status?: string }>('commish_claim_roster', { p_league_id: leagueId, p_roster_id: rosterId });
 /** Admin/commish-map a roster to a person — by a joined-user id (picked from the
  *  pool) or by email (immediate enroll if signed in, else a pending claim that
  *  links on their next sign-in). Empty email + no id clears the roster. */
