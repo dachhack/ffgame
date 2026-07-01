@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink,
+  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite,
   setTeamController, setLineupPolicy,
   leagueKdst, setKdstMode, setTeamKdst,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
@@ -559,22 +559,19 @@ function CodeRequestRow({ r, leagues, onToggle }: { r: CodeRequest; leagues: Adm
   const [copied, setCopied] = useState(false);
   // Adopt the first league's code once leagues load (initial render may precede the fetch).
   useEffect(() => { setCode((c) => c || leagues[0]?.invite_code || ''); }, [leagues]);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   const link = code ? shareLink(code) : '';
-  const mailto = () => {
-    const subject = "You're in — your Drip Fantasy invite";
-    const body = [
-      `You're in! Here's your invite to the Drip Fantasy live head-to-head pilot.`,
-      ``,
-      `Join here: ${link}`,
-      `Or sign in at https://www.dripfantasy.com and enter code ${code}.`,
-      ``,
-      `See you on the field,`,
-      `Drip Fantasy`,
-    ].join('\n');
-    return `mailto:${r.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const canSend = !!code && !!r.email;
+  const send = async () => {
+    if (!canSend || sending) return;
+    setSending(true); setErr(null);
+    const res = await sendInvite({ to: r.email!, code, link, leagueName: r.league_name ?? undefined });
+    setSending(false);
+    if (res.ok) { setSent(true); if (!r.handled) onToggle(r.id, true); }
+    else setErr(res.error ?? 'Send failed.');
   };
-  const canSend = !!code;
-  const anchorBtn: React.CSSProperties = { ...btn(false), textDecoration: 'none', display: 'inline-block', lineHeight: 1.4 };
   return (
     <div style={{ padding: '8px 0', borderTop: '1px solid var(--bd)', opacity: r.handled ? 0.5 : 1 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
@@ -597,10 +594,13 @@ function CodeRequestRow({ r, leagues, onToggle }: { r: CodeRequest; leagues: Adm
         ) : (
           <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="invite code" className="mono" style={{ ...inp, fontSize: 10, padding: '5px 6px', width: 130 }} />
         )}
-        {r.email && canSend
-          ? <a href={mailto()} style={anchorBtn} title={`Email the code to ${r.email}`}>✉ email code</a>
-          : <span style={{ ...anchorBtn, opacity: 0.4, cursor: 'default' }} title={!r.email ? 'No email on this request' : 'Pick or enter a code first'}>✉ email code</span>}
-        <button onClick={() => { if (link) { copy(link); setCopied(true); setTimeout(() => setCopied(false), 1200); } }} disabled={!canSend} className="mono" style={{ ...btn(false), opacity: canSend ? 1 : 0.4, cursor: canSend ? 'pointer' : 'default' }} title="Copy the invite share link">{copied ? '✓ link copied' : '⛓ copy link'}</button>
+        <button onClick={send} disabled={!canSend || sending} className="mono"
+          style={{ ...btn(sent), opacity: canSend ? 1 : 0.4, cursor: canSend && !sending ? 'pointer' : 'default' }}
+          title={!r.email ? 'No email on this request' : !code ? 'Pick or enter a code first' : `Email the code to ${r.email}`}>
+          {sending ? 'sending…' : sent ? '✓ sent' : '✉ send code'}
+        </button>
+        <button onClick={() => { if (link) { copy(link); setCopied(true); setTimeout(() => setCopied(false), 1200); } }} disabled={!code} className="mono" style={{ ...btn(false), opacity: code ? 1 : 0.4, cursor: code ? 'pointer' : 'default' }} title="Copy the invite share link">{copied ? '✓ link copied' : '⛓ copy link'}</button>
+        {err && <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--opp, #e5484d)' }}>{err}</span>}
       </div>
     </div>
   );
