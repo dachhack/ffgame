@@ -5,7 +5,7 @@ import { liveConfigured } from '../data/supabaseClient';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   getSession, onAuth, signOut, ensureAppUser,
-  previewLeague, redeemPreview, redeemInvite, myEnrollments, myLinkedSleeper,
+  previewLeague, redeemPreview, redeemInvite, myEnrollments, myLinkedSleeper, claimMyRosters,
   redeemCommish, isAdmin, commishOverview, friendlyError,
   myMatchup, matchupTeams,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo,
@@ -275,8 +275,13 @@ function Enroll({ session, view, setView }: { session: Session; view: OnboardVie
 
   const refresh = async () => {
     let rows: Enrollment[] = [];
-    try { await ensureAppUser(session); rows = await myEnrollments(session.user.id); setEnrollments(rows); }
-    catch { setEnrollments([]); }
+    try {
+      await ensureAppUser(session);
+      // Pick up any rosters an admin/commish pre-assigned to my email (non-Sleeper
+      // leagues are enrolled this way, since there's no username to self-claim by).
+      await claimMyRosters().catch(() => {});
+      rows = await myEnrollments(session.user.id); setEnrollments(rows);
+    } catch { setEnrollments([]); }
     commishOverview().then((l) => setCommishIds(new Set((l ?? []).map((x) => x.league_id)))).catch(() => setCommishIds(new Set()));
     // Each league's next matchup + opponent, for the home cards.
     for (const e of rows) {

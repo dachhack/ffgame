@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite,
+  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster,
   setTeamController, setLineupPolicy,
   leagueKdst, setKdstMode, setTeamKdst,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
@@ -195,6 +195,11 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
     const next: Controller = cur === 'ai' ? 'human' : 'ai';
     try { await setTeamController(l.league_id, rosterId, next); await loadMembers(); } catch { /* noop */ }
   };
+  const assign = async (rosterId: number, email: string) => {
+    const r = await adminAssignRoster(l.league_id, rosterId, email);
+    await loadMembers();
+    return r;
+  };
   const [running, setRunning] = useState(false);
   const openCoin = (m: AdminMatchup) => { setCoinEdit(m.id); setCoinVals({ home: String(m.home_coin ?? ''), away: String(m.away_coin ?? '') }); };
   const saveCoin = async (id: string) => { await adminSetCoin(id, Number(coinVals.home || 0), Number(coinVals.away || 0)); setCoinEdit(null); await loadM(); };
@@ -328,20 +333,25 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
             </div>
           ); })()}
           {members.map((m) => (
-            <div key={m.roster_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                {m.avatar && <img src={m.avatar} alt="" width={24} height={24} style={{ borderRadius: 5, flexShrink: 0 }} />}
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{m.team}</div>
-                  <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{m.enrolled ? (m.email ?? m.sleeper ?? 'enrolled') : 'not joined'}</div>
+            <div key={m.roster_id} style={{ padding: '6px 0', borderTop: '1px solid var(--bd)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  {m.avatar && <img src={m.avatar} alt="" width={24} height={24} style={{ borderRadius: 5, flexShrink: 0 }} />}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{m.team}</div>
+                    <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>
+                      {m.enrolled ? (m.email ?? m.sleeper ?? 'enrolled') : m.claim_email ? `pending · ${m.claim_email}` : 'not assigned'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {m.email && <SendLink email={m.email} />}
+                  <button onClick={() => toggleMemberAi(m.roster_id, m.controller)} className="mono" title={m.controller === 'ai' ? 'hand back to manager' : 'set team to AI auto-pilot'}
+                    style={{ fontSize: 8.5, fontWeight: 700, color: m.controller === 'ai' ? 'var(--on-accent)' : 'var(--dim)', background: m.controller === 'ai' ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}>🤖 {m.controller === 'ai' ? 'AI' : 'off'}</button>
+                  <span className="mono" style={{ fontSize: 8.5, color: m.enrolled ? 'var(--you)' : m.claim_email ? 'var(--dim)' : 'var(--faint)', border: `1px solid ${m.enrolled ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '2px 6px' }}>{m.enrolled ? 'JOINED' : m.claim_email ? 'PENDING' : '—'}</span>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                {m.email && <SendLink email={m.email} />}
-                <button onClick={() => toggleMemberAi(m.roster_id, m.controller)} className="mono" title={m.controller === 'ai' ? 'hand back to manager' : 'set team to AI auto-pilot'}
-                  style={{ fontSize: 8.5, fontWeight: 700, color: m.controller === 'ai' ? 'var(--on-accent)' : 'var(--dim)', background: m.controller === 'ai' ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}>🤖 {m.controller === 'ai' ? 'AI' : 'off'}</button>
-                <span className="mono" style={{ fontSize: 8.5, color: m.enrolled ? 'var(--you)' : 'var(--faint)', border: `1px solid ${m.enrolled ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '2px 6px' }}>{m.enrolled ? 'JOINED' : '—'}</span>
-              </div>
+              <AssignRoster initial={m.email ?? m.claim_email ?? ''} onAssign={(email) => assign(m.roster_id, email)} />
             </div>
           ))}
         </div>
@@ -650,6 +660,30 @@ function CodeRequestRow({ r, leagues, onToggle }: { r: CodeRequest; leagues: Adm
         <button onClick={() => { if (link) { copy(link); setCopied(true); setTimeout(() => setCopied(false), 1200); } }} disabled={!code} className="mono" style={{ ...btn(false), opacity: code ? 1 : 0.4, cursor: code ? 'pointer' : 'default' }} title="Copy the invite link">{copied ? '✓ link copied' : '⛓ copy link'}</button>
         {err && <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--opp, #e5484d)' }}>{err}</span>}
       </div>
+    </div>
+  );
+}
+
+// Admin/commish-map a roster to a person by email. Enrolls now if they've signed
+// in, otherwise records a pending claim that auto-links on their next sign-in.
+function AssignRoster({ initial, onAssign }: { initial: string; onAssign: (email: string) => Promise<{ ok: boolean; error?: string; status?: string }> }) {
+  const [email, setEmail] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const go = async () => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    const r = await onAssign(email.trim());
+    setBusy(false);
+    setMsg(!r.ok ? (r.error ?? 'failed') : r.status === 'pending' ? '✓ pending — links on sign-in' : r.status === 'cleared' ? '✓ cleared' : '✓ enrolled');
+  };
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+      <input value={email} onChange={(e) => { setEmail(e.target.value); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
+        placeholder="assign to email…" type="email" spellCheck={false} autoCapitalize="none" autoCorrect="off"
+        style={{ ...inp, fontSize: 10, padding: '5px 7px', flex: 1, minWidth: 0 }} />
+      <button onClick={go} disabled={busy} className="mono" style={{ ...btn(false), opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'assign'}</button>
+      {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp, #e5484d)' }}>{msg}</span>}
     </div>
   );
 }

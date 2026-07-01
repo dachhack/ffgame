@@ -321,7 +321,7 @@ export type Controller = 'human' | 'ai';
 export type LineupPolicy = 'best_lineup' | 'ai' | 'empty';
 export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; provider?: string; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; }
 export interface AdminUser { id: string; email: string | null; sleeper_username: string | null; sleeper_user_id: string | null; enrolled: number; created_at: string; }
-export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; }
+export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; claim_email?: string | null; }
 export interface AdminAdmin { email: string; note: string | null; }
 export interface MemberRow { roster_id: number; owner_id: string | null; team_name: string; }
 export interface MatchupRow { sleeper_matchup_id: number | null; home_roster_id: number; away_roster_id: number; }
@@ -449,6 +449,12 @@ export async function sendInvite(input: { to: string; code: string; link: string
   return data as { ok: boolean; error?: string };
 }
 export const adminLeagueMembers = (leagueId: string) => rpc<AdminMember[]>('admin_league_members', { p_league_id: leagueId });
+/** Admin/commish-map a roster to a person by email (immediate enroll if they've
+ *  signed in, else a pending claim that auto-links on their next sign-in). Empty email clears it. */
+export const adminAssignRoster = (leagueId: string, rosterId: number, email: string) =>
+  rpc<{ ok: boolean; error?: string; status?: 'enrolled' | 'pending' | 'cleared' }>('admin_assign_roster', { p_league_id: leagueId, p_roster_id: rosterId, p_email: email });
+/** Claim any rosters pre-assigned to my email (called after sign-in). */
+export const claimMyRosters = () => rpc<{ ok: boolean; claimed?: number }>('claim_my_rosters');
 export const commishOverview = () => rpc<AdminLeague[]>('commish_overview');
 export interface MatchupPicks { home_roster_id: number; away_roster_id: number; home_app_user: string | null; away_app_user: string | null; picks: { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null }[]; home_lineup: { player_slug: string | null; pos: string | null }[]; away_lineup: { player_slug: string | null; pos: string | null }[]; home_buffs: string[]; away_buffs: string[]; home_unlocks?: string[]; away_unlocks?: string[]; home_extra?: number; away_extra?: number; }
 export const adminMatchupPicks = (matchupId: string) => rpc<MatchupPicks>('admin_matchup_picks', { p_matchup_id: matchupId });
