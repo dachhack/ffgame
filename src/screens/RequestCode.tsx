@@ -24,21 +24,35 @@ export function RequestCodeFab() {
 // The pilot supports leagues from any of these platforms.
 const PLATFORMS = ['Sleeper', 'ESPN', 'Yahoo', 'Fleaflicker', 'MFL', 'Other'];
 
+// Per-platform help for the "league ID or link" field — where to find it, and an
+// example URL, so a requester can hand us exactly what we need to import.
+const REF_GUIDE: Record<string, { placeholder: string; hint: string }> = {
+  Sleeper: { placeholder: 'sleeper.com/leagues/1234567890…', hint: 'Sleeper app/site → your league → the number in its URL.' },
+  ESPN: { placeholder: 'fantasy.espn.com/football/league?leagueId=…', hint: 'Open your league on the web and copy the URL (it has leagueId=).' },
+  Yahoo: { placeholder: 'football.fantasysports.yahoo.com/f1/123456', hint: 'Open your league on the web and copy the URL.' },
+  Fleaflicker: { placeholder: 'fleaflicker.com/nfl/leagues/123456', hint: 'Open your league and copy the URL.' },
+  MFL: { placeholder: 'www55.myfantasyleague.com/2026/home/12345', hint: 'Your league home URL — it has the league ID.' },
+  Other: { placeholder: 'a link to your league', hint: 'Paste any link that identifies your league.' },
+  '': { placeholder: 'your league URL or ID', hint: 'Pick your platform above and we’ll show where to find this.' },
+};
+
 export function RequestCodeModal({ initialPlatform, onClose }: { initialPlatform: string; onClose: () => void }) {
   const [email, setEmail] = useState('');
   const [platform, setPlatform] = useState(initialPlatform);
   const [league, setLeague] = useState('');
+  const [leagueRef, setLeagueRef] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const guide = REF_GUIDE[platform] ?? REF_GUIDE[''];
 
   const submit = async () => {
     if (busy) return;
     if (!email.trim()) { setErr('Add your email so we can send your code.'); return; }
     setBusy(true); setErr(null);
-    // `sleeper` on the API is the generic contact/handle field; we send the platform.
-    const r = await requestCode({ email, sleeper: platform, league, note });
+    // `sleeper` on the API is the generic contact field; we send the platform there.
+    const r = await requestCode({ email, sleeper: platform, league, leagueRef, note });
     if (r.ok) setDone(true);
     else { setErr(r.error ?? 'Could not send — try again.'); setBusy(false); }
   };
@@ -69,8 +83,13 @@ export function RequestCodeModal({ initialPlatform, onClose }: { initialPlatform
             <Field label="LEAGUE NAME (OPTIONAL)">
               <input value={league} onChange={(e) => setLeague(e.target.value)} placeholder="e.g. Sunday Scaries Dynasty" style={input} />
             </Field>
+            <Field label="LEAGUE ID OR LINK">
+              <input value={leagueRef} onChange={(e) => { setLeagueRef(e.target.value); setErr(null); }} placeholder={guide.placeholder}
+                spellCheck={false} autoCapitalize="none" autoCorrect="off" style={input} />
+              <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 5, lineHeight: 1.4 }}>{guide.hint} It’s what lets us pull your league in.</div>
+            </Field>
             <Field label="ANYTHING ELSE (OPTIONAL)">
-              <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="league link or ID, size, when you play…" rows={2} style={{ ...input, resize: 'vertical' }} />
+              <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="league size, when you play, questions…" rows={2} style={{ ...input, resize: 'vertical' }} />
             </Field>
             {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', marginTop: 4, lineHeight: 1.4 }}>{err}</div>}
             <button onClick={submit} disabled={busy} className="mono" style={{ ...primaryBtn, marginTop: 14, opacity: busy ? 0.6 : 1 }}>{busy ? 'sending…' : 'request a code →'}</button>
