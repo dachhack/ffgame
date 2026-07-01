@@ -6,7 +6,7 @@ import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   getSession, onAuth, signOut, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, myEnrollments, myLinkedSleeper,
-  startCommishVerify, confirmCommishVerify, isAdmin, commishOverview, friendlyError,
+  redeemCommish, isAdmin, commishOverview, friendlyError,
   myMatchup, matchupTeams,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo,
 } from '../data/liveApi';
@@ -50,9 +50,14 @@ export function LiveOnboard() {
   const [ready, setReady] = useState(false);
   const [recovery, setRecovery] = useState(false);
   const [admin, setAdmin] = useState(false);
-  // Honor a deep link into the admin panel (gear menu → "Super admin" from any
-  // screen navigates here with view:'admin'); default to the onboarding home.
-  const [view, setView] = useState<OnboardView>(route.name === 'live' && route.view === 'admin' ? 'admin' : 'home');
+  // Honor deep links: the gear menu's "Super admin" (view:'admin'), and a
+  // commissioner invite link (?live=1&commish=CODE → dripCommishCode) which opens
+  // the commissioner claim screen. Otherwise land on the onboarding home.
+  const [view, setView] = useState<OnboardView>(() => {
+    if (route.name === 'live' && route.view === 'admin') return 'admin';
+    try { if (localStorage.getItem('dripCommishCode')) return 'commish'; } catch { /* ignore */ }
+    return 'home';
+  });
 
   useEffect(() => {
     if (!liveConfigured) { setReady(true); return; }
@@ -442,10 +447,8 @@ function RoleChooser({ onPlayer, onCommish }: { onPlayer: () => void; onCommish:
   );
 }
 
-function CommishVerify({ onBack }: { onBack: () => void }) {
-  const [code, setCode] = useState('');
-  const [username, setUsername] = useState('');
-  const [tag, setTag] = useState<string | null>(null);
+function CommishVerify({ onBack, initialCode }: { onBack: () => void; initialCode?: string }) {
+  const [code, setCode] = useState(initialCode ?? '');
   const [league, setLeague] = useState('');
   const [invite, setInvite] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -453,23 +456,27 @@ function CommishVerify({ onBack }: { onBack: () => void }) {
   const [copied, setCopied] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
 
-  const start = async () => {
-    if (!code.trim() || !username.trim() || busy) return;
+  // Admin-assigned model: the commish code the admin sent you IS the authorization.
+  // Redeem it → become this league's commissioner (any platform, no team-tagging).
+  const redeem = async (c0?: string) => {
+    const c = (c0 ?? code).trim();
+    if (!c || busy) return;
     setBusy(true); setErr(null);
-    const r = await startCommishVerify(code, username);
+    const r = await redeemCommish(c);
     setBusy(false);
-    if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not start verification.')); return; }
-    setTag(r.tag ?? null); setLeague(r.league ?? '');
+    if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not verify.')); return; }
+    setInvite(r.invite_code ?? null); setLeague(r.league ?? '');
+    try { localStorage.removeItem('dripCommishCode'); } catch { /* ignore */ }
   };
 
-  const confirm = async () => {
-    if (busy) return;
-    setBusy(true); setErr(null);
-    const r = await confirmCommishVerify(code);
-    setBusy(false);
-    if (!r.ok) { setErr(friendlyError(r.error ?? 'Not verified yet.')); return; }
-    setInvite(r.invite_code ?? null); setLeague(r.league ?? league);
-  };
+  // A commissioner invite link pre-fills the code (survives the magic-link bounce)
+  // and redeems on its own.
+  useEffect(() => {
+    let c: string | null = initialCode ?? null;
+    if (!c) { try { c = localStorage.getItem('dripCommishCode'); } catch { /* ignore */ } }
+    if (c) { setCode(c); redeem(c); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (invite) {
     // One way to invite the league: the join link (no code to type). The raw code
@@ -484,7 +491,6 @@ function CommishVerify({ onBack }: { onBack: () => void }) {
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>
           Prefer a code? Share <span onClick={() => { navigator.clipboard?.writeText(invite); setCodeCopied(true); }} title="click to copy" style={{ color: 'var(--text)', fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer' }}>{codeCopied ? 'copied ✓' : invite}</span> — players enter it on the join screen.
         </div>
-        <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>You can remove the tag from your Sleeper team name now.</div>
         <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={onBack} className="mono" style={linkBtn}>← done</button></div>
       </div>
     );
@@ -494,35 +500,17 @@ function CommishVerify({ onBack }: { onBack: () => void }) {
     <>
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
         <div className="grotesk" style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>Verify as commissioner</div>
-        <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Enter the commissioner code you were given, and prove you run the league by tagging your Sleeper team name.</div>
+        <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Enter the commissioner code you were sent. That claims the league — then you invite your league mates.</div>
       </div>
       <div style={card}>
-        {!tag ? (
-          <>
-            <label className="mono" style={label}>COMMISSIONER CODE</label>
-            <input value={code} autoFocus autoCapitalize="characters" autoCorrect="off" spellCheck={false}
-              onChange={(e) => { setCode(e.target.value.toUpperCase()); setErr(null); }}
-              placeholder="e.g. 9F3A1C2D" style={{ ...input, letterSpacing: '0.12em', marginTop: 7, width: '100%', boxSizing: 'border-box' }} />
-            <label className="mono" style={{ ...label, display: 'block', marginTop: 12 }}>YOUR SLEEPER USERNAME</label>
-            <div style={{ display: 'flex', gap: 8, marginTop: 7 }}>
-              <input value={username} autoCapitalize="none" autoCorrect="off" spellCheck={false}
-                onChange={(e) => { setUsername(e.target.value); setErr(null); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') start(); }}
-                placeholder="your Sleeper handle" style={input} />
-              <button onClick={start} disabled={busy || !code.trim() || !username.trim()} className="mono" style={{ ...btn, opacity: busy || !code.trim() || !username.trim() ? 0.6 : 1 }}>{busy ? '…' : 'START'}</button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', lineHeight: 1.6 }}>
-              {league && <>Verifying <span style={{ color: 'var(--text)', fontWeight: 700 }}>{league}</span>.<br /></>}
-              In Sleeper, add this tag to your team name, then tap Check:
-            </div>
-            <div className="mono" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--you)', borderRadius: 6, padding: '12px 14px', textAlign: 'center', margin: '12px 0' }}>{tag}</div>
-            <button onClick={confirm} disabled={busy} className="mono" style={{ ...btn, width: '100%', padding: '11px 0', opacity: busy ? 0.6 : 1 }}>{busy ? 'CHECKING…' : 'CHECK ✓'}</button>
-            <div style={{ textAlign: 'center', marginTop: 10 }}><button onClick={() => { setTag(null); setErr(null); }} className="mono" style={linkBtn}>start over</button></div>
-          </>
-        )}
+        <label className="mono" style={label}>COMMISSIONER CODE</label>
+        <div style={{ display: 'flex', gap: 8, marginTop: 7 }}>
+          <input value={code} autoFocus autoCapitalize="characters" autoCorrect="off" spellCheck={false}
+            onChange={(e) => { setCode(e.target.value.toUpperCase()); setErr(null); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') redeem(); }}
+            placeholder="e.g. 9F3A1C2D" style={{ ...input, letterSpacing: '0.12em' }} />
+          <button onClick={() => redeem()} disabled={busy || !code.trim()} className="mono" style={{ ...btn, opacity: busy || !code.trim() ? 0.6 : 1 }}>{busy ? '…' : 'VERIFY'}</button>
+        </div>
         {err && <div className="mono" style={errStyle}>{err}</div>}
       </div>
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>

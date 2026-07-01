@@ -200,6 +200,14 @@ export async function confirmCommishVerify(commishCode: string): Promise<Confirm
   return data as ConfirmCommish;
 }
 
+/** Admin-assigned commissioner: redeem the commish code the admin sent you → become
+ *  this league's commissioner (platform-agnostic, no Sleeper team-tagging). */
+export async function redeemCommish(commishCode: string): Promise<ConfirmCommish & { league_id?: string }> {
+  const { data, error } = await client().rpc('redeem_commish', { p_code: commishCode.trim() });
+  if (error) return { ok: false, error: error.message };
+  return data as ConfirmCommish & { league_id?: string };
+}
+
 // ── Sealed picks (live-H2H lineup) ──────────────────────────────────────────────
 export interface LiveMatchup { id: string; league_id: string; week: number; status: string; lock_at: string | null; home_roster_id: number; away_roster_id: number; home_coin: number | null; away_coin: number | null; }
 export interface PoolPlayer { slug: string; full: string; pos: string; }
@@ -425,7 +433,7 @@ export async function dispatchSim(input: { mode?: 'live' | 'reset' | 'check' | '
 }
 /** Email an invite (share link + code) to a code-request, via the send-invite edge
  *  function (admin-only; the function re-checks is_admin and sends through Gmail). */
-export async function sendInvite(input: { to: string; code: string; link: string; leagueName?: string }): Promise<{ ok: boolean; error?: string }> {
+export async function sendInvite(input: { to: string; code: string; link: string; leagueName?: string; kind?: 'player' | 'commish' }): Promise<{ ok: boolean; error?: string }> {
   const { data, error } = await client().functions.invoke('send-invite', { body: input });
   if (error) {
     // On a non-2xx the FunctionsHttpError only says "non-2xx status code"; the real

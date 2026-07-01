@@ -76,7 +76,9 @@ on `GMAIL_SENDER`, or Gmail silently rewrites the From back to the real mailbox.
 
 ```jsonc
 // POST body (sent by src/data/liveApi.ts → sendInvite)
-{ "to": "player@example.com", "code": "AB12CD", "link": "https://www.dripfantasy.com/?live=1&code=AB12CD", "leagueName": "Sunday Scaries" }
+// kind "commish" (default in the admin UI) sends the commissioner claim email +
+// ?commish= link; "player" sends the join invite + ?code= link.
+{ "to": "runner@example.com", "code": "AB12CD", "link": "https://www.dripfantasy.com/?live=1&commish=AB12CD", "leagueName": "Sunday Scaries", "kind": "commish" }
 // → { "ok": true, "id": "<gmail message id>" }   |   { "ok": false, "error": "…" }
 ```
 

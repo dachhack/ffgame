@@ -44,6 +44,10 @@ export function App() {
     if (p.get('live') === '1') {
       const code = p.get('code');
       if (code) { try { localStorage.setItem('dripInviteCode', code.toUpperCase()); } catch { /* ignore */ } }
+      // A commissioner invite link (?commish=CODE) → stash the commish code so it
+      // survives the magic-link bounce; LiveOnboard opens the claim screen.
+      const commish = p.get('commish');
+      if (commish) { try { localStorage.setItem('dripCommishCode', commish.toUpperCase()); } catch { /* ignore */ } }
       navigate({ name: 'live' });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -22,6 +22,8 @@ import { POWERUPS } from '../data/powerups';
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
 
 const shareLink = (code: string) => `${window.location.origin}${window.location.pathname}?live=1&code=${code}`;
+// Commissioner claim link — opens the "verify as commissioner" screen prefilled.
+const commishLink = (code: string) => `${window.location.origin}${window.location.pathname}?live=1&commish=${code}`;
 const copy = (v: string) => navigator.clipboard?.writeText(v);
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 14, marginBottom: 12 };
@@ -555,23 +557,36 @@ function CodeRequests() {
 }
 
 function CodeRequestRow({ r, leagues, onToggle }: { r: CodeRequest; leagues: AdminLeague[]; onToggle: (id: string, handled: boolean) => void }) {
-  const [code, setCode] = useState(leagues[0]?.invite_code ?? '');
+  const [leagueId, setLeagueId] = useState(leagues[0]?.league_id ?? '');
+  const [manual, setManual] = useState('');
+  // Default to commissioner: requesters are usually league runners, who need the
+  // commish code + claim flow, then invite their own league mates.
+  const [kind, setKind] = useState<'commish' | 'player'>('commish');
   const [copied, setCopied] = useState(false);
-  // Adopt the first league's code once leagues load (initial render may precede the fetch).
-  useEffect(() => { setCode((c) => c || leagues[0]?.invite_code || ''); }, [leagues]);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const link = code ? shareLink(code) : '';
+  // Adopt the first league once leagues load (initial render may precede the fetch).
+  useEffect(() => { setLeagueId((id) => id || leagues[0]?.league_id || ''); }, [leagues]);
+
+  const league = leagues.find((l) => l.league_id === leagueId);
+  const code = league ? (kind === 'commish' ? league.commish_code : league.invite_code) : manual.trim();
+  const link = code ? (kind === 'commish' ? commishLink(code) : shareLink(code)) : '';
   const canSend = !!code && !!r.email;
+  const reset = () => { setSent(false); setErr(null); };
+
   const send = async () => {
     if (!canSend || sending) return;
     setSending(true); setErr(null);
-    const res = await sendInvite({ to: r.email!, code, link, leagueName: r.league_name ?? undefined });
+    const res = await sendInvite({ to: r.email!, code, link, leagueName: r.league_name ?? undefined, kind });
     setSending(false);
     if (res.ok) { setSent(true); if (!r.handled) onToggle(r.id, true); }
     else setErr(res.error ?? 'Send failed.');
   };
+  const kindBtn = (k: 'commish' | 'player', lbl: string) => (
+    <button onClick={() => { setKind(k); reset(); }} className="mono" style={{ ...btn(kind === k), fontSize: 9 }}>{lbl}</button>
+  );
+
   return (
     <div style={{ padding: '8px 0', borderTop: '1px solid var(--bd)', opacity: r.handled ? 0.5 : 1 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
@@ -587,19 +602,23 @@ function CodeRequestRow({ r, leagues, onToggle }: { r: CodeRequest; leagues: Adm
         <button onClick={() => onToggle(r.id, !r.handled)} className="mono" style={btn(r.handled)}>{r.handled ? 'handled' : 'mark done'}</button>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 8 }}>
+        <div style={{ display: 'flex', gap: 4 }} title="Commissioner invite (claims the league) or player join invite">
+          {kindBtn('commish', 'Commish')}
+          {kindBtn('player', 'Player')}
+        </div>
         {leagues.length > 0 ? (
-          <select value={code} onChange={(e) => setCode(e.target.value)} className="mono" style={{ ...inp, fontSize: 10, padding: '5px 6px', maxWidth: 200 }} title="Invite code to send">
-            {leagues.map((l) => <option key={l.league_id} value={l.invite_code}>{l.name} · {l.invite_code}</option>)}
+          <select value={leagueId} onChange={(e) => { setLeagueId(e.target.value); reset(); }} className="mono" style={{ ...inp, fontSize: 10, padding: '5px 6px', maxWidth: 220 }} title={`${kind === 'commish' ? 'Commissioner' : 'Invite'} code to send`}>
+            {leagues.map((l) => <option key={l.league_id} value={l.league_id}>{l.name} · {kind === 'commish' ? l.commish_code : l.invite_code}</option>)}
           </select>
         ) : (
-          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="invite code" className="mono" style={{ ...inp, fontSize: 10, padding: '5px 6px', width: 130 }} />
+          <input value={manual} onChange={(e) => { setManual(e.target.value); reset(); }} placeholder={kind === 'commish' ? 'commish code' : 'invite code'} className="mono" style={{ ...inp, fontSize: 10, padding: '5px 6px', width: 130 }} />
         )}
         <button onClick={send} disabled={!canSend || sending} className="mono"
           style={{ ...btn(sent), opacity: canSend ? 1 : 0.4, cursor: canSend && !sending ? 'pointer' : 'default' }}
-          title={!r.email ? 'No email on this request' : !code ? 'Pick or enter a code first' : `Email the code to ${r.email}`}>
-          {sending ? 'sending…' : sent ? '✓ sent' : '✉ send code'}
+          title={!r.email ? 'No email on this request' : !code ? 'Pick or enter a code first' : `Email the ${kind} invite to ${r.email}`}>
+          {sending ? 'sending…' : sent ? '✓ sent' : `✉ send ${kind} invite`}
         </button>
-        <button onClick={() => { if (link) { copy(link); setCopied(true); setTimeout(() => setCopied(false), 1200); } }} disabled={!code} className="mono" style={{ ...btn(false), opacity: code ? 1 : 0.4, cursor: code ? 'pointer' : 'default' }} title="Copy the invite share link">{copied ? '✓ link copied' : '⛓ copy link'}</button>
+        <button onClick={() => { if (link) { copy(link); setCopied(true); setTimeout(() => setCopied(false), 1200); } }} disabled={!code} className="mono" style={{ ...btn(false), opacity: code ? 1 : 0.4, cursor: code ? 'pointer' : 'default' }} title="Copy the invite link">{copied ? '✓ link copied' : '⛓ copy link'}</button>
         {err && <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--opp, #e5484d)' }}>{err}</span>}
       </div>
     </div>
