@@ -224,6 +224,16 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
               ⚡ Super admin →
             </button>
           )}
+          {liveConfigured && !session && (
+            <button
+              onClick={() => { setOpen(false); navigate({ name: 'live' }); }}
+              className="mono"
+              title="Sign in to the live H2H pilot"
+              style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, marginTop: -2, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
+            >
+              ◢ Sign in
+            </button>
+          )}
           {session && (
             <button
               onClick={() => {
