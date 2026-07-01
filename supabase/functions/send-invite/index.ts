@@ -33,6 +33,16 @@ function b64url(bytes: Uint8Array): string {
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 const b64urlStr = (s: string) => b64url(new TextEncoder().encode(s));
+// Standard base64 of a UTF-8 string (no url-safe swap) — for the raw MIME body.
+function b64(bytes: Uint8Array): string {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+// RFC 2047 encoded-word so non-ASCII in a header (e.g. an em dash in the subject)
+// survives instead of turning into mojibake.
+const encodeHeader = (s: string) =>
+  /^[\x00-\x7F]*$/.test(s) ? s : `=?UTF-8?B?${b64(new TextEncoder().encode(s))}?=`;
 
 // ── Google service-account access token (JWT bearer grant, RS256) ─────────────
 function pemToPkcs8(pem: string): ArrayBuffer {
@@ -143,9 +153,9 @@ Deno.serve(async (req) => {
 
     const subject = "You're in — your Drip Fantasy invite";
     const mime = [
-      `From: ${fromName} <${sender}>`,
+      `From: ${encodeHeader(fromName)} <${sender}>`,
       `To: ${to}`,
-      `Subject: ${subject}`,
+      `Subject: ${encodeHeader(subject)}`,
       'MIME-Version: 1.0',
       'Content-Type: text/html; charset="UTF-8"',
       'Content-Transfer-Encoding: 7bit',
