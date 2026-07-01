@@ -46,7 +46,8 @@ supabase functions deploy send-invite
 
 supabase secrets set \
   GOOGLE_SA_EMAIL="drip-mailer@<project>.iam.gserviceaccount.com" \
-  GMAIL_SENDER="hi@dripfantasy.com" \
+  GMAIL_SENDER="you@dripfantasy.com" \
+  GMAIL_FROM="hi@dripfantasy.com" \
   GMAIL_FROM_NAME="Drip Fantasy"
 
 # the private key — paste the value of "private_key" from the JSON, keeping the
@@ -54,8 +55,22 @@ supabase secrets set \
 supabase secrets set GOOGLE_SA_PRIVATE_KEY="$(jq -r .private_key /path/to/key.json)"
 ```
 
-`GMAIL_SENDER` must be a real mailbox in the Workspace domain. `SUPABASE_URL` /
-`SUPABASE_ANON_KEY` are injected automatically.
+`GMAIL_SENDER` must be a **real Gmail-enabled mailbox** in the Workspace domain —
+the service account can't impersonate an alias or a Squarespace forward.
+`SUPABASE_URL` / `SUPABASE_ANON_KEY` are injected automatically.
+
+### Sending "from" a different address (e.g. hi@dripfantasy.com)
+
+To have mail *appear* from an address other than the impersonated mailbox, set
+`GMAIL_FROM` to that address — but it must be a **verified "Send mail as" alias**
+on `GMAIL_SENDER`, or Gmail silently rewrites the From back to the real mailbox.
+
+1. Sign in to `GMAIL_SENDER`'s Gmail → **Settings → Accounts and Import → "Send
+   mail as" → Add another email address.** Enter `hi@dripfantasy.com`, leave
+   "Treat as an alias" checked.
+2. Google emails a confirmation to `hi@dripfantasy.com`. Since it forwards to your
+   Gmail (Squarespace), click the link (or enter the code) to verify.
+3. Set `GMAIL_FROM="hi@dripfantasy.com"`. Leave it unset to send from `GMAIL_SENDER`.
 
 ## Request / response
 

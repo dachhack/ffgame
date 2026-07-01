@@ -13,7 +13,10 @@
 // Secrets (set once with `supabase secrets set …`, see README.md):
 //   GOOGLE_SA_EMAIL        service account client_email
 //   GOOGLE_SA_PRIVATE_KEY  service account private key (PEM; \n-escaped is fine)
-//   GMAIL_SENDER           Workspace user to send AS, e.g. hi@dripfantasy.com
+//   GMAIL_SENDER           real Workspace mailbox to impersonate (must have Gmail)
+//   GMAIL_FROM             optional visible From address — a VERIFIED "send mail as"
+//                          alias on GMAIL_SENDER, e.g. hi@dripfantasy.com. Defaults
+//                          to GMAIL_SENDER. (Gmail rewrites an unverified From.)
 //   GMAIL_FROM_NAME        optional display name (default: "Drip Fantasy")
 // SUPABASE_URL / SUPABASE_ANON_KEY are injected automatically.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
@@ -148,12 +151,18 @@ Deno.serve(async (req) => {
     if (!saEmail || !saKey || !sender)
       return json({ ok: false, error: 'Server not configured: set GOOGLE_SA_EMAIL, GOOGLE_SA_PRIVATE_KEY and GMAIL_SENDER.' });
     const fromName = Deno.env.get('GMAIL_FROM_NAME') ?? 'Drip Fantasy';
+    // We impersonate GMAIL_SENDER (a real Workspace mailbox), but the visible From
+    // can be a different verified "send mail as" alias on that mailbox — e.g. show
+    // hi@dripfantasy.com while sending through the primary account. Falls back to
+    // the sender when GMAIL_FROM isn't set. (Gmail only honors a From that's a
+    // verified alias on the impersonated account; otherwise it rewrites it.)
+    const fromAddr = Deno.env.get('GMAIL_FROM')?.trim() || sender;
 
     const token = await getAccessToken(saEmail, saKey, sender);
 
     const subject = "You're in — your Drip Fantasy invite";
     const mime = [
-      `From: ${encodeHeader(fromName)} <${sender}>`,
+      `From: ${encodeHeader(fromName)} <${fromAddr}>`,
       `To: ${to}`,
       `Subject: ${encodeHeader(subject)}`,
       'MIME-Version: 1.0',
