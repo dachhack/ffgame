@@ -501,6 +501,11 @@ export const myBuffs = (matchupId: string) => rpc<string[]>('my_buffs', { p_matc
 /** Hero board: persist the armed buff set (no wallet charge — paid at buy). */
 export const heroSetBuffs = (matchupId: string, buffs: string[]) =>
   rpc<{ ok: boolean; error?: string }>('hero_set_buffs', { p_matchup_id: matchupId, p_buffs: buffs });
+/** Hero board: persist/read the full working applied blob (extra slots, swaps,
+ *  backups, targeted powerups) for cross-device restoration. */
+export const heroSetApplied = (matchupId: string, payload: unknown) =>
+  rpc<{ ok: boolean; error?: string }>('hero_set_applied', { p_matchup_id: matchupId, p_payload: payload });
+export const myHeroApplied = (matchupId: string) => rpc<Record<string, unknown>>('my_hero_applied', { p_matchup_id: matchupId });
 
 // Metric unlocks (M2): arm before a locked metric (Combo Drip / Return / Air Raid)
 // can be picked. Same applied_state store, free this season.
