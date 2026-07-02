@@ -21,7 +21,13 @@ interface PoolEntry { slug: string; full: string; pos: string }
 
 function poolToPlayer(p: PoolEntry): Player {
   const meta = slugMeta(p.slug);
-  return { id: p.slug, name: shortName(p.full), full: p.full, pos: (p.pos as Pos) || meta.pos, team: meta.team, stats: { ...ZERO } };
+  const pos = (p.pos as Pos) || meta.pos;
+  // Kickers are played as the TEAM's kicker, not a specific name — key/label them
+  // like the engine's team-keyed K ("kc-k" → "KC K"), matching the demo board.
+  if (pos === 'K' && meta.team) {
+    return { id: `${meta.team.toLowerCase()}-k`, name: `${meta.team} K`, full: `${meta.team} Kicker`, pos: 'K', team: meta.team, stats: { ...ZERO } };
+  }
+  return { id: p.slug, name: shortName(p.full), full: p.full, pos, team: meta.team, stats: { ...ZERO } };
 }
 
 /**
@@ -54,8 +60,9 @@ export async function buildLiveLeague(leagueId: string, youRosterId: number, wee
       const roster: string[] = [];
       for (const p of pool) {
         if (!p?.slug) continue;
-        if (!players[p.slug]) players[p.slug] = poolToPlayer(p);
-        roster.push(p.slug);
+        const pl = poolToPlayer(p); // K is remapped to the team's kicker id
+        if (!players[pl.id]) players[pl.id] = pl;
+        roster.push(pl.id);
       }
       return {
         id: teamId(m.sleeper_roster_id),

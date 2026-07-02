@@ -343,7 +343,7 @@ export async function revealedOppBuffs(matchupId: string, userId: string): Promi
 // ── Super admin ─────────────────────────────────────────────────────────────────
 export type Controller = 'human' | 'ai';
 export type LineupPolicy = 'best_lineup' | 'ai' | 'empty';
-export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; provider?: string; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; }
+export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; provider?: string; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; weekly_budget?: number; }
 export interface AdminUser { id: string; email: string | null; sleeper_username: string | null; sleeper_user_id: string | null; enrolled: number; created_at: string; }
 export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; claim_email?: string | null; }
 export interface AdminAdmin { email: string; note: string | null; }
@@ -486,6 +486,22 @@ export const commishSeedCoin = (leagueId: string, rosterId: number, amount: numb
 export interface RosterWallet { roster_id: number; coins: number }
 /** Admin/commish: every team's current coin balance. */
 export const adminLeagueWallets = (leagueId: string) => rpc<RosterWallet[]>('admin_league_wallets', { p_league_id: leagueId });
+/** The league's configured weekly coin budget (any member can read it — the board
+ *  shows it in place of the generic stipend when the league sets its own). Null
+ *  when unreadable/unset. */
+export const leagueWeeklyBudget = async (leagueId: string): Promise<number | null> => {
+  if (!supabase) return null;
+  const { data } = await supabase.from('league').select('weekly_budget').eq('id', leagueId).maybeSingle();
+  const b = (data as { weekly_budget?: number } | null)?.weekly_budget;
+  return b == null ? null : Number(b);
+};
+/** Commissioner/admin sets the league's flat weekly coin budget (0 disables). */
+export const commishSetWeeklyBudget = (leagueId: string, amount: number) =>
+  rpc<{ ok: boolean; error?: string; weekly_budget?: number }>('commish_set_weekly_budget', { p_league_id: leagueId, p_amount: amount });
+/** Commissioner/admin grants the league's weekly budget to every team for one
+ *  week (idempotent — re-running a week never double-credits). */
+export const commishGrantWeeklyBudget = (leagueId: string, week: number) =>
+  rpc<{ ok: boolean; error?: string; credited?: number; weekly_budget?: number }>('commish_grant_weekly_budget', { p_league_id: leagueId, p_week: week });
 /** Admin/commish-map a roster to a person — by a joined-user id (picked from the
  *  pool) or by email (immediate enroll if signed in, else a pending claim that
  *  links on their next sign-in). Empty email + no id clears the roster. */
