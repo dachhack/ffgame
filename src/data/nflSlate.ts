@@ -65,9 +65,20 @@ export function gamesInWindow(week: number, win: WindowId): NflGame[] {
 }
 
 // ── Calendar dates ──────────────────────────────────────────────────────────
-// 2025 NFL season opened Thursday, Sept 4 (Week 1 TNF). Each later week shifts
-// by 7 days; windows fall on Thu / Sun / Mon within the week.
-const SEASON_START = Date.UTC(2025, 8, 4); // Thu Sep 4 2025
+// Week 1 opens on the Thursday after Labor Day (first Monday of September); each
+// later week shifts by 7 days, windows fall on Thu / Sun / Mon within the week.
+// The season year is set when a league loads (setSeasonYear) so 2026 leagues show
+// 2026 dates, not the baked 2025 opener.
+function seasonStartUTC(year: number): number {
+  const sep1 = new Date(Date.UTC(year, 8, 1));
+  const toMonday = (1 - sep1.getUTCDay() + 7) % 7; // Sep 1 → first Monday (Labor Day)
+  return Date.UTC(year, 8, 1 + toMonday + 3);      // Labor Day + 3 = Thursday kickoff
+}
+let SEASON_START = seasonStartUTC(2025); // default: the baked 2025 season (demo)
+/** Point the calendar at a season's opener (Thu after Labor Day). */
+export function setSeasonYear(year: number): void {
+  if (Number.isFinite(year) && year > 2000 && year < 2100) SEASON_START = seasonStartUTC(year);
+}
 const DAY = 86_400_000;
 const WIN_DAY_OFFSET: Record<WindowId, number> = { tnf: 0, early: 3, late: 3, snf: 3, mnf: 4 };
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
