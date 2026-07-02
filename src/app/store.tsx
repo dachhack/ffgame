@@ -9,6 +9,7 @@ import { powerupById } from '../data/powerups';
 import { DEMO_WEEK } from '../config';
 import { DEFAULT_PROVIDER_ID, type ProviderUser, type ProviderId } from '../data/providers';
 import { track, identify, Ev } from './analytics';
+import { myInventory, consumeInventory, refundInventory } from '../data/liveApi';
 
 import type { SlotSwap } from '../engine/matchup';
 export type { SlotSwap };
@@ -245,6 +246,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Persist coins + inventory + applied together. Pass next values explicitly so
   // we don't race React's async state.
   const persist = (next: { coins?: number; inv?: Record<string, number>; applied?: Record<number, AppliedWeek> }) => {
+    if (liveCtx) return; // live coins/inventory are server-backed — don't clobber the demo save
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({
         coins: next.coins ?? coins,
@@ -263,6 +265,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // updates in one handler (e.g. multiple power-up refunds from a single roster
   // change) compose via functional setters and still save the final result.
   useEffect(() => { persist({}); }, [coins, inventory, applied]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Entering a live pilot board: load the team's server-backed inventory (owned
+  // power-ups persist across devices) and start applied clean (armed powerups
+  // aren't server-backed yet). Leaving it: restore the demo save from localStorage.
+  const wasLive = useRef(false);
+  useEffect(() => {
+    if (liveCtx) {
+      wasLive.current = true;
+      setApplied({});
+      myInventory(liveCtx.matchupId).then((inv) => setInventory(inv ?? {})).catch(() => setInventory({}));
+    } else if (wasLive.current) {
+      wasLive.current = false;
+      const s = loadState();
+      creditedWeeks.current = new Set(s.weeks);
+      setCoins(s.coins); setInventory(s.inv); setApplied(s.applied);
+    }
+  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setTheme = (t: ThemeName) => {
     setThemeState(t);
@@ -291,10 +310,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setInventory((prev) => { const next = { ...prev, [id]: (prev[id] ?? 0) + 1 }; persist({ inv: next }); return next; });
   };
 
+  // Live leagues: keep owned inventory server-backed. Buys are recorded by
+  // wallet_buy_powerup; here we mirror consumes (arm/apply) and refunds (disarm/
+  // back-out) so ownership persists across devices. Fire-and-forget.
+  const syncInv = (id: string, delta: number): void => {
+    if (!liveCtx) return;
+    (delta < 0 ? consumeInventory : refundInventory)(liveCtx.matchupId, id).catch(() => {});
+  };
+
   const useConsumable = (id: string): boolean => {
     if ((inventory[id] ?? 0) <= 0) return false;
     const nextInv = { ...inventory, [id]: inventory[id] - 1 };
-    setInventory(nextInv); persist({ inv: nextInv });
+    setInventory(nextInv); persist({ inv: nextInv }); syncInv(id, -1);
     return true;
   };
 
@@ -305,7 +332,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const nextInv = { ...inventory, [id]: inventory[id] - 1 };
     const cur: AppliedWeek = applied[week] ?? { extraSlots: {}, swaps: {}, backups: {} };
     const nextApplied = { ...applied, [week]: patch({ ...cur, extraSlots: cur.extraSlots ?? {}, swaps: cur.swaps ?? {}, backups: cur.backups ?? {} }) };
-    setInventory(nextInv); setApplied(nextApplied); persist({ inv: nextInv, applied: nextApplied });
+    setInventory(nextInv); setApplied(nextApplied); persist({ inv: nextInv, applied: nextApplied }); syncInv(id, -1);
     return true;
   };
 
@@ -324,7 +351,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const buffs = { ...cur.buffs }; delete buffs[id];
       return { ...prev, [week]: { ...cur, buffs } };
     });
-    setInventory((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
+    setInventory((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 })); syncInv(id, 1);
   };
 
   const setDoubleOrNothing = (week: number, slotKey: string): boolean =>
@@ -354,7 +381,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       mutate(nc);
       return { ...prev, [week]: nc };
     });
-    setInventory((prev) => ({ ...prev, [refundId]: (prev[refundId] ?? 0) + 1 }));
+    setInventory((prev) => ({ ...prev, [refundId]: (prev[refundId] ?? 0) + 1 })); syncInv(refundId, 1);
   };
   const clearDoubleOrNothing = (week: number): void => { if (applied[week]?.doubleOrNothing) clearApplied(week, 'double-or-nothing', (c) => { delete c.doubleOrNothing; }); };
   const clearSpy = (week: number): void => { if (applied[week]?.spy) clearApplied(week, 'spy', (c) => { delete c.spy; }); };
@@ -364,7 +391,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     clearApplied(week, 'extra-slot', (c) => { if (n - 1 > 0) c.extraSlots[win] = n - 1; else delete c.extraSlots[win]; });
   };
   // Refund an unlock-metric powerup (when a player swaps off / clears that metric).
-  const refundUnlock = (id: string): void => { setInventory((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 })); };
+  const refundUnlock = (id: string): void => { setInventory((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 })); syncInv(id, 1); };
 
   const applyMetricSwap = (week: number, slotKey: string, atClock: number, atRt: number, toMetricId: string): boolean =>
     consumeAndApply('metric-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, atRt, toMetricId } } }));
