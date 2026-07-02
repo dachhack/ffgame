@@ -1,6 +1,6 @@
 // Real 2025 NFL slate per week (away @ home, final scores, time-slot window),
 // from the nflverse schedule. window: tnf/early/late/snf/mnf.
-import type { WindowId } from '../types';
+import type { WindowId, GameWindow } from '../types';
 import { WINDOWS } from './metrics';
 import { realKickoff } from './realPbp';
 export interface NflGame { away: string; home: string; aScore: number; hScore: number; win: WindowId; kickoff?: number; }
@@ -33,12 +33,13 @@ export const NFL_SLATE: Record<number, NflGame[]> = {
 // win drive slate-gating + the K/DST bye check.)
 const RUNTIME_SLATE: Record<number, NflGame[]> = {};
 export function setRuntimeSlate(week: number, games: NflGame[]): void {
-  if (Array.isArray(games) && games.length) RUNTIME_SLATE[week] = games;
+  if (Array.isArray(games) && games.length) { RUNTIME_SLATE[week] = games; derivedCache.delete(week); }
 }
 /** Drop all live overrides → revert to the baked 2025 slate (the force-resolve /
  *  demo path resolves baked 2025 data, so it must use the 2025 slate). */
 export function clearRuntimeSlate(): void {
   for (const k of Object.keys(RUNTIME_SLATE)) delete RUNTIME_SLATE[Number(k)];
+  derivedCache.clear();
 }
 /** The slate for a week — the live override if one's been set, else baked 2025. */
 function slateFor(week: number): NflGame[] | undefined {
@@ -56,12 +57,107 @@ export function nflGameForTeam(week: number, team?: string | null): NflGame | un
 
 /** The time-slot window a team plays in for a given week, or null (bye). */
 export function windowForTeam(week: number, team?: string | null): WindowId | null {
-  return nflGameForTeam(week, team)?.win ?? null;
+  if (!team) return null;
+  return deriveWeek(week).teamWin.get(team) ?? null;
 }
 
 /** Every real NFL game scheduled in a given time-slot window that week. */
 export function gamesInWindow(week: number, win: WindowId): NflGame[] {
-  return (slateFor(week) || []).filter((g) => g.win === win);
+  return deriveWeek(week).gamesByWin.get(win) ?? [];
+}
+
+// ── Dynamic game windows ──────────────────────────────────────────────────────
+// A week's lineup windows are DERIVED from its real kickoffs: games are clustered
+// by start time (a game more than an hour after a window's first kickoff opens its
+// own window), and each window gets slots = min(3, ceil(games / 3)). A normal week
+// reproduces the fixed five — TNF / Sun-early ×3 / Sun-late ×2 / SNF / MNF = 8
+// slots — while an odd week (e.g. the 2026 Week-1 Wednesday opener) grows an extra
+// 1-slot window. When the slate carries no real kickoffs (the baked 2025 demo), we
+// fall back to the fixed WINDOWS model, grouped by each game's baked `win`.
+const WIN_HOUR = 3_600_000;
+
+interface DerivedWeek { windows: GameWindow[]; teamWin: Map<string, string>; gamesByWin: Map<string, NflGame[]>; }
+const derivedCache = new Map<number, DerivedWeek>();
+
+function etWeekday(ms: number): string {
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' }).format(ms);
+}
+/** A cluster's window id + headline labels, from its earliest kickoff (ET day +
+ *  hour). Sunday splits by kickoff hour into the familiar morning/1pm/4pm/night
+ *  buckets; every other weekday is its own named slate. */
+function winMetaFor(ms: number): { id: string; label: string; sub: string } {
+  const wd = etWeekday(ms);
+  const hr = etSod(ms) / 3600;
+  switch (wd) {
+    case 'Thu': return { id: 'tnf', label: 'TNF', sub: 'Thursday Night' };
+    case 'Wed': return { id: 'wed', label: 'WED', sub: 'Wednesday' };
+    case 'Fri': return { id: 'fri', label: 'FRI', sub: 'Friday' };
+    case 'Sat': return { id: 'sat', label: 'SAT', sub: 'Saturday' };
+    case 'Tue': return { id: 'tue', label: 'TUE', sub: 'Tuesday' };
+    case 'Mon': return { id: 'mnf', label: 'MNF', sub: 'Monday Night' };
+    default: // Sunday — bucket by kickoff hour
+      if (hr < 11) return { id: 'am', label: 'SUN AM', sub: 'Sunday Morning' };
+      if (hr < 15) return { id: 'early', label: 'SUN 1PM', sub: 'Sunday Early' };
+      if (hr < 18) return { id: 'late', label: 'SUN 4PM', sub: 'Sunday Late' };
+      return { id: 'snf', label: 'SNF', sub: 'Sunday Night' };
+  }
+}
+
+/** Cluster a week's slate into its real game windows (memoized per week). Falls
+ *  back to the fixed five when kickoffs aren't fully known. */
+function deriveWeek(week: number): DerivedWeek {
+  const cached = derivedCache.get(week);
+  if (cached) return cached;
+  const slate = slateFor(week) ?? [];
+  const kicks = slate.filter((g) => typeof g.kickoff === 'number') as (NflGame & { kickoff: number })[];
+  let result: DerivedWeek;
+  if (!slate.length || kicks.length !== slate.length) {
+    // No (complete) real kickoffs → fixed five-window model, grouped by baked `win`.
+    const gamesByWin = new Map<string, NflGame[]>();
+    const teamWin = new Map<string, string>();
+    for (const g of slate) {
+      const arr = gamesByWin.get(g.win) ?? gamesByWin.set(g.win, []).get(g.win)!;
+      arr.push(g);
+      teamWin.set(g.home, g.win); teamWin.set(g.away, g.win);
+    }
+    result = { windows: WINDOWS, teamWin, gamesByWin };
+  } else {
+    // Greedy cluster in kickoff order: a game joins the open window if it kicks
+    // within an hour of that window's anchor (first) kickoff, else starts its own.
+    const sorted = [...kicks].sort((a, b) => a.kickoff - b.kickoff);
+    const clusters: (NflGame & { kickoff: number })[][] = [];
+    let cur: (NflGame & { kickoff: number })[] = [];
+    let anchor = -Infinity;
+    for (const g of sorted) {
+      if (!cur.length || g.kickoff - anchor <= WIN_HOUR) { if (!cur.length) anchor = g.kickoff; cur.push(g); }
+      else { clusters.push(cur); cur = [g]; anchor = g.kickoff; }
+    }
+    if (cur.length) clusters.push(cur);
+
+    const windows: GameWindow[] = [];
+    const teamWin = new Map<string, string>();
+    const gamesByWin = new Map<string, NflGame[]>();
+    const usedBase = new Map<string, number>();
+    for (const games of clusters) {
+      const k0 = Math.min(...games.map((g) => g.kickoff));
+      const meta = winMetaFor(k0);
+      const n = usedBase.get(meta.id) ?? 0; usedBase.set(meta.id, n + 1);
+      const id = n === 0 ? meta.id : `${meta.id}${n + 1}`; // disambiguate a repeated bucket
+      const slots = Math.min(3, Math.ceil(games.length / 3));
+      windows.push({ id, label: meta.label, sub: meta.sub, slots, time: kickoffLabel(k0) });
+      gamesByWin.set(id, games);
+      for (const g of games) { teamWin.set(g.home, id); teamWin.set(g.away, id); }
+    }
+    result = { windows, teamWin, gamesByWin };
+  }
+  derivedCache.set(week, result);
+  return result;
+}
+
+/** The lineup windows for a week — derived from the real slate when kickoffs are
+ *  known, else the fixed five. Ordered by kickoff. */
+export function windowsForWeek(week: number): GameWindow[] {
+  return deriveWeek(week).windows;
 }
 
 // ── Calendar dates ──────────────────────────────────────────────────────────
@@ -86,7 +182,7 @@ const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'
 
 /** The calendar date a given window is played on, that week. */
 export function windowDate(week: number, win: WindowId): Date {
-  return new Date(SEASON_START + ((week - 1) * 7 + WIN_DAY_OFFSET[win]) * DAY);
+  return new Date(SEASON_START + ((week - 1) * 7 + (WIN_DAY_OFFSET[win] ?? 3)) * DAY);
 }
 
 // ET calendar parts for an epoch-ms — so a window's real day matches its ET
@@ -151,7 +247,8 @@ function fmtTimeOfDay(sod: number): string {
 }
 /** The first window that week that actually has games (earliest kickoff). */
 function firstGameWindow(week: number) {
-  return WINDOWS.find((w) => gamesInWindow(week, w.id).length > 0) ?? WINDOWS[0];
+  const wins = windowsForWeek(week);
+  return wins.find((w) => gamesInWindow(week, w.id).length > 0) ?? wins[0] ?? WINDOWS[0];
 }
 
 // ── Real kickoff times (when the week's play-by-play is loaded) ───────────────

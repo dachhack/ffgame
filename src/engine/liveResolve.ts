@@ -24,7 +24,7 @@
 //   • Drip-coin economy — weekly stipend + unopposed bounty + per-event-of-note
 //     coin, returned per side. (No DB sink yet; surfaced for a future column.)
 import type { Player, PbpEvent, Pos } from '../types';
-import { WINDOWS, metricById } from '../data/metrics';
+import { metricById } from '../data/metrics';
 import { REAL_WEEKS } from '../data/realPbp';
 import { resolveSlot, windowFgMult, teTdNukeClocks, defEarnScore, EMPTY_PLAYER, type SlotInput } from './sim';
 
@@ -126,9 +126,15 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
   // Lineup-wide aggregates for K banker and DEF suppress.
   let homeTds = 0, awayTds = 0, homeBankerXp = 0, awayBankerXp = 0;
   let homeSuppress = 0, awaySuppress = 0;
-  for (const w of WINDOWS) {
-    const homeIns: SlotInput[] = homePicks.filter((p) => p.win === w.id).map((p) => ({ player: p.player, metricId: p.metricId }));
-    const awayIns: SlotInput[] = awayPicks.filter((p) => p.win === w.id).map((p) => ({ player: p.player, metricId: p.metricId }));
+  // Windows are whatever the sealed picks carry — the client derives them per week
+  // from the real slate (a normal week's five, or more when the schedule splits),
+  // so we resolve every distinct window id present rather than a fixed five.
+  const winIds: string[] = [];
+  const seenWin = new Set<string>();
+  for (const p of [...homePicks, ...awayPicks]) if (!seenWin.has(p.win)) { seenWin.add(p.win); winIds.push(p.win); }
+  for (const wid of winIds) {
+    const homeIns: SlotInput[] = homePicks.filter((p) => p.win === wid).map((p) => ({ player: p.player, metricId: p.metricId }));
+    const awayIns: SlotInput[] = awayPicks.filter((p) => p.win === wid).map((p) => ({ player: p.player, metricId: p.metricId }));
     // Field General builds its multiplier from every filled slot on its side.
     // Overtime carries the multiplier past regulation; fg-stack stacks twin Generals.
     const homeMult = windowFgMult(homeIns, week, { reg, carryOT: homeBuffs.has('overtime'), stack: homeBuffs.has('fg-stack') });
@@ -142,11 +148,11 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     for (const p of awayIns) if (p.player.pos === 'DEF' && p.metricId === 'suppress') awaySuppress = Math.max(awaySuppress, defEarnScore(p.player, week));
 
     const idxs = new Set<string>();
-    for (const p of homePicks) if (p.win === w.id) idxs.add(p.slot);
-    for (const p of awayPicks) if (p.win === w.id) idxs.add(p.slot);
+    for (const p of homePicks) if (p.win === wid) idxs.add(p.slot);
+    for (const p of awayPicks) if (p.win === wid) idxs.add(p.slot);
     for (const slot of idxs) {
-      const hp = homeBy.get(`${w.id}|${slot}`);
-      const ap = awayBy.get(`${w.id}|${slot}`);
+      const hp = homeBy.get(`${wid}|${slot}`);
+      const ap = awayBy.get(`${wid}|${slot}`);
       const you: SlotInput = hp ? { player: hp.player, metricId: hp.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
       const them: SlotInput = ap ? { player: ap.player, metricId: ap.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
       const label = `${hp?.player.team || 'BYE'} · ${ap?.player.team || 'BYE'}`;
@@ -160,7 +166,7 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
       if (hp?.player.pos === 'DEF' && hp.metricId === 'suppress') homeF = 0;
       if (ap?.player.pos === 'DEF' && ap.metricId === 'suppress') awayF = 0;
       slots.push({
-        win: w.id, slot, homeP: hp?.player ?? null, awayP: ap?.player ?? null,
+        win: wid, slot, homeP: hp?.player ?? null, awayP: ap?.player ?? null,
         homeMetric: hp?.metricId ?? null, awayMetric: ap?.metricId ?? null,
         home: homeF, away: awayF, events: res.events,
       });
