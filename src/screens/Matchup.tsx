@@ -6,7 +6,8 @@ import { avatarUrl, teamLogo } from '../data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek } from '../data/nflSlate';
 import { METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById, type Powerup } from '../data/powerups';
-import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '../data/league';
+import { getTeam, getPlayer, gameForTeam, getActiveLeague, activeRegSeasonWeeks } from '../data/league';
+import { buildLiveLeague } from '../data/liveBoard';
 import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
 } from '../engine/matchup';
@@ -14,7 +15,7 @@ import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type S
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
-import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, ensureWallet, walletBuyPowerup, leagueWeeklyBudget, type PickRow } from '../data/liveApi';
+import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, ensureWallet, walletBuyPowerup, leagueWeeklyBudget, myMatchup, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
@@ -92,7 +93,7 @@ const DEMO_POWERUPS = [
 ];
 
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
-  const { youTeamId: YOU, navigate, liveCtx, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
+  const { youTeamId: YOU, navigate, liveCtx, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const [demoBuff, setDemoBuff] = useState('garbage-time'); // the power-up the demo viewer armed
   const buffs = demo ? { [demoBuff]: true } : (applied[week]?.buffs ?? {});
   const buffsKey = JSON.stringify(buffs);
@@ -300,6 +301,25 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const earnings = useMemo(() => weekEarnings(resolved, 'you', week, turnoverCoin), [resolved, week, buffsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const weekCoins = earnings.total;
   const [earnOpen, setEarnOpen] = useState(false);
+  // Live board: page to another week's matchup — rebuild this league's board for
+  // the new week (its rosters, opponent + matchup ctx) and open it, exactly like
+  // entering the hero board fresh. Null unless a switch is in flight.
+  const [switchingWeek, setSwitchingWeek] = useState<number | null>(null);
+  const seasonWeeks = activeRegSeasonWeeks();
+  async function goToWeek(target: number) {
+    if (!liveCtx || switchingWeek != null) return;
+    if (target < 1 || target > seasonWeeks || target === week) return;
+    setSwitchingWeek(target);
+    try {
+      const m = await myMatchup(liveCtx.leagueId, liveCtx.rosterId, target).catch(() => null);
+      const { built, youTeamId } = await buildLiveLeague(liveCtx.leagueId, liveCtx.rosterId, target);
+      const ctx = m ? { matchupId: m.id, userId: liveCtx.userId, leagueId: liveCtx.leagueId, rosterId: liveCtx.rosterId, week: m.week } : null;
+      loadSimLeague(built, youTeamId, ctx);
+      navigate({ name: 'matchup', week: target, phase: 'setup' });
+    } catch {
+      setSwitchingWeek(null); // stay put on failure
+    }
+  }
   // Live board: the league's own weekly coin budget (set by the commissioner)
   // replaces the generic flat-stipend copy in the earnings sheet.
   const [leagueBudget, setLeagueBudget] = useState<number | null>(null);
@@ -944,8 +964,15 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           // Live board: minimal header — Brand · big centered score · coin + gear.
           // No phase tabs (status) or lock time; each window carries its own state.
           <>
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 9 }}>
               <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
+              <button onClick={() => navigate({ name: 'live' })} className="mono" title="Back to your leagues" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>← my leagues</button>
+              {/* Week selector: page to another week's matchup on this same league. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                <button onClick={() => goToWeek(week - 1)} disabled={week <= 1 || switchingWeek != null} title="previous week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: week <= 1 || switchingWeek != null ? 'default' : 'pointer', opacity: week <= 1 ? 0.35 : 1 }}>‹</button>
+                <span className="mono" title="Week — page through the season" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', minWidth: 36, textAlign: 'center' }}>{switchingWeek != null ? `WK ${switchingWeek}…` : `WK ${week}`}</span>
+                <button onClick={() => goToWeek(week + 1)} disabled={week >= seasonWeeks || switchingWeek != null} title="next week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: week >= seasonWeeks || switchingWeek != null ? 'default' : 'pointer', opacity: week >= seasonWeeks ? 0.35 : 1 }}>›</button>
+              </div>
             </div>
             <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: isMobile ? 9 : 16 }}>
               <Avatar name={you.name} accent="var(--you)" size={isMobile ? 24 : 30} src={avatarUrl(you.ownerId)} />
