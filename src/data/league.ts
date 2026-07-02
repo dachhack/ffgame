@@ -1,5 +1,6 @@
 import type { League, FantasyTeam, Player, Pos, ScheduleGame } from '../types';
 import { statsForName, shortName, normName, teamForName } from './players';
+import { setSeasonYear } from './nflSlate';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Drip Test League — the public demo. A SANITIZED clone: the rosters,
@@ -251,10 +252,12 @@ export interface BuiltLeague { league: League; players: Record<string, Player>; 
 /** Swap in a live (Sleeper-built) league. */
 export function setActiveLeague(b: BuiltLeague): void {
   activeLeague = b.league; activePlayers = b.players; activeWeeks = Math.min(REG_SEASON_WEEKS, Math.max(1, b.weeks));
+  setSeasonYear(b.league.season); // calendar follows this league's season (2026 → 2026 dates)
 }
 /** Restore the baked DRIP demo league. */
 export function resetToDemoLeague(): void {
   activeLeague = DEMO_LEAGUE; activePlayers = DEMO_PLAYERS; activeWeeks = 14;
+  setSeasonYear(2025); // the demo replays the baked 2025 season
 }
 
 // Kept for back-compat: the baked demo league object.

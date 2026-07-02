@@ -6,7 +6,7 @@ import { avatarUrl, teamLogo } from '../data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod } from '../data/nflSlate';
 import { WINDOWS, METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById, type Powerup } from '../data/powerups';
-import { getTeam, getPlayer, gameForTeam } from '../data/league';
+import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '../data/league';
 import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
 } from '../engine/matchup';
@@ -939,7 +939,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5, flexWrap: 'wrap' }}>
                 <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--on-accent)', background: 'var(--you)', borderRadius: 4, padding: '4px 9px' }}>NFL WEEK {week}</span>
                 <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)' }}>{weekDateRange(week)}</span>
-                <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>2025 SEASON</span>
+                <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>{getActiveLeague().season} SEASON</span>
               </div>
               <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{headline}</div>
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, maxWidth: 520, lineHeight: 1.5 }}>{subhead}</div>
