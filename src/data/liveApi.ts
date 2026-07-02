@@ -486,6 +486,15 @@ export const commishSeedCoin = (leagueId: string, rosterId: number, amount: numb
 export interface RosterWallet { roster_id: number; coins: number }
 /** Admin/commish: every team's current coin balance. */
 export const adminLeagueWallets = (leagueId: string) => rpc<RosterWallet[]>('admin_league_wallets', { p_league_id: leagueId });
+/** The league's configured weekly coin budget (any member can read it — the board
+ *  shows it in place of the generic stipend when the league sets its own). Null
+ *  when unreadable/unset. */
+export const leagueWeeklyBudget = async (leagueId: string): Promise<number | null> => {
+  if (!supabase) return null;
+  const { data } = await supabase.from('league').select('weekly_budget').eq('id', leagueId).maybeSingle();
+  const b = (data as { weekly_budget?: number } | null)?.weekly_budget;
+  return b == null ? null : Number(b);
+};
 /** Commissioner/admin sets the league's flat weekly coin budget (0 disables). */
 export const commishSetWeeklyBudget = (leagueId: string, amount: number) =>
   rpc<{ ok: boolean; error?: string; weekly_budget?: number }>('commish_set_weekly_budget', { p_league_id: leagueId, p_amount: amount });

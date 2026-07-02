@@ -14,7 +14,7 @@ import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type S
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
-import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, ensureWallet, walletBuyPowerup, type PickRow } from '../data/liveApi';
+import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, ensureWallet, walletBuyPowerup, leagueWeeklyBudget, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
@@ -300,6 +300,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const earnings = useMemo(() => weekEarnings(resolved, 'you', week, turnoverCoin), [resolved, week, buffsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const weekCoins = earnings.total;
   const [earnOpen, setEarnOpen] = useState(false);
+  // Live board: the league's own weekly coin budget (set by the commissioner)
+  // replaces the generic flat-stipend copy in the earnings sheet.
+  const [leagueBudget, setLeagueBudget] = useState<number | null>(null);
+  useEffect(() => {
+    if (!liveCtx) { setLeagueBudget(null); return; }
+    leagueWeeklyBudget(liveCtx.leagueId).then(setLeagueBudget).catch(() => setLeagueBudget(null));
+  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
   // Hero board: the coin balance is the REAL team wallet (starts at 0, seeded by
   // the commissioner). Load it once; the worker credits earnings in-season, so the
   // board doesn't run the demo weekly-credit here.
@@ -1274,15 +1281,21 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       {puView === 'apply' && <ApplyPowerupsModal items={appliable} inventory={inventory} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); setPuView(null); }} onClose={() => setPuView(null)} />}
       {shopOpen && <ShopModal onClose={() => setShopOpen(false)} coinsOverride={liveCtx ? Math.round(coinBal) : undefined} onBuy={liveCtx ? buyFromWallet : undefined} />}
 
-      {earnOpen && <EarningsModal earnings={earnings} onReset={liveCtx ? undefined : () => { resetDripCoin(); setEarnOpen(false); }} onClose={() => setEarnOpen(false)} />}
+      {earnOpen && <EarningsModal earnings={earnings} weeklyBudget={liveCtx && leagueBudget != null && leagueBudget !== WEEKLY_STIPEND ? leagueBudget : null} onReset={liveCtx ? undefined : () => { resetDripCoin(); setEarnOpen(false); }} onClose={() => setEarnOpen(false)} />}
     </>
   );
 }
 
 // ── Drip-coin earning opportunities, by position (risk pays more) ──
-function EarningsModal({ earnings, onReset, onClose }: { earnings: { stipend: number; unopposed: number; signature: number; turnover: number; total: number }; onReset?: () => void; onClose: () => void }) {
+function EarningsModal({ earnings, weeklyBudget, onReset, onClose }: { earnings: { stipend: number; unopposed: number; signature: number; turnover: number; total: number }; weeklyBudget?: number | null; onReset?: () => void; onClose: () => void }) {
   const order: Pos[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
   const riskColor = (r: string) => (r === 'HIGH' ? 'var(--fx-nuke)' : r === 'MED' ? 'var(--warn)' : 'var(--dim)');
+  // A league with its own weekly budget replaces the flat sim stipend everywhere
+  // in this sheet — the tally line + total and the always-on explainer.
+  const budgetMode = weeklyBudget != null;
+  const stipendLabel = budgetMode ? 'Weekly budget' : 'Weekly stipend';
+  const stipendVal = budgetMode ? weeklyBudget! : earnings.stipend;
+  const shownTotal = budgetMode ? (earnings.total - earnings.stipend + weeklyBudget!) : earnings.total;
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '50px 16px', overflow: 'auto' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
@@ -1297,18 +1310,22 @@ function EarningsModal({ earnings, onReset, onClose }: { earnings: { stipend: nu
           {/* this week's running tally */}
           <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px' }}>
             <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 6 }}>THIS WEEK</div>
-            {([['Weekly stipend', earnings.stipend], ['Unopposed players', earnings.unopposed], ['Events of note', earnings.signature], ['Turnovers', earnings.turnover]] as [string, number][]).map(([k, v]) => (
+            {([[stipendLabel, stipendVal], ['Unopposed players', earnings.unopposed], ['Events of note', earnings.signature], ['Turnovers', earnings.turnover]] as [string, number][]).map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--dim)', padding: '2px 0' }}>
                 <span>{k}</span><span className="mono" style={{ color: v < 0 ? 'var(--opp)' : 'var(--fx-streak)', fontWeight: 700 }}>{v < 0 ? '' : '+'}{v}</span>
               </div>
             ))}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, color: 'var(--text)', padding: '5px 0 0', marginTop: 4, borderTop: '1px solid var(--bd)' }}>
-              <span>Total</span><span className="mono" style={{ color: 'var(--fx-mult)' }}>+{earnings.total}</span>
+              <span>Total</span><span className="mono" style={{ color: 'var(--fx-mult)' }}>+{shownTotal}</span>
             </div>
           </div>
           {/* always-on */}
           <div className="mono" style={{ fontSize: 9.5, lineHeight: 1.6, color: 'var(--dim)' }}>
-            <div>◈ <b style={{ color: 'var(--text)' }}>+{WEEKLY_STIPEND}</b> flat every week, just for playing.</div>
+            {budgetMode
+              ? (weeklyBudget! > 0
+                ? <div>◈ <b style={{ color: 'var(--text)' }}>+{weeklyBudget}</b> weekly budget from your commissioner.</div>
+                : <div>◈ Coin is earned in-game — your commissioner hasn’t set a weekly budget.</div>)
+              : <div>◈ <b style={{ color: 'var(--text)' }}>+{WEEKLY_STIPEND}</b> flat every week, just for playing.</div>}
             <div>◈ <b style={{ color: 'var(--text)' }}>+{UNOPPOSED_COIN}</b> for each unopposed player you field.</div>
             <div style={{ marginTop: 5 }}>Then coin only on <b style={{ color: 'var(--text)' }}>events of note</b> — a nuke / shutdown / wipe, a drip going HOT, or a DST suppress firing. Routine yards, catches and carries don't pay.</div>
             <div style={{ marginTop: 5 }}>◈ <b style={{ color: 'var(--opp)' }}>−10</b> to the opponent for each INT thrown / fumble lost by your players (their giveaways pay you). <b style={{ color: 'var(--text)' }}>🦅 Ball Hawk</b> raises it to 25.</div>
