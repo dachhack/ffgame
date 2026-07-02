@@ -349,7 +349,7 @@ export interface AdminMember { roster_id: number; team: string; owner: string | 
 export interface AdminAdmin { email: string; note: string | null; }
 export interface MemberRow { roster_id: number; owner_id: string | null; team_name: string; }
 export interface MatchupRow { sleeper_matchup_id: number | null; home_roster_id: number; away_roster_id: number; }
-export interface LineupRow { roster_id: number; starters: { slug: string; full: string; pos: string }[]; }
+export interface LineupRow { roster_id: number; starters: { slug: string; full: string; pos: string; team?: string }[]; }
 export interface AdminMatchup { id: string; week: number; home_roster_id: number; away_roster_id: number; status: string; lock_at: string | null; home_final: number | null; away_final: number | null; home_coin?: number | null; away_coin?: number | null; }
 export interface AdminOverride { sleeper_user_id: string; note: string | null; }
 export interface AdminAudit { table: string; op: string; row_id: string | null; at: string; detail?: string | null; actor?: string | null; }

@@ -65,7 +65,9 @@ export async function syncNormalizedWeek(leagueId: string, norm: NormalizedLeagu
     starters: t.playerKeys
       .map((k) => norm.players[k])
       .filter((p): p is NormPlayer => !!p)
-      .map((p) => ({ slug: poolSlug(p), full: p.full, pos: p.pos })),
+      // Carry the real NFL team so the hero board can slot players by their game
+      // window even when the name-slug isn't in the baked slug map.
+      .map((p) => ({ slug: poolSlug(p), full: p.full, pos: p.pos, team: p.nflTeam ?? '' })),
   }));
   await adminUpsertLineups(leagueId, week, lineups);
   return { pairs: pairs.length, rosters: norm.teams.length };

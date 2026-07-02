@@ -7,8 +7,8 @@
 import type { BuiltLeague } from './league';
 import { REG_SEASON_WEEKS } from './league';
 import type { League, FantasyTeam, Player, Pos, PlayerStats, ScheduleGame } from '../types';
-import { shortName } from './players';
-import { slugMeta } from './slugMeta';
+import { shortName, teamForName, normName } from './players';
+import { slugMeta, normTeam } from './slugMeta';
 import { supabase } from './supabaseClient';
 import { liveSlate } from './liveApi';
 import { setRuntimeSlate } from './nflSlate';
@@ -17,17 +17,29 @@ import type { WindowId } from '../types';
 const ZERO: PlayerStats = { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 };
 const teamId = (rosterId: number) => `r${rosterId}`;
 
-interface PoolEntry { slug: string; full: string; pos: string }
+// starters_json has two historical shapes: ESPN's { slug, full, pos } and
+// Sleeper's { player_slug, sleeper_id, pos }. The real NFL team (team/nflTeam) is
+// carried when the sync provides it; older rows don't have it, so we also resolve
+// from the slug map and the stats DB by name.
+interface PoolEntry { slug?: string; player_slug?: string | null; full?: string; pos?: string; team?: string | null; nflTeam?: string | null }
+const entrySlug = (p: PoolEntry): string => (p.slug ?? p.player_slug ?? '');
 
 function poolToPlayer(p: PoolEntry): Player {
-  const meta = slugMeta(p.slug);
+  const slug = entrySlug(p);
+  const meta = slugMeta(slug);
   const pos = (p.pos as Pos) || meta.pos;
+  const full = p.full || slug.replace(/-/g, ' ');
+  // Resolve the NFL team so the player lands in a real game window rather than
+  // being silently dropped: the sync's carried team first (most current), then the
+  // baked slug map, then the stats DB by name.
+  const team = normTeam(p.team ?? p.nflTeam ?? '') || meta.team || teamForName(full);
   // Kickers are played as the TEAM's kicker, not a specific name — key/label them
   // like the engine's team-keyed K ("kc-k" → "KC K"), matching the demo board.
-  if (pos === 'K' && meta.team) {
-    return { id: `${meta.team.toLowerCase()}-k`, name: `${meta.team} K`, full: `${meta.team} Kicker`, pos: 'K', team: meta.team, stats: { ...ZERO } };
+  if (pos === 'K' && team) {
+    return { id: `${team.toLowerCase()}-k`, name: `${team} K`, full: `${team} Kicker`, pos: 'K', team, stats: { ...ZERO } };
   }
-  return { id: p.slug, name: shortName(p.full), full: p.full, pos, team: meta.team, stats: { ...ZERO } };
+  const id = slug || normName(full).replace(/\s+/g, '-');
+  return { id, name: shortName(full), full, pos, team, stats: { ...ZERO } };
 }
 
 /**
@@ -53,14 +65,18 @@ export async function buildLiveLeague(leagueId: string, youRosterId: number, wee
   }
 
   const players: Record<string, Player> = {};
+  const excluded: string[] = []; // rostered players we couldn't map to an NFL team
   const teams: FantasyTeam[] = members
     .sort((a, b) => a.sleeper_roster_id - b.sleeper_roster_id)
     .map((m) => {
       const pool = poolByRoster.get(m.sleeper_roster_id) ?? [];
       const roster: string[] = [];
       for (const p of pool) {
-        if (!p?.slug) continue;
+        if (!p || !entrySlug(p)) continue;
         const pl = poolToPlayer(p); // K is remapped to the team's kicker id
+        // No resolvable NFL team → the engine can't slot them in any window and
+        // they'd vanish from the board. Track for the audit below.
+        if (!pl.team) excluded.push(`${pl.full} (${pl.pos})`);
         if (!players[pl.id]) players[pl.id] = pl;
         roster.push(pl.id);
       }
@@ -94,6 +110,14 @@ export async function buildLiveLeague(leagueId: string, youRosterId: number, wee
     const slate = await liveSlate(week, lg?.season ?? undefined);
     if (slate.length) setRuntimeSlate(week, slate.map((s) => ({ away: s.away, home: s.home, aScore: 0, hScore: 0, win: s.win as WindowId, kickoff: s.kickoff ? Date.parse(s.kickoff) : undefined })));
   } catch { /* no live slate yet — window gating falls back to the baked slate */ }
+
+  // Audit: surface any rostered players excluded because we can't resolve their
+  // NFL team (so they never land in a window). Re-syncing the league carries the
+  // real team through starters_json and clears these; this log names who's affected.
+  if (excluded.length) {
+    // eslint-disable-next-line no-console
+    console.warn(`[hero board] wk${week}: ${excluded.length} rostered player(s) have no resolvable NFL team and won't appear in any window — re-sync the league to fix:`, excluded);
+  }
 
   return {
     built: { league, players, weeks: Math.min(REG_SEASON_WEEKS, Math.max(1, maxWeek || REG_SEASON_WEEKS)) },
