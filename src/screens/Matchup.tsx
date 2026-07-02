@@ -3,7 +3,7 @@ import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile } from '../app/ui';
 import { avatarUrl, teamLogo } from '../data/media';
-import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, kickoffLabel, windowsForWeek } from '../data/nflSlate';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek } from '../data/nflSlate';
 import { METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById, type Powerup } from '../data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '../data/league';
@@ -117,6 +117,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // Live pilot: hydrate this matchup's saved sealed picks from Supabase once, so a
   // returning manager sees the lineup they sealed. Won't clobber in-progress edits.
   const hydratedRef = useRef(false);
+  const [heroHydrated, setHeroHydrated] = useState(false); // saved picks loaded → safe to auto-save
   useEffect(() => {
     if (!liveCtx || hydratedRef.current) return;
     hydratedRef.current = true;
@@ -127,8 +128,25 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         lineup[`${r.game_window}#${r.roster_slot}`] = { playerId: r.player_slug, metricId: r.metric_id };
       }
       if (Object.keys(lineup).length) setPicks((prev) => (Object.keys(prev).length ? prev : lineup));
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => setHeroHydrated(true));
   }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Live board: auto-save the working lineup (debounced) so each window's picks
+  // are sealed by its own lock — there's no manual LOCK IN. Only after the saved
+  // lineup has hydrated, so we never clobber a returning manager's sealed picks.
+  useEffect(() => {
+    if (!liveCtx || !heroHydrated) return;
+    const t = setTimeout(() => {
+      const rows: PickRow[] = [];
+      for (const [key, p] of Object.entries(picks)) {
+        if (!p?.playerId) continue;
+        const [win, slot] = key.split('#');
+        if (win == null || slot == null) continue;
+        rows.push({ game_window: win, roster_slot: slot, player_slug: p.playerId, metric_id: p.metricId ?? null });
+      }
+      savePicks(liveCtx.matchupId, liveCtx.userId, rows).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [picks, liveCtx, heroHydrated]); // eslint-disable-line react-hooks/exhaustive-deps
   const [selSlot, setSelSlot] = useState<string | null>(null);
   // Per-window playback: each window runs its own clock + play/pause. The clock
   // is game-elapsed seconds by default, or REAL wall-clock seconds since kickoff
@@ -246,11 +264,14 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   }, [youPools]);
 
   const effYouPicks = useMemo<Record<string, Pick>>(() => {
+    // Live board: score EXACTLY the lineup you saved — the worker resolves the
+    // sealed picks, so the board must not silently inject a default lineup.
+    if (liveCtx) return picks;
     // The demo always shows the seeded lineup (even in setup) so a viewer can edit
     // a metric on a real, populated board; the live game keeps setup hidden.
     if (phase === 'setup' && !demo) return picks;
     return { ...youDefault, ...picks };
-  }, [phase, picks, youDefault, demo]);
+  }, [phase, picks, youDefault, demo, liveCtx]);
 
   // Seed the demo's local lineup once so its setup board is populated and metric
   // edits (pickMetricFor needs picks[key]) take hold — never touches the store.
@@ -328,10 +349,68 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // The playback ceiling for the active mode (game-elapsed vs real wall-clock).
   const winTarget = wallClock ? winRealMax : winMax;
 
+  // ── Real-time live board driver ─────────────────────────────────────────────
+  // The live board advances on the real clock: each window locks 1h before its
+  // real kickoff, goes LIVE at kickoff, and reads FINAL once its game window has
+  // elapsed. The play-by-play log fills in from the worker feed — which only
+  // carries plays that have already happened — so a LIVE window simply reveals
+  // everything ingested so far. No manual LOCK IN / ▶: the wall clock drives it.
+  const LOCK_LEAD_MS = 3_600_000;        // lineups lock 1h before kickoff
+  const GAME_WINDOW_MS = 4 * 3_600_000;  // a game reads "in progress" for ~4h after kickoff
+  type WinState = 'setup' | 'locked' | 'live' | 'final';
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!liveCtx) return;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [liveCtx]);
+  const liveWinState = useMemo(() => {
+    const out: Record<string, WinState> = {};
+    for (const w of windowsForWeek(week)) {
+      const k = windowKickoffMs(week, w.id);
+      let s: WinState = 'setup';
+      if (k != null) {
+        if (nowMs >= k + GAME_WINDOW_MS) s = 'final';
+        else if (nowMs >= k) s = 'live';
+        else if (nowMs >= k - LOCK_LEAD_MS) s = 'locked';
+      }
+      out[w.id] = s;
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [week, nowMs, livePbpVer]);
+  // Overall live-board phase, derived from its windows (all setup → setup, all
+  // final → final, else live). Drives the header + board-level gating; a manual
+  // phase tab is disabled on the live board.
+  const liveBoardPhase: Phase | null = useMemo(() => {
+    if (!liveCtx) return null;
+    const states = windowsForWeek(week).map((w) => liveWinState[w.id]);
+    if (!states.length) return 'setup';
+    if (states.every((s) => s === 'setup')) return 'setup';
+    if (states.every((s) => s === 'final')) return 'final';
+    return 'live';
+  }, [liveCtx, liveWinState, week]);
+  useEffect(() => { if (liveBoardPhase) setPhase(liveBoardPhase); }, [liveBoardPhase]);
+  const winRt = (wid: string): WinState | null => (liveCtx ? liveWinState[wid] ?? 'setup' : null);
+  const winPhaseFor = (wid: string): Phase => {
+    const s = winRt(wid);
+    if (!s) return phase;                              // sim/demo board: single global phase
+    return s === 'setup' ? 'setup' : s === 'final' ? 'final' : 'live'; // locked & live both render live
+  };
+  // A LIVE/FINAL window reveals every play ingested so far (winMax); locked/setup
+  // reveal nothing. The sim/demo board keeps its manual playback clock.
+  const effWinClock = (wid: string): number => {
+    if (!liveCtx) return winClocks[wid] ?? 0;
+    const s = winRt(wid);
+    return s === 'live' || s === 'final' ? (winMax[wid] ?? GAME_SECONDS) : 0;
+  };
+
   // On entering live/final — or switching clock mode — seed each window's
   // position + play state. (Toggling modes re-seeds to 0 so playback replays
-  // cleanly on the new axis rather than mixing units.)
+  // cleanly on the new axis rather than mixing units.) Sim/demo only — the live
+  // board is driven by the real clock above.
   useEffect(() => {
+    if (liveCtx) return;
     if (phase === 'setup') return;
     const clocks: Record<string, number> = {};
     const playing: Record<string, boolean> = {};
@@ -344,8 +423,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   }, [phase, winTarget]);
 
   // Single ticker advances every playing window toward its own (mode) max.
+  // Sim/demo only — the live board reveals plays on the real clock, not playback.
   useEffect(() => {
-    if (phase !== 'live') return;
+    if (liveCtx || phase !== 'live') return;
     const id = setInterval(() => {
       setWinClocks((prev) => {
         let changed = false;
@@ -413,8 +493,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       let next = prev; let changed = false;
       for (const rw of resolved.windows) {
         const id = rw.window.id;
-        const c = winClocks[id] ?? 0;
-        const active = phase === 'live' && c > 0 && c < (winTarget[id] ?? Infinity);
+        // Live board: a window's log is "active" while it's LIVE on the real
+        // clock; sim/demo uses the playback position.
+        const active = liveCtx ? winRt(id) === 'live' : (() => { const c = winClocks[id] ?? 0; return phase === 'live' && c > 0 && c < (winTarget[id] ?? Infinity); })();
         if (active !== (prevActive.current[id] ?? false)) {
           if (!changed) { next = { ...prev }; changed = true; }
           for (const s of rw.slots) next[slotKey(id, s.slotIndex)] = active;
@@ -423,7 +504,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       }
       return changed ? next : prev;
     });
-  }, [phase, winClocks, winMax, resolved]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, winClocks, winMax, resolved, liveCtx, liveWinState]);
 
   // ── totals at each window's own clock ──
   const { youTotal, themTotal } = useMemo(() => {
@@ -431,7 +513,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     if (phase === 'setup') return { youTotal: 0, themTotal: 0 };
     let y = 0; let t = 0;
     for (const rw of resolved.windows) {
-      const c = winClocks[rw.window.id] ?? 0;
+      // Live board: each window is sampled at its real-time position (all plays
+      // ingested so far for a live/final window, none for locked/setup).
+      const c = effWinClock(rw.window.id);
       for (const s of rw.slots) {
         if (!s.you || !s.their) continue;
         // In wall-clock mode each side is sampled at ITS game's clock for the
@@ -445,14 +529,16 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     }
     for (const b of resolved.bonuses ?? []) y += b.points; // armed-buff payouts
     return { youTotal: Math.round(y * 10) / 10, themTotal: Math.round(t * 10) / 10 };
-  }, [resolved, winClocks, phase, wallClock, week]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolved, winClocks, phase, wallClock, week, liveCtx, liveWinState, winMax]);
 
   // Every window has played out to its own end — the board is effectively final.
   const allWindowsDone = useMemo(() => {
     const ids = Object.keys(winTarget);
     return ids.length > 0 && ids.every((id) => (winClocks[id] ?? 0) >= (winTarget[id] ?? Infinity));
   }, [winClocks, winTarget]);
-  const boardFinal = phase === 'final' || (phase === 'live' && allWindowsDone);
+  // Live board is final only when the real clock has retired every window.
+  const boardFinal = liveCtx ? phase === 'final' : (phase === 'final' || (phase === 'live' && allWindowsDone));
 
   // Count slots that have a player placed (the visible action). Previously this
   // counted only metric-complete picks, so the "SLOTS SET" tally appeared frozen
@@ -471,11 +557,17 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const winLife = useMemo(() => {
     const out: Record<string, 'pending' | 'live' | 'closed'> = {};
     for (const id of Object.keys(winTarget)) {
-      const c = winClocks[id] ?? 0;
-      out[id] = c <= 0 ? 'pending' : c >= winTarget[id] ? 'closed' : 'live';
+      if (liveCtx) {
+        // Live board: the timeline is the real clock, not playback.
+        const s = liveWinState[id] ?? 'setup';
+        out[id] = s === 'live' ? 'live' : s === 'final' ? 'closed' : 'pending';
+      } else {
+        const c = winClocks[id] ?? 0;
+        out[id] = c <= 0 ? 'pending' : c >= winTarget[id] ? 'closed' : 'live';
+      }
     }
     return out;
-  }, [winClocks, winTarget]);
+  }, [winClocks, winTarget, liveCtx, liveWinState]);
   const anyStarted = Object.values(winLife).some((s) => s !== 'pending');
   const liveWins = windowsForWeek(week).filter((w) => winLife[w.id] === 'live');
   const preKickPhase = phase === 'live' && !anyStarted; // locked in, no game kicked yet
@@ -490,7 +582,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const backupPrompted = useRef<Set<string>>(new Set());
   useEffect(() => { if (phase !== 'live') backupPrompted.current = new Set(); }, [phase]);
   useEffect(() => {
-    if (phase !== 'live' || anyStarted || backupMenu) return;
+    // Sim/demo only — the live board doesn't force a lock-in interrupt (backups
+    // stay assignable from each spot). Its clock is real, not a manual kickoff.
+    if (liveCtx || phase !== 'live' || anyStarted || backupMenu) return;
     const next = resolved.windows.flatMap((w) => w.slots).find((s) => {
       if (!s.backup || !s.you) return false;
       const k = slotKey(s.win, s.slotIndex);
@@ -576,9 +670,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   }
 
   function assignFromRoster(playerId: string) {
-    if (phase !== 'setup') return;
     const win = playerWindow.get(playerId);
     if (!win) return;
+    // Live board: a window is editable only until its own lock (1h pre-kick).
+    // Sim/demo board: editable while the single board phase is setup.
+    if (liveCtx ? winRt(win) !== 'setup' : phase !== 'setup') return;
     const nSlots = slotsFor(win, week, extraSlots);
     // Already slotted in this window → just (re)select it.
     for (let i = 0; i < nSlots; i++) {
@@ -828,8 +924,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
           <Brand onClick={() => navigate({ name: 'league' })} hideDataSource={!!liveCtx} />
           <div style={{ display: 'flex', gap: 2, padding: 3, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4 }}>
+            {/* On the live board the phase follows the real clock — the tabs are a
+                read-only progress indicator, not a switcher. */}
             {(['setup', 'live', 'final'] as Phase[]).map((p) => (
-              <button key={p} onClick={() => changePhase(p)} className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', padding: '5px 9px', borderRadius: 3, border: 'none', background: phase === p ? 'var(--sh)' : 'transparent', color: phase === p ? 'var(--you)' : 'var(--dim)' }}>
+              <button key={p} onClick={() => { if (!liveCtx) changePhase(p); }} className="mono" title={liveCtx ? 'The live board advances on real time' : undefined} style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', padding: '5px 9px', borderRadius: 3, border: 'none', cursor: liveCtx ? 'default' : 'pointer', background: phase === p ? 'var(--sh)' : 'transparent', color: phase === p ? 'var(--you)' : 'var(--dim)' }}>
                 {p.toUpperCase()}
               </button>
             ))}
@@ -860,15 +958,24 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 <div className="mono" style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--faint)' }}>LOCKS IN</div>
                 <div className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--warn)' }}>{weekLockLabel(week)}</div>
               </div>
-              <button onClick={lockIn} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4, boxShadow: '0 0 20px color-mix(in srgb, var(--you) 30%, transparent)' }}>
-                LOCK IN →
-              </button>
+              {/* Live board: no LOCK IN button — each window locks on the real clock
+                  and the lineup auto-saves. Sim/demo keeps the manual lock. */}
+              {liveCtx ? (
+                <span className="mono" title="Your lineup saves automatically and locks 1h before each window's kickoff." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 40%, var(--bd))', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', borderRadius: 4, padding: '6px 10px' }}>✓ AUTO-SAVES</span>
+              ) : (
+                <button onClick={lockIn} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4, boxShadow: '0 0 20px color-mix(in srgb, var(--you) 30%, transparent)' }}>
+                  LOCK IN →
+                </button>
+              )}
             </div>
           )}
           {phase === 'live' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ display: 'inline-block', width: 8, height: 8, background: '#FF4F62', borderRadius: '50%', animation: 'lpulse 1.2s ease infinite' }} />
               <span className="mono" style={{ color: '#FF4F62', fontWeight: 700, letterSpacing: '0.14em', fontSize: 11 }}>LIVE</span>
+              {/* Live board plays on the real clock — no manual RUN ALL / clock-mode
+                  / speed controls. Those stay on the sim/demo replay only. */}
+              {!liveCtx && <>
               <button onClick={toggleAll} title="Play — or pause — every game window at once" className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px' }}>
                 {anyPlaying ? '❚❚ PAUSE ALL' : '▶ RUN ALL'}
               </button>
@@ -884,6 +991,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: speed > 1 ? 'var(--on-accent)' : 'var(--dim)', background: speed > 1 ? 'var(--you)' : 'var(--surface)', border: `1px solid ${speed > 1 ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '6px 10px' }}>
                 ⏩ {speed}×
               </button>
+              </>}
             </div>
           )}
           {phase === 'final' && (
@@ -942,12 +1050,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               </div>
               <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{headline}</div>
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, maxWidth: 520, lineHeight: 1.5 }}>{subhead}</div>
-              {preKickPhase && (
+              {preKickPhase && !liveCtx && (
                 <div className="mono" style={{ marginTop: 7, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))', border: '1px solid var(--warn)', borderRadius: 6, padding: '6px 10px' }}>
                   ▶ Nothing's kicked yet — press <span style={{ color: 'var(--text)' }}>RUN ALL</span> (or ▶ on a window) to play the week out.
                 </div>
               )}
-              {phase === 'live' && (
+              {phase === 'live' && !liveCtx && (
                 <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, fontSize: 10, color: 'var(--dim)' }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', flex: 'none', background: clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--faint)' }} />
                   <span style={{ fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)' }}>{clockMode === 'real' ? 'REAL CLOCK' : clockMode === 'feed' ? 'REAL FEED' : 'GAME CLOCK'}</span>
@@ -990,22 +1098,23 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 key={rw.window.id}
                 rw={rw}
                 week={week}
-                phase={phase}
-                clock={winClocks[rw.window.id] ?? 0}
+                phase={winPhaseFor(rw.window.id)}
+                realtime={winRt(rw.window.id)}
+                clock={effWinClock(rw.window.id)}
                 maxClock={winTarget[rw.window.id] ?? GAME_SECONDS}
                 wallClock={wallClock}
                 realClock={realResolve}
                 wallSeconds={(() => {
-                  const c = winClocks[rw.window.id] ?? 0;
+                  const c = effWinClock(rw.window.id);
                   // Real seconds elapsed at the current feed position: direct in
                   // wall modes; in game mode, scale the game position into the
                   // window's real-time span so the wall clock still advances.
                   return wallClock ? c : ((winMax[rw.window.id] ? c / winMax[rw.window.id] : 0) * (winRealMax[rw.window.id] ?? 0));
                 })()}
-                playing={!!winPlaying[rw.window.id]}
+                playing={liveCtx ? false : !!winPlaying[rw.window.id]}
                 onTogglePlay={() => setWinPlay(rw.window.id, !winPlaying[rw.window.id])}
                 onReplay={() => replayWin(rw.window.id)}
-                canApplyExtra={phase === 'setup' && extraSlotQty > 0}
+                canApplyExtra={winPhaseFor(rw.window.id) === 'setup' && extraSlotQty > 0}
                 extraSlotQty={extraSlotQty}
                 onApplyExtra={() => applyExtraSlot(week, rw.window.id)}
                 onRemoveExtra={() => removeExtraSlot(week, rw.window.id)}
@@ -1588,6 +1697,7 @@ function WindowSection(props: {
   rw: ReturnType<typeof buildMatchup>['windows'][number];
   week: number;
   phase: Phase;
+  realtime?: 'setup' | 'locked' | 'live' | 'final' | null; // live board: real-clock window state (no manual playback)
   clock: number;
   maxClock: number;
   wallClock: boolean;
@@ -1622,7 +1732,7 @@ function WindowSection(props: {
   onScout: (win: WindowId) => void;
   lockPlayer?: boolean; // demo setup: metric is editable, but the player is fixed
 }) {
-  const { rw, week, phase, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer } = props;
+  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer } = props;
   const w = rw.window;
   // Twin Generals: with the buff armed and ≥2 of your Field General QBs in this
   // window, the top two multipliers stack — link those QB spots so you can see
@@ -1633,7 +1743,9 @@ function WindowSection(props: {
     if (fgKeys.length >= 2) fgKeys.forEach((k) => twinLinked.add(k));
   }
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
-  const done = clock >= maxClock;
+  // On the live board, "done" tracks the real-clock state (a LIVE window reveals
+  // all ingested plays but isn't over); otherwise it's the playback position.
+  const done = realtime ? realtime === 'final' : clock >= maxClock;
   const pct = Math.round((Math.min(clock, maxClock) / maxClock) * 100);
   // Live apply-mode: EMP targets the whole live window; Spy/Mulligan target a
   // single spot. Highlight what's eligible and dim the rest.
@@ -1705,6 +1817,22 @@ function WindowSection(props: {
               </button>
             )}
             <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--dim)' }}>{setN}/{rw.slots.length} SET</span>
+          </div>
+        ) : realtime ? (
+          // Live board: the window's state comes from the real clock — no manual
+          // playback. Show LOCKED (sealed, pre-kick) / ● LIVE / FINAL.
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.06em' }}>{windowTimeLabel(week, w.id)} ET</span>
+            {realtime === 'locked' ? (
+              <span className="mono" title="Lineups are locked for this window — kickoff is within the hour." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '3px 8px' }}>🔒 LOCKED</span>
+            ) : realtime === 'final' ? (
+              <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)' }}>FINAL</span>
+            ) : (
+              <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: '#FF4F62' }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#FF4F62', animation: 'lpulse 1.2s ease infinite' }} />
+                LIVE
+              </span>
+            )}
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
