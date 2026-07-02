@@ -9,7 +9,7 @@ import { powerupById } from '../data/powerups';
 import { DEMO_WEEK } from '../config';
 import { DEFAULT_PROVIDER_ID, type ProviderUser, type ProviderId } from '../data/providers';
 import { track, identify, Ev } from './analytics';
-import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs } from '../data/liveApi';
+import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied } from '../data/liveApi';
 
 import type { SlotSwap } from '../engine/matchup';
 export type { SlotSwap };
@@ -270,22 +270,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // power-ups persist across devices) and start applied clean (armed powerups
   // aren't server-backed yet). Leaving it: restore the demo save from localStorage.
   const wasLive = useRef(false);
+  const appliedHydrated = useRef(false);
   useEffect(() => {
     if (liveCtx) {
       wasLive.current = true;
+      appliedHydrated.current = false;
       myInventory(liveCtx.matchupId).then((inv) => setInventory(inv ?? {})).catch(() => setInventory({}));
-      // Load the armed buffs for this matchup's week (rest of applied is real-time/local).
+      // Restore the full working applied-state: armed buffs (scored, from
+      // applied_state) + the working blob (extra slots, swaps, backups, targeted).
       const wk = liveCtx.week;
-      myBuffs(liveCtx.matchupId)
-        .then((buffs) => setApplied({ [wk]: { extraSlots: {}, swaps: {}, backups: {}, buffs: Object.fromEntries((buffs ?? []).map((b) => [b, true])) } }))
-        .catch(() => setApplied({}));
+      Promise.all([myBuffs(liveCtx.matchupId).catch(() => [] as string[]), myHeroApplied(liveCtx.matchupId).catch(() => ({}))])
+        .then(([buffs, blob]) => {
+          const b = (blob ?? {}) as Partial<AppliedWeek>;
+          setApplied({ [wk]: {
+            extraSlots: b.extraSlots ?? {}, swaps: b.swaps ?? {}, backups: b.backups ?? {},
+            doubleOrNothing: b.doubleOrNothing, spy: b.spy, byeSteal: b.byeSteal, emp: b.emp,
+            buffs: Object.fromEntries((buffs ?? []).map((x) => [x, true as const])),
+          } });
+        })
+        .catch(() => setApplied({}))
+        .finally(() => { appliedHydrated.current = true; });
     } else if (wasLive.current) {
       wasLive.current = false;
+      appliedHydrated.current = false;
       const s = loadState();
       creditedWeeks.current = new Set(s.weeks);
       setCoins(s.coins); setInventory(s.inv); setApplied(s.applied);
     }
   }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live: persist the working applied blob (minus buffs → applied_state, and
+  // lineup → sealed_pick) on every change, once hydrated, so it restores anywhere.
+  useEffect(() => {
+    if (!liveCtx || !appliedHydrated.current) return;
+    const cur = applied[liveCtx.week];
+    if (!cur) return;
+    const rest: Record<string, unknown> = { ...cur };
+    delete rest.lineup; delete rest.buffs;
+    heroSetApplied(liveCtx.matchupId, rest).catch(() => {});
+  }, [applied, liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setTheme = (t: ThemeName) => {
     setThemeState(t);
