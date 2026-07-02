@@ -80,7 +80,7 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
   try {
     const slate = await buildSlate(season, week, config.seasonType);
     if (slate.length) {
-      setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win })));
+      setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
       await db().from('nfl_slate').upsert(
         slate.map((g) => ({ season, week, home: g.home, away: g.away, win: g.win, kickoff: g.kickoff })),
         { onConflict: 'season,week,home' },

@@ -59,7 +59,7 @@ async function tick() {
   const games = await getGames(season, week, config.seasonType);
   // Keep the live slate fresh (overrides baked 2025) so lock/resolve slate-gate
   // the AI lineup against the real current-season windows + byes.
-  setRuntimeSlate(week, slateFromGames(games).map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win })));
+  setRuntimeSlate(week, slateFromGames(games).map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
 
   // Injuries: daily, or hourly on game days.
   const injEvery = gameDay(games) ? config.injuryPollGamedayMs : config.injuryPollDailyMs;

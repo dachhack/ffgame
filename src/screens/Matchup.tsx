@@ -3,8 +3,8 @@ import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile } from '../app/ui';
 import { avatarUrl, teamLogo } from '../data/media';
-import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, kickoffLabel } from '../data/nflSlate';
-import { WINDOWS, METRICS, metricById } from '../data/metrics';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, kickoffLabel, windowsForWeek } from '../data/nflSlate';
+import { METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById, type Powerup } from '../data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '../data/league';
 import {
@@ -461,7 +461,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // Placed players still missing their (required) hidden metric — those slots
   // score 0 until a metric is chosen, so surface them as an interim step.
   const metriclessCount = Object.values(picks).filter((p) => p.playerId && !p.metricId).length;
-  const totalSlots = totalSlotsWith(extraSlots);
+  const totalSlots = totalSlotsWith(week, extraSlots);
   const anyPlaying = Object.values(winPlaying).some(Boolean);
   const extraSlotQty = inventory['extra-slot'] ?? 0;
 
@@ -477,7 +477,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     return out;
   }, [winClocks, winTarget]);
   const anyStarted = Object.values(winLife).some((s) => s !== 'pending');
-  const liveWins = WINDOWS.filter((w) => winLife[w.id] === 'live');
+  const liveWins = windowsForWeek(week).filter((w) => winLife[w.id] === 'live');
   const preKickPhase = phase === 'live' && !anyStarted; // locked in, no game kicked yet
 
   // On lock-in, walk through EVERY UNOPPOSED player (your player with no
@@ -506,8 +506,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   if (aw?.doubleOrNothing) { const s = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === aw.doubleOrNothing); activeEffects.push({ key: 'don', icon: '⚖️', name: 'Double or Nothing', detail: 'Staked ' + (s?.you?.player.name ?? '—'), onRemove: phase === 'setup' ? () => clearDoubleOrNothing(week) : undefined }); }
   if (aw?.byeSteal) activeEffects.push({ key: 'bye', icon: '🪂', name: 'Bye Steal', detail: 'Fielded ' + (getPlayer(aw.byeSteal.playerId)?.name ?? '—'), onRemove: phase === 'setup' ? () => clearByeSteal(week) : undefined });
   if (aw?.spy) { const sp = aw.spy; activeEffects.push({ key: 'spy', icon: '👁️', name: 'Spy', detail: `Revealed a slot’s ${sp.reveal}`, onRemove: preKickPhase ? () => clearSpy(week) : undefined }); }
-  for (const [win, n] of Object.entries(aw?.extraSlots ?? {})) if ((n ?? 0) > 0) { const wl = WINDOWS.find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'x-' + win, icon: '➕', name: 'Extra Slot', detail: `+${n} on ${wl}`, onRemove: phase === 'setup' ? () => removeExtraSlot(week, win as WindowId) : undefined }); }
-  for (const [win, c] of Object.entries(aw?.emp ?? {})) if (c != null) { const wl = WINDOWS.find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'emp-' + win, icon: '💥', name: 'EMP', detail: `Fired on ${wl}` }); }
+  for (const [win, n] of Object.entries(aw?.extraSlots ?? {})) if ((n ?? 0) > 0) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'x-' + win, icon: '➕', name: 'Extra Slot', detail: `+${n} on ${wl}`, onRemove: phase === 'setup' ? () => removeExtraSlot(week, win as WindowId) : undefined }); }
+  for (const [win, c] of Object.entries(aw?.emp ?? {})) if (c != null) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'emp-' + win, icon: '💥', name: 'EMP', detail: `Fired on ${wl}` }); }
 
   // Owned power-ups you can still apply right now, scoped to open windows. 'pre'
   // power-ups lock at the first kickoff; 'live' ones need a running window.
@@ -531,8 +531,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // never sits below an empty one.
   function compactPicks(p: Record<string, Pick>): Record<string, Pick> {
     const out: Record<string, Pick> = {};
-    for (const w of WINDOWS) {
-      const n = slotsFor(w.id, extraSlots);
+    for (const w of windowsForWeek(week)) {
+      const n = slotsFor(w.id, week, extraSlots);
       let idx = 0;
       for (let i = 0; i < n; i++) {
         const pk = p[slotKey(w.id, i)];
@@ -579,7 +579,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     if (phase !== 'setup') return;
     const win = playerWindow.get(playerId);
     if (!win) return;
-    const nSlots = slotsFor(win, extraSlots);
+    const nSlots = slotsFor(win, week, extraSlots);
     // Already slotted in this window → just (re)select it.
     for (let i = 0; i < nSlots; i++) {
       const k = slotKey(win, i);
@@ -1041,7 +1041,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         const curPlayer = cur ? getPlayer(cur.playerId) : null;
         if (!curPlayer) return null;
         const slottedIds = new Set(
-          Array.from({ length: slotsFor(swapTarget.win, extraSlots) }, (_, i) => effYouPicks[slotKey(swapTarget.win, i)]?.playerId).filter(Boolean) as string[],
+          Array.from({ length: slotsFor(swapTarget.win, week, extraSlots) }, (_, i) => effYouPicks[slotKey(swapTarget.win, i)]?.playerId).filter(Boolean) as string[],
         );
         const bench = (youPools[swapTarget.win] || []).filter((p) => !slottedIds.has(p.id));
         const atClock = winClocks[swapTarget.win] ?? 0;
@@ -1089,7 +1089,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
       {pickerSlot && (() => {
         const { key, win } = pickerSlot;
-        const n = slotsFor(win, extraSlots);
+        const n = slotsFor(win, week, extraSlots);
         const slotted = new Set<string>();
         for (let i = 0; i < n; i++) { const pid = picks[slotKey(win, i)]?.playerId; if (pid) slotted.add(pid); }
         const current = picks[key]?.playerId;
@@ -1346,14 +1346,14 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.2em', color: accent, fontWeight: 700 }}>{side === 'you' ? '◂' : '▸'} {side === 'you' ? 'YOUR' : 'THEIR'} ROSTER</span>
         <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{total}</span>
       </button>
-      {WINDOWS.map((w) => (
+      {windowsForWeek(week).map((w) => (
         <div key={w.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
             <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{w.label}</span>
             <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{w.time}</span>
           </div>
-          {pools[w.id].length === 0 && <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', padding: '0 4px' }}>— none playing —</span>}
-          {pools[w.id].map((p) => {
+          {(pools[w.id] ?? []).length === 0 && <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', padding: '0 4px' }}>— none playing —</span>}
+          {(pools[w.id] ?? []).map((p) => {
             // Never reveal which players the opponent has selected during setup.
             const assigned = assignedIds.has(p.id) && (side === 'you' || phase !== 'setup');
             const interactive = side === 'you' && phase === 'setup';
@@ -2008,7 +2008,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
   onPick: (id: string) => void; onRemove: () => void; onClose: () => void;
   gated?: (p: Player) => boolean; onGated?: (p: Player) => void; // opt-in premium lock (default: none)
 }) {
-  const label = WINDOWS.find((w) => w.id === win)?.label ?? win.toUpperCase();
+  const label = windowsForWeek(week).find((w) => w.id === win)?.label ?? win.toUpperCase();
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflow: 'auto' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
@@ -2057,7 +2057,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
 function ScoutModal({ win, week, pool, oppName, onClose }: {
   win: WindowId; week: number; pool: Player[]; oppName: string; onClose: () => void;
 }) {
-  const label = WINDOWS.find((w) => w.id === win)?.label ?? win.toUpperCase();
+  const label = windowsForWeek(week).find((w) => w.id === win)?.label ?? win.toUpperCase();
   const posOrder: Pos[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
   const sorted = [...pool].sort((a, b) => (posOrder.indexOf(a.pos) - posOrder.indexOf(b.pos)) || a.name.localeCompare(b.name));
   return (
