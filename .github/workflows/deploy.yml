@@ -45,6 +45,9 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # Bound a hung Pages deployment (the publish step polls up to ~10 min); this
+    # caps the job so a Pages outage fails the run promptly instead of lingering.
+    timeout-minutes: 12
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
