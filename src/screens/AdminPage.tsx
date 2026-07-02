@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, type LeagueJoiner,
   setTeamController, setLineupPolicy,
   leagueKdst, setKdstMode, setTeamKdst,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
@@ -358,6 +358,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
       )}
       {tab === 'members' && members && (
         <div style={{ marginTop: 10 }}>
+          <WeeklyBudget l={l} onGranted={() => loadMembers()} />
           {(() => { const nj = members.filter((m) => !m.enrolled).length; return (
             <div className="mono" style={{ ...mono, fontSize: 9.5, color: nj ? 'var(--dim)' : 'var(--you)', marginBottom: 6 }}>
               {members.length - nj}/{members.length} joined{nj ? ` · ${nj} not yet` : ''}
@@ -794,6 +795,55 @@ function SeedCoin({ balance, onSeed }: { balance: number; onSeed: (amt: number) 
         placeholder="grant coin…" inputMode="numeric" style={{ ...inp, fontSize: 10, padding: '5px 7px', width: 90 }} />
       <button onClick={go} disabled={busy || !amt} className="mono" style={{ ...btn(false), opacity: busy || !amt ? 0.6 : 1 }}>{busy ? '…' : 'grant'}</button>
       {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp, #e5484d)' }}>{msg}</span>}
+    </div>
+  );
+}
+
+// Commissioner: the league's flat weekly coin budget + a per-week grant. Setting
+// the amount defines the budget; "grant" credits every team that week's budget
+// (idempotent server-side, so a re-press never double-pays).
+function WeeklyBudget({ l, onGranted }: { l: AdminLeague; onGranted: () => void }) {
+  const [amt, setAmt] = useState(String(l.weekly_budget ?? 0));
+  const [saved, setSaved] = useState<number>(l.weekly_budget ?? 0);
+  const [week, setWeek] = useState('1');
+  const [busy, setBusy] = useState<'' | 'save' | 'grant'>('');
+  const [msg, setMsg] = useState<string | null>(null);
+  const dirty = Number(amt) !== saved;
+  const save = async () => {
+    const n = Number(amt);
+    if (busy || Number.isNaN(n) || n < 0) return;
+    setBusy('save'); setMsg(null);
+    const r = await commishSetWeeklyBudget(l.league_id, n);
+    setBusy('');
+    if (r.ok) { setSaved(r.weekly_budget ?? n); setMsg(`✓ budget set to ${Math.round(r.weekly_budget ?? n)}`); } else setMsg(r.error ?? 'failed');
+  };
+  const grant = async () => {
+    const w = Number(week);
+    if (busy || !w || w < 1) return;
+    setBusy('grant'); setMsg(null);
+    const r = await commishGrantWeeklyBudget(l.league_id, w);
+    setBusy('');
+    if (!r.ok) { setMsg(r.error ?? 'failed'); return; }
+    if ((r.weekly_budget ?? 0) <= 0) setMsg('set a budget above 0 first');
+    else if ((r.credited ?? 0) === 0) setMsg(`week ${w} already granted`);
+    else { setMsg(`✓ granted ${Math.round(r.weekly_budget ?? 0)} to ${r.credited} team${r.credited === 1 ? '' : 's'} · week ${w}`); onGranted(); }
+  };
+  return (
+    <div style={{ marginBottom: 10, padding: '9px 10px', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6 }}>
+      <div className="mono" style={{ ...mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 7 }}>◈ WEEKLY BUDGET</div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input value={amt} onChange={(e) => { setAmt(e.target.value.replace(/[^\d]/g, '')); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
+          placeholder="coin / week" inputMode="numeric" style={{ ...inp, fontSize: 11, padding: '5px 7px', width: 90 }} />
+        <button onClick={save} disabled={busy === 'save' || !dirty} className="mono" style={{ ...btn(false), opacity: busy === 'save' || !dirty ? 0.6 : 1 }}>{busy === 'save' ? '…' : 'set budget'}</button>
+        <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>each team, per week</span>
+      </div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 7, flexWrap: 'wrap' }}>
+        <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)' }}>grant week</span>
+        <input value={week} onChange={(e) => { setWeek(e.target.value.replace(/[^\d]/g, '')); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') grant(); }}
+          inputMode="numeric" style={{ ...inp, fontSize: 11, padding: '5px 7px', width: 48, textAlign: 'center' }} />
+        <button onClick={grant} disabled={busy === 'grant' || saved <= 0} title={saved <= 0 ? 'set a budget above 0 first' : 'credit every team this week’s budget'} className="mono" style={{ ...btn(false), opacity: busy === 'grant' || saved <= 0 ? 0.6 : 1 }}>{busy === 'grant' ? '…' : 'grant to all teams'}</button>
+      </div>
+      {msg && <div className="mono" style={{ ...mono, fontSize: 9, marginTop: 6, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--dim)' }}>{msg}</div>}
     </div>
   );
 }
