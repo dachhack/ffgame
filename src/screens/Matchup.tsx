@@ -659,7 +659,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   function replayWin(wid: string) { setWinClocks((c) => ({ ...c, [wid]: 0 })); setWinPlaying((p) => ({ ...p, [wid]: true })); }
 
   const headline = phase === 'setup' ? 'Set Your Windows' : phase === 'live' ? 'Live Resolution' : `Week ${week} — Final`;
-  const subhead = `${you.name} vs ${opp.name} · each window plays on its own clock — hit ▶ on any window, or run them all.`;
+  // The real live board advances on real time (no manual per-window playback), so
+  // it drops the "hit ▶ / run them all" copy; the sim/demo replay keeps it.
+  const subhead = liveCtx
+    ? `${you.name} vs ${opp.name}`
+    : `${you.name} vs ${opp.name} · each window plays on its own clock — hit ▶ on any window, or run them all.`;
 
   if (!ready) {
     return (
@@ -835,8 +839,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               ⟳ REPLAY
             </span>
           )}
-          <SiteSettings />
-          {resolved.real && (
+          {/* REAL PBP badge is a replay-only tag — the live board isn't a PBP replay. */}
+          {!liveCtx && resolved.real && (
             <span className="mono" title="This week resolves off real 2025 NFL play-by-play" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 3, padding: '3px 6px' }}>
               ● REAL PBP
             </span>
@@ -846,7 +850,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           <button onClick={() => setEarnOpen(true)} title="Drip Coin — tap for earning opportunities" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 9px', cursor: 'pointer' }}>
             <CoinIcon size={13} />
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{Math.round(coinBal)}</span>
-            {weekCoins > 0 && <span style={{ fontSize: 8.5, color: 'var(--fx-streak)' }}>+{weekCoins}</span>}
+            {phase === 'final' && weekCoins > 0 && <span style={{ fontSize: 8.5, color: 'var(--fx-streak)' }}>+{weekCoins}</span>}
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <Avatar name={you.name} accent="var(--you)" size={20} src={avatarUrl(you.ownerId)} />
@@ -893,6 +897,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               WEEK RESULT →
             </button>
           )}
+          <SiteSettings />
         </div>
       </header>
 
@@ -961,7 +966,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                   <button onClick={() => setPendingApply(null)} className="mono" style={{ background: 'none', border: 'none', color: 'var(--dim)', fontWeight: 700, fontSize: 9, letterSpacing: '0.1em' }}>CANCEL</button>
                 </div>
               ) : (
-                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'nowrap' }}>
+                <div style={{ marginTop: 8 }}>
+                  <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 6 }}>⚡ POWER-UPS</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'nowrap' }}>
                   <button onClick={() => setPuView('active')} className="mono" style={{ flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--you)', borderRadius: 6, padding: '7px 9px' }}>
                     ◈ ACTIVE{activeEffects.length > 0 ? ` · ${activeEffects.length}` : ''}
                   </button>
@@ -971,6 +978,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                   <button onClick={() => setShopOpen(true)} className="mono" style={{ flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 9px' }}>
                     🛒 SHOP
                   </button>
+                </div>
                 </div>
               )}
               <TargetPanel aw={aw} oppPicks={oppPicks} preKick={preKickPhase} onClearSpy={() => clearSpy(week)} />
