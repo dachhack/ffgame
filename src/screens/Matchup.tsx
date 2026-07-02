@@ -1826,6 +1826,31 @@ function WindowSection(props: {
   })();
   const slateTeams = [...new Set(slate.flatMap((g) => [g.away, g.home]))];
 
+  // This window's own real-clock timeline (live board): locks 1h before its
+  // kickoff, goes live at kickoff. Shown per-window so each window carries its
+  // own Setup → Locked → Live → Final states + times, not just the board header.
+  const winKickSod = windowKickoffSod(week, w.id);
+  const lockLabel = fmtTimeOfDay(winKickSod - 3600);
+  const kickLabel = fmtTimeOfDay(winKickSod);
+  // The state chip for this window's real-clock state.
+  const stateChip = !realtime ? null : realtime === 'setup' ? (
+    <span className="mono" title="Open — edit this window until it locks 1h before kickoff." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 4, padding: '3px 8px' }}>SETUP</span>
+  ) : realtime === 'locked' ? (
+    <span className="mono" title="Lineups are locked for this window — kickoff is within the hour." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '3px 8px' }}>🔒 LOCKED</span>
+  ) : realtime === 'final' ? (
+    <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 4, padding: '3px 8px' }}>FINAL</span>
+  ) : (
+    <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: '#FF4F62', border: '1px solid #FF4F62', borderRadius: 4, padding: '3px 8px' }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#FF4F62', animation: 'lpulse 1.2s ease infinite' }} /> LIVE
+    </span>
+  );
+  // The time hint that pairs with the state: what's next on this window's clock.
+  const timeHint = !realtime ? null
+    : realtime === 'setup' ? `🔒 locks ${lockLabel} ET`
+    : realtime === 'locked' ? `▶ kicks ${kickLabel} ET`
+    : realtime === 'live' ? `kicked ${kickLabel} ET`
+    : null;
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--bd)', paddingBottom: 7, marginBottom: 9, gap: 12, flexWrap: 'wrap' }}>
@@ -1844,6 +1869,9 @@ function WindowSection(props: {
 
         {phase === 'setup' ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            {/* Live board: this window's own state + lock time, right in its header. */}
+            {stateChip}
+            {timeHint && <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--warn)', letterSpacing: '0.04em' }}>{timeHint}</span>}
             {canApplyExtra && (
               <button
                 onClick={onApplyExtra}
@@ -1863,19 +1891,10 @@ function WindowSection(props: {
           </div>
         ) : realtime ? (
           // Live board: the window's state comes from the real clock — no manual
-          // playback. Show LOCKED (sealed, pre-kick) / ● LIVE / FINAL.
+          // playback. Show its state chip + the next milestone on its own clock.
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.06em' }}>{windowTimeLabel(week, w.id)} ET</span>
-            {realtime === 'locked' ? (
-              <span className="mono" title="Lineups are locked for this window — kickoff is within the hour." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '3px 8px' }}>🔒 LOCKED</span>
-            ) : realtime === 'final' ? (
-              <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)' }}>FINAL</span>
-            ) : (
-              <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: '#FF4F62' }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#FF4F62', animation: 'lpulse 1.2s ease infinite' }} />
-                LIVE
-              </span>
-            )}
+            {timeHint && <span className="mono" style={{ fontSize: 9, color: realtime === 'live' ? 'var(--faint)' : 'var(--warn)', fontWeight: 700, letterSpacing: '0.04em' }}>{timeHint}</span>}
+            {stateChip}
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
