@@ -1,6 +1,7 @@
 import type { League, FantasyTeam, Player, Pos, ScheduleGame } from '../types';
 import { statsForName, shortName, normName, teamForName } from './players';
 import { setSeasonYear } from './nflSlate';
+import { setInjurySeason } from './injuries';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Drip Test League — the public demo. A SANITIZED clone: the rosters,
@@ -253,11 +254,13 @@ export interface BuiltLeague { league: League; players: Record<string, Player>; 
 export function setActiveLeague(b: BuiltLeague): void {
   activeLeague = b.league; activePlayers = b.players; activeWeeks = Math.min(REG_SEASON_WEEKS, Math.max(1, b.weeks));
   setSeasonYear(b.league.season); // calendar follows this league's season (2026 → 2026 dates)
+  setInjurySeason(b.league.season); // baked 2025 injury tags only apply to a 2025 board
 }
 /** Restore the baked DRIP demo league. */
 export function resetToDemoLeague(): void {
   activeLeague = DEMO_LEAGUE; activePlayers = DEMO_PLAYERS; activeWeeks = 14;
   setSeasonYear(2025); // the demo replays the baked 2025 season
+  setInjurySeason(2025); // baked injury tags belong to the 2025 replay
 }
 
 // Kept for back-compat: the baked demo league object.
