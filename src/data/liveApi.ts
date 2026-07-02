@@ -498,6 +498,9 @@ export const LIVE_BUFFS = ['overtime', 'ot-shield', 'momentum', 'garbage-time', 
 export const armBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; buffs?: string[] }>('arm_buff', { p_matchup_id: matchupId, p_buff: buff });
 export const disarmBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; buffs?: string[] }>('disarm_buff', { p_matchup_id: matchupId, p_buff: buff });
 export const myBuffs = (matchupId: string) => rpc<string[]>('my_buffs', { p_matchup_id: matchupId });
+/** Hero board: persist the armed buff set (no wallet charge — paid at buy). */
+export const heroSetBuffs = (matchupId: string, buffs: string[]) =>
+  rpc<{ ok: boolean; error?: string }>('hero_set_buffs', { p_matchup_id: matchupId, p_buffs: buffs });
 
 // Metric unlocks (M2): arm before a locked metric (Combo Drip / Return / Air Raid)
 // can be picked. Same applied_state store, free this season.

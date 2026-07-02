@@ -9,7 +9,7 @@ import { powerupById } from '../data/powerups';
 import { DEMO_WEEK } from '../config';
 import { DEFAULT_PROVIDER_ID, type ProviderUser, type ProviderId } from '../data/providers';
 import { track, identify, Ev } from './analytics';
-import { myInventory, consumeInventory, refundInventory } from '../data/liveApi';
+import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs } from '../data/liveApi';
 
 import type { SlotSwap } from '../engine/matchup';
 export type { SlotSwap };
@@ -273,8 +273,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (liveCtx) {
       wasLive.current = true;
-      setApplied({});
       myInventory(liveCtx.matchupId).then((inv) => setInventory(inv ?? {})).catch(() => setInventory({}));
+      // Load the armed buffs for this matchup's week (rest of applied is real-time/local).
+      const wk = liveCtx.week;
+      myBuffs(liveCtx.matchupId)
+        .then((buffs) => setApplied({ [wk]: { extraSlots: {}, swaps: {}, backups: {}, buffs: Object.fromEntries((buffs ?? []).map((b) => [b, true])) } }))
+        .catch(() => setApplied({}));
     } else if (wasLive.current) {
       wasLive.current = false;
       const s = loadState();
@@ -317,6 +321,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!liveCtx) return;
     (delta < 0 ? consumeInventory : refundInventory)(liveCtx.matchupId, id).catch(() => {});
   };
+  // The armed buff ids for a week (pre-mutation snapshot from `applied`).
+  const armedBuffs = (week: number): string[] => { const b = applied[week]?.buffs ?? {}; return Object.keys(b).filter((k) => b[k]); };
+  // Persist the armed buff set server-side on the hero board (survives reload).
+  const pushBuffs = (buffs: string[]): void => { if (liveCtx) heroSetBuffs(liveCtx.matchupId, buffs).catch(() => {}); };
 
   const useConsumable = (id: string): boolean => {
     if ((inventory[id] ?? 0) <= 0) return false;
@@ -339,8 +347,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const applyExtraSlot = (week: number, win: WindowId): boolean =>
     consumeAndApply('extra-slot', week, (cur) => ({ ...cur, extraSlots: { ...cur.extraSlots, [win]: (cur.extraSlots[win] ?? 0) + 1 } }));
 
-  const armBuff = (week: number, id: string): boolean =>
-    applied[week]?.buffs?.[id] ? false : consumeAndApply(id, week, (cur) => ({ ...cur, buffs: { ...cur.buffs, [id]: true } }));
+  const armBuff = (week: number, id: string): boolean => {
+    if (applied[week]?.buffs?.[id]) return false;
+    const ok = consumeAndApply(id, week, (cur) => ({ ...cur, buffs: { ...cur.buffs, [id]: true } }));
+    if (ok) pushBuffs([...armedBuffs(week), id]);
+    return ok;
+  };
 
   // Disarm a previously-armed buff: clear the flag and refund the consumable.
   // Functional setters so several disarms in one tick compose (persist via effect).
@@ -352,6 +364,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return { ...prev, [week]: { ...cur, buffs } };
     });
     setInventory((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 })); syncInv(id, 1);
+    pushBuffs(armedBuffs(week).filter((b) => b !== id));
   };
 
   const setDoubleOrNothing = (week: number, slotKey: string): boolean =>
