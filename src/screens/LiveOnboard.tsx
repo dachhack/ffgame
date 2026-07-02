@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
 import { SiteSettings } from '../app/ui';
 import { liveConfigured } from '../data/supabaseClient';
@@ -7,8 +7,8 @@ import {
   getSession, onAuth, signOut, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, joinLeague, myEnrollments, myLinkedSleeper, claimMyRosters,
   redeemCommish, isAdmin, commishOverview, friendlyError,
-  myMatchup, matchupTeams,
-  type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague,
+  myMatchup, matchupTeams, leagueResults,
+  type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
 } from '../data/liveApi';
 import { DEMO_WEEK } from '../config';
 import { buildDripTestLeague } from '../data/dripTest';
@@ -42,7 +42,7 @@ function GoogleG() {
   );
 }
 
-type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin' | 'add' | 'join';
+type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin' | 'add' | 'join' | 'results';
 
 export function LiveOnboard() {
   const { navigate, route } = useStore();
@@ -367,6 +367,7 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
     </>
   );
   if (view === 'board') return <LiveBoard userId={session.user.id} leagueId={target?.leagueId} rosterId={target?.rosterId} onBack={() => setView('home')} />;
+  if (view === 'results' && target) return <LeagueResults leagueId={target.leagueId} onBack={() => setView('home')} />;
   if (view === 'admin') return <AdminPage onBack={() => setView('home')} />;
   if (enrollments === null || !commishLoaded) return <Muted text="Loading your leagues…" />;
 
@@ -394,6 +395,7 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
       commishIds={commishIds}
       userId={session.user.id}
       onBoard={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('board'); }}
+      onResults={(leagueId) => { setTarget({ leagueId, rosterId: 0 }); setView('results'); }}
       onManage={(id) => { setManageId(id); setView('commishdash'); }}
       onAdd={() => setView('add')}
       isCommish={isCommish}
@@ -403,9 +405,9 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onBoard, onManage, onAdd, isCommish }: {
+function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onBoard, onResults, onManage, onAdd, isCommish }: {
   enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
-  onBoard: (leagueId: string, rosterId: number) => void; onManage: (leagueId: string) => void; onAdd: () => void; isCommish: boolean;
+  onBoard: (leagueId: string, rosterId: number) => void; onResults: (leagueId: string) => void; onManage: (leagueId: string) => void; onAdd: () => void; isCommish: boolean;
 }) {
   const [filter, setFilter] = useState<'all' | 'commish'>('all');
   const enrolledIds = new Set(enrollments.map((e) => e.league_id));
@@ -434,12 +436,12 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
       {isCommish && <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>{chip('all', 'ALL', total)}{chip('commish', 'COMMISH', commishCount)}</div>}
       {/* Commissioned leagues on top; players below (hidden under the commish filter). */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12, alignItems: 'start' }}>
-        {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} />)}
+        {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} onResults={() => onResults(l.league_id)} />)}
         {enrolledCommish.map((e) => (
-          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onManage={() => onManage(e.league_id)} />
+          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} />
         ))}
         {filter === 'all' && enrolledPlayer.map((e) => (
-          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onManage={() => onManage(e.league_id)} />
+          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} />
         ))}
       </div>
       <div style={{ textAlign: 'center', marginTop: 18 }}>
@@ -450,7 +452,7 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
 }
 
 // A league you commission but don't play in — no matchup card, just a way in to manage it.
-function CommishOnlyCard({ l, onManage }: { l: AdminLeague; onManage: () => void }) {
+function CommishOnlyCard({ l, onManage, onResults }: { l: AdminLeague; onManage: () => void; onResults: () => void }) {
   // Mirror LeagueCard's anatomy (identity row + status pill, boxed info strip,
   // full-width primary button) so play and commish-only cards read as one family.
   // You don't have a team here, so the info strip shows roster-fill instead of a
@@ -481,13 +483,16 @@ function CommishOnlyCard({ l, onManage }: { l: AdminLeague; onManage: () => void
 
       {/* actions */}
       <button onClick={onManage} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 12, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>⚑ manage league</button>
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+        <button onClick={onResults} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>▦ scores</button>
+      </div>
     </div>
   );
 }
 
-function LeagueCard({ e, card, commish, userId, onBoard, onManage }: {
+function LeagueCard({ e, card, commish, userId, onBoard, onResults, onManage }: {
   e: Enrollment; card?: MatchupCard; commish: boolean; userId: string;
-  onBoard: () => void; onManage: () => void;
+  onBoard: () => void; onResults: () => void; onManage: () => void;
 }) {
   const { loadSimLeague, navigate } = useStore();
   const [building, setBuilding] = useState(false);
@@ -576,9 +581,95 @@ function LeagueCard({ e, card, commish, userId, onBoard, onManage }: {
       {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{buildErr}</div>}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>
         <button onClick={onBoard} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board</button>
+        <button onClick={onResults} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>▦ scores</button>
         <button onClick={playFullBoard} disabled={building} className="mono" title="try the full board on last year's data" style={{ ...linkBtn, color: 'var(--dim)', opacity: building ? 0.6 : 1 }}>{building ? (buildNote || 'loading…') : '▷ demo (2025)'}</button>
         {commish && <button onClick={onManage} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚑ manage league</button>}
       </div>
+    </div>
+  );
+}
+
+// League-wide scoreboard + standings, from persisted final scores (matchup.home_
+// final/away_final, readable by any league member). Per-window detail stays
+// participant-only, so the board shows final totals; live/scheduled show a dash.
+function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => void }) {
+  const [rows, setRows] = useState<MatchupResult[] | null>(null);
+  const [teams, setTeams] = useState<Record<number, TeamInfo>>({});
+  useEffect(() => {
+    let ok = true;
+    leagueResults(leagueId).then((rs) => {
+      if (!ok) return;
+      setRows(rs);
+      const ids = Array.from(new Set(rs.flatMap((r) => [r.home_roster_id, r.away_roster_id])));
+      if (ids.length) matchupTeams(leagueId, ids).then((t) => { if (ok) setTeams(t); }).catch(() => {});
+    }).catch(() => setRows([]));
+    return () => { ok = false; };
+  }, [leagueId]);
+  const name = (rid: number) => teams[rid]?.team_name ?? `Roster ${rid}`;
+
+  const standings = useMemo(() => {
+    const s: Record<number, { rid: number; w: number; l: number; t: number; pf: number }> = {};
+    const get = (rid: number) => (s[rid] ??= { rid, w: 0, l: 0, t: 0, pf: 0 });
+    for (const r of rows ?? []) {
+      if (r.status !== 'final' || r.home_final == null || r.away_final == null) continue;
+      const h = get(r.home_roster_id), a = get(r.away_roster_id);
+      h.pf += Number(r.home_final); a.pf += Number(r.away_final);
+      if (r.home_final > r.away_final) { h.w++; a.l++; } else if (r.home_final < r.away_final) { a.w++; h.l++; } else { h.t++; a.t++; }
+    }
+    return Object.values(s).sort((x, y) => (y.w - x.w) || (y.pf - x.pf));
+  }, [rows]);
+
+  const weeks = useMemo(() => {
+    const m = new Map<number, MatchupResult[]>();
+    for (const r of rows ?? []) { if (!m.has(r.week)) m.set(r.week, []); m.get(r.week)!.push(r); }
+    return [...m.entries()].sort((a, b) => a[0] - b[0]);
+  }, [rows]);
+
+  const hdr: React.CSSProperties = { fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginBottom: 8 };
+  return (
+    <div>
+      <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>
+      <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>▦ Scores &amp; results</div>
+      {rows === null ? <Muted text="Loading…" />
+        : rows.length === 0 ? <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>No matchups scheduled yet — sync the season from Manage.</div>
+        : (
+          <>
+            {standings.some((s) => s.w + s.l + s.t > 0) && (
+              <div style={{ ...card, marginBottom: 12 }}>
+                <div style={hdr}>STANDINGS</div>
+                {standings.map((s, i) => (
+                  <div key={s.rid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
+                    <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', width: 16 }}>{i + 1}</span>
+                    <span style={{ flex: 1, fontSize: 12, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(s.rid)}</span>
+                    <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>{s.w}-{s.l}{s.t ? `-${s.t}` : ''}</span>
+                    <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 60, textAlign: 'right' }}>{Math.round(s.pf)} PF</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {weeks.map(([wk, ms]) => (
+              <div key={wk} style={{ ...card, marginBottom: 10 }}>
+                <div style={hdr}>WEEK {wk}</div>
+                {ms.map((r, i) => {
+                  const fin = r.status === 'final' && r.home_final != null && r.away_final != null;
+                  const homeWon = fin && Number(r.home_final) > Number(r.away_final);
+                  const awayWon = fin && Number(r.away_final) > Number(r.home_final);
+                  return (
+                    <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
+                      <span style={{ flex: 1, fontSize: 12, fontWeight: homeWon ? 700 : 400, color: homeWon ? 'var(--you)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{name(r.home_roster_id)}</span>
+                      <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', width: 30, textAlign: 'center' }}>{fin ? Math.round(Number(r.home_final)) : '—'}</span>
+                      <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>·</span>
+                      <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', width: 30, textAlign: 'center' }}>{fin ? Math.round(Number(r.away_final)) : '—'}</span>
+                      <span style={{ flex: 1, fontSize: 12, fontWeight: awayWon ? 700 : 400, color: awayWon ? 'var(--you)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(r.away_roster_id)}</span>
+                      <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: fin ? 'var(--dim)' : r.status === 'live' ? '#FF4F62' : 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 5px', flexShrink: 0 }}>{fin ? 'FINAL' : r.status === 'live' ? 'LIVE' : 'SCHED'}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </>
+        )}
+      <div style={{ textAlign: 'center', marginTop: 12 }}><button onClick={onBack} className="mono" style={linkBtn}>← my leagues</button></div>
     </div>
   );
 }

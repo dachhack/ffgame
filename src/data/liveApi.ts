@@ -241,6 +241,16 @@ export async function myMatchup(leagueId: string, rosterId: number, week?: numbe
   return (data as LiveMatchup) ?? null;
 }
 
+export interface MatchupResult { id: string; week: number; home_roster_id: number; away_roster_id: number; home_final: number | null; away_final: number | null; status: string; }
+/** Every matchup in a league (all weeks) with its final totals — the scoreboard/
+ *  results feed. Readable by any league member (finals live on the matchup row). */
+export async function leagueResults(leagueId: string): Promise<MatchupResult[]> {
+  const { data } = await client().from('matchup')
+    .select('id, week, home_roster_id, away_roster_id, home_final, away_final, status')
+    .eq('league_id', leagueId).order('week');
+  return (data ?? []) as MatchupResult[];
+}
+
 /** The caller's player pool for a week (their Sleeper roster, from sleeper_lineup). */
 export async function myPool(leagueId: string, week: number, rosterId: number): Promise<PoolPlayer[]> {
   const { data } = await client().from('sleeper_lineup').select('starters_json')
