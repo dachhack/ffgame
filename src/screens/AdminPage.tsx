@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, type LeagueJoiner,
   setTeamController, setLineupPolicy,
   leagueKdst, setKdstMode, setTeamKdst,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
@@ -177,6 +177,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
   const [matchups, setMatchups] = useState<AdminMatchup[] | null>(null);
   const [members, setMembers] = useState<AdminMember[] | null>(null);
   const [joiners, setJoiners] = useState<LeagueJoiner[]>([]);
+  const [wallets, setWallets] = useState<Record<number, number>>({});
   const [audit, setAudit] = useState<AdminAudit[] | null>(null);
   const [tab, setTab] = useState<'' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst'>(defaultTab);
   // roster_id → team name, from members (drives readable matchup labels).
@@ -259,6 +260,13 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
   const loadMembers = async () => {
     setMembers(await adminLeagueMembers(l.league_id));
     adminLeagueJoiners(l.league_id).then(setJoiners).catch(() => setJoiners([]));
+    adminLeagueWallets(l.league_id).then((ws) => setWallets(Object.fromEntries((ws ?? []).map((w) => [w.roster_id, w.coins])))).catch(() => setWallets({}));
+  };
+  // Commissioner grants drip coin to a team; refresh balances after.
+  const seedCoin = async (rosterId: number, amount: number) => {
+    const r = await commishSeedCoin(l.league_id, rosterId, amount);
+    if (r.ok) adminLeagueWallets(l.league_id).then((ws) => setWallets(Object.fromEntries((ws ?? []).map((w) => [w.roster_id, w.coins])))).catch(() => {});
+    return r;
   };
   const loadAudit = async () => setAudit(await commishAudit(l.league_id, 40));
   const showTab = (t: 'matchups' | 'members' | 'audit' | 'ready' | 'kdst') => {
@@ -375,6 +383,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
                 </div>
               </div>
               <AssignRoster initial={m.email ?? m.claim_email ?? ''} joiners={joiners} onAssign={(a) => assign(m.roster_id, a)} onClaimSelf={() => claimSelf(m.roster_id)} />
+              <SeedCoin balance={wallets[m.roster_id] ?? 0} onSeed={(amt) => seedCoin(m.roster_id, amt)} />
             </div>
           ))}
         </div>
@@ -759,6 +768,31 @@ function AssignRoster({ initial, joiners = [], onAssign, onClaimSelf }: { initia
         style={{ ...inp, fontSize: 10, padding: '5px 7px', flex: 1, minWidth: 0 }} />
       <button onClick={go} disabled={busy} className="mono" style={{ ...btn(false), opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'assign'}</button>
       {onClaimSelf && <button onClick={claim} disabled={busy} className="mono" title="claim this team for yourself" style={{ ...btn(true), opacity: busy ? 0.6 : 1 }}>＋ me</button>}
+      {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp, #e5484d)' }}>{msg}</span>}
+    </div>
+  );
+}
+
+// Commissioner grants drip coin to a team. Real leagues start at 0; this is how a
+// commish stakes players (or claws back). Additive; the balance shows live.
+function SeedCoin({ balance, onSeed }: { balance: number; onSeed: (amt: number) => Promise<{ ok: boolean; error?: string; balance?: number }> }) {
+  const [amt, setAmt] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const go = async () => {
+    const n = Number(amt);
+    if (busy || !n) return;
+    setBusy(true); setMsg(null);
+    const r = await onSeed(n);
+    setBusy(false);
+    if (r.ok) { setAmt(''); setMsg(`✓ balance ${Math.round(r.balance ?? balance)}`); } else setMsg(r.error ?? 'failed');
+  };
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+      <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>◇ {Math.round(balance)}</span>
+      <input value={amt} onChange={(e) => { setAmt(e.target.value.replace(/[^\d-]/g, '')); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
+        placeholder="grant coin…" inputMode="numeric" style={{ ...inp, fontSize: 10, padding: '5px 7px', width: 90 }} />
+      <button onClick={go} disabled={busy || !amt} className="mono" style={{ ...btn(false), opacity: busy || !amt ? 0.6 : 1 }}>{busy ? '…' : 'grant'}</button>
       {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp, #e5484d)' }}>{msg}</span>}
     </div>
   );

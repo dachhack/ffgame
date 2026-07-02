@@ -468,6 +468,12 @@ export const adminDeleteLeague = (leagueId: string) =>
  *  Call once per roster to claim multiple teams. */
 export const commishClaimRoster = (leagueId: string, rosterId: number) =>
   rpc<{ ok: boolean; error?: string; status?: string }>('commish_claim_roster', { p_league_id: leagueId, p_roster_id: rosterId });
+/** Commissioner/admin grants drip coin to a team (additive). */
+export const commishSeedCoin = (leagueId: string, rosterId: number, amount: number) =>
+  rpc<{ ok: boolean; error?: string; balance?: number }>('commish_seed_coin', { p_league_id: leagueId, p_roster_id: rosterId, p_amount: amount });
+export interface RosterWallet { roster_id: number; coins: number }
+/** Admin/commish: every team's current coin balance. */
+export const adminLeagueWallets = (leagueId: string) => rpc<RosterWallet[]>('admin_league_wallets', { p_league_id: leagueId });
 /** Admin/commish-map a roster to a person — by a joined-user id (picked from the
  *  pool) or by email (immediate enroll if signed in, else a pending claim that
  *  links on their next sign-in). Empty email + no id clears the roster. */
