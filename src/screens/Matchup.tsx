@@ -940,6 +940,36 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   return (
     <>
       <header style={{ height: 'auto', minHeight: isMobile ? 52 : 60, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 8, padding: isMobile ? '7px 10px' : '8px 16px', position: 'sticky', top: 0, zIndex: 40, gap: isMobile ? 12 : 10 }}>
+        {liveCtx ? (
+          // Live board: minimal header — Brand · big centered score · coin + gear.
+          // No phase tabs (status) or lock time; each window carries its own state.
+          <>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
+            </div>
+            <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: isMobile ? 9 : 16 }}>
+              <Avatar name={you.name} accent="var(--you)" size={isMobile ? 24 : 30} src={avatarUrl(you.ownerId)} />
+              <span className="mono" style={{ color: 'var(--text)', fontSize: isMobile ? 22 : 28, fontWeight: 700, lineHeight: 1 }}>{youTotal.toFixed(1)}</span>
+              <span className="mono" style={{ color: 'var(--faint)', fontSize: isMobile ? 11 : 13, fontWeight: 700, letterSpacing: '0.12em' }}>VS</span>
+              <span className="mono" style={{ color: 'var(--text)', fontSize: isMobile ? 22 : 28, fontWeight: 700, lineHeight: 1 }}>{themTotal.toFixed(1)}</span>
+              <Avatar name={opp.name} accent="var(--opp)" size={isMobile ? 24 : 30} src={avatarUrl(opp.ownerId)} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+              <button onClick={() => setEarnOpen(true)} title="Drip Coin — tap for earning opportunities" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 9px', cursor: 'pointer' }}>
+                <CoinIcon size={13} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{Math.round(coinBal)}</span>
+                {phase === 'final' && weekCoins > 0 && <span style={{ fontSize: 8.5, color: 'var(--fx-streak)' }}>+{weekCoins}</span>}
+              </button>
+              {phase === 'final' && (
+                <button onClick={() => navigate({ name: 'final', week })} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4 }}>
+                  WEEK RESULT →
+                </button>
+              )}
+              <SiteSettings />
+            </div>
+          </>
+        ) : (
+          <>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
           <Brand onClick={() => navigate({ name: 'league' })} hideDataSource={!!liveCtx} />
           <div style={{ display: 'flex', gap: 2, padding: 3, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4 }}>
@@ -1020,6 +1050,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           )}
           <SiteSettings />
         </div>
+          </>
+        )}
       </header>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 10 : 14, padding: isMobile ? 10 : 14, overflow: isMobile ? 'auto' : 'hidden', minHeight: 0 }}>
