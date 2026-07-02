@@ -82,6 +82,9 @@ interface Store {
   inventory: Record<string, number>; // powerup id -> qty owned
   /** Buy a powerup with coins. Returns false if unaffordable. */
   buyPowerup: (id: string) => boolean;
+  /** Add a powerup to inventory WITHOUT touching the coin ledger (the hero board
+   *  charges the real DB wallet separately, then grants the item). */
+  grantPowerup: (id: string) => void;
   /** Consume one of a held powerup. Returns false if none held. */
   useConsumable: (id: string) => boolean;
   applied: Record<number, AppliedWeek>; // week -> applied powerup effects
@@ -282,6 +285,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
+  // Grant an owned powerup without spending store coin — the hero board charges
+  // the real DB wallet, then calls this to add the item to inventory.
+  const grantPowerup = (id: string): void => {
+    setInventory((prev) => { const next = { ...prev, [id]: (prev[id] ?? 0) + 1 }; persist({ inv: next }); return next; });
+  };
+
   const useConsumable = (id: string): boolean => {
     if ((inventory[id] ?? 0) <= 0) return false;
     const nextInv = { ...inventory, [id]: inventory[id] - 1 };
@@ -384,7 +393,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
     [theme, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, liveCtx, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

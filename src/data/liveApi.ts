@@ -518,6 +518,10 @@ export const sellExtraSlot = (matchupId: string) => rpc<{ ok: boolean; error?: s
 // spend before week 1. ensure_wallet seeds once (idempotent) and returns balance.
 export const myWallet = (matchupId: string) => rpc<number>('my_wallet', { p_matchup_id: matchupId });
 export const ensureWallet = (matchupId: string) => rpc<number>('ensure_wallet', { p_matchup_id: matchupId });
+/** Buy a power-up into inventory, charged against the real team wallet. Returns
+ *  the new balance. The client adds the owned item to local inventory. */
+export const walletBuyPowerup = (matchupId: string, powerupId: string) =>
+  rpc<{ ok: boolean; error?: string; balance?: number; charged?: number }>('wallet_buy_powerup', { p_matchup_id: matchupId, p_powerup_id: powerupId });
 export const adminSetState = (matchupId: string, states: { window: string; home: number; away: number }[], coin?: { home: number; away: number }, slotScores?: { win: string; side: string; slot: string; slug: string; metric: string | null; score: number }[]) =>
   rpc<{ ok: boolean }>('admin_set_state', { p_matchup_id: matchupId, p_states: states, p_home_coin: coin?.home ?? null, p_away_coin: coin?.away ?? null, p_slot_scores: slotScores ?? null });
 export const adminSetCoin = (matchupId: string, home: number, away: number) =>

@@ -14,7 +14,7 @@ import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type S
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
-import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, type PickRow } from '../data/liveApi';
+import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, ensureWallet, walletBuyPowerup, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
@@ -92,7 +92,7 @@ const DEMO_POWERUPS = [
 ];
 
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
-  const { youTeamId: YOU, navigate, liveCtx, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
+  const { youTeamId: YOU, navigate, liveCtx, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const [demoBuff, setDemoBuff] = useState('garbage-time'); // the power-up the demo viewer armed
   const buffs = demo ? { [demoBuff]: true } : (applied[week]?.buffs ?? {});
   const buffsKey = JSON.stringify(buffs);
@@ -276,8 +276,25 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const earnings = useMemo(() => weekEarnings(resolved, 'you', week, turnoverCoin), [resolved, week, buffsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const weekCoins = earnings.total;
   const [earnOpen, setEarnOpen] = useState(false);
+  // Hero board: the coin balance is the REAL team wallet (starts at 0, seeded by
+  // the commissioner). Load it once; the worker credits earnings in-season, so the
+  // board doesn't run the demo weekly-credit here.
+  const [liveWallet, setLiveWallet] = useState<number | null>(null);
   useEffect(() => {
-    if (demo) return; // the demo never touches the store's coin ledger
+    if (!liveCtx) { setLiveWallet(null); return; }
+    ensureWallet(liveCtx.matchupId).then((b) => setLiveWallet(Number(b ?? 0))).catch(() => setLiveWallet(0));
+  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+  const coinBal = liveCtx ? (liveWallet ?? 0) : coins;
+  // Buy a power-up into inventory, charged against the real wallet (hero board).
+  const buyFromWallet = async (id: string): Promise<boolean> => {
+    if (!liveCtx) return false;
+    const r = await walletBuyPowerup(liveCtx.matchupId, id).catch(() => null);
+    if (!r?.ok) return false;
+    grantPowerup(id); setLiveWallet(Number(r.balance ?? 0));
+    return true;
+  };
+  useEffect(() => {
+    if (demo || liveCtx) return; // demo/hero board never touch the store's coin ledger
     if (phase === 'live' || phase === 'final') creditWeek(week, weekCoins);
   }, [phase, week, weekCoins]);
 
@@ -828,7 +845,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 10, whiteSpace: 'nowrap', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
           <button onClick={() => setEarnOpen(true)} title="Drip Coin — tap for earning opportunities" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 9px', cursor: 'pointer' }}>
             <CoinIcon size={13} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{coins}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{Math.round(coinBal)}</span>
             {weekCoins > 0 && <span style={{ fontSize: 8.5, color: 'var(--fx-streak)' }}>+{weekCoins}</span>}
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -1123,7 +1140,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
       {puView === 'active' && <ActivePowerupsModal effects={activeEffects} onClose={() => setPuView(null)} />}
       {puView === 'apply' && <ApplyPowerupsModal items={appliable} inventory={inventory} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); setPuView(null); }} onClose={() => setPuView(null)} />}
-      {shopOpen && <ShopModal onClose={() => setShopOpen(false)} />}
+      {shopOpen && <ShopModal onClose={() => setShopOpen(false)} coinsOverride={liveCtx ? Math.round(coinBal) : undefined} onBuy={liveCtx ? buyFromWallet : undefined} />}
 
       {earnOpen && <EarningsModal earnings={earnings} onReset={liveCtx ? undefined : () => { resetDripCoin(); setEarnOpen(false); }} onClose={() => setEarnOpen(false)} />}
     </>
