@@ -314,7 +314,9 @@ export function DemoControls({ compact }: { compact?: boolean }) {
   );
 }
 
-export function Brand({ onClick }: { onClick?: () => void }) {
+// `hideDataSource` drops the "· data Stathead" attribution (the hero/live board
+// isn't a 2025-data replay, so the demo attribution would mislead there).
+export function Brand({ onClick, hideDataSource = false }: { onClick?: () => void; hideDataSource?: boolean }) {
   return (
     <div
       onClick={onClick}
@@ -327,17 +329,19 @@ export function Brand({ onClick }: { onClick?: () => void }) {
         </div>
         <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 7.5, letterSpacing: '0.06em', color: 'var(--faint)', marginTop: 2, whiteSpace: 'nowrap' }}>
           <span>{APP_VERSION}</span>
-          <span style={{ opacity: 0.5 }}>·</span>
-          <span>data</span>
-          <a
-            href={DATA_SOURCE.url}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            style={{ color: 'var(--you)', textDecoration: 'none', fontWeight: 700 }}
-          >
-            {DATA_SOURCE.name} ↗
-          </a>
+          {!hideDataSource && <>
+            <span style={{ opacity: 0.5 }}>·</span>
+            <span>data</span>
+            <a
+              href={DATA_SOURCE.url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              style={{ color: 'var(--you)', textDecoration: 'none', fontWeight: 700 }}
+            >
+              {DATA_SOURCE.name} ↗
+            </a>
+          </>}
         </div>
       </div>
     </div>
