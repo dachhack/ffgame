@@ -3,7 +3,7 @@
 import type { WindowId } from '../types';
 import { WINDOWS } from './metrics';
 import { realKickoff } from './realPbp';
-export interface NflGame { away: string; home: string; aScore: number; hScore: number; win: WindowId; }
+export interface NflGame { away: string; home: string; aScore: number; hScore: number; win: WindowId; kickoff?: number; }
 export const NFL_SLATE: Record<number, NflGame[]> = {
   1: [{ away: "DAL", home: "PHI", aScore: 20, hScore: 24, win: "tnf" }, { away: "KC", home: "LAC", aScore: 21, hScore: 27, win: "tnf" }, { away: "TB", home: "ATL", aScore: 23, hScore: 20, win: "early" }, { away: "CIN", home: "CLE", aScore: 17, hScore: 16, win: "early" }, { away: "MIA", home: "IND", aScore: 8, hScore: 33, win: "early" }, { away: "CAR", home: "JAX", aScore: 10, hScore: 26, win: "early" }, { away: "LV", home: "NE", aScore: 20, hScore: 13, win: "early" }, { away: "ARI", home: "NO", aScore: 20, hScore: 13, win: "early" }, { away: "PIT", home: "NYJ", aScore: 34, hScore: 32, win: "early" }, { away: "NYG", home: "WAS", aScore: 6, hScore: 21, win: "early" }, { away: "TEN", home: "DEN", aScore: 12, hScore: 20, win: "late" }, { away: "SF", home: "SEA", aScore: 17, hScore: 13, win: "late" }, { away: "DET", home: "GB", aScore: 13, hScore: 27, win: "late" }, { away: "HOU", home: "LA", aScore: 9, hScore: 14, win: "late" }, { away: "BAL", home: "BUF", aScore: 40, hScore: 41, win: "snf" }, { away: "MIN", home: "CHI", aScore: 27, hScore: 24, win: "mnf" }],
   2: [{ away: "WAS", home: "GB", aScore: 18, hScore: 27, win: "tnf" }, { away: "CLE", home: "BAL", aScore: 17, hScore: 41, win: "early" }, { away: "JAX", home: "CIN", aScore: 27, hScore: 31, win: "early" }, { away: "NYG", home: "DAL", aScore: 37, hScore: 40, win: "early" }, { away: "CHI", home: "DET", aScore: 21, hScore: 52, win: "early" }, { away: "NE", home: "MIA", aScore: 33, hScore: 27, win: "early" }, { away: "SF", home: "NO", aScore: 26, hScore: 21, win: "early" }, { away: "BUF", home: "NYJ", aScore: 30, hScore: 10, win: "early" }, { away: "SEA", home: "PIT", aScore: 31, hScore: 17, win: "early" }, { away: "LA", home: "TEN", aScore: 33, hScore: 19, win: "early" }, { away: "CAR", home: "ARI", aScore: 22, hScore: 27, win: "late" }, { away: "DEN", home: "IND", aScore: 28, hScore: 29, win: "late" }, { away: "PHI", home: "KC", aScore: 20, hScore: 17, win: "late" }, { away: "ATL", home: "MIN", aScore: 22, hScore: 6, win: "snf" }, { away: "TB", home: "HOU", aScore: 20, hScore: 19, win: "mnf" }, { away: "LAC", home: "LV", aScore: 20, hScore: 9, win: "mnf" }],
@@ -89,14 +89,39 @@ export function windowDate(week: number, win: WindowId): Date {
   return new Date(SEASON_START + ((week - 1) * 7 + WIN_DAY_OFFSET[win]) * DAY);
 }
 
-/** e.g. "Thu, Sep 4" for a window. */
+// ET calendar parts for an epoch-ms — so a window's real day matches its ET
+// kickoff (a Wed-night opener reads "Wed", not the computed Thursday).
+function etParts(ms: number): { wd: string; mo: string; da: number } {
+  const p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric' }).formatToParts(new Date(ms));
+  return {
+    wd: p.find((x) => x.type === 'weekday')?.value ?? '',
+    mo: p.find((x) => x.type === 'month')?.value ?? '',
+    da: Number(p.find((x) => x.type === 'day')?.value ?? 0),
+  };
+}
+/** Every real kickoff (epoch ms) among a week's games, from the loaded slate. */
+function weekKickoffs(week: number): number[] {
+  return (slateFor(week) || []).map((g) => g.kickoff).filter((k): k is number => typeof k === 'number');
+}
+
+/** e.g. "Thu, Sep 4" for a window — the real kickoff day when the slate carries it
+ *  (so odd weeks like a Wednesday opener read correctly), else the computed slot. */
 export function windowDateLabel(week: number, win: WindowId): string {
+  const ms = windowKickoffMs(week, win);
+  if (ms != null) { const { wd, mo, da } = etParts(ms); return `${wd}, ${mo} ${da}`; }
   const d = windowDate(week, win);
   return `${WD[d.getUTCDay()]}, ${MO[d.getUTCMonth()]} ${d.getUTCDate()}`;
 }
 
-/** The week's date span, Thursday → Monday, e.g. "Sep 4 – 8". */
+/** The week's date span, first → last game, e.g. "Sep 4 – 8" — real kickoffs when
+ *  loaded (so it spans a Wed-night opener through Monday), else computed. */
 export function weekDateRange(week: number): string {
+  const ks = weekKickoffs(week);
+  if (ks.length) {
+    const lo = etParts(Math.min(...ks)), hi = etParts(Math.max(...ks));
+    const b = lo.mo === hi.mo ? `${hi.da}` : `${hi.mo} ${hi.da}`;
+    return `${lo.mo} ${lo.da} – ${b}`;
+  }
   const thu = windowDate(week, 'tnf');
   const mon = windowDate(week, 'mnf');
   const a = `${MO[thu.getUTCMonth()]} ${thu.getUTCDate()}`;
@@ -147,7 +172,9 @@ function fmtSodShort(sod: number): string {
 export function windowKickoffMs(week: number, win: WindowId): number | null {
   let min: number | null = null;
   for (const g of gamesInWindow(week, win)) {
-    const k = realKickoff(week, g.home) ?? realKickoff(week, g.away);
+    // Prefer the slate's scheduled kickoff (known pre-season); fall back to the
+    // real first-snap from play-by-play once the week is live.
+    const k = (typeof g.kickoff === 'number' ? g.kickoff : null) ?? realKickoff(week, g.home) ?? realKickoff(week, g.away);
     if (k != null && (min == null || k < min)) min = k;
   }
   return min;
@@ -160,6 +187,11 @@ export function windowKickoffSod(week: number, win: WindowId): number {
   const w = WINDOWS.find((x) => x.id === win);
   return w ? slotKickoffSod(w.time) : 13 * 3600;
 }
+/** A single game's real kickoff as "Wed 8:20p" (ET day + time). */
+export function kickoffLabel(ms: number): string {
+  return `${etParts(ms).wd} ${fmtSodShort(etSod(ms))}`;
+}
+
 /** A window's compact kickoff label e.g. "1:00p" — real when loaded, else slot. */
 export function windowTimeLabel(week: number, win: WindowId): string {
   const ms = windowKickoffMs(week, win);
