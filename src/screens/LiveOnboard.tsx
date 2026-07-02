@@ -500,8 +500,9 @@ function LeagueCard({ e, card, commish, userId, onBoard, onManage }: {
     if (building) return;
     setBuilding(true); setBuildErr(null); setBuildNote('Loading your board…');
     try {
-      const m = await myMatchup(e.league_id, e.sleeper_roster_id).catch(() => null);
-      const week = m?.week ?? 1;
+      // Default to week 1 of the season (pre-season 2026 opens on its opener).
+      const week = 1;
+      const m = await myMatchup(e.league_id, e.sleeper_roster_id, week).catch(() => null);
       const { built, youTeamId } = await buildLiveLeague(e.league_id, e.sleeper_roster_id, week);
       const ctx = m ? { matchupId: m.id, userId, leagueId: e.league_id, rosterId: e.sleeper_roster_id, week: m.week } : null;
       loadSimLeague(built, youTeamId, ctx);
