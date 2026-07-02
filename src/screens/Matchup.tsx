@@ -3,7 +3,7 @@ import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile } from '../app/ui';
 import { avatarUrl, teamLogo } from '../data/media';
-import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod } from '../data/nflSlate';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, kickoffLabel } from '../data/nflSlate';
 import { WINDOWS, METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById, type Powerup } from '../data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '../data/league';
@@ -1646,13 +1646,13 @@ function WindowSection(props: {
   const [slateOpen, setSlateOpen] = useState(false);
   // The real NFL games feeding this window: map each window player's team to its
   // actual away@home matchup that week, and list the players involved.
-  interface SlateGame { away: string; home: string; you: string[]; their: string[] }
+  interface SlateGame { away: string; home: string; kickoff?: number; you: string[]; their: string[] }
   const slate: SlateGame[] = (() => {
     // Seed with every real NFL game in this window — so the chip shows even
     // before anyone is assigned (e.g. a lone TNF game).
     const games = new Map<string, SlateGame>();
     for (const g of gamesInWindow(week, w.id)) {
-      games.set(`${g.away}@${g.home}`, { away: g.away, home: g.home, you: [], their: [] });
+      games.set(`${g.away}@${g.home}`, { away: g.away, home: g.home, kickoff: g.kickoff, you: [], their: [] });
     }
     const add = (team: string | undefined, name: string, side: 'you' | 'their') => {
       const g = nflGameForTeam(week, team);
@@ -1753,7 +1753,7 @@ function WindowSection(props: {
                       {teamLine(g.away)}
                       <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--faint)', flex: 'none' }}>@</span>
                       {teamLine(g.home)}
-                      <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--dim)', flex: 'none', marginLeft: 6 }}>{windowTimeLabel(week, w.id)}</span>
+                      <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--dim)', flex: 'none', marginLeft: 6 }}>{g.kickoff ? kickoffLabel(g.kickoff) : windowTimeLabel(week, w.id)}</span>
                     </div>
                     {(g.you.length > 0 || g.their.length > 0) && (
                       <div style={{ fontSize: 9.5, lineHeight: 1.5, marginTop: 6, paddingTop: 6, borderTop: '1px solid color-mix(in srgb, var(--bd) 60%, transparent)' }}>

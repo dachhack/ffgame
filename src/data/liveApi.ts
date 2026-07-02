@@ -292,9 +292,9 @@ export async function getMatchupState(matchupId: string): Promise<WindowScore[]>
 /** The live NFL slate for a week (worker-written from ESPN, migration 0029) —
  *  drives slate-gating + the K/DST bye check for the real current season. Empty
  *  until the worker has synced that week (then the client falls back to baked). */
-export interface SlateGame { away: string; home: string; win: string }
+export interface SlateGame { away: string; home: string; win: string; kickoff?: string | null }
 export async function liveSlate(week: number, season?: string): Promise<SlateGame[]> {
-  let q = client().from('nfl_slate').select('away, home, win').eq('week', week);
+  let q = client().from('nfl_slate').select('away, home, win, kickoff').eq('week', week);
   if (season) q = q.eq('season', season); // 2025 (demo) + 2026 rows share week #s — scope by season
   const { data } = await q;
   return (data ?? []) as SlateGame[];
