@@ -839,12 +839,6 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               ⟳ REPLAY
             </span>
           )}
-          {/* REAL PBP badge is a replay-only tag — the live board isn't a PBP replay. */}
-          {!liveCtx && resolved.real && (
-            <span className="mono" title="This week resolves off real 2025 NFL play-by-play" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 3, padding: '3px 6px' }}>
-              ● REAL PBP
-            </span>
-          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 10, whiteSpace: 'nowrap', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
           <button onClick={() => setEarnOpen(true)} title="Drip Coin — tap for earning opportunities" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 9px', cursor: 'pointer' }}>
