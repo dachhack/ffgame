@@ -172,18 +172,22 @@ export function LeagueOverview() {
   );
 }
 
-export function ShopModal({ onClose }: { onClose: () => void }) {
+export function ShopModal({ onClose, coinsOverride, onBuy }: { onClose: () => void; coinsOverride?: number; onBuy?: (id: string) => Promise<boolean> }) {
   const { coins, inventory, buyPowerup } = useStore();
   const [flash, setFlash] = useState<string | null>(null);
-  function buy(id: string) {
-    if (buyPowerup(id)) { setFlash(id); setTimeout(() => setFlash((f) => (f === id ? null : f)), 600); }
+  // Hero board passes the real wallet balance + a wallet-charged buy; otherwise
+  // the demo store ledger drives affordability + purchase.
+  const bal = coinsOverride ?? coins;
+  async function buy(id: string) {
+    const ok = onBuy ? await onBuy(id) : buyPowerup(id);
+    if (ok) { setFlash(id); setTimeout(() => setFlash((f) => (f === id ? null : f)), 600); }
   }
   return (
-    <Modal title="Power-Up Shop" sub={`◈ ${coins} DRIP COIN · +5 per signature play`} onClose={onClose} maxWidth={560}>
+    <Modal title="Power-Up Shop" sub={`◈ ${bal} DRIP COIN · +5 per signature play`} onClose={onClose} maxWidth={560}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 480, overflow: 'auto' }}>
         {POWERUPS.map((p) => {
           const have = inventory[p.id] ?? 0;
-          const afford = coins >= p.price;
+          const afford = bal >= p.price;
           const timingTag = p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME';
           return (
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: 'var(--bg)', border: `1px solid ${flash === p.id ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, padding: '10px 12px', transition: 'border-color .3s' }}>
