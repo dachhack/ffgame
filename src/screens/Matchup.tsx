@@ -180,7 +180,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     else if (pendingApply === 'metric-swap' || pendingApply === 'player-swap') { setSwapTarget({ key, win: key.split('#')[0] as WindowId }); setPendingApply(null); } // open the swap menu on the tapped live spot
   }
   function applyToWindow(win: WindowId) {
-    if (pendingApply === 'emp') { applyEmp(week, win, winClocks[win] ?? 0); setPendingApply(null); }
+    // On the live board a live window's "now" is its latest ingested play (winMax
+    // via effWinClock); the sim board uses the manual playback clock. Either way
+    // EMP freezes forward from the current position, never retroactively.
+    if (pendingApply === 'emp') { applyEmp(week, win, effWinClock(win)); setPendingApply(null); }
   }
   // Rosters expand in setup (you need them to set lineups), collapse otherwise.
   const [rosterOpen, setRosterOpen] = useState<{ you: boolean; their: boolean }>(() => ({ you: initialPhase === 'setup', their: initialPhase === 'setup' }));
@@ -593,6 +596,15 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     });
     if (next) { const k = slotKey(next.win, next.slotIndex); backupPrompted.current.add(k); setBackupMenu({ key: k, required: true }); }
   }, [phase, anyStarted, backupMenu, resolved, backupAssign]);
+
+  // Unopposed best-ball backups (your player, no head-to-head opponent, a scoring
+  // metric) that haven't yet been assigned to sub for a starter. On the live board
+  // these surface as a CTA during the locked/live period instead of a forced modal.
+  const pendingBackups = useMemo(() => resolved.windows.flatMap((w) => w.slots).filter((s) => {
+    if (!s.backup || !s.you) return false;
+    if (ZERO_BANK_METRICS.has(`${s.you.player.pos}:${s.you.metricId}`)) return false;
+    return !backupAssign[slotKey(s.win, s.slotIndex)];
+  }), [resolved, backupAssign]);
 
   // Everything currently in effect, with a back-out where the store supports it.
   const activeEffects: { key: string; icon: string; name: string; detail: string; onRemove?: () => void }[] = [];
@@ -1055,6 +1067,15 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                   ▶ Nothing's kicked yet — press <span style={{ color: 'var(--text)' }}>RUN ALL</span> (or ▶ on a window) to play the week out.
                 </div>
               )}
+              {/* Live board: a nudge (not a forced modal) to assign best-ball backups
+                  once rosters lock — your unopposed players can sub in for a starter. */}
+              {liveCtx && phase === 'live' && pendingBackups.length > 0 && (
+                <button
+                  onClick={() => { const s0 = pendingBackups[0]; setBackupMenu({ key: slotKey(s0.win, s0.slotIndex) }); }}
+                  className="mono" style={{ marginTop: 7, display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, var(--surface))', border: '1px solid var(--you)', borderRadius: 6, padding: '7px 11px', cursor: 'pointer' }}>
+                  🔁 {pendingBackups.length} unopposed {pendingBackups.length === 1 ? 'player' : 'players'} can sub in — assign {pendingBackups.length === 1 ? 'a backup' : 'backups'} →
+                </button>
+              )}
               {phase === 'live' && !liveCtx && (
                 <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, fontSize: 10, color: 'var(--dim)' }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', flex: 'none', background: clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--faint)' }} />
@@ -1114,7 +1135,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 playing={liveCtx ? false : !!winPlaying[rw.window.id]}
                 onTogglePlay={() => setWinPlay(rw.window.id, !winPlaying[rw.window.id])}
                 onReplay={() => replayWin(rw.window.id)}
-                canApplyExtra={winPhaseFor(rw.window.id) === 'setup' && extraSlotQty > 0}
+                canApplyExtra={phase === 'setup' && extraSlotQty > 0}
                 extraSlotQty={extraSlotQty}
                 onApplyExtra={() => applyExtraSlot(week, rw.window.id)}
                 onRemoveExtra={() => removeExtraSlot(week, rw.window.id)}
@@ -1155,7 +1176,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           Array.from({ length: slotsFor(swapTarget.win, week, extraSlots) }, (_, i) => effYouPicks[slotKey(swapTarget.win, i)]?.playerId).filter(Boolean) as string[],
         );
         const bench = (youPools[swapTarget.win] || []).filter((p) => !slottedIds.has(p.id));
-        const atClock = winClocks[swapTarget.win] ?? 0;
+        const atClock = effWinClock(swapTarget.win); // live board: the window's current real position
         // Stamp activation with the REAL time at the feed's current position, so
         // the swap can't retroactively grab a play already final in real time.
         const atRt = realTimeAt(curPlayer, week, atClock, cur!.metricId ?? undefined);
@@ -1180,7 +1201,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         if (!b) return null;
         // Only what's legitimately known when you sub: live points so far (not
         // the finals). At kickoff these are all 0 — it's a blind commitment.
-        const liveOf = (s: typeof b) => banksAtClock(s.events, winClocks[s.win] ?? 0).you;
+        const liveOf = (s: typeof b) => banksAtClock(s.events, effWinClock(s.win)).you;
         const starters = all
           .filter((s) => s.you && s.their)
           .map((s) => ({ key: slotKey(s.win, s.slotIndex), name: s.you!.player.name, score: liveOf(s), win: s.win }));
@@ -1236,7 +1257,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         const slot = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === mulliganSlot);
         const p = slot?.you?.player;
         if (!p) return null;
-        const atClock = winClocks[slot!.win] ?? 0;
+        const atClock = effWinClock(slot!.win); // live board: the window's current real position
         const atRt = realTimeAt(p, week, atClock, slot!.you!.metricId ?? undefined);
         return (
           <MulliganModal
@@ -1749,11 +1770,16 @@ function WindowSection(props: {
   const pct = Math.round((Math.min(clock, maxClock) / maxClock) * 100);
   // Live apply-mode: EMP targets the whole live window; Spy/Mulligan target a
   // single spot. Highlight what's eligible and dim the rest.
-  const empEligible = applyMode === 'emp' && phase === 'live' && clock > 0 && !done && aw?.emp?.[w.id] == null;
+  // Live-timing power-ups only apply to a genuinely LIVE window. On the live board
+  // a LOCKED window renders in the same 'live' phase (sealed, pre-kick), so gate
+  // on the real-clock state so a swap/mulligan/EMP can't land on a locked window.
+  // Sim/demo has no `realtime`, so this is a no-op there.
+  const liveNow = !realtime || realtime === 'live';
+  const empEligible = applyMode === 'emp' && liveNow && phase === 'live' && clock > 0 && !done && aw?.emp?.[w.id] == null;
   const spotEligible = (s: typeof rw.slots[number]) => {
-    if (applyMode === 'spy') return !!s.their;             // reveal the opponent here
-    if (applyMode === 'mulligan') return !!s.you && !done; // re-roll your metric
-    if (applyMode === 'metric-swap' || applyMode === 'player-swap') return !!s.you && !done; // swap this live spot
+    if (applyMode === 'spy') return !!s.their;                          // reveal the opponent here (locked period)
+    if (applyMode === 'mulligan') return liveNow && !!s.you && !done;   // re-roll your metric
+    if (applyMode === 'metric-swap' || applyMode === 'player-swap') return liveNow && !!s.you && !done; // swap this live spot
     return false;
   };
   const spotApplyMode = applyMode === 'spy' || applyMode === 'mulligan' || applyMode === 'metric-swap' || applyMode === 'player-swap';
