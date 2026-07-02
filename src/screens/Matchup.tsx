@@ -805,7 +805,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     <>
       <header style={{ height: 'auto', minHeight: isMobile ? 52 : 60, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 8, padding: isMobile ? '7px 10px' : '8px 16px', position: 'sticky', top: 0, zIndex: 40, gap: isMobile ? 12 : 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
-          <Brand onClick={() => navigate({ name: 'league' })} />
+          <Brand onClick={() => navigate({ name: 'league' })} hideDataSource={!!liveCtx} />
           <div style={{ display: 'flex', gap: 2, padding: 3, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4 }}>
             {(['setup', 'live', 'final'] as Phase[]).map((p) => (
               <button key={p} onClick={() => changePhase(p)} className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', padding: '5px 9px', borderRadius: 3, border: 'none', background: phase === p ? 'var(--sh)' : 'transparent', color: phase === p ? 'var(--you)' : 'var(--dim)' }}>
@@ -1125,13 +1125,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       {puView === 'apply' && <ApplyPowerupsModal items={appliable} inventory={inventory} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); setPuView(null); }} onClose={() => setPuView(null)} />}
       {shopOpen && <ShopModal onClose={() => setShopOpen(false)} />}
 
-      {earnOpen && <EarningsModal earnings={earnings} onReset={() => { resetDripCoin(); setEarnOpen(false); }} onClose={() => setEarnOpen(false)} />}
+      {earnOpen && <EarningsModal earnings={earnings} onReset={liveCtx ? undefined : () => { resetDripCoin(); setEarnOpen(false); }} onClose={() => setEarnOpen(false)} />}
     </>
   );
 }
 
 // ── Drip-coin earning opportunities, by position (risk pays more) ──
-function EarningsModal({ earnings, onReset, onClose }: { earnings: { stipend: number; unopposed: number; signature: number; turnover: number; total: number }; onReset: () => void; onClose: () => void }) {
+function EarningsModal({ earnings, onReset, onClose }: { earnings: { stipend: number; unopposed: number; signature: number; turnover: number; total: number }; onReset?: () => void; onClose: () => void }) {
   const order: Pos[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
   const riskColor = (r: string) => (r === 'HIGH' ? 'var(--fx-nuke)' : r === 'MED' ? 'var(--warn)' : 'var(--dim)');
   return (
@@ -1193,10 +1193,11 @@ function EarningsModal({ earnings, onReset, onClose }: { earnings: { stipend: nu
               </div>
             ))}
           </div>
-          {/* Dev/testing reset: top coin back to the grant and wipe owned + applied powerups. */}
-          <button onClick={onReset} title="Reset drip coin to the demo grant and clear all owned + applied powerups" className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 2, padding: '9px 12px', background: 'var(--bg)', border: '1px dashed var(--warn)', borderRadius: 6, color: 'var(--warn)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em' }}>
+          {/* Dev/testing reset: top coin back to the grant and wipe owned + applied
+              powerups. Demo-only — hidden on the hero board (real wallet). */}
+          {onReset && <button onClick={onReset} title="Reset drip coin to the demo grant and clear all owned + applied powerups" className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 2, padding: '9px 12px', background: 'var(--bg)', border: '1px dashed var(--warn)', borderRadius: 6, color: 'var(--warn)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em' }}>
             ↻ REFRESH DRIP COIN & CLEAR POWERUPS
-          </button>
+          </button>}
         </div>
       </div>
     </div>
