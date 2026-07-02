@@ -84,7 +84,7 @@ export async function buildLiveLeague(leagueId: string, youRosterId: number, wee
   // Inject the real current-season NFL slate for this week so the window pools
   // gate correctly (falls back to the baked slate if the week isn't loaded yet).
   try {
-    const slate = await liveSlate(week);
+    const slate = await liveSlate(week, lg?.season ?? undefined);
     if (slate.length) setRuntimeSlate(week, slate.map((s) => ({ away: s.away, home: s.home, aScore: 0, hScore: 0, win: s.win as WindowId })));
   } catch { /* no live slate yet — window gating falls back to the baked slate */ }
 
