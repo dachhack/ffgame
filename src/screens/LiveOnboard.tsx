@@ -13,6 +13,7 @@ import {
 import { DEMO_WEEK } from '../config';
 import { buildDripTestLeague } from '../data/dripTest';
 import { buildLiveLeague } from '../data/liveBoard';
+import { PRESEASON_BASE } from '../data/nflSlate';
 import { LiveBoard } from './LiveBoard';
 import { AdminPage } from './AdminPage';
 import { CommishDash } from './CommishDash';
@@ -510,8 +511,9 @@ function LeagueCard({ e, card, commish, userId, onBoard, onResults, onManage }: 
     if (building) return;
     setBuilding(true); setBuildErr(null); setBuildNote('Loading your board…');
     try {
-      // Default to week 1 of the season (pre-season 2026 opens on its opener).
-      const week = 1;
+      // Default to week 1; a preseason-mode league opens on its first preseason
+      // (offset) week instead, where its real 2026 preseason matchups live.
+      const week = e.league?.preseason_at ? PRESEASON_BASE + 1 : 1;
       const m = await myMatchup(e.league_id, e.sleeper_roster_id, week).catch(() => null);
       const { built, youTeamId } = await buildLiveLeague(e.league_id, e.sleeper_roster_id, week);
       const ctx = m ? { matchupId: m.id, userId, leagueId: e.league_id, rosterId: e.sleeper_roster_id, week: m.week } : null;
