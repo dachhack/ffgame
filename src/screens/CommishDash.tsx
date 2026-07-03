@@ -33,7 +33,13 @@ export function CommishDash({ onBack, focusId }: { onBack: () => void; focusId?:
             <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>None yet. Verify ownership via “I’m the commissioner,” and ask the admin to import the league if it isn’t listed.</div>
           </div>
         )
-        : shown.map((l) => <LeagueRow key={l.league_id} l={l} reload={load} admin={false} defaultTab="members" />)}
+        : shown.map((l, i) => (
+          // With several leagues, cards collapse to just their header (first one
+          // starts open) so the list stays scannable; a lone/focused league is
+          // always expanded.
+          <LeagueRow key={l.league_id} l={l} reload={load} admin={false} defaultTab="members"
+            collapsible={shown.length > 1} defaultOpen={i === 0} />
+        ))}
 
       <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', margin: '10px 4px', lineHeight: 1.5 }}>
         Share the invite link with your players, see who’s joined, sync each week’s matchups, and run the live windows — all for the leagues you commission.

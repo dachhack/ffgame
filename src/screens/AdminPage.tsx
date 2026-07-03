@@ -208,13 +208,19 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 // K-DST / Audit). Used by both the super-admin Leagues tab and CommishDash.
 type LeagueTab = 'overview' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst';
 
-export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: AdminLeague; reload: () => void; admin?: boolean; defaultTab?: '' | LeagueTab }) {
+export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsible = false, defaultOpen = true }: {
+  l: AdminLeague; reload: () => void; admin?: boolean; defaultTab?: '' | LeagueTab;
+  /** Collapsible card: the header toggles the management panel (CommishDash uses
+   *  this when you run several leagues). Non-collapsible cards are always open. */
+  collapsible?: boolean; defaultOpen?: boolean;
+}) {
   const [matchups, setMatchups] = useState<AdminMatchup[] | null>(null);
   const [members, setMembers] = useState<AdminMember[] | null>(null);
   const [joiners, setJoiners] = useState<LeagueJoiner[]>([]);
   const [wallets, setWallets] = useState<Record<number, number>>({});
   const [audit, setAudit] = useState<AdminAudit[] | null>(null);
   const [tab, setTab] = useState<LeagueTab>(defaultTab || 'overview');
+  const [open, setOpen] = useState(collapsible ? defaultOpen : true);
   // roster_id → team name, from members (drives readable matchup labels).
   const teamName = (rid: number) => members?.find((m) => m.roster_id === rid)?.team ?? `Roster ${rid}`;
   const [kdst, setKdst] = useState<LeagueKdst | null>(null);
@@ -306,19 +312,21 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
   const loadAudit = async () => setAudit(await commishAudit(l.league_id, 40));
   const showTab = (t: LeagueTab) => {
     setTab(t);
-    if (t === 'matchups') { if (!matchups) loadM(); if (!members) loadMembers(); }
-    if (t === 'members' && !members) loadMembers();
-    if (t === 'audit') loadAudit();
+    if (t === 'matchups') { if (!matchups) loadM().catch(() => {}); if (!members) loadMembers().catch(() => {}); }
+    if (t === 'members' && !members) loadMembers().catch(() => {});
+    if (t === 'audit') loadAudit().catch(() => {});
     if (t === 'kdst' && !kdst) loadKdst();
   };
-  // Auto-load the initially-open tab (CommishDash opens straight on "members").
+  // Load the active tab's data once the card is (or becomes) open — collapsed
+  // cards don't fetch anything until expanded. Guards prevent refetching.
   useEffect(() => {
-    if (tab === 'members') loadMembers();
-    else if (tab === 'matchups') { loadM(); loadMembers(); }
-    else if (tab === 'kdst') loadKdst();
-    else if (tab === 'audit') loadAudit();
+    if (!open) return;
+    if (tab === 'members' && !members) loadMembers().catch(() => {});
+    else if (tab === 'matchups') { if (!matchups) loadM().catch(() => {}); if (!members) loadMembers().catch(() => {}); }
+    else if (tab === 'kdst' && !kdst) loadKdst();
+    else if (tab === 'audit' && !audit) loadAudit().catch(() => {});
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, []);
+  }, [open]);
   const set = async (id: string, status: string, lockNow = false) => { await adminSetMatchup(id, status, lockNow); await loadM(); };
   // Schedule the WHOLE regular season (all weeks) in one go — ESPN publishes the
   // full fantasy schedule up front, so there's no reason to sync week by week.
@@ -354,10 +362,14 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
       {watch && <AdminMatchupBoard matchupId={watch} onClose={() => setWatch(null)} />}
       {sheet && <FeedSheet matchupId={sheet} week={Number(srcWeek) || 1} onClose={() => setSheet(null)} />}
 
-      {/* League identity + the one always-on action: share the invite link. */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+      {/* League identity + the one always-on action: share the invite link.
+          When collapsible (CommishDash with several leagues), the header row
+          doubles as the expand/collapse toggle. */}
+      <div onClick={collapsible ? () => setOpen((o) => !o) : undefined} role={collapsible ? 'button' : undefined} aria-expanded={collapsible ? open : undefined}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', cursor: collapsible ? 'pointer' : undefined }}>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {collapsible && <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--dim)', flexShrink: 0 }}>{open ? '▾' : '▸'}</span>}
             <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{l.name}</span>
             <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>{l.season}</span>
             {l.provider && l.provider !== 'sleeper' && <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px', textTransform: 'uppercase' }}>{l.provider}</span>}
@@ -368,8 +380,10 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
         </div>
         {/* Primary way to invite players — the join link (no code to type). The
             code chips live in the Setup tab as a fallback for manual entry. */}
-        <button onClick={() => { copy(shareLink(l.invite_code)); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className="mono" style={{ ...btn(true), flexShrink: 0 }}>{copied ? '✓ copied' : '⛓ invite link'}</button>
+        <button onClick={(e) => { e.stopPropagation(); copy(shareLink(l.invite_code)); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className="mono" style={{ ...btn(true), flexShrink: 0 }}>{copied ? '✓ copied' : '⛓ invite link'}</button>
       </div>
+
+      {open && <>
 
       {busy && busy !== 'sync' && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{busy}</div>}
 
@@ -577,6 +591,8 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
           ))}
         </div>
       )}
+
+      </>}
     </div>
   );
 }
