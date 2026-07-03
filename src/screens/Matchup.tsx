@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile } from '../app/ui';
-import { FieldView, SlotFieldViews } from '../app/FieldView';
+import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { avatarUrl, teamLogo } from '../data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, preseasonWeekNum, PRESEASON_BASE, PRESEASON_WEEKS } from '../data/nflSlate';
 import { METRICS, metricById } from '../data/metrics';
@@ -157,6 +157,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const [winClocks, setWinClocks] = useState<Record<string, number>>({});
   const [winPlaying, setWinPlaying] = useState<Record<string, boolean>>({});
   const [speed, setSpeed] = useState(1); // playback speed multiplier (1/2/4/8)
+  const [fieldsOpen, setFieldsOpen] = useState(false); // ▦ ALL GAMES field board overlay
   // Playback clock mode: 'game' = all games lockstep on game clock; 'feed' =
   // real-time reveal but scoring still resolves on game clock; 'real' = real-time
   // reveal AND cross-game effects (TE-TD drip nuke) resolve in real-time order.
@@ -1135,6 +1136,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 ⏩ {speed}×
               </button>
               </>}
+              {REAL_WEEKS.has(week) && (
+                <button onClick={() => setFieldsOpen(true)} title="Every game with a slotted player, as live field visuals — your plays vs your opponent's" className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px' }}>
+                  ▦ FIELDS
+                </button>
+              )}
             </div>
           )}
           {phase === 'final' && (
@@ -1413,6 +1419,23 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       {puView === 'active' && <ActivePowerupsModal effects={activeEffects} onClose={() => setPuView(null)} />}
       {puView === 'apply' && <ApplyPowerupsModal items={appliable} inventory={inventory} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); setPuView(null); }} onClose={() => setPuView(null)} />}
       {shopOpen && <ShopModal onClose={() => setShopOpen(false)} coinsOverride={liveCtx ? Math.round(coinBal) : undefined} onBuy={liveCtx ? buyFromWallet : undefined} />}
+      {fieldsOpen && (
+        <FieldBoard week={week} onClose={() => setFieldsOpen(false)} entries={(() => {
+          // One entry per slotted player: its team locates the NFL game, its
+          // side drives the play tinting, and its clock mirrors the slot rows
+          // (per-game real-time position in wall modes, shared window clock in
+          // game mode) so the board shows exactly what the board rows show.
+          const list: FieldBoardEntry[] = [];
+          for (const rw of resolved.windows) {
+            const c = effWinClock(rw.window.id);
+            for (const s of rw.slots) {
+              if (s.you) list.push({ playerId: s.you.player.id, team: s.you.player.team, side: 'you', clock: wallClock ? clockAtRealTime(s.you.player, week, c, s.you.metricId ?? undefined) : c });
+              if (s.their) list.push({ playerId: s.their.player.id, team: s.their.player.team, side: 'their', clock: wallClock ? clockAtRealTime(s.their.player, week, c, s.their.metricId ?? undefined) : c });
+            }
+          }
+          return list;
+        })()} />
+      )}
 
       {earnOpen && <EarningsModal earnings={earnings} weeklyBudget={liveCtx && leagueBudget != null && leagueBudget !== WEEKLY_STIPEND ? leagueBudget : null} onReset={liveCtx ? undefined : () => { resetDripCoin(); setEarnOpen(false); }} onClose={() => setEarnOpen(false)} />}
     </>
@@ -2572,7 +2595,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
           return <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: col, textAlign: 'center', marginTop: 4 }}>{txt}</div>;
         })()}
         {(phase === 'final' || done) && <BuffFxRow side={mineBackup ? 'you' : 'their'} fx={mineBackup ? slot.youBuffFx : slot.theirBuffFx} />}
-        {open && slot.real && <FieldView week={week} team={be.player.team} clock={bclock} />}
+        {open && slot.real && <FieldView week={week} team={be.player.team} clock={bclock} collapsible />}
         {open && (() => {
           const log = buildLog(bEvents);
           return (
