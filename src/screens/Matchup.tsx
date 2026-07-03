@@ -3,7 +3,7 @@ import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile } from '../app/ui';
 import { avatarUrl, teamLogo } from '../data/media';
-import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek } from '../data/nflSlate';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS } from '../data/nflSlate';
 import { METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById, type Powerup } from '../data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague, activeRegSeasonWeeks } from '../data/league';
@@ -15,7 +15,7 @@ import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type S
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
-import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, ensureWallet, walletBuyPowerup, leagueWeeklyBudget, myMatchup, type PickRow } from '../data/liveApi';
+import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, ensureWallet, walletBuyPowerup, leagueWeeklyBudget, leagueTestLiveAt, myMatchup, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
@@ -327,6 +327,15 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     if (!liveCtx) { setLeagueBudget(null); return; }
     leagueWeeklyBudget(liveCtx.leagueId).then(setLeagueBudget).catch(() => setLeagueBudget(null));
   }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Super-admin live-test mode: when the league has a test anchor, install the
+  // compressed slate timeline so this board runs Setup→Locked→Live→Final in real
+  // minutes. `testAnchor` drives the state memo; cleared when leaving the board.
+  const [testAnchor, setTestAnchor] = useState<number | null>(null);
+  useEffect(() => {
+    if (!liveCtx) { setTestTimeline(null); setTestAnchor(null); return; }
+    leagueTestLiveAt(liveCtx.leagueId).then((ms) => { setTestTimeline(ms); setTestAnchor(ms); }).catch(() => { setTestTimeline(null); setTestAnchor(null); });
+    return () => setTestTimeline(null);
+  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
   // Hero board: the coin balance is the REAL team wallet (starts at 0, seeded by
   // the commissioner). Load it once; the worker credits earnings in-season, so the
   // board doesn't run the demo weekly-credit here.
@@ -395,20 +404,25 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     return () => clearInterval(t);
   }, [liveCtx]);
   const liveWinState = useMemo(() => {
+    // Live-test mode compresses both the lock lead and the live duration so the
+    // whole flow plays out in minutes (windowKickoffMs already returns the
+    // compressed anchor-relative kickoff).
+    const lockLead = testTimelineOn() ? TEST_LOCK_LEAD_MS : LOCK_LEAD_MS;
+    const gameDur = testTimelineOn() ? TEST_GAME_MS : GAME_WINDOW_MS;
     const out: Record<string, WinState> = {};
     for (const w of windowsForWeek(week)) {
       const k = windowKickoffMs(week, w.id);
       let s: WinState = 'setup';
       if (k != null) {
-        if (nowMs >= k + GAME_WINDOW_MS) s = 'final';
+        if (nowMs >= k + gameDur) s = 'final';
         else if (nowMs >= k) s = 'live';
-        else if (nowMs >= k - LOCK_LEAD_MS) s = 'locked';
+        else if (nowMs >= k - lockLead) s = 'locked';
       }
       out[w.id] = s;
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [week, nowMs, livePbpVer]);
+  }, [week, nowMs, livePbpVer, testAnchor]);
   // Overall live-board phase, derived from its windows (all setup → setup, all
   // final → final, else live). Drives the header + board-level gating; a manual
   // phase tab is disabled on the live board.
@@ -962,6 +976,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const liveLeaguesChip = (
     <button onClick={() => navigate({ name: 'live' })} className="mono" title="Back to your leagues" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>← my leagues</button>
   );
+  // Super-admin live-test badge — makes it obvious the board is on a compressed
+  // test clock, not the real slate.
+  const liveTestChip = testAnchor != null ? (
+    <span className="mono" title="Live-test mode: this league's windows run on a compressed schedule (super-admin toggle)." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 7px', whiteSpace: 'nowrap', flexShrink: 0 }}>🧪 TEST</span>
+  ) : null;
   const liveWeekSel = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
       <button onClick={() => goToWeek(week - 1)} disabled={week <= 1 || switchingWeek != null} title="previous week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: week <= 1 || switchingWeek != null ? 'default' : 'pointer', opacity: week <= 1 ? 0.35 : 1 }}>‹</button>
@@ -1008,7 +1027,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                {liveWeekSel}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{liveWeekSel}{liveTestChip}</div>
                 {liveScore}
               </div>
             </div>
@@ -1020,6 +1039,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
               {liveLeaguesChip}
               {liveWeekSel}
+              {liveTestChip}
             </div>
             {liveScore}
             <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
@@ -1933,7 +1953,7 @@ function WindowSection(props: {
   // kickoff, goes live at kickoff. Shown per-window so each window carries its
   // own Setup → Locked → Live → Final states + times, not just the board header.
   const winKickSod = windowKickoffSod(week, w.id);
-  const lockLabel = fmtTimeOfDay(winKickSod - 3600);
+  const lockLabel = fmtTimeOfDay(winKickSod - (testTimelineOn() ? TEST_LOCK_LEAD_MS / 1000 : 3600));
   const kickLabel = fmtTimeOfDay(winKickSod);
   // The state chip for this window's real-clock state.
   const stateChip = !realtime ? null : realtime === 'setup' ? (

@@ -264,9 +264,28 @@ function fmtSodShort(sod: number): string {
   const h = Math.floor(x / 3600), mm = Math.floor((x % 3600) / 60);
   return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, '0')}${h >= 12 ? 'p' : 'a'}`;
 }
+// ── Live-test timeline (super-admin preseason testing) ───────────────────────
+// When a league flips on live-test mode, the board anchors its window schedule to
+// the moment it was enabled and compresses it: window i kicks off a couple minutes
+// after the last, so Setup → Locked → Live → Final can be watched in real minutes
+// without waiting for the real slate. Set from the board (setTestTimeline) so every
+// window-time lookup below returns the compressed schedule automatically.
+let TEST_ANCHOR: number | null = null;
+const TEST_SETUP_LEAD_MS = 180_000; // 3m of setup before the first window kicks
+const TEST_STEP_MS = 120_000;       // 2m between successive window kickoffs
+export const TEST_LOCK_LEAD_MS = 60_000;  // window locks 1m before its (test) kickoff
+export const TEST_GAME_MS = 120_000;      // a window reads LIVE for 2m, then FINAL
+/** Enable/disable the compressed live-test timeline (anchor = epoch ms, null = off). */
+export function setTestTimeline(anchorMs: number | null): void { TEST_ANCHOR = anchorMs; }
+export function testTimelineOn(): boolean { return TEST_ANCHOR != null; }
+
 /** Earliest real kickoff (epoch ms) among a window's games, or null if unknown
- *  (week not loaded). */
+ *  (week not loaded). In live-test mode, the compressed anchor-relative kickoff. */
 export function windowKickoffMs(week: number, win: WindowId): number | null {
+  if (TEST_ANCHOR != null) {
+    const idx = windowsForWeek(week).findIndex((w) => w.id === win);
+    return idx >= 0 ? TEST_ANCHOR + TEST_SETUP_LEAD_MS + idx * TEST_STEP_MS : null;
+  }
   let min: number | null = null;
   for (const g of gamesInWindow(week, win)) {
     // Prefer the slate's scheduled kickoff (known pre-season); fall back to the
