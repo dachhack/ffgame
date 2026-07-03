@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../app/store';
-import { SiteSettings } from '../app/ui';
+import { SiteSettings, VersionTag } from '../app/ui';
 import { getProvider, espnAuth, type ProviderId } from '../data/providers';
 
 // Generic "connect a league by id" screen for providers that aren't Sleeper
@@ -47,7 +47,10 @@ export function ProviderConnect({ provider }: { provider: ProviderId }) {
           <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', padding: '6px 9px', borderRadius: 4, cursor: 'pointer' }}>← BACK</button>
           <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Connect a {prov.label} league</span>
         </div>
-        <SiteSettings />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <VersionTag />
+          <SiteSettings />
+        </div>
       </header>
 
       <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}>

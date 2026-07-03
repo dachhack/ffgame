@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { useStore } from '../app/store';
-import { SiteSettings, PlayerImg } from '../app/ui';
+import { SiteSettings, PlayerImg, VersionTag } from '../app/ui';
 import { buildMatchup, defaultLineup, aiLineup, slotKey } from '../engine/matchup';
 import { YOU_TEAM_ID, gameForTeam } from '../data/league';
 import { DEMO_WEEK } from '../config';
@@ -189,6 +189,7 @@ export function GuidedDemo() {
         <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← back</button>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <VersionTag />
         <DemoViewToggle view="clean" onSwitch={(v) => v === 'board' && navigate({ name: 'demo', view: 'board' })} />
         <SiteSettings />
       </div>
