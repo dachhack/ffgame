@@ -499,7 +499,7 @@ function LeagueCard({ e, card, commish, userId, onBoard, onResults, onManage }: 
   e: Enrollment; card?: MatchupCard; commish: boolean; userId: string;
   onBoard: () => void; onResults: () => void; onManage: () => void;
 }) {
-  const { loadSimLeague, navigate } = useStore();
+  const { loadSimLeague, navigate, setDemoWeek } = useStore();
   const [building, setBuilding] = useState(false);
   const [buildNote, setBuildNote] = useState('');
   const [buildErr, setBuildErr] = useState<string | null>(null);
@@ -526,21 +526,31 @@ function LeagueCard({ e, card, commish, userId, onBoard, onResults, onManage }: 
       setBuilding(false);
     }
   };
-  // The optional 2025 demo: fetch a real source league, re-skin it, and enter the
-  // GUIDED demo board — the full window-by-window "see it play" flow on last year's
-  // data, exactly like the standalone demo, just skinned to this league's roster.
-  // Client-only (no sealed picks / server persistence); the live board is the
-  // default action for real play.
+  // The 2025 demo: play the FULL board on last year's play-by-play, built from
+  // YOUR league — your real roster + your league's teams as the opponent (its real
+  // Week-1 matchup when there is one). Enters the client-only SIM board (ctx null →
+  // the playable LOCK-IN / per-window replay, not the real-time live board), so you
+  // can run each window on 2025 data. Falls back to the canned demo league if your
+  // Week-1 roster isn't synced yet.
   const playFullBoard = async () => {
     if (building) return;
-    setBuilding(true); setBuildErr(null);
+    setBuilding(true); setBuildErr(null); setBuildNote('Loading your board…');
     try {
-      const { built, youTeamId } = await buildDripTestLeague(e.sleeper_roster_id, setBuildNote);
-      // Drop any live-league slate overrides so the demo replays clean baked 2025
-      // windows, and enter the demo board (ctx null → client-only playback).
+      const week = 1; // baked 2025 play-by-play exists for weeks 1–14; Week 1 is always synced
+      const picked = await (async () => {
+        try {
+          const live = await buildLiveLeague(e.league_id, e.sleeper_roster_id, week);
+          const roster = live.built.league.teams.find((t) => t.id === live.youTeamId)?.roster ?? [];
+          if (roster.length) { live.built.league.season = 2025; return live; } // it's a 2025 replay — label + injuries follow
+        } catch { /* fall through to the canned demo */ }
+        return buildDripTestLeague(e.sleeper_roster_id, setBuildNote);
+      })();
+      // Drop any live-league slate override so it replays clean baked 2025 windows,
+      // and enter the SIM board (ctx null → client-only playback, not the live board).
       clearRuntimeSlate();
-      loadSimLeague(built, youTeamId, null);
-      navigate({ name: 'demo', view: 'board' });
+      loadSimLeague(picked.built, picked.youTeamId, null);
+      setDemoWeek(week);
+      navigate({ name: 'matchup', week, phase: 'setup' });
     } catch {
       setBuildErr('Couldn’t load the board — check your connection and try again.');
       setBuilding(false);
