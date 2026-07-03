@@ -25,3 +25,14 @@ a { color: inherit; }
 
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .grotesk { font-family: 'Space Grotesk', system-ui, sans-serif; }
+
+/* Management surfaces (super-admin + commissioner dashboards) — see adminUi.tsx.
+   Tab strips stay one row and scroll sideways instead of wrapping. */
+.mgmt-tabs { scrollbar-width: none; }
+.mgmt-tabs::-webkit-scrollbar { display: none; }
+@media (max-width: 760px) {
+  /* 16px inputs stop iOS Safari from zooming the page on focus; taller buttons
+     make the dense tool rows comfortably tappable. */
+  .mgmt input, .mgmt select { font-size: 16px !important; }
+  .mgmt button { min-height: 34px; }
+}

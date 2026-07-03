@@ -19,6 +19,7 @@ import { slugMeta } from '../data/slugMeta';
 import { isMarkFree, setMarkFree } from '../data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '../data/liveApi';
 import { POWERUPS } from '../data/powerups';
+import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, type TabDef } from './adminUi';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
 
@@ -33,13 +34,6 @@ function extractLeagueId(raw: string, platform: string): string {
 }
 const copy = (v: string) => navigator.clipboard?.writeText(v);
 
-const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 14, marginBottom: 12 };
-const h: React.CSSProperties = { fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginBottom: 10 };
-const mono: React.CSSProperties = { fontFamily: 'var(--mono, monospace)' };
-const chip: React.CSSProperties = { fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 6px', color: 'var(--text)', background: 'var(--bg)' };
-const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
-const btn = (active = false): React.CSSProperties => ({ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: active ? 'var(--on-accent)' : 'var(--text)', background: active ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' });
-const inp: React.CSSProperties = { fontFamily: 'inherit', fontSize: 12, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 10px' };
 
 /** Friendly local time for a matchup's auto-lock (kickoff), e.g. "Sun 1:00 PM". */
 function fmtLock(iso: string): string {
@@ -122,64 +116,105 @@ function PremiumTierPanel() {
   );
 }
 
+type AdminTab = 'leagues' | 'requests' | 'users' | 'system' | 'audit';
+
 export function AdminPage({ onBack }: { onBack: () => void }) {
   const [leagues, setLeagues] = useState<AdminLeague[] | null>(null);
   const [overrides, setOverrides] = useState<AdminOverride[]>([]);
   const [audit, setAudit] = useState<AdminAudit[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [tab, setTab] = useState<AdminTab>('leagues');
+  // Open code-request count — badges the Requests tab so new ones aren't missed.
+  const [pendingReqs, setPendingReqs] = useState(0);
 
   const load = async () => {
-    try { setLeagues(await adminOverview()); setOverrides(await adminOverrides()); setAudit(await adminAudit(40)); }
-    catch (e) { setErr(e instanceof Error ? e.message : 'Load failed.'); setLeagues([]); }
+    try {
+      setLeagues(await adminOverview()); setOverrides(await adminOverrides()); setAudit(await adminAudit(60));
+      adminCodeRequests().then((rs) => setPendingReqs(rs.filter((r) => !r.handled).length)).catch(() => {});
+      setErr(null);
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Load failed.'); setLeagues([]); }
   };
   useEffect(() => { load(); }, []);
 
+  const tabs: TabDef<AdminTab>[] = [
+    { id: 'leagues', label: 'LEAGUES' },
+    { id: 'requests', label: 'REQUESTS', badge: pendingReqs },
+    { id: 'users', label: 'USERS' },
+    { id: 'system', label: 'SYSTEM' },
+    { id: 'audit', label: 'AUDIT' },
+  ];
+
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <span className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>⚙ Super admin</span>
-        <button onClick={load} className="mono" style={linkBtn}>↻ refresh</button>
+    <div className="mgmt">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>⚙ Super admin</div>
+          <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', marginTop: 2 }}>
+            {leagues === null ? '…' : `${leagues.length} league${leagues.length === 1 ? '' : 's'}`}{pendingReqs ? ` · ${pendingReqs} open request${pendingReqs === 1 ? '' : 's'}` : ''}
+          </div>
+        </div>
+        <button onClick={load} className="mono" style={{ ...linkBtn, flexShrink: 0 }}>↻ refresh</button>
       </div>
       {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', marginBottom: 10 }}>{err}</div>}
 
-      <HealthPanel />
-      <MarkFreeToggle />
-      <PremiumTierPanel />
-      <ImportLeague reload={load} />
+      <TabBar tabs={tabs} active={tab} onSelect={setTab} style={{ marginBottom: 14 }} />
 
-      <div style={card}>
-        <div style={h}>LEAGUES</div>
-        {leagues === null ? <Muted text="Loading…" /> : leagues.length === 0 ? <Muted text="No leagues imported yet." /> :
-          leagues.map((l) => <LeagueRow key={l.league_id} l={l} reload={load} />)}
-      </div>
+      {tab === 'leagues' && (
+        <>
+          <ImportLeague reload={load} />
+          {leagues === null ? <div style={card}><Muted text="Loading…" /></div>
+            : leagues.length === 0 ? <div style={card}><Muted text="No leagues imported yet — import one above." /></div>
+            : leagues.map((l) => <LeagueRow key={l.league_id} l={l} reload={load} />)}
+        </>
+      )}
 
-      <CodeRequests />
-      <Overrides overrides={overrides} reload={load} />
-      <Admins />
-      <Users />
+      {tab === 'requests' && <CodeRequests onPending={setPendingReqs} />}
 
-      <div style={card}>
-        <div style={h}>RECENT AUDIT</div>
-        {audit.length === 0 ? <Muted text="No activity." /> : audit.map((a, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 10.5, gap: 8 }}>
-            <span className="mono" style={{ ...mono, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.op} <span style={{ color: 'var(--dim)' }}>{a.table}</span>{a.detail && <span style={{ color: 'var(--you)' }}> · {a.detail}</span>}{a.actor && <span style={{ color: 'var(--faint)' }}> · {a.actor}</span>}</span>
-            <span className="mono" style={{ ...mono, color: 'var(--faint)', fontSize: 9.5, whiteSpace: 'nowrap' }}>{new Date(a.at).toLocaleString()}</span>
-          </div>
-        ))}
-      </div>
+      {tab === 'users' && (
+        <>
+          <Users />
+          <Admins />
+          <Overrides overrides={overrides} reload={load} />
+        </>
+      )}
+
+      {tab === 'system' && (
+        <>
+          <HealthPanel />
+          <MarkFreeToggle />
+          <PremiumTierPanel />
+        </>
+      )}
+
+      {tab === 'audit' && (
+        <div style={card}>
+          <div style={h}>RECENT AUDIT</div>
+          {audit.length === 0 ? <Muted text="No activity." /> : audit.map((a, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 10.5, gap: 8, borderTop: i ? '1px solid var(--bd)' : 'none' }}>
+              <span className="mono" style={{ ...mono, color: 'var(--text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.op} <span style={{ color: 'var(--dim)' }}>{a.table}</span>{a.detail && <span style={{ color: 'var(--you)' }}> · {a.detail}</span>}{a.actor && <span style={{ color: 'var(--faint)' }}> · {a.actor}</span>}</span>
+              <span className="mono" style={{ ...mono, color: 'var(--faint)', fontSize: 9.5, whiteSpace: 'nowrap' }}>{new Date(a.at).toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ textAlign: 'center', marginTop: 6 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
     </div>
   );
 }
 
-export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: AdminLeague; reload: () => void; admin?: boolean; defaultTab?: '' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst' }) {
+// One league's management card — the whole commissioner/admin toolset for a
+// league, organized under a tab strip (Setup / Members / Picks / Matchups /
+// K-DST / Audit). Used by both the super-admin Leagues tab and CommishDash.
+type LeagueTab = 'overview' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst';
+
+export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: AdminLeague; reload: () => void; admin?: boolean; defaultTab?: '' | LeagueTab }) {
   const [matchups, setMatchups] = useState<AdminMatchup[] | null>(null);
   const [members, setMembers] = useState<AdminMember[] | null>(null);
   const [joiners, setJoiners] = useState<LeagueJoiner[]>([]);
   const [wallets, setWallets] = useState<Record<number, number>>({});
   const [audit, setAudit] = useState<AdminAudit[] | null>(null);
-  const [tab, setTab] = useState<'' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst'>(defaultTab);
+  const [tab, setTab] = useState<LeagueTab>(defaultTab || 'overview');
   // roster_id → team name, from members (drives readable matchup labels).
   const teamName = (rid: number) => members?.find((m) => m.roster_id === rid)?.team ?? `Roster ${rid}`;
   const [kdst, setKdst] = useState<LeagueKdst | null>(null);
@@ -269,8 +304,8 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
     return r;
   };
   const loadAudit = async () => setAudit(await commishAudit(l.league_id, 40));
-  const showTab = (t: 'matchups' | 'members' | 'audit' | 'ready' | 'kdst') => {
-    setTab((cur) => (cur === t ? '' : t));
+  const showTab = (t: LeagueTab) => {
+    setTab(t);
     if (t === 'matchups') { if (!matchups) loadM(); if (!members) loadMembers(); }
     if (t === 'members' && !members) loadMembers();
     if (t === 'audit') loadAudit();
@@ -278,10 +313,10 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
   };
   // Auto-load the initially-open tab (CommishDash opens straight on "members").
   useEffect(() => {
-    if (defaultTab === 'members') loadMembers();
-    else if (defaultTab === 'matchups') { loadM(); loadMembers(); }
-    else if (defaultTab === 'kdst') loadKdst();
-    else if (defaultTab === 'audit') loadAudit();
+    if (tab === 'members') loadMembers();
+    else if (tab === 'matchups') { loadM(); loadMembers(); }
+    else if (tab === 'kdst') loadKdst();
+    else if (tab === 'audit') loadAudit();
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, []);
   const set = async (id: string, status: string, lockNow = false) => { await adminSetMatchup(id, status, lockNow); await loadM(); };
@@ -304,50 +339,84 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
     if (r.ok) reload();
   };
 
+  const statusChip = (color: string): React.CSSProperties => ({ ...mono, fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color, border: `1px solid ${color}`, borderRadius: 4, padding: '2px 5px', whiteSpace: 'nowrap' });
+  const leagueTabs: TabDef<LeagueTab>[] = [
+    { id: 'overview', label: 'SETUP' },
+    { id: 'members', label: 'MEMBERS' },
+    { id: 'ready', label: 'PICKS' },
+    { id: 'matchups', label: 'MATCHUPS' },
+    { id: 'kdst', label: 'K/DST' },
+    { id: 'audit', label: 'AUDIT' },
+  ];
+
   return (
-    <div style={{ borderTop: '1px solid var(--bd)', paddingTop: 8, marginTop: 8 }}>
+    <div style={card}>
       {watch && <AdminMatchupBoard matchupId={watch} onClose={() => setWatch(null)} />}
       {sheet && <FeedSheet matchupId={sheet} week={Number(srcWeek) || 1} onClose={() => setSheet(null)} />}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{l.name} <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>· {l.season}</span>{l.provider && l.provider !== 'sleeper' && <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px', marginLeft: 6, textTransform: 'uppercase' }}>{l.provider}</span>}</div>
-          <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 3 }}>{l.enrolled}/{l.rosters} enrolled · commish {l.commissioner ? '✓' : '—'}</div>
+
+      {/* League identity + the one always-on action: share the invite link. */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{l.name}</span>
+            <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>{l.season}</span>
+            {l.provider && l.provider !== 'sleeper' && <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px', textTransform: 'uppercase' }}>{l.provider}</span>}
+            {!!l.test_live_at && <span className="mono" style={statusChip('var(--warn)')}>🧪 LIVE TEST</span>}
+            {!!l.preseason_at && <span className="mono" style={statusChip('var(--you)')}>🏈 PRESEASON</span>}
+          </div>
+          <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 4 }}>{l.enrolled}/{l.rosters} enrolled · commish {l.commissioner ? '✓' : '—'}</div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {/* Tabs highlight the active one in place (and toggle it closed on a second
-              click) rather than relabeling to "hide", which read as the tab vanishing. */}
-          <button onClick={() => showTab('ready')} className="mono" style={btn(tab === 'ready')} aria-pressed={tab === 'ready'}>picks</button>
-          <button onClick={() => showTab('members')} className="mono" style={btn(tab === 'members')} aria-pressed={tab === 'members'}>members</button>
-          <button onClick={() => showTab('kdst')} className="mono" style={btn(tab === 'kdst')} aria-pressed={tab === 'kdst'}>K/DST</button>
-          <button onClick={() => showTab('matchups')} className="mono" style={btn(tab === 'matchups')} aria-pressed={tab === 'matchups'}>matchups</button>
-          <button onClick={() => showTab('audit')} className="mono" style={btn(tab === 'audit')} aria-pressed={tab === 'audit'}>audit</button>
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: 10, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <span style={{ ...chip }}>commish&nbsp;<CodeChip v={l.commish_code} /></span>
-        {admin && <button onClick={() => regen('commish')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate">↻</button>}
-        <span style={{ ...chip }}>invite&nbsp;<CodeChip v={l.invite_code} /></span>
-        <button onClick={() => regen('invite')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate">↻</button>
         {/* Primary way to invite players — the join link (no code to type). The
-            invite code chip above remains as a fallback for manual entry. */}
-        <button onClick={() => { copy(shareLink(l.invite_code)); setCopied(true); }} className="mono" style={btn(true)}>{copied ? '✓ invite link copied' : '⛓ share invite link'}</button>
-        {admin && <span style={{ flex: 1 }} />}
-        {admin && <PreseasonToggle on={!!l.preseason_at} leagueId={l.league_id} reload={reload} />}
-        {admin && <TestLiveToggle on={!!l.test_live_at} leagueId={l.league_id} reload={reload} />}
-        {admin && <DeleteLeague name={l.name} onDelete={async () => { const r = await adminDeleteLeague(l.league_id); if (r.ok) reload(); return r; }} />}
+            code chips live in the Setup tab as a fallback for manual entry. */}
+        <button onClick={() => { copy(shareLink(l.invite_code)); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className="mono" style={{ ...btn(true), flexShrink: 0 }}>{copied ? '✓ copied' : '⛓ invite link'}</button>
       </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-        <span style={{ flex: 1 }} />
-        {/* This week box drives the picks-readiness view below; the sync button
-            schedules the ENTIRE season's matchups in one pass. */}
-        <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>picks wk</span>
-        <input value={week} onChange={(e) => setWeek(e.target.value.replace(/\D/g, ''))} style={{ ...inp, width: 38, padding: '5px 6px', textAlign: 'center' }} />
-        <button onClick={sync} disabled={busy === 'sync'} className="mono" style={btn(true)} title="schedule every week's matchups">{busy === 'sync' ? 'scheduling…' : '⟳ sync season'}</button>
-      </div>
-      {busy && busy !== 'sync' && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{busy}</div>}
+
+      {busy && busy !== 'sync' && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{busy}</div>}
+
+      <TabBar tabs={leagueTabs} active={tab} onSelect={showTab} style={{ margin: '10px -14px 0', padding: '0 8px' }} />
+
+      {tab === 'overview' && (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <div style={subhead}>INVITE CODES</div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                <span style={chip}>commish&nbsp;<CodeChip v={l.commish_code} /></span>
+                {admin && <button onClick={() => regen('commish')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate the commissioner code">↻ regen</button>}
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                <span style={chip}>invite&nbsp;<CodeChip v={l.invite_code} /></span>
+                <button onClick={() => regen('invite')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate the invite code">↻ regen</button>
+              </span>
+            </div>
+            <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>Players join with the invite link (button above) or by typing the invite code. The commish code claims league management.</div>
+          </div>
+          <div>
+            <div style={subhead}>SCHEDULE</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button onClick={sync} disabled={busy === 'sync'} className="mono" style={btn(true)} title="schedule every week's matchups">{busy === 'sync' ? 'scheduling…' : '⟳ sync season'}</button>
+              <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>pulls the whole season's matchups + lineups from {l.provider === 'espn' ? 'ESPN' : 'Sleeper'}</span>
+            </div>
+          </div>
+          {admin && (
+            <div>
+              <div style={subhead}>ADMIN MODES</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <PreseasonToggle on={!!l.preseason_at} leagueId={l.league_id} reload={reload} />
+                <TestLiveToggle on={!!l.test_live_at} leagueId={l.league_id} reload={reload} />
+                <span style={{ flex: 1 }} />
+                <DeleteLeague name={l.name} onDelete={async () => { const r = await adminDeleteLeague(l.league_id); if (r.ok) reload(); return r; }} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {tab === 'ready' && (
-        <div style={{ marginTop: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>week</span>
+            <input value={week} onChange={(e) => setWeek(e.target.value.replace(/\D/g, ''))} inputMode="numeric" style={{ ...inp, width: 48, padding: '5px 6px', textAlign: 'center' }} />
             <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>on missed pick:</span>
             <select value={policy} onChange={(e) => changePolicy(e.target.value as LineupPolicy)} style={{ ...inp, padding: '4px 6px', fontSize: 11 }}>
               <option value="best_lineup">force best lineup (stay human)</option>
@@ -358,8 +427,9 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
           <PickReadinessTab leagueId={l.league_id} week={Number(week) || 1} admin={admin} />
         </div>
       )}
+      {tab === 'members' && !members && <div style={{ marginTop: 12 }}><Muted text="Loading…" /></div>}
       {tab === 'members' && members && (
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 12 }}>
           <WeeklyBudget l={l} onGranted={() => loadMembers()} />
           {(() => { const nj = members.filter((m) => !m.enrolled).length; return (
             <div className="mono" style={{ ...mono, fontSize: 9.5, color: nj ? 'var(--dim)' : 'var(--you)', marginBottom: 6 }}>
@@ -392,7 +462,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
         </div>
       )}
       {tab === 'kdst' && (
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 12 }}>
           {!kdst ? <Muted text="Loading…" /> : (
             <>
               <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
@@ -445,8 +515,9 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
           )}
         </div>
       )}
+      {tab === 'matchups' && !matchups && <div style={{ marginTop: 12 }}><Muted text="Loading…" /></div>}
       {tab === 'matchups' && matchups && (
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 12 }}>
           <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', lineHeight: 1.6, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '7px 9px', marginBottom: 8 }}>
             Each matchup auto-advances at the real kickoff, or set it manually:
             {' '}<b style={{ color: 'var(--dim)' }}>Open</b> (picks open, pre-kickoff) →
@@ -497,7 +568,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
         </div>
       )}
       {tab === 'audit' && (
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 12 }}>
           {audit === null ? <Muted text="Loading…" /> : audit.length === 0 ? <Muted text="No matchup activity yet." /> : audit.map((a, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: '1px solid var(--bd)', gap: 8 }}>
               <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.op} <span style={{ color: 'var(--dim)' }}>{a.table}</span>{a.detail && <span style={{ color: 'var(--you)' }}> · {a.detail}</span>}{a.actor && <span style={{ color: 'var(--faint)' }}> · {a.actor}</span>}</span>
@@ -561,7 +632,7 @@ function ImportLeague({ reload }: { reload: () => void }) {
       <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>{pill('sleeper', 'Sleeper')}{pill('espn', 'ESPN')}</div>
       <div style={{ display: 'flex', gap: 6 }}>
         <input value={sid} onChange={(e) => setSid(e.target.value)} placeholder={espn ? 'ESPN league id' : 'Sleeper league id'} style={{ ...inp, flex: 1, minWidth: 0 }} />
-        <input value={season} onChange={(e) => setSeason(e.target.value)} placeholder="season" style={{ ...inp, width: 56 }} />
+        <input value={season} onChange={(e) => setSeason(e.target.value)} placeholder="season" style={{ ...inp, width: 68 }} />
         <button onClick={go} disabled={busy} className="mono" style={btn(true)}>{busy ? '…' : 'import'}</button>
       </div>
       {espn && (
@@ -604,12 +675,14 @@ function Admins() {
   );
 }
 
-function CodeRequests() {
+function CodeRequests({ onPending }: { onPending?: (n: number) => void }) {
   const [rows, setRows] = useState<CodeRequest[] | null>(null);
   const [leagues, setLeagues] = useState<AdminLeague[]>([]);
   const [showHandled, setShowHandled] = useState(false);
   const load = async () => { try { setRows(await adminCodeRequests()); } catch { setRows([]); } };
   useEffect(() => { load(); }, []);
+  // Keep the parent's Requests-tab badge in sync as requests load / get handled.
+  useEffect(() => { if (rows) onPending?.(rows.filter((r) => !r.handled).length); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [rows]);
   // Existing leagues' invite codes feed the per-request "send code" picker.
   useEffect(() => { adminOverview().then(setLeagues).catch(() => setLeagues([])); }, []);
   const reloadLeagues = async () => { const l = await adminOverview().catch(() => [] as AdminLeague[]); setLeagues(l); return l; };
@@ -1250,10 +1323,6 @@ function SendLink({ email }: { email: string }) {
       {s === 'sent' ? '✓ link sent' : s === 'sending' ? '…' : s === 'err' ? 'failed' : '✉ send link'}
     </button>
   );
-}
-
-function Muted({ text }: { text: string }) {
-  return <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)' }}>{text}</div>;
 }
 
 // A K or DST team picker — value is a '<team>-<suffix>' slug (or null = random).
