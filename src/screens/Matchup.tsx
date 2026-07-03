@@ -5,10 +5,10 @@ import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile }
 import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed } from '../data/gameFeed';
 import { avatarUrl, teamLogo } from '../data/media';
-import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, preseasonWeekNum, PRESEASON_BASE, PRESEASON_WEEKS } from '../data/nflSlate';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, preseasonWeekNum } from '../data/nflSlate';
 import { METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById, type Powerup } from '../data/powerups';
-import { getTeam, getPlayer, gameForTeam, getActiveLeague, activeRegSeasonWeeks } from '../data/league';
+import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '../data/league';
 import { buildLiveLeague } from '../data/liveBoard';
 import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
@@ -312,15 +312,22 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // the new week (its rosters, opponent + matchup ctx) and open it, exactly like
   // entering the hero board fresh. Null unless a switch is in flight.
   const [switchingWeek, setSwitchingWeek] = useState<number | null>(null);
-  // A preseason board pages within the preseason (offset) weeks; a regular board
-  // pages the regular season. Bounds keep the selector inside its own range.
   const preseason = isPreseasonWeek(week);
-  const seasonWeeks = activeRegSeasonWeeks();
-  const weekMin = preseason ? PRESEASON_BASE + 1 : 1;
-  const weekMax = preseason ? PRESEASON_BASE + PRESEASON_WEEKS : seasonWeeks;
-  async function goToWeek(target: number) {
-    if (!liveCtx || switchingWeek != null) return;
-    if (target < weekMin || target > weekMax || target === week) return;
+  // The selector pages the league's whole matchup timeline as ONE continuous
+  // range — preseason (offset) weeks first, then the regular season — so a
+  // preseason-enabled league flips PRE 1 → … → PRE 3 → WK 1 → … in one stride.
+  // Driven by the schedule the league actually has, so it only offers real weeks.
+  const orderedWeeks = (() => {
+    const ws = new Set(getActiveLeague().schedule.map((g) => g.week));
+    ws.add(week);
+    return [...ws].sort((a, b) => (isPreseasonWeek(a) ? 0 : 1) - (isPreseasonWeek(b) ? 0 : 1) || a - b);
+  })();
+  const wIdx = orderedWeeks.indexOf(week);
+  const prevWeek = wIdx > 0 ? orderedWeeks[wIdx - 1] : null;
+  const nextWeek = wIdx >= 0 && wIdx < orderedWeeks.length - 1 ? orderedWeeks[wIdx + 1] : null;
+  async function goToWeek(target: number | null) {
+    if (!liveCtx || switchingWeek != null || target == null) return;
+    if (!orderedWeeks.includes(target) || target === week) return;
     setSwitchingWeek(target);
     try {
       const m = await myMatchup(liveCtx.leagueId, liveCtx.rosterId, target).catch(() => null);
@@ -1001,9 +1008,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const weekLabel = (w: number) => (isPreseasonWeek(w) ? `PRE ${preseasonWeekNum(w)}` : `WK ${w}`);
   const liveWeekSel = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-      <button onClick={() => goToWeek(week - 1)} disabled={week <= weekMin || switchingWeek != null} title="previous week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: week <= weekMin || switchingWeek != null ? 'default' : 'pointer', opacity: week <= weekMin ? 0.35 : 1 }}>‹</button>
+      <button onClick={() => goToWeek(prevWeek)} disabled={prevWeek == null || switchingWeek != null} title="previous week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: prevWeek == null || switchingWeek != null ? 'default' : 'pointer', opacity: prevWeek == null ? 0.35 : 1 }}>‹</button>
       <span className="mono" title="Week — page through the season" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', minWidth: 36, textAlign: 'center' }}>{switchingWeek != null ? `${weekLabel(switchingWeek)}…` : weekLabel(week)}</span>
-      <button onClick={() => goToWeek(week + 1)} disabled={week >= weekMax || switchingWeek != null} title="next week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: week >= weekMax || switchingWeek != null ? 'default' : 'pointer', opacity: week >= weekMax ? 0.35 : 1 }}>›</button>
+      <button onClick={() => goToWeek(nextWeek)} disabled={nextWeek == null || switchingWeek != null} title="next week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: nextWeek == null || switchingWeek != null ? 'default' : 'pointer', opacity: nextWeek == null ? 0.35 : 1 }}>›</button>
     </div>
   );
   const liveScore = (

@@ -7,7 +7,7 @@ import {
   getSession, onAuth, signOut, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, joinLeague, myEnrollments, myLinkedSleeper, claimMyRosters,
   redeemCommish, isAdmin, commishOverview, friendlyError,
-  myMatchup, matchupTeams, leagueResults,
+  myMatchup, matchupTeams, leagueResults, defaultOpenWeek,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
 } from '../data/liveApi';
 import { DEMO_WEEK } from '../config';
@@ -511,9 +511,12 @@ function LeagueCard({ e, card, commish, userId, onBoard, onResults, onManage }: 
     if (building) return;
     setBuilding(true); setBuildErr(null); setBuildNote('Loading your board…');
     try {
-      // Default to week 1; a preseason-mode league opens on its first preseason
-      // (offset) week instead, where its real 2026 preseason matchups live.
-      const week = e.league?.preseason_at ? PRESEASON_BASE + 1 : 1;
+      // Open to the current NFL week (or the next upcoming if none is live) across
+      // the league's whole timeline — so a preseason-mode league lands on its next
+      // preseason game and rolls into Week 1 once preseason wraps.
+      const preseasonOn = !!e.league?.preseason_at;
+      const week = await defaultOpenWeek(e.league_id, e.league?.season ?? '2026', preseasonOn)
+        .catch(() => (preseasonOn ? PRESEASON_BASE + 1 : 1));
       const m = await myMatchup(e.league_id, e.sleeper_roster_id, week).catch(() => null);
       const { built, youTeamId } = await buildLiveLeague(e.league_id, e.sleeper_roster_id, week);
       const ctx = m ? { matchupId: m.id, userId, leagueId: e.league_id, rosterId: e.sleeper_roster_id, week: m.week } : null;

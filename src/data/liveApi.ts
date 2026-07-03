@@ -241,6 +241,34 @@ export async function myMatchup(leagueId: string, rosterId: number, week?: numbe
   return (data as LiveMatchup) ?? null;
 }
 
+/** The week a league's board should open to: the current NFL week (its games in
+ *  progress), or — when none is live — the next upcoming week, across the league's
+ *  whole matchup timeline. Preseason (offset) weeks sort ahead of the regular
+ *  season by real kickoff, so a preseason league opens on its next preseason game
+ *  and rolls into Week 1 once preseason is done. Falls back to the first week. */
+export async function defaultOpenWeek(leagueId: string, season: string, preseasonEnabled: boolean): Promise<number> {
+  const [msRes, slRes] = await Promise.all([
+    client().from('matchup').select('week').eq('league_id', leagueId),
+    client().from('nfl_slate').select('week, kickoff').eq('season', season),
+  ]);
+  const weeks = [...new Set(((msRes.data ?? []) as { week: number }[]).map((r) => r.week))];
+  if (!weeks.length) return preseasonEnabled ? 101 : 1;
+  const kicks: Record<number, { first: number; last: number }> = {};
+  for (const r of (slRes.data ?? []) as { week: number; kickoff: string | null }[]) {
+    if (!r.kickoff) continue;
+    const t = Date.parse(r.kickoff);
+    const e = kicks[r.week] ?? (kicks[r.week] = { first: t, last: t });
+    e.first = Math.min(e.first, t); e.last = Math.max(e.last, t);
+  }
+  // Ordered by real kickoff (weeks with no known slate sort last). Open the first
+  // week that isn't fully over — i.e. live now or the soonest upcoming.
+  const ordered = weeks.slice().sort((a, b) => (kicks[a]?.first ?? Infinity) - (kicks[b]?.first ?? Infinity) || a - b);
+  const now = Date.now();
+  const GAME_MS = 4 * 3_600_000;
+  for (const w of ordered) { const k = kicks[w]; if (!k || now <= k.last + GAME_MS) return w; }
+  return ordered[ordered.length - 1];
+}
+
 export interface MatchupResult { id: string; week: number; home_roster_id: number; away_roster_id: number; home_final: number | null; away_final: number | null; status: string; }
 /** Every matchup in a league (all weeks) with its final totals — the scoreboard/
  *  results feed. Readable by any league member (finals live on the matchup row). */
