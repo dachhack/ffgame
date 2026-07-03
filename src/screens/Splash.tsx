@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
-import { SiteSettings } from '../app/ui';
+import { SiteSettings, VersionTag } from '../app/ui';
 import { getProvider } from '../data/providers';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
 import { getSession } from '../data/liveApi';
@@ -45,7 +45,8 @@ export function Splash() {
           <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}>◈ DRIP FANTASY</span>
           {sleeperUser && <button onClick={() => navigate({ name: 'leagues' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← {sleeperUser.displayName}’s leagues</button>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <VersionTag />
           <SiteSettings />
         </div>
       </header>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
-import { SiteSettings } from '../app/ui';
+import { SiteSettings, VersionTag } from '../app/ui';
 import { getProvider, type ProviderLeague } from '../data/providers';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
 
@@ -98,7 +98,10 @@ export function Leagues() {
             <span style={{ fontSize: 8.5, color: 'var(--faint)', letterSpacing: '0.08em' }}>▾</span>
           </button>
         </div>
-        <SiteSettings />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <VersionTag />
+          <SiteSettings />
+        </div>
       </header>
 
       <main style={{ flex: 1, overflow: 'auto', padding: '20px 16px 60px' }}>

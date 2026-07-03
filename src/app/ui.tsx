@@ -314,6 +314,15 @@ export function DemoControls({ compact }: { compact?: boolean }) {
   );
 }
 
+// Small faint version readout for headers that don't use <Brand> (which shows
+// the version under the wordmark) — keeps the running build identifiable on
+// every page.
+export function VersionTag({ style }: { style?: CSSProperties }) {
+  return (
+    <span className="mono" title="app version" style={{ fontSize: 8.5, letterSpacing: '0.08em', color: 'var(--faint)', whiteSpace: 'nowrap', ...style }}>{APP_VERSION}</span>
+  );
+}
+
 // `hideDataSource` drops the "· data Stathead" attribution (the hero/live board
 // isn't a 2025-data replay, so the demo attribution would mislead there).
 export function Brand({ onClick, hideDataSource = false }: { onClick?: () => void; hideDataSource?: boolean }) {

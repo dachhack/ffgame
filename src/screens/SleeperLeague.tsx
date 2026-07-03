@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../app/store';
-import { SiteSettings } from '../app/ui';
+import { SiteSettings, VersionTag } from '../app/ui';
 import { getProvider, type ProviderStanding } from '../data/providers';
 import type { BuiltLeague } from '../data/league';
 
@@ -78,7 +78,10 @@ export function SleeperLeague({ leagueId, leagueName }: { leagueId: string; leag
           <button onClick={() => navigate({ name: 'leagues' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', padding: '6px 9px', borderRadius: 4, cursor: 'pointer' }}>← LEAGUES</button>
           <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{leagueName}</span>
         </div>
-        <SiteSettings />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <VersionTag />
+          <SiteSettings />
+        </div>
       </header>
 
       <main style={{ flex: 1, overflow: 'auto', padding: '20px 16px 60px' }}>

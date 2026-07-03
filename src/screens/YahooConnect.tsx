@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
-import { SiteSettings } from '../app/ui';
+import { SiteSettings, VersionTag } from '../app/ui';
 import { getProvider, type ProviderLeague } from '../data/providers';
 import { yahooConfigured, yahooConnected, startYahooAuth, yahooDisconnect } from '../data/providers/yahooClient';
 
@@ -45,7 +45,10 @@ export function YahooConnect() {
           <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', padding: '6px 9px', borderRadius: 4, cursor: 'pointer' }}>← BACK</button>
           <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Connect a Yahoo league</span>
         </div>
-        <SiteSettings />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <VersionTag />
+          <SiteSettings />
+        </div>
       </header>
       <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}>
         <div style={{ width: '100%', maxWidth: 460 }}>{kids}</div>
