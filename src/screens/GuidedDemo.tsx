@@ -7,6 +7,7 @@ import { DEMO_WEEK } from '../config';
 import { METRICS } from '../data/metrics';
 import { loadRealWeek, realPointsFor } from '../data/realPbp';
 import { FX_COLOR, fmtClock, buildBeats, type Beat } from '../data/demoNarration';
+import { SlotFieldViews } from '../app/FieldView';
 import { DemoViewToggle } from './DemoOverlay';
 import type { PbpEvent, WindowId } from '../types';
 
@@ -177,7 +178,7 @@ export function GuidedDemo() {
   const activeBeat = beats.reduce<Beat | null>((acc, b) => (b.clock <= clock ? b : acc), null);
   const intro: Beat | null = featured ? {
     clock: 0, key: 'intro', icon: '👀', title: 'KICKOFF',
-    body: `You fielded ${featured.you.player.name} on ${youMet?.name ?? 'a hidden metric'} (${youMet?.tag ?? '—'}), armed ${armedPu?.name}. Watch it play out.`,
+    body: `You fielded ${featured.you.player.name} on ${youMet?.name ?? 'a hidden metric'} (${youMet?.tag ?? '—'}), armed ${armedPu?.name}. Watch it play out — and follow the ball on the live field below.`,
   } : null;
   const shown = activeBeat ?? intro;
 
@@ -347,6 +348,9 @@ export function GuidedDemo() {
               <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, color: ended ? 'var(--you)' : 'var(--text)', marginTop: 3, lineHeight: 1 }}>{ended ? 'FINAL' : fmtClock(clock)}</div>
             </div>
           </div>
+
+          {/* the live field(s) under the duel — same drive charts as the real board */}
+          <SlotFieldViews week={DEMO_WEEK} youTeam={featured.you.player.team} theirTeam={featured.their.player.team} youClock={clock} theirClock={clock} />
 
           {/* legend — kept above the play log so the key stays visible while the action is up top */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', justifyContent: 'center', marginTop: 12 }}>

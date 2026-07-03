@@ -1,6 +1,20 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-03 · Build `v0.88.0`_
+_Last updated: 2026-07-03 · Build `v0.89.0`_
+
+## Field visuals in the demo flow + lean live board (v0.89.0)
+- **Guided demo** (`GuidedDemo.tsx` watch step): `SlotFieldViews` renders the
+  duel's live field(s) under the duel card, driven by the demo clock — both
+  players' games, takeover/red-zone included. Intro narration points at it.
+- **Lean pilot board** (`LiveBoard.tsx`): new "⬢ AROUND THE LEAGUE" collapsible
+  card — every game the worker has plays for this week as a `FieldView` grid
+  (clock = MAX → always the latest play). `weekGameFeeds` is fetched in the
+  same refresh as scores/picks and installed via `setLiveGameFeed` (exclusive
+  overlay, never baked data on a live board).
+- Where visuals live on the live 2026 surfaces: the FULL matchup board
+  (Matchup.tsx with liveCtx) has per-slot fields under LOG + the ▦ FIELDS
+  all-games overlay with outcome tinting; the lean LiveBoard summary now has
+  the around-the-league grid (no tinting — it has no engine events).
 
 ## Field visuals polish: outcome tinting, takeover, red zone (v0.88.0)
 - **Outcome-based tinting** replaces participation tinting on the ▦ FIELDS
