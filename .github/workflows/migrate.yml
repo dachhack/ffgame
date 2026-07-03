@@ -5,7 +5,7 @@ name: Apply Supabase migrations
 # already-applied migrations are never re-run), so it needs no migration tracking.
 on:
   push:
-    branches: [claude/admiring-brown-x5limu, claude/charming-bardeen-tqeyue, claude/drip-fantasy-live-onboard-i6dgrs, claude/live-game-board-2026-umibeg]
+    branches: [main, claude/play-by-play-visuals-research-rl1eau, claude/admiring-brown-x5limu, claude/charming-bardeen-tqeyue, claude/drip-fantasy-live-onboard-i6dgrs, claude/live-game-board-2026-umibeg]
     paths: ['supabase/migrations/**']
   workflow_dispatch:
     inputs:
