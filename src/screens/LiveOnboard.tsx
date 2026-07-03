@@ -10,10 +10,9 @@ import {
   myMatchup, matchupTeams, leagueResults, defaultOpenWeek,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
 } from '../data/liveApi';
-import { DEMO_WEEK } from '../config';
 import { buildDripTestLeague } from '../data/dripTest';
 import { buildLiveLeague } from '../data/liveBoard';
-import { PRESEASON_BASE } from '../data/nflSlate';
+import { PRESEASON_BASE, clearRuntimeSlate } from '../data/nflSlate';
 import { LiveBoard } from './LiveBoard';
 import { AdminPage } from './AdminPage';
 import { CommishDash } from './CommishDash';
@@ -528,21 +527,20 @@ function LeagueCard({ e, card, commish, userId, onBoard, onResults, onManage }: 
     }
   };
   // The optional 2025 demo: fetch a real source league, re-skin it, and enter the
-  // full sim board as this user's team (a "see it play" preview until the season
-  // starts). The default action is the real live board for this league.
+  // GUIDED demo board — the full window-by-window "see it play" flow on last year's
+  // data, exactly like the standalone demo, just skinned to this league's roster.
+  // Client-only (no sealed picks / server persistence); the live board is the
+  // default action for real play.
   const playFullBoard = async () => {
     if (building) return;
     setBuilding(true); setBuildErr(null);
     try {
-      const [{ built, youTeamId }, m] = await Promise.all([
-        buildDripTestLeague(e.sleeper_roster_id, setBuildNote),
-        myMatchup(e.league_id, e.sleeper_roster_id).catch(() => null),
-      ]);
-      // With a real matchup, run as a true pilot board (sealed-pick persistence on,
-      // opened on the matchup's week). Without one, fall back to a plain playtest.
-      const ctx = m ? { matchupId: m.id, userId, leagueId: e.league_id, rosterId: e.sleeper_roster_id, week: m.week } : null;
-      loadSimLeague(built, youTeamId, ctx);
-      navigate({ name: 'matchup', week: ctx ? ctx.week : DEMO_WEEK, phase: 'setup' });
+      const { built, youTeamId } = await buildDripTestLeague(e.sleeper_roster_id, setBuildNote);
+      // Drop any live-league slate overrides so the demo replays clean baked 2025
+      // windows, and enter the demo board (ctx null → client-only playback).
+      clearRuntimeSlate();
+      loadSimLeague(built, youTeamId, null);
+      navigate({ name: 'demo', view: 'board' });
     } catch {
       setBuildErr('Couldn’t load the board — check your connection and try again.');
       setBuilding(false);
