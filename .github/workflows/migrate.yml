@@ -1,11 +1,12 @@
 name: Apply Supabase migrations
 
 # Runs newly-ADDED files in supabase/migrations/ against the database whenever
-# they land on the working branch. No SQL pasting. Only added files run (existing,
-# already-applied migrations are never re-run), so it needs no migration tracking.
+# they land on main (i.e. on every merged PR that adds a migration). No SQL
+# pasting. Only added files run (existing, already-applied migrations are never
+# re-run), so it needs no migration tracking.
 on:
   push:
-    branches: [claude/admiring-brown-x5limu, claude/charming-bardeen-tqeyue, claude/drip-fantasy-live-onboard-i6dgrs, claude/live-game-board-2026-umibeg]
+    branches: [main]
     paths: ['supabase/migrations/**']
   workflow_dispatch:
     inputs:
