@@ -957,44 +957,78 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     );
   }
 
+  // ── Live-board header pieces (shared between the desktop single row and the
+  // mobile two-row layout so nothing overlaps on a narrow screen). ──
+  const liveLeaguesChip = (
+    <button onClick={() => navigate({ name: 'live' })} className="mono" title="Back to your leagues" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>← my leagues</button>
+  );
+  const liveWeekSel = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+      <button onClick={() => goToWeek(week - 1)} disabled={week <= 1 || switchingWeek != null} title="previous week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: week <= 1 || switchingWeek != null ? 'default' : 'pointer', opacity: week <= 1 ? 0.35 : 1 }}>‹</button>
+      <span className="mono" title="Week — page through the season" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', minWidth: 36, textAlign: 'center' }}>{switchingWeek != null ? `WK ${switchingWeek}…` : `WK ${week}`}</span>
+      <button onClick={() => goToWeek(week + 1)} disabled={week >= seasonWeeks || switchingWeek != null} title="next week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: week >= seasonWeeks || switchingWeek != null ? 'default' : 'pointer', opacity: week >= seasonWeeks ? 0.35 : 1 }}>›</button>
+    </div>
+  );
+  const liveScore = (
+    <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 16 }}>
+      <Avatar name={you.name} accent="var(--you)" size={isMobile ? 22 : 30} src={avatarUrl(you.ownerId)} />
+      <span className="mono" style={{ color: 'var(--text)', fontSize: isMobile ? 20 : 28, fontWeight: 700, lineHeight: 1 }}>{youTotal.toFixed(1)}</span>
+      <span className="mono" style={{ color: 'var(--faint)', fontSize: isMobile ? 10 : 13, fontWeight: 700, letterSpacing: '0.12em' }}>VS</span>
+      <span className="mono" style={{ color: 'var(--text)', fontSize: isMobile ? 20 : 28, fontWeight: 700, lineHeight: 1 }}>{themTotal.toFixed(1)}</span>
+      <Avatar name={opp.name} accent="var(--opp)" size={isMobile ? 22 : 30} src={avatarUrl(opp.ownerId)} />
+    </div>
+  );
+  const liveCoin = (
+    <button onClick={() => setEarnOpen(true)} title="Drip Coin — tap for earning opportunities" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 9px', cursor: 'pointer', flexShrink: 0 }}>
+      <CoinIcon size={13} />
+      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{Math.round(coinBal)}</span>
+      {phase === 'final' && weekCoins > 0 && <span style={{ fontSize: 8.5, color: 'var(--fx-streak)' }}>+{weekCoins}</span>}
+    </button>
+  );
+  const liveWeekResult = phase === 'final' ? (
+    <button onClick={() => navigate({ name: 'final', week })} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4, flexShrink: 0 }}>WEEK RESULT →</button>
+  ) : null;
+
   return (
     <>
       <header style={{ height: 'auto', minHeight: isMobile ? 52 : 60, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 8, padding: isMobile ? '7px 10px' : '8px 16px', position: 'sticky', top: 0, zIndex: 40, gap: isMobile ? 12 : 10 }}>
         {liveCtx ? (
-          // Live board: minimal header — Brand · big centered score · coin + gear.
-          // No phase tabs (status) or lock time; each window carries its own state.
-          <>
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 9 }}>
-              <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
-              <button onClick={() => navigate({ name: 'live' })} className="mono" title="Back to your leagues" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>← my leagues</button>
-              {/* Week selector: page to another week's matchup on this same league. */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-                <button onClick={() => goToWeek(week - 1)} disabled={week <= 1 || switchingWeek != null} title="previous week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: week <= 1 || switchingWeek != null ? 'default' : 'pointer', opacity: week <= 1 ? 0.35 : 1 }}>‹</button>
-                <span className="mono" title="Week — page through the season" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', minWidth: 36, textAlign: 'center' }}>{switchingWeek != null ? `WK ${switchingWeek}…` : `WK ${week}`}</span>
-                <button onClick={() => goToWeek(week + 1)} disabled={week >= seasonWeeks || switchingWeek != null} title="next week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: week >= seasonWeeks || switchingWeek != null ? 'default' : 'pointer', opacity: week >= seasonWeeks ? 0.35 : 1 }}>›</button>
+          isMobile ? (
+            // Mobile: two stacked rows so the chips/score/coin never collide.
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
+                  {liveLeaguesChip}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  {liveCoin}
+                  {liveWeekResult}
+                  <SiteSettings />
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                {liveWeekSel}
+                {liveScore}
               </div>
             </div>
-            <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: isMobile ? 9 : 16 }}>
-              <Avatar name={you.name} accent="var(--you)" size={isMobile ? 24 : 30} src={avatarUrl(you.ownerId)} />
-              <span className="mono" style={{ color: 'var(--text)', fontSize: isMobile ? 22 : 28, fontWeight: 700, lineHeight: 1 }}>{youTotal.toFixed(1)}</span>
-              <span className="mono" style={{ color: 'var(--faint)', fontSize: isMobile ? 11 : 13, fontWeight: 700, letterSpacing: '0.12em' }}>VS</span>
-              <span className="mono" style={{ color: 'var(--text)', fontSize: isMobile ? 22 : 28, fontWeight: 700, lineHeight: 1 }}>{themTotal.toFixed(1)}</span>
-              <Avatar name={opp.name} accent="var(--opp)" size={isMobile ? 24 : 30} src={avatarUrl(opp.ownerId)} />
+          ) : (
+          // Desktop: minimal single row — Brand · big centered score · coin + gear.
+          // No phase tabs (status) or lock time; each window carries its own state.
+          <>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 9 }}>
+              <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
+              {liveLeaguesChip}
+              {liveWeekSel}
             </div>
+            {liveScore}
             <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
-              <button onClick={() => setEarnOpen(true)} title="Drip Coin — tap for earning opportunities" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 9px', cursor: 'pointer' }}>
-                <CoinIcon size={13} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{Math.round(coinBal)}</span>
-                {phase === 'final' && weekCoins > 0 && <span style={{ fontSize: 8.5, color: 'var(--fx-streak)' }}>+{weekCoins}</span>}
-              </button>
-              {phase === 'final' && (
-                <button onClick={() => navigate({ name: 'final', week })} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4 }}>
-                  WEEK RESULT →
-                </button>
-              )}
+              {liveCoin}
+              {liveWeekResult}
               <SiteSettings />
             </div>
           </>
+          )
         ) : (
           <>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
@@ -1081,7 +1115,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         )}
       </header>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 10 : 14, padding: isMobile ? 10 : 14, overflow: isMobile ? 'auto' : 'hidden', minHeight: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? undefined : 'flex-start', gap: isMobile ? 10 : 14, padding: isMobile ? 10 : 14, overflow: isMobile ? 'auto' : 'visible', minHeight: 0 }}>
         {!isMobile && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={!rosterOpen.you} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} />}
 
         {isMobile && (
@@ -1544,8 +1578,8 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
 
   if (collapsed && !fluid) {
     return (
-      <aside style={{ width: 26, flex: 'none' }} className="hide-narrow">
-        <button onClick={onToggle} title={`Show ${side === 'you' ? 'your' : 'their'} roster`} className="mono" style={{ width: 26, height: '100%', minHeight: 120, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '8px 0', background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, color: accent, cursor: 'pointer' } as React.CSSProperties}>
+      <aside style={{ width: 26, flex: 'none', position: 'sticky', top: 68, alignSelf: 'flex-start' }} className="hide-narrow">
+        <button onClick={onToggle} title={`Show ${side === 'you' ? 'your' : 'their'} roster`} className="mono" style={{ width: 26, minHeight: 160, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '8px 0', background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, color: accent, cursor: 'pointer' } as React.CSSProperties}>
           <span style={{ fontSize: 11 }}>{side === 'you' ? '▸' : '◂'}</span>
           <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.18em', writingMode: 'vertical-rl', textOrientation: 'mixed' }}>{side === 'you' ? 'YOUR' : 'THEIR'} ROSTER · {total}</span>
         </button>
@@ -1556,7 +1590,10 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
   return (
     <aside style={fluid
       ? { width: '100%', flex: 'none', overflow: 'auto', maxHeight: '44vh', display: 'flex', flexDirection: 'column', gap: 12, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: 10 }
-      : { width: side === 'you' ? 170 : 196, flex: 'none', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} className={fluid ? undefined : 'hide-narrow'}>
+      // Desktop: pin the rail below the sticky header so you can grab a player from
+      // anywhere on the board without scrolling back up; the rail scrolls on its own
+      // when the roster is long.
+      : { width: side === 'you' ? 170 : 196, flex: 'none', position: 'sticky', top: 68, alignSelf: 'flex-start', maxHeight: 'calc(100vh - 80px)', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} className={fluid ? undefined : 'hide-narrow'}>
       <button onClick={onToggle} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.2em', color: accent, fontWeight: 700 }}>{side === 'you' ? '◂' : '▸'} {side === 'you' ? 'YOUR' : 'THEIR'} ROSTER</span>
         <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{total}</span>
