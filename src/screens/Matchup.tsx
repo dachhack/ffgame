@@ -1430,12 +1430,33 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           // side drives the play tinting, and its clock mirrors the slot rows
           // (per-game real-time position in wall modes, shared window clock in
           // game mode) so the board shows exactly what the board rows show.
+          //
+          // Tinting is by OUTCOME: an event helps its side when it banked
+          // points (delta) or fired an effect. Denial effects (nuke/erase/…)
+          // are logged on the VICTIM's side, so their benefit flips to the
+          // opponent — whose player's play at that clock is the pid we tint.
+          const DENIAL = new Set(['nuke', 'erase', 'stop', 'reset', 'compression', 'cold']);
           const list: FieldBoardEntry[] = [];
           for (const rw of resolved.windows) {
             const c = effWinClock(rw.window.id);
             for (const s of rw.slots) {
-              if (s.you) list.push({ playerId: s.you.player.id, team: s.you.player.team, side: 'you', clock: wallClock ? clockAtRealTime(s.you.player, week, c, s.you.metricId ?? undefined) : c });
-              if (s.their) list.push({ playerId: s.their.player.id, team: s.their.player.team, side: 'their', clock: wallClock ? clockAtRealTime(s.their.player, week, c, s.their.metricId ?? undefined) : c });
+              const side = { you: s.you, their: s.their };
+              const plays = {
+                you: s.you ? realPbpFor(week, s.you.player.id) ?? [] : [],
+                their: s.their ? realPbpFor(week, s.their.player.id) ?? [] : [],
+              };
+              const pids: Record<'you' | 'their', number[]> = { you: [], their: [] };
+              for (const ev of s.events) {
+                if (ev.drip) continue;
+                if (!(ev.delta > 0) && !ev.effect) continue;
+                const benefit = ev.effect && DENIAL.has(ev.effect.type) ? (ev.side === 'you' ? 'their' : 'you') : ev.side;
+                const pid = plays[benefit].find((rp) => rp.c === ev.clock)?.pid;
+                if (pid != null) pids[benefit].push(pid);
+              }
+              for (const sd of ['you', 'their'] as const) {
+                const p = side[sd];
+                if (p) list.push({ playerId: p.player.id, team: p.player.team, side: sd, pids: pids[sd], clock: wallClock ? clockAtRealTime(p.player, week, c, p.metricId ?? undefined) : c });
+              }
             }
           }
           return list;

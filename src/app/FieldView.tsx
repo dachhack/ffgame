@@ -11,7 +11,7 @@
 // with plays tinted by whose roster made them — you vs opponent).
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed } from '../data/gameFeed';
-import { realPbpFor } from '../data/realPbp';
+import { isPreseasonWeek, preseasonWeekNum } from '../data/nflSlate';
 import { teamLogo } from '../data/media';
 import { useIsMobile } from './ui';
 
@@ -97,9 +97,11 @@ export function SlotFieldViews({ week, youTeam, theirTeam, youClock, theirClock 
 
 // ── The full-screen "all games" board ────────────────────────────────────────
 // Nothing but fields: every NFL game with a slotted player, one drive chart
-// each, plays tinted by which roster they belong to. Entries carry each slotted
-// player's team + the feed clock its side is sampled at (mirrors the slot rows).
-export interface FieldBoardEntry { playerId: string; team?: string | null; side: 'you' | 'their'; clock: number; }
+// each, plays tinted by OUTCOME — the pids each side actually banked points or
+// fired an effect on (computed by the caller from the slot event logs), not
+// mere participation. Entries carry each slotted player's team, the feed clock
+// its side is sampled at (mirrors the slot rows), and those outcome pids.
+export interface FieldBoardEntry { playerId: string; team?: string | null; side: 'you' | 'their'; clock: number; pids?: number[]; }
 
 export function FieldBoard({ week, entries, onClose }: { week: number; entries: FieldBoardEntry[]; onClose: () => void }) {
   const feedLoaded = useGameFeedWeek(week);
@@ -121,7 +123,7 @@ export function FieldBoard({ week, entries, onClose }: { week: number; entries: 
       if (!g) { g = { feed, clock: 0, you: new Set(), their: new Set() }; m.set(feed.key, g); }
       g.clock = Math.max(g.clock, e.clock);
       const pids = e.side === 'you' ? g.you : g.their;
-      for (const rp of realPbpFor(week, e.playerId) ?? []) if (rp.pid != null) pids.add(rp.pid);
+      for (const pid of e.pids ?? []) pids.add(pid);
     }
     return [...m.values()];
   }, [entries, week, feedLoaded]);
@@ -135,12 +137,12 @@ export function FieldBoard({ week, entries, onClose }: { week: number; entries: 
     <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'var(--bg)', overflow: 'auto', padding: '14px 14px 30px' }}>
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
-          <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--text)' }}>▦ ALL GAMES · WEEK {week}</span>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--text)' }}>▦ ALL GAMES · {isPreseasonWeek(week) ? `PRESEASON WK ${preseasonWeekNum(week)}` : `WEEK ${week}`}</span>
           <button onClick={onClose} className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 12px' }}>✕ CLOSE</button>
         </div>
         <div style={{ display: 'flex', gap: 14, marginBottom: 10 }}>
-          {dot('var(--you)', 'YOUR PLAYERS')}
-          {dot('var(--opp)', 'OPPONENT')}
+          {dot('var(--you)', 'SCORED FOR YOU')}
+          {dot('var(--opp)', 'FOR OPPONENT')}
           {dot('var(--warn)', 'BOTH')}
         </div>
         {games.length === 0 && (
@@ -186,6 +188,21 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
   // First-down target line (only when a normal down is coming up).
   const fdX = nxt && nxt.dn > 0 && nxt.dist > 0 && nxt.dist < nxt.yl
     ? xOf(nxt.yl - nxt.dist, nxt.tm) : null;
+  // Red zone: the upcoming snap is inside the 20 — pulse the attacked end zone.
+  const redZone = !over && nxt != null && nxt.dn > 0 && nxt.yl <= 20;
+
+  // Scoring takeover: the TD/FG is chased at the SAME game-clock second by its
+  // XP and the ensuing kickoff, so the scoring play is almost never the latest
+  // visible play. Take the most recent score within the last 3 plays — it stays
+  // up through the special-teams sandwich and drops on the next real snap.
+  let si = -1;
+  for (let j = idx; j >= 0 && j > idx - 3; j--) if (plays[j].sc && !/Extra Point|Two-Point/i.test(plays[j].ty)) { si = j; break; }
+  const takeover: GamePlay | null = si >= 0 ? plays[si] : null;
+  // Who scored: the side whose score moved (tm is the OFFENSE at the snap, which
+  // is the wrong team on pick-sixes / fumble returns / safeties).
+  const scoredTm = takeover
+    ? (si > 0 && takeover.as > plays[si - 1].as ? away : si > 0 && takeover.hs > plays[si - 1].hs ? home : takeover.tm)
+    : null;
 
   // Whose roster made the shown play — tints arc, chip, text and card border.
   const side = cur ? pidSide?.(cur.pid) ?? null : null;
@@ -216,12 +233,17 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
         <span style={{ color: ballTm === home ? 'var(--text)' : 'var(--dim)' }}>{score.h} {home}</span>
       </div>
       {/* the field, with a light perspective tilt */}
-      <div style={{ perspective: 560 }}>
+      <div style={{ perspective: 560, position: 'relative' }}>
         <svg viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', width: '100%', transform: 'rotateX(20deg)', transformOrigin: '50% 100%' }}>
           {/* turf + end zones */}
           <rect x={FX} y={TOP} width={FW} height={BOT - TOP} fill="color-mix(in srgb, var(--you) 5%, var(--surface))" />
           <rect x={0} y={TOP} width={EZ} height={BOT - TOP} fill="color-mix(in srgb, var(--dim) 16%, var(--surface))" />
           <rect x={W - EZ} y={TOP} width={EZ} height={BOT - TOP} fill="color-mix(in srgb, var(--dim) 16%, var(--surface))" />
+          {/* red-zone glow on the end zone under attack */}
+          {redZone && (
+            <rect x={attacksRight ? W - EZ : 0} y={TOP} width={EZ} height={BOT - TOP}
+              fill="color-mix(in srgb, var(--fx-nuke) 32%, var(--surface))" style={{ animation: 'bpulse 1.4s ease infinite' }} />
+          )}
           <text x={EZ / 2} y={midY} fill="var(--dim)" fontSize={9} fontWeight={700} textAnchor="middle" transform={`rotate(-90 ${EZ / 2} ${midY})`} style={{ letterSpacing: '0.2em' }}>{away}</text>
           <text x={W - EZ / 2} y={midY} fill="var(--dim)" fontSize={9} fontWeight={700} textAnchor="middle" transform={`rotate(90 ${W - EZ / 2} ${midY})`} style={{ letterSpacing: '0.2em' }}>{home}</text>
           {/* yard lines + numbers */}
@@ -255,6 +277,23 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
             </g>
           )}
         </svg>
+        {/* scoring-play takeover — pops over the field, holds, fades (pure CSS) */}
+        {takeover && (() => {
+          const tAccent = pidSide ? (() => {
+            const s = pidSide(takeover.pid);
+            return s === 'you' ? 'var(--you)' : s === 'their' ? 'var(--opp)' : s === 'both' ? 'var(--warn)' : null;
+          })() : null;
+          return (
+            <div key={`ta${takeover.pid ?? takeover.c}`} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', animation: 'fvtakeover 2.8s ease both' }}>
+              <span className="mono" style={{ fontSize: 'clamp(18px, 6vw, 30px)', fontWeight: 800, letterSpacing: '0.18em', color: tAccent ?? 'var(--warn)', textShadow: '0 0 18px color-mix(in srgb, currentColor 60%, transparent), 0 2px 10px rgba(0,0,0,.5)' }}>
+                {/TOUCHDOWN/i.test(takeover.txt) ? 'TOUCHDOWN' : takeover.ty.startsWith('Field Goal') ? 'FIELD GOAL' : /SAFETY/.test(takeover.txt) ? 'SAFETY' : 'SCORE'}
+              </span>
+              <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--text)', textShadow: '0 1px 6px rgba(0,0,0,.6)', marginTop: 2 }}>
+                {scoredTm} · {away} {takeover.as} — {takeover.hs} {home}
+              </span>
+            </div>
+          );
+        })()}
       </div>
       {/* situation chip + play text */}
       <div style={{ textAlign: 'center', marginTop: 4 }}>
