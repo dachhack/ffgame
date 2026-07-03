@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { WINDOWS, metricById } from '../data/metrics';
 import type { Pos } from '../types';
 import {
-  myRoster, myMatchup, getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, myPool, matchupWallets, matchupTeams,
-  type LiveMatchup, type WindowScore, type RevealedPick, type PoolPlayer, type TeamInfo,
+  myRoster, myMatchup, getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, myPool, matchupWallets, matchupTeams, weekGameFeeds,
+  type LiveMatchup, type WindowScore, type RevealedPick, type PoolPlayer, type TeamInfo, type GameFeedRow,
 } from '../data/liveApi';
+import { setLiveGameFeed, feedRowsToWeek } from '../data/gameFeed';
+import { FieldView } from '../app/FieldView';
 import { REG_SEASON_WEEKS } from '../data/league';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16 };
@@ -21,6 +23,8 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
   const [teams, setTeams] = useState<Record<number, TeamInfo>>({});
   const [state, setState] = useState<'loading' | 'none' | 'ready'>('loading');
   const [weekSel, setWeekSel] = useState<number | null>(null); // null = default (earliest) week
+  const [gameFeeds, setGameFeeds] = useState<GameFeedRow[]>([]); // field visuals (game_feed)
+  const [fieldsOpen, setFieldsOpen] = useState(true);
 
   useEffect(() => {
     let unsub = () => {};
@@ -35,9 +39,16 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
       setPool(Object.fromEntries(pl.map((p) => [p.slug, p])));
       matchupTeams(r.leagueId, [m.home_roster_id, m.away_roster_id]).then(setTeams).catch(() => {});
       const refresh = async () => {
-        const [mm, ss, pk, ww] = await Promise.all([getMatchup(m.id), getMatchupState(m.id), getRevealedPicks(m.id), matchupWallets(m.id).catch(() => null)]);
+        const [mm, ss, pk, ww, gf] = await Promise.all([
+          getMatchup(m.id), getMatchupState(m.id), getRevealedPicks(m.id), matchupWallets(m.id).catch(() => null),
+          weekGameFeeds(m.week).catch(() => [] as GameFeedRow[]),
+        ]);
         if (mm) setMatchup(mm);
         setScores(ss); setPicks(pk); setWallets(ww);
+        // Install the worker's per-game feeds so FieldView resolves them (the
+        // live overlay is exclusive per week — never baked data on a live board).
+        setLiveGameFeed(m.week, feedRowsToWeek(gf));
+        setGameFeeds(gf);
       };
       await refresh();
       setState('ready');
@@ -130,6 +141,26 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
           })}
         </div>
       )}
+
+      {(() => {
+        // Every NFL game the worker has plays for this week, as drive charts —
+        // the same FieldView as the full board, always showing the latest play.
+        const games = gameFeeds.filter((g) => g.plays.length > 0).sort((a, b) => a.key.localeCompare(b.key));
+        if (!games.length) return null;
+        return (
+          <div style={{ ...card, marginBottom: 12 }}>
+            <button onClick={() => setFieldsOpen((o) => !o)} className="mono" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', background: 'none', border: 'none', padding: 0, fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700 }}>
+              <span>⬢ AROUND THE LEAGUE · {games.length} GAME{games.length > 1 ? 'S' : ''}</span>
+              <span>{fieldsOpen ? '▴' : '▾'}</span>
+            </button>
+            {fieldsOpen && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: 8, marginTop: 8 }}>
+                {games.map((g) => <FieldView key={g.key} week={matchup!.week} team={g.away} clock={Number.MAX_SAFE_INTEGER} />)}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <Lineup title="Your lineup" picks={mine} pool={pool} reveal />
       <Lineup title={locked ? 'Opponent lineup' : 'Opponent — sealed'} picks={theirs} pool={pool} reveal={locked} />
