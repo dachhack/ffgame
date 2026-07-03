@@ -20,6 +20,9 @@ export function App() {
   const { theme, route, youTeamId, navigate, liveCtx } = useStore();
   const vars = themeVars(THEMES[theme]) as Record<string, string>;
   const light = theme === 'daylight' || theme === 'arctic';
+  // A signed-in live user already has a league — hide the "request a league code"
+  // invite CTA for them (they reached the demo/sim board from their leagues).
+  const loggedIn = (() => { try { return localStorage.getItem('dripLive') === '1'; } catch { return false; } })();
 
   useEffect(() => {
     document.body.style.background = THEMES[theme].bg;
@@ -82,7 +85,7 @@ export function App() {
       {/* Persistent "out" across the funnel — request a pilot code for your league.
           Hidden inside the live pilot itself (you're already in), on the hero board
           (a real pilot matchup), and on splash (its own "request an invite" link). */}
-      {route.name !== 'live' && route.name !== 'splash' && !liveCtx && <RequestCodeFab />}
+      {route.name !== 'live' && route.name !== 'splash' && !liveCtx && !loggedIn && <RequestCodeFab />}
     </div>
   );
 }
