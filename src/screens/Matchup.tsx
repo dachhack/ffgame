@@ -3,6 +3,7 @@ import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile } from '../app/ui';
 import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
+import { setLiveGameFeed, feedRowsToWeek, hasGameFeed } from '../data/gameFeed';
 import { avatarUrl, teamLogo } from '../data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, preseasonWeekNum, PRESEASON_BASE, PRESEASON_WEEKS } from '../data/nflSlate';
 import { METRICS, metricById } from '../data/metrics';
@@ -16,7 +17,7 @@ import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type S
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
-import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, ensureWallet, walletBuyPowerup, leagueWeeklyBudget, leagueTestLiveAt, myMatchup, type PickRow } from '../data/liveApi';
+import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, leagueWeeklyBudget, leagueTestLiveAt, myMatchup, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
@@ -243,10 +244,14 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   useEffect(() => {
     if (!liveCtx) return;
     let alive = true;
+    // Claim the week's game-feed slot up front (empty) so a 2026 live week can
+    // never fall back to the baked 2025 week of the same number mid-fetch.
+    setLiveGameFeed(liveCtx.week, { games: {}, teams: {} });
     const load = async () => {
       try {
-        const rows = await weekLivePlays(liveCtx.week);
+        const [rows, feeds] = await Promise.all([weekLivePlays(liveCtx.week), weekGameFeeds(liveCtx.week)]);
         setLivePlays(liveCtx.week, liveRowsToPbp(rows));
+        setLiveGameFeed(liveCtx.week, feedRowsToWeek(feeds));
         if (alive) setLivePbpVer((v) => v + 1);
       } catch { /* keep prior */ }
     };
@@ -1136,7 +1141,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 ⏩ {speed}×
               </button>
               </>}
-              {REAL_WEEKS.has(week) && (
+              {hasGameFeed(week) && (
                 <button onClick={() => setFieldsOpen(true)} title="Every game with a slotted player, as live field visuals — your plays vs your opponent's" className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px' }}>
                   ▦ FIELDS
                 </button>

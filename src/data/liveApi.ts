@@ -329,6 +329,15 @@ export async function weekLivePlays(week: number): Promise<LivePlayRow[]> {
   return (data ?? []) as LivePlayRow[];
 }
 
+/** The week's per-game field-visual feeds (game_feed, readable by any authed
+ *  user) — drives FieldView/FieldBoard on the live board. */
+export interface GameFeedRow { key: string; away: string; home: string; plays: import('./gameFeed').GamePlay[]; }
+export async function weekGameFeeds(week: number): Promise<GameFeedRow[]> {
+  const { data } = await client().from('game_feed')
+    .select('key, away, home, plays').eq('week', week);
+  return (data ?? []) as GameFeedRow[];
+}
+
 /** The opponent's revealed armed buffs — readable only AFTER the matchup locks
  *  (applied_read_after_lock RLS). Returns null when the opponent's row isn't
  *  visible yet (pre-lock) so callers can keep the AI default; an array (possibly

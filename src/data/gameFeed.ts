@@ -34,9 +34,38 @@ export interface TeamGameFeed { key: string; away: string; home: string; plays: 
 const cache = new Map<number, WeekGameFeed>();
 const inflight = new Map<number, Promise<void>>();
 
-/** Fetch + cache a week's game feeds (no-op for non-real weeks / already loaded). */
+// ── Live overlay (worker-ingested game_feed rows) ────────────────────────────
+// For a real pilot week the worker's game_feed docs are installed here. Like the
+// realPbp live overlay, a live week is EXCLUSIVE — baked 2025 data must never
+// leak into a 2026 board that shares the same week number.
+const liveFeeds = new Map<number, WeekGameFeed>();
+
+/** game_feed DB rows → a week's {games, teams} (mirrors the baker's shape). */
+export function feedRowsToWeek(rows: { key: string; away: string; home: string; plays: GamePlay[] }[]): WeekGameFeed {
+  const games: Record<string, GamePlay[]> = {};
+  const teams: Record<string, string> = {};
+  for (const r of rows) {
+    games[r.key] = r.plays ?? [];
+    teams[r.away] = r.key; teams[r.home] = r.key;
+  }
+  return { games, teams };
+}
+/** Install the week's live game feeds; makes that week resolve live-only. */
+export function setLiveGameFeed(week: number, feed: WeekGameFeed): void { liveFeeds.set(week, feed); }
+/** Drop all live game feeds (back to baked resolution). */
+export function clearLiveGameFeeds(): void { liveFeeds.clear(); }
+
+/** True when the week has any field-visual data (live overlay or baked). */
+export function hasGameFeed(week: number): boolean {
+  const live = liveFeeds.get(week);
+  if (live) return Object.keys(live.games).length > 0;
+  return REAL_WEEKS.has(week);
+}
+
+/** Fetch + cache a week's game feeds (no-op for non-real weeks / already loaded).
+ *  A live-overlaid week never fetches baked data — the overlay is exclusive. */
 export function loadGameFeedWeek(week: number): Promise<void> {
-  if (!REAL_WEEKS.has(week) || cache.has(week)) return Promise.resolve();
+  if (liveFeeds.has(week) || !REAL_WEEKS.has(week) || cache.has(week)) return Promise.resolve();
   let p = inflight.get(week);
   if (!p) {
     const url = `${import.meta.env.BASE_URL}gamefeed/w${week}.json`;
@@ -50,10 +79,11 @@ export function loadGameFeedWeek(week: number): Promise<void> {
   return p;
 }
 
-/** A team's game feed for a loaded week, or null (not loaded / bye / unknown). */
+/** A team's game feed for a loaded week, or null (not loaded / bye / unknown).
+ *  The live overlay wins and is exclusive (a live week ignores baked data). */
 export function gameFeedFor(week: number, team?: string | null): TeamGameFeed | null {
   if (!team) return null;
-  const wk = cache.get(week);
+  const wk = liveFeeds.get(week) ?? cache.get(week);
   const key = wk?.teams[team];
   const plays = key ? wk?.games[key] : undefined;
   if (!key || !plays) return null;

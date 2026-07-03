@@ -2,7 +2,7 @@
 // Reuses the validated adapter (scripts/espn/espnAdapter.mjs); only the persistence
 // is new here. Slug resolution uses the Sleeper player index (espn_id bridge +
 // name fallback), so plays key on the SAME slug as picks and lineups.
-import { gameToRealPlays } from '../../../scripts/espn/espnAdapter.mjs';
+import { gameToRealPlays, gameToFeed } from '../../../scripts/espn/espnAdapter.mjs';
 import { db } from '../supabase.js';
 
 const SUM = (id) => `https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${id}`;
@@ -48,6 +48,19 @@ export async function pollGame(eventId, week, playerIndex) {
     const { data: existing } = await db().from('live_play').select('id,pid,player_slug,k').eq('week', week).eq('game_id', eventId);
     const staleIds = (existing ?? []).filter((e) => !present.has(`${e.pid}|${e.player_slug}|${e.k}`)).map((e) => e.id);
     if (staleIds.length) await db().from('live_play').delete().in('id', staleIds);
+  }
+
+  // Game feed for the field visuals (FieldView/FieldBoard) — the SAME summary,
+  // normalized to GamePlay[] by the adapter. Whole-doc upsert per game: each
+  // poll carries the full current play set, so ESPN mid-game revisions
+  // reconcile by replacement, no row-level diffing.
+  const feed = gameToFeed(sum);
+  if (feed) {
+    const [key, [away, home], plays] = feed;
+    await db().from('game_feed').upsert(
+      { week, game_id: String(eventId), key, away, home, plays, updated_at: new Date().toISOString() },
+      { onConflict: 'week,game_id' },
+    );
   }
   return rows.length;
 }
