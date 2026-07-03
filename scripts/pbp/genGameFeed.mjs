@@ -28,7 +28,7 @@
 //   weeks: "3" or "2-5". Summaries are cached in scripts/pbp/espn-cache/
 //   (gitignored) so re-runs don't refetch.
 import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs';
-import { clockOf, fixTeam } from '../espn/espnAdapter.mjs';
+import { gameToFeed } from '../espn/espnAdapter.mjs';
 
 const here = new URL('.', import.meta.url);
 const CACHE = new URL('espn-cache/', here);
@@ -58,83 +58,6 @@ async function getJson(url, cacheKey, tries = 4) {
     await new Promise((res) => setTimeout(res, 1000 * (i + 1)));
   }
   throw new Error(`fetch failed: ${url}`);
-}
-
-// Clock-management rows carry no field situation — the visual skips them.
-const SKIP_TYPES = new Set([
-  'Timeout', 'Official Timeout', 'Two-minute warning', 'End Period',
-  'End of Half', 'End of Game', 'Coin Toss',
-]);
-
-// Yards-to-endzone for a situation, from the perspective of the team named in
-// `abbrs` (the situation's own team). ESPN's numeric `yardsToEndzone` is flipped
-// on a small share of plays (e.g. a 4th & 19 punt at "TEN 25" carrying yte 25
-// instead of 75); `possessionText` ("TEN 25" / "50") matches the broadcast spot
-// and is authoritative, so parse it first and fall back to the number.
-function yteOf(sit, abbrs) {
-  const yte = Number(sit?.yardsToEndzone ?? 0) || 0;
-  const pt = String(sit?.possessionText ?? '').trim();
-  if (pt === '50') return 50;
-  const m = /^([A-Z]{2,4})\s+(\d{1,2})$/.exec(pt);
-  if (!m) return yte;
-  const n = Number(m[2]);
-  return abbrs.has(m[1]) ? 100 - n : n;
-}
-
-/** One ESPN summary → [gameKey, teams[], GamePlay[]] (null if no drives yet). */
-export function gameToFeed(summary) {
-  const comp = summary?.header?.competitions?.[0];
-  const byId = new Map();   // competitor id -> nflverse abbr
-  const abbrsOf = new Map(); // competitor id -> Set of raw + fixed abbrs (possessionText matching)
-  let home = '', away = '';
-  for (const c of comp?.competitors ?? []) {
-    const raw = c?.team?.abbreviation ?? '';
-    const abbr = fixTeam(raw);
-    const id = String(c?.id ?? c?.team?.id);
-    byId.set(id, abbr);
-    abbrsOf.set(id, new Set([raw, abbr]));
-    if (c?.homeAway === 'home') home = abbr; else if (c?.homeAway === 'away') away = abbr;
-  }
-  if (!home || !away) return null;
-  const eventId = summary?.header?.id ?? '';
-
-  const drives = [...(summary?.drives?.previous ?? [])];
-  if (summary?.drives?.current?.plays) drives.push(summary.drives.current);
-  const all = [];
-  for (let d = 0; d < drives.length; d++) for (const p of drives[d]?.plays ?? []) all.push([d, p]);
-  if (!all.length) return null;
-
-  let startMs = Infinity;
-  for (const [, p] of all) { const ms = Date.parse(p?.wallclock ?? ''); if (Number.isFinite(ms) && ms < startMs) startMs = ms; }
-
-  const plays = [];
-  for (const [drv, p] of all) {
-    const ty = p?.type?.text ?? '';
-    const tm = byId.get(String(p?.start?.team?.id ?? ''));
-    if (SKIP_TYPES.has(ty) || !tm) continue;
-    const c = clockOf(Number(p?.period?.number ?? 1), p?.clock?.displayValue ?? '15:00');
-    const wm = Date.parse(p?.wallclock ?? '');
-    const t = Number.isFinite(wm) && Number.isFinite(startMs) ? Math.max(0, Math.round((wm - startMs) / 1000)) : null;
-    const idStr = String(p?.id ?? '');
-    const pid = idStr.startsWith(String(eventId)) ? Number(idStr.slice(String(eventId).length)) : null;
-    plays.push({
-      c, ...(t != null ? { t } : {}), ...(pid != null ? { pid } : {}),
-      drv, tm,
-      ...(() => { const t2 = byId.get(String(p?.end?.team?.id ?? '')); return t2 && t2 !== tm ? { tm2: t2 } : {}; })(),
-      dn: Number(p?.start?.down ?? 0) || 0,
-      dist: Number(p?.start?.distance ?? 0) || 0,
-      yl: yteOf(p?.start, abbrsOf.get(String(p?.start?.team?.id ?? '')) ?? new Set()),
-      yl2: yteOf(p?.end ?? p?.start, abbrsOf.get(String(p?.end?.team?.id ?? p?.start?.team?.id ?? '')) ?? new Set()),
-      ty, txt: p?.text ?? '',
-      ...(p?.scoringPlay ? { sc: 1 } : {}),
-      ...(p?.isPenalty ? { pen: 1 } : {}),
-      ...(p?.isTurnover ? { to: 1 } : {}),
-      hs: Number(p?.homeScore ?? 0) || 0,
-      as: Number(p?.awayScore ?? 0) || 0,
-    });
-  }
-  plays.sort((a, b) => a.c - b.c || (a.pid ?? 0) - (b.pid ?? 0));
-  return [`${away}@${home}`, [away, home], plays];
 }
 
 for (const w of WEEKS) {

@@ -1,6 +1,25 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-03 · Build `v0.86.0`_
+_Last updated: 2026-07-03 · Build `v0.87.0`_
+
+## Live game feeds — field visuals Phase B (v0.87.0)
+The drive charts now light up on the LIVE pilot board, not just baked replays:
+- **Adapter**: `gameToFeed(summary)` moved into `scripts/espn/espnAdapter.mjs`
+  (shared by the baker and the worker; baker rebake byte-identical).
+- **DB**: `game_feed` table (`0057_game_feed.sql`) — one row per game per week,
+  `plays` jsonb = the GamePlay[] contract, whole-doc upsert per poll so ESPN
+  mid-game revisions reconcile by replacement. Authed-read RLS like live_play.
+  **Apply the migration before the worker ships.**
+- **Worker**: `pollGame` also upserts the game's feed from the same summary
+  (zero extra ESPN calls). The **simulator** time-releases baked
+  `public/gamefeed/` docs as `game_id 'SIM:<key>'` on the same clock as the
+  play feed (cleared on start + reset), so the dress rehearsal exercises the
+  visuals end-to-end.
+- **Client**: `gameFeed.ts` live overlay (`setLiveGameFeed`/`feedRowsToWeek`,
+  exclusive per week like realPbp so 2026 week N never falls back to baked
+  2025 week N — the board claims the slot with an empty overlay before the
+  first fetch). The 15s liveCtx poll in `Matchup.tsx` installs plays + feeds
+  together; ▦ FIELDS gates on `hasGameFeed(week)`.
 
 ## Field board + collapsible fields (v0.86.0)
 - **Slot fields are collapsible**: `FieldCollapse` wraps `SlotFieldViews` and
