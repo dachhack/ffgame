@@ -175,8 +175,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (u) { identify(u.userId, { username: u.username }); track(Ev.sleeperConnected); }
     try { if (u) localStorage.setItem(SLEEPER_KEY, JSON.stringify(u)); else localStorage.removeItem(SLEEPER_KEY); } catch { /* ignore */ }
   };
-  // Boot to your leagues if a Sleeper user is remembered, else the welcome splash.
-  const [route, setRoute] = useState<Route>(sleeperUser ? { name: 'leagues' } : { name: 'splash' });
+  // Boot straight into the app for returning users, skipping the demo funnel:
+  //   • a signed-in live user (dripLive flag) → their leagues (Live onboard home),
+  //   • else a remembered Sleeper user → the Sleeper demo leagues,
+  //   • else the welcome splash.
+  // The ?live=1 / OAuth deep links in App.tsx still override this after mount.
+  const [route, setRoute] = useState<Route>(() => {
+    try { if (localStorage.getItem('dripLive') === '1') return { name: 'live' }; } catch { /* ignore */ }
+    return sleeperUser ? { name: 'leagues' } : { name: 'splash' };
+  });
   // Browser back/forward: mirror each route into history state (URL unchanged) so the
   // back button steps between in-app screens instead of dead-ending / leaving the site.
   const navigate = (r: Route) => {
