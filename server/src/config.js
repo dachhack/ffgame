@@ -15,6 +15,10 @@ export const config = {
   season: process.env.PILOT_SEASON || '2026',
   // ESPN seasontype the pollers query: 1=preseason, 2=regular (default), 3=postseason.
   seasonType: Number(process.env.PILOT_SEASON_TYPE || 2),
+  // Board-week offset applied to every DB read/write while polling preseason, so
+  // preseason weeks 1-3 land on board weeks 101-103 and never collide with the
+  // regular-season slate/matchups. ESPN API calls still use the real (1-3) week.
+  weekOffset: Number(process.env.PILOT_SEASON_TYPE || 2) === 1 ? 100 : 0,
   leagueIds: (process.env.PILOT_LEAGUE_IDS || '').split(',').map((s) => s.trim()).filter(Boolean),
   playsPollMs: Number(process.env.PLAYS_POLL_MS || 25000),
   scoreboardPollMs: Number(process.env.SCOREBOARD_POLL_MS || 60000),

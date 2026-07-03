@@ -30,6 +30,10 @@ let syncing = false;
  *  longer than one play tick, so it lives on its own (slower) interval. */
 async function syncTick() {
   if (syncing || !config.leagueIds.length) return;
+  // Preseason matchups are seeded by the admin preseason toggle (cloned into board
+  // weeks 101-103), not from Sleeper — which has no preseason pairings. Skip the
+  // Sleeper weekly sync so it can't write lineups/slate at the wrong (un-offset) week.
+  if (config.weekOffset) return;
   const { season, week } = await currentWeek();
   const due = week !== lastSyncedWeek || Date.now() - lastSyncAt >= config.weeklySyncRefreshMs;
   if (!due) return;
@@ -55,11 +59,27 @@ function gameDay(games, now = Date.now()) {
 }
 
 async function tick() {
-  const { season, week } = await currentWeek();
-  const games = await getGames(season, week, config.seasonType);
+  const { season, week: espnWeek } = await currentWeek();
+  // ESPN API calls use the real week (1-3 in preseason); every DB read/write uses
+  // the offset BOARD week (101-103 in preseason) so preseason never collides with
+  // the loaded regular-season data. Offset is 0 outside preseason — no-op.
+  const week = espnWeek + config.weekOffset;
+  const games = await getGames(season, espnWeek, config.seasonType);
   // Keep the live slate fresh (overrides baked 2025) so lock/resolve slate-gate
   // the AI lineup against the real current-season windows + byes.
-  setRuntimeSlate(week, slateFromGames(games).map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
+  const slate = slateFromGames(games);
+  setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
+  // Persist the preseason slate at the offset week so the client can load it (the
+  // regular-season slate is loaded once via migration; the weekly sync writes it
+  // in-season, but that sync is skipped for preseason — see syncTick).
+  if (config.weekOffset && slate.length) {
+    try {
+      await db().from('nfl_slate').upsert(
+        slate.map((g) => ({ season, week, home: g.home, away: g.away, win: g.win, kickoff: g.kickoff })),
+        { onConflict: 'season,week,home' },
+      );
+    } catch (e) { log('preseason slate upsert', e.message); }
+  }
 
   // Injuries: daily, or hourly on game days.
   const injEvery = gameDay(games) ? config.injuryPollGamedayMs : config.injuryPollDailyMs;
@@ -82,8 +102,8 @@ async function tick() {
   const locked = await lockDueMatchups();
   if (locked) log('locked', locked, 'matchups');
 
-  // Poll live games → persist plays.
-  const toPoll = await gamesToPoll(season, week, config.seasonType);
+  // Poll live games → persist plays (keyed at the board week).
+  const toPoll = await gamesToPoll(season, espnWeek, config.seasonType);
   let wrote = 0;
   for (const eventId of toPoll) { try { wrote += await pollGame(eventId, week, playerIndex); } catch (e) { log('poll game', eventId, e.message); } }
   if (toPoll.length) log('polled', toPoll.length, 'games,', wrote, 'play rows');

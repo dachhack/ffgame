@@ -264,6 +264,19 @@ function fmtSodShort(sod: number): string {
   const h = Math.floor(x / 3600), mm = Math.floor((x % 3600) / 60);
   return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, '0')}${h >= 12 ? 'p' : 'a'}`;
 }
+// ── Preseason weeks ──────────────────────────────────────────────────────────
+// Preseason is namespaced as OFFSET board weeks (ESPN preseason week N → board
+// week 100 + N) so a league can run real 2026 preseason matchups without
+// colliding with the already-loaded regular-season weeks 1-3. The slate/plays for
+// these weeks are written by the worker (seasonType=1) at the same offset.
+export const PRESEASON_BASE = 100;
+/** Is this a preseason (offset) board week? */
+export const isPreseasonWeek = (week: number): boolean => week > PRESEASON_BASE;
+/** The 1-based preseason week number for an offset board week (101 → 1). */
+export const preseasonWeekNum = (week: number): number => week - PRESEASON_BASE;
+/** How many preseason weeks a preseason league carries (P1-P3). */
+export const PRESEASON_WEEKS = 3;
+
 // ── Live-test timeline (super-admin preseason testing) ───────────────────────
 // When a league flips on live-test mode, the board anchors its window schedule to
 // the moment it was enabled and compresses it: window i kicks off a couple minutes

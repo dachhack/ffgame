@@ -3,7 +3,7 @@ import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile } from '../app/ui';
 import { avatarUrl, teamLogo } from '../data/media';
-import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS } from '../data/nflSlate';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, preseasonWeekNum, PRESEASON_BASE, PRESEASON_WEEKS } from '../data/nflSlate';
 import { METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById, type Powerup } from '../data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague, activeRegSeasonWeeks } from '../data/league';
@@ -305,10 +305,15 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // the new week (its rosters, opponent + matchup ctx) and open it, exactly like
   // entering the hero board fresh. Null unless a switch is in flight.
   const [switchingWeek, setSwitchingWeek] = useState<number | null>(null);
+  // A preseason board pages within the preseason (offset) weeks; a regular board
+  // pages the regular season. Bounds keep the selector inside its own range.
+  const preseason = isPreseasonWeek(week);
   const seasonWeeks = activeRegSeasonWeeks();
+  const weekMin = preseason ? PRESEASON_BASE + 1 : 1;
+  const weekMax = preseason ? PRESEASON_BASE + PRESEASON_WEEKS : seasonWeeks;
   async function goToWeek(target: number) {
     if (!liveCtx || switchingWeek != null) return;
-    if (target < 1 || target > seasonWeeks || target === week) return;
+    if (target < weekMin || target > weekMax || target === week) return;
     setSwitchingWeek(target);
     try {
       const m = await myMatchup(liveCtx.leagueId, liveCtx.rosterId, target).catch(() => null);
@@ -981,11 +986,17 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const liveTestChip = testAnchor != null ? (
     <span className="mono" title="Live-test mode: this league's windows run on a compressed schedule (super-admin toggle)." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 7px', whiteSpace: 'nowrap', flexShrink: 0 }}>🧪 TEST</span>
   ) : null;
+  // Preseason badge — makes it obvious this board is a real 2026 preseason matchup,
+  // not a regular-season week.
+  const livePreseasonChip = preseason ? (
+    <span className="mono" title="Preseason: this league is playing a real 2026 NFL preseason matchup (super-admin toggle)." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, var(--surface))', border: '1px solid var(--you)', borderRadius: 4, padding: '5px 7px', whiteSpace: 'nowrap', flexShrink: 0 }}>🏈 PRESEASON</span>
+  ) : null;
+  const weekLabel = (w: number) => (isPreseasonWeek(w) ? `PRE ${preseasonWeekNum(w)}` : `WK ${w}`);
   const liveWeekSel = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-      <button onClick={() => goToWeek(week - 1)} disabled={week <= 1 || switchingWeek != null} title="previous week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: week <= 1 || switchingWeek != null ? 'default' : 'pointer', opacity: week <= 1 ? 0.35 : 1 }}>‹</button>
-      <span className="mono" title="Week — page through the season" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', minWidth: 36, textAlign: 'center' }}>{switchingWeek != null ? `WK ${switchingWeek}…` : `WK ${week}`}</span>
-      <button onClick={() => goToWeek(week + 1)} disabled={week >= seasonWeeks || switchingWeek != null} title="next week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: week >= seasonWeeks || switchingWeek != null ? 'default' : 'pointer', opacity: week >= seasonWeeks ? 0.35 : 1 }}>›</button>
+      <button onClick={() => goToWeek(week - 1)} disabled={week <= weekMin || switchingWeek != null} title="previous week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: week <= weekMin || switchingWeek != null ? 'default' : 'pointer', opacity: week <= weekMin ? 0.35 : 1 }}>‹</button>
+      <span className="mono" title="Week — page through the season" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', minWidth: 36, textAlign: 'center' }}>{switchingWeek != null ? `${weekLabel(switchingWeek)}…` : weekLabel(week)}</span>
+      <button onClick={() => goToWeek(week + 1)} disabled={week >= weekMax || switchingWeek != null} title="next week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: week >= weekMax || switchingWeek != null ? 'default' : 'pointer', opacity: week >= weekMax ? 0.35 : 1 }}>›</button>
     </div>
   );
   const liveScore = (
@@ -1027,7 +1038,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{liveWeekSel}{liveTestChip}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{liveWeekSel}{livePreseasonChip}{liveTestChip}</div>
                 {liveScore}
               </div>
             </div>
@@ -1039,6 +1050,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
               {liveLeaguesChip}
               {liveWeekSel}
+              {livePreseasonChip}
               {liveTestChip}
             </div>
             {liveScore}
