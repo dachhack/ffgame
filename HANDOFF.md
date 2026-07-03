@@ -1,6 +1,26 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-03 · Build `v0.87.0`_
+_Last updated: 2026-07-03 · Build `v0.88.0`_
+
+## Field visuals polish: outcome tinting, takeover, red zone (v0.88.0)
+- **Outcome-based tinting** replaces participation tinting on the ▦ FIELDS
+  board: `FieldBoardEntry.pids` now carries the plays a side actually BANKED on
+  — built in `Matchup.tsx` from the slot event logs (`delta > 0` or an effect;
+  denial effects nuke/erase/stop/reset/compression/cold log on the VICTIM's
+  side, so their benefit flips to the opponent, whose player's play at that
+  clock supplies the pid). Legend reads SCORED FOR YOU / FOR OPPONENT / BOTH.
+- **Scoring takeover** (`Field`): big TOUCHDOWN/FIELD GOAL/SAFETY pop over the
+  field (pure CSS `fvtakeover`, 2.8s, self-fading). Trigger is the most recent
+  scoring play within the last 3 plays — the TD's XP + ensuing kickoff share
+  its game-clock second, so requiring "latest play" would never fire. The
+  scorer line derives the team from the SCORE DELTA, not `tm` (offense at
+  snap), so pick-sixes/return TDs credit the right side.
+- **Red-zone glow**: the attacked end zone pulses (`bpulse`) whenever the
+  upcoming snap is inside the 20 (derived from the feed spot, no extra data).
+- **Preseason**: verified end-to-end — the worker polls preseason as board
+  weeks 101-103 into `game_feed`, the client live overlay is week-agnostic,
+  and the board header reads "PRESEASON WK N" (`isPreseasonWeek`). Live-test
+  the visuals in August before the regular season.
 
 ## Live game feeds — field visuals Phase B (v0.87.0)
 The drive charts now light up on the LIVE pilot board, not just baked replays:
