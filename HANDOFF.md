@@ -1,6 +1,29 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-06-20 · Build `v0.9.8.0`_
+_Last updated: 2026-07-03 · Build `v0.83.0`_
+
+## Play-by-play field visuals (v0.83.0)
+Sleeper-style drive chart per NFL game on the live board (see
+`docs/pbp-visuals-research.md` for the research + design):
+- **Data**: `scripts/pbp/genGameFeed.mjs` bakes `public/gamefeed/wN.json` from
+  ESPN summaries (cached in gitignored `scripts/pbp/espn-cache/`) — every
+  scrimmage play with down/distance/start-end yards-to-endzone/possession/text/
+  score (`GamePlay`, `src/data/gameFeed.ts`, lazy per-week loader). ESPN's
+  numeric `yardsToEndzone` is FLIPPED on ~2.6% of plays (mostly punts); the
+  baker derives it from `possessionText` instead (residual drive-continuity
+  mismatches: 0.03%, all ESPN sequence oddities like overturned plays).
+- **UI**: `src/app/FieldView.tsx` — SVG field (perspective tilt, yard lines,
+  end zones, first-down line, ball marker w/ team logo + abbr fallback, play
+  arc, situation chip, play text), driven by the same feed clock as the log
+  (`plays.filter(c <= clock)`, marker/banner from the NEXT play's start spot —
+  authoritative across penalties). `SlotFieldViews` renders ONE field when both
+  slot players share an NFL game, else two (side-by-side desktop / stacked
+  mobile). Mounted in `Matchup.tsx` above `TwoColLog` in both the H2H and
+  backup/unopposed open blocks, gated on `slot.real`.
+- Away team always attacks right (`x = away ? 100-yl : yl`) so the ball is
+  continuous across possession changes. `fvdraw` keyframes in `styles.css`.
+- Phase B (live): the poller's summary already carries `drives` — emit
+  `gameToFeed` rows into a `game_feed` table and install like `setLivePlays`.
 
 ## Zero synthetic player data (v0.9.8.0)
 All player production is now real 2025 nflverse PBP — the synthetic simulation
