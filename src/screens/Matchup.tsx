@@ -990,6 +990,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     );
   }
 
+  // A signed-in live user (reached the board through their leagues) — they're
+  // already "in", so the sim/demo board gives them a way back to their leagues and
+  // drops the "get a league code" invite CTA.
+  const loggedIn = (() => { try { return localStorage.getItem('dripLive') === '1'; } catch { return false; } })();
   // ── Live-board header pieces (shared between the desktop single row and the
   // mobile two-row layout so nothing overlaps on a narrow screen). ──
   const liveLeaguesChip = (
@@ -1079,6 +1083,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           <>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
           <Brand onClick={() => navigate({ name: 'league' })} hideDataSource={!!liveCtx} />
+          {loggedIn && !liveCtx && liveLeaguesChip}
           <div style={{ display: 'flex', gap: 2, padding: 3, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4 }}>
             {/* On the live board the phase follows the real clock — the tabs are a
                 read-only progress indicator, not a switcher. */}
