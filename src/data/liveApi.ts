@@ -343,7 +343,7 @@ export async function revealedOppBuffs(matchupId: string, userId: string): Promi
 // ── Super admin ─────────────────────────────────────────────────────────────────
 export type Controller = 'human' | 'ai';
 export type LineupPolicy = 'best_lineup' | 'ai' | 'empty';
-export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; provider?: string; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; weekly_budget?: number; }
+export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; provider?: string; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; weekly_budget?: number; test_live_at?: string | null; }
 export interface AdminUser { id: string; email: string | null; sleeper_username: string | null; sleeper_user_id: string | null; enrolled: number; created_at: string; }
 export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; claim_email?: string | null; }
 export interface AdminAdmin { email: string; note: string | null; }
@@ -494,6 +494,17 @@ export const leagueWeeklyBudget = async (leagueId: string): Promise<number | nul
   const { data } = await supabase.from('league').select('weekly_budget').eq('id', leagueId).maybeSingle();
   const b = (data as { weekly_budget?: number } | null)?.weekly_budget;
   return b == null ? null : Number(b);
+};
+/** Super-admin: toggle a league's live-test mode (compressed real-time schedule). */
+export const adminSetTestLive = (leagueId: string, on: boolean) =>
+  rpc<{ ok: boolean; error?: string; test_live_at?: string | null }>('admin_set_test_live', { p_league_id: leagueId, p_on: on });
+/** The league's live-test anchor (epoch ms) if test mode is on, else null. Any
+ *  member can read it — the board compresses its window timeline from this. */
+export const leagueTestLiveAt = async (leagueId: string): Promise<number | null> => {
+  if (!supabase) return null;
+  const { data } = await supabase.from('league').select('test_live_at').eq('id', leagueId).maybeSingle();
+  const t = (data as { test_live_at?: string | null } | null)?.test_live_at;
+  return t ? Date.parse(t) : null;
 };
 /** Commissioner/admin sets the league's flat weekly coin budget (0 disables). */
 export const commishSetWeeklyBudget = (leagueId: string, amount: number) =>

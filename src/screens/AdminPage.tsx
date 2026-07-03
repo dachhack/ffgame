@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, type LeagueJoiner,
   setTeamController, setLineupPolicy,
   leagueKdst, setKdstMode, setTeamKdst,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
@@ -332,6 +332,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
             invite code chip above remains as a fallback for manual entry. */}
         <button onClick={() => { copy(shareLink(l.invite_code)); setCopied(true); }} className="mono" style={btn(true)}>{copied ? '✓ invite link copied' : '⛓ share invite link'}</button>
         {admin && <span style={{ flex: 1 }} />}
+        {admin && <TestLiveToggle on={!!l.test_live_at} leagueId={l.league_id} reload={reload} />}
         {admin && <DeleteLeague name={l.name} onDelete={async () => { const r = await adminDeleteLeague(l.league_id); if (r.ok) reload(); return r; }} />}
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
@@ -845,6 +846,27 @@ function WeeklyBudget({ l, onGranted }: { l: AdminLeague; onGranted: () => void 
       </div>
       {msg && <div className="mono" style={{ ...mono, fontSize: 9, marginTop: 6, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--dim)' }}>{msg}</div>}
     </div>
+  );
+}
+
+// Super-admin only: flip a league's live board onto a compressed real-time test
+// clock (Setup → Locked → Live → Final in minutes) so the flow can be exercised in
+// preseason. Affects every member of the league. Toggling off restores the real
+// slate. Re-toggling on re-anchors the schedule to "now".
+function TestLiveToggle({ on, leagueId, reload }: { on: boolean; leagueId: string; reload: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (busy) return;
+    setBusy(true);
+    await adminSetTestLive(leagueId, !on).catch(() => {});
+    setBusy(false);
+    reload();
+  };
+  return (
+    <button onClick={go} disabled={busy} title={on ? 'Live-test mode is ON — the board runs a compressed Setup→Locked→Live→Final clock for everyone. Click to turn off.' : 'Turn on live-test mode: the board runs a compressed real-time clock so you can test the flow now.'}
+      className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--warn)', background: on ? 'var(--warn)' : 'var(--bg)', border: '1px solid var(--warn)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+      {busy ? '…' : on ? '🧪 LIVE TEST: ON' : '🧪 live test'}
+    </button>
   );
 }
 
