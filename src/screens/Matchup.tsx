@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile } from '../app/ui';
+import { FieldView, SlotFieldViews } from '../app/FieldView';
 import { avatarUrl, teamLogo } from '../data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, preseasonWeekNum, PRESEASON_BASE, PRESEASON_WEEKS } from '../data/nflSlate';
 import { METRICS, metricById } from '../data/metrics';
@@ -2571,6 +2572,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
           return <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: col, textAlign: 'center', marginTop: 4 }}>{txt}</div>;
         })()}
         {(phase === 'final' || done) && <BuffFxRow side={mineBackup ? 'you' : 'their'} fx={mineBackup ? slot.youBuffFx : slot.theirBuffFx} />}
+        {open && slot.real && <FieldView week={week} team={be.player.team} clock={bclock} />}
         {open && (() => {
           const log = buildLog(bEvents);
           return (
@@ -2669,6 +2671,9 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
       )}
       {final && <BuffFxRow side="you" fx={slot.youBuffFx} stake={slot.youStake} />}
       {final && <BuffFxRow side="their" fx={slot.theirBuffFx} />}
+      {open && slot.real && (
+        <SlotFieldViews week={week} youTeam={slot.you.player.team} theirTeam={slot.their.player.team} youClock={youClock} theirClock={theirClock} />
+      )}
       {open && (() => {
         const log = buildLog(visibleEvents);
         return (
