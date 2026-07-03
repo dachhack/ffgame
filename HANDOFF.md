@@ -1,6 +1,22 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-03 · Build `v0.83.0`_
+_Last updated: 2026-07-03 · Build `v0.86.0`_
+
+## Field board + collapsible fields (v0.86.0)
+- **Slot fields are collapsible**: `FieldCollapse` wraps `SlotFieldViews` and
+  the backup `FieldView collapsible` mount — a centered `⬢ FIELD ▾/▴` chip
+  (default open, per-slot state).
+- **▦ FIELDS — the all-games board** (`FieldBoard`, `src/app/FieldView.tsx`):
+  a full-screen overlay (live-phase header button, gated on `REAL_WEEKS`) with
+  NOTHING but drive charts — every NFL game holding a slotted player, one
+  `Field` each in a responsive grid, ESC/✕ to close. Entries are built in
+  `Matchup.tsx` mirroring the slot rows' clock math (`effWinClock` +
+  `clockAtRealTime` in wall modes), so the board matches the board rows.
+- **You/opponent play tinting**: per game, pid→side sets are built from each
+  slotted player's `realPbpFor` plays (pids are per-game, grouped per-game so
+  no cross-game collisions). The shown play tints arc, marker ring, situation
+  chip, text dot and card border — `--you` for your roster, `--opp` for the
+  opponent's, `--warn` when both touch the same play (turnovers, K/DST).
 
 ## Play-by-play field visuals (v0.83.0)
 Sleeper-style drive chart per NFL game on the live board (see
