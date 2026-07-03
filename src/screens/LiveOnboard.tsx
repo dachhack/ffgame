@@ -61,6 +61,11 @@ export function LiveOnboard() {
     getSession().then((s) => { setSession(s); setReady(true); });
     return onAuth((s, ev) => { setSession(s); if (ev === 'PASSWORD_RECOVERY') setRecovery(true); });
   }, []);
+  // Remember that this is a live (signed-in) user so the app boots straight to
+  // their leagues next time, skipping the demo funnel. Only an explicit sign-out
+  // clears it (see the sign-out button), so an expired session still lands here to
+  // re-authenticate rather than dropping back to the marketing splash.
+  useEffect(() => { if (session) { try { localStorage.setItem('dripLive', '1'); } catch { /* ignore */ } } }, [session]);
   useEffect(() => {
     if (!session) { setAdmin(false); return; }
     isAdmin().then(setAdmin).catch(() => setAdmin(false));
@@ -99,7 +104,7 @@ export function LiveOnboard() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {session && <span className="mono" title={session.user.email ?? ''} style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 9px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>◢ {sessionName(session)}</span>}
-          {session && <button onClick={() => signOut()} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>sign out</button>}
+          {session && <button onClick={() => { try { localStorage.removeItem('dripLive'); } catch { /* ignore */ } signOut(); navigate({ name: 'splash' }); }} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>sign out</button>}
           <SiteSettings superAdmin={session && admin ? () => setView('admin') : undefined} />
         </div>
       </header>
