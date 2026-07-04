@@ -1,6 +1,30 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-04 · Build `v0.92.0`_
+_Last updated: 2026-07-04 · Build `v0.93.0`_
+
+## Demo landing sets up like the hero board (v0.93.0)
+The demo landing's "pick your star" wizard is gone — setup is now the REAL
+hero-board interaction, reusing the actual components (`SetupRow`,
+`PlayerPicker`, `RosterAside`, `ScoutModal` — the latter two newly exported
+from `Matchup.tsx`):
+- **Both full rosters on display**: desktop shows the two roster rails
+  (yours draggable, theirs sealed-pool view) flanking the board; narrow
+  screens get the same rails as fluid toggle panels (opponent starts
+  collapsed). Assigned players strike through, exactly like the hero board.
+- **Drag or tap to field a player** (`assignFromRoster`/`assignToSlot` with
+  top-down `compact`, mirroring Matchup's semantics), then **seal the hidden
+  metric inline on the spot** (SetupRow's own "② PICK A METRIC ↓" list with
+  ⓘ info cards). 🔍 SCOUT on sealed opponent boxes opens the real scout modal.
+- **Guided prompt is state-derived, not a modal wizard**: ① build lineup →
+  ② seal metric → ③ arm power-up (Garbage Time / EMP / Momentum) & RUN.
+  `✦ AUTO-FILL` fills remaining spots from `defaultLineup` (dedup-aware);
+  RUN requires ≥1 fully-sealed pick and auto-fills the rest. EMP targets the
+  viewer's FIRST-placed player's window at a fixed halftime clock (1800s).
+  "↩ change my lineup" on the end card hands the auto-filled board back as
+  editable picks. Playout/watch phase unchanged from v0.92.0.
+- Verified headlessly both ways: mobile tap flow (place → metric → scout →
+  picker → auto-fill → run → FINAL → back to setup) and desktop HTML5
+  drag-and-drop from the rail onto a spot.
 
 ## The demo IS the landing page (v0.92.0)
 Logged-out onboarding collapsed to one screen: `src/screens/DemoBoard.tsx`

@@ -1653,7 +1653,9 @@ function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMe
 }
 
 // ── Roster aside ──────────────────────────────────────────────────────────
-function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, onToggle, bye = [], week, fluid }: {
+// Exported: the demo landing (DemoBoard) mounts the same rails so its setup
+// reads exactly like the hero board.
+export function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, onToggle, bye = [], week, fluid }: {
   side: 'you' | 'their';
   pools: Record<WindowId, Player[]>;
   picks: Record<string, Pick>;
@@ -2443,7 +2445,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
 // Lists every opponent player whose game falls in this window: who they COULD
 // field here. The actual pick stays sealed — the full pool is shown (no
 // removal of slotted players), so nothing leaks by commission or omission.
-function ScoutModal({ win, week, pool, oppName, onClose }: {
+export function ScoutModal({ win, week, pool, oppName, onClose }: {
   win: WindowId; week: number; pool: Player[]; oppName: string; onClose: () => void;
 }) {
   const label = windowsForWeek(week).find((w) => w.id === win)?.label ?? win.toUpperCase();
