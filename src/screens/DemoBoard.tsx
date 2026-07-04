@@ -98,9 +98,12 @@ export function DemoBoard() {
   const [selSlot, setSelSlot] = useState<string | null>(null);
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   const [scoutWin, setScoutWin] = useState<WindowId | null>(null);
-  // Both full rosters are on display; on narrow screens the opponent panel
-  // starts collapsed to keep the board within a swipe.
-  const [rosterOpen, setRosterOpen] = useState(() => ({ you: true, their: !window.matchMedia('(max-width:920px)').matches }));
+  // Desktop: both roster rails on display. Narrow screens: both panels start
+  // collapsed so the board itself is within the first swipe.
+  const [rosterOpen, setRosterOpen] = useState(() => {
+    const wide = !window.matchMedia('(max-width:920px)').matches;
+    return { you: wide, their: wide };
+  });
   const [chosenBuff, setChosenBuff] = useState('garbage-time');
   // The viewer's FIRST placement is the featured duel (auto-opened log/field +
   // EMP target).
@@ -358,7 +361,7 @@ export function DemoBoard() {
   // Guided prompt: derived from the board state, not a modal wizard.
   const promptIdx = placedN === 0 ? 0 : pendingMetric ? 1 : 2;
   const prompts = [
-    { title: 'Build your lineup', sub: narrow ? 'Tap a player in YOUR ROSTER below (or tap a + spot) to field him. A player can only play in the window his real NFL game falls in.' : 'Drag a player from YOUR ROSTER onto a spot (or tap a spot). A player can only play in the window his real NFL game falls in.' },
+    { title: 'Build your lineup', sub: narrow ? 'Open YOUR ROSTER below and tap a player (or tap any + spot) to field him. A player can only play in the window his real NFL game falls in.' : 'Drag a player from YOUR ROSTER onto a spot (or tap a spot). A player can only play in the window his real NFL game falls in.' },
     { title: 'Seal his hidden metric', sub: 'Pick how he scores, right on the spot. Your opponent can’t see it until his game kicks off — and you can 🔍 SCOUT who they could field against you.' },
     { title: 'Arm a power-up & run the week', sub: 'One power-up bends the live games. Any spot you leave empty auto-fills with your best options when you run.' },
   ];
