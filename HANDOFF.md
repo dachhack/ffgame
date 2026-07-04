@@ -1,6 +1,20 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-04 · Build `v0.94.1`_
+_Last updated: 2026-07-04 · Build `v0.94.2`_
+
+## Add-a-league request path + Splash retired (v0.94.2)
+- **"＋ add a league" now has a no-code path**: `RoleChooser` takes an
+  optional `onRequest` third choice ("My league isn't in the pilot yet →")
+  opening `RequestCodeModal`. Wired in BOTH RoleChooser mounts — the
+  My-Leagues `add` view and the fresh-sign-in no-enrollments fork.
+- **`Splash.tsx` is DELETED** — the `splash` route now renders `DemoBoard`
+  (route id kept for history/deep-link compat), so every legacy
+  `navigate({name:'splash'})` call site lands on the demo landing.
+- **Sign-out lands on the demo landing** (both paths: the LiveOnboard header
+  button and the SiteSettings gear — the gear now also clears `dripLive`,
+  which it previously left set). Both call `markBootSessionChecked()` (new
+  DemoBoard export) before navigating so the demo's one-shot boot session
+  check can't race the async `signOut()` and bounce the user back to `live`.
 
 ## Demo UX fixes (v0.94.1)
 - **End-card "More demo" is a real input now** — the focus-the-bottom-bar

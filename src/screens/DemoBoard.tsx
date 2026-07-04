@@ -26,6 +26,9 @@ const actionText = (play: string) => play.replace(/^[A-Z]{2,3}( D| TD)?:\s*/, ''
 // leagues screen. Checked ONCE per app load, so an intentional later visit to
 // the demo (e.g. via the back button) is never hijacked.
 let bootSessionChecked = false;
+/** Disarm the boot session check — called by sign-out before landing here, so
+ *  the async signOut can't race the check and bounce the user back to `live`. */
+export function markBootSessionChecked(): void { bootSessionChecked = true; }
 
 // The logged-out landing page IS the demo: one Drip Test League board (Week 2,
 // Taco Time Titans vs Beach Day Ballers) that sets up EXACTLY like the hero

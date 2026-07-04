@@ -5,7 +5,6 @@ import { LeagueHub } from './screens/LeagueHub';
 import { LeagueOverview } from './screens/LeagueOverview';
 import { Matchup } from './screens/Matchup';
 import { MatchupFinal } from './screens/MatchupFinal';
-import { Splash } from './screens/Splash';
 import { Leagues } from './screens/Leagues';
 import { SleeperLeague } from './screens/SleeperLeague';
 import { ProviderConnect } from './screens/ProviderConnect';
@@ -68,7 +67,8 @@ export function App() {
         flexDirection: 'column',
       }}
     >
-      {route.name === 'splash' && <Splash />}
+      {/* 'splash' is retired — legacy navigations land on the demo landing. */}
+      {route.name === 'splash' && <DemoBoard />}
       {route.name === 'live' && <LiveOnboard />}
       {route.name === 'demo' && (route.view === 'board'
         ? <Matchup key="demo-board" week={DEMO_WEEK} initialPhase="setup" demo />
