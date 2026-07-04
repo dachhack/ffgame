@@ -11,15 +11,21 @@ import { FX_COLOR, fmtClock, buildBeats, type Beat } from '../data/demoNarration
 import { avatarUrl } from '../data/media';
 import { getProvider } from '../data/providers';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
+import { getSession } from '../data/liveApi';
 import { SlotFieldViews } from '../app/FieldView';
 import { SetupRow, PlayerPicker, RosterAside, ScoutModal } from './Matchup';
 import { RequestCodeModal } from './RequestCode';
 import { Faq } from './Faq';
-import { DemoViewToggle } from './DemoOverlay';
 import { track, Ev } from '../app/analytics';
 import type { Pick, Player, WindowId } from '../types';
 
 const actionText = (play: string) => play.replace(/^[A-Z]{2,3}( D| TD)?:\s*/, '');
+
+// A signed-in player who lands here (first OAuth redirect, a magic link opened
+// in a fresh tab — anything that beats the dripLive flag) belongs on their
+// leagues screen. Checked ONCE per app load, so an intentional later visit to
+// the demo (e.g. via the back button) is never hijacked.
+let bootSessionChecked = false;
 
 // The logged-out landing page IS the demo: one Drip Test League board (Week 2,
 // Taco Time Titans vs Beach Day Ballers) that sets up EXACTLY like the hero
@@ -50,6 +56,13 @@ export function DemoBoard() {
   // board always builds from the demo rosters.
   useEffect(() => { if (isSimLeague) exitSimLeague(); }, [isSimLeague, exitSimLeague]);
   useEffect(() => { track(Ev.screenView, { screen: 'demo-board', week: DEMO_WEEK }); }, []);
+  // Logged-in players go straight to their leagues (see bootSessionChecked).
+  useEffect(() => {
+    if (bootSessionChecked) return;
+    bootSessionChecked = true;
+    getSession().then((s) => { if (s) navigate({ name: 'live' }); }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const youId = YOU_TEAM_ID;
   const oppId = gameForTeam(youId, DEMO_WEEK)?.oppId;
@@ -178,6 +191,12 @@ export function DemoBoard() {
     setWIdx(0); setWClock(0); setEnded(false); setPlaying(true); setPhase('watch');
   };
   const replay = () => { setWIdx(0); setWClock(0); setEnded(false); setPlaying(true); };
+  // Full reset — a pristine board, back at step ①.
+  const backToStart = () => {
+    setPhase('setup'); setPicks({}); setRunPicks(null); setFeaturedId(null); setOpenSlots({});
+    setChosenBuff('garbage-time'); setSelSlot(null); setPlaying(false); setEnded(false); setWIdx(0); setWClock(0);
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { /* ignore */ }
+  };
   const changePicks = () => {
     // Hand the full (auto-filled) board back as editable picks so the viewer
     // can tweak any spot, hero-board style.
@@ -284,7 +303,6 @@ export function DemoBoard() {
   const [name, setName] = useState(sleeperUser?.username ?? '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const moreRef = useRef<HTMLInputElement>(null);
   const submitSleeper = async () => {
     const u = name.trim();
     if (!u || busy) return;
@@ -308,13 +326,15 @@ export function DemoBoard() {
     <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', flexWrap: 'wrap', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}>◈ DRIP FANTASY</span>
+        {phase === 'watch' && ended && (
+          <button onClick={backToStart} className="mono" style={{ ...chipBtn, color: 'var(--you)', borderColor: 'color-mix(in srgb, var(--you) 45%, var(--bd))' }}>↺ BACK TO START</button>
+        )}
         {sleeperUser && <button onClick={() => navigate({ name: 'leagues' })} className="mono" style={chipBtn}>← {sleeperUser.displayName}’s leagues</button>}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <button onClick={() => navigate({ name: 'live' })} className="mono" style={linkBtn}>sign in</button>
         <span style={{ color: 'var(--faint)' }}>·</span>
         <button onClick={() => setFaq(true)} className="mono" style={linkBtn}>FAQ</button>
-        <DemoViewToggle view="clean" onSwitch={(v) => v === 'board' && navigate({ name: 'demo', view: 'board' })} />
         <VersionTag />
         <SiteSettings />
       </div>
@@ -521,15 +541,32 @@ export function DemoBoard() {
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 7, lineHeight: 1.5 }}>
                 Every duel you just watched was sealed picks, hidden metrics, and live effects on real NFL plays. Now picture it with your own roster.
               </div>
-              <button onClick={() => { moreRef.current?.focus(); moreRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }} className="mono" style={{ ...cta, marginTop: 12 }}>
-                More demo — run it with YOUR league →
-              </button>
-              <button onClick={() => setRequesting(true)} className="mono" style={{ ...cta, marginTop: 8, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--bd)' }}>
+              {/* More demo — the actual input, right here at the conversion moment */}
+              <div style={{ marginTop: 12, textAlign: 'left' }}>
+                <label className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--you)' }}>MORE DEMO — RUN IT WITH YOUR LEAGUE</label>
+                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                  <input
+                    value={name}
+                    onChange={(e) => { setName(e.target.value); setErr(null); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') submitSleeper(); }}
+                    placeholder="your Sleeper username"
+                    spellCheck={false} autoCapitalize="none" autoCorrect="off"
+                    style={{ flex: 1, minWidth: 0, fontFamily: 'inherit', fontSize: 13, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px', outline: 'none' }}
+                  />
+                  <button onClick={submitSleeper} disabled={busy || !name.trim()} className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '0 16px', cursor: busy ? 'default' : 'pointer', opacity: busy || !name.trim() ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                    {busy ? 'loading…' : 'GO →'}
+                  </button>
+                </div>
+                {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', marginTop: 6 }}>{err}</div>}
+                <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 6 }}>Sleeper public API — username only, never a password.</div>
+              </div>
+              <button onClick={() => setRequesting(true)} className="mono" style={{ ...cta, marginTop: 12, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--bd)' }}>
                 ◈ Request a code for your league
               </button>
-              <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 10 }}>
+              <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 10, flexWrap: 'wrap' }}>
                 <button onClick={replay} className="mono" style={linkBtn}>↺ replay</button>
                 <button onClick={changePicks} className="mono" style={linkBtn}>↩ change my lineup</button>
+                <button onClick={backToStart} className="mono" style={linkBtn}>⇤ back to start</button>
                 <button onClick={() => navigate({ name: 'live' })} className="mono" style={linkBtn}>sign in</button>
               </div>
             </div>
@@ -573,7 +610,6 @@ export function DemoBoard() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', flex: 'none' }}>MORE DEMO?</span>
             <input
-              ref={moreRef}
               value={name}
               onChange={(e) => { setName(e.target.value); setErr(null); }}
               onKeyDown={(e) => { if (e.key === 'Enter') submitSleeper(); }}

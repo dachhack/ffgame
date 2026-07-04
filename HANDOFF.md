@@ -1,6 +1,21 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-04 · Build `v0.94.0`_
+_Last updated: 2026-07-04 · Build `v0.94.1`_
+
+## Demo UX fixes (v0.94.1)
+- **End-card "More demo" is a real input now** — the focus-the-bottom-bar
+  button (invisible feedback) is replaced by an inline Sleeper-username field
+  + GO in the end card itself, sharing state with the persistent bottom bar.
+- **↺ BACK TO START** header chip after FINAL (plus an end-card link) —
+  full reset to a pristine step-① board (`backToStart`), unlike
+  "change my lineup" which keeps the picks.
+- **Signed-in players land on their leagues**: `DemoBoard` checks
+  `getSession()` ONCE per app load (`bootSessionChecked` module flag) and
+  navigates to `live` — covers the first OAuth redirect / magic-link-in-new-tab
+  cases that beat the `dripLive` boot flag. The once-only guard keeps the
+  back button from being hijacked on later demo visits.
+- Dropped the CLEAN/REAL BOARD `DemoViewToggle` from the demo header
+  (the toggle still exists on the board-demo surface for signed-in flows).
 
 ## Demo watch phase: expandable LOG & FIELD per duel (v0.94.0)
 Every duel row on the demo board expands once its window kicks off: a
