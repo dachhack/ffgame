@@ -8,6 +8,7 @@ import { injuryFor } from '../data/injuries';
 import { REG_SEASON_WEEKS } from '../data/league';
 import { APP_VERSION, DATA_SOURCE } from './version';
 import { Rulebook } from '../screens/Rulebook';
+import { markBootSessionChecked } from '../screens/DemoBoard';
 import { Faq } from '../screens/Faq';
 import { liveConfigured } from '../data/supabaseClient';
 import { getSession, onAuth, signOut, isAdmin } from '../data/liveApi';
@@ -253,10 +254,13 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
               onClick={() => {
                 setOpen(false);
                 signOut().catch(() => {});
-                // A clean logout also forgets the cached Sleeper "example" user
-                // (kept separately from the auth session) and returns to splash.
+                // A clean logout drops the live boot flag, forgets the cached
+                // Sleeper "example" user (kept separately from the auth
+                // session), and returns to the demo landing.
+                try { localStorage.removeItem('dripLive'); } catch { /* ignore */ }
                 setSleeperUser(null);
-                navigate({ name: 'splash' });
+                markBootSessionChecked(); // don't let the demo's boot check race the async signOut
+                navigate({ name: 'demo' });
               }}
               className="mono"
               title={session.user.email ?? 'Sign out'}

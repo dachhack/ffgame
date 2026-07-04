@@ -16,6 +16,8 @@ import { PRESEASON_BASE, clearRuntimeSlate } from '../data/nflSlate';
 import { LiveBoard } from './LiveBoard';
 import { AdminPage } from './AdminPage';
 import { CommishDash } from './CommishDash';
+import { RequestCodeModal } from './RequestCode';
+import { markBootSessionChecked } from './DemoBoard';
 import type { Session } from '@supabase/supabase-js';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
@@ -100,12 +102,12 @@ export function LiveOnboard() {
               for the marketing demo). Signed out: the demo link. */}
           {session
             ? (view !== 'home' && <button onClick={() => setView('home')} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← my leagues</button>)
-            : <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← demo</button>}
+            : <button onClick={() => navigate({ name: 'demo' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← demo</button>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <VersionTag />
           {session && <span className="mono" title={session.user.email ?? ''} style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 9px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>◢ {sessionName(session)}</span>}
-          {session && <button onClick={() => { try { localStorage.removeItem('dripLive'); } catch { /* ignore */ } signOut(); navigate({ name: 'splash' }); }} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>sign out</button>}
+          {session && <button onClick={() => { try { localStorage.removeItem('dripLive'); } catch { /* ignore */ } signOut(); markBootSessionChecked(); navigate({ name: 'demo' }); }} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>sign out</button>}
           <SiteSettings superAdmin={session && admin ? () => setView('admin') : undefined} />
         </div>
       </header>
@@ -329,6 +331,8 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
   const [manageId, setManageId] = useState<string | null>(null);
   // Which team's live board/picks a card opened (a manager can be in several).
   const [target, setTarget] = useState<{ leagueId: string; rosterId: number } | null>(null);
+  // "My league isn't in the pilot yet" → the request-a-code capture sheet.
+  const [requesting, setRequesting] = useState(false);
   const commishIds = new Set(commishLeagues.map((l) => l.league_id));
   const isCommish = commishIds.size > 0;
 
@@ -362,8 +366,9 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
   // claim with a commish code), then return home refreshed.
   if (view === 'add') return (
     <>
-      <RoleChooser onPlayer={() => setView('join')} onCommish={() => setView('commish')} />
+      <RoleChooser onPlayer={() => setView('join')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
+      {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </>
   );
   if (view === 'join') return (
@@ -385,11 +390,12 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
   if (enrollments.length === 0) return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onCommish={() => setView('commish')} />
+        ? <RoleChooser onPlayer={() => setChoice('player')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} />
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
       </div>
+      {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </div>
   );
 
@@ -693,7 +699,7 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
   );
 }
 
-function RoleChooser({ onPlayer, onCommish }: { onPlayer: () => void; onCommish: () => void }) {
+function RoleChooser({ onPlayer, onCommish, onRequest }: { onPlayer: () => void; onCommish: () => void; onRequest?: () => void }) {
   const choice: React.CSSProperties = { width: '100%', textAlign: 'left', fontFamily: 'inherit', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, cursor: 'pointer' };
   return (
     <>
@@ -710,6 +716,12 @@ function RoleChooser({ onPlayer, onCommish }: { onPlayer: () => void; onCommish:
           <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>I run this league →</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Verify as commissioner with the code you were given, then share a player invite code with your league.</div>
         </button>
+        {onRequest && (
+          <button onClick={onRequest} style={choice}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>My league isn’t in the pilot yet →</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No code? Request one — we’ll set your league up. Sleeper · ESPN · Yahoo · Fleaflicker · MFL.</div>
+          </button>
+        )}
       </div>
     </>
   );
