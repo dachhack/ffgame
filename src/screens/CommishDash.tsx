@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react';
 import { commishOverview, type AdminLeague } from '../data/liveApi';
 import { LeagueRow } from './AdminPage';
-import { card, linkBtn, mono, Muted } from './adminUi';
+import { card, linkBtn, mono, Muted, errMsg } from './adminUi';
 
 // Commissioner dashboard — one tabbed management card (LeagueRow) per league you
 // run. Opened from a league card's "manage" (focusId → just that league) or as
 // the landing screen for commish-only accounts (all your leagues).
 export function CommishDash({ onBack, focusId }: { onBack: () => void; focusId?: string | null }) {
   const [leagues, setLeagues] = useState<AdminLeague[] | null>(null);
-  const load = async () => { try { setLeagues(await commishOverview()); } catch { setLeagues([]); } };
+  const [err, setErr] = useState<string | null>(null);
+  // Keep already-loaded leagues on a failed refresh; surface the real error.
+  const load = async () => {
+    try { setLeagues(await commishOverview()); setErr(null); }
+    catch (e) { setErr(errMsg(e, 'Load failed.')); setLeagues((cur) => cur ?? []); }
+  };
   useEffect(() => { load(); }, []);
 
   const shown = focusId && leagues ? leagues.filter((l) => l.league_id === focusId) : leagues;
@@ -27,6 +32,7 @@ export function CommishDash({ onBack, focusId }: { onBack: () => void; focusId?:
         <button onClick={load} className="mono" style={{ ...linkBtn, flexShrink: 0 }}>↻ refresh</button>
       </div>
 
+      {err && <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--opp)', marginBottom: 10, lineHeight: 1.5, wordBreak: 'break-word' }}>⚠ {err}</div>}
       {shown === null ? <div style={card}><Muted text="Loading…" /></div>
         : shown.length === 0 ? (
           <div style={card}>
