@@ -1,48 +1,49 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../app/store';
-import { SiteSettings, VersionTag, PlayerImg, Avatar } from '../app/ui';
-import { buildMatchup, defaultLineup, aiLineup, slotKey, banksAtClock, type ResolvedSlot } from '../engine/matchup';
+import { SiteSettings, VersionTag, PlayerImg, Avatar, useIsMobile } from '../app/ui';
+import { buildMatchup, defaultLineup, aiLineup, slotKey, slotsFor, windowPools, byePlayers, banksAtClock, type ResolvedSlot } from '../engine/matchup';
 import { YOU_TEAM_ID, gameForTeam, getTeam } from '../data/league';
 import { DEMO_WEEK } from '../config';
 import { METRICS } from '../data/metrics';
-import { loadRealWeek, realPointsFor } from '../data/realPbp';
-import { gamesInWindow } from '../data/nflSlate';
+import { loadRealWeek } from '../data/realPbp';
+import { gamesInWindow, windowsForWeek } from '../data/nflSlate';
 import { FX_COLOR, fmtClock, buildBeats, type Beat } from '../data/demoNarration';
 import { avatarUrl } from '../data/media';
 import { getProvider } from '../data/providers';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
 import { SlotFieldViews } from '../app/FieldView';
+import { SetupRow, PlayerPicker, RosterAside, ScoutModal } from './Matchup';
 import { RequestCodeModal } from './RequestCode';
 import { Faq } from './Faq';
 import { DemoViewToggle } from './DemoOverlay';
 import { track, Ev } from '../app/analytics';
-import type { Player, WindowId } from '../types';
+import type { Pick, Player, WindowId } from '../types';
 
 // The logged-out landing page IS the demo: one Drip Test League board (Week 2,
-// Taco Time Titans vs Beach Day Ballers) rendered as a tight version of the
-// hero board — both lineups by real game window, sealed opponent picks, hidden
-// metrics, a power-up, and a RUN that plays the week out window by window.
+// Taco Time Titans vs Beach Day Ballers) that sets up EXACTLY like the hero
+// board — both full rosters on the rails, drag (or tap) a player onto a spot,
+// seal his hidden metric from the same inline picker, scout the opponent's
+// window pools — then arm a power-up and RUN the week window by window.
 // Engagement follows the guided-demo playbook: value before any ask (no gate),
-// a couple of real decisions (star → metric → power-up) with everything else
-// defaulted, then the identity ask ("More demo?" → Sleeper username) only
-// after the payoff. All scoring is the real engine on real 2025 plays.
+// real interaction with everything skippable (auto-fill), and the identity ask
+// ("More demo?" → Sleeper username) only after the payoff. All scoring is the
+// real engine on real 2025 plays.
 
 const TICK_MS = 400;
-const EMP_SECONDS = 600;   // EMP freezes opponent drip for 10:00
-const STAR_POS = ['QB', 'RB', 'WR', 'TE'] as const;
+const EMP_AT = 1800;      // EMP fires at halftime of the featured window…
+const EMP_SECONDS = 600;  // …freezing opponent drip for 10:00
 
-// The three power-ups offered as the third decision (each a real engine effect).
+// The three power-ups offered before the run (each a real engine effect).
 const POWER_OPTIONS = [
-  { id: 'garbage-time', icon: '🗑️', name: 'Garbage Time', blurb: 'Every point you score in the final 5 minutes counts double.' },
-  { id: 'emp', icon: '❄️', name: 'EMP', blurb: 'Freeze their drip clock for 10 minutes mid-game — passive points stop cold.' },
-  { id: 'momentum', icon: '📈', name: 'Momentum', blurb: 'When your drip goes hot, it runs 3× instead of the usual 2×.' },
+  { id: 'garbage-time', icon: '🗑️', name: 'Garbage Time', blurb: 'Final-5-minute points count double.' },
+  { id: 'emp', icon: '❄️', name: 'EMP', blurb: 'Freeze their drip clock for 10 min mid-game.' },
+  { id: 'momentum', icon: '📈', name: 'Momentum', blurb: 'Hot drips run 3× instead of 2×.' },
 ];
-
-type Step = 'star' | 'metric' | 'power' | 'watch';
-interface Star { key: string; winId: WindowId; winLabel: string; slotIndex: number; player: Player; oppName: string; pts: number; }
 
 export function DemoBoard() {
   const { navigate, sleeperUser, setSleeperUser, isSimLeague, exitSimLeague } = useStore();
+  // Rails need ~900px; below that the rosters render as fluid panels instead.
+  const narrow = useIsMobile(920);
   // Coming back from a Sleeper sim: restore the baked Drip Test League so the
   // board always builds from the demo rosters.
   useEffect(() => { if (isSimLeague) exitSimLeague(); }, [isSimLeague, exitSimLeague]);
@@ -59,52 +60,138 @@ export function DemoBoard() {
     loadRealWeek(DEMO_WEEK).then(() => { if (alive) setReady(true); });
     return () => { alive = false; };
   }, []);
-  const pts = useMemo(() => realPointsFor(DEMO_WEEK), [ready]); // curation only — never shown
 
-  const base = useMemo(() => (ready ? defaultLineup(youId, DEMO_WEEK) : {}), [ready, youId]);
+  const wins = useMemo(() => (ready ? windowsForWeek(DEMO_WEEK) : []), [ready]);
+  const youPools = useMemo(() => (ready ? windowPools(youId, DEMO_WEEK) : {}), [ready, youId]);
+  const oppPools = useMemo(() => (ready && oppId ? windowPools(oppId, DEMO_WEEK) : {}), [ready, oppId]);
+  const byeYou = useMemo(() => (ready ? byePlayers(youId, DEMO_WEEK) : []), [ready, youId]);
+  const byeTheir = useMemo(() => (ready && oppId ? byePlayers(oppId, DEMO_WEEK) : []), [ready, oppId]);
+  const playerWindow = useMemo(() => {
+    const m = new Map<string, WindowId>();
+    for (const w of Object.keys(youPools)) for (const p of youPools[w]) m.set(p.id, w);
+    return m;
+  }, [youPools]);
+  const defaults = useMemo(() => (ready ? defaultLineup(youId, DEMO_WEEK) : {}), [ready, youId]);
   const oppPicks = useMemo(() => (ready && oppId ? aiLineup(oppId, youId, DEMO_WEEK) : {}), [ready, oppId, youId]);
-  const scout = useMemo(() => (ready && oppId ? buildMatchup(youId, oppId, DEMO_WEEK, base, oppPicks) : null), [ready, oppId, youId, base, oppPicks]);
 
-  // The star choices: your best contested duel at each of QB/RB/WR/TE, top 3.
-  const stars = useMemo<Star[]>(() => {
-    if (!scout) return [];
-    const byPos: Record<string, Star> = {};
-    for (const w of scout.windows) for (const s of w.slots) {
-      if (!s.you || !s.their || !s.events.length) continue;
-      const p = s.you.player;
-      if (!(STAR_POS as readonly string[]).includes(p.pos)) continue;
-      const v = pts[p.id] ?? 0;
-      if (!byPos[p.pos] || v > byPos[p.pos].pts) {
-        byPos[p.pos] = { key: slotKey(w.window.id, s.slotIndex), winId: w.window.id, winLabel: w.window.label, slotIndex: s.slotIndex, player: p, oppName: s.their.player.name, pts: v };
-      }
-    }
-    return Object.values(byPos).sort((a, b) => b.pts - a.pts).slice(0, 3);
-  }, [scout, pts]);
-
-  // ── The three decisions ────────────────────────────────────────────────────
-  const [step, setStep] = useState<Step>('star');
-  const [starIdx, setStarIdx] = useState(0);
-  const star = stars[starIdx] ?? null;
-  const [chosenMetric, setChosenMetric] = useState<string | null>(null);
-  const effMetric = chosenMetric ?? (star ? base[star.key]?.metricId ?? null : null);
-  const metricOptions = useMemo(() => (star ? (METRICS[star.player.pos] ?? []).filter((m) => !m.lock && m.id !== 'fg').slice(0, 4) : []), [star]);
+  // ── Lineup building — the same semantics as the hero board ────────────────
+  const [phase, setPhase] = useState<'setup' | 'watch'>('setup');
+  const [picks, setPicks] = useState<Record<string, Pick>>({});
+  const [selSlot, setSelSlot] = useState<string | null>(null);
+  const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
+  const [scoutWin, setScoutWin] = useState<WindowId | null>(null);
+  // Both full rosters are on display; on narrow screens the opponent panel
+  // starts collapsed to keep the board within a swipe.
+  const [rosterOpen, setRosterOpen] = useState(() => ({ you: true, their: !window.matchMedia('(max-width:920px)').matches }));
   const [chosenBuff, setChosenBuff] = useState('garbage-time');
+  // The viewer's FIRST placement is the featured duel (field view + EMP target).
+  const [featuredId, setFeaturedId] = useState<string | null>(null);
   const armedPu = POWER_OPTIONS.find((p) => p.id === chosenBuff);
 
-  const starWinMax = useMemo(() => {
-    const w = scout?.windows.find((x) => x.window.id === star?.winId);
-    return w ? w.slots.reduce((a, s) => s.events.reduce((m, e) => Math.max(m, e.clock), a), 0) : 0;
-  }, [scout, star]);
-  const empClock = Math.max(60, Math.round((starWinMax * 0.5) / 60) * 60);
+  // Keep each window filled top-down (spot 2 never filled while spot 1 is empty).
+  const compact = (p: Record<string, Pick>) => {
+    const out: Record<string, Pick> = {};
+    for (const w of windowsForWeek(DEMO_WEEK)) {
+      const n = slotsFor(w.id, DEMO_WEEK);
+      let idx = 0;
+      for (let i = 0; i < n; i++) { const pk = p[slotKey(w.id, i)]; if (pk) out[slotKey(w.id, idx++)] = pk; }
+    }
+    return out;
+  };
+  // Fill every remaining spot from the default lineup (each auto pick arrives
+  // with its best metric already sealed), never duplicating a placed player.
+  const autoFill = (cur: Record<string, Pick>) => {
+    const used = new Set(Object.values(cur).map((p) => p.playerId));
+    const out = { ...cur };
+    for (const w of windowsForWeek(DEMO_WEEK)) {
+      const n = slotsFor(w.id, DEMO_WEEK);
+      const queue: Pick[] = [];
+      for (let i = 0; i < n; i++) { const pk = defaults[slotKey(w.id, i)]; if (pk && !used.has(pk.playerId)) queue.push(pk); }
+      for (let i = 0; i < n; i++) {
+        const k = slotKey(w.id, i);
+        if (!out[k]) { const pk = queue.shift(); if (pk) { out[k] = pk; used.add(pk.playerId); } }
+      }
+    }
+    return compact(out);
+  };
 
-  // Resolve the full week the viewer built — every slot, both sides, for real.
+  const assignFromRoster = (playerId: string) => {
+    if (phase !== 'setup') return;
+    const win = playerWindow.get(playerId);
+    if (!win) return;
+    const n = slotsFor(win, DEMO_WEEK);
+    for (let i = 0; i < n; i++) { const k = slotKey(win, i); if (picks[k]?.playerId === playerId) { setSelSlot(k); return; } }
+    const nx = { ...picks };
+    for (const k of Object.keys(nx)) if (nx[k].playerId === playerId) delete nx[k];
+    let target = slotKey(win, 0); // full window replaces spot 0, like the hero board
+    for (let i = 0; i < n; i++) { const k = slotKey(win, i); if (!nx[k]) { target = k; break; } }
+    nx[target] = { playerId, metricId: null };
+    if (!Object.keys(picks).length) track(Ev.demoStep, { step: 'place' });
+    if (!featuredId) setFeaturedId(playerId);
+    setPicks(compact(nx));
+    setSelSlot(null);
+    setPickerSlot(null);
+  };
+  const assignToSlot = (key: string, playerId: string) => {
+    const nx = { ...picks };
+    for (const k of Object.keys(nx)) if (nx[k].playerId === playerId) delete nx[k];
+    nx[key] = { playerId, metricId: null };
+    if (!Object.keys(picks).length) track(Ev.demoStep, { step: 'place' });
+    if (!featuredId) setFeaturedId(playerId);
+    setPicks(compact(nx));
+    setSelSlot(null);
+    setPickerSlot(null);
+  };
+  const pickMetricFor = (key: string, metricId: string) => {
+    if (!Object.values(picks).some((p) => p.metricId)) track(Ev.demoStep, { step: 'metric' });
+    setPicks((prev) => (prev[key] ? { ...prev, [key]: { ...prev[key], metricId } } : prev));
+    setSelSlot(null);
+  };
+  const clearSlot = (key: string) => {
+    const nx = { ...picks };
+    delete nx[key];
+    setPicks(compact(nx));
+    setSelSlot(null);
+  };
+
+  const placedN = Object.keys(picks).length;
+  const pendingMetric = Object.values(picks).some((p) => !p.metricId);
+  const canRun = placedN > 0 && !pendingMetric;
+
+  // ── RUN — auto-fill the rest, resolve the whole week for real ─────────────
+  const [runPicks, setRunPicks] = useState<Record<string, Pick> | null>(null);
+  const run = () => {
+    if (!canRun) return;
+    track(Ev.demoRun, { placed: placedN, powerup: chosenBuff });
+    setRunPicks(autoFill(picks));
+    setWIdx(0); setWClock(0); setEnded(false); setPlaying(true); setPhase('watch');
+  };
+  const replay = () => { setWIdx(0); setWClock(0); setEnded(false); setPlaying(true); };
+  const changePicks = () => {
+    // Hand the full (auto-filled) board back as editable picks so the viewer
+    // can tweak any spot, hero-board style.
+    if (runPicks) setPicks(runPicks);
+    setRunPicks(null); setPlaying(false); setEnded(false); setWIdx(0); setWClock(0); setPhase('setup');
+  };
+
+  // The featured pick (first placement, else the board's first spot).
+  const featId = useMemo(() => {
+    if (!runPicks) return null;
+    if (featuredId && Object.values(runPicks).some((p) => p.playerId === featuredId)) return featuredId;
+    return Object.values(runPicks)[0]?.playerId ?? null;
+  }, [runPicks, featuredId]);
+  const empWin = useMemo<WindowId | null>(() => {
+    if (!runPicks) return null;
+    const entry = Object.entries(runPicks).find(([, p]) => p.playerId === featId) ?? Object.entries(runPicks)[0];
+    return entry ? (entry[0].split('#')[0] as WindowId) : null;
+  }, [runPicks, featId]);
+
   const resolved = useMemo(() => {
-    if (!ready || !oppId || !star || !effMetric) return null;
-    const youPicks = { ...base, [star.key]: { playerId: star.player.id, metricId: effMetric } };
+    if (!ready || !oppId || !runPicks) return null;
     const buffs = chosenBuff === 'emp' ? {} : { [chosenBuff]: true };
-    const extras = chosenBuff === 'emp' ? { emp: { [star.winId]: empClock } } : {};
-    return buildMatchup(youId, oppId, DEMO_WEEK, youPicks, oppPicks, {}, {}, {}, buffs, extras);
-  }, [ready, oppId, youId, star, effMetric, chosenBuff, base, oppPicks, empClock]);
+    const extras = chosenBuff === 'emp' && empWin ? { emp: { [empWin]: EMP_AT } } : {};
+    return buildMatchup(youId, oppId, DEMO_WEEK, runPicks, oppPicks, {}, {}, {}, buffs, extras);
+  }, [ready, oppId, youId, runPicks, chosenBuff, empWin, oppPicks]);
 
   const winMaxes = useMemo(() => (resolved ? resolved.windows.map((w) => w.slots.reduce((a, s) => s.events.reduce((m, e) => Math.max(m, e.clock), a), 0)) : []), [resolved]);
 
@@ -115,15 +202,8 @@ export function DemoBoard() {
   const [ended, setEnded] = useState(false);
   const [speed, setSpeed] = useState<1 | 2>(1);
 
-  const run = () => {
-    track(Ev.demoRun, { star: star?.player.id ?? null, metric: effMetric, powerup: chosenBuff });
-    setWIdx(0); setWClock(0); setEnded(false); setPlaying(true); setStep('watch');
-  };
-  const replay = () => { setWIdx(0); setWClock(0); setEnded(false); setPlaying(true); };
-  const changePicks = () => { setPlaying(false); setEnded(false); setWIdx(0); setWClock(0); setStep('star'); };
-
   useEffect(() => {
-    if (step !== 'watch' || !playing || ended || !resolved) return;
+    if (phase !== 'watch' || !playing || ended || !resolved) return;
     const id = setInterval(() => {
       setWClock((c) => {
         const max = winMaxes[wIdx] ?? 0;
@@ -139,11 +219,11 @@ export function DemoBoard() {
       });
     }, TICK_MS);
     return () => clearInterval(id);
-  }, [step, playing, ended, wIdx, speed, resolved, winMaxes]);
+  }, [phase, playing, ended, wIdx, speed, resolved, winMaxes]);
 
   type WinState = 'upcoming' | 'live' | 'final';
   const winState = (i: number): WinState => {
-    if (step !== 'watch') return 'upcoming';
+    if (phase !== 'watch') return 'upcoming';
     if (ended || i < wIdx) return 'final';
     return i === wIdx ? 'live' : 'upcoming';
   };
@@ -168,11 +248,11 @@ export function DemoBoard() {
     const w = resolved?.windows[wIdx];
     if (!w) return [];
     const out = buildBeats(w.slots.flatMap((s) => s.events));
-    if (chosenBuff === 'emp' && star && w.window.id === star.winId) {
-      out.push({ clock: empClock, key: 'freeze', icon: '❄️', title: 'EMP — FREEZE', body: 'Your EMP fires: the opponent’s drip clock is frozen for 10 minutes. Passive points stop cold — only a touchdown can still score.' });
+    if (chosenBuff === 'emp' && w.window.id === empWin) {
+      out.push({ clock: EMP_AT, key: 'freeze', icon: '❄️', title: 'EMP — FREEZE', body: 'Your EMP fires: the opponent’s drip clock is frozen for 10 minutes. Passive points stop cold — only a touchdown can still score.' });
     }
     return out.sort((a, b) => a.clock - b.clock);
-  }, [resolved, wIdx, chosenBuff, star, empClock]);
+  }, [resolved, wIdx, chosenBuff, empWin]);
   const liveWin = resolved?.windows[wIdx];
   const winIntro: Beat | null = liveWin ? {
     clock: 0, key: 'intro', icon: '🏈', title: `${liveWin.window.label} — KICKOFF`,
@@ -182,8 +262,12 @@ export function DemoBoard() {
   } : null;
   const activeBeat = beats.reduce<Beat | null>((acc, b) => (b.clock <= wClock ? b : acc), null) ?? winIntro;
 
-  const featured = star ? resolved?.windows.find((w) => w.window.id === star.winId)?.slots.find((s) => s.slotIndex === star.slotIndex) ?? null : null;
-  const frozen = chosenBuff === 'emp' && !!star && liveWin?.window.id === star.winId && wClock >= empClock && wClock < empClock + EMP_SECONDS && !ended;
+  const featuredSlot = useMemo(() => {
+    if (!resolved || !featId) return null;
+    for (const w of resolved.windows) for (const s of w.slots) if (s.you?.player.id === featId && s.their) return { winId: w.window.id as WindowId, slotIndex: s.slotIndex, slot: s };
+    return null;
+  }, [resolved, featId]);
+  const frozen = chosenBuff === 'emp' && phase === 'watch' && !ended && liveWin?.window.id === empWin && wClock >= EMP_AT && wClock < EMP_AT + EMP_SECONDS;
 
   // ── "More demo?" — the persistent Sleeper handoff ──────────────────────────
   const [name, setName] = useState(sleeperUser?.username ?? '');
@@ -226,27 +310,24 @@ export function DemoBoard() {
     </header>
   );
 
-  if (!ready || !resolved || !star || !youTeam || !oppTeam) {
-    const broken = ready && scout && !stars.length;
+  if (!ready || !youTeam || !oppTeam || !oppId) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
         {header}
         <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div className="mono" style={{ fontSize: 11, color: 'var(--dim)', letterSpacing: '0.08em' }}>
-            {broken ? 'Demo unavailable — try the full board from the header toggle.' : 'Loading the demo board…'}
-          </div>
+          <div className="mono" style={{ fontSize: 11, color: 'var(--dim)', letterSpacing: '0.08em' }}>Loading the demo board…</div>
         </main>
       </div>
     );
   }
 
-  const stepOrder: Step[] = ['star', 'metric', 'power'];
-  const stepIdx = stepOrder.indexOf(step); // -1 during watch
-  const prompts: Record<Exclude<Step, 'watch'>, { title: string; sub: string }> = {
-    star: { title: 'Pick your star', sub: 'Three of your stars, three positions — each in a live duel against one of their picks. Your choice slots into the board below.' },
-    metric: { title: `Seal ${star.player.name}’s hidden metric`, sub: 'The metric decides HOW he scores — and how he attacks their player. Your opponent can’t see it until his game kicks off.' },
-    power: { title: 'Arm one power-up', sub: 'Power-ups bend the live game. Arm one, then run the week and watch every window play out.' },
-  };
+  // Guided prompt: derived from the board state, not a modal wizard.
+  const promptIdx = placedN === 0 ? 0 : pendingMetric ? 1 : 2;
+  const prompts = [
+    { title: 'Build your lineup', sub: narrow ? 'Tap a player in YOUR ROSTER below (or tap a + spot) to field him. A player can only play in the window his real NFL game falls in.' : 'Drag a player from YOUR ROSTER onto a spot (or tap a spot). A player can only play in the window his real NFL game falls in.' },
+    { title: 'Seal his hidden metric', sub: 'Pick how he scores, right on the spot. Your opponent can’t see it until his game kicks off — and you can 🔍 SCOUT who they could field against you.' },
+    { title: 'Arm a power-up & run the week', sub: 'One power-up bends the live games. Any spot you leave empty auto-fills with your best options when you run.' },
+  ];
 
   // ── Board pieces ───────────────────────────────────────────────────────────
   const scoreHdr = (
@@ -255,40 +336,60 @@ export function DemoBoard() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
         <TeamSide team={youTeam.name} owner={youTeam.owner} ownerId={youTeam.ownerId} score={youTot} accent="var(--you)" you />
         <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.12em', flex: 'none' }}>
-          {step === 'watch' && !ended && liveWin ? <span style={{ color: 'var(--you)' }}>{liveWin.window.label} · {fmtClock(wClock)}</span> : ended ? <span style={{ color: 'var(--you)' }}>FINAL</span> : 'VS'}
+          {phase === 'watch' && !ended && liveWin ? <span style={{ color: 'var(--you)' }}>{liveWin.window.label} · {fmtClock(wClock)}</span> : ended ? <span style={{ color: 'var(--you)' }}>FINAL</span> : 'VS'}
         </div>
         <TeamSide team={oppTeam.name} owner={oppTeam.owner} ownerId={oppTeam.ownerId} score={theirTot} accent="var(--opp)" />
       </div>
     </div>
   );
 
-  const windowCards = resolved.windows.map((w, i) => {
+  const windowCards = wins.map((w, i) => {
     const st = winState(i);
-    const games = gamesInWindow(DEMO_WEEK, w.window.id).length;
-    const isStarWin = w.window.id === star.winId;
+    const games = gamesInWindow(DEMO_WEEK, w.id).length;
+    const nSlots = slotsFor(w.id, DEMO_WEEK);
+    const rslots = phase === 'watch' && resolved ? resolved.windows[i]?.slots ?? [] : [];
+    const isFeatWin = featuredSlot?.winId === w.id;
     return (
-      <div key={w.window.id} style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, marginTop: 10, overflow: 'hidden', opacity: step === 'watch' && st === 'upcoming' ? 0.65 : 1, transition: 'opacity .3s' }}>
+      <div key={w.id} style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, marginTop: 10, overflow: 'hidden', opacity: phase === 'watch' && st === 'upcoming' ? 0.65 : 1, transition: 'opacity .3s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--bd)', background: 'var(--bg)' }}>
-          <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>{w.window.label}</span>
-          <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{w.window.time}{games > 0 ? ` · ${games} game${games > 1 ? 's' : ''}` : ''}</span>
+          <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>{w.label}</span>
+          <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{w.time}{games > 0 ? ` · ${games} game${games > 1 ? 's' : ''}` : ''}</span>
           <span style={{ flex: 1 }} />
           {st === 'upcoming' && <span className="mono" style={{ ...stateChip, color: 'var(--dim)', borderColor: 'var(--bd)' }}>🔒 SEALED</span>}
           {st === 'live' && <span className="mono" style={{ ...stateChip, color: 'var(--you)', borderColor: 'color-mix(in srgb, var(--you) 45%, transparent)' }}><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 3, background: 'var(--you)', marginRight: 5, animation: 'bpulse 1.2s infinite' }} />LIVE</span>}
           {st === 'final' && <span className="mono" style={{ ...stateChip, color: 'var(--dim)', borderColor: 'var(--bd)' }}>FINAL</span>}
         </div>
-        {w.slots.map((s) => {
-          const b = slotBanks(s, st);
-          const isFeatured = isStarWin && s.slotIndex === star.slotIndex;
-          return (
-            <SlotRow key={s.slotIndex} slot={s} state={st} you={b.you} their={b.their}
-              featured={isFeatured && step !== 'watch'} frozen={isFeatured && frozen}
-              armedPu={isFeatured && step === 'watch' ? armedPu : undefined} />
-          );
-        })}
+        {phase === 'setup' ? (
+          <div style={{ padding: '10px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {Array.from({ length: nSlots }, (_, si) => {
+              const key = slotKey(w.id, si);
+              return (
+                <SetupRow
+                  key={key} slotKeyStr={key} winId={w.id} week={DEMO_WEEK} pick={picks[key]} selected={selSlot === key}
+                  inventory={{}} armed={{}} appliedPu={[]} applyMode={null} onApplyToSpot={() => {}}
+                  onOpenPicker={() => { setPickerSlot({ key, win: w.id }); setSelSlot(key); }}
+                  onPickMetric={(m) => pickMetricFor(key, m)}
+                  onClearSlot={() => clearSlot(key)}
+                  onDropPlayer={(id) => assignFromRoster(id)}
+                  onScout={() => setScoutWin(w.id)}
+                />
+              );
+            })}
+          </div>
+        ) : (
+          rslots.map((s) => {
+            const b = slotBanks(s, st);
+            const isFeatured = isFeatWin && s.slotIndex === featuredSlot?.slotIndex;
+            return (
+              <SlotRow key={s.slotIndex} slot={s} state={st} you={b.you} their={b.their}
+                frozen={isFeatured && frozen} armedPu={isFeatured ? armedPu : undefined} />
+            );
+          })
+        )}
         {/* the featured duel's live field — the same drive chart as the real board */}
-        {isStarWin && st === 'live' && featured?.you && featured.their && (
+        {phase === 'watch' && isFeatWin && st === 'live' && featuredSlot?.slot.you && featuredSlot.slot.their && (
           <div style={{ padding: '0 10px 10px' }}>
-            <SlotFieldViews week={DEMO_WEEK} youTeam={featured.you.player.team} theirTeam={featured.their.player.team} youClock={wClock} theirClock={wClock} />
+            <SlotFieldViews week={DEMO_WEEK} youTeam={featuredSlot.slot.you.player.team} theirTeam={featuredSlot.slot.their.player.team} youClock={wClock} theirClock={wClock} />
           </div>
         )}
       </div>
@@ -298,7 +399,12 @@ export function DemoBoard() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {header}
-      <main style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '6px 14px 96px' }}>
+      <main style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 14, padding: '6px 14px 96px' }}>
+        {/* your full roster — the hero board's drag rail (desktop, setup only) */}
+        {phase === 'setup' && !narrow && (
+          <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase="setup" collapsed={!rosterOpen.you} onToggle={() => setRosterOpen((o) => ({ ...o, you: !o.you }))} bye={byeYou} week={DEMO_WEEK} />
+        )}
+
         <div style={{ width: '100%', maxWidth: 520 }}>
           {/* hero one-liner */}
           <div style={{ textAlign: 'center', margin: '6px 0 14px' }}>
@@ -306,86 +412,63 @@ export function DemoBoard() {
               Fantasy football, but the picks are <span style={{ color: 'var(--you)' }}>sealed</span> and the game is <span style={{ color: 'var(--you)' }}>live</span>.
             </div>
             <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 7, lineHeight: 1.5 }}>
-              This is a real week from the Drip Test League. Make three calls, hit run, and watch it play out — in about a minute.
+              This is a real week from the Drip Test League. Drag your starters in, seal their hidden metrics, arm a power-up — then run the week.
             </div>
           </div>
 
           {scoreHdr}
 
-          {/* step prompt / watch narration / end card — always directly under the score */}
-          {step !== 'watch' && (
+          {/* guided prompt + power-ups + run — always directly under the score */}
+          {phase === 'setup' && (
             <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: '12px 14px', marginTop: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {stepOrder.map((s, i) => (
-                  <span key={s} style={{ width: i === stepIdx ? 20 : 7, height: 7, borderRadius: 4, background: i <= stepIdx ? 'var(--you)' : 'var(--bd)', transition: 'all .2s' }} />
+                {prompts.map((_, i) => (
+                  <span key={i} style={{ width: i === promptIdx ? 20 : 7, height: 7, borderRadius: 4, background: i <= promptIdx ? 'var(--you)' : 'var(--bd)', transition: 'all .2s' }} />
                 ))}
-                <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginLeft: 4 }}>STEP {stepIdx + 1} OF 3</span>
+                <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginLeft: 4 }}>STEP {promptIdx + 1} OF 3</span>
               </div>
-              <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginTop: 8 }}>{prompts[step as Exclude<Step, 'watch'>].title}</div>
-              <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, lineHeight: 1.45 }}>{prompts[step as Exclude<Step, 'watch'>].sub}</div>
+              <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginTop: 8 }}>{prompts[promptIdx].title}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, lineHeight: 1.45 }}>{prompts[promptIdx].sub}</div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-                {step === 'star' && stars.map((d, i) => {
-                  const on = starIdx === i;
-                  return (
-                    <button key={d.player.id} onClick={() => { setStarIdx(i); setChosenMetric(null); }} style={optCard(on)}>
-                      <PlayerImg playerId={d.player.id} team={d.player.team} pos={d.player.pos} size={40} />
-                      <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                        <div className="grotesk" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.player.name}</div>
-                        <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', letterSpacing: '0.04em', marginTop: 2 }}>{d.player.pos} · {d.player.team} · {d.winLabel} · duels {d.oppName}</div>
-                      </div>
-                      {on && <span style={tick}>✓</span>}
-                    </button>
-                  );
-                })}
+              {/* power-ups appear once the first pick is sealed */}
+              {promptIdx === 2 && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+                  {POWER_OPTIONS.map((pu) => {
+                    const on = chosenBuff === pu.id;
+                    return (
+                      <button key={pu.id} onClick={() => setChosenBuff(pu.id)} title={pu.blurb} style={{ ...optCard(on), flex: 1, flexDirection: 'column', gap: 4, padding: '9px 6px', alignItems: 'center', textAlign: 'center' }}>
+                        <span style={{ fontSize: 19, lineHeight: 1 }}>{pu.icon}</span>
+                        <span className="grotesk" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>{pu.name}</span>
+                        <span style={{ fontSize: 8.5, color: 'var(--dim)', lineHeight: 1.35 }}>{pu.blurb}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
-                {step === 'metric' && metricOptions.map((m) => {
-                  const on = effMetric === m.id;
-                  return (
-                    <button key={m.id} onClick={() => setChosenMetric(m.id)} style={{ ...optCard(on), alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                          <span className="grotesk" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>{m.name}</span>
-                          <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 45%, transparent)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', borderRadius: 3, padding: '1px 5px' }}>{m.tag}</span>
-                        </div>
-                        <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 4, lineHeight: 1.4 }}>{m.ef}</div>
-                      </div>
-                      {on && <span style={{ ...tick, alignSelf: 'center' }}>✓</span>}
-                    </button>
-                  );
-                })}
-
-                {step === 'power' && POWER_OPTIONS.map((pu) => {
-                  const on = chosenBuff === pu.id;
-                  return (
-                    <button key={pu.id} onClick={() => setChosenBuff(pu.id)} style={{ ...optCard(on), alignItems: 'flex-start' }}>
-                      <span style={{ fontSize: 22, lineHeight: 1 }}>{pu.icon}</span>
-                      <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                        <div className="grotesk" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>{pu.name}</div>
-                        <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 4, lineHeight: 1.4 }}>{pu.blurb}</div>
-                      </div>
-                      {on && <span style={{ ...tick, alignSelf: 'center' }}>✓</span>}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-                {stepIdx > 0 && <button onClick={() => setStep(stepOrder[stepIdx - 1])} className="mono" style={{ ...ctlBtn, flex: 'none' }}>← back</button>}
-                <button
-                  onClick={() => {
-                    if (stepIdx < 2) { track(Ev.demoStep, { step: stepOrder[stepIdx + 1] }); setStep(stepOrder[stepIdx + 1]); }
-                    else run();
-                  }}
-                  className="mono" style={{ ...cta, flex: 1, width: 'auto' }}
-                >
-                  {stepIdx < 2 ? 'Next →' : `▶ RUN WEEK ${DEMO_WEEK}`}
+              <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+                <button onClick={() => setPicks(autoFill(picks))} className="mono" style={{ ...ctlBtn, flex: 'none' }}>✦ AUTO-FILL</button>
+                <button onClick={run} disabled={!canRun} className="mono" style={{ ...cta, flex: 1, width: 'auto', opacity: canRun ? 1 : 0.5, cursor: canRun ? 'pointer' : 'default' }}>
+                  ▶ RUN WEEK {DEMO_WEEK}
                 </button>
               </div>
+              {!canRun && <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 7, textAlign: 'center' }}>{placedN === 0 ? 'field at least one player to run the week' : 'seal a metric on every fielded player first'}</div>}
             </div>
           )}
 
-          {step === 'watch' && !ended && (
+          {/* mobile: the same roster rails as fluid panels */}
+          {phase === 'setup' && narrow && (
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setRosterOpen((o) => ({ ...o, you: !o.you }))} className="mono" style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.you ? 'var(--you)' : 'var(--bd)'}`, color: rosterOpen.you ? 'var(--you)' : 'var(--dim)', cursor: 'pointer' }}>{rosterOpen.you ? '▾' : '▸'} YOUR ROSTER</button>
+                <button onClick={() => setRosterOpen((o) => ({ ...o, their: !o.their }))} className="mono" style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.their ? 'var(--opp)' : 'var(--bd)'}`, color: rosterOpen.their ? 'var(--opp)' : 'var(--dim)', cursor: 'pointer' }}>{rosterOpen.their ? '▾' : '▸'} THEIR ROSTER</button>
+              </div>
+              {rosterOpen.you && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase="setup" collapsed={false} onToggle={() => setRosterOpen((o) => ({ ...o, you: !o.you }))} bye={byeYou} week={DEMO_WEEK} fluid />}
+              {rosterOpen.their && <RosterAside side="their" pools={oppPools} picks={{}} phase="setup" sealed collapsed={false} onToggle={() => setRosterOpen((o) => ({ ...o, their: !o.their }))} bye={byeTheir} week={DEMO_WEEK} fluid />}
+            </div>
+          )}
+
+          {phase === 'watch' && !ended && (
             <div style={{ minHeight: 78, marginTop: 10, background: 'var(--bg)', border: '1px solid var(--bd)', borderLeft: `3px solid ${activeBeat && FX_COLOR[activeBeat.key] ? FX_COLOR[activeBeat.key] : 'var(--you)'}`, borderRadius: 8, padding: '11px 13px', display: 'flex', gap: 11, alignItems: 'flex-start' }}>
               <span style={{ fontSize: 21, lineHeight: 1 }}>{activeBeat?.icon}</span>
               <div style={{ minWidth: 0, flex: 1 }}>
@@ -399,7 +482,7 @@ export function DemoBoard() {
             </div>
           )}
 
-          {ended && (
+          {ended && resolved && (
             <div style={{ marginTop: 10, background: 'var(--surface)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 10, padding: 16, textAlign: 'center' }}>
               <div className="grotesk" style={{ fontSize: 19, fontWeight: 700, color: 'var(--text)' }}>
                 {youTot >= theirTot ? `You took Week ${DEMO_WEEK}, ` : `They edged you, `}{Math.max(youTot, theirTot).toFixed(1)}–{Math.min(youTot, theirTot).toFixed(1)}.
@@ -418,7 +501,7 @@ export function DemoBoard() {
               </button>
               <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 10 }}>
                 <button onClick={replay} className="mono" style={linkBtn}>↺ replay</button>
-                <button onClick={changePicks} className="mono" style={linkBtn}>↩ different picks</button>
+                <button onClick={changePicks} className="mono" style={linkBtn}>↩ change my lineup</button>
                 <button onClick={() => navigate({ name: 'live' })} className="mono" style={linkBtn}>sign in</button>
               </div>
             </div>
@@ -428,7 +511,7 @@ export function DemoBoard() {
           {windowCards}
 
           {/* effect legend during playout */}
-          {step === 'watch' && (
+          {phase === 'watch' && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', justifyContent: 'center', marginTop: 12 }}>
               {[['💧', 'DRIP'], ['💥', 'NUKE'], ['🩸', 'ERASE'], ['🗑️', 'POWER-UP'], ['❄️', 'EMP'], ['◇', 'COIN']].map(([icon, label]) => (
                 <span key={label} className="mono" style={{ fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--faint)' }}>{icon} {label}</span>
@@ -449,6 +532,11 @@ export function DemoBoard() {
             <button onClick={() => setFaq(true)} className="mono" style={linkBtn}>Read the FAQ</button>
           </div>
         </div>
+
+        {/* the opponent's full roster — visible pool, sealed picks (desktop, setup only) */}
+        {phase === 'setup' && !narrow && (
+          <RosterAside side="their" pools={oppPools} picks={{}} phase="setup" sealed collapsed={!rosterOpen.their} onToggle={() => setRosterOpen((o) => ({ ...o, their: !o.their }))} bye={byeTheir} week={DEMO_WEEK} />
+        )}
       </main>
 
       {/* persistent "More demo?" bar — the identity ask, always one glance away */}
@@ -473,6 +561,16 @@ export function DemoBoard() {
         </div>
       </div>
 
+      {/* hero-board modals: tap-a-spot player picker + opponent-pool scout */}
+      {pickerSlot && (
+        <PlayerPicker
+          win={pickerSlot.win} week={DEMO_WEEK} players={youPools[pickerSlot.win] ?? []} currentId={picks[pickerSlot.key]?.playerId}
+          onPick={(id) => assignToSlot(pickerSlot.key, id)}
+          onRemove={() => { clearSlot(pickerSlot.key); setPickerSlot(null); }}
+          onClose={() => { setPickerSlot(null); setSelSlot(null); }}
+        />
+      )}
+      {scoutWin && <ScoutModal win={scoutWin} week={DEMO_WEEK} pool={oppPools[scoutWin] ?? []} oppName={oppTeam.name} onClose={() => setScoutWin(null)} />}
       {requesting && <RequestCodeModal initialPlatform={sleeperUser ? 'Sleeper' : ''} onClose={() => setRequesting(false)} />}
       {faq && <Faq onClose={() => setFaq(false)} />}
     </div>
@@ -508,9 +606,9 @@ function MetricChip({ pos, metricId }: { pos: Player['pos']; metricId: string | 
   );
 }
 
-function SlotRow({ slot, state, you, their, featured, frozen, armedPu }: {
+function SlotRow({ slot, state, you, their, frozen, armedPu }: {
   slot: ResolvedSlot; state: 'upcoming' | 'live' | 'final'; you: number; their: number;
-  featured?: boolean; frozen?: boolean; armedPu?: { icon: string; name: string };
+  frozen?: boolean; armedPu?: { icon: string; name: string };
 }) {
   const sealed = state === 'upcoming'; // opponent picks + metrics unseal at kickoff
   const side = (who: 'you' | 'their') => {
@@ -544,7 +642,7 @@ function SlotRow({ slot, state, you, their, featured, frozen, armedPu }: {
     );
   };
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--bd)', ...(featured ? { boxShadow: 'inset 3px 0 0 var(--you), 0 0 0 1px color-mix(in srgb, var(--you) 35%, transparent)', background: 'color-mix(in srgb, var(--you) 6%, transparent)' } : {}) }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--bd)' }}>
       {side('you')}
       <div className="mono" style={{ flex: 'none', minWidth: 68, textAlign: 'center' }}>
         {state === 'upcoming'
@@ -566,5 +664,4 @@ const stateChip: React.CSSProperties = { fontSize: 8, fontWeight: 700, letterSpa
 const ctlBtn: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 14px', cursor: 'pointer' };
 const miniBtn: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 5, padding: '5px 9px', cursor: 'pointer' };
 const cta: React.CSSProperties = { width: '100%', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 7, padding: '12px 0', cursor: 'pointer' };
-const tick: React.CSSProperties = { flex: 'none', fontSize: 13, fontWeight: 700, color: 'var(--you)' };
 const optCard = (on: boolean): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left', background: on ? 'color-mix(in srgb, var(--you) 9%, var(--surface))' : 'var(--surface)', border: `1.5px solid ${on ? 'var(--you)' : 'var(--bd)'}`, boxShadow: on ? '0 0 0 3px color-mix(in srgb, var(--you) 14%, transparent)' : 'none', transition: 'all .15s' });
