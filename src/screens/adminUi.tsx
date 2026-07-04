@@ -19,6 +19,20 @@ export function Muted({ text }: { text: string }) {
   return <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)' }}>{text}</div>;
 }
 
+/** Human-readable message from ANY thrown value. supabase-js network failures
+ *  reject with a plain object (not an Error), so `instanceof Error` checks were
+ *  collapsing the real cause into a generic fallback — read `.message` off
+ *  whatever we got, and stringify the rest rather than hide it. */
+export function errMsg(e: unknown, fallback = 'failed'): string {
+  if (e instanceof Error) return e.message || fallback;
+  if (e && typeof e === 'object') {
+    const m = (e as { message?: unknown }).message;
+    if (m) return String(m);
+    try { return JSON.stringify(e); } catch { return fallback; }
+  }
+  return e ? String(e) : fallback;
+}
+
 export interface TabDef<T extends string = string> { id: T; label: string; badge?: number }
 
 /** Underline-style tab strip. Scrolls horizontally on narrow screens instead of

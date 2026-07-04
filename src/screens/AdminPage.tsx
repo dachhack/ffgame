@@ -19,7 +19,7 @@ import { slugMeta } from '../data/slugMeta';
 import { isMarkFree, setMarkFree } from '../data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '../data/liveApi';
 import { POWERUPS } from '../data/powerups';
-import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, type TabDef } from './adminUi';
+import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, errMsg, type TabDef } from './adminUi';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
 
@@ -81,12 +81,12 @@ function PremiumTierPanel() {
   const [tier, setTier] = useState<PremiumTier | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { getPremiumTier().then(setTier).catch((e) => setErr(e instanceof Error ? e.message : 'load failed')); }, []);
+  useEffect(() => { getPremiumTier().then(setTier).catch((e) => setErr(errMsg(e, 'load failed'))); }, []);
 
   const save = async (next: PremiumTier) => {
     setTier(next); setBusy(true); setErr(null);
     try { const r = await adminSetPremiumTier(next.free_positions, next.free_powerups); if (!r.ok) setErr(r.error ?? 'save failed'); }
-    catch (e) { setErr(e instanceof Error ? e.message : 'save failed'); }
+    catch (e) { setErr(errMsg(e, 'save failed')); }
     finally { setBusy(false); }
   };
   const flip = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
@@ -127,12 +127,19 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
   // Open code-request count — badges the Requests tab so new ones aren't missed.
   const [pendingReqs, setPendingReqs] = useState(0);
 
+  // Each section loads independently: one failing RPC must not blank the others
+  // (leagues used to vanish when a later call threw), and failures surface with
+  // their real message + which call produced it.
   const load = async () => {
-    try {
-      setLeagues(await adminOverview()); setOverrides(await adminOverrides()); setAudit(await adminAudit(60));
-      adminCodeRequests().then((rs) => setPendingReqs(rs.filter((r) => !r.handled).length)).catch(() => {});
-      setErr(null);
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Load failed.'); setLeagues([]); }
+    const [ov, ors, au] = await Promise.allSettled([adminOverview(), adminOverrides(), adminAudit(60)]);
+    if (ov.status === 'fulfilled') setLeagues(ov.value); else setLeagues((cur) => cur ?? []);
+    if (ors.status === 'fulfilled') setOverrides(ors.value);
+    if (au.status === 'fulfilled') setAudit(au.value);
+    const parts = [['overview', ov], ['overrides', ors], ['audit', au]] as const;
+    const errs = parts.filter(([, r]) => r.status === 'rejected')
+      .map(([name, r]) => `${name}: ${errMsg((r as PromiseRejectedResult).reason, 'failed')}`);
+    setErr(errs.length ? errs.join(' · ') : null);
+    adminCodeRequests().then((rs) => setPendingReqs(rs.filter((r) => !r.handled).length)).catch(() => {});
   };
   useEffect(() => { load(); }, []);
 
@@ -155,7 +162,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
         </div>
         <button onClick={load} className="mono" style={{ ...linkBtn, flexShrink: 0 }}>↻ refresh</button>
       </div>
-      {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', marginBottom: 10 }}>{err}</div>}
+      {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', marginBottom: 10, lineHeight: 1.5, wordBreak: 'break-word' }}>⚠ {err}</div>}
 
       <TabBar tabs={tabs} active={tab} onSelect={setTab} style={{ marginBottom: 14 }} />
 
@@ -263,7 +270,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
     if (running) return;
     setRunning(true); setBusy(label);
     try { setBusy(await fn()); await loadM(); }
-    catch (e) { setBusy(e instanceof Error ? e.message : `${label} failed`); }
+    catch (e) { setBusy(errMsg(e, `${label} failed`)); }
     finally { setRunning(false); }
   };
   const resolve = (id: string) => run('resolve', async () => { await forceResolve(id, Number(srcWeek)); return '✓ resolved from 2025'; });
@@ -339,7 +346,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
         ? await syncEspnSeason(l.league_id, stripProvider(l.sleeper_league_id), l.season)
         : await (async () => { let pairs = 0; for (let w = 1; w <= 14; w++) pairs += (await syncWeek(l.league_id, l.sleeper_league_id, w)).pairs; return { weeks: 14, pairs }; })();
       setBusy(`✓ ${r.weeks} weeks · ${r.pairs} matchups`); setTab('matchups'); await loadM();
-    } catch (e) { setBusy(e instanceof Error ? e.message : 'sync failed'); }
+    } catch (e) { setBusy(errMsg(e, 'sync failed')); }
   };
   const regen = async (which: 'invite' | 'commish') => {
     if (!confirm(`Regenerate the ${which} code? The old one stops working.`)) return;
@@ -636,7 +643,7 @@ function ImportLeague({ reload }: { reload: () => void }) {
       if (espn) { const r = await importEspnSeason(sid.trim(), season.trim() || '2026', { swid: swid.trim() || undefined, s2: s2.trim() || undefined }); setMsg(`✓ imported · ${r.weeks} weeks scheduled`); }
       else { await importLeague(sid.trim(), season.trim() || '2026'); setMsg('✓ imported'); }
       setSid(''); reload();
-    } catch (e) { setMsg(e instanceof Error ? e.message : 'import failed'); }
+    } catch (e) { setMsg(errMsg(e, 'import failed')); }
     finally { setBusy(false); }
   };
   const pill = (p: 'sleeper' | 'espn', label: string) => (
@@ -747,7 +754,7 @@ function CodeRequestRow({ r, leagues, onToggle, reloadLeagues }: { r: CodeReques
       const newId = typeof res === 'string' ? res : res.leagueId;
       await reloadLeagues();
       setLeagueId(newId); setKind('commish'); setSent(false);
-    } catch (e) { setErr(e instanceof Error ? e.message : 'import failed'); }
+    } catch (e) { setErr(errMsg(e, 'import failed')); }
     finally { setImporting(false); }
   };
 
@@ -1086,7 +1093,7 @@ function AdminMatchupBoard({ matchupId, onClose }: { matchupId: string; onClose:
     let alive = true;
     const load = async () => {
       try { const d = await adminMatchupBoard(matchupId); if (alive) { setB(d); setErr(null); } }
-      catch (e) { if (alive) setErr(e instanceof Error ? e.message : 'load failed'); }
+      catch (e) { if (alive) setErr(errMsg(e, 'load failed')); }
     };
     load();
     const t = setInterval(load, 2500);
@@ -1206,7 +1213,7 @@ const ago = (iso: string | null): string => {
 function HealthPanel() {
   const [hp, setHp] = useState<AdminHealth | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const load = async () => { try { setHp(await adminHealth()); setErr(null); } catch (e) { setErr(e instanceof Error ? e.message : 'load failed'); } };
+  const load = async () => { try { setHp(await adminHealth()); setErr(null); } catch (e) { setErr(errMsg(e, 'load failed')); } };
   useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, []);
   const liveOn = (hp?.live_matchups ?? 0) > 0;
   // While games are live, a >90s gap since the last play ingest is suspicious.
@@ -1250,7 +1257,7 @@ const SIDE_STATUS = (s: PickSide): { label: string; color: string } => {
 function PickReadinessTab({ leagueId, week, admin }: { leagueId: string; week: number; admin: boolean }) {
   const [rows, setRows] = useState<PickReadiness[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const load = async () => { try { setRows(await adminPickReadiness(leagueId, week)); } catch (e) { setBusy(e instanceof Error ? e.message : 'load failed'); } };
+  const load = async () => { try { setRows(await adminPickReadiness(leagueId, week)); } catch (e) { setBusy(errMsg(e, 'load failed')); } };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [leagueId, week]);
 
   const autofill = async (m: PickReadiness, side: 'home' | 'away') => {
@@ -1269,7 +1276,7 @@ function PickReadinessTab({ leagueId, week, admin }: { leagueId: string; week: n
       if (!out.length) { setBusy('no synced lineup to autofill (run sync week)'); return; }
       const r = await adminSetPicks(m.matchup_id, s.app_user_id, out);
       setBusy(r.ok ? `✓ filled ${r.count} picks for ${s.team}` : (r.error ?? 'failed')); await load();
-    } catch (e) { setBusy(e instanceof Error ? e.message : 'autofill failed'); }
+    } catch (e) { setBusy(errMsg(e, 'autofill failed')); }
   };
   const clear = async (m: PickReadiness, side: 'home' | 'away') => {
     const s = side === 'home' ? m.home : m.away;
@@ -1277,14 +1284,14 @@ function PickReadinessTab({ leagueId, week, admin }: { leagueId: string; week: n
     if (!confirm(`Clear ${s.team}'s picks for this matchup?`)) return;
     setBusy('clear…');
     try { await adminClearPicks(m.matchup_id, s.app_user_id); setBusy(`✓ cleared ${s.team}`); await load(); }
-    catch (e) { setBusy(e instanceof Error ? e.message : 'clear failed'); }
+    catch (e) { setBusy(errMsg(e, 'clear failed')); }
   };
   const toggleAi = async (m: PickReadiness, side: 'home' | 'away') => {
     const s = side === 'home' ? m.home : m.away;
     const next: Controller = s.controller === 'ai' ? 'human' : 'ai';
     setBusy('ai…');
     try { const r = await setTeamController(leagueId, s.roster_id, next); setBusy(r.ok ? `✓ ${s.team} → ${next}` : (r.error ?? 'failed')); await load(); }
-    catch (e) { setBusy(e instanceof Error ? e.message : 'ai toggle failed'); }
+    catch (e) { setBusy(errMsg(e, 'ai toggle failed')); }
   };
 
   const sideRow = (m: PickReadiness, side: 'home' | 'away') => {
