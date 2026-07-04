@@ -9,7 +9,7 @@
 // Three exports: FieldView (one team's game), SlotFieldViews (a slot's one-or-
 // two games, collapsible), FieldBoard (full-screen grid of EVERY slotted game,
 // with plays tinted by whose roster made them — you vs opponent).
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed } from '../data/gameFeed';
 import { isPreseasonWeek, preseasonWeekNum } from '../data/nflSlate';
 import { teamLogo } from '../data/media';
@@ -111,6 +111,16 @@ export function FieldBoard({ week, entries, onClose }: { week: number; entries: 
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  // Follow mode: when a new play lands on any field, scroll that field into
+  // view so you're not hunting up and down the grid. Sticky via localStorage.
+  const [follow, setFollow] = useState(() => { try { return localStorage.getItem('dripFieldFollow') === '1'; } catch { return false; } });
+  const toggleFollow = () => setFollow((f) => { const n = !f; try { localStorage.setItem('dripFieldFollow', n ? '1' : '0'); } catch { /* ignore */ } return n; });
+  const cardRefs = useRef(new Map<string, HTMLDivElement>());
+  const lastSeen = useRef<Map<string, number> | null>(null); // game key → visible-play count
+  const lastScrollAt = useRef(0);
+  const lastTarget = useRef<string | null>(null);
+  const [focusKey, setFocusKey] = useState<string | null>(null); // brief highlight on the followed card
+
   // Group entries by NFL game; per game take the furthest clock and build the
   // pid → side index from each slotted player's real plays (pids are unique
   // within a game, and each group only indexes players in that game).
@@ -128,6 +138,41 @@ export function FieldBoard({ week, entries, onClose }: { week: number; entries: 
     return [...m.values()];
   }, [entries, week, feedLoaded]);
 
+  // Detect a play landing: per game, count the plays at/under its clock; when
+  // that count grows, the newest of those plays just became visible. Scroll to
+  // the game with the "biggest" fresh play (a score wins, else the latest by
+  // game clock), with a cooldown so a burst of ticks doesn't thrash the page.
+  // The first pass only seeds the counts — opening the board never scrolls.
+  useEffect(() => {
+    const counts = new Map<string, number>();
+    for (const g of games) {
+      let n = 0;
+      for (const p of g.feed.plays) { if (p.c <= g.clock) n++; else break; }
+      counts.set(g.feed.key, n);
+    }
+    const prev = lastSeen.current;
+    lastSeen.current = counts;
+    if (!prev || !follow) return;
+    // Games that just landed a play, scores first (a TD/FG always wins focus);
+    // otherwise rotate away from the game we last jumped to, so when several
+    // games land plays together the attention cycles instead of pinning to one.
+    const landed = games
+      .map((g) => ({ key: g.feed.key, n: counts.get(g.feed.key) ?? 0, prev: prev.get(g.feed.key) ?? 0, plays: g.feed.plays }))
+      .filter((x) => x.n > x.prev)
+      .map((x) => ({ key: x.key, sc: !!x.plays[x.n - 1]?.sc }));
+    if (!landed.length || Date.now() - lastScrollAt.current < 1500) return;
+    // Round-robin: continue from wherever we last jumped, so every landing
+    // field gets visited in turn instead of the grid's first one winning.
+    const score = landed.find((x) => x.sc);
+    const after = landed.findIndex((x) => x.key === lastTarget.current);
+    const target = (score ?? landed[(after + 1) % landed.length]).key;
+    lastScrollAt.current = Date.now();
+    lastTarget.current = target;
+    cardRefs.current.get(target)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setFocusKey(target);
+    window.setTimeout(() => setFocusKey((cur) => (cur === target ? null : cur)), 1800);
+  }, [games, follow]);
+
   const dot = (color: string, label: string) => (
     <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)' }}>
       <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />{label}
@@ -138,7 +183,14 @@ export function FieldBoard({ week, entries, onClose }: { week: number; entries: 
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
           <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--text)' }}>▦ ALL GAMES · {isPreseasonWeek(week) ? `PRESEASON WK ${preseasonWeekNum(week)}` : `WEEK ${week}`}</span>
-          <button onClick={onClose} className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 12px' }}>✕ CLOSE</button>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button onClick={toggleFollow} className="mono" aria-pressed={follow}
+              title="auto-scroll to the field where the newest play just landed"
+              style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: follow ? 'var(--on-accent)' : 'var(--dim)', background: follow ? 'var(--you)' : 'var(--surface)', border: `1px solid ${follow ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '6px 12px' }}>
+              {follow ? '◉ FOLLOW: ON' : '○ FOLLOW PLAYS'}
+            </button>
+            <button onClick={onClose} className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 12px' }}>✕ CLOSE</button>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 14, marginBottom: 10 }}>
           {dot('var(--you)', 'SCORED FOR YOU')}
@@ -150,11 +202,15 @@ export function FieldBoard({ week, entries, onClose }: { week: number; entries: 
         )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 350px), 1fr))', gap: 10 }}>
           {games.map((g) => (
-            <Field key={g.feed.key} feed={g.feed} clock={g.clock} pidSide={(pid) => {
-              if (pid == null) return null;
-              const y = g.you.has(pid), t = g.their.has(pid);
-              return y && t ? 'both' : y ? 'you' : t ? 'their' : null;
-            }} />
+            <div key={g.feed.key}
+              ref={(el) => { if (el) cardRefs.current.set(g.feed.key, el); else cardRefs.current.delete(g.feed.key); }}
+              style={{ borderRadius: 6, outline: focusKey === g.feed.key ? '2px solid var(--you)' : '2px solid transparent', outlineOffset: 2, transition: 'outline-color .4s ease' }}>
+              <Field feed={g.feed} clock={g.clock} pidSide={(pid) => {
+                if (pid == null) return null;
+                const y = g.you.has(pid), t = g.their.has(pid);
+                return y && t ? 'both' : y ? 'you' : t ? 'their' : null;
+              }} />
+            </div>
           ))}
         </div>
       </div>
