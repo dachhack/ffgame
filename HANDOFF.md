@@ -1,6 +1,20 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-04 · Build `v0.93.0`_
+_Last updated: 2026-07-04 · Build `v0.94.0`_
+
+## Demo watch phase: expandable LOG & FIELD per duel (v0.94.0)
+Every duel row on the demo board expands once its window kicks off: a
+centered `▾ LOG & FIELD` chip under the row opens `DuelLog` (the GuidedDemo
+two-sided play log — scoring plays, effects, 🗑️×2 buff notes, ◇ coin —
+revealed to the window clock, auto-scrolling while live) plus
+`SlotFieldViews` (the real board's drive charts, both players' games, own
+⬢ FIELD collapse). Live windows sample at `wClock`, final windows at that
+window's max clock, so logs/fields stay browsable after FINAL. The featured
+(first-placed) duel's panel auto-opens at RUN (`openSlots` seeded in `run()`).
+Sealed windows don't expand. Ops note: the v0.93.0 Pages deploy failed with a
+transient GitHub "Deployment failed, try again later" AFTER a green build —
+the token can't rerun Actions jobs (403), so the fix is the repo's usual
+fresh-SHA-to-main re-trigger (v0.93.1 was exactly that).
 
 ## Demo landing sets up like the hero board (v0.93.0)
 The demo landing's "pick your star" wizard is gone — setup is now the REAL
