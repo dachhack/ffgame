@@ -3,7 +3,7 @@ import { SleeperHandoff } from './SleeperHandoff';
 
 // Presentational chrome shared by the two demo views. The narrated controls +
 // end-card sit UNDER the real in-game live board (Matchup demo mode); the view
-// toggle lets a viewer flip between the clean simulation (GuidedDemo) and the
+// toggle lets a viewer flip between the clean simulation (DemoBoard) and the
 // authentic board so they see both "how it's taught" and "how it'll play".
 
 type DemoView = 'clean' | 'board';

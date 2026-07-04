@@ -12,7 +12,7 @@ import { ProviderConnect } from './screens/ProviderConnect';
 import { YahooConnect } from './screens/YahooConnect';
 import { yahooExchange } from './data/providers/yahooClient';
 import { LiveOnboard } from './screens/LiveOnboard';
-import { GuidedDemo } from './screens/GuidedDemo';
+import { DemoBoard } from './screens/DemoBoard';
 import { RequestCodeFab } from './screens/RequestCode';
 import { DEMO_WEEK } from './config';
 
@@ -72,7 +72,7 @@ export function App() {
       {route.name === 'live' && <LiveOnboard />}
       {route.name === 'demo' && (route.view === 'board'
         ? <Matchup key="demo-board" week={DEMO_WEEK} initialPhase="setup" demo />
-        : <GuidedDemo />)}
+        : <DemoBoard />)}
       {route.name === 'leagues' && <Leagues />}
       {route.name === 'sleeperLeague' && <SleeperLeague key={route.leagueId} leagueId={route.leagueId} leagueName={route.leagueName} />}
       {route.name === 'connect' && (route.provider === 'yahoo'
@@ -84,8 +84,9 @@ export function App() {
       {route.name === 'final' && <MatchupFinal key={`f${route.week}-${youTeamId}`} week={route.week} />}
       {/* Persistent "out" across the funnel — request a pilot code for your league.
           Hidden inside the live pilot itself (you're already in), on the hero board
-          (a real pilot matchup), and on splash (its own "request an invite" link). */}
-      {route.name !== 'live' && route.name !== 'splash' && !liveCtx && !loggedIn && <RequestCodeFab />}
+          (a real pilot matchup), on splash (its own "request an invite" link), and
+          on the demo landing (it carries its own request-a-code CTA). */}
+      {route.name !== 'live' && route.name !== 'splash' && !(route.name === 'demo' && route.view !== 'board') && !liveCtx && !loggedIn && <RequestCodeFab />}
     </div>
   );
 }

@@ -3,5 +3,5 @@
 // genuine 2025 season; weeks before this read as completed, this week is the
 // one you actively set a lineup for. The demo's identity is sanitized — see
 // the Drip Test League re-skin in data/league.ts.
-export const DEMO_WEEK = 4;
+export const DEMO_WEEK = 2;
 export const SLEEPER_HANDLE = 'tacotuesday';

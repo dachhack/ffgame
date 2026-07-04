@@ -70,6 +70,8 @@ Implemented now (`src/app/analytics.ts`, `Ev.*`, wired in `src/app/store.tsx`):
 | `league_opened {live, teams}` | `loadSimLeague` | activation |
 | `lineup_set {week, slots}` | `setLineup` | **activation** |
 | `powerup_bought {id, price}` | `buyPowerup` | engagement |
+| `demo_step {step}` | `DemoBoard` — advanced a guided decision step | acquisition |
+| `demo_run {star, metric, powerup}` | `DemoBoard` — hit RUN on the landing demo | acquisition |
 
 To add as the gating/paywall ships (constants already defined):
 | Event | Fire when |
