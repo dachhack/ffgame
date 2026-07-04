@@ -19,6 +19,8 @@ import { DemoViewToggle } from './DemoOverlay';
 import { track, Ev } from '../app/analytics';
 import type { Pick, Player, WindowId } from '../types';
 
+const actionText = (play: string) => play.replace(/^[A-Z]{2,3}( D| TD)?:\s*/, '');
+
 // The logged-out landing page IS the demo: one Drip Test League board (Week 2,
 // Taco Time Titans vs Beach Day Ballers) that sets up EXACTLY like the hero
 // board — both full rosters on the rails, drag (or tap) a player onto a spot,
@@ -84,8 +86,11 @@ export function DemoBoard() {
   // starts collapsed to keep the board within a swipe.
   const [rosterOpen, setRosterOpen] = useState(() => ({ you: true, their: !window.matchMedia('(max-width:920px)').matches }));
   const [chosenBuff, setChosenBuff] = useState('garbage-time');
-  // The viewer's FIRST placement is the featured duel (field view + EMP target).
+  // The viewer's FIRST placement is the featured duel (auto-opened log/field +
+  // EMP target).
   const [featuredId, setFeaturedId] = useState<string | null>(null);
+  // Per-slot expanded LOG & FIELD panels during the watch phase.
+  const [openSlots, setOpenSlots] = useState<Record<string, boolean>>({});
   const armedPu = POWER_OPTIONS.find((p) => p.id === chosenBuff);
 
   // Keep each window filled top-down (spot 2 never filled while spot 1 is empty).
@@ -163,7 +168,13 @@ export function DemoBoard() {
   const run = () => {
     if (!canRun) return;
     track(Ev.demoRun, { placed: placedN, powerup: chosenBuff });
-    setRunPicks(autoFill(picks));
+    const fp = autoFill(picks);
+    setRunPicks(fp);
+    // Auto-open the featured duel's LOG & FIELD panel so the deepest view is
+    // on display without a tap.
+    const fid = featuredId && Object.values(fp).some((p) => p.playerId === featuredId) ? featuredId : Object.values(fp)[0]?.playerId;
+    const fkey = Object.entries(fp).find(([, p]) => p.playerId === fid)?.[0];
+    setOpenSlots(fkey ? { [fkey]: true } : {});
     setWIdx(0); setWClock(0); setEnded(false); setPlaying(true); setPhase('watch');
   };
   const replay = () => { setWIdx(0); setWClock(0); setEnded(false); setPlaying(true); };
@@ -378,19 +389,36 @@ export function DemoBoard() {
           </div>
         ) : (
           rslots.map((s) => {
+            const key = slotKey(w.id, s.slotIndex);
             const b = slotBanks(s, st);
             const isFeatured = isFeatWin && s.slotIndex === featuredSlot?.slotIndex;
+            // Once a window has kicked off, every duel expands into its play
+            // log + the live field(s) — the same depth as the real board.
+            const canOpen = st !== 'upcoming' && s.events.length > 0;
+            const open = canOpen && !!openSlots[key];
+            const winClock = st === 'live' ? wClock : winMaxes[i] ?? 0;
             return (
-              <SlotRow key={s.slotIndex} slot={s} state={st} you={b.you} their={b.their}
-                frozen={isFeatured && frozen} armedPu={isFeatured ? armedPu : undefined} />
+              <div key={key} style={{ borderBottom: '1px solid var(--bd)' }}>
+                <SlotRow slot={s} state={st} you={b.you} their={b.their} noBorder
+                  frozen={isFeatured && frozen} armedPu={isFeatured ? armedPu : undefined} />
+                {canOpen && (
+                  <div style={{ padding: '0 12px 8px' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <button onClick={() => setOpenSlots((o) => ({ ...o, [key]: !open }))} className="mono" style={{ background: 'none', border: 'none', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: open ? 'var(--you)' : 'var(--faint)', cursor: 'pointer', padding: '2px 8px' }}>
+                        {open ? '▴ HIDE LOG & FIELD' : '▾ LOG & FIELD'}
+                      </button>
+                    </div>
+                    {open && (
+                      <>
+                        <DuelLog slot={s} clock={winClock} live={st === 'live'} />
+                        <SlotFieldViews week={DEMO_WEEK} youTeam={s.you?.player.team} theirTeam={s.their?.player.team} youClock={winClock} theirClock={winClock} />
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             );
           })
-        )}
-        {/* the featured duel's live field — the same drive chart as the real board */}
-        {phase === 'watch' && isFeatWin && st === 'live' && featuredSlot?.slot.you && featuredSlot.slot.their && (
-          <div style={{ padding: '0 10px 10px' }}>
-            <SlotFieldViews week={DEMO_WEEK} youTeam={featuredSlot.slot.you.player.team} theirTeam={featuredSlot.slot.their.player.team} youClock={wClock} theirClock={wClock} />
-          </div>
         )}
       </div>
     );
@@ -606,9 +634,48 @@ function MetricChip({ pos, metricId }: { pos: Player['pos']; metricId: string | 
   );
 }
 
-function SlotRow({ slot, state, you, their, frozen, armedPu }: {
+// Two-sided play log for one duel — scoring plays, effects, power-up notes and
+// coin, revealed up to the window's clock (the GuidedDemo log, per slot).
+function DuelLog({ slot, clock, live }: { slot: ResolvedSlot; clock: number; live: boolean }) {
+  const logRef = useRef<HTMLDivElement>(null);
+  const rows = slot.events.filter((e) => e.clock <= clock && (e.delta > 0 || e.effect || e.coin || e.sig || e.buffNote));
+  useEffect(() => { if (live) logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' }); }, [rows.length, live]);
+  return (
+    <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 7, padding: '8px 10px', marginTop: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
+        <span className="mono" style={{ flex: 1, fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.you?.player.name.toUpperCase() ?? ''}</span>
+        <span className="mono" style={{ minWidth: 34, textAlign: 'center', fontSize: 7.5, color: 'var(--faint)' }}>CLOCK</span>
+        <span className="mono" style={{ flex: 1, fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--opp)', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.their?.player.name.toUpperCase() ?? ''}</span>
+      </div>
+      <div ref={logRef} style={{ maxHeight: 140, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {rows.length === 0 && <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', textAlign: 'center', padding: '4px 0' }}>scoring plays appear here…</div>}
+        {rows.map((e, ri) => {
+          const mine = e.side === 'you';
+          const cell = (
+            <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5, flexDirection: mine ? 'row-reverse' : 'row', maxWidth: '100%', overflow: 'hidden' }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: mine ? 'var(--you)' : 'var(--opp)' }}>{actionText(e.play)}</span>
+              {e.delta > 0 && <span style={{ color: 'var(--text)', fontWeight: 700 }}>+{e.delta.toFixed(1)}</span>}
+              {e.effect && <span style={{ color: FX_COLOR[e.effect.type] ?? 'var(--text)', fontWeight: 700 }}>{e.effect.type.toUpperCase()}</span>}
+              {e.buffNote && <span style={{ color: 'var(--fx-streak, #36D399)', fontWeight: 700 }}>🗑️×2</span>}
+              {e.coin && <span style={{ color: 'var(--you)' }}>◇</span>}
+            </span>
+          );
+          return (
+            <div key={ri} className="mono" style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 9 }}>
+              <span style={{ flex: 1, minWidth: 0, textAlign: 'right' }}>{mine ? cell : ''}</span>
+              <span style={{ minWidth: 34, textAlign: 'center', color: 'var(--faint)' }}>{fmtClock(e.clock)}</span>
+              <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>{!mine ? cell : ''}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SlotRow({ slot, state, you, their, frozen, armedPu, noBorder }: {
   slot: ResolvedSlot; state: 'upcoming' | 'live' | 'final'; you: number; their: number;
-  frozen?: boolean; armedPu?: { icon: string; name: string };
+  frozen?: boolean; armedPu?: { icon: string; name: string }; noBorder?: boolean;
 }) {
   const sealed = state === 'upcoming'; // opponent picks + metrics unseal at kickoff
   const side = (who: 'you' | 'their') => {
@@ -642,7 +709,7 @@ function SlotRow({ slot, state, you, their, frozen, armedPu }: {
     );
   };
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--bd)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: noBorder ? 'none' : '1px solid var(--bd)' }}>
       {side('you')}
       <div className="mono" style={{ flex: 'none', minWidth: 68, textAlign: 'center' }}>
         {state === 'upcoming'
