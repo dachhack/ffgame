@@ -1,6 +1,34 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-03 · Build `v0.89.0`_
+_Last updated: 2026-07-04 · Build `v0.92.0`_
+
+## The demo IS the landing page (v0.92.0)
+Logged-out onboarding collapsed to one screen: `src/screens/DemoBoard.tsx`
+replaces `GuidedDemo.tsx` as the `demo` route's clean view AND becomes the boot
+route for logged-out visitors (`store.tsx` initial route: dripLive → `live`,
+remembered Sleeper user → `leagues`, else → `demo`; popstate fallback → `demo`).
+- **One playable board, zero gate**: the Drip Test League **Week 2** matchup
+  (`DEMO_WEEK = 2` in `config.ts` — Taco Time Titans vs Beach Day Ballers), a
+  tight version of the hero board: all 5 windows with real slate times + game
+  counts, both lineups (opponent picks render 🔒 SEALED until their window
+  kicks off), metric chips, unopposed-backup teaching text.
+- **Three guided decisions, everything else defaulted**: pick a star (best
+  contested duel per position, top 3) → seal his hidden metric → arm a power-up
+  (Garbage Time / EMP / Momentum) → `▶ RUN WEEK 2`. Playout is
+  window-SEQUENCED (TNF → … → MNF, ~50s at 1×), narrated by `demoNarration`
+  beats per live window, with `SlotFieldViews` under the featured duel and a
+  score header that ticks live. Backup (unopposed) slots bank 0 during
+  playout so the total never visibly drops when the engine zeroes them at
+  FINAL. End card = result + bonuses + the two conversion CTAs.
+- **Persistent CTAs per the onboarding spec**: a fixed bottom "MORE DEMO?"
+  bar (Sleeper username → `leagues` flow, same logic as Splash), a standing
+  "Request a code for your league" card (→ `RequestCodeModal`; the global
+  `RequestCodeFab` is hidden on this screen), and small `sign in · FAQ` in the
+  header + footer. `Splash.tsx` still exists (reachable) but is no longer the
+  landing. New analytics: `demo_step` / `demo_run` (see analytics-plan.md).
+- FAQ copy updated (demo opens Week 2, not Week 4). Verified end-to-end
+  headlessly (vite preview + Chromium): land → 3 steps → run → FINAL
+  100.8–36.3 → CTAs all functional.
 
 ## Field visuals in the demo flow + lean live board (v0.89.0)
 - **Guided demo** (`GuidedDemo.tsx` watch step): `SlotFieldViews` renders the

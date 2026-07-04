@@ -179,11 +179,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Boot straight into the app for returning users, skipping the demo funnel:
   //   • a signed-in live user (dripLive flag) → their leagues (Live onboard home),
   //   • else a remembered Sleeper user → the Sleeper demo leagues,
-  //   • else the welcome splash.
+  //   • else the playable demo board (the logged-out landing page).
   // The ?live=1 / OAuth deep links in App.tsx still override this after mount.
   const [route, setRoute] = useState<Route>(() => {
     try { if (localStorage.getItem('dripLive') === '1') return { name: 'live' }; } catch { /* ignore */ }
-    return sleeperUser ? { name: 'leagues' } : { name: 'splash' };
+    // First-time (logged-out) visitors land straight on the playable demo board
+    // — the demo IS the landing page. Returning Sleeper users skip to leagues.
+    return sleeperUser ? { name: 'leagues' } : { name: 'demo' };
   });
   // Browser back/forward: mirror each route into history state (URL unchanged) so the
   // back button steps between in-app screens instead of dead-ending / leaving the site.
@@ -194,7 +196,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
   useEffect(() => {
     try { window.history.replaceState({ __route: route }, ''); } catch { /* ignore */ }
-    const onPop = (e: PopStateEvent) => { setRoute(((e.state as { __route?: Route } | null)?.__route) ?? { name: 'splash' }); };
+    const onPop = (e: PopStateEvent) => { setRoute(((e.state as { __route?: Route } | null)?.__route) ?? { name: 'demo' }); };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
     // eslint-disable-next-line react-hooks/exhaustive-deps

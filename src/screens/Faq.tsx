@@ -102,8 +102,8 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
         },
         {
           q: 'What NFL season and weeks does the demo cover?',
-          a: <>The real 2025 NFL regular season — 14 weeks. The demo opens on <b>Week 4</b>: weeks 1–3 are already in the books, and
-            Week 4 is the live one you set a lineup for and watch resolve. Every stat, score and schedule entry is genuine 2025 data.</>,
+          a: <>The real 2025 NFL regular season — 14 weeks. The demo opens on <b>Week 2</b>: week 1 is already in the books, and
+            Week 2 is the live one you set a lineup for and watch resolve. Every stat, score and schedule entry is genuine 2025 data.</>,
         },
         {
           q: 'Whose league is the demo based on?',

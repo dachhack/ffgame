@@ -22,6 +22,9 @@ export const Ev = {
   screenView: 'screen_view',
   leagueOpened: 'league_opened',
   lineupSet: 'lineup_set',
+  // guided demo funnel (the logged-out landing board)
+  demoStep: 'demo_step',   // {step:'metric'|'power'} — advanced a decision step
+  demoRun: 'demo_run',     // {star, metric, powerup} — hit RUN on the demo board
   powerupBought: 'powerup_bought',
   // premium funnel (docs/premium-model.md; fire once the gating + entitlements ship)
   gatedFeatureAttempted: 'gated_feature_attempted', // tried K/DST/IDP/locked power-up → premium INTENT
