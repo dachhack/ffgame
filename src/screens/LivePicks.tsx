@@ -12,6 +12,7 @@ import {
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
 } from '../data/liveApi';
 import { powerupById } from '../data/powerups';
+import { PuIcon, GameIcon, COIN_GOLD } from '../app/gameIcons';
 import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } from '../data/premiumClient';
 import { shortName } from '../data/players';
 import type { Player } from '../types';
@@ -340,7 +341,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
         <div style={{ ...card, marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Power-ups</div>
-            <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--you)' }}>◆ {Math.round(coins)} coin</span>
+            <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--you)' }}><GameIcon src={COIN_GOLD} size="1.3em" /> {Math.round(coins)} coin</span>
           </div>
           <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
             Arm before kickoff — each buffs your whole lineup all week, spent from your drip coin. Locks at kickoff.
@@ -365,7 +366,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
                 <button key={id} onClick={() => toggleBuff(id)} disabled={locked || !!buffBusy || !afford} title={pu?.blurb}
                   className="mono"
                   style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : afford ? 'var(--text)' : 'var(--faint)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked || !afford ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : afford ? 1 : 0.5 }}>
-                  {pu?.icon} {pu?.name ?? id} {on ? '✓' : puLocked(id) ? '🔒' : `◆${priceOf(id)}`}
+                  <PuIcon id={id} emoji={pu?.icon} size="1.4em" /> {pu?.name ?? id} {on ? '✓' : puLocked(id) ? '🔒' : <><GameIcon src={COIN_GOLD} size="1.2em" />{priceOf(id)}</>}
                 </button>
               );
             })}
@@ -383,7 +384,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
                 <button key={id} onClick={() => toggleUnlock(id)} disabled={locked || !!buffBusy || !afford} title={pu?.blurb}
                   className="mono"
                   style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : afford ? 'var(--text)' : 'var(--faint)', background: on ? 'var(--streak, var(--you))' : 'var(--bg)', border: `1px solid ${on ? 'var(--streak, var(--you))' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked || !afford ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : afford ? 1 : 0.5 }}>
-                  {pu?.icon} {pu?.name ?? id} {on ? '✓' : puLocked(id) ? '🔒' : `◆${priceOf(id)}`}
+                  <PuIcon id={id} emoji={pu?.icon} size="1.4em" /> {pu?.name ?? id} {on ? '✓' : puLocked(id) ? '🔒' : <><GameIcon src={COIN_GOLD} size="1.2em" />{priceOf(id)}</>}
                 </button>
               );
             })}
@@ -432,7 +433,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
         <div style={{ ...card, marginBottom: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Extra slots</div>
-            <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{extra}/2 owned · ◆ {Math.round(coins)}</span>
+            <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{extra}/2 owned · <GameIcon src={COIN_GOLD} size="1.2em" /> {Math.round(coins)}</span>
           </div>
           <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
             Add up to 2 bonus lineup slots (◆{priceOf('extra-slot')} each). An extra slot is one-sided — it plays unopposed as a best-ball backup. Choose its window, then a player + metric. Slate-gated like any pick.
@@ -440,12 +441,12 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
           <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
             <button onClick={buyExtra} disabled={locked || extraBusy || extra >= 2 || coins < priceOf('extra-slot')} className="mono"
               style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--you)', borderRadius: 14, padding: '6px 11px', cursor: locked || extra >= 2 || coins < priceOf('extra-slot') ? 'default' : 'pointer', opacity: locked || extra >= 2 || coins < priceOf('extra-slot') ? 0.5 : 1 }}>
-              ➕ extra slot ◆{priceOf('extra-slot')}
+              ➕ extra slot <GameIcon src={COIN_GOLD} size="1.2em" />{priceOf('extra-slot')}
             </button>
             {extra > 0 && (
               <button onClick={sellExtra} disabled={locked || extraBusy} className="mono"
                 style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 14, padding: '6px 11px', cursor: locked ? 'default' : 'pointer', opacity: locked ? 0.5 : 1 }}>
-                ➖ sell ◆{priceOf('extra-slot')}
+                ➖ sell <GameIcon src={COIN_GOLD} size="1.2em" />{priceOf('extra-slot')}
               </button>
             )}
           </div>

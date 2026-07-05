@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { requestCode } from '../data/liveApi';
 import { liveConfigured } from '../data/supabaseClient';
 import { useStore } from '../app/store';
+import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 
 // A persistent "out" present across the whole funnel: any visitor — wowed by the
 // demo, browsing leagues, mid-sim — can ask us to set their league up in the
@@ -14,7 +15,7 @@ export function RequestCodeFab() {
   return (
     <>
       <button onClick={() => setOpen(true)} className="mono" style={fab} title="Request a pilot code for your league">
-        ◈ get a league code
+        <GameIcon src={BRAND_MARK} size="1.3em" /> get a league code
       </button>
       {open && <RequestCodeModal initialPlatform={sleeperUser ? 'Sleeper' : ''} onClose={() => setOpen(false)} />}
     </>

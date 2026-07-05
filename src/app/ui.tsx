@@ -10,6 +10,7 @@ import { APP_VERSION, DATA_SOURCE } from './version';
 import { Rulebook } from '../screens/Rulebook';
 import { markBootSessionChecked } from '../screens/DemoBoard';
 import { Faq } from '../screens/Faq';
+import { GameIcon, UI_ART, BRAND_MARK } from './gameIcons';
 import { liveConfigured } from '../data/supabaseClient';
 import { getSession, onAuth, signOut, isAdmin } from '../data/liveApi';
 
@@ -215,7 +216,7 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
             className="mono"
             style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
           >
-            📖 Rulebook
+            <GameIcon src={UI_ART.rulebook} size="1.5em" /> Rulebook
           </button>
           <button
             onClick={() => { setOpen(false); setFaq(true); }}
@@ -236,7 +237,7 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
               className="mono"
               style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, marginTop: -2, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
             >
-              ⚡ Super admin →
+              <GameIcon src={UI_ART.admin} size="1.5em" /> Super admin →
             </button>
           )}
           {liveConfigured && !session && (
@@ -335,7 +336,7 @@ export function Brand({ onClick, hideDataSource = false }: { onClick?: () => voi
       onClick={onClick}
       style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, cursor: onClick ? 'pointer' : 'default' }}
     >
-      <div style={{ width: 13, height: 13, background: 'var(--you)', transform: 'rotate(45deg)', flex: 'none' }} />
+      <GameIcon src={BRAND_MARK} size={18} style={{ verticalAlign: 'middle' }} />
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: 1.1 }}>
         <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)', whiteSpace: 'nowrap' }}>
           DRIP FANTASY
