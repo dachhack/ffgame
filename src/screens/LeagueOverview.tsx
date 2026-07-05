@@ -192,7 +192,7 @@ export function ShopModal({ onClose, coinsOverride, onBuy }: { onClose: () => vo
           const timingTag = p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME';
           return (
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: 'var(--bg)', border: `1px solid ${flash === p.id ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, padding: '10px 12px', transition: 'border-color .3s' }}>
-              <span style={{ fontSize: 20, flex: 'none', width: 26, textAlign: 'center' }}><PuIcon id={p.id} emoji={p.icon} size={24} /></span>
+              <span style={{ fontSize: 30, flex: 'none', width: 46, textAlign: 'center' }}><PuIcon id={p.id} emoji={p.icon} size={42} /></span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                   <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{p.name}</span>

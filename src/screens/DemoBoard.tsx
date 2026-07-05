@@ -515,7 +515,7 @@ export function DemoBoard() {
                     const on = chosenBuff === pu.id;
                     return (
                       <button key={pu.id} onClick={() => setChosenBuff(pu.id)} title={pu.blurb} style={{ ...optCard(on), flex: 1, flexDirection: 'column', gap: 4, padding: '9px 6px', alignItems: 'center', textAlign: 'center' }}>
-                        <span style={{ fontSize: 19, lineHeight: 1 }}><PuIcon id={pu.id} emoji={pu.icon} size={22} /></span>
+                        <span style={{ fontSize: 24, lineHeight: 1 }}><PuIcon id={pu.id} emoji={pu.icon} size={30} /></span>
                         <span className="grotesk" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>{pu.name}</span>
                         <span style={{ fontSize: 8.5, color: 'var(--dim)', lineHeight: 1.35 }}>{pu.blurb}</span>
                       </button>
