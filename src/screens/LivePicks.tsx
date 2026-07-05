@@ -12,7 +12,7 @@ import {
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
 } from '../data/liveApi';
 import { powerupById } from '../data/powerups';
-import { PuIcon, GameIcon, COIN_GOLD } from '../app/gameIcons';
+import { PuIcon, GameIcon, Emoji, COIN_GOLD } from '../app/gameIcons';
 import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } from '../data/premiumClient';
 import { shortName } from '../data/players';
 import type { Player } from '../types';
@@ -324,7 +324,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
         {/* Season-long auto-pilot: AI sets the team's best lineup each week. */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--bd)' }}>
           <div style={{ minWidth: 0 }}>
-            <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: controller === 'ai' ? 'var(--you)' : 'var(--text)' }}>🤖 Auto-pilot {controller === 'ai' ? 'ON' : 'OFF'}</div>
+            <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: controller === 'ai' ? 'var(--you)' : 'var(--text)' }}><Emoji e="🤖" /> Auto-pilot {controller === 'ai' ? 'ON' : 'OFF'}</div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>{controller === 'ai' ? 'AI sets your best lineup each week. Turn off to pick yourself.' : 'Let AI set your best lineup automatically every week.'}</div>
           </div>
           <button onClick={toggleAi} disabled={aiBusy} className="mono"
@@ -349,7 +349,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
           {!matchPremium && (
             <div style={{ background: 'color-mix(in srgb, var(--you) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 35%, transparent)', borderRadius: 8, padding: '8px 9px', marginTop: 8 }}>
               <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--you)', lineHeight: 1.55 }}>
-                🔒 Premium unlocks K/DST/IDP + the full power-up set + special events. Both sides of a premium matchup get the full set — never pay-to-win.
+                <Emoji e="🔒" /> Premium unlocks K/DST/IDP + the full power-up set + special events. Both sides of a premium matchup get the full set — never pay-to-win.
               </div>
               <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
                 <button onClick={() => checkout('personal')} className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>Unlock for $5 · all your leagues</button>
@@ -366,7 +366,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
                 <button key={id} onClick={() => toggleBuff(id)} disabled={locked || !!buffBusy || !afford} title={pu?.blurb}
                   className="mono"
                   style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : afford ? 'var(--text)' : 'var(--faint)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked || !afford ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : afford ? 1 : 0.5 }}>
-                  <PuIcon id={id} emoji={pu?.icon} size="1.4em" /> {pu?.name ?? id} {on ? '✓' : puLocked(id) ? '🔒' : <><GameIcon name={COIN_GOLD} emoji="◆" size="1.2em" />{priceOf(id)}</>}
+                  <PuIcon id={id} emoji={pu?.icon} size="1.4em" /> {pu?.name ?? id} {on ? '✓' : puLocked(id) ? <Emoji e="🔒" size="1.2em" /> : <><GameIcon name={COIN_GOLD} emoji="◆" size="1.2em" />{priceOf(id)}</>}
                 </button>
               );
             })}
@@ -384,7 +384,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
                 <button key={id} onClick={() => toggleUnlock(id)} disabled={locked || !!buffBusy || !afford} title={pu?.blurb}
                   className="mono"
                   style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : afford ? 'var(--text)' : 'var(--faint)', background: on ? 'var(--streak, var(--you))' : 'var(--bg)', border: `1px solid ${on ? 'var(--streak, var(--you))' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked || !afford ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : afford ? 1 : 0.5 }}>
-                  <PuIcon id={id} emoji={pu?.icon} size="1.4em" /> {pu?.name ?? id} {on ? '✓' : puLocked(id) ? '🔒' : <><GameIcon name={COIN_GOLD} emoji="◆" size="1.2em" />{priceOf(id)}</>}
+                  <PuIcon id={id} emoji={pu?.icon} size="1.4em" /> {pu?.name ?? id} {on ? '✓' : puLocked(id) ? <Emoji e="🔒" size="1.2em" /> : <><GameIcon name={COIN_GOLD} emoji="◆" size="1.2em" />{priceOf(id)}</>}
                 </button>
               );
             })}

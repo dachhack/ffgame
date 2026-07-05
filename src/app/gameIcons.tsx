@@ -61,17 +61,24 @@ export const ICON_SETS: { id: IconSetName; name: string }[] = [
   { id: 'pixel', name: 'Pixel Bowl' },
 ];
 
+/** A raw emoji glyph bumped to icon size, so emoji read at the same scale as
+ *  the art sets instead of shrinking to the surrounding label text. */
+export function Emoji({ e, size = '1.35em', style }: { e?: ReactNode; size?: number | string; style?: CSSProperties }) {
+  if (e == null) return null;
+  return <span aria-hidden style={{ fontSize: size, lineHeight: 1, verticalAlign: '-0.14em', display: 'inline-block', ...style }}>{e}</span>;
+}
+
 /** Inline icon for the active set: an image sized in em (or px) for the art
- *  sets, the emoji glyph for the emoji set — and the emoji again if the image
- *  fails to load (an undrawn Pixel Bowl sprite). `set` overrides the store's
- *  choice, for previews. */
+ *  sets, the same-size emoji glyph for the emoji set — and the emoji again if
+ *  the image fails to load (an undrawn Pixel Bowl sprite). `set` overrides the
+ *  store's choice, for previews. */
 export function GameIcon({ name, emoji, size = '1.15em', style, set }: {
   name: string; emoji?: ReactNode; size?: number | string; style?: CSSProperties; set?: IconSetName;
 }) {
   const { iconSet } = useStore();
   const active = set ?? iconSet;
   const [failed, setFailed] = useState<string | null>(null);
-  if (active === 'emoji' || failed === active) return <>{emoji ?? null}</>;
+  if (active === 'emoji' || failed === active) return <Emoji e={emoji} size={size} style={style} />;
   return (
     <img
       src={assetUrl(active, name)}
@@ -86,14 +93,14 @@ export function GameIcon({ name, emoji, size = '1.15em', style, set }: {
 /** Power-up icon: set artwork when the id has some, else the data emoji. */
 export function PuIcon({ id, emoji, size, style }: { id?: string; emoji?: ReactNode; size?: number | string; style?: CSSProperties }) {
   const name = id ? PU_ART[id] : undefined;
-  if (!name) return <>{emoji ?? null}</>;
+  if (!name) return <Emoji e={emoji} size={size} style={style} />;
   return <GameIcon name={name} emoji={emoji} size={size} style={style} />;
 }
 
 /** Live-event icon by narration key: set artwork when mapped, else the emoji. */
 export function FxIcon({ k, emoji, size, style }: { k?: string; emoji?: ReactNode; size?: number | string; style?: CSSProperties }) {
   const name = k ? FX_ART[k] : undefined;
-  if (!name) return <>{emoji ?? null}</>;
+  if (!name) return <Emoji e={emoji} size={size} style={style} />;
   return <GameIcon name={name} emoji={emoji} size={size} style={style} />;
 }
 

@@ -17,7 +17,7 @@ import { SetupRow, PlayerPicker, RosterAside, ScoutModal } from './Matchup';
 import { RequestCodeModal } from './RequestCode';
 import { Faq } from './Faq';
 import { track, Ev } from '../app/analytics';
-import { PuIcon, FxIcon, GameIcon, COIN_GOLD, BRAND_MARK } from '../app/gameIcons';
+import { PuIcon, FxIcon, GameIcon, Emoji, COIN_GOLD, BRAND_MARK } from '../app/gameIcons';
 import type { Pick, Player, WindowId } from '../types';
 
 const actionText = (play: string) => play.replace(/^[A-Z]{2,3}( D| TD)?:\s*/, '');
@@ -410,7 +410,7 @@ export function DemoBoard() {
           <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>{w.label}</span>
           <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{w.time}{games > 0 ? ` · ${games} game${games > 1 ? 's' : ''}` : ''}</span>
           <span style={{ flex: 1 }} />
-          {st === 'upcoming' && <span className="mono" style={{ ...stateChip, color: 'var(--dim)', borderColor: 'var(--bd)' }}>🔒 SEALED</span>}
+          {st === 'upcoming' && <span className="mono" style={{ ...stateChip, color: 'var(--dim)', borderColor: 'var(--bd)' }}><Emoji e="🔒" size="1.25em" /> SEALED</span>}
           {st === 'live' && <span className="mono" style={{ ...stateChip, color: 'var(--you)', borderColor: 'color-mix(in srgb, var(--you) 45%, transparent)' }}><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 3, background: 'var(--you)', marginRight: 5, animation: 'bpulse 1.2s infinite' }} />LIVE</span>}
           {st === 'final' && <span className="mono" style={{ ...stateChip, color: 'var(--dim)', borderColor: 'var(--bd)' }}>FINAL</span>}
         </div>
@@ -767,7 +767,7 @@ function SlotRow({ slot, state, you, their, frozen, armedPu, noBorder }: {
     if (who === 'their' && sealed) {
       return (
         <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'flex-end' }}>
-          <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', border: '1px dashed var(--bd)', borderRadius: 5, padding: '7px 10px' }}>🔒 SEALED PICK</span>
+          <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', border: '1px dashed var(--bd)', borderRadius: 5, padding: '7px 10px' }}><Emoji e="🔒" size="1.25em" /> SEALED PICK</span>
         </div>
       );
     }
