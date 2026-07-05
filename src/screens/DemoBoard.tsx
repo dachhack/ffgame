@@ -182,6 +182,23 @@ export function DemoBoard() {
   const placedN = Object.keys(picks).length;
   const pendingMetric = Object.values(picks).some((p) => !p.metricId);
   const canRun = placedN > 0 && !pendingMetric;
+  // Guidance targets: the single next spot to fill, and any picks still
+  // missing their sealed metric — each gets the pulsing guide-ring.
+  const firstEmptyKey = useMemo(() => {
+    for (const w of wins) {
+      const n = slotsFor(w.id, DEMO_WEEK);
+      for (let i = 0; i < n; i++) { const k = slotKey(w.id, i); if (!picks[k]) return k; }
+    }
+    return null;
+  }, [wins, picks]);
+  // Tapping the ghosted RUN button redirects attention instead of no-opping:
+  // the step card shakes and the hint flips to the warn color for a beat.
+  const [nudged, setNudged] = useState(0);
+  useEffect(() => {
+    if (!nudged) return;
+    const t = setTimeout(() => setNudged(0), 1600);
+    return () => clearTimeout(t);
+  }, [nudged]);
 
   // ── RUN — auto-fill the rest, resolve the whole week for real ─────────────
   const [runPicks, setRunPicks] = useState<Record<string, Pick> | null>(null);
@@ -237,7 +254,7 @@ export function DemoBoard() {
   const [wClock, setWClock] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [ended, setEnded] = useState(false);
-  const [speed, setSpeed] = useState<1 | 2>(1);
+  const [speed, setSpeed] = useState<1 | 2 | 4>(1);
 
   useEffect(() => {
     if (phase !== 'watch' || !playing || ended || !resolved) return;
@@ -245,7 +262,7 @@ export function DemoBoard() {
       setWClock((c) => {
         const max = winMaxes[wIdx] ?? 0;
         const slots = resolved.windows[wIdx]?.slots.length ?? 1;
-        const ticks = 16 + 5 * (slots - 1); // ~6-13s per window at 1×
+        const ticks = 32 + 10 * (slots - 1); // ~13-26s per window at 1× (2×/4× available)
         const stepSec = Math.max(30, Math.ceil(max / ticks));
         const n = c + stepSec * speed;
         if (n >= max) {
@@ -401,16 +418,22 @@ export function DemoBoard() {
           <div style={{ padding: '10px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {Array.from({ length: nSlots }, (_, si) => {
               const key = slotKey(w.id, si);
+              // Walk the viewer: ring the next spot to fill, then any pick
+              // whose hidden metric still needs sealing.
+              const guide = (promptIdx === 0 && key === firstEmptyKey)
+                || (promptIdx === 1 && !!picks[key] && !picks[key].metricId);
               return (
-                <SetupRow
-                  key={key} slotKeyStr={key} winId={w.id} week={DEMO_WEEK} pick={picks[key]} selected={selSlot === key}
-                  inventory={{}} armed={{}} appliedPu={[]} applyMode={null} onApplyToSpot={() => {}}
-                  onOpenPicker={() => { setPickerSlot({ key, win: w.id }); setSelSlot(key); }}
-                  onPickMetric={(m) => pickMetricFor(key, m)}
-                  onClearSlot={() => clearSlot(key)}
-                  onDropPlayer={(id) => assignFromRoster(id)}
-                  onScout={() => setScoutWin(w.id)}
-                />
+                <div key={key} className={guide ? 'guide-ring' : undefined} style={{ borderRadius: 7 }}>
+                  <SetupRow
+                    slotKeyStr={key} winId={w.id} week={DEMO_WEEK} pick={picks[key]} selected={selSlot === key}
+                    inventory={{}} armed={{}} appliedPu={[]} applyMode={null} onApplyToSpot={() => {}}
+                    onOpenPicker={() => { setPickerSlot({ key, win: w.id }); setSelSlot(key); }}
+                    onPickMetric={(m) => pickMetricFor(key, m)}
+                    onClearSlot={() => clearSlot(key)}
+                    onDropPlayer={(id) => assignFromRoster(id)}
+                    onScout={() => setScoutWin(w.id)}
+                  />
+                </div>
               );
             })}
           </div>
@@ -475,7 +498,7 @@ export function DemoBoard() {
 
           {/* guided prompt + power-ups + run — always directly under the score */}
           {phase === 'setup' && (
-            <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: '12px 14px', marginTop: 10 }}>
+            <div key={nudged} style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: '12px 14px', marginTop: 10, animation: nudged ? 'shake .35s ease' : undefined }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 {prompts.map((_, i) => (
                   <span key={i} style={{ width: i === promptIdx ? 20 : 7, height: 7, borderRadius: 4, background: i <= promptIdx ? 'var(--you)' : 'var(--bd)', transition: 'all .2s' }} />
@@ -503,11 +526,25 @@ export function DemoBoard() {
 
               <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
                 <button onClick={() => setPicks(autoFill(picks))} className="mono" style={{ ...ctlBtn, flex: 'none' }}>✦ AUTO-FILL</button>
-                <button onClick={run} disabled={!canRun} className="mono" style={{ ...cta, flex: 1, width: 'auto', opacity: canRun ? 1 : 0.5, cursor: canRun ? 'pointer' : 'default' }}>
+                <button
+                  onClick={() => (canRun ? run() : setNudged(Date.now()))}
+                  aria-disabled={!canRun}
+                  className="mono"
+                  style={{
+                    ...cta, flex: 1, width: 'auto',
+                    ...(canRun
+                      ? { boxShadow: '0 0 18px color-mix(in srgb, var(--you) 25%, transparent)' }
+                      : { background: 'var(--surface)', color: 'var(--faint)', border: '1px dashed var(--bd)', cursor: 'default' }),
+                  }}
+                >
                   ▶ RUN WEEK {DEMO_WEEK}
                 </button>
               </div>
-              {!canRun && <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 7, textAlign: 'center' }}>{placedN === 0 ? 'field at least one player to run the week' : 'seal a metric on every fielded player first'}</div>}
+              {!canRun && (
+                <div className="mono" style={{ fontSize: 8.5, fontWeight: nudged ? 700 : 400, color: nudged ? 'var(--warn)' : 'var(--faint)', marginTop: 7, textAlign: 'center', transition: 'color .2s' }}>
+                  {placedN === 0 ? '↑ field at least one player first — tap a glowing spot (or ✦ AUTO-FILL)' : '↑ seal a metric on every glowing spot first'}
+                </div>
+              )}
             </div>
           )}
 
@@ -515,7 +552,7 @@ export function DemoBoard() {
           {phase === 'setup' && narrow && (
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setRosterOpen((o) => ({ ...o, you: !o.you }))} className="mono" style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.you ? 'var(--you)' : 'var(--bd)'}`, color: rosterOpen.you ? 'var(--you)' : 'var(--dim)', cursor: 'pointer' }}>{rosterOpen.you ? '▾' : '▸'} YOUR ROSTER</button>
+                <button onClick={() => setRosterOpen((o) => ({ ...o, you: !o.you }))} className={promptIdx === 0 && !rosterOpen.you ? 'mono guide-ring' : 'mono'} style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.you ? 'var(--you)' : 'var(--bd)'}`, color: rosterOpen.you ? 'var(--you)' : 'var(--dim)', cursor: 'pointer' }}>{rosterOpen.you ? '▾' : '▸'} YOUR ROSTER</button>
                 <button onClick={() => setRosterOpen((o) => ({ ...o, their: !o.their }))} className="mono" style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.their ? 'var(--opp)' : 'var(--bd)'}`, color: rosterOpen.their ? 'var(--opp)' : 'var(--dim)', cursor: 'pointer' }}>{rosterOpen.their ? '▾' : '▸'} THEIR ROSTER</button>
               </div>
               {rosterOpen.you && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase="setup" collapsed={false} onToggle={() => setRosterOpen((o) => ({ ...o, you: !o.you }))} bye={byeYou} week={DEMO_WEEK} fluid />}
@@ -532,7 +569,7 @@ export function DemoBoard() {
               </div>
               <div style={{ display: 'flex', gap: 6, flex: 'none' }}>
                 <button onClick={() => setPlaying((p) => !p)} className="mono" style={miniBtn}>{playing ? '❚❚' : '▶'}</button>
-                <button onClick={() => setSpeed((s) => (s === 1 ? 2 : 1))} className="mono" style={miniBtn}>{speed}×</button>
+                <button onClick={() => setSpeed((s) => (s === 4 ? 1 : (s * 2) as 2 | 4))} className="mono" title="Playback speed" style={miniBtn}>{speed}×</button>
               </div>
             </div>
           )}
