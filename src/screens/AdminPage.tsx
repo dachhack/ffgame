@@ -569,7 +569,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
                   <button style={btn(m.status === 'live')} onClick={() => set(m.id, 'live', true)} title="Lock & score — seals both lineups at kickoff, scoring starts">Lock</button>
                   <button style={btn(m.status === 'final')} onClick={() => set(m.id, 'final')} title="Final — week complete">Final</button>
                   <button style={btn(coinEdit === m.id)} onClick={() => (coinEdit === m.id ? setCoinEdit(null) : openCoin(m))} title="edit drip coin">◇</button>
-                  <button style={btn(false)} onClick={() => setWatch(m.id)} title="watch the live board"><GameIcon src={UI_ART.liveboard} size="1.4em" /></button>
+                  <button style={btn(false)} onClick={() => setWatch(m.id)} title="watch the live board"><GameIcon name={UI_ART.liveboard} emoji="▦" size="1.4em" /></button>
                   <button style={btn(false)} onClick={() => setSheet(m.id)} title={`feed sheet — per-player play log (2025 wk ${srcWeek})`}>≣</button>
                   {admin && <button style={btn(false)} onClick={() => resolve(m.id)} title="run real engine on baked 2025 data">▶</button>}
                   {admin && <button style={btn(false)} onClick={() => resetOne(m.id)} title="reset this matchup → scheduled, scores cleared">↺</button>}

@@ -59,7 +59,7 @@ export function LeagueOverview() {
               <Stat label="SEED" value={`#${you.seed}`} />
               <Stat label="RECORD" value={`${you.wins}-${you.losses}`} />
               <Stat label="POINTS FOR" value={you.pf.toFixed(0)} />
-              <Stat label={<><GameIcon src={COIN_GOLD} size="1.4em" /> DRIP COIN</>} value={`${coins}`} />
+              <Stat label={<><GameIcon name={COIN_GOLD} emoji="◈" size="1.4em" /> DRIP COIN</>} value={`${coins}`} />
             </div>
           </div>
 
@@ -184,7 +184,7 @@ export function ShopModal({ onClose, coinsOverride, onBuy }: { onClose: () => vo
     if (ok) { setFlash(id); setTimeout(() => setFlash((f) => (f === id ? null : f)), 600); }
   }
   return (
-    <Modal title="Power-Up Shop" sub={<><GameIcon src={COIN_GOLD} size="1.4em" /> {bal} DRIP COIN · +5 per signature play</>} onClose={onClose} maxWidth={560}>
+    <Modal title="Power-Up Shop" sub={<><GameIcon name={COIN_GOLD} emoji="◈" size="1.4em" /> {bal} DRIP COIN · +5 per signature play</>} onClose={onClose} maxWidth={560}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 480, overflow: 'auto' }}>
         {POWERUPS.map((p) => {
           const have = inventory[p.id] ?? 0;
@@ -208,7 +208,7 @@ export function ShopModal({ onClose, coinsOverride, onBuy }: { onClose: () => vo
                 className="mono"
                 style={{ flex: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', borderRadius: 4, padding: '8px 11px', border: 'none', cursor: afford ? 'pointer' : 'default', color: afford ? 'var(--bg)' : 'var(--faint)', background: afford ? 'var(--you)' : 'var(--surface)', opacity: afford ? 1 : 0.6 }}
               >
-                <GameIcon src={COIN_GOLD} size="1.2em" /> {p.price}
+                <GameIcon name={COIN_GOLD} emoji="◈" size="1.2em" /> {p.price}
               </button>
             </div>
           );

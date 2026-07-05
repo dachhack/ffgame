@@ -98,7 +98,7 @@ export function LiveOnboard() {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', flexWrap: 'wrap', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}><GameIcon src={BRAND_MARK} size="1.4em" /> DRIP FANTASY · LIVE</span>
+          <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}><GameIcon name={BRAND_MARK} emoji="◈" size="1.4em" /> DRIP FANTASY · LIVE</span>
           {/* Signed in: a shortcut back to your leagues from any sub-view (no need
               for the marketing demo). Signed out: the demo link. */}
           {session
@@ -602,7 +602,7 @@ function LeagueCard({ e, card, commish, userId, onBoard, onResults, onManage }: 
           live 2026 slate once the week is synced). The 2025 full-board sim is an
           optional "see it play" demo until the season starts. */}
       <button onClick={playHeroBoard} disabled={building} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: building ? 'default' : 'pointer', marginTop: 12, opacity: building ? 0.7 : 1, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
-        {building ? (buildNote || 'LOADING…') : <><GameIcon src={BRAND_MARK} size="1.3em" /> SET YOUR LINEUP →</>}
+        {building ? (buildNote || 'LOADING…') : <><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> SET YOUR LINEUP →</>}
       </button>
       {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{buildErr}</div>}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>

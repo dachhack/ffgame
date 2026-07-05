@@ -17,7 +17,7 @@ import { SetupRow, PlayerPicker, RosterAside, ScoutModal } from './Matchup';
 import { RequestCodeModal } from './RequestCode';
 import { Faq } from './Faq';
 import { track, Ev } from '../app/analytics';
-import { PuIcon, FxIcon, GameIcon, FX_ART, COIN_GOLD, BRAND_MARK } from '../app/gameIcons';
+import { PuIcon, FxIcon, GameIcon, COIN_GOLD, BRAND_MARK } from '../app/gameIcons';
 import type { Pick, Player, WindowId } from '../types';
 
 const actionText = (play: string) => play.replace(/^[A-Z]{2,3}( D| TD)?:\s*/, '');
@@ -332,7 +332,7 @@ export function DemoBoard() {
   const header = (
     <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', flexWrap: 'wrap', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}><GameIcon src={BRAND_MARK} size="1.4em" /> DRIP FANTASY</span>
+        <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}><GameIcon name={BRAND_MARK} emoji="◈" size="1.4em" /> DRIP FANTASY</span>
         {phase === 'watch' && ended && (
           <button onClick={backToStart} className="mono" style={{ ...chipBtn, color: 'var(--you)', borderColor: 'color-mix(in srgb, var(--you) 45%, var(--bd))' }}>↺ BACK TO START</button>
         )}
@@ -543,7 +543,7 @@ export function DemoBoard() {
                 {youTot >= theirTot ? `You took Week ${DEMO_WEEK}, ` : `They edged you, `}{Math.max(youTot, theirTot).toFixed(1)}–{Math.min(youTot, theirTot).toFixed(1)}.
               </div>
               {resolved.bonuses?.map((b) => (
-                <div key={b.id} className="mono" style={{ fontSize: 9.5, color: 'var(--you)', marginTop: 5 }}><GameIcon src={COIN_GOLD} size="1.2em" /> {b.label} ({b.points > 0 ? '+' : ''}{b.points})</div>
+                <div key={b.id} className="mono" style={{ fontSize: 9.5, color: 'var(--you)', marginTop: 5 }}><GameIcon name={COIN_GOLD} emoji="◇" size="1.2em" /> {b.label} ({b.points > 0 ? '+' : ''}{b.points})</div>
               ))}
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 7, lineHeight: 1.5 }}>
                 Every duel you just watched was sealed picks, hidden metrics, and live effects on real NFL plays. Now picture it with your own roster.
@@ -595,11 +595,11 @@ export function DemoBoard() {
           <div style={{ marginTop: 16, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14, textAlign: 'center' }}>
             <div className="grotesk" style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)' }}>Want this on your real league?</div>
             <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 4, lineHeight: 1.5 }}>We’ll set it up and send you a code — Sleeper · ESPN · MFL · Fleaflicker.</div>
-            <button onClick={() => setRequesting(true)} className="mono" style={{ ...cta, marginTop: 10 }}><GameIcon src={BRAND_MARK} size="1.3em" /> Request a code for your league</button>
+            <button onClick={() => setRequesting(true)} className="mono" style={{ ...cta, marginTop: 10 }}><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> Request a code for your league</button>
           </div>
 
           <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 14 }}>
-            <button onClick={() => navigate({ name: 'live' })} className="mono" style={linkBtn}><GameIcon src={BRAND_MARK} size="1.3em" /> Already invited? Sign in</button>
+            <button onClick={() => navigate({ name: 'live' })} className="mono" style={linkBtn}><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> Already invited? Sign in</button>
             <span style={{ color: 'var(--faint)' }}>·</span>
             <button onClick={() => setFaq(true)} className="mono" style={linkBtn}>Read the FAQ</button>
           </div>
@@ -700,7 +700,7 @@ function DuelLog({ slot, clock, live }: { slot: ResolvedSlot; clock: number; liv
               {e.delta > 0 && <span style={{ color: 'var(--text)', fontWeight: 700 }}>+{e.delta.toFixed(1)}</span>}
               {e.effect && <span style={{ color: FX_COLOR[e.effect.type] ?? 'var(--text)', fontWeight: 700 }}>{e.effect.type.toUpperCase()}</span>}
               {e.buffNote && <span style={{ color: 'var(--fx-streak, #36D399)', fontWeight: 700 }}><FxIcon k="power" emoji="🗑️" size="1.2em" />×2</span>}
-              {e.coin && <span style={{ color: 'var(--you)' }}><GameIcon src={COIN_GOLD} size="1.2em" /></span>}
+              {e.coin && <span style={{ color: 'var(--you)' }}><GameIcon name={COIN_GOLD} emoji="◇" size="1.2em" /></span>}
             </span>
           );
           return (
@@ -738,7 +738,7 @@ function SlotRow({ slot, state, you, their, frozen, armedPu, noBorder }: {
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 7 }}>
         <div style={{ position: 'relative', flex: 'none', filter: who === 'their' && frozen ? 'grayscale(0.6) brightness(0.9)' : undefined }}>
           <PlayerImg playerId={pick.player.id} team={pick.player.team} pos={pick.player.pos} size={30} />
-          {who === 'their' && frozen && <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}><GameIcon src={FX_ART.freeze} size={18} /></span>}
+          {who === 'their' && frozen && <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}><FxIcon k="freeze" emoji="❄️" size={18} /></span>}
         </div>
         <div style={{ minWidth: 0, textAlign: right ? 'right' : 'left' }}>
           <div className="grotesk" style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pick.player.name}</div>

@@ -15,7 +15,7 @@ export function RequestCodeFab() {
   return (
     <>
       <button onClick={() => setOpen(true)} className="mono" style={fab} title="Request a pilot code for your league">
-        <GameIcon src={BRAND_MARK} size="1.3em" /> get a league code
+        <GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> get a league code
       </button>
       {open && <RequestCodeModal initialPlatform={sleeperUser ? 'Sleeper' : ''} onClose={() => setOpen(false)} />}
     </>

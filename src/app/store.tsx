@@ -46,9 +46,15 @@ export type Route =
  *  persist its lineup to sealed_pick and align with the worker's scoring. */
 export interface LiveCtx { matchupId: string; userId: string; leagueId: string; rosterId: number; week: number; }
 
+/** The three switchable icon skins: classic emoji, the Football Factory art
+ *  set, and the retro Pixel Bowl sprites. */
+export type IconSetName = 'emoji' | 'factory' | 'pixel';
+
 interface Store {
   theme: ThemeName;
   setTheme: (t: ThemeName) => void;
+  iconSet: IconSetName;
+  setIconSet: (s: IconSetName) => void;
   /** Larger-text mode (zooms the whole UI ~20% for readability). */
   bigText: boolean;
   setBigText: (v: boolean) => void;
@@ -133,6 +139,7 @@ interface Store {
 const Ctx = createContext<Store | null>(null);
 
 const THEME_KEY = 'gc-theme';
+const ICONSET_KEY = 'gc-iconset';
 const BIGTEXT_KEY = 'gc-bigtext';
 const FULLSTATS_KEY = 'gc-fullstats';
 const SLEEPER_KEY = 'gc-sleeper';
@@ -227,6 +234,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const exitSimLeague = () => {
     resetToDemoLeague(); clearSyntheticWeeks(); clearLivePlays(); clearLiveGameFeeds(); clearRuntimeHeadshots();
     setActiveLeagueState(LEAGUE); setIsSimLeague(false); setYouTeam(YOU_TEAM_ID); setLiveCtx(null);
+  };
+  const [iconSet, setIconSetState] = useState<IconSetName>(() => {
+    try {
+      const saved = localStorage.getItem(ICONSET_KEY) as IconSetName | null;
+      return saved === 'emoji' || saved === 'factory' || saved === 'pixel' ? saved : 'factory';
+    } catch { return 'factory'; }
+  });
+  const setIconSet = (s: IconSetName) => {
+    setIconSetState(s);
+    try { localStorage.setItem(ICONSET_KEY, s); } catch { /* ignore */ }
   };
   const [bigText, setBigTextState] = useState<boolean>(() => {
     try {
@@ -466,8 +483,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
-    [theme, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, liveCtx, youTeamId, demoWeek, coins, inventory, applied],
+    () => ({ theme, setTheme, iconSet, setIconSet, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    [theme, iconSet, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, liveCtx, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

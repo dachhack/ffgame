@@ -114,14 +114,14 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
         {status === 'scheduled' && <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', marginTop: 8 }}>Scores start ticking after kickoff.</div>}
         {(myCoin != null || theirCoin != null) && (
           <div className="mono" style={{ display: 'flex', justifyContent: 'center', gap: 18, fontSize: 9.5, color: 'var(--faint)', marginTop: 8 }}>
-            <span style={{ color: 'var(--you)' }}><GameIcon src={COIN_GOLD} size="1.3em" /> {round(Number(myCoin ?? 0))} this week</span>
-            <span style={{ color: 'var(--opp)' }}><GameIcon src={COIN_GOLD} size="1.3em" /> {round(Number(theirCoin ?? 0))}</span>
+            <span style={{ color: 'var(--you)' }}><GameIcon name={COIN_GOLD} emoji="◇" size="1.3em" /> {round(Number(myCoin ?? 0))} this week</span>
+            <span style={{ color: 'var(--opp)' }}><GameIcon name={COIN_GOLD} emoji="◇" size="1.3em" /> {round(Number(theirCoin ?? 0))}</span>
           </div>
         )}
         {(myBank != null || theirBank != null) && (
           <div className="mono" style={{ display: 'flex', justifyContent: 'center', gap: 18, fontSize: 9.5, color: 'var(--faint)', marginTop: 4 }}>
-            <span style={{ color: 'var(--you)' }}><GameIcon src={COIN_GOLD} size="1.3em" /> {round(Number(myBank ?? 0))} banked</span>
-            <span style={{ color: 'var(--opp)' }}><GameIcon src={COIN_GOLD} size="1.3em" /> {round(Number(theirBank ?? 0))}</span>
+            <span style={{ color: 'var(--you)' }}><GameIcon name={COIN_GOLD} emoji="◆" size="1.3em" /> {round(Number(myBank ?? 0))} banked</span>
+            <span style={{ color: 'var(--opp)' }}><GameIcon name={COIN_GOLD} emoji="◆" size="1.3em" /> {round(Number(theirBank ?? 0))}</span>
           </div>
         )}
       </div>
