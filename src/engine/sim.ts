@@ -600,8 +600,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       // silently and shows up in the next tick's cumulative.
       const yd = Math.round(ya * 10) / 10, td = Math.round(ta * 10) / 10;
       const ym = opts.youMult?.(next), tm = opts.theirMult?.(next);
-      if (yd > 0) events.push({ clock: next, side: 'you', play: `${you.player.team || 'NFL'}: ${Y.hot ? 'HOT drip' : 'drip'}`, delta: yd, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true, mult: ym && ym !== 1 ? ym : undefined, buffNote: dripBuffNote(yg) });
-      if (td > 0) events.push({ clock: next, side: 'their', play: `${their.player.team || 'NFL'}: ${T.hot ? 'HOT drip' : 'drip'}`, delta: td, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true, mult: tm && tm !== 1 ? tm : undefined, buffNote: dripBuffNote(tg) });
+      if (yd > 0) events.push({ clock: next, side: 'you', play: `${you.player.team || 'NFL'}: ${Y.hot ? '🔥 HOT drip' : 'drip'}`, delta: yd, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true, mult: ym && ym !== 1 ? ym : undefined, buffNote: dripBuffNote(yg) });
+      if (td > 0) events.push({ clock: next, side: 'their', play: `${their.player.team || 'NFL'}: ${T.hot ? '🔥 HOT drip' : 'drip'}`, delta: td, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true, mult: tm && tm !== 1 ? tm : undefined, buffNote: dripBuffNote(tg) });
       t = next;
     }
   };
@@ -856,10 +856,10 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     }
 
     // streak / drip badges
-    if (!effect && iAmDrip && myDripKind?.includes(play.kind)) effect = { type: 'streak', text: mine.hot ? `HOT 2× · ${mine.rate.toFixed(2)}/m` : `DRIP ↑ ${mine.rate.toFixed(2)}/m` };
+    if (!effect && iAmDrip && myDripKind?.includes(play.kind)) effect = { type: 'streak', text: mine.hot ? `🔥 HOT 2× · ${mine.rate.toFixed(2)}/m` : `DRIP ↑ ${mine.rate.toFixed(2)}/m` };
     if (!effect && myFam === 'streak') {
-      if (play.td) effect = { type: 'streak', text: 'TD → STREAK 2×' };
-      else if (mine.hot && play.catch) effect = { type: 'streak', text: 'HOT STREAK · 2×' };
+      if (play.td) effect = { type: 'streak', text: '🔥 TD → STREAK 2×' };
+      else if (mine.hot && play.catch) effect = { type: 'streak', text: '🔥 HOT STREAK · 2×' };
     }
     if (!effect && oppFam === 'streak' && pts > 0) {
       effect = { type: 'cold', text: 'STREAK COLD' };

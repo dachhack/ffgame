@@ -735,7 +735,7 @@ function DuelLog({ slot, clock, live }: { slot: ResolvedSlot; clock: number; liv
             <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5, flexDirection: mine ? 'row-reverse' : 'row', maxWidth: '100%', overflow: 'hidden' }}>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: mine ? 'var(--you)' : 'var(--opp)' }}>{actionText(e.play)}</span>
               {e.delta > 0 && <span style={{ color: 'var(--text)', fontWeight: 700 }}>+{e.delta.toFixed(1)}</span>}
-              {e.effect && <span style={{ color: FX_COLOR[e.effect.type] ?? 'var(--text)', fontWeight: 700 }}>{e.effect.type.toUpperCase()}</span>}
+              {e.effect && <span style={{ color: FX_COLOR[e.effect.type] ?? 'var(--text)', fontWeight: 700 }}>{e.effect.type === 'streak' ? '🔥 ' : ''}{e.effect.type.toUpperCase()}</span>}
               {e.buffNote && <span style={{ color: 'var(--fx-streak, #36D399)', fontWeight: 700 }}><FxIcon k="power" emoji="🗑️" size="1.2em" />×2</span>}
               {e.coin && <span style={{ color: 'var(--you)' }}><GameIcon name={COIN_GOLD} emoji="◇" size="1.2em" /></span>}
             </span>
