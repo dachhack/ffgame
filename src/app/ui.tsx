@@ -10,7 +10,7 @@ import { APP_VERSION, DATA_SOURCE } from './version';
 import { Rulebook } from '../screens/Rulebook';
 import { markBootSessionChecked } from '../screens/DemoBoard';
 import { Faq } from '../screens/Faq';
-import { GameIcon, UI_ART, BRAND_MARK } from './gameIcons';
+import { GameIcon, UI_ART, BRAND_MARK, ICON_SETS } from './gameIcons';
 import { liveConfigured } from '../data/supabaseClient';
 import { getSession, onAuth, signOut, isAdmin } from '../data/liveApi';
 
@@ -118,7 +118,7 @@ export function Avatar({ name, accent = 'var(--you)', size = 30, src }: { name: 
  *  toggles (previously inline chips). `superAdmin`, when provided, adds a super-admin
  *  entry at the bottom (shown only for admins in the live app). */
 export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
-  const { theme, setTheme, bigText, setBigText, fullStats, setFullStats, setSleeperUser, navigate } = useStore();
+  const { theme, setTheme, iconSet, setIconSet, bigText, setBigText, fullStats, setFullStats, setSleeperUser, navigate } = useStore();
   const [open, setOpen] = useState(false);
   const [rules, setRules] = useState(false);
   const [faq, setFaq] = useState(false);
@@ -201,6 +201,22 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
             </div>
           </div>
           <div>
+            <div style={lbl}>ICONS</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 7 }}>
+              {ICON_SETS.map((s) => {
+                const active = iconSet === s.id;
+                return (
+                  <button key={s.id} onClick={() => setIconSet(s.id)} title={s.id}
+                    style={{ display: 'flex', alignItems: 'center', gap: 7, textAlign: 'left', padding: '7px 10px', borderRadius: 5, fontFamily: MONO, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                      background: active ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${active ? 'var(--you)' : 'var(--bd)'}`, color: active ? 'var(--you)' : 'var(--dim)' }}>
+                    <GameIcon name="coin-gold" emoji="◈" size="1.4em" set={s.id} />
+                    <span style={{ flex: 1 }}>{s.name}</span>{active ? '✓' : ''}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
             <div style={lbl}>DISPLAY</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
               <button onClick={() => setBigText(!bigText)} aria-pressed={bigText} title="Bigger fine print" style={toggle(bigText)}>
@@ -216,7 +232,7 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
             className="mono"
             style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
           >
-            <GameIcon src={UI_ART.rulebook} size="1.5em" /> Rulebook
+            <GameIcon name={UI_ART.rulebook} emoji="📖" size="1.5em" /> Rulebook
           </button>
           <button
             onClick={() => { setOpen(false); setFaq(true); }}
@@ -237,7 +253,7 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
               className="mono"
               style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, marginTop: -2, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
             >
-              <GameIcon src={UI_ART.admin} size="1.5em" /> Super admin →
+              <GameIcon name={UI_ART.admin} emoji="⚡" size="1.5em" /> Super admin →
             </button>
           )}
           {liveConfigured && !session && (
@@ -336,7 +352,7 @@ export function Brand({ onClick, hideDataSource = false }: { onClick?: () => voi
       onClick={onClick}
       style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, cursor: onClick ? 'pointer' : 'default' }}
     >
-      <GameIcon src={BRAND_MARK} size={18} style={{ verticalAlign: 'middle' }} />
+      <GameIcon name={BRAND_MARK} emoji={<div style={{ width: 13, height: 13, background: 'var(--you)', transform: 'rotate(45deg)', flex: 'none' }} />} size={18} style={{ verticalAlign: 'middle' }} />
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: 1.1 }}>
         <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)', whiteSpace: 'nowrap' }}>
           DRIP FANTASY

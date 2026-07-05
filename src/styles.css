@@ -36,3 +36,14 @@ a { color: inherit; }
   .mgmt input, .mgmt select { font-size: 16px !important; }
   .mgmt button { min-height: 34px; }
 }
+
+/* Demo guidance: a pulsing accent ring that walks the viewer to the next
+   action (pick a player, then seal a metric) before RUN unlocks. */
+@keyframes guidepulse {
+  0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--you) 85%, transparent), 0 0 16px color-mix(in srgb, var(--you) 30%, transparent); }
+  50% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--you) 25%, transparent), 0 0 4px transparent; }
+}
+.guide-ring { animation: guidepulse 1.5s ease-in-out infinite; border-radius: 7px; }
+@media (prefers-reduced-motion: reduce) {
+  .guide-ring { animation: none; box-shadow: 0 0 0 2px var(--you); }
+}

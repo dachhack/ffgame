@@ -126,7 +126,7 @@ export function Rulebook({ onClose }: { onClose: () => void }) {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{pu.name}</span>
-                      <span className="mono" style={{ fontSize: 10, color: 'var(--warn)' }}><GameIcon src={COIN_SILVER} size="1.2em" /> {pu.price}</span>
+                      <span className="mono" style={{ fontSize: 10, color: 'var(--warn)' }}><GameIcon name={COIN_SILVER} emoji="◎" size="1.2em" /> {pu.price}</span>
                       <span style={tag}>{pu.kind === 'metric' ? 'METRIC' : 'ACTION'}</span>
                     </div>
                     <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--dim)', marginTop: 4 }}>{pu.blurb}</div>

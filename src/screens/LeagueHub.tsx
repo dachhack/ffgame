@@ -153,7 +153,7 @@ export function LeagueHub() {
               }}
             >
               <span style={{ minWidth: 0 }}>
-                <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--you)' }}><GameIcon src={BRAND_MARK} size="1.3em" /> Play this for real — live &amp; head-to-head</span>
+                <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--you)' }}><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> Play this for real — live &amp; head-to-head</span>
                 <span className="mono" style={{ display: 'block', fontSize: 9.5, color: 'var(--dim)', marginTop: 4, lineHeight: 1.5 }}>
                   Sealed lineups vs your leaguemates, scored live off real NFL games. Join the H2H pilot.
                 </span>
