@@ -122,7 +122,7 @@ export function Rulebook({ onClose }: { onClose: () => void }) {
               <div className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>{grp.t} <span style={{ color: 'var(--faint)', fontWeight: 400 }}>· {grp.sub}</span></div>
               {grp.list.map((pu) => (
                 <div key={pu.id} style={{ padding: '9px 0', borderTop: '1px solid var(--bd)', display: 'flex', gap: 10 }}>
-                  <span style={{ fontSize: 18, flexShrink: 0 }}><PuIcon id={pu.id} emoji={pu.icon} size={22} /></span>
+                  <span style={{ fontSize: 24, flexShrink: 0 }}><PuIcon id={pu.id} emoji={pu.icon} size={34} /></span>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{pu.name}</span>

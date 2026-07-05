@@ -1810,7 +1810,7 @@ function ActivePowerupsModal({ effects, onClose }: {
       {effects.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— nothing active —<br />arm or apply power-ups from ✦ APPLY</div>}
       {effects.map((e) => (
         <div key={e.key} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 8px', borderRadius: 5, background: 'color-mix(in srgb, var(--you) 9%, var(--bg))', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))' }}>
-          <span style={{ fontSize: 17, flex: 'none', lineHeight: 1.1 }}><PuIcon id={e.id} emoji={e.icon} size={20} /></span>
+          <span style={{ fontSize: 22, flex: 'none', lineHeight: 1.1 }}><PuIcon id={e.id} emoji={e.icon} size={30} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{e.name}</div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 2 }}>{e.detail}</div>
@@ -1838,7 +1838,7 @@ function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose }: {
         const qty = inventory[p.id] ?? 0;
         return (
           <div key={p.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '7px 8px', borderRadius: 5, background: 'var(--bg)', border: '1px solid var(--bd)' }}>
-            <span style={{ fontSize: 17, flex: 'none', lineHeight: 1.1 }}><PuIcon id={p.id} emoji={p.icon} size={20} /></span>
+            <span style={{ fontSize: 22, flex: 'none', lineHeight: 1.1 }}><PuIcon id={p.id} emoji={p.icon} size={30} /></span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{p.name}</span>
