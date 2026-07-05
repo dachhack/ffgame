@@ -1,5 +1,6 @@
 import { METRICS, WINDOWS } from '../data/metrics';
 import { POWERUPS } from '../data/powerups';
+import { PuIcon, GameIcon, COIN_SILVER } from '../app/gameIcons';
 import type { Pos } from '../types';
 
 // In-app scoring rulebook. The metric catalog + power-up list are rendered straight
@@ -121,11 +122,11 @@ export function Rulebook({ onClose }: { onClose: () => void }) {
               <div className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>{grp.t} <span style={{ color: 'var(--faint)', fontWeight: 400 }}>· {grp.sub}</span></div>
               {grp.list.map((pu) => (
                 <div key={pu.id} style={{ padding: '9px 0', borderTop: '1px solid var(--bd)', display: 'flex', gap: 10 }}>
-                  <span style={{ fontSize: 18, flexShrink: 0 }}>{pu.icon}</span>
+                  <span style={{ fontSize: 18, flexShrink: 0 }}><PuIcon id={pu.id} emoji={pu.icon} size={22} /></span>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{pu.name}</span>
-                      <span className="mono" style={{ fontSize: 10, color: 'var(--warn)' }}>◎ {pu.price}</span>
+                      <span className="mono" style={{ fontSize: 10, color: 'var(--warn)' }}><GameIcon src={COIN_SILVER} size="1.2em" /> {pu.price}</span>
                       <span style={tag}>{pu.kind === 'metric' ? 'METRIC' : 'ACTION'}</span>
                     </div>
                     <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--dim)', marginTop: 4 }}>{pu.blurb}</div>

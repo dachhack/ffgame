@@ -8,6 +8,7 @@ import { avatarUrl } from '../data/media';
 import { SLEEPER_HANDLE } from '../config';
 import { weekLockLabel } from '../data/nflSlate';
 import { APP_VERSION, DATA_SOURCE } from '../app/version';
+import { PuIcon, GameIcon, COIN_GOLD } from '../app/gameIcons';
 import type { FantasyTeam } from '../types';
 
 type ModalState =
@@ -58,7 +59,7 @@ export function LeagueOverview() {
               <Stat label="SEED" value={`#${you.seed}`} />
               <Stat label="RECORD" value={`${you.wins}-${you.losses}`} />
               <Stat label="POINTS FOR" value={you.pf.toFixed(0)} />
-              <Stat label="◈ DRIP COIN" value={`${coins}`} />
+              <Stat label={<><GameIcon src={COIN_GOLD} size="1.4em" /> DRIP COIN</>} value={`${coins}`} />
             </div>
           </div>
 
@@ -183,7 +184,7 @@ export function ShopModal({ onClose, coinsOverride, onBuy }: { onClose: () => vo
     if (ok) { setFlash(id); setTimeout(() => setFlash((f) => (f === id ? null : f)), 600); }
   }
   return (
-    <Modal title="Power-Up Shop" sub={`◈ ${bal} DRIP COIN · +5 per signature play`} onClose={onClose} maxWidth={560}>
+    <Modal title="Power-Up Shop" sub={<><GameIcon src={COIN_GOLD} size="1.4em" /> {bal} DRIP COIN · +5 per signature play</>} onClose={onClose} maxWidth={560}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 480, overflow: 'auto' }}>
         {POWERUPS.map((p) => {
           const have = inventory[p.id] ?? 0;
@@ -191,7 +192,7 @@ export function ShopModal({ onClose, coinsOverride, onBuy }: { onClose: () => vo
           const timingTag = p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME';
           return (
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: 'var(--bg)', border: `1px solid ${flash === p.id ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, padding: '10px 12px', transition: 'border-color .3s' }}>
-              <span style={{ fontSize: 20, flex: 'none', width: 26, textAlign: 'center' }}>{p.icon}</span>
+              <span style={{ fontSize: 20, flex: 'none', width: 26, textAlign: 'center' }}><PuIcon id={p.id} emoji={p.icon} size={24} /></span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                   <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{p.name}</span>
@@ -207,7 +208,7 @@ export function ShopModal({ onClose, coinsOverride, onBuy }: { onClose: () => vo
                 className="mono"
                 style={{ flex: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', borderRadius: 4, padding: '8px 11px', border: 'none', cursor: afford ? 'pointer' : 'default', color: afford ? 'var(--bg)' : 'var(--faint)', background: afford ? 'var(--you)' : 'var(--surface)', opacity: afford ? 1 : 0.6 }}
               >
-                ◈ {p.price}
+                <GameIcon src={COIN_GOLD} size="1.2em" /> {p.price}
               </button>
             </div>
           );
@@ -220,7 +221,7 @@ export function ShopModal({ onClose, coinsOverride, onBuy }: { onClose: () => vo
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value }: { label: ReactNode; value: string }) {
   return (
     <div style={{ textAlign: 'right' }}>
       <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.14em', color: 'var(--faint)' }}>{label}</div>
@@ -251,7 +252,7 @@ function TeamMini({ team, accent, right }: { team: FantasyTeam; accent: string; 
 
 // ── Modals ──────────────────────────────────────────────────────────────
 
-function Modal({ title, sub, onClose, children, maxWidth = 480 }: { title: string; sub?: string; onClose: () => void; children: ReactNode; maxWidth?: number }) {
+function Modal({ title, sub, onClose, children, maxWidth = 480 }: { title: string; sub?: ReactNode; onClose: () => void; children: ReactNode; maxWidth?: number }) {
   return (
     <div
       onClick={onClose}

@@ -6,6 +6,7 @@ import { buildMatchup, defaultLineup, aiLineup, slotKey } from '../engine/matchu
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
 import { metricById } from '../data/metrics';
 import { powerupById } from '../data/powerups';
+import { PuIcon } from '../app/gameIcons';
 
 export function MatchupFinal({ week }: { week: number }) {
   const { navigate, youTeamId: YOU, applied } = useStore();
@@ -85,7 +86,7 @@ export function MatchupFinal({ week }: { week: number }) {
                 <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 9, flexWrap: 'wrap' }}>
                   <span style={{ letterSpacing: '0.1em', color: 'var(--faint)', fontWeight: 700 }}>YOU ARMED</span>
                   {armedList.map((id) => { const p = powerupById(id); return p ? (
-                    <span key={id} title={p.blurb} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 45%, transparent)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', borderRadius: 3, padding: '1px 6px' }}>{p.icon} {p.name}</span>
+                    <span key={id} title={p.blurb} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 45%, transparent)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', borderRadius: 3, padding: '1px 6px' }}><PuIcon id={p.id} emoji={p.icon} size="1.4em" /> {p.name}</span>
                   ) : null; })}
                 </div>
               )}

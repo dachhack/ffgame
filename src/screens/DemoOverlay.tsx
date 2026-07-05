@@ -1,4 +1,5 @@
 import { FX_COLOR, fmtClock, type Beat } from '../data/demoNarration';
+import { FxIcon } from '../app/gameIcons';
 import { SleeperHandoff } from './SleeperHandoff';
 
 // Presentational chrome shared by the two demo views. The narrated controls +
@@ -42,7 +43,7 @@ export function DemoOverlay(p: DemoOverlayProps) {
     <div style={{ width: '100%', maxWidth: 560, margin: '14px auto 0' }}>
       {/* narration callout */}
       <div style={{ minHeight: 84, background: 'var(--bg)', border: '1px solid var(--bd)', borderLeft: `3px solid ${accent}`, borderRadius: 7, padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-        <span style={{ fontSize: 22, lineHeight: 1 }}>{p.beat?.icon ?? '👀'}</span>
+        <span style={{ fontSize: 22, lineHeight: 1 }}><FxIcon k={p.beat?.key} emoji={p.beat?.icon ?? '👀'} size={26} /></span>
         <div style={{ minWidth: 0 }}>
           <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: accent }}>{p.beat?.title ?? 'KICKOFF'}</div>
           <div style={{ fontSize: 12, color: 'var(--text)', marginTop: 4, lineHeight: 1.45 }}>{p.beat?.body ?? 'Watch the banked scores build on each side — then collide.'}</div>
@@ -59,8 +60,8 @@ export function DemoOverlay(p: DemoOverlayProps) {
 
       {/* legend */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', justifyContent: 'center', marginTop: 12 }}>
-        {[['💧', 'DRIP'], ['💥', 'NUKE'], ['🩸', 'ERASE'], ['🗑️', 'POWER-UP'], ['◇', 'COIN']].map(([icon, label]) => (
-          <span key={label} className="mono" style={{ fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--faint)' }}>{icon} {label}</span>
+        {([['drip', '💧', 'DRIP'], ['nuke', '💥', 'NUKE'], ['erase', '🩸', 'ERASE'], ['power', '🗑️', 'POWER-UP'], ['coin', '◇', 'COIN']] as const).map(([k, icon, label]) => (
+          <span key={label} className="mono" style={{ fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--faint)' }}><FxIcon k={k} emoji={icon} size="1.4em" /> {label}</span>
         ))}
       </div>
 

@@ -19,6 +19,7 @@ import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
 import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, leagueWeeklyBudget, leagueTestLiveAt, myMatchup, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
+import { PuIcon, GameIcon, COIN_GOLD, UI_ART } from '../app/gameIcons';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
 const TICK_MS = 700;
@@ -64,16 +65,10 @@ function fmtGameClock(c: number): string {
   return `Q${q} ${m}:${String(s).padStart(2, '0')}`;
 }
 
-// Drip coin — an actual minted-coin glyph (gold disc with the ◈ house mark),
-// so coin reads as currency wherever it appears instead of a bare symbol.
+// Drip coin — the gold-ball coin artwork, so coin reads as currency wherever
+// it appears instead of a bare symbol.
 function CoinIcon({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden style={{ display: 'inline-block', verticalAlign: 'text-bottom', flex: 'none' }}>
-      <circle cx="8" cy="8" r="7" fill="#F2C14E" stroke="#9A6B12" strokeWidth="1.4" />
-      <circle cx="8" cy="8" r="5.1" fill="none" stroke="#C9952B" strokeWidth="0.9" />
-      <path d="M8 4.6 L10.4 8 L8 11.4 L5.6 8 Z" fill="#9A6B12" />
-    </svg>
-  );
+  return <GameIcon src={COIN_GOLD} size={size} style={{ verticalAlign: 'text-bottom' }} />;
 }
 
 // A prominent coin-earn pill for the play-by-play log.
@@ -667,13 +662,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   }), [resolved, backupAssign]);
 
   // Everything currently in effect, with a back-out where the store supports it.
-  const activeEffects: { key: string; icon: string; name: string; detail: string; onRemove?: () => void }[] = [];
-  for (const id of Object.keys(buffs)) if (buffs[id]) { const p = powerupById(id); if (p) activeEffects.push({ key: 'b-' + id, icon: p.icon, name: p.name, detail: 'Armed · whole field', onRemove: phase === 'setup' ? () => disarmBuff(week, id) : undefined }); }
-  if (aw?.doubleOrNothing) { const s = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === aw.doubleOrNothing); activeEffects.push({ key: 'don', icon: '⚖️', name: 'Double or Nothing', detail: 'Staked ' + (s?.you?.player.name ?? '—'), onRemove: phase === 'setup' ? () => clearDoubleOrNothing(week) : undefined }); }
-  if (aw?.byeSteal) activeEffects.push({ key: 'bye', icon: '🪂', name: 'Bye Steal', detail: 'Fielded ' + (getPlayer(aw.byeSteal.playerId)?.name ?? '—'), onRemove: phase === 'setup' ? () => clearByeSteal(week) : undefined });
-  if (aw?.spy) { const sp = aw.spy; activeEffects.push({ key: 'spy', icon: '👁️', name: 'Spy', detail: `Revealed a slot’s ${sp.reveal}`, onRemove: preKickPhase ? () => clearSpy(week) : undefined }); }
-  for (const [win, n] of Object.entries(aw?.extraSlots ?? {})) if ((n ?? 0) > 0) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'x-' + win, icon: '➕', name: 'Extra Slot', detail: `+${n} on ${wl}`, onRemove: phase === 'setup' ? () => removeExtraSlot(week, win as WindowId) : undefined }); }
-  for (const [win, c] of Object.entries(aw?.emp ?? {})) if (c != null) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'emp-' + win, icon: '💥', name: 'EMP', detail: `Fired on ${wl}` }); }
+  const activeEffects: { key: string; id?: string; icon: string; name: string; detail: string; onRemove?: () => void }[] = [];
+  for (const id of Object.keys(buffs)) if (buffs[id]) { const p = powerupById(id); if (p) activeEffects.push({ key: 'b-' + id, id, icon: p.icon, name: p.name, detail: 'Armed · whole field', onRemove: phase === 'setup' ? () => disarmBuff(week, id) : undefined }); }
+  if (aw?.doubleOrNothing) { const s = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === aw.doubleOrNothing); activeEffects.push({ key: 'don', id: 'double-or-nothing', icon: '⚖️', name: 'Double or Nothing', detail: 'Staked ' + (s?.you?.player.name ?? '—'), onRemove: phase === 'setup' ? () => clearDoubleOrNothing(week) : undefined }); }
+  if (aw?.byeSteal) activeEffects.push({ key: 'bye', id: 'bye-steal', icon: '🪂', name: 'Bye Steal', detail: 'Fielded ' + (getPlayer(aw.byeSteal.playerId)?.name ?? '—'), onRemove: phase === 'setup' ? () => clearByeSteal(week) : undefined });
+  if (aw?.spy) { const sp = aw.spy; activeEffects.push({ key: 'spy', id: 'spy', icon: '👁️', name: 'Spy', detail: `Revealed a slot’s ${sp.reveal}`, onRemove: preKickPhase ? () => clearSpy(week) : undefined }); }
+  for (const [win, n] of Object.entries(aw?.extraSlots ?? {})) if ((n ?? 0) > 0) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'x-' + win, id: 'extra-slot', icon: '➕', name: 'Extra Slot', detail: `+${n} on ${wl}`, onRemove: phase === 'setup' ? () => removeExtraSlot(week, win as WindowId) : undefined }); }
+  for (const [win, c] of Object.entries(aw?.emp ?? {})) if (c != null) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'emp-' + win, id: 'emp', icon: '💥', name: 'EMP', detail: `Fired on ${wl}` }); }
 
   // Owned power-ups you can still apply right now, scoped to open windows. 'pre'
   // power-ups lock at the first kickoff; 'live' ones need a running window.
@@ -901,7 +896,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                     const on = demoBuff === pu.id;
                     return (
                       <button key={pu.id} onClick={() => setDemoBuff(pu.id)} style={{ display: 'flex', alignItems: 'flex-start', gap: 11, padding: '10px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left', background: on ? 'color-mix(in srgb, var(--you) 9%, var(--surface))' : 'var(--surface)', border: `1.5px solid ${on ? 'var(--you)' : 'var(--bd)'}`, boxShadow: on ? '0 0 0 3px color-mix(in srgb, var(--you) 14%, transparent)' : 'none' }}>
-                        <span style={{ fontSize: 22, lineHeight: 1 }}>{pu.icon}</span>
+                        <span style={{ fontSize: 22, lineHeight: 1 }}><PuIcon id={pu.id} emoji={pu.icon} size={26} /></span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div className="grotesk" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>{pu.name}</div>
                           <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>{pu.blurb}</div>
@@ -1232,7 +1227,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               </div>
               {pendingApply ? (
                 <div className="mono" style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))', border: '1px solid var(--warn)', borderRadius: 6, padding: '7px 11px' }}>
-                  <span>{powerupById(pendingApply)?.icon} Tap a {powerupById(pendingApply)?.target === 'window' ? 'window' : 'spot'} to apply {powerupById(pendingApply)?.name}</span>
+                  <span><PuIcon id={pendingApply} emoji={powerupById(pendingApply)?.icon} size="1.4em" /> Tap a {powerupById(pendingApply)?.target === 'window' ? 'window' : 'spot'} to apply {powerupById(pendingApply)?.name}</span>
                   <button onClick={() => setPendingApply(null)} className="mono" style={{ background: 'none', border: 'none', color: 'var(--dim)', fontWeight: 700, fontSize: 9, letterSpacing: '0.1em' }}>CANCEL</button>
                 </div>
               ) : (
@@ -1517,12 +1512,12 @@ function EarningsModal({ earnings, weeklyBudget, onReset, onClose }: { earnings:
           <div className="mono" style={{ fontSize: 9.5, lineHeight: 1.6, color: 'var(--dim)' }}>
             {budgetMode
               ? (weeklyBudget! > 0
-                ? <div>◈ <b style={{ color: 'var(--text)' }}>+{weeklyBudget}</b> weekly budget from your commissioner.</div>
-                : <div>◈ Coin is earned in-game — your commissioner hasn’t set a weekly budget.</div>)
-              : <div>◈ <b style={{ color: 'var(--text)' }}>+{WEEKLY_STIPEND}</b> flat every week, just for playing.</div>}
-            <div>◈ <b style={{ color: 'var(--text)' }}>+{UNOPPOSED_COIN}</b> for each unopposed player you field.</div>
+                ? <div><CoinIcon size={11} /> <b style={{ color: 'var(--text)' }}>+{weeklyBudget}</b> weekly budget from your commissioner.</div>
+                : <div><CoinIcon size={11} /> Coin is earned in-game — your commissioner hasn’t set a weekly budget.</div>)
+              : <div><CoinIcon size={11} /> <b style={{ color: 'var(--text)' }}>+{WEEKLY_STIPEND}</b> flat every week, just for playing.</div>}
+            <div><CoinIcon size={11} /> <b style={{ color: 'var(--text)' }}>+{UNOPPOSED_COIN}</b> for each unopposed player you field.</div>
             <div style={{ marginTop: 5 }}>Then coin only on <b style={{ color: 'var(--text)' }}>events of note</b> — a nuke / shutdown / wipe, a drip going HOT, or a DST suppress firing. Routine yards, catches and carries don't pay.</div>
-            <div style={{ marginTop: 5 }}>◈ <b style={{ color: 'var(--opp)' }}>−10</b> to the opponent for each INT thrown / fumble lost by your players (their giveaways pay you). <b style={{ color: 'var(--text)' }}>🦅 Ball Hawk</b> raises it to 25.</div>
+            <div style={{ marginTop: 5 }}><CoinIcon size={11} /> <b style={{ color: 'var(--opp)' }}>−10</b> to the opponent for each INT thrown / fumble lost by your players (their giveaways pay you). <b style={{ color: 'var(--text)' }}><PuIcon id="turnover-boost" emoji="🦅" size="1.2em" /> Ball Hawk</b> raises it to 25.</div>
           </div>
           {/* per-position signature rates */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1623,7 +1618,7 @@ function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMe
         </div>
         <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
-            <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 7 }}>🔀 METRIC SWAP {metricQty > 0 ? `· ×${metricQty}` : '· NONE OWNED'}</div>
+            <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 7 }}><PuIcon id="metric-swap" emoji="🔀" size="1.4em" /> METRIC SWAP {metricQty > 0 ? `· ×${metricQty}` : '· NONE OWNED'}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, opacity: metricQty > 0 ? 1 : 0.4, pointerEvents: metricQty > 0 ? 'auto' : 'none' }}>
               {METRICS[player.pos].filter((m) => m.id !== metricId).map((m) => (
                 <button key={m.id} onClick={() => onMetric(m.id)} title={m.ef} className="mono" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '7px 9px', color: 'var(--text)', textAlign: 'left' }}>
@@ -1634,7 +1629,7 @@ function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMe
             </div>
           </div>
           <div>
-            <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 7 }}>🔁 PLAYER SWAP {playerQty > 0 ? `· ×${playerQty}` : '· NONE OWNED'}</div>
+            <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 7 }}><PuIcon id="player-swap" emoji="🔁" size="1.4em" /> PLAYER SWAP {playerQty > 0 ? `· ×${playerQty}` : '· NONE OWNED'}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflow: 'auto', opacity: playerQty > 0 ? 1 : 0.4, pointerEvents: playerQty > 0 ? 'auto' : 'none' }}>
               {bench.length === 0 && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>No bench players in this window.</span>}
               {bench.map((p) => (
@@ -1790,7 +1785,7 @@ const POWERUP_HINT: Record<string, string> = {
 const SPOT_APPLY = new Set(['double-or-nothing', 'bye-steal', 'spy', 'mulligan', 'emp', 'metric-swap', 'player-swap']);
 
 // Shared modal shell for the two power-up cards.
-function PuShell({ title, subtitle, accent, onClose, children }: { title: string; subtitle: string; accent: string; onClose: () => void; children: ReactNode }) {
+function PuShell({ title, subtitle, accent, onClose, children }: { title: ReactNode; subtitle: string; accent: string; onClose: () => void; children: ReactNode }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '44px 16px', overflow: 'auto' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
@@ -1810,14 +1805,14 @@ function PuShell({ title, subtitle, accent, onClose, children }: { title: string
 // ACTIVE: everything currently in effect this week, with a back-out where the
 // power-up can still be unwound (before its window locks / kicks off).
 function ActivePowerupsModal({ effects, onClose }: {
-  effects: { key: string; icon: string; name: string; detail: string; onRemove?: () => void }[]; onClose: () => void;
+  effects: { key: string; id?: string; icon: string; name: string; detail: string; onRemove?: () => void }[]; onClose: () => void;
 }) {
   return (
     <PuShell title="◈ Active Power-Ups" subtitle="WHAT'S CURRENTLY IN EFFECT — BACK ANY OUT BEFORE IT LOCKS" accent="var(--you)" onClose={onClose}>
       {effects.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— nothing active —<br />arm or apply power-ups from ✦ APPLY</div>}
       {effects.map((e) => (
         <div key={e.key} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 8px', borderRadius: 5, background: 'color-mix(in srgb, var(--you) 9%, var(--bg))', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))' }}>
-          <span style={{ fontSize: 17, flex: 'none', lineHeight: 1.1 }}>{e.icon}</span>
+          <span style={{ fontSize: 17, flex: 'none', lineHeight: 1.1 }}><PuIcon id={e.id} emoji={e.icon} size={20} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{e.name}</div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 2 }}>{e.detail}</div>
@@ -1845,7 +1840,7 @@ function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose }: {
         const qty = inventory[p.id] ?? 0;
         return (
           <div key={p.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '7px 8px', borderRadius: 5, background: 'var(--bg)', border: '1px solid var(--bd)' }}>
-            <span style={{ fontSize: 17, flex: 'none', lineHeight: 1.1 }}>{p.icon}</span>
+            <span style={{ fontSize: 17, flex: 'none', lineHeight: 1.1 }}><PuIcon id={p.id} emoji={p.icon} size={20} /></span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{p.name}</span>
@@ -1873,7 +1868,7 @@ function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose }: {
 // Spy: after tapping a slate slot, choose what to reveal about the opponent there.
 function SpyRevealModal({ onPick, onClose }: { onPick: (r: 'player' | 'metric') => void; onClose: () => void }) {
   return (
-    <PuShell title="👁️ Spy — Reveal" subtitle="UNCOVER ONE THING ABOUT THE OPPONENT IN THIS SLOT" accent="var(--warn)" onClose={onClose}>
+    <PuShell title={<><PuIcon id="spy" emoji="👁️" size="1.2em" /> Spy — Reveal</>} subtitle="UNCOVER ONE THING ABOUT THE OPPONENT IN THIS SLOT" accent="var(--warn)" onClose={onClose}>
       {([['player', 'Reveal Player', 'See who the opponent slotted here.'], ['metric', 'Reveal Metric', 'See which metric the opponent chose here.']] as const).map(([r, label, blurb]) => (
         <button key={r} onClick={() => onPick(r)} className="mono" style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 3, padding: '10px 12px', borderRadius: 5, border: '1px solid var(--warn)', background: 'var(--bg)', cursor: 'pointer' }}>
           <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{label}</span>
@@ -1890,7 +1885,7 @@ function MulliganModal({ player, curMetric, inventory, onPick, onClose }: {
 }) {
   const options = METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === curMetric);
   return (
-    <PuShell title="🎲 Mulligan — Re-roll" subtitle={`PICK A NEW METRIC FOR ${player.name.toUpperCase()} · COUNTS ONLY PLAYS AFTER NOW (REAL TIME)`} accent="var(--warn)" onClose={onClose}>
+    <PuShell title={<><PuIcon id="mulligan" emoji="🎲" size="1.2em" /> Mulligan — Re-roll</>} subtitle={`PICK A NEW METRIC FOR ${player.name.toUpperCase()} · COUNTS ONLY PLAYS AFTER NOW (REAL TIME)`} accent="var(--warn)" onClose={onClose}>
       {options.map((m) => {
         const cur = m.id === curMetric;
         return (
@@ -2349,14 +2344,14 @@ export function SetupRow(props: {
           onDrop={(e) => { e.preventDefault(); onDropPlayer(e.dataTransfer.getData('text/plain')); }}
           style={{ minWidth: 0, minHeight: 78, background: emptyEligible ? 'color-mix(in srgb, var(--warn) 12%, transparent)' : selected ? 'var(--surface)' : 'transparent', border: `1px dashed ${emptyEligible ? 'var(--warn)' : selected ? 'var(--you)' : 'var(--bdh)'}`, borderLeft: `3px dashed ${emptyEligible ? 'var(--warn)' : selected ? 'var(--you)' : 'var(--bdh)'}`, borderRadius: 4, padding: '16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', opacity: applyDim ? 0.4 : 1 }}
         >
-          <span className="grotesk" style={{ fontSize: 20, color: emptyEligible ? 'var(--warn)' : 'var(--faint)' }}>{emptyEligible ? applyPu?.icon : '+'}</span>
+          <span className="grotesk" style={{ fontSize: 20, color: emptyEligible ? 'var(--warn)' : 'var(--faint)' }}>{emptyEligible ? <PuIcon id={applyPu?.id} emoji={applyPu?.icon} size={22} /> : '+'}</span>
           <span className="mono" style={{ fontSize: 10, color: emptyEligible ? 'var(--warn)' : 'var(--faint)', letterSpacing: '0.12em', fontWeight: emptyEligible ? 700 : 400 }}>{emptyEligible ? 'TAP TO FIELD BYE' : 'TAP TO PICK PLAYER'}</span>
         </div>
       )}
       <div onClick={hideScout ? undefined : onScout} title={hideScout ? 'Your opponent’s lineup is sealed until kickoff' : "Scout the opponent's possible players for this window"} style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: hideScout ? 'default' : 'pointer' }}>
         <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--dim)' }}>◆</span>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.16em', color: 'var(--faint)', fontWeight: 700 }}>SEALED · {winId.toUpperCase()}</span>
-        {!hideScout && <span className="mono" style={{ fontSize: 7.5, letterSpacing: '0.12em', color: 'var(--opp)', fontWeight: 700 }}>🔍 SCOUT</span>}
+        {!hideScout && <span className="mono" style={{ fontSize: 7.5, letterSpacing: '0.12em', color: 'var(--opp)', fontWeight: 700 }}><GameIcon src={UI_ART.scout} size="1.6em" /> SCOUT</span>}
       </div>
     </div>
     {infoMetric && <MetricInfo metric={infoMetric} onClose={() => setInfoMetric(null)} />}
@@ -2456,7 +2451,7 @@ export function ScoutModal({ win, week, pool, oppName, onClose }: {
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, borderTop: '3px solid var(--opp)', boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>🔍 Scout · {label}</div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}><GameIcon src={UI_ART.scout} size="1.2em" /> Scout · {label}</div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>WHO {oppName.toUpperCase()} COULD FIELD HERE — PICK STAYS SEALED</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
@@ -2511,7 +2506,7 @@ function BuffFxRow({ side, fx, stake }: { side: 'you' | 'their'; fx?: BuffFx[]; 
     const c = stake === 'won' ? 'var(--fx-streak)' : 'var(--fx-nuke)';
     items.push(
       <span key="stake" className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 8, fontWeight: 700, letterSpacing: '0.04em', color: c, background: 'var(--surface)', border: `1px solid ${c}`, borderRadius: 3, padding: '2px 5px' }}>
-        ⚖️ DOUBLE OR NOTHING {stake === 'won' ? 'WON ×2' : 'LOST → 0'}
+        <PuIcon id="double-or-nothing" emoji="⚖️" size="1.5em" /> DOUBLE OR NOTHING {stake === 'won' ? 'WON ×2' : 'LOST → 0'}
       </span>,
     );
   }
@@ -2708,7 +2703,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
       )}
       {incomingName && !(final && slot.youSub) && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', marginTop: 3 }}>
-          🛟 backup {incomingName} on standby{final ? ' — did not sub in' : ''}
+          <PuIcon id="insurance" emoji="🛟" size="1.5em" /> backup {incomingName} on standby{final ? ' — did not sub in' : ''}
         </div>
       )}
       {final && slot.youSub && (
