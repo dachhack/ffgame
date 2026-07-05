@@ -19,7 +19,7 @@ import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
 import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, leagueWeeklyBudget, leagueTestLiveAt, myMatchup, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
-import { PuIcon, GameIcon, DripCoin, UI_ART } from '../app/gameIcons';
+import { PuIcon, GameIcon, Emoji, DripCoin, UI_ART } from '../app/gameIcons';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
 const TICK_MS = 700;
@@ -1230,7 +1230,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 </div>
               ) : (
                 <div style={{ flex: 'none' }}>
-                  <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 4 }}>⚡ POWER-UPS</div>
+                  <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 4 }}><Emoji e="⚡" size="1.25em" /> POWER-UPS</div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={() => setPuView('active')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--you)', borderRadius: 6, padding: '7px 11px' }}>
                       ◈ ACTIVE{activeEffects.length > 0 ? ` · ${activeEffects.length}` : ''}
@@ -1239,7 +1239,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                       ✦ APPLY{appliable.length > 0 ? ` · ${appliable.length}` : ''}
                     </button>
                     <button onClick={() => setShopOpen(true)} className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 11px' }}>
-                      🛒 SHOP
+                      <Emoji e="🛒" size="1.3em" /> SHOP
                     </button>
                   </div>
                 </div>
@@ -2028,7 +2028,7 @@ function WindowSection(props: {
   const stateChip = !realtime ? null : realtime === 'setup' ? (
     <span className="mono" title="Open — edit this window until it locks 1h before kickoff." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 4, padding: '3px 8px' }}>SETUP</span>
   ) : realtime === 'locked' ? (
-    <span className="mono" title="Lineups are locked for this window — kickoff is within the hour." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '3px 8px' }}>🔒 LOCKED</span>
+    <span className="mono" title="Lineups are locked for this window — kickoff is within the hour." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '3px 8px' }}><Emoji e="🔒" size="1.25em" /> LOCKED</span>
   ) : realtime === 'final' ? (
     <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 4, padding: '3px 8px' }}>FINAL</span>
   ) : (
@@ -2419,7 +2419,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
                   <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
                 </div>
                 {sel ? <span className="mono" style={{ fontSize: 8, color: 'var(--you)', flex: 'none' }}>CURRENT ✓</span>
-                  : isGated ? <span title="Premium position — unlock premium" style={{ fontSize: 12, flex: 'none' }}>🔒</span> : null}
+                  : isGated ? <span title="Premium position — unlock premium" style={{ fontSize: 14, flex: 'none' }}>🔒</span> : null}
               </button>
             );
           })}

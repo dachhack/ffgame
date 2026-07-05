@@ -8,7 +8,7 @@ import { avatarUrl } from '../data/media';
 import { SLEEPER_HANDLE } from '../config';
 import { weekLockLabel } from '../data/nflSlate';
 import { APP_VERSION, DATA_SOURCE } from '../app/version';
-import { PuIcon, GameIcon, COIN_GOLD } from '../app/gameIcons';
+import { PuIcon, GameIcon, Emoji, COIN_GOLD } from '../app/gameIcons';
 import type { FantasyTeam } from '../types';
 
 type ModalState =
@@ -68,8 +68,8 @@ export function LeagueOverview() {
 
           {/* toolbar */}
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-            <ToolButton onClick={() => setModal({ type: 'schedule' })}>📅 ALL MATCHUPS</ToolButton>
-            <ToolButton onClick={() => setModal({ type: 'shop' })}>🛒 POWER-UP SHOP</ToolButton>
+            <ToolButton onClick={() => setModal({ type: 'schedule' })}><Emoji e="📅" /> ALL MATCHUPS</ToolButton>
+            <ToolButton onClick={() => setModal({ type: 'shop' })}><Emoji e="🛒" /> POWER-UP SHOP</ToolButton>
             <span style={{ fontSize: 11, color: 'var(--faint)' }}>Tap any team in standings to see their roster &amp; schedule.</span>
           </div>
 
