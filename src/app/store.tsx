@@ -8,7 +8,7 @@ import { clearRuntimeHeadshots } from '../data/media';
 import type { League } from '../types';
 import { powerupById } from '../data/powerups';
 import { DEMO_WEEK } from '../config';
-import { DEFAULT_PROVIDER_ID, type ProviderUser, type ProviderId } from '../data/providers';
+import { type ProviderUser, type ProviderId } from '../data/providers';
 import { track, identify, Ev } from './analytics';
 import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied } from '../data/liveApi';
 
@@ -169,30 +169,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const saved = typeof localStorage !== 'undefined' ? (localStorage.getItem(THEME_KEY) as ThemeName | null) : null;
     return saved ?? 'neon';
   });
+  // The Sleeper username is session-only on purpose: every visit to the demo
+  // requires re-entering it to reach its leagues, so nothing is remembered
+  // across loads. (Purge the key older builds persisted.)
   const [sleeperUser, setSleeperUserState] = useState<ProviderUser | null>(() => {
-    try {
-      const s = localStorage.getItem(SLEEPER_KEY);
-      if (!s) return null;
-      const u = JSON.parse(s) as ProviderUser;
-      // Backfill `provider` for accounts persisted before the provider seam.
-      return u.provider ? u : { ...u, provider: DEFAULT_PROVIDER_ID };
-    } catch { return null; }
+    try { localStorage.removeItem(SLEEPER_KEY); } catch { /* ignore */ }
+    return null;
   });
   const setSleeperUser = (u: ProviderUser | null) => {
     setSleeperUserState(u);
     if (u) { identify(u.userId, { username: u.username }); track(Ev.sleeperConnected); }
-    try { if (u) localStorage.setItem(SLEEPER_KEY, JSON.stringify(u)); else localStorage.removeItem(SLEEPER_KEY); } catch { /* ignore */ }
   };
   // Boot straight into the app for returning users, skipping the demo funnel:
   //   • a signed-in live user (dripLive flag) → their leagues (Live onboard home),
-  //   • else a remembered Sleeper user → the Sleeper demo leagues,
-  //   • else the playable demo board (the logged-out landing page).
+  //   • else the playable demo board (the landing page for everyone else —
+  //     Sleeper users type their username again each visit).
   // The ?live=1 / OAuth deep links in App.tsx still override this after mount.
   const [route, setRoute] = useState<Route>(() => {
     try { if (localStorage.getItem('dripLive') === '1') return { name: 'live' }; } catch { /* ignore */ }
-    // First-time (logged-out) visitors land straight on the playable demo board
-    // — the demo IS the landing page. Returning Sleeper users skip to leagues.
-    return sleeperUser ? { name: 'leagues' } : { name: 'demo' };
+    return { name: 'demo' };
   });
   // Browser back/forward: mirror each route into history state (URL unchanged) so the
   // back button steps between in-app screens instead of dead-ending / leaving the site.
