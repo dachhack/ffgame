@@ -1,4 +1,7 @@
-# Pixel Bowl sprite slot
+# Pixel Bowl sprite slot (PARKED)
+
+The picker entry is currently hidden — re-add { id: 'pixel', name: 'Pixel Bowl' }
+to ICON_SETS in src/app/gameIcons.tsx when the sprite set is ready.
 
 Drop the retro sprites here — same filenames as `../factory/`. Any sprite
 that's missing simply falls back to the classic emoji at runtime, so the set

@@ -58,7 +58,9 @@ export const UI_ART = {
 export const ICON_SETS: { id: IconSetName; name: string }[] = [
   { id: 'emoji', name: 'Classic Emoji' },
   { id: 'factory', name: 'Football Factory' },
-  { id: 'pixel', name: 'Pixel Bowl' },
+  // Pixel Bowl is parked until its sprite set is ready — re-add
+  // { id: 'pixel', name: 'Pixel Bowl' } here to revive the option
+  // (the runtime plumbing and public/icons/pixel/README.md remain).
 ];
 
 /** A raw emoji glyph bumped to icon size, so emoji read at the same scale as
