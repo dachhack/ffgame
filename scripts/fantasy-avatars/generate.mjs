@@ -393,9 +393,43 @@ const gridPromptFor = (n, cols, rows) =>
   `Transform EVERY headshot into a stylized fantasy character portrait: ${clause}. ` +
   `Keep each transformed character in exactly the same grid cell as its source photo — one character ` +
   `per cell, same layout, no swapping, merging, or moving subjects between cells. Keep each player's ` +
-  `pose recognizable. ${NO_TRADEMARKS}Render as detailed pixel-art style bust portraits, ` +
+  `pose recognizable. Each character must keep the jersey colors from ITS OWN source photo — never ` +
+  `copy jersey colors, patterns, or team designs from a neighboring cell, and never render readable ` +
+  `letters or words. ${NO_TRADEMARKS}Render as detailed pixel-art style bust portraits, ` +
   `no text or watermarks. All background inside and between cells must stay one solid flat uniform ` +
   `bright magenta color (#FF00FF) — no gradients, shadows, or grid lines. Leave empty magenta cells empty.`;
+
+// ---- Jersey audit (grid mode) -----------------------------------------------
+// Gemini sometimes paints a cell with a NEIGHBOR's team colors (right cell,
+// wrong jersey — layout checks can't see it). Detect it by color: histogram
+// the torso region of each output cell and compare against every input in
+// the batch; a cell that matches someone else's jersey clearly better than
+// its own gets rejected and that player regenerates solo.
+
+/** 64-bin RGB histogram of the opaque torso region, or null if too little. */
+function torsoHist(pngBuf) {
+  const img = PNG.sync.read(pngBuf);
+  const { width: w, height: h, data } = img;
+  const hist = new Float64Array(64);
+  let n = 0;
+  for (let y = Math.floor(h * 0.55); y < Math.floor(h * 0.98); y++) {
+    for (let x = Math.floor(w * 0.1); x < Math.floor(w * 0.9); x++) {
+      const i = (y * w + x) * 4;
+      if (data[i + 3] < 120) continue;
+      hist[(data[i] >> 6) * 16 + ((data[i + 1] >> 6) * 4) + (data[i + 2] >> 6)]++;
+      n++;
+    }
+  }
+  if (n < 50) return null;
+  for (let k = 0; k < 64; k++) hist[k] /= n;
+  return hist;
+}
+
+function histDist(a, b) {
+  let s = 0;
+  for (let k = 0; k < 64; k++) s += Math.abs(a[k] - b[k]);
+  return s / 2; // 0 (identical) .. 1 (disjoint)
+}
 
 const gridMutatePromptFor = (n, cols, rows) =>
   `This image is a ${cols}x${rows} grid of ${n} fantasy character portraits on a solid magenta ` +
@@ -548,8 +582,28 @@ async function generateBatch(players) {
           }
         }
       }
+      // Jersey audit: reject cells wearing another batch member's team colors.
+      const inHists = shots.map((s) => torsoHist(Buffer.from(s.data, 'base64')));
+      const wrongJersey = new Set();
+      for (let i = 0; i < players.length; i++) {
+        const outHist = torsoHist(keepBg || !bgKeyed ? cells[i] : keyed[i].buf);
+        if (!outHist || !inHists[i]) continue;
+        const own = histDist(outHist, inHists[i]);
+        let bestOther = Infinity;
+        for (let j = 0; j < players.length; j++) {
+          if (j !== i && inHists[j]) bestOther = Math.min(bestOther, histDist(outHist, inHists[j]));
+        }
+        if (own > bestOther * 1.3 + 0.12) wrongJersey.add(i);
+      }
+
       const batch = [];
       for (let i = 0; i < players.length; i++) {
+        if (wrongJersey.has(i)) {
+          console.warn(`  reject  ${players[i].slug} — cell matches another player's jersey colors; regenerating solo`);
+          const solo = await generateOne(players[i]);
+          batch.push(solo?.status === 'ok' ? { ...solo, reason: 'grid cell had wrong jersey; regenerated solo' } : solo);
+          continue;
+        }
         const note = !keepBg && !bgKeyed ? 'not keyed: cell background not flat enough to key' : undefined;
         const buf = keepBg || !bgKeyed ? cells[i] : keyed[i].buf;
         await writeFile(path.join(outDir, `${players[i].slug}.png`), buf);
