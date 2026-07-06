@@ -393,9 +393,13 @@ const gridPromptFor = (n, cols, rows) =>
   `Transform EVERY headshot into a stylized fantasy character portrait: ${clause}. ` +
   `Keep each transformed character in exactly the same grid cell as its source photo — one character ` +
   `per cell, same layout, no swapping, merging, or moving subjects between cells. Keep each player's ` +
-  `pose recognizable. Each character must keep the jersey colors from ITS OWN source photo — never ` +
-  `copy jersey colors, patterns, or team designs from a neighboring cell, and never render readable ` +
-  `letters or words. ${NO_TRADEMARKS}Render as detailed pixel-art style bust portraits, ` +
+  `pose recognizable. Every character must be VISIBLY DIFFERENT, derived from its own source photo: ` +
+  `keep that player's face shape, hairstyle, facial hair, and skin tone under the fantasy features — ` +
+  `do not give every cell the same face. Each character must keep the jersey colors from ITS OWN ` +
+  `source photo — never copy jersey colors, patterns, or team designs from a neighboring cell, and ` +
+  `never render readable letters or words. ${NO_TRADEMARKS}Absolutely no NFL shield anywhere — ` +
+  `replace every chest, collar, and sleeve logo with a fictional dragon-crest sigil. ` +
+  `Render as detailed pixel-art style bust portraits, ` +
   `no text or watermarks. All background inside and between cells must stay one solid flat uniform ` +
   `bright magenta color (#FF00FF) — no gradients, shadows, or grid lines. Leave empty magenta cells empty.`;
 
