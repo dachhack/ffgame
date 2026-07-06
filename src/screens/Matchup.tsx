@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile } from '../app/ui';
@@ -91,14 +91,19 @@ const DEMO_POWERUPS = [
   { id: 'floodgates', icon: '🌊', name: 'Floodgates', blurb: 'Your drips ignore the opponent’s pauses and erases all game.' },
 ];
 
+// Stable empty record so props that fall back to "nothing" keep a constant
+// identity — lets the memoized WindowSection skip re-renders on every clock tick
+// (a fresh {} each render would look like a changed prop and defeat the memo).
+const EMPTY_REC: Record<string, never> = {};
+
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
   const { youTeamId: YOU, navigate, liveCtx, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const [demoBuff, setDemoBuff] = useState('garbage-time'); // the power-up the demo viewer armed
-  const buffs = demo ? { [demoBuff]: true } : (applied[week]?.buffs ?? {});
+  const buffs = useMemo(() => (demo ? { [demoBuff]: true } : (applied[week]?.buffs ?? EMPTY_REC)), [demo, demoBuff, applied, week]);
   const buffsKey = JSON.stringify(buffs);
   const extraSlots = applied[week]?.extraSlots ?? {};
   const swaps = applied[week]?.swaps ?? {};
-  const backupAssign = applied[week]?.backups ?? {};
+  const backupAssign = applied[week]?.backups ?? EMPTY_REC;
   const aw = applied[week];
   const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, emp: aw?.emp };
   const extrasKey = JSON.stringify(extras);
@@ -1601,7 +1606,7 @@ function TargetPanel({ aw, oppPicks, preKick, onClearSpy }: {
 }
 
 // ── Window section ──────────────────────────────────────────────────────────
-function WindowSection(props: {
+function WindowSectionInner(props: {
   rw: ReturnType<typeof buildMatchup>['windows'][number];
   week: number;
   phase: Phase;
@@ -1826,6 +1831,29 @@ function WindowSection(props: {
     </div>
   );
 }
+
+// The live board re-renders Matchup every ~700ms tick (winClocks advances), which
+// would re-render all five WindowSections even though only the playing window's
+// clock changed. Skip the re-render when every DATA prop is unchanged: idle and
+// finished windows have identical data tick-to-tick, so only the advancing window
+// (whose `clock`/`wallSeconds` change) re-renders. Function props are treated as
+// always-equal (Matchup rebuilds these handler closures every render, but that's
+// irrelevant here) — SAFE because every piece of state a handler reads (picks,
+// phase, playing, applyMode, inventory, backups, armed, aw, …) is itself a compared
+// prop, so any change that would alter a handler's behavior also changes a data
+// prop and forces the re-render. A skipped window therefore never fires a handler
+// against stale state. (Verified: with one window live, toggling a second — idle,
+// memo-skipped — window still starts it, and scores resolve byte-identically.)
+const WindowSection = memo(WindowSectionInner, (a, b) => {
+  const ak = Object.keys(a), bk = Object.keys(b);
+  if (ak.length !== bk.length) return false;
+  for (const k of ak) {
+    const av = (a as Record<string, unknown>)[k], bv = (b as Record<string, unknown>)[k];
+    if (typeof av === 'function' && typeof bv === 'function') continue; // handler identity is irrelevant (see note above)
+    if (!Object.is(av, bv)) return false;
+  }
+  return true;
+});
 
 // ── Setup row ──
 // Marks the two Field General QBs that are paired under the Twin Generals power-up
