@@ -25,7 +25,16 @@ GEMINI_API_KEY=... node scripts/fantasy-avatars/generate.mjs \
 
 # See the queue without calling the API
 node scripts/fantasy-avatars/generate.mjs --style elf --dry-run
+
+# Different style per position (QB/RB/WR/TE, from scripts/pbp/crosswalk.json)
+GEMINI_API_KEY=... node scripts/fantasy-avatars/generate.mjs \
+  --style-map "QB=wizard,RB=orc,WR=elf,TE=dwarf"
 ```
+
+With `--style-map` the whole set lands in one folder (`out/mixed/` unless you
+name it with `--style`), each player keyed by position; the manifest records
+which style each player got. Positions not in the map are skipped, so
+`--style-map "QB=wizard"` does just the QBs.
 
 Outputs land at `scripts/fantasy-avatars/out/<style>/<slug>.png` **with
 transparent backgrounds**: Gemini can't emit an alpha channel, so the script

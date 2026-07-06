@@ -22,6 +22,10 @@
 //   --style <name>        preset name (see STYLES below) and the output folder
 //   --prompt "<text>"     custom style clause; overrides the preset text
 //                         (still pass --style to name the output folder)
+//   --style-map "QB=wizard,RB=orc,WR=elf,TE=dwarf"
+//                         style per position (from scripts/pbp/crosswalk.json);
+//                         one folder for the whole set (--style names it,
+//                         default "mixed"); unmapped positions are skipped
 //   --players a,b,c       only these slugs (comma-separated)
 //   --limit N             stop after N players (after skip-existing filtering)
 //   --concurrency N       parallel requests (default 3)
@@ -104,8 +108,30 @@ const flag = (name) => {
 };
 const has = (name) => args.includes(`--${name}`);
 
-const style = flag('style') ?? 'dragonborn';
 const customPrompt = flag('prompt');
+
+// --style-map "QB=wizard,RB=orc,WR=elf,TE=dwarf": one run, style per position
+// (positions come from scripts/pbp/crosswalk.json, same slugs as headshots).
+// Everything still lands in one out/<style>/ folder so the set ships together.
+const styleMapFlag = flag('style-map');
+let styleMap = null;
+if (styleMapFlag) {
+  if (customPrompt) {
+    console.error('--style-map cannot be combined with --prompt (map entries use presets).');
+    process.exit(1);
+  }
+  styleMap = {};
+  for (const part of styleMapFlag.split(',')) {
+    const [pos, s] = part.split('=').map((x) => x.trim());
+    if (!pos || !STYLES[s]) {
+      console.error(`Bad --style-map entry "${part}" — use POS=preset, presets: ${Object.keys(STYLES).join(', ')}`);
+      process.exit(1);
+    }
+    styleMap[pos.toUpperCase()] = s;
+  }
+}
+
+const style = flag('style') ?? (styleMap ? 'mixed' : 'dragonborn');
 const onlyPlayers = flag('players')?.split(',').map((s) => s.trim()).filter(Boolean);
 const limit = flag('limit') ? Number(flag('limit')) : Infinity;
 const concurrency = flag('concurrency') ? Number(flag('concurrency')) : 3;
@@ -118,12 +144,12 @@ const grid = flag('grid') ? Number(flag('grid')) : 0; // players per API call, 0
 const passes = flag('passes') ? Number(flag('passes')) : 1; // 2+ re-feeds output to mutate away from the source face
 
 const clause = customPrompt ?? STYLES[style];
-if (!clause) {
+if (!clause && !styleMap) {
   console.error(`Unknown style "${style}". Presets: ${Object.keys(STYLES).join(', ')}`);
   console.error('Or pass --prompt "<style clause>" with your own --style name for the folder.');
   process.exit(1);
 }
-const prompt = promptFor(clause);
+const prompt = clause ? promptFor(clause) : null; // per-player prompts override under --style-map
 
 const keyOnly = flag('key-only'); // chroma-key an existing PNG, no API (testing/repair)
 
@@ -149,6 +175,18 @@ if (onlyPlayers) {
   queue = roster.filter((p) => want.has(p.slug));
   const missing = onlyPlayers.filter((s) => !queue.some((p) => p.slug === s));
   if (missing.length) console.warn(`Not in headshots.ts, skipping: ${missing.join(', ')}`);
+}
+
+if (styleMap) {
+  const crosswalk = JSON.parse(await readFile(path.join(REPO, 'scripts', 'pbp', 'crosswalk.json'), 'utf8'));
+  const before = queue.length;
+  queue = queue
+    .map((p) => ({ ...p, styleName: styleMap[crosswalk[p.slug]?.pos?.toUpperCase()] }))
+    .filter((p) => p.styleName)
+    .map((p) => ({ ...p, prompt: promptFor(STYLES[p.styleName]) }));
+  if (before !== queue.length) {
+    console.log(`Skipping ${before - queue.length} player(s) whose position isn't in the style map.`);
+  }
 }
 
 const outDir = path.join(outRoot, style);
@@ -179,13 +217,14 @@ if (has('verify')) {
 
 if (!keyOnly) {
   console.log(`Style "${style}" → ${outDir}`);
-  console.log(`Prompt: ${prompt}\n`);
+  if (styleMap) console.log(`Style map: ${Object.entries(styleMap).map(([p, s]) => `${p}→${s}`).join('  ')}`);
+  else console.log(`Prompt: ${prompt}\n`);
   console.log(`${queue.length} player(s) queued${Number.isFinite(limit) ? ` (limit ${limit})` : ''}, concurrency ${concurrency}, model ${model}`);
   if (grid > 1) console.log(`Grid mode: ${Math.ceil(queue.length / grid)} API call(s) of up to ${grid} players each`);
 }
 
 if (dryRun) {
-  for (const p of queue) console.log(`  would generate: ${p.slug}  (${p.url})`);
+  for (const p of queue) console.log(`  would generate: ${p.slug}${p.styleName ? ` [${p.styleName}]` : ''}  (${p.url})`);
   process.exit(0);
 }
 
@@ -388,9 +427,9 @@ function sliceGrid(outBuf, cols, rows, count) {
   return cells;
 }
 
-const gridPromptFor = (n, cols, rows) =>
+const gridPromptFor = (n, cols, rows, c = clause) =>
   `This image is a ${cols}x${rows} grid of ${n} NFL player headshot photos on a solid magenta background. ` +
-  `Transform EVERY headshot into a stylized fantasy character portrait: ${clause}. ` +
+  `Transform EVERY headshot into a stylized fantasy character portrait: ${c}. ` +
   `Keep each transformed character in exactly the same grid cell as its source photo — one character ` +
   `per cell, same layout, no swapping, merging, or moving subjects between cells. Keep each player's ` +
   `pose recognizable. Every character must be VISIBLY DIFFERENT, derived from its own source photo: ` +
@@ -510,7 +549,7 @@ async function generateOne(p) {
       let input = await fetchHeadshot(p.url);
       let out;
       for (let pass = 1; pass <= passes; pass++) {
-        out = await callGemini(input, pass === 1 ? prompt : mutatePromptFor());
+        out = await callGemini(input, pass === 1 ? (p.prompt ?? prompt) : mutatePromptFor());
         input = { data: out.buf.toString('base64'), mime: out.mime };
       }
       let buf = out.buf;
@@ -563,8 +602,11 @@ async function generateBatch(players) {
       const stitched = stitchGrid(shots.map((s) => Buffer.from(s.data, 'base64')), cols, rows);
       let input = { data: stitched.toString('base64'), mime: 'image/png' };
       let out;
+      const batchClause = players[0].styleName ? STYLES[players[0].styleName] : clause;
       for (let pass = 1; pass <= passes; pass++) {
-        out = await callGemini(input, (pass === 1 ? gridPromptFor : gridMutatePromptFor)(players.length, cols, rows));
+        out = await callGemini(input, pass === 1
+          ? gridPromptFor(players.length, cols, rows, batchClause)
+          : gridMutatePromptFor(players.length, cols, rows));
         input = { data: out.buf.toString('base64'), mime: out.mime };
       }
       // Slice ALL cells (including trailing empties) and sanity-check occupancy
@@ -636,9 +678,21 @@ async function generateBatch(players) {
   }
 }
 
-const jobs = grid > 1
-  ? Array.from({ length: Math.ceil(queue.length / grid) }, (_, i) => queue.slice(i * grid, (i + 1) * grid))
-  : queue;
+// Grid batches must share one style, so group by style before chunking.
+function chunkJobs() {
+  const groups = new Map();
+  for (const p of queue) {
+    const k = p.styleName ?? style;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(p);
+  }
+  const out = [];
+  for (const g of groups.values()) {
+    for (let i = 0; i < g.length; i += grid) out.push(g.slice(i, i + grid));
+  }
+  return out;
+}
+const jobs = grid > 1 ? chunkJobs() : queue;
 
 // --grid-preview: exercise the local half of grid mode (stitch → slice → key)
 // on the first batch, so the contact sheet can be inspected before spending
@@ -677,6 +731,7 @@ await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, wor
 const manifestPath = path.join(outDir, 'manifest.json');
 let manifest = {};
 try { manifest = JSON.parse(await readFile(manifestPath, 'utf8')); } catch { /* first run */ }
+const styleOf = new Map(queue.map((p) => [p.slug, p.styleName]));
 for (const r of results) {
   if (r.status === 'quota') continue; // not an outcome — the run just stopped here
   const source = roster.find((p) => p.slug === r.slug)?.url;
@@ -687,12 +742,15 @@ for (const r of results) {
     espnId: source?.match(/full\/(\d+)\.png/)?.[1],
     source,
     passes,
+    ...(styleOf.get(r.slug) ? { style: styleOf.get(r.slug) } : {}),
     // sha256 (truncated) of the written PNG — verifies files haven't been
     // renamed or shuffled since generation.
     ...(r.sha256 ? { sha256: r.sha256 } : {}),
   };
 }
-await writeFile(manifestPath, JSON.stringify({ style, model, prompt, players: manifest }, null, 2));
+await writeFile(manifestPath, JSON.stringify(
+  { style, model, ...(styleMap ? { styleMap } : { prompt }), players: manifest }, null, 2,
+));
 
 const tally = results.reduce((a, r) => ((a[r.status] = (a[r.status] ?? 0) + 1), a), {});
 console.log(`\nDone: ${tally.ok ?? 0} ok, ${tally.refused ?? 0} refused, ${tally.error ?? 0} error`);
