@@ -27,13 +27,24 @@
 //   --concurrency N       parallel requests (default 3)
 //   --model <id>          Gemini model (default gemini-2.5-flash-image)
 //   --out <dir>           output root (default scripts/fantasy-avatars/out)
+//   --grid N              pack N players per API call as a contact sheet and
+//                         slice the result — ~N× cheaper, lower per-face detail
+//                         (try 9; 25 max is sensible at Gemini's ~1024px output)
+//   --keep-bg             skip chroma-keying, save Gemini's opaque output as-is
+//   --key-only <file>     just chroma-key an existing PNG to <file>.keyed.png
+//   --grid-preview        with --grid: build the first contact sheet and slice
+//                         it back apart locally (no API call) to inspect both
 //   --force               regenerate even if the output PNG already exists
 //   --dry-run             list what would be generated, no downloads/API calls
+//
+// Backgrounds: Gemini can't output transparency, so the prompt demands a flat
+// magenta ground which is flood-fill keyed out locally (see keyOutBackground).
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PNG } from 'pngjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..', '..');
@@ -52,12 +63,15 @@ const STYLES = {
 };
 
 // The wrapper around the style clause. Keeps team colors so avatars still read
-// as "your player", and asks for a clean bust on transparent-friendly ground.
+// as "your player". Gemini can't emit an alpha channel, so we ask for a solid
+// magenta ground (no NFL team wears it, no fantasy skin tone is it) and
+// chroma-key it to transparency after download.
 const promptFor = (clause) =>
   `Transform this NFL player headshot into a stylized fantasy character portrait: ${clause}. ` +
   `Keep the pose, framing, and jersey/team colors recognizable from the original photo. ` +
-  `Render as a detailed pixel-art style bust portrait on a plain dark background, ` +
-  `head and shoulders only, centered, no text or watermarks.`;
+  `Render as a detailed pixel-art style bust portrait, head and shoulders only, centered, ` +
+  `no text or watermarks. The entire background must be one solid flat uniform bright ` +
+  `magenta color (#FF00FF) — no gradient, no shadow, no vignette, no outline glow.`;
 
 // ---- CLI ------------------------------------------------------------------
 const args = process.argv.slice(2);
@@ -76,6 +90,8 @@ const model = flag('model') ?? 'gemini-2.5-flash-image';
 const outRoot = flag('out') ?? path.join(HERE, 'out');
 const force = has('force');
 const dryRun = has('dry-run');
+const keepBg = has('keep-bg');
+const grid = flag('grid') ? Number(flag('grid')) : 0; // players per API call, 0 = one per call
 
 const clause = customPrompt ?? STYLES[style];
 if (!clause) {
@@ -85,8 +101,10 @@ if (!clause) {
 }
 const prompt = promptFor(clause);
 
+const keyOnly = flag('key-only'); // chroma-key an existing PNG, no API (testing/repair)
+
 const apiKey = process.env.GEMINI_API_KEY;
-if (!apiKey && !dryRun) {
+if (!apiKey && !dryRun && !keyOnly && !has('grid-preview')) {
   console.error('GEMINI_API_KEY is not set. Create one at https://aistudio.google.com/apikey');
   console.error('and run:  GEMINI_API_KEY=... node scripts/fantasy-avatars/generate.mjs ...');
   process.exit(1);
@@ -114,18 +132,140 @@ await mkdir(outDir, { recursive: true });
 if (!force) {
   const before = queue.length;
   queue = queue.filter((p) => !existsSync(path.join(outDir, `${p.slug}.png`)));
-  if (before !== queue.length) console.log(`Skipping ${before - queue.length} already-generated (use --force to redo).`);
+  if (before !== queue.length && !keyOnly) console.log(`Skipping ${before - queue.length} already-generated (use --force to redo).`);
 }
 queue = queue.slice(0, limit);
 
-console.log(`Style "${style}" → ${outDir}`);
-console.log(`Prompt: ${prompt}\n`);
-console.log(`${queue.length} player(s) queued${Number.isFinite(limit) ? ` (limit ${limit})` : ''}, concurrency ${concurrency}, model ${model}`);
+if (!keyOnly) {
+  console.log(`Style "${style}" → ${outDir}`);
+  console.log(`Prompt: ${prompt}\n`);
+  console.log(`${queue.length} player(s) queued${Number.isFinite(limit) ? ` (limit ${limit})` : ''}, concurrency ${concurrency}, model ${model}`);
+  if (grid > 1) console.log(`Grid mode: ${Math.ceil(queue.length / grid)} API call(s) of up to ${grid} players each`);
+}
 
 if (dryRun) {
   for (const p of queue) console.log(`  would generate: ${p.slug}  (${p.url})`);
   process.exit(0);
 }
+
+// ---- Chroma key -------------------------------------------------------------
+// Gemini returns opaque images, so the prompt asks for a flat #FF00FF ground
+// and this keys it out: flood-fill near-magenta pixels connected to the image
+// border (interior magenta accents survive), then soften/despill the 1px rim.
+const KEY = { r: 255, g: 0, b: 255 };
+const HARD = 90;  // border-connected pixels this close to magenta are cleared
+const SOFT = 170; // rim pixels between HARD and SOFT get partial alpha
+
+function keyOutBackground(pngBuf) {
+  const img = PNG.sync.read(pngBuf);
+  const { width: w, height: h, data } = img;
+  const dist = (i) => Math.max(
+    Math.abs(data[i] - KEY.r), Math.abs(data[i + 1] - KEY.g), Math.abs(data[i + 2] - KEY.b),
+  );
+
+  // Flood fill from every border pixel across near-magenta neighbors.
+  const cleared = new Uint8Array(w * h);
+  const stack = [];
+  for (let x = 0; x < w; x++) stack.push(x, x + w * (h - 1));
+  for (let y = 0; y < h; y++) stack.push(y * w, y * w + w - 1);
+  while (stack.length) {
+    const p = stack.pop();
+    if (cleared[p] || dist(p * 4) >= HARD) continue;
+    cleared[p] = 1;
+    const x = p % w, y = (p / w) | 0;
+    if (x > 0) stack.push(p - 1);
+    if (x < w - 1) stack.push(p + 1);
+    if (y > 0) stack.push(p - w);
+    if (y < h - 1) stack.push(p + w);
+  }
+
+  let hit = 0;
+  for (let p = 0; p < w * h; p++) {
+    const i = p * 4;
+    if (cleared[p]) { data[i + 3] = 0; hit++; continue; }
+    // Rim pass: pixels touching the cleared region get alpha from their
+    // magenta-ness (anti-aliased edge) plus a despill of the magenta cast.
+    const x = p % w, y = (p / w) | 0;
+    const nearClear =
+      (x > 0 && cleared[p - 1]) || (x < w - 1 && cleared[p + 1]) ||
+      (y > 0 && cleared[p - w]) || (y < h - 1 && cleared[p + w]);
+    if (!nearClear) continue;
+    const d = dist(i);
+    if (d < SOFT) data[i + 3] = Math.round(data[i + 3] * Math.min(1, (d - HARD) / (SOFT - HARD)));
+    const spillCap = Math.max(data[i + 1], Math.min(data[i], data[i + 2]));
+    if (data[i] > spillCap) data[i] = spillCap;
+    if (data[i + 2] > spillCap) data[i + 2] = spillCap;
+  }
+  // If almost nothing keyed, Gemini likely ignored the magenta ask — keep the
+  // original rather than shipping a nibbled image, and let the caller warn.
+  return { buf: PNG.sync.write(img), keyedFrac: hit / (w * h) };
+}
+
+if (keyOnly) {
+  const { buf, keyedFrac } = keyOutBackground(await readFile(keyOnly));
+  const dest = keyOnly.replace(/\.png$/i, '') + '.keyed.png';
+  await writeFile(dest, buf);
+  console.log(`keyed ${(keyedFrac * 100).toFixed(1)}% of pixels → ${dest}`);
+  process.exit(0);
+}
+
+// ---- Grid batching -----------------------------------------------------------
+// --grid N packs N headshots into one contact-sheet image per API call. One
+// output image costs the same as one portrait, so a 5x5 grid is ~25x cheaper
+// and stretches free-tier quota — at the price of less detail per face
+// (Gemini outputs ~1024px total, so a 5x5 cell is ~200px).
+const CELL = 256;
+
+function stitchGrid(shotBufs, cols, rows) {
+  const canvas = new PNG({ width: cols * CELL, height: rows * CELL });
+  for (let i = 0; i < canvas.data.length; i += 4) {
+    canvas.data[i] = KEY.r; canvas.data[i + 1] = KEY.g; canvas.data[i + 2] = KEY.b; canvas.data[i + 3] = 255;
+  }
+  shotBufs.forEach((buf, idx) => {
+    const src = PNG.sync.read(buf);
+    const scale = Math.min(CELL / src.width, CELL / src.height);
+    const w = Math.max(1, Math.round(src.width * scale));
+    const h = Math.max(1, Math.round(src.height * scale));
+    const ox = (idx % cols) * CELL + ((CELL - w) >> 1);
+    const oy = ((idx / cols) | 0) * CELL + ((CELL - h) >> 1);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const s = ((Math.min(src.height - 1, (y / scale) | 0)) * src.width + Math.min(src.width - 1, (x / scale) | 0)) * 4;
+        const d = ((oy + y) * canvas.width + ox + x) * 4;
+        const a = src.data[s + 3] / 255; // ESPN headshots are transparent PNGs — blend onto magenta
+        canvas.data[d] = Math.round(src.data[s] * a + KEY.r * (1 - a));
+        canvas.data[d + 1] = Math.round(src.data[s + 1] * a + KEY.g * (1 - a));
+        canvas.data[d + 2] = Math.round(src.data[s + 2] * a + KEY.b * (1 - a));
+      }
+    }
+  });
+  return PNG.sync.write(canvas);
+}
+
+function sliceGrid(outBuf, cols, rows, count) {
+  const img = PNG.sync.read(outBuf); // output size ≠ input size; slice proportionally
+  const cells = [];
+  for (let idx = 0; idx < count; idx++) {
+    const col = idx % cols, row = (idx / cols) | 0;
+    const x0 = Math.round((col * img.width) / cols), x1 = Math.round(((col + 1) * img.width) / cols);
+    const y0 = Math.round((row * img.height) / rows), y1 = Math.round(((row + 1) * img.height) / rows);
+    const cell = new PNG({ width: x1 - x0, height: y1 - y0 });
+    for (let y = y0; y < y1; y++) {
+      img.data.copy(cell.data, (y - y0) * cell.width * 4, (y * img.width + x0) * 4, (y * img.width + x1) * 4);
+    }
+    cells.push(PNG.sync.write(cell));
+  }
+  return cells;
+}
+
+const gridPromptFor = (n, cols, rows) =>
+  `This image is a ${cols}x${rows} grid of ${n} NFL player headshot photos on a solid magenta background. ` +
+  `Transform EVERY headshot into a stylized fantasy character portrait: ${clause}. ` +
+  `Keep each transformed character in exactly the same grid cell as its source photo — one character ` +
+  `per cell, same layout, no swapping, merging, or moving subjects between cells. Keep each player's ` +
+  `pose and jersey/team colors recognizable. Render as detailed pixel-art style bust portraits, ` +
+  `no text or watermarks. All background inside and between cells must stay one solid flat uniform ` +
+  `bright magenta color (#FF00FF) — no gradients, shadows, or grid lines. Leave empty magenta cells empty.`;
 
 // ---- Generation ------------------------------------------------------------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -138,7 +278,7 @@ async function fetchHeadshot(url) {
   return { data: buf.toString('base64'), mime };
 }
 
-async function callGemini(headshot) {
+async function callGemini(headshot, promptText = prompt) {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
@@ -148,7 +288,7 @@ async function callGemini(headshot) {
         contents: [{
           parts: [
             { inline_data: { mime_type: headshot.mime, data: headshot.data } },
-            { text: prompt },
+            { text: promptText },
           ],
         }],
       }),
@@ -170,7 +310,10 @@ async function callGemini(headshot) {
   const json = await res.json();
   const cand = json.candidates?.[0];
   const img = cand?.content?.parts?.find((p) => p.inlineData?.data || p.inline_data?.data);
-  if (img) return Buffer.from((img.inlineData ?? img.inline_data).data, 'base64');
+  if (img) {
+    const part = img.inlineData ?? img.inline_data;
+    return { buf: Buffer.from(part.data, 'base64'), mime: part.mimeType ?? part.mime_type ?? 'image/png' };
+  }
   // No image back — usually a policy refusal on identifiable people.
   const why = cand?.finishReason || json.promptFeedback?.blockReason ||
     cand?.content?.parts?.map((p) => p.text).filter(Boolean).join(' ').slice(0, 200) ||
@@ -187,10 +330,23 @@ async function generateOne(p) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const headshot = await fetchHeadshot(p.url);
-      const png = await callGemini(headshot);
-      await writeFile(path.join(outDir, `${p.slug}.png`), png);
+      const out = await callGemini(headshot);
+      let buf = out.buf;
+      let note;
+      if (!keepBg) {
+        if (out.mime !== 'image/png') {
+          note = `not keyed: got ${out.mime}`;
+        } else {
+          const keyed = keyOutBackground(buf);
+          // <5% cleared means the model ignored the magenta ask; keep original.
+          if (keyed.keyedFrac < 0.05) note = 'not keyed: background was not magenta';
+          else buf = keyed.buf;
+        }
+        if (note) console.warn(`  warn    ${p.slug} — ${note} (kept opaque)`);
+      }
+      await writeFile(path.join(outDir, `${p.slug}.png`), buf);
       console.log(`  ok      ${p.slug}`);
-      return { slug: p.slug, status: 'ok' };
+      return { slug: p.slug, status: 'ok', ...(note ? { reason: note } : {}) };
     } catch (e) {
       if (e.refused) {
         console.warn(`  REFUSED ${p.slug} — ${e.message}`);
@@ -213,14 +369,92 @@ async function generateOne(p) {
   }
 }
 
-let cursor = 0;
-async function worker() {
-  while (cursor < queue.length && !quotaWall) {
-    const p = queue[cursor++];
-    results.push(await generateOne(p));
+/** Grid mode: one API call transforms a whole contact sheet, then we slice it
+ *  back apart by cell and key each cell. A refusal/error hits the whole batch. */
+async function generateBatch(players) {
+  const label = `${players[0].slug}…+${players.length - 1}`;
+  const cols = Math.ceil(Math.sqrt(players.length));
+  const rows = Math.ceil(players.length / cols);
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const shots = await Promise.all(players.map((p) => fetchHeadshot(p.url)));
+      const stitched = stitchGrid(shots.map((s) => Buffer.from(s.data, 'base64')), cols, rows);
+      const out = await callGemini(
+        { data: stitched.toString('base64'), mime: 'image/png' },
+        gridPromptFor(players.length, cols, rows),
+      );
+      const cells = sliceGrid(out.buf, cols, rows, players.length);
+      const batch = [];
+      for (let i = 0; i < players.length; i++) {
+        let buf = cells[i];
+        let note;
+        if (!keepBg) {
+          const keyed = keyOutBackground(buf);
+          if (keyed.keyedFrac < 0.05) note = 'not keyed: cell background was not magenta';
+          else buf = keyed.buf;
+        }
+        await writeFile(path.join(outDir, `${players[i].slug}.png`), buf);
+        console.log(`  ok      ${players[i].slug}${note ? ` — ${note}` : ''}`);
+        batch.push({ slug: players[i].slug, status: 'ok', ...(note ? { reason: note } : {}) });
+      }
+      return batch;
+    } catch (e) {
+      if (e.refused) {
+        console.warn(`  REFUSED batch ${label} — ${e.message}`);
+        return players.map((p) => ({ slug: p.slug, status: 'refused', reason: e.message }));
+      }
+      if (e.quota) {
+        quotaWall = true;
+        return players.map((p) => ({ slug: p.slug, status: 'quota' }));
+      }
+      if (attempt < 3) {
+        const wait = e.retryAfterMs ?? 2000 * 2 ** (attempt - 1);
+        console.warn(`  retry   batch ${label} in ${Math.round(wait / 1000)}s — ${e.message.slice(0, 120)}`);
+        await sleep(wait);
+        continue;
+      }
+      console.error(`  ERROR   batch ${label} — ${e.message}`);
+      return players.map((p) => ({ slug: p.slug, status: 'error', reason: e.message }));
+    }
   }
 }
-await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
+
+const jobs = grid > 1
+  ? Array.from({ length: Math.ceil(queue.length / grid) }, (_, i) => queue.slice(i * grid, (i + 1) * grid))
+  : queue;
+
+// --grid-preview: exercise the local half of grid mode (stitch → slice → key)
+// on the first batch, so the contact sheet can be inspected before spending
+// API money. Writes grid-preview.png plus keyed per-player cells.
+if (has('grid-preview')) {
+  if (grid <= 1 || !jobs.length) {
+    console.error('--grid-preview needs --grid N (>1) and a non-empty queue.');
+    process.exit(1);
+  }
+  const players = jobs[0];
+  const cols = Math.ceil(Math.sqrt(players.length));
+  const rows = Math.ceil(players.length / cols);
+  const shots = await Promise.all(players.map((p) => fetchHeadshot(p.url)));
+  const stitched = stitchGrid(shots.map((s) => Buffer.from(s.data, 'base64')), cols, rows);
+  await writeFile(path.join(outDir, 'grid-preview.png'), stitched);
+  const previewDir = path.join(outDir, 'grid-preview-cells');
+  await mkdir(previewDir, { recursive: true });
+  for (const [i, cell] of sliceGrid(stitched, cols, rows, players.length).entries()) {
+    await writeFile(path.join(previewDir, `${players[i].slug}.png`), keyOutBackground(cell).buf);
+  }
+  console.log(`Contact sheet (${cols}x${rows}, what Gemini would receive): ${path.join(outDir, 'grid-preview.png')}`);
+  console.log(`Sliced + keyed cells (local round trip, no API): ${previewDir}`);
+  process.exit(0);
+}
+let cursor = 0;
+async function worker() {
+  while (cursor < jobs.length && !quotaWall) {
+    const job = jobs[cursor++];
+    if (grid > 1) results.push(...await generateBatch(job));
+    else results.push(await generateOne(job));
+  }
+}
+await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, worker));
 
 // ---- Manifest & summary -----------------------------------------------------
 const manifestPath = path.join(outDir, 'manifest.json');
