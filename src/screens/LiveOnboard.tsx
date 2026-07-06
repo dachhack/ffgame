@@ -465,11 +465,12 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
   );
 }
 
-// Week 1 of the 2026 NFL season opens with TNF on Thu Sep 10 at 8:20 PM ET.
-// Lineups lock one hour before the week's first kickoff (see nflSlate.ts), so
-// the first pick lock of the season is 7:20 PM ET. The banner retires itself
-// once that moment passes.
-const SEASON_FIRST_LOCK = new Date('2026-09-10T19:20:00-04:00');
+// Week 1 of the 2026 NFL season opens WEDNESDAY Sep 9 at 8:20 PM ET (SEA
+// hosts the opener; the traditional Thursday slot went to the Melbourne
+// game). Lineups lock one hour before the week's first kickoff (see
+// nflSlate.ts), so the first pick lock of the season is 7:20 PM ET. The
+// banner retires itself once that moment passes.
+const SEASON_FIRST_LOCK = new Date('2026-09-09T19:20:00-04:00');
 
 function SeasonCountdown() {
   const [now, setNow] = useState(() => Date.now());
