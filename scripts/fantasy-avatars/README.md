@@ -55,10 +55,21 @@ without spending anything:
 node scripts/fantasy-avatars/generate.mjs --style dragonborn --grid 9 --limit 9 --grid-preview
 ```
 
+## Trademarks & mutation passes
+
+Prompts keep the jersey's team colors but instruct Gemini to replace every
+NFL shield, team logo, and wordmark with invented fantasy heraldry — real
+trademarks are their own legal problem separate from likeness. `--passes 2`
+re-feeds each result through Gemini with a "mutate the face away from any
+real person" prompt (works in grid mode too; multiplies cost per player).
+Note this reduces visual similarity but does not erase right-of-publicity
+risk if the art is displayed next to the player's real name.
+
 Style presets: dragonborn, orc, elf, dwarf, wizard, knight, vampire,
 werewolf, robot, zombie. Flags: `--style`, `--prompt`, `--players`,
 `--limit`, `--concurrency` (default 3), `--model`, `--out`, `--grid`,
-`--grid-preview`, `--keep-bg`, `--key-only`, `--force`, `--dry-run`.
+`--grid-preview`, `--passes`, `--keep-bg`, `--key-only`, `--force`,
+`--dry-run`.
 
 ## Likeness caveat (read before shipping these)
 
