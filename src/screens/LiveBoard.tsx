@@ -18,30 +18,43 @@ export function LiveBoard({ userId, onBack }: { userId: string; onBack: () => vo
   const [pool, setPool] = useState<Record<string, PoolPlayer>>({});
   const [wallets, setWallets] = useState<{ home: number | null; away: number | null } | null>(null);
   const [teams, setTeams] = useState<Record<number, TeamInfo>>({});
-  const [state, setState] = useState<'loading' | 'none' | 'ready'>('loading');
+  const [state, setState] = useState<'loading' | 'none' | 'ready' | 'error'>('loading');
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let unsub = () => {};
+    let alive = true;
     (async () => {
-      const r = await myRoster(userId);
-      if (!r) { setState('none'); return; }
-      const m = await myMatchup(r.leagueId, r.rosterId);
-      if (!m) { setState('none'); return; }
-      setMatchup(m); setYouAreHome(m.home_roster_id === r.rosterId);
-      const pl = await myPool(r.leagueId, m.week, r.rosterId);
-      setPool(Object.fromEntries(pl.map((p) => [p.slug, p])));
-      matchupTeams(r.leagueId, [m.home_roster_id, m.away_roster_id]).then(setTeams).catch(() => {});
-      const refresh = async () => {
-        const [mm, ss, pk, ww] = await Promise.all([getMatchup(m.id), getMatchupState(m.id), getRevealedPicks(m.id), matchupWallets(m.id).catch(() => null)]);
-        if (mm) setMatchup(mm);
-        setScores(ss); setPicks(pk); setWallets(ww);
-      };
-      await refresh();
-      setState('ready');
-      unsub = subscribeMatchup(m.id, refresh); // live push on score/status change
+      try {
+        setState('loading');
+        const r = await myRoster(userId);
+        if (!alive) return;
+        if (!r) { setState('none'); return; }
+        const m = await myMatchup(r.leagueId, r.rosterId);
+        if (!alive) return;
+        if (!m) { setState('none'); return; }
+        setMatchup(m); setYouAreHome(m.home_roster_id === r.rosterId);
+        const pl = await myPool(r.leagueId, m.week, r.rosterId);
+        if (!alive) return;
+        setPool(Object.fromEntries(pl.map((p) => [p.slug, p])));
+        matchupTeams(r.leagueId, [m.home_roster_id, m.away_roster_id]).then((t) => alive && setTeams(t)).catch(() => {});
+        const refresh = async () => {
+          const [mm, ss, pk, ww] = await Promise.all([getMatchup(m.id), getMatchupState(m.id), getRevealedPicks(m.id), matchupWallets(m.id).catch(() => null)]);
+          if (mm) setMatchup(mm);
+          setScores(ss); setPicks(pk); setWallets(ww);
+        };
+        await refresh();
+        if (!alive) return;
+        setState('ready');
+        unsub = subscribeMatchup(m.id, refresh); // live push on score/status change
+      } catch {
+        // A network failure once left this stuck on "Loading the board…" forever;
+        // surface it with a retry instead.
+        if (alive) setState('error');
+      }
     })();
-    return () => unsub();
-  }, [userId]);
+    return () => { alive = false; unsub(); };
+  }, [userId, attempt]);
 
   const totals = useMemo(() => {
     const home = scores.reduce((t, s) => t + Number(s.home_score), 0);
@@ -50,6 +63,16 @@ export function LiveBoard({ userId, onBack }: { userId: string; onBack: () => vo
   }, [scores, youAreHome]);
 
   if (state === 'loading') return <Muted text="Loading the board…" />;
+  if (state === 'error') return (
+    <div style={card}>
+      <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Couldn’t load the board</div>
+      <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 10 }}>Check your connection and try again.</div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 14 }}>
+        <button onClick={() => setAttempt((a) => a + 1)} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>↻ retry</button>
+        <button onClick={onBack} className="mono" style={linkBtn}>← back</button>
+      </div>
+    </div>
+  );
   if (state === 'none') return (
     <div style={card}>
       <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>No matchup yet</div>

@@ -261,15 +261,19 @@ interface MatchupCard { matchup: LiveMatchup; teams: Record<number, TeamInfo>; }
 
 function Enroll({ session, view, setView }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void }) {
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
+  const [loadErr, setLoadErr] = useState(false);
   const [commishIds, setCommishIds] = useState<Set<string>>(new Set());
   const [cards, setCards] = useState<Record<string, MatchupCard>>({});
   const [choice, setChoice] = useState<'none' | 'player'>('none');
   const isCommish = commishIds.size > 0;
 
   const refresh = async () => {
+    setLoadErr(false);
     let rows: Enrollment[] = [];
+    // Don't fake an empty enrollment on failure — that shows an already-enrolled
+    // user the "how are you joining?" form. Surface a retry instead (see below).
     try { await ensureAppUser(session); rows = await myEnrollments(session.user.id); setEnrollments(rows); }
-    catch { setEnrollments([]); }
+    catch { setLoadErr(true); return; }
     commishOverview().then((l) => setCommishIds(new Set((l ?? []).map((x) => x.league_id)))).catch(() => setCommishIds(new Set()));
     // Each league's next matchup + opponent, for the home cards.
     for (const e of rows) {
@@ -290,6 +294,14 @@ function Enroll({ session, view, setView }: { session: Session; view: OnboardVie
   if (view === 'picks') return <LivePicks userId={session.user.id} onBack={() => setView('home')} />;
   if (view === 'board') return <LiveBoard userId={session.user.id} onBack={() => setView('home')} />;
   if (view === 'admin') return <AdminPage onBack={() => setView('home')} />;
+  // Only a first-load failure blanks the screen; a background refresh failure keeps
+  // whatever we already showed. Retry rather than mislead an enrolled user.
+  if (loadErr && enrollments === null) return (
+    <div style={{ textAlign: 'center', padding: '24px 0' }}>
+      <Muted text="Couldn’t load your leagues." />
+      <button onClick={refresh} className="mono" style={{ marginTop: 12, background: 'none', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', cursor: 'pointer' }}>↻ retry</button>
+    </div>
+  );
   if (enrollments === null) return <Muted text="Loading your leagues…" />;
 
   // Not enrolled yet → fork by role instead of defaulting everyone into the player form.
