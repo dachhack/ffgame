@@ -465,10 +465,11 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
   );
 }
 
-// Week 1 of the 2026 NFL season: TNF on Thu Sep 10 at 8:20 PM ET — the first
-// kickoff, i.e. the first moment picks lock. The banner retires itself once
-// the season is underway.
-const SEASON_KICKOFF = new Date('2026-09-10T20:20:00-04:00');
+// Week 1 of the 2026 NFL season opens with TNF on Thu Sep 10 at 8:20 PM ET.
+// Lineups lock one hour before the week's first kickoff (see nflSlate.ts), so
+// the first pick lock of the season is 7:20 PM ET. The banner retires itself
+// once that moment passes.
+const SEASON_FIRST_LOCK = new Date('2026-09-10T19:20:00-04:00');
 
 function SeasonCountdown() {
   const [now, setNow] = useState(() => Date.now());
@@ -476,7 +477,7 @@ function SeasonCountdown() {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
-  const ms = SEASON_KICKOFF.getTime() - now;
+  const ms = SEASON_FIRST_LOCK.getTime() - now;
   if (ms <= 0) return null;
   const s = Math.floor(ms / 1000);
   const segs: [number, string][] = [
@@ -485,7 +486,7 @@ function SeasonCountdown() {
     [Math.floor((s % 3600) / 60), 'MIN'],
     [s % 60, 'SEC'],
   ];
-  const when = SEASON_KICKOFF.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+  const when = SEASON_FIRST_LOCK.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: '14px 16px', marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
       <div style={{ minWidth: 220, flex: '1 1 220px' }}>
