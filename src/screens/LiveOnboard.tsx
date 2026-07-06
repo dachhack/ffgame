@@ -125,7 +125,8 @@ function AuthForm() {
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const reset = () => { setErr(null); setInfo(null); };
+  const [signupPending, setSignupPending] = useState(false); // awaiting email confirmation
+  const reset = () => { setErr(null); setInfo(null); setSignupPending(false); };
   const go = (m: AuthMode) => { setMode(m); setSent(false); reset(); };
 
   const run = async (fn: () => Promise<void>) => {
@@ -137,7 +138,7 @@ function AuthForm() {
   const submit = () => {
     if (!email.trim()) return;
     if (mode === 'signin') return run(() => signInPassword(email, password));
-    if (mode === 'signup') return run(async () => { const r = await signUpPassword(email, password); if (r.needsConfirm) setInfo('Account created — check your email to confirm, then sign in.'); });
+    if (mode === 'signup') return run(async () => { const r = await signUpPassword(email, password); if (r.needsConfirm) { setInfo('Account created — check your email to confirm, then sign in.'); setSignupPending(true); } });
     if (mode === 'forgot') return run(async () => { await sendPasswordReset(email); setInfo('If that email has an account, a reset link is on its way.'); });
     return run(async () => { await sendMagicLink(email); setSent(true); });
   };
@@ -208,6 +209,15 @@ function AuthForm() {
           style={{ ...btn, width: '100%', padding: '11px 0', marginTop: 14, opacity: busy || !email.trim() || (showPw && password.length < 6) ? 0.6 : 1 }}>{busy ? '…' : cta}</button>
         {err && <div className="mono" style={errStyle}>{err}</div>}
         {info && <div className="mono" style={{ ...errStyle, color: 'var(--you)' }}>{info}</div>}
+        {signupPending && (
+          // Didn't get the confirmation email? A magic link both confirms the
+          // address and signs them in, so it doubles as a resend + a way through.
+          <div style={{ textAlign: 'center', marginTop: 10 }}>
+            <button onClick={() => run(async () => { await sendMagicLink(email); setMode('magic'); setSent(true); })} disabled={busy} className="mono" style={{ ...linkBtn, opacity: busy ? 0.6 : 1 }}>
+              Didn’t get it? Email me a sign-in link →
+            </button>
+          </div>
+        )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, flexWrap: 'wrap', gap: 8 }}>
           {mode === 'signin' && <button onClick={() => go('signup')} className="mono" style={linkBtn}>create account</button>}
