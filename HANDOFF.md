@@ -1,6 +1,27 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-06 · Build `v0.95.0`_
+_Last updated: 2026-07-06 · Build `v0.95.1`_
+
+## All 24 power-ups priced server-side + late-swap copy/ops (v0.95.1)
+- **`0059_powerup_prices.sql`**: `powerup_price()` now lists every catalog item.
+  Twelve (metric-swap, player-swap, mulligan, emp, spy, double-or-nothing,
+  bye-steal, trick-play, pick-six, hail-mary, turnover-boost,
+  unlock-carries-wipe) previously fell to the `else 9999` default, so
+  `wallet_buy_powerup` rejected them as `'unknown powerup'` while the shop
+  showed a price — the reactive/live toolkit was unbuyable in live leagues.
+- **`scripts/check-powerup-prices.mjs`** now (a) parses the LATEST
+  `powerup_price()` definition across migrations (create-or-replace semantics),
+  and (b) fails on OMISSIONS in both directions — the class of bug above can't
+  recur silently. All 24 in lockstep.
+- **Late-swap copy**: rulebook §1 + intro and the FAQ now advertise per-window
+  locks ("Sunday can answer what Thursday revealed"); rulebook HTML regenerated.
+- **Ops**: sunday-ops-runbook's lock section documents the two-stage lock
+  (`locked N matchups` at first kickoff, then `sealed N window picks` per
+  window) and adds a per-window dress-rehearsal checklist — the simulator
+  bulk-locks by design and never exercises the staged path.
+- NOTE: several newly-buyable power-ups remain unmodeled by the live resolver
+  (playtester findings §2 limitations) — buying works; effect coverage is the
+  open thread.
 
 ## Per-window pick locks — "late swap" (v0.95.0)
 Picks now seal **per window at that window's own first kickoff**, not all at

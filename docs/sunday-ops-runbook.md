@@ -43,10 +43,19 @@ Cap: **≤ ~100 enrolled leagues** (the pilot's access gate — see checklist 2c
 - Chase un-set lineups: admin console **Pick readiness** (`admin_pick_readiness`)
   lists who hasn't sealed a lineup per league/week. Ping them before lock.
 
-### Kickoff · lock (automatic)
-The worker locks each matchup at its `lock_at` (first kickoff of the week) and
-reveals sealed picks. Confirm in `fly logs`: `locked N matchups`. After lock,
-lineups can't change.
+### Kickoff · lock (automatic, PER WINDOW since v0.95.0)
+Two stages now:
+- At `lock_at` (first kickoff of the week) the worker flips the matchup live and
+  seals only the windows already underway — `fly logs`: `locked N matchups`.
+  Pre-match power-ups stop arming here.
+- Each later window's picks seal (and reveal to the opponent) at that window's
+  OWN first kickoff — `fly logs`: `sealed N window picks` as SUN 1PM / 4PM /
+  SNF / MNF go off. Until then those picks stay editable ("late swap").
+Confirm through Sunday that the `sealed …` lines fire at each window boundary;
+a silent gap means the tick's slate had no kickoffs (the sweep is slate-driven —
+check `nfl_slate` for the week). The DB trigger (`enforce_window_lock`, 0058)
+independently blocks client writes into a kicked-off window, so a late sweep is
+a display/reveal lag, never an integrity hole.
 
 ### During games · monitor
 - Watch the **Health** panel timestamps (above) and `fly logs --app drip-pilot-worker`
@@ -95,3 +104,12 @@ Before a real slate, prove the whole live path on a test league with baked data:
 test league/week (drips a baked week through the real resolver onto the live
 board), then `mode: reset`. See `server/README.md`. The **August preseason
 live-fire** is the first run against a *real* ESPN feed (`PILOT_SEASON_TYPE=1`).
+
+**Per-window locks need their own rehearsal** — the simulator bulk-locks by
+design (it rehearses a week already fully live), so it never exercises the
+staged path. Once before the season: on a test league with a future-dated
+`nfl_slate` week, let the worker tick across a window boundary and confirm
+(1) `sealed N window picks` fires at the boundary, (2) a pick in a not-yet-
+started window still saves from LivePicks after the week is live, (3) a write
+into the started window is rejected (the 0058 trigger), and (4) the opponent's
+picks for the later window stay hidden until it kicks off.

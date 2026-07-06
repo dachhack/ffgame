@@ -68,7 +68,8 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
         {
           q: 'How do I actually play a week?',
           a: <>Open a matchup and you'll move through three phases: <b>SETUP</b> (build a lineup across the 5 windows and seal a hidden
-            metric on each slot), <b>LIVE</b> (picks reveal at kickoff and effects fire on the real game clock), and <b>FINAL</b>
+            metric on each slot), <b>LIVE</b> (each window's picks reveal at that window's kickoff and effects fire on the real game
+            clock — your later windows stay editable, so Sunday can answer what Thursday revealed), and <b>FINAL</b>
             (the week's result across all slots). The {rulebookLink('Rulebook')} walks through the full flow.</>,
         },
         {
