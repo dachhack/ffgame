@@ -79,6 +79,21 @@ async function aiBudgetPass(m, rosterId, appUserId, starters, seed) {
   return { owned: own.unlocks, extra: own.extra };
 }
 
+/** Backfill lock_at on scheduled matchups that were created without it. The in-app
+ *  "sync week" and clone-week paths persist matchups with lock_at = null, so they
+ *  would never auto-lock; here the worker fills in the week's authoritative first
+ *  kickoff (epoch ms) so they seal at kickoff like worker-synced matchups. Scoped
+ *  to one week; a no-op (returns 0) until ESPN has that week's kickoff. */
+export async function backfillLockAt(week, kickoffMs) {
+  if (!Number.isFinite(kickoffMs)) return 0;
+  const iso = new Date(kickoffMs).toISOString();
+  const { data } = await db().from('matchup')
+    .update({ lock_at: iso })
+    .eq('week', week).eq('status', 'scheduled').is('lock_at', null)
+    .select('id');
+  return (data ?? []).length;
+}
+
 /** Lock any scheduled matchups whose lock_at has passed. Returns count locked. */
 export async function lockDueMatchups(now = new Date()) {
   const iso = now.toISOString();

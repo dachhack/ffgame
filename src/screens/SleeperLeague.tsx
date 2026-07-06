@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { useStore, rememberSimLeague } from '../app/store';
-import { SiteSettings } from '../app/ui';
-import { getStandings, sleeperAvatarUrl, type SleeperStanding } from '../data/sleeper';
-import { buildSleeperLeague } from '../data/buildLeague';
+import { useStore } from '../app/store';
+import { SiteSettings, VersionTag } from '../app/ui';
+import { getProvider, type ProviderStanding } from '../data/providers';
+import type { BuiltLeague } from '../data/league';
 
 // A background build either resolves to the engine-ready league or carries its
 // error — it never rejects, so a prefetch the user never triggers can't warn.
 type BuildOutcome =
-  | { ok: true; built: Awaited<ReturnType<typeof buildSleeperLeague>>['built']; youTeamId: string }
+  | { ok: true; built: BuiltLeague; youTeamId: string }
   | { ok: false; error: unknown };
 
 function buildErrorCopy(e: unknown): string {
@@ -20,7 +20,7 @@ function buildErrorCopy(e: unknown): string {
 
 export function SleeperLeague({ leagueId, leagueName }: { leagueId: string; leagueName: string }) {
   const { navigate, sleeperUser, loadSimLeague } = useStore();
-  const [rows, setRows] = useState<SleeperStanding[] | null>(null);
+  const [rows, setRows] = useState<ProviderStanding[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
@@ -32,7 +32,7 @@ export function SleeperLeague({ leagueId, leagueName }: { leagueId: string; leag
 
   const startBuild = (kdst: boolean) => {
     if (!sleeperUser) return;
-    const p: Promise<BuildOutcome> = buildSleeperLeague(leagueId, sleeperUser.userId, setNote, { addKdst: kdst })
+    const p: Promise<BuildOutcome> = getProvider(sleeperUser.provider).buildLeague(leagueId, sleeperUser.userId, setNote, { addKdst: kdst })
       .then((r) => ({ ok: true as const, built: r.built, youTeamId: r.youTeamId }))
       .catch((error) => ({ ok: false as const, error }));
     buildRef.current = { addKdst: kdst, p };
@@ -47,9 +47,6 @@ export function SleeperLeague({ leagueId, leagueName }: { leagueId: string; leag
       const outcome = await buildRef.current!.p;
       if (!outcome.ok) throw outcome.error;
       loadSimLeague(outcome.built, outcome.youTeamId);
-      // Remember this league so a reload of a sim-backed board route lands here (to
-      // rebuild) rather than silently showing the baked demo.
-      rememberSimLeague({ leagueId, leagueName });
       navigate({ name: 'hub' });
     } catch (e) {
       setSimErr(buildErrorCopy(e));
@@ -62,13 +59,14 @@ export function SleeperLeague({ leagueId, leagueName }: { leagueId: string; leag
     let alive = true;
     setRows(null); setErr(null);
     startBuild(addKdst); // warm the build in the background, in parallel with standings
-    getStandings(leagueId)
+    getProvider(sleeperUser?.provider).getStandings(leagueId)
       .then((d) => { if (alive) setRows(d.standings); })
       .catch(() => { if (alive) setErr('Could not load this league from Sleeper.'); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
 
+  const provider = getProvider(sleeperUser?.provider);
   const mine = sleeperUser?.displayName?.toLowerCase();
   const myIdx = rows ? rows.findIndex((r) => mine && r.owner.toLowerCase() === mine) : -1;
   const myRow = myIdx >= 0 ? rows![myIdx] : null;
@@ -80,7 +78,10 @@ export function SleeperLeague({ leagueId, leagueName }: { leagueId: string; leag
           <button onClick={() => navigate({ name: 'leagues' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', padding: '6px 9px', borderRadius: 4, cursor: 'pointer' }}>← LEAGUES</button>
           <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{leagueName}</span>
         </div>
-        <SiteSettings />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <VersionTag />
+          <SiteSettings />
+        </div>
       </header>
 
       <main style={{ flex: 1, overflow: 'auto', padding: '20px 16px 60px' }}>
@@ -123,7 +124,7 @@ export function SleeperLeague({ leagueId, leagueName }: { leagueId: string; leag
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {rows.map((r, i) => {
                 const isMe = mine && r.owner.toLowerCase() === mine;
-                const av = sleeperAvatarUrl(r.avatar);
+                const av = provider.avatarUrl(r.avatar);
                 return (
                   <div key={r.rosterId} style={{ display: 'grid', gridTemplateColumns: '26px 1fr auto auto', gap: 10, alignItems: 'center', background: isMe ? 'color-mix(in srgb, var(--you) 10%, var(--surface))' : 'var(--surface)', border: `1px solid ${isMe ? 'color-mix(in srgb, var(--you) 45%, transparent)' : 'var(--bd)'}`, borderRadius: 4, padding: '8px 11px' }}>
                     <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--faint)', textAlign: 'center' }}>{i + 1}</span>

@@ -2,13 +2,10 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    # `main` is the active integration branch, so merges there should publish.
-    # The legacy `claude/youthful-albattani-s9kprl` branch is kept as a trigger
-    # so deploys keep working until the repo's default branch is switched to
-    # `main`. NOTE: the github-pages environment restricts deployments to the
-    # default branch, so a `main` push only publishes once `main` is set as the
-    # default branch in repo settings (until then its deploy job is gated).
-    branches: [main, claude/youthful-albattani-s9kprl]
+    # `main` is the active integration branch and is allowed to publish (added
+    # to the github-pages environment's deployment branches), so merges to main
+    # deploy automatically.
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -48,6 +45,9 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # Bound a hung Pages deployment (the publish step polls up to ~10 min); this
+    # caps the job so a Pages outage fails the run promptly instead of lingering.
+    timeout-minutes: 12
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

@@ -22,17 +22,16 @@ league. Live demo: **https://dachhack.github.io/ffgame/**.
 
 ## Deploy / branch model — READ BEFORE PUSHING
 
-- Dev/work branch this session: **`claude/relaxed-turing-ymqhz6`**.
-- **Deploy branch: `claude/youthful-albattani-s9kprl`** — the only branch the
-  Pages workflow triggers on (`.github/workflows/deploy.yml`); GitHub Pages env
-  protection allows only it.
-- **To ship:** push the work branch, then fast-forward the deploy branch to it:
+- **Deploy = merge to `main`.** The Pages workflow
+  (`.github/workflows/deploy.yml`) triggers on every push to `main`, which is the
+  default branch and the only one the `github-pages` environment allows to publish.
+- **To ship:** push your work branch, open a PR to `main`, and merge it — Pages
+  deploys automatically.
   ```
-  git push -u origin claude/relaxed-turing-ymqhz6
-  git push origin claude/relaxed-turing-ymqhz6:claude/youthful-albattani-s9kprl   # deploys
+  git push -u origin <your-branch>
+  # open a PR and merge to main → Pages deploys automatically
   ```
-  (The work branch is the deploy branch + your commits, so this is a clean
-  fast-forward. Retry pushes up to 4× with exponential backoff on network errors.)
+  (Retry pushes up to 4× with exponential backoff on network errors.)
 - **Docs-only commits** (e.g. anything under `docs/`) don't need a deploy.
 - Build to verify before pushing: `npm run build` (`tsc -b && vite build`).
 - Verify CI after a deploy via the GitHub MCP Actions tools (`deploy.yml`); the

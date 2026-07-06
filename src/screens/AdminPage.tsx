@@ -3,14 +3,16 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink,
+  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminSetPreseason, type LeagueJoiner,
   setTeamController, setLineupPolicy,
   leagueKdst, setKdstMode, setTeamKdst,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
   type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy, type LeagueKdst, type KdstMode,
 } from '../data/liveApi';
 import { importLeague, syncWeek } from '../data/sleeperAdmin';
+import { importEspnSeason, syncEspnSeason, stripProvider } from '../data/providerAdmin';
 import { forceResolve } from '../data/forceResolve';
+import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
 import { FeedSheet } from './FeedSheet';
 import { WINDOWS, defaultMetric } from '../data/metrics';
 import { NFL_CODES } from '../data/kdst';
@@ -18,19 +20,27 @@ import { slugMeta } from '../data/slugMeta';
 import { isMarkFree, setMarkFree } from '../data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '../data/liveApi';
 import { POWERUPS } from '../data/powerups';
+import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, errMsg, type TabDef } from './adminUi';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
 
 const shareLink = (code: string) => `${window.location.origin}${window.location.pathname}?live=1&code=${code}`;
+// Commissioner claim link — opens the "verify as commissioner" screen prefilled.
+const commishLink = (code: string) => `${window.location.origin}${window.location.pathname}?live=1&commish=${code}`;
+// Pull a platform league id out of whatever the requester pasted (raw id or a URL).
+function extractLeagueId(raw: string, platform: string): string {
+  const s = raw.trim();
+  if (platform === 'espn') return (s.match(/leagueId=(\d+)/i) ?? s.match(/(\d{3,})/) ?? [])[1] ?? s;
+  return (s.match(/leagues?\/(\d+)/i) ?? s.match(/(\d{5,})/) ?? [])[1] ?? s;
+}
 const copy = (v: string) => navigator.clipboard?.writeText(v);
 
-const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 14, marginBottom: 12 };
-const h: React.CSSProperties = { fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginBottom: 10 };
-const mono: React.CSSProperties = { fontFamily: 'var(--mono, monospace)' };
-const chip: React.CSSProperties = { fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 6px', color: 'var(--text)', background: 'var(--bg)' };
-const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
-const btn = (active = false): React.CSSProperties => ({ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: active ? 'var(--on-accent)' : 'var(--text)', background: active ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' });
-const inp: React.CSSProperties = { fontFamily: 'inherit', fontSize: 12, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 10px' };
+
+/** Friendly local time for a matchup's auto-lock (kickoff), e.g. "Sun 1:00 PM". */
+function fmtLock(iso: string): string {
+  try { return new Date(iso).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }); }
+  catch { return iso; }
+}
 
 function CodeChip({ v }: { v: string }) {
   const [done, setDone] = useState(false);
@@ -72,12 +82,12 @@ function PremiumTierPanel() {
   const [tier, setTier] = useState<PremiumTier | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { getPremiumTier().then(setTier).catch((e) => setErr(e instanceof Error ? e.message : 'load failed')); }, []);
+  useEffect(() => { getPremiumTier().then(setTier).catch((e) => setErr(errMsg(e, 'load failed'))); }, []);
 
   const save = async (next: PremiumTier) => {
     setTier(next); setBusy(true); setErr(null);
     try { const r = await adminSetPremiumTier(next.free_positions, next.free_powerups); if (!r.ok) setErr(r.error ?? 'save failed'); }
-    catch (e) { setErr(e instanceof Error ? e.message : 'save failed'); }
+    catch (e) { setErr(errMsg(e, 'save failed')); }
     finally { setBusy(false); }
   };
   const flip = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
@@ -97,7 +107,7 @@ function PremiumTierPanel() {
           <div style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: 5 }}>POWER-UPS</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {POWERUPS.map((pu) => { const free = tier.free_powerups.includes(pu.id); return (
-              <button key={pu.id} onClick={() => save({ ...tier, free_powerups: flip(tier.free_powerups, pu.id) })} style={btn(free)} title={pu.name}>{pu.icon} {pu.name}{free ? ' · free' : ' · 🔒'}</button>
+              <button key={pu.id} onClick={() => save({ ...tier, free_powerups: flip(tier.free_powerups, pu.id) })} style={btn(free)} title={pu.name}><PuIcon id={pu.id} emoji={pu.icon} size="1.4em" /> {pu.name}{free ? ' · free' : ' · 🔒'}</button>
             ); })}
           </div>
         </>
@@ -107,62 +117,118 @@ function PremiumTierPanel() {
   );
 }
 
+type AdminTab = 'leagues' | 'requests' | 'users' | 'system' | 'audit';
+
 export function AdminPage({ onBack }: { onBack: () => void }) {
   const [leagues, setLeagues] = useState<AdminLeague[] | null>(null);
   const [overrides, setOverrides] = useState<AdminOverride[]>([]);
   const [audit, setAudit] = useState<AdminAudit[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [tab, setTab] = useState<AdminTab>('leagues');
+  // Open code-request count — badges the Requests tab so new ones aren't missed.
+  const [pendingReqs, setPendingReqs] = useState(0);
 
+  // Each section loads independently: one failing RPC must not blank the others
+  // (leagues used to vanish when a later call threw), and failures surface with
+  // their real message + which call produced it.
   const load = async () => {
-    try { setLeagues(await adminOverview()); setOverrides(await adminOverrides()); setAudit(await adminAudit(40)); }
-    catch (e) { setErr(e instanceof Error ? e.message : 'Load failed.'); setLeagues([]); }
+    const [ov, ors, au] = await Promise.allSettled([adminOverview(), adminOverrides(), adminAudit(60)]);
+    if (ov.status === 'fulfilled') setLeagues(ov.value); else setLeagues((cur) => cur ?? []);
+    if (ors.status === 'fulfilled') setOverrides(ors.value);
+    if (au.status === 'fulfilled') setAudit(au.value);
+    const parts = [['overview', ov], ['overrides', ors], ['audit', au]] as const;
+    const errs = parts.filter(([, r]) => r.status === 'rejected')
+      .map(([name, r]) => `${name}: ${errMsg((r as PromiseRejectedResult).reason, 'failed')}`);
+    setErr(errs.length ? errs.join(' · ') : null);
+    adminCodeRequests().then((rs) => setPendingReqs(rs.filter((r) => !r.handled).length)).catch(() => {});
   };
   useEffect(() => { load(); }, []);
 
+  const tabs: TabDef<AdminTab>[] = [
+    { id: 'leagues', label: 'LEAGUES' },
+    { id: 'requests', label: 'REQUESTS', badge: pendingReqs },
+    { id: 'users', label: 'USERS' },
+    { id: 'system', label: 'SYSTEM' },
+    { id: 'audit', label: 'AUDIT' },
+  ];
+
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <span className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>⚙ Super admin</span>
-        <button onClick={load} className="mono" style={linkBtn}>↻ refresh</button>
-      </div>
-      {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', marginBottom: 10 }}>{err}</div>}
-
-      <HealthPanel />
-      <MarkFreeToggle />
-      <PremiumTierPanel />
-      <ImportLeague reload={load} />
-
-      <div style={card}>
-        <div style={h}>LEAGUES</div>
-        {leagues === null ? <Muted text="Loading…" /> : leagues.length === 0 ? <Muted text="No leagues imported yet." /> :
-          leagues.map((l) => <LeagueRow key={l.league_id} l={l} reload={load} />)}
-      </div>
-
-      <CodeRequests />
-      <Overrides overrides={overrides} reload={load} />
-      <Admins />
-      <Users />
-
-      <div style={card}>
-        <div style={h}>RECENT AUDIT</div>
-        {audit.length === 0 ? <Muted text="No activity." /> : audit.map((a, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 10.5, gap: 8 }}>
-            <span className="mono" style={{ ...mono, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.op} <span style={{ color: 'var(--dim)' }}>{a.table}</span>{a.detail && <span style={{ color: 'var(--you)' }}> · {a.detail}</span>}{a.actor && <span style={{ color: 'var(--faint)' }}> · {a.actor}</span>}</span>
-            <span className="mono" style={{ ...mono, color: 'var(--faint)', fontSize: 9.5, whiteSpace: 'nowrap' }}>{new Date(a.at).toLocaleString()}</span>
+    <div className="mgmt">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>⚙ Super admin</div>
+          <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', marginTop: 2 }}>
+            {leagues === null ? '…' : `${leagues.length} league${leagues.length === 1 ? '' : 's'}`}{pendingReqs ? ` · ${pendingReqs} open request${pendingReqs === 1 ? '' : 's'}` : ''}
           </div>
-        ))}
+        </div>
+        <button onClick={load} className="mono" style={{ ...linkBtn, flexShrink: 0 }}>↻ refresh</button>
       </div>
+      {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', marginBottom: 10, lineHeight: 1.5, wordBreak: 'break-word' }}>⚠ {err}</div>}
+
+      <TabBar tabs={tabs} active={tab} onSelect={setTab} style={{ marginBottom: 14 }} />
+
+      {tab === 'leagues' && (
+        <>
+          <ImportLeague reload={load} />
+          {leagues === null ? <div style={card}><Muted text="Loading…" /></div>
+            : leagues.length === 0 ? <div style={card}><Muted text="No leagues imported yet — import one above." /></div>
+            : leagues.map((l) => <LeagueRow key={l.league_id} l={l} reload={load} />)}
+        </>
+      )}
+
+      {tab === 'requests' && <CodeRequests onPending={setPendingReqs} />}
+
+      {tab === 'users' && (
+        <>
+          <Users />
+          <Admins />
+          <Overrides overrides={overrides} reload={load} />
+        </>
+      )}
+
+      {tab === 'system' && (
+        <>
+          <HealthPanel />
+          <MarkFreeToggle />
+          <PremiumTierPanel />
+        </>
+      )}
+
+      {tab === 'audit' && (
+        <div style={card}>
+          <div style={h}>RECENT AUDIT</div>
+          {audit.length === 0 ? <Muted text="No activity." /> : audit.map((a, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 10.5, gap: 8, borderTop: i ? '1px solid var(--bd)' : 'none' }}>
+              <span className="mono" style={{ ...mono, color: 'var(--text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.op} <span style={{ color: 'var(--dim)' }}>{a.table}</span>{a.detail && <span style={{ color: 'var(--you)' }}> · {a.detail}</span>}{a.actor && <span style={{ color: 'var(--faint)' }}> · {a.actor}</span>}</span>
+              <span className="mono" style={{ ...mono, color: 'var(--faint)', fontSize: 9.5, whiteSpace: 'nowrap' }}>{new Date(a.at).toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ textAlign: 'center', marginTop: 6 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
     </div>
   );
 }
 
-export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: AdminLeague; reload: () => void; admin?: boolean; defaultTab?: '' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst' }) {
+// One league's management card — the whole commissioner/admin toolset for a
+// league, organized under a tab strip (Setup / Members / Picks / Matchups /
+// K-DST / Audit). Used by both the super-admin Leagues tab and CommishDash.
+type LeagueTab = 'overview' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst';
+
+export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsible = false, defaultOpen = true }: {
+  l: AdminLeague; reload: () => void; admin?: boolean; defaultTab?: '' | LeagueTab;
+  /** Collapsible card: the header toggles the management panel (CommishDash uses
+   *  this when you run several leagues). Non-collapsible cards are always open. */
+  collapsible?: boolean; defaultOpen?: boolean;
+}) {
   const [matchups, setMatchups] = useState<AdminMatchup[] | null>(null);
   const [members, setMembers] = useState<AdminMember[] | null>(null);
+  const [joiners, setJoiners] = useState<LeagueJoiner[]>([]);
+  const [wallets, setWallets] = useState<Record<number, number>>({});
   const [audit, setAudit] = useState<AdminAudit[] | null>(null);
-  const [tab, setTab] = useState<'' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst'>(defaultTab);
+  const [tab, setTab] = useState<LeagueTab>(defaultTab || 'overview');
+  const [open, setOpen] = useState(collapsible ? defaultOpen : true);
   // roster_id → team name, from members (drives readable matchup labels).
   const teamName = (rid: number) => members?.find((m) => m.roster_id === rid)?.team ?? `Roster ${rid}`;
   const [kdst, setKdst] = useState<LeagueKdst | null>(null);
@@ -186,6 +252,17 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
     const next: Controller = cur === 'ai' ? 'human' : 'ai';
     try { await setTeamController(l.league_id, rosterId, next); await loadMembers(); } catch { /* noop */ }
   };
+  const assign = async (rosterId: number, a: { email?: string; appUserId?: string }) => {
+    const r = await adminAssignRoster(l.league_id, rosterId, a.email ?? '', a.appUserId);
+    await loadMembers();
+    return r;
+  };
+  // Commissioner/admin claims a roster for themselves (a team to play).
+  const claimSelf = async (rosterId: number) => {
+    const r = await commishClaimRoster(l.league_id, rosterId);
+    await loadMembers();
+    return r;
+  };
   const [running, setRunning] = useState(false);
   const openCoin = (m: AdminMatchup) => { setCoinEdit(m.id); setCoinVals({ home: String(m.home_coin ?? ''), away: String(m.away_coin ?? '') }); };
   const saveCoin = async (id: string) => { await adminSetCoin(id, Number(coinVals.home || 0), Number(coinVals.away || 0)); setCoinEdit(null); await loadM(); };
@@ -194,7 +271,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
     if (running) return;
     setRunning(true); setBusy(label);
     try { setBusy(await fn()); await loadM(); }
-    catch (e) { setBusy(e instanceof Error ? e.message : `${label} failed`); }
+    catch (e) { setBusy(errMsg(e, `${label} failed`)); }
     finally { setRunning(false); }
   };
   const resolve = (id: string) => run('resolve', async () => { await forceResolve(id, Number(srcWeek)); return '✓ resolved from 2025'; });
@@ -229,28 +306,48 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
   };
 
   const loadM = async () => setMatchups(await adminMatchups(l.league_id));
-  const loadMembers = async () => setMembers(await adminLeagueMembers(l.league_id));
+  const loadMembers = async () => {
+    setMembers(await adminLeagueMembers(l.league_id));
+    adminLeagueJoiners(l.league_id).then(setJoiners).catch(() => setJoiners([]));
+    adminLeagueWallets(l.league_id).then((ws) => setWallets(Object.fromEntries((ws ?? []).map((w) => [w.roster_id, w.coins])))).catch(() => setWallets({}));
+  };
+  // Commissioner grants drip coin to a team; refresh balances after.
+  const seedCoin = async (rosterId: number, amount: number) => {
+    const r = await commishSeedCoin(l.league_id, rosterId, amount);
+    if (r.ok) adminLeagueWallets(l.league_id).then((ws) => setWallets(Object.fromEntries((ws ?? []).map((w) => [w.roster_id, w.coins])))).catch(() => {});
+    return r;
+  };
   const loadAudit = async () => setAudit(await commishAudit(l.league_id, 40));
-  const showTab = (t: 'matchups' | 'members' | 'audit' | 'ready' | 'kdst') => {
-    setTab((cur) => (cur === t ? '' : t));
-    if (t === 'matchups') { if (!matchups) loadM(); if (!members) loadMembers(); }
-    if (t === 'members' && !members) loadMembers();
-    if (t === 'audit') loadAudit();
+  const showTab = (t: LeagueTab) => {
+    setTab(t);
+    if (t === 'matchups') { if (!matchups) loadM().catch(() => {}); if (!members) loadMembers().catch(() => {}); }
+    if (t === 'members' && !members) loadMembers().catch(() => {});
+    if (t === 'audit') loadAudit().catch(() => {});
     if (t === 'kdst' && !kdst) loadKdst();
   };
-  // Auto-load the initially-open tab (CommishDash opens straight on "members").
+  // Load the active tab's data once the card is (or becomes) open — collapsed
+  // cards don't fetch anything until expanded. Guards prevent refetching.
   useEffect(() => {
-    if (defaultTab === 'members') loadMembers();
-    else if (defaultTab === 'matchups') { loadM(); loadMembers(); }
-    else if (defaultTab === 'kdst') loadKdst();
-    else if (defaultTab === 'audit') loadAudit();
+    if (!open) return;
+    if (tab === 'members' && !members) loadMembers().catch(() => {});
+    else if (tab === 'matchups') { if (!matchups) loadM().catch(() => {}); if (!members) loadMembers().catch(() => {}); }
+    else if (tab === 'kdst' && !kdst) loadKdst();
+    else if (tab === 'audit' && !audit) loadAudit().catch(() => {});
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, []);
+  }, [open]);
   const set = async (id: string, status: string, lockNow = false) => { await adminSetMatchup(id, status, lockNow); await loadM(); };
+  // Schedule the WHOLE regular season (all weeks) in one go — ESPN publishes the
+  // full fantasy schedule up front, so there's no reason to sync week by week.
+  // Scoring still comes from the ESPN play feed. Public ESPN needs no creds here.
   const sync = async () => {
+    if (busy === 'sync') return;
     setBusy('sync');
-    try { const r = await syncWeek(l.league_id, l.sleeper_league_id, Number(week)); setBusy(`✓ ${r.pairs} matchups`); setTab('matchups'); await loadM(); }
-    catch (e) { setBusy(e instanceof Error ? e.message : 'sync failed'); }
+    try {
+      const r = l.provider === 'espn'
+        ? await syncEspnSeason(l.league_id, stripProvider(l.sleeper_league_id), l.season)
+        : await (async () => { let pairs = 0; for (let w = 1; w <= 14; w++) pairs += (await syncWeek(l.league_id, l.sleeper_league_id, w)).pairs; return { weeks: 14, pairs }; })();
+      setBusy(`✓ ${r.weeks} weeks · ${r.pairs} matchups`); setTab('matchups'); await loadM();
+    } catch (e) { setBusy(errMsg(e, 'sync failed')); }
   };
   const regen = async (which: 'invite' | 'commish') => {
     if (!confirm(`Regenerate the ${which} code? The old one stops working.`)) return;
@@ -258,39 +355,90 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
     if (r.ok) reload();
   };
 
+  const statusChip = (color: string): React.CSSProperties => ({ ...mono, fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color, border: `1px solid ${color}`, borderRadius: 4, padding: '2px 5px', whiteSpace: 'nowrap' });
+  const leagueTabs: TabDef<LeagueTab>[] = [
+    { id: 'overview', label: 'SETUP' },
+    { id: 'members', label: 'MEMBERS' },
+    { id: 'ready', label: 'PICKS' },
+    { id: 'matchups', label: 'MATCHUPS' },
+    { id: 'kdst', label: 'K/DST' },
+    { id: 'audit', label: 'AUDIT' },
+  ];
+
   return (
-    <div style={{ borderTop: '1px solid var(--bd)', paddingTop: 8, marginTop: 8 }}>
+    <div style={card}>
       {watch && <AdminMatchupBoard matchupId={watch} onClose={() => setWatch(null)} />}
       {sheet && <FeedSheet matchupId={sheet} week={Number(srcWeek) || 1} onClose={() => setSheet(null)} />}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{l.name} <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>· {l.season}</span></div>
-          <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 3 }}>{l.enrolled}/{l.rosters} enrolled · commish {l.commissioner ? '✓' : '—'}</div>
+
+      {/* League identity + the one always-on action: share the invite link.
+          When collapsible (CommishDash with several leagues), the header row
+          doubles as the expand/collapse toggle. */}
+      <div onClick={collapsible ? () => setOpen((o) => !o) : undefined} role={collapsible ? 'button' : undefined} aria-expanded={collapsible ? open : undefined}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', cursor: collapsible ? 'pointer' : undefined }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {collapsible && <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--dim)', flexShrink: 0 }}>{open ? '▾' : '▸'}</span>}
+            <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{l.name}</span>
+            <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>{l.season}</span>
+            {l.provider && l.provider !== 'sleeper' && <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px', textTransform: 'uppercase' }}>{l.provider}</span>}
+            {!!l.test_live_at && <span className="mono" style={statusChip('var(--warn)')}>🧪 LIVE TEST</span>}
+            {!!l.preseason_at && <span className="mono" style={statusChip('var(--you)')}>🏈 PRESEASON</span>}
+          </div>
+          <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 4 }}>{l.enrolled}/{l.rosters} enrolled · commish {l.commissioner ? '✓' : '—'}</div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => showTab('ready')} className="mono" style={linkBtn}>{tab === 'ready' ? 'hide' : 'picks'}</button>
-          <button onClick={() => showTab('members')} className="mono" style={linkBtn}>{tab === 'members' ? 'hide' : 'members'}</button>
-          <button onClick={() => showTab('kdst')} className="mono" style={linkBtn}>{tab === 'kdst' ? 'hide' : 'K/DST'}</button>
-          <button onClick={() => showTab('matchups')} className="mono" style={linkBtn}>{tab === 'matchups' ? 'hide' : 'matchups'}</button>
-          <button onClick={() => showTab('audit')} className="mono" style={linkBtn}>{tab === 'audit' ? 'hide' : 'audit'}</button>
+        {/* Primary way to invite players — the join link (no code to type). The
+            code chips live in the Setup tab as a fallback for manual entry. */}
+        <button onClick={(e) => { e.stopPropagation(); copy(shareLink(l.invite_code)); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className="mono" style={{ ...btn(true), flexShrink: 0 }}>{copied ? '✓ copied' : '⛓ invite link'}</button>
+      </div>
+
+      {open && <>
+
+      {busy && busy !== 'sync' && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{busy}</div>}
+
+      <TabBar tabs={leagueTabs} active={tab} onSelect={showTab} style={{ margin: '10px -14px 0', padding: '0 8px' }} />
+
+      {tab === 'overview' && (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <div style={subhead}>INVITE CODES</div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                <span style={chip}>commish&nbsp;<CodeChip v={l.commish_code} /></span>
+                {admin && <button onClick={() => regen('commish')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate the commissioner code">↻ regen</button>}
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                <span style={chip}>invite&nbsp;<CodeChip v={l.invite_code} /></span>
+                <button onClick={() => regen('invite')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate the invite code">↻ regen</button>
+              </span>
+            </div>
+            <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>Players join with the invite link (button above) or by typing the invite code. The commish code claims league management.</div>
+          </div>
+          <div>
+            <div style={subhead}>SCHEDULE</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button onClick={sync} disabled={busy === 'sync'} className="mono" style={btn(true)} title="schedule every week's matchups">{busy === 'sync' ? 'scheduling…' : '⟳ sync season'}</button>
+              <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>pulls the whole season's matchups + lineups from {l.provider === 'espn' ? 'ESPN' : 'Sleeper'}</span>
+            </div>
+          </div>
+          {admin && (
+            <div>
+              <div style={subhead}>ADMIN MODES</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <PreseasonToggle on={!!l.preseason_at} leagueId={l.league_id} reload={reload} />
+                <TestLiveToggle on={!!l.test_live_at} leagueId={l.league_id} reload={reload} />
+                <span style={{ flex: 1 }} />
+                <DeleteLeague name={l.name} onDelete={async () => { const r = await adminDeleteLeague(l.league_id); if (r.ok) reload(); return r; }} />
+              </div>
+            </div>
+          )}
         </div>
-      </div>
-      <div style={{ display: 'flex', gap: 10, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <span style={{ ...chip }}>commish&nbsp;<CodeChip v={l.commish_code} /></span>
-        {admin && <button onClick={() => regen('commish')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate">↻</button>}
-        <span style={{ ...chip }}>invite&nbsp;<CodeChip v={l.invite_code} /></span>
-        <button onClick={() => regen('invite')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate">↻</button>
-        <button onClick={() => { copy(shareLink(l.invite_code)); setCopied(true); }} className="mono" style={btn(false)}>{copied ? 'link copied' : 'copy invite link'}</button>
-      </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-        <span style={{ flex: 1 }} />
-        <input value={week} onChange={(e) => setWeek(e.target.value.replace(/\D/g, ''))} style={{ ...inp, width: 38, padding: '5px 6px', textAlign: 'center' }} />
-        <button onClick={sync} disabled={busy === 'sync'} className="mono" style={btn(true)}>{busy === 'sync' ? 'syncing…' : 'sync week'}</button>
-      </div>
-      {busy && busy !== 'sync' && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{busy}</div>}
+      )}
+
       {tab === 'ready' && (
-        <div style={{ marginTop: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>week</span>
+            <input value={week} onChange={(e) => setWeek(e.target.value.replace(/\D/g, ''))} inputMode="numeric" style={{ ...inp, width: 48, padding: '5px 6px', textAlign: 'center' }} />
             <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>on missed pick:</span>
             <select value={policy} onChange={(e) => changePolicy(e.target.value as LineupPolicy)} style={{ ...inp, padding: '4px 6px', fontSize: 11 }}>
               <option value="best_lineup">force best lineup (stay human)</option>
@@ -301,34 +449,42 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
           <PickReadinessTab leagueId={l.league_id} week={Number(week) || 1} admin={admin} />
         </div>
       )}
+      {tab === 'members' && !members && <div style={{ marginTop: 12 }}><Muted text="Loading…" /></div>}
       {tab === 'members' && members && (
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 12 }}>
+          <WeeklyBudget l={l} onGranted={() => loadMembers()} />
           {(() => { const nj = members.filter((m) => !m.enrolled).length; return (
             <div className="mono" style={{ ...mono, fontSize: 9.5, color: nj ? 'var(--dim)' : 'var(--you)', marginBottom: 6 }}>
               {members.length - nj}/{members.length} joined{nj ? ` · ${nj} not yet` : ''}
             </div>
           ); })()}
           {members.map((m) => (
-            <div key={m.roster_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                {m.avatar && <img src={m.avatar} alt="" width={24} height={24} style={{ borderRadius: 5, flexShrink: 0 }} />}
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{m.team}</div>
-                  <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{m.enrolled ? (m.email ?? m.sleeper ?? 'enrolled') : 'not joined'}</div>
+            <div key={m.roster_id} style={{ padding: '6px 0', borderTop: '1px solid var(--bd)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  {m.avatar && <img src={m.avatar} alt="" width={24} height={24} style={{ borderRadius: 5, flexShrink: 0 }} />}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{m.team}</div>
+                    <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>
+                      {m.enrolled ? (m.email ?? m.sleeper ?? 'enrolled') : m.claim_email ? `pending · ${m.claim_email}` : 'not assigned'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {m.email && <SendLink email={m.email} />}
+                  <button onClick={() => toggleMemberAi(m.roster_id, m.controller)} className="mono" title={m.controller === 'ai' ? 'hand back to manager' : 'set team to AI auto-pilot'}
+                    style={{ fontSize: 8.5, fontWeight: 700, color: m.controller === 'ai' ? 'var(--on-accent)' : 'var(--dim)', background: m.controller === 'ai' ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}>🤖 {m.controller === 'ai' ? 'AI' : 'off'}</button>
+                  <span className="mono" style={{ fontSize: 8.5, color: m.enrolled ? 'var(--you)' : m.claim_email ? 'var(--dim)' : 'var(--faint)', border: `1px solid ${m.enrolled ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '2px 6px' }}>{m.enrolled ? 'JOINED' : m.claim_email ? 'PENDING' : '—'}</span>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                {m.email && <SendLink email={m.email} />}
-                <button onClick={() => toggleMemberAi(m.roster_id, m.controller)} className="mono" title={m.controller === 'ai' ? 'hand back to manager' : 'set team to AI auto-pilot'}
-                  style={{ fontSize: 8.5, fontWeight: 700, color: m.controller === 'ai' ? 'var(--on-accent)' : 'var(--dim)', background: m.controller === 'ai' ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}>🤖 {m.controller === 'ai' ? 'AI' : 'off'}</button>
-                <span className="mono" style={{ fontSize: 8.5, color: m.enrolled ? 'var(--you)' : 'var(--faint)', border: `1px solid ${m.enrolled ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '2px 6px' }}>{m.enrolled ? 'JOINED' : '—'}</span>
-              </div>
+              <AssignRoster initial={m.email ?? m.claim_email ?? ''} joiners={joiners} onAssign={(a) => assign(m.roster_id, a)} onClaimSelf={() => claimSelf(m.roster_id)} />
+              <SeedCoin balance={wallets[m.roster_id] ?? 0} onSeed={(amt) => seedCoin(m.roster_id, amt)} />
             </div>
           ))}
         </div>
       )}
       {tab === 'kdst' && (
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 12 }}>
           {!kdst ? <Muted text="Loading…" /> : (
             <>
               <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
@@ -381,13 +537,14 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
           )}
         </div>
       )}
+      {tab === 'matchups' && !matchups && <div style={{ marginTop: 12 }}><Muted text="Loading…" /></div>}
       {tab === 'matchups' && matchups && (
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 12 }}>
           <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', lineHeight: 1.6, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '7px 9px', marginBottom: 8 }}>
-            Run each matchup through the week:
-            {' '}<b style={{ color: 'var(--dim)' }}>sched</b> (picks open, pre-kickoff) →
-            {' '}<b style={{ color: 'var(--you)' }}>live+lock</b> (kickoff — seals both lineups, scoring starts) →
-            {' '}<b style={{ color: 'var(--dim)' }}>final</b>.
+            Each matchup auto-advances at the real kickoff, or set it manually:
+            {' '}<b style={{ color: 'var(--dim)' }}>Open</b> (picks open, pre-kickoff) →
+            {' '}<b style={{ color: 'var(--you)' }}>Lock</b> (kickoff — seals both lineups, scoring starts) →
+            {' '}<b style={{ color: 'var(--dim)' }}>Final</b>.
             <br />◇ edit drip coin · ▦ watch the live board · ≣ play-by-play feed{admin ? ' · ▶ resolve from baked data · ↺ reset' : ''}.
           </div>
           {admin && (
@@ -404,13 +561,15 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
           {matchups.length === 0 ? <Muted text="No matchups (run sync week)." /> : matchups.map((m) => (
             <div key={m.id} style={{ borderTop: '1px solid var(--bd)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', flexWrap: 'wrap', gap: 6 }}>
-                <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)' }}>W{m.week} · {teamName(m.home_roster_id)} v {teamName(m.away_roster_id)} · <span style={{ color: 'var(--you)' }}>{m.status}</span>{m.home_final != null && <span style={{ color: 'var(--faint)' }}> · {m.home_final}-{m.away_final}</span>}{(m.home_coin != null || m.away_coin != null) && <span style={{ color: 'var(--faint)' }}> · ◇ {m.home_coin ?? 0}/{m.away_coin ?? 0}</span>}</span>
+                <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)' }}>W{m.week} · {teamName(m.home_roster_id)} v {teamName(m.away_roster_id)} · <span style={{ color: 'var(--you)' }}>{m.status}</span>{m.home_final != null && <span style={{ color: 'var(--faint)' }}> · {m.home_final}-{m.away_final}</span>}{(m.home_coin != null || m.away_coin != null) && <span style={{ color: 'var(--faint)' }}> · ◇ {m.home_coin ?? 0}/{m.away_coin ?? 0}</span>}{m.status === 'scheduled' && (m.lock_at
+                  ? <span style={{ color: 'var(--faint)' }} title="The worker seals lineups and starts scoring automatically at kickoff."> · 🔒 auto-locks {fmtLock(m.lock_at)}</span>
+                  : <span style={{ color: 'var(--warn)' }} title="No kickoff time yet. The worker backfills it from the live NFL schedule once the week is current, and it auto-locks then. Until it appears you can set Lock manually."> · ⏳ kickoff pending — auto-locks once set</span>)}</span>
                 <div style={{ display: 'flex', gap: 5 }}>
-                  <button style={btn(m.status === 'scheduled')} onClick={() => set(m.id, 'scheduled')}>sched</button>
-                  <button style={btn(m.status === 'live')} onClick={() => set(m.id, 'live', true)}>live+lock</button>
-                  <button style={btn(m.status === 'final')} onClick={() => set(m.id, 'final')}>final</button>
+                  <button style={btn(m.status === 'scheduled')} onClick={() => set(m.id, 'scheduled')} title="Picks open — pre-kickoff">Open</button>
+                  <button style={btn(m.status === 'live')} onClick={() => set(m.id, 'live', true)} title="Lock & score — seals both lineups at kickoff, scoring starts">Lock</button>
+                  <button style={btn(m.status === 'final')} onClick={() => set(m.id, 'final')} title="Final — week complete">Final</button>
                   <button style={btn(coinEdit === m.id)} onClick={() => (coinEdit === m.id ? setCoinEdit(null) : openCoin(m))} title="edit drip coin">◇</button>
-                  <button style={btn(false)} onClick={() => setWatch(m.id)} title="watch the live board">▦</button>
+                  <button style={btn(false)} onClick={() => setWatch(m.id)} title="watch the live board"><GameIcon name={UI_ART.liveboard} emoji="▦" size="1.4em" /></button>
                   <button style={btn(false)} onClick={() => setSheet(m.id)} title={`feed sheet — per-player play log (2025 wk ${srcWeek})`}>≣</button>
                   {admin && <button style={btn(false)} onClick={() => resolve(m.id)} title="run real engine on baked 2025 data">▶</button>}
                   {admin && <button style={btn(false)} onClick={() => resetOne(m.id)} title="reset this matchup → scheduled, scores cleared">↺</button>}
@@ -431,7 +590,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
         </div>
       )}
       {tab === 'audit' && (
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 12 }}>
           {audit === null ? <Muted text="Loading…" /> : audit.length === 0 ? <Muted text="No matchup activity yet." /> : audit.map((a, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: '1px solid var(--bd)', gap: 8 }}>
               <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.op} <span style={{ color: 'var(--dim)' }}>{a.table}</span>{a.detail && <span style={{ color: 'var(--you)' }}> · {a.detail}</span>}{a.actor && <span style={{ color: 'var(--faint)' }}> · {a.actor}</span>}</span>
@@ -440,6 +599,8 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '' }: { l: Adm
           ))}
         </div>
       )}
+
+      </>}
     </div>
   );
 }
@@ -468,27 +629,48 @@ function Overrides({ overrides, reload }: { overrides: AdminOverride[]; reload: 
 }
 
 function ImportLeague({ reload }: { reload: () => void }) {
+  const [platform, setPlatform] = useState<'sleeper' | 'espn'>('sleeper');
   const [sid, setSid] = useState('');
   const [season, setSeason] = useState('2026');
+  const [swid, setSwid] = useState('');
+  const [s2, setS2] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const espn = platform === 'espn';
   const go = async () => {
     if (!sid.trim() || busy) return;
     setBusy(true); setMsg(null);
-    try { await importLeague(sid.trim(), season.trim() || '2026'); setMsg('✓ imported'); setSid(''); reload(); }
-    catch (e) { setMsg(e instanceof Error ? e.message : 'import failed'); }
+    try {
+      if (espn) { const r = await importEspnSeason(sid.trim(), season.trim() || '2026', { swid: swid.trim() || undefined, s2: s2.trim() || undefined }); setMsg(`✓ imported · ${r.weeks} weeks scheduled`); }
+      else { await importLeague(sid.trim(), season.trim() || '2026'); setMsg('✓ imported'); }
+      setSid(''); reload();
+    } catch (e) { setMsg(errMsg(e, 'import failed')); }
     finally { setBusy(false); }
   };
+  const pill = (p: 'sleeper' | 'espn', label: string) => (
+    <button onClick={() => { setPlatform(p); setMsg(null); }} className="mono" style={btn(platform === p)}>{label}</button>
+  );
   return (
     <div style={card}>
-      <div style={h}>IMPORT A SLEEPER LEAGUE</div>
+      <div style={h}>IMPORT A LEAGUE</div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>{pill('sleeper', 'Sleeper')}{pill('espn', 'ESPN')}</div>
       <div style={{ display: 'flex', gap: 6 }}>
-        <input value={sid} onChange={(e) => setSid(e.target.value)} placeholder="Sleeper league id" style={{ ...inp, flex: 1, minWidth: 0 }} />
-        <input value={season} onChange={(e) => setSeason(e.target.value)} placeholder="season" style={{ ...inp, width: 56 }} />
+        <input value={sid} onChange={(e) => setSid(e.target.value)} placeholder={espn ? 'ESPN league id' : 'Sleeper league id'} style={{ ...inp, flex: 1, minWidth: 0 }} />
+        <input value={season} onChange={(e) => setSeason(e.target.value)} placeholder="season" style={{ ...inp, width: 68 }} />
         <button onClick={go} disabled={busy} className="mono" style={btn(true)}>{busy ? '…' : 'import'}</button>
       </div>
+      {espn && (
+        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          <input value={swid} onChange={(e) => setSwid(e.target.value)} placeholder="SWID (private only)" style={{ ...inp, flex: 1, minWidth: 0 }} />
+          <input value={s2} onChange={(e) => setS2(e.target.value)} placeholder="espn_s2 (private only)" style={{ ...inp, flex: 1, minWidth: 0 }} />
+        </div>
+      )}
       {msg && <div className="mono" style={{ ...mono, fontSize: 9.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{msg}</div>}
-      <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 8 }}>Pulls league + rosters from Sleeper, generates the commish/invite codes, and enrolls any managers already signed in. Then “sync week” per league for matchups + lineups.</div>
+      <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 8 }}>
+        {espn
+          ? 'Pulls the ESPN league + rosters + schedule. Public leagues need no cookies; private ones take SWID + espn_s2. Enrollment is admin-mapped (ESPN has no public user id). Then “sync week” for matchups + pick pools. Live scoring runs off the ESPN play feed.'
+          : 'Pulls league + rosters from Sleeper, generates the commish/invite codes, and enrolls any managers already signed in. Then “sync week” per league for matchups + lineups.'}
+      </div>
     </div>
   );
 }
@@ -517,29 +699,323 @@ function Admins() {
   );
 }
 
-function CodeRequests() {
+function CodeRequests({ onPending }: { onPending?: (n: number) => void }) {
   const [rows, setRows] = useState<CodeRequest[] | null>(null);
+  const [leagues, setLeagues] = useState<AdminLeague[]>([]);
+  const [showHandled, setShowHandled] = useState(false);
   const load = async () => { try { setRows(await adminCodeRequests()); } catch { setRows([]); } };
   useEffect(() => { load(); }, []);
+  // Keep the parent's Requests-tab badge in sync as requests load / get handled.
+  useEffect(() => { if (rows) onPending?.(rows.filter((r) => !r.handled).length); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [rows]);
+  // Existing leagues' invite codes feed the per-request "send code" picker.
+  useEffect(() => { adminOverview().then(setLeagues).catch(() => setLeagues([])); }, []);
+  const reloadLeagues = async () => { const l = await adminOverview().catch(() => [] as AdminLeague[]); setLeagues(l); return l; };
   const toggle = async (id: string, handled: boolean) => { await adminSetCodeRequestHandled(id, handled); load(); };
   const pending = rows?.filter((r) => !r.handled).length ?? 0;
+  const hasHandled = rows?.some((r) => r.handled) ?? false;
+  const visible = (rows ?? []).filter((r) => showHandled || !r.handled);
   return (
     <div style={card}>
-      <div style={h}>CODE REQUESTS{pending ? ` · ${pending} NEW` : ''}</div>
-      {rows === null ? <Muted text="Loading…" /> : rows.length === 0 ? <Muted text="No requests yet." /> : rows.map((r) => (
-        <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '6px 0', borderTop: '1px solid var(--bd)', gap: 8, opacity: r.handled ? 0.5 : 1 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 11.5, color: 'var(--text)' }}>
-              {r.email ? <span className="mono" style={{ ...mono, cursor: 'pointer' }} onClick={() => copy(r.email!)} title="copy">{r.email}</span> : '—'}
-              {r.sleeper_username && <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}> · @{r.sleeper_username}</span>}
-            </div>
-            {r.league_name && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 2 }}>{r.league_name}</div>}
-            {r.note && <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 2, lineHeight: 1.4 }}>{r.note}</div>}
-            <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>{new Date(r.created_at).toLocaleString()}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+        <div style={{ ...h, marginBottom: 0 }}>CODE REQUESTS{pending ? ` · ${pending} NEW` : ''}</div>
+        {hasHandled && <button onClick={() => setShowHandled((s) => !s)} className="mono" style={linkBtn}>{showHandled ? 'hide handled' : 'show handled'}</button>}
+      </div>
+      {rows === null ? <Muted text="Loading…" />
+        : visible.length === 0 ? <Muted text={pending === 0 && !rows.length ? 'No requests yet.' : 'All caught up.'} />
+        : visible.map((r) => <CodeRequestRow key={r.id} r={r} leagues={leagues} onToggle={toggle} reloadLeagues={reloadLeagues} />)}
+    </div>
+  );
+}
+
+function CodeRequestRow({ r, leagues, onToggle, reloadLeagues }: { r: CodeRequest; leagues: AdminLeague[]; onToggle: (id: string, handled: boolean) => void; reloadLeagues: () => Promise<AdminLeague[]> }) {
+  const [leagueId, setLeagueId] = useState(leagues[0]?.league_id ?? '');
+  const [manual, setManual] = useState('');
+  // Default to commissioner: requesters are usually league runners, who need the
+  // commish code + claim flow, then invite their own league mates.
+  const [kind, setKind] = useState<'commish' | 'player'>('commish');
+  const [copied, setCopied] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  // The request's platform ('sleeper' | 'espn' | …) and whether we can import it here.
+  const platform = (r.sleeper_username ?? '').toLowerCase();
+  const refId = r.league_ref ? extractLeagueId(r.league_ref, platform) : '';
+  // The already-imported league that matches this request's ref, if any.
+  const ownLeague = r.league_ref ? leagues.find((l) => l.sleeper_league_id === refId || l.sleeper_league_id === `espn-${refId}`) : undefined;
+  const importable = !!r.league_ref && (platform === 'sleeper' || platform === 'espn' || platform === '');
+  // Prefer this request's own league in the picker once it's imported; else first.
+  useEffect(() => { setLeagueId((id) => ownLeague?.league_id || id || leagues[0]?.league_id || ''); /* eslint-disable-next-line */ }, [leagues]);
+  const doImport = async () => {
+    if (!r.league_ref || importing) return;
+    setImporting(true); setErr(null);
+    try {
+      const ref = extractLeagueId(r.league_ref, platform);
+      const res = platform === 'espn' ? await importEspnSeason(ref, '2026') : await importLeague(ref, '2026');
+      const newId = typeof res === 'string' ? res : res.leagueId;
+      await reloadLeagues();
+      setLeagueId(newId); setKind('commish'); setSent(false);
+    } catch (e) { setErr(errMsg(e, 'import failed')); }
+    finally { setImporting(false); }
+  };
+
+  const league = leagues.find((l) => l.league_id === leagueId);
+  const code = league ? (kind === 'commish' ? league.commish_code : league.invite_code) : manual.trim();
+  const link = code ? (kind === 'commish' ? commishLink(code) : shareLink(code)) : '';
+  const canSend = !!code && !!r.email;
+  const reset = () => { setSent(false); setErr(null); };
+
+  const send = async () => {
+    if (!canSend || sending) return;
+    setSending(true); setErr(null);
+    const res = await sendInvite({ to: r.email!, code, link, leagueName: r.league_name ?? undefined, kind });
+    setSending(false);
+    if (res.ok) { setSent(true); if (!r.handled) onToggle(r.id, true); }
+    else setErr(res.error ?? 'Send failed.');
+  };
+  const kindBtn = (k: 'commish' | 'player', lbl: string) => (
+    <button onClick={() => { setKind(k); reset(); }} className="mono" style={{ ...btn(kind === k), fontSize: 9 }}>{lbl}</button>
+  );
+
+  return (
+    <div style={{ padding: '8px 0', borderTop: '1px solid var(--bd)', opacity: r.handled ? 0.5 : 1 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 11.5, color: 'var(--text)' }}>
+            {r.email ? <span className="mono" style={{ ...mono, cursor: 'pointer' }} onClick={() => copy(r.email!)} title="copy">{r.email}</span> : '—'}
+            {r.sleeper_username && <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}> · {r.sleeper_username}</span>}
           </div>
-          <button onClick={() => toggle(r.id, !r.handled)} className="mono" style={btn(r.handled)}>{r.handled ? 'handled' : 'mark done'}</button>
+          {r.league_name && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 2 }}>{r.league_name}</div>}
+          {r.league_ref && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--you)', marginTop: 2, cursor: 'pointer', wordBreak: 'break-all' }} onClick={() => copy(r.league_ref!)} title="copy — paste into Import">⛓ {r.league_ref}</div>}
+          {r.note && <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 2, lineHeight: 1.4 }}>{r.note}</div>}
+          <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>{new Date(r.created_at).toLocaleString()}</div>
         </div>
-      ))}
+        <button onClick={() => onToggle(r.id, !r.handled)} className="mono" style={btn(r.handled)}>{r.handled ? 'handled' : 'mark done'}</button>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 8 }}>
+        {importable && !ownLeague && (
+          <button onClick={doImport} disabled={importing} className="mono" style={{ ...btn(true), opacity: importing ? 0.6 : 1 }}
+            title={`Import this ${platform || 'Sleeper'} league (${refId}) so you can send its commish code`}>
+            {importing ? 'importing…' : '⤓ import this league'}
+          </button>
+        )}
+        {ownLeague && <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--you)' }}>✓ imported</span>}
+        <div style={{ display: 'flex', gap: 4 }} title="Commissioner invite (claims the league) or player join invite">
+          {kindBtn('commish', 'Commish')}
+          {kindBtn('player', 'Player')}
+        </div>
+        {leagues.length > 0 ? (
+          <select value={leagueId} onChange={(e) => { setLeagueId(e.target.value); reset(); }} className="mono" style={{ ...inp, fontSize: 10, padding: '5px 6px', maxWidth: 220 }} title={`${kind === 'commish' ? 'Commissioner' : 'Invite'} code to send`}>
+            {leagues.map((l) => <option key={l.league_id} value={l.league_id}>{l.name} · {kind === 'commish' ? l.commish_code : l.invite_code}</option>)}
+          </select>
+        ) : (
+          <input value={manual} onChange={(e) => { setManual(e.target.value); reset(); }} placeholder={kind === 'commish' ? 'commish code' : 'invite code'} className="mono" style={{ ...inp, fontSize: 10, padding: '5px 6px', width: 130 }} />
+        )}
+        <button onClick={send} disabled={!canSend || sending} className="mono"
+          style={{ ...btn(sent), opacity: canSend ? 1 : 0.4, cursor: canSend && !sending ? 'pointer' : 'default' }}
+          title={!r.email ? 'No email on this request' : !code ? 'Pick or enter a code first' : `Email the ${kind} invite to ${r.email}`}>
+          {sending ? 'sending…' : sent ? '✓ sent' : `✉ send ${kind} invite`}
+        </button>
+        <button onClick={() => { if (link) { copy(link); setCopied(true); setTimeout(() => setCopied(false), 1200); } }} disabled={!code} className="mono" style={{ ...btn(false), opacity: code ? 1 : 0.4, cursor: code ? 'pointer' : 'default' }} title="Copy the invite link">{copied ? '✓ link copied' : '⛓ copy link'}</button>
+        {err && <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--opp, #e5484d)' }}>{err}</span>}
+      </div>
+    </div>
+  );
+}
+
+// Admin/commish-map a roster to a person by email. Enrolls now if they've signed
+// in, otherwise records a pending claim that auto-links on their next sign-in.
+function AssignRoster({ initial, joiners = [], onAssign, onClaimSelf }: { initial: string; joiners?: LeagueJoiner[]; onAssign: (a: { email?: string; appUserId?: string }) => Promise<{ ok: boolean; error?: string; status?: string }>; onClaimSelf?: () => Promise<{ ok: boolean; error?: string; status?: string }> }) {
+  const [email, setEmail] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const result = (r: { ok: boolean; error?: string; status?: string }) =>
+    setMsg(!r.ok ? (r.error ?? 'failed') : r.status === 'pending' ? '✓ pending — links on sign-in' : r.status === 'cleared' ? '✓ cleared' : '✓ enrolled');
+  const go = async () => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    const r = await onAssign({ email: email.trim() });
+    setBusy(false); result(r);
+  };
+  // Commissioner claims this team for themselves (to play, not just manage).
+  const claim = async () => {
+    if (busy || !onClaimSelf) return;
+    setBusy(true); setMsg(null);
+    const r = await onClaimSelf();
+    setBusy(false); setMsg(!r.ok ? (r.error ?? 'failed') : '✓ claimed — this team is yours');
+  };
+  // Pick a player who already tapped the invite link (join pool) — no typing.
+  const pick = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const appUserId = e.target.value;
+    if (busy || !appUserId) return;
+    const j = joiners.find((x) => x.app_user_id === appUserId);
+    setBusy(true); setMsg(null);
+    const r = await onAssign({ appUserId, email: j?.email ?? undefined });
+    setBusy(false); result(r);
+    if (r.ok && j?.email) setEmail(j.email);
+  };
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+      {joiners.length > 0 && (
+        <select value="" onChange={pick} disabled={busy} className="mono"
+          title="assign a player who joined the pool" style={{ ...inp, fontSize: 10, padding: '5px 7px', maxWidth: 160 }}>
+          <option value="">joined players…</option>
+          {joiners.map((j) => <option key={j.app_user_id} value={j.app_user_id}>{j.email ?? j.app_user_id.slice(0, 8)}</option>)}
+        </select>
+      )}
+      <input value={email} onChange={(e) => { setEmail(e.target.value); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
+        placeholder="assign to email…" type="email" spellCheck={false} autoCapitalize="none" autoCorrect="off"
+        style={{ ...inp, fontSize: 10, padding: '5px 7px', flex: 1, minWidth: 0 }} />
+      <button onClick={go} disabled={busy} className="mono" style={{ ...btn(false), opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'assign'}</button>
+      {onClaimSelf && <button onClick={claim} disabled={busy} className="mono" title="claim this team for yourself" style={{ ...btn(true), opacity: busy ? 0.6 : 1 }}>＋ me</button>}
+      {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp, #e5484d)' }}>{msg}</span>}
+    </div>
+  );
+}
+
+// Commissioner grants drip coin to a team. Real leagues start at 0; this is how a
+// commish stakes players (or claws back). Additive; the balance shows live.
+function SeedCoin({ balance, onSeed }: { balance: number; onSeed: (amt: number) => Promise<{ ok: boolean; error?: string; balance?: number }> }) {
+  const [amt, setAmt] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const go = async () => {
+    const n = Number(amt);
+    if (busy || !n) return;
+    setBusy(true); setMsg(null);
+    const r = await onSeed(n);
+    setBusy(false);
+    if (r.ok) { setAmt(''); setMsg(`✓ balance ${Math.round(r.balance ?? balance)}`); } else setMsg(r.error ?? 'failed');
+  };
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+      <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>◇ {Math.round(balance)}</span>
+      <input value={amt} onChange={(e) => { setAmt(e.target.value.replace(/[^\d-]/g, '')); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
+        placeholder="grant coin…" inputMode="numeric" style={{ ...inp, fontSize: 10, padding: '5px 7px', width: 90 }} />
+      <button onClick={go} disabled={busy || !amt} className="mono" style={{ ...btn(false), opacity: busy || !amt ? 0.6 : 1 }}>{busy ? '…' : 'grant'}</button>
+      {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp, #e5484d)' }}>{msg}</span>}
+    </div>
+  );
+}
+
+// Commissioner: the league's flat weekly coin budget + a per-week grant. Setting
+// the amount defines the budget; "grant" credits every team that week's budget
+// (idempotent server-side, so a re-press never double-pays).
+function WeeklyBudget({ l, onGranted }: { l: AdminLeague; onGranted: () => void }) {
+  const [amt, setAmt] = useState(String(l.weekly_budget ?? 0));
+  const [saved, setSaved] = useState<number>(l.weekly_budget ?? 0);
+  const [week, setWeek] = useState('1');
+  const [busy, setBusy] = useState<'' | 'save' | 'grant'>('');
+  const [msg, setMsg] = useState<string | null>(null);
+  const dirty = Number(amt) !== saved;
+  const save = async () => {
+    const n = Number(amt);
+    if (busy || Number.isNaN(n) || n < 0) return;
+    setBusy('save'); setMsg(null);
+    const r = await commishSetWeeklyBudget(l.league_id, n);
+    setBusy('');
+    if (r.ok) { setSaved(r.weekly_budget ?? n); setMsg(`✓ budget set to ${Math.round(r.weekly_budget ?? n)}`); } else setMsg(r.error ?? 'failed');
+  };
+  const grant = async () => {
+    const w = Number(week);
+    if (busy || !w || w < 1) return;
+    setBusy('grant'); setMsg(null);
+    const r = await commishGrantWeeklyBudget(l.league_id, w);
+    setBusy('');
+    if (!r.ok) { setMsg(r.error ?? 'failed'); return; }
+    if ((r.weekly_budget ?? 0) <= 0) setMsg('set a budget above 0 first');
+    else if ((r.credited ?? 0) === 0) setMsg(`week ${w} already granted`);
+    else { setMsg(`✓ granted ${Math.round(r.weekly_budget ?? 0)} to ${r.credited} team${r.credited === 1 ? '' : 's'} · week ${w}`); onGranted(); }
+  };
+  return (
+    <div style={{ marginBottom: 10, padding: '9px 10px', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6 }}>
+      <div className="mono" style={{ ...mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 7 }}>◈ WEEKLY BUDGET</div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input value={amt} onChange={(e) => { setAmt(e.target.value.replace(/[^\d]/g, '')); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
+          placeholder="coin / week" inputMode="numeric" style={{ ...inp, fontSize: 11, padding: '5px 7px', width: 90 }} />
+        <button onClick={save} disabled={busy === 'save' || !dirty} className="mono" style={{ ...btn(false), opacity: busy === 'save' || !dirty ? 0.6 : 1 }}>{busy === 'save' ? '…' : 'set budget'}</button>
+        <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>each team, per week</span>
+      </div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 7, flexWrap: 'wrap' }}>
+        <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)' }}>grant week</span>
+        <input value={week} onChange={(e) => { setWeek(e.target.value.replace(/[^\d]/g, '')); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') grant(); }}
+          inputMode="numeric" style={{ ...inp, fontSize: 11, padding: '5px 7px', width: 48, textAlign: 'center' }} />
+        <button onClick={grant} disabled={busy === 'grant' || saved <= 0} title={saved <= 0 ? 'set a budget above 0 first' : 'credit every team this week’s budget'} className="mono" style={{ ...btn(false), opacity: busy === 'grant' || saved <= 0 ? 0.6 : 1 }}>{busy === 'grant' ? '…' : 'grant to all teams'}</button>
+      </div>
+      {msg && <div className="mono" style={{ ...mono, fontSize: 9, marginTop: 6, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--dim)' }}>{msg}</div>}
+    </div>
+  );
+}
+
+// Super-admin only: flip a league's live board onto a compressed real-time test
+// clock (Setup → Locked → Live → Final in minutes) so the flow can be exercised in
+// preseason. Affects every member of the league. Toggling off restores the real
+// slate. Re-toggling on re-anchors the schedule to "now".
+function TestLiveToggle({ on, leagueId, reload }: { on: boolean; leagueId: string; reload: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (busy) return;
+    setBusy(true);
+    await adminSetTestLive(leagueId, !on).catch(() => {});
+    setBusy(false);
+    reload();
+  };
+  return (
+    <button onClick={go} disabled={busy} title={on ? 'Live-test mode is ON — the board runs a compressed Setup→Locked→Live→Final clock for everyone. Click to turn off.' : 'Turn on live-test mode: the board runs a compressed real-time clock so you can test the flow now.'}
+      className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--warn)', background: on ? 'var(--warn)' : 'var(--bg)', border: '1px solid var(--warn)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+      {busy ? '…' : on ? '🧪 LIVE TEST: ON' : '🧪 live test'}
+    </button>
+  );
+}
+
+// Super-admin only: flip a league into preseason mode. Clones its Week-1 pairings
+// + lineups into the preseason offset weeks (101-103) so the league can create and
+// play real 2026 NFL preseason matchups (on real PBP, once the worker runs with
+// seasonType=1). Toggling off clears the stamp and drops the preseason clones.
+function PreseasonToggle({ on, leagueId, reload }: { on: boolean; leagueId: string; reload: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (busy) return;
+    setBusy(true);
+    await adminSetPreseason(leagueId, !on).catch(() => {});
+    setBusy(false);
+    reload();
+  };
+  return (
+    <button onClick={go} disabled={busy} title={on ? 'Preseason mode is ON — this league has real 2026 preseason matchups (weeks 101-103). Click to turn off and remove them.' : 'Turn on preseason mode: seed this league with real 2026 preseason matchups so it can play live on real PBP before the season starts.'}
+      className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--you)', background: on ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--you)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+      {busy ? '…' : on ? '🏈 PRESEASON: ON' : '🏈 preseason'}
+    </button>
+  );
+}
+
+// Super-admin only: permanently delete a league. Two-step, type-the-name guard so
+// it can't be a stray click — the whole league + its matchups/picks/members go.
+function DeleteLeague({ name, onDelete }: { name: string; onDelete: () => Promise<{ ok: boolean; error?: string }> }) {
+  const [open, setOpen] = useState(false);
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const danger = 'var(--opp, #e5484d)';
+  const go = async () => {
+    if (busy || confirm.trim() !== name) return;
+    setBusy(true); setErr(null);
+    const r = await onDelete();
+    if (!r.ok) { setErr(r.error ?? 'failed'); setBusy(false); }
+    // on success the row unmounts (parent reloads) — no need to reset state
+  };
+  if (!open) return (
+    <button onClick={() => setOpen(true)} className="mono" style={{ ...linkBtn, fontSize: 9, color: danger }} title="permanently delete this league">🗑 delete league</button>
+  );
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span className="mono" style={{ ...mono, fontSize: 9, color: danger }}>type “{name}” to confirm:</span>
+      <input value={confirm} onChange={(e) => { setConfirm(e.target.value); setErr(null); }} onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
+        autoFocus spellCheck={false} style={{ ...inp, fontSize: 10, padding: '4px 7px', minWidth: 140, borderColor: danger }} />
+      <button onClick={go} disabled={busy || confirm.trim() !== name} className="mono"
+        style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-accent, #fff)', background: danger, border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', opacity: busy || confirm.trim() !== name ? 0.5 : 1 }}>{busy ? 'deleting…' : 'delete forever'}</button>
+      <button onClick={() => { setOpen(false); setConfirm(''); setErr(null); }} className="mono" style={{ ...linkBtn, fontSize: 9 }}>cancel</button>
+      {err && <span className="mono" style={{ ...mono, fontSize: 9, color: danger }}>{err}</span>}
     </div>
   );
 }
@@ -618,7 +1094,7 @@ function AdminMatchupBoard({ matchupId, onClose }: { matchupId: string; onClose:
     let alive = true;
     const load = async () => {
       try { const d = await adminMatchupBoard(matchupId); if (alive) { setB(d); setErr(null); } }
-      catch (e) { if (alive) setErr(e instanceof Error ? e.message : 'load failed'); }
+      catch (e) { if (alive) setErr(errMsg(e, 'load failed')); }
     };
     load();
     const t = setInterval(load, 2500);
@@ -738,7 +1214,7 @@ const ago = (iso: string | null): string => {
 function HealthPanel() {
   const [hp, setHp] = useState<AdminHealth | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const load = async () => { try { setHp(await adminHealth()); setErr(null); } catch (e) { setErr(e instanceof Error ? e.message : 'load failed'); } };
+  const load = async () => { try { setHp(await adminHealth()); setErr(null); } catch (e) { setErr(errMsg(e, 'load failed')); } };
   useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, []);
   const liveOn = (hp?.live_matchups ?? 0) > 0;
   // While games are live, a >90s gap since the last play ingest is suspicious.
@@ -782,7 +1258,7 @@ const SIDE_STATUS = (s: PickSide): { label: string; color: string } => {
 function PickReadinessTab({ leagueId, week, admin }: { leagueId: string; week: number; admin: boolean }) {
   const [rows, setRows] = useState<PickReadiness[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const load = async () => { try { setRows(await adminPickReadiness(leagueId, week)); } catch (e) { setBusy(e instanceof Error ? e.message : 'load failed'); } };
+  const load = async () => { try { setRows(await adminPickReadiness(leagueId, week)); } catch (e) { setBusy(errMsg(e, 'load failed')); } };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [leagueId, week]);
 
   const autofill = async (m: PickReadiness, side: 'home' | 'away') => {
@@ -801,7 +1277,7 @@ function PickReadinessTab({ leagueId, week, admin }: { leagueId: string; week: n
       if (!out.length) { setBusy('no synced lineup to autofill (run sync week)'); return; }
       const r = await adminSetPicks(m.matchup_id, s.app_user_id, out);
       setBusy(r.ok ? `✓ filled ${r.count} picks for ${s.team}` : (r.error ?? 'failed')); await load();
-    } catch (e) { setBusy(e instanceof Error ? e.message : 'autofill failed'); }
+    } catch (e) { setBusy(errMsg(e, 'autofill failed')); }
   };
   const clear = async (m: PickReadiness, side: 'home' | 'away') => {
     const s = side === 'home' ? m.home : m.away;
@@ -809,14 +1285,14 @@ function PickReadinessTab({ leagueId, week, admin }: { leagueId: string; week: n
     if (!confirm(`Clear ${s.team}'s picks for this matchup?`)) return;
     setBusy('clear…');
     try { await adminClearPicks(m.matchup_id, s.app_user_id); setBusy(`✓ cleared ${s.team}`); await load(); }
-    catch (e) { setBusy(e instanceof Error ? e.message : 'clear failed'); }
+    catch (e) { setBusy(errMsg(e, 'clear failed')); }
   };
   const toggleAi = async (m: PickReadiness, side: 'home' | 'away') => {
     const s = side === 'home' ? m.home : m.away;
     const next: Controller = s.controller === 'ai' ? 'human' : 'ai';
     setBusy('ai…');
     try { const r = await setTeamController(leagueId, s.roster_id, next); setBusy(r.ok ? `✓ ${s.team} → ${next}` : (r.error ?? 'failed')); await load(); }
-    catch (e) { setBusy(e instanceof Error ? e.message : 'ai toggle failed'); }
+    catch (e) { setBusy(errMsg(e, 'ai toggle failed')); }
   };
 
   const sideRow = (m: PickReadiness, side: 'home' | 'away') => {
@@ -871,10 +1347,6 @@ function SendLink({ email }: { email: string }) {
       {s === 'sent' ? '✓ link sent' : s === 'sending' ? '…' : s === 'err' ? 'failed' : '✉ send link'}
     </button>
   );
-}
-
-function Muted({ text }: { text: string }) {
-  return <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)' }}>{text}</div>;
 }
 
 // A K or DST team picker — value is a '<team>-<suffix>' slug (or null = random).

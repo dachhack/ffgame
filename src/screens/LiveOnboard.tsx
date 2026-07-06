@@ -1,22 +1,24 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
-import { SiteSettings } from '../app/ui';
+import { SiteSettings, VersionTag } from '../app/ui';
 import { liveConfigured } from '../data/supabaseClient';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   getSession, onAuth, signOut, ensureAppUser,
-  previewLeague, redeemPreview, redeemInvite, myEnrollments,
-  startCommishVerify, confirmCommishVerify, isAdmin, commishOverview, friendlyError,
-  myMatchup, matchupTeams,
-  type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo,
+  previewLeague, redeemPreview, redeemInvite, joinLeague, myEnrollments, myLinkedSleeper, claimMyRosters,
+  redeemCommish, isAdmin, commishOverview, friendlyError,
+  myMatchup, matchupTeams, leagueResults, defaultOpenWeek,
+  type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
 } from '../data/liveApi';
-import { DEMO_WEEK } from '../config';
 import { buildDripTestLeague } from '../data/dripTest';
-import { LivePicks } from './LivePicks';
+import { buildLiveLeague } from '../data/liveBoard';
+import { PRESEASON_BASE, clearRuntimeSlate } from '../data/nflSlate';
 import { LiveBoard } from './LiveBoard';
-import { RequestCodeModal } from './RequestCode';
+import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { AdminPage } from './AdminPage';
 import { CommishDash } from './CommishDash';
+import { RequestCodeModal } from './RequestCode';
+import { markBootSessionChecked } from './DemoBoard';
 import type { Session } from '@supabase/supabase-js';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
@@ -43,47 +45,82 @@ function GoogleG() {
   );
 }
 
-type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin';
+type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin' | 'add' | 'join' | 'results';
 
 export function LiveOnboard() {
-  const { navigate } = useStore();
+  const { navigate, route } = useStore();
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [recovery, setRecovery] = useState(false);
   const [admin, setAdmin] = useState(false);
-  const [view, setView] = useState<OnboardView>('home');
+  const [claiming, setClaiming] = useState(false);
+  const [pendingCommish, setPendingCommish] = useState<string | null>(null);
+  // Honor the gear menu's "Super admin" deep link (view:'admin'); a commissioner
+  // invite link is handled by the auto-claim effect below.
+  const [view, setView] = useState<OnboardView>(() => (route.name === 'live' && route.view === 'admin' ? 'admin' : 'home'));
 
   useEffect(() => {
     if (!liveConfigured) { setReady(true); return; }
     getSession().then((s) => { setSession(s); setReady(true); });
     return onAuth((s, ev) => { setSession(s); if (ev === 'PASSWORD_RECOVERY') setRecovery(true); });
   }, []);
+  // Remember that this is a live (signed-in) user so the app boots straight to
+  // their leagues next time, skipping the demo funnel. Only an explicit sign-out
+  // clears it (see the sign-out button), so an expired session still lands here to
+  // re-authenticate rather than dropping back to the marketing splash.
+  useEffect(() => { if (session) { try { localStorage.setItem('dripLive', '1'); } catch { /* ignore */ } } }, [session]);
   useEffect(() => {
     if (!session) { setAdmin(false); return; }
     isAdmin().then(setAdmin).catch(() => setAdmin(false));
   }, [session]);
+  // Commissioner invite link: once signed in, auto-claim the league from the pending
+  // commish code (URL → dripCommishCode) and drop straight into league management —
+  // no role chooser, no code re-entry. On failure, fall back to the manual verify
+  // form with the code prefilled.
+  useEffect(() => {
+    if (!session) return;
+    let code: string | null = null;
+    try { code = localStorage.getItem('dripCommishCode'); localStorage.removeItem('dripCommishCode'); } catch { /* ignore */ }
+    if (!code) return;
+    setPendingCommish(code); setClaiming(true);
+    redeemCommish(code)
+      .then((r) => { if (r.ok) { setPendingCommish(null); setView('commishdash'); } else setView('commish'); })
+      .catch(() => setView('commish'))
+      .finally(() => setClaiming(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
+
+  // Management views (super-admin + commissioner dashboard) get the full desktop
+  // width; the onboarding/player screens stay a comfortable single column.
+  const wide = view === 'admin' || view === 'commishdash';
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', flexWrap: 'wrap', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}>◈ DRIP FANTASY · LIVE</span>
-          <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← demo</button>
+          <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}><GameIcon name={BRAND_MARK} emoji="◈" size="1.4em" /> DRIP FANTASY · LIVE</span>
+          {/* Signed in: a shortcut back to your leagues from any sub-view (no need
+              for the marketing demo). Signed out: the demo link. */}
+          {session
+            ? (view !== 'home' && <button onClick={() => setView('home')} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← my leagues</button>)
+            : <button onClick={() => navigate({ name: 'demo' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← demo</button>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <VersionTag />
           {session && <span className="mono" title={session.user.email ?? ''} style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 9px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>◢ {sessionName(session)}</span>}
-          {session && <button onClick={() => signOut()} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>sign out</button>}
+          {session && <button onClick={() => { try { localStorage.removeItem('dripLive'); } catch { /* ignore */ } signOut(); markBootSessionChecked(); navigate({ name: 'demo' }); }} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>sign out</button>}
           <SiteSettings superAdmin={session && admin ? () => setView('admin') : undefined} />
         </div>
       </header>
 
-      <main style={{ flex: 1, display: 'flex', alignItems: view === 'admin' ? 'flex-start' : 'center', justifyContent: 'center', padding: '24px 16px' }}>
-        <div style={{ width: '100%', maxWidth: view === 'admin' ? 1080 : 440 }}>
+      <main style={{ flex: 1, display: 'flex', alignItems: wide ? 'flex-start' : 'center', justifyContent: 'center', padding: '24px 16px' }}>
+        <div style={{ width: '100%', maxWidth: wide ? 1080 : view === 'home' ? 960 : 440 }}>
           {!liveConfigured ? <NotConfigured />
             : !ready ? <Muted text="Loading…" />
             : recovery ? <SetPassword onDone={() => setRecovery(false)} />
             : !session ? <AuthForm />
-            : <Enroll session={session} view={view} setView={setView} />}
+            : claiming ? <Muted text="Setting up your league…" />
+            : <Enroll session={session} view={view} setView={setView} commishCode={pendingCommish} />}
         </div>
       </main>
     </div>
@@ -103,6 +140,10 @@ function Muted({ text }: { text: string }) {
   return <div className="mono" style={{ textAlign: 'center', fontSize: 11, color: 'var(--dim)' }}>{text}</div>;
 }
 
+// A stable per-team key (a commissioner can hold several rosters in one league,
+// so league_id alone isn't unique across enrollment cards).
+const enrollKey = (e: Enrollment) => `${e.league_id}:${e.sleeper_roster_id}`;
+
 function NotConfigured() {
   return (
     <div style={card}>
@@ -117,6 +158,18 @@ function NotConfigured() {
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'magic';
 
 function AuthForm() {
+  // Framing from the invite link (persisted by App.tsx). A commissioner who
+  // clicked ?commish=… should see league-setup copy, not the player pitch — so
+  // signing in doesn't feel like a gate. Read-only; the code is consumed later.
+  const inviteContext: 'commish' | 'player' | null = (() => {
+    try {
+      if (localStorage.getItem('dripCommishCode')) return 'commish';
+      if (localStorage.getItem('dripInviteCode')) return 'player';
+    } catch { /* ignore */ }
+    return null;
+  })();
+  const commishCtx = inviteContext === 'commish';
+  const playerCtx = inviteContext === 'player';
   const [mode, setMode] = useState<AuthMode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -175,9 +228,16 @@ function AuthForm() {
     <>
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
         <div className="grotesk" style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1.1 }}>
-          {mode === 'signin' ? <>The <span style={{ color: 'var(--you)' }}>live H2H</span> pilot.</> : title}
+          {mode !== 'signin' ? title
+            : commishCtx ? <>Set up your <span style={{ color: 'var(--you)' }}>league</span>.</>
+            : playerCtx ? <>Join your <span style={{ color: 'var(--you)' }}>league</span>.</>
+            : <>The <span style={{ color: 'var(--you)' }}>live H2H</span> pilot.</>}
         </div>
-        {mode === 'signin' && <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 10 }}>Sign in to set your lineup and watch it play live.</div>}
+        {mode === 'signin' && <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 10 }}>
+          {commishCtx ? 'Sign in to claim and manage your league.'
+            : playerCtx ? 'Sign in to claim your team and set your lineup.'
+            : 'Sign in to set your lineup and watch it play live.'}
+        </div>}
       </div>
       <div style={card}>
         {showPw && (SHOW_GOOGLE || SHOW_APPLE) && (
@@ -227,7 +287,9 @@ function AuthForm() {
         </div>
         {showPw && (
           <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 14, lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
-            To join a league you’ll also need your <span style={{ color: 'var(--dim)' }}>invite code</span> (from your commissioner) and your <span style={{ color: 'var(--dim)' }}>Sleeper username</span>.
+            {commishCtx
+              ? <>Signing in claims this league from your invite — then you’ll manage rosters, invites and weekly matchups.</>
+              : <>To join a league you’ll also need your <span style={{ color: 'var(--dim)' }}>invite code</span> (from your commissioner) and your <span style={{ color: 'var(--dim)' }}>Sleeper username</span>.</>}
           </div>
         )}
       </div>
@@ -270,10 +332,11 @@ function SetPassword({ onDone }: { onDone: () => void }) {
 // Per-league matchup snapshot for the home cards: the next matchup + both teams' identity.
 interface MatchupCard { matchup: LiveMatchup; teams: Record<number, TeamInfo>; }
 
-function Enroll({ session, view, setView }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void }) {
+function Enroll({ session, view, setView, commishCode }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void; commishCode?: string | null }) {
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
   const [loadErr, setLoadErr] = useState(false);
-  const [commishIds, setCommishIds] = useState<Set<string>>(new Set());
+  const [commishLeagues, setCommishLeagues] = useState<AdminLeague[]>([]);
+  const [commishLoaded, setCommishLoaded] = useState(false);
   const [cards, setCards] = useState<Record<string, MatchupCard>>({});
   // A commissioner's share link (?code=…) stashes dripInviteCode and promises
   // "just sign in and confirm — no code to type." Honor that by skipping the
@@ -281,22 +344,37 @@ function Enroll({ session, view, setView }: { session: Session; view: OnboardVie
   const [choice, setChoice] = useState<'none' | 'player'>(() => {
     try { return localStorage.getItem('dripInviteCode') ? 'player' : 'none'; } catch { return 'none'; }
   });
+  // Which league "manage" opened — so the dashboard focuses that one, not all.
+  const [manageId, setManageId] = useState<string | null>(null);
+  // Which team's live board/picks a card opened (a manager can be in several).
+  const [target, setTarget] = useState<{ leagueId: string; rosterId: number } | null>(null);
+  // "My league isn't in the pilot yet" → the request-a-code capture sheet.
+  const [requesting, setRequesting] = useState(false);
+  const commishIds = new Set(commishLeagues.map((l) => l.league_id));
   const isCommish = commishIds.size > 0;
 
   const refresh = async () => {
     setLoadErr(false);
     let rows: Enrollment[] = [];
-    // Don't fake an empty enrollment on failure — that shows an already-enrolled
-    // user the "how are you joining?" form. Surface a retry instead (see below).
-    try { await ensureAppUser(session); rows = await myEnrollments(session.user.id); setEnrollments(rows); }
-    catch { setLoadErr(true); return; }
-    commishOverview().then((l) => setCommishIds(new Set((l ?? []).map((x) => x.league_id)))).catch(() => setCommishIds(new Set()));
+    try {
+      await ensureAppUser(session);
+      // Pick up any rosters an admin/commish pre-assigned to my email (non-Sleeper
+      // leagues are enrolled this way, since there's no username to self-claim by).
+      await claimMyRosters().catch(() => {});
+      rows = await myEnrollments(session.user.id); setEnrollments(rows);
+    } catch {
+      // Don't fake an empty enrollment on failure — that shows an already-enrolled
+      // user the "how are you joining?" form. Surface a retry instead (see below).
+      // commishLoaded is flipped so the loading gate clears and the error renders.
+      setLoadErr(true); setCommishLoaded(true); return;
+    }
+    commishOverview().then((l) => setCommishLeagues(l ?? [])).catch(() => setCommishLeagues([])).finally(() => setCommishLoaded(true));
     // Each league's next matchup + opponent, for the home cards.
     for (const e of rows) {
       myMatchup(e.league_id, e.sleeper_roster_id).then(async (m) => {
         if (!m) return;
         const teams = await matchupTeams(e.league_id, [m.home_roster_id, m.away_roster_id]).catch(() => ({}));
-        setCards((c) => ({ ...c, [e.league_id]: { matchup: m, teams } }));
+        setCards((c) => ({ ...c, [enrollKey(e)]: { matchup: m, teams } }));
       }).catch(() => {});
     }
   };
@@ -305,10 +383,25 @@ function Enroll({ session, view, setView }: { session: Session; view: OnboardVie
     /* eslint-disable-next-line */
   }, [session.user.id]);
 
-  if (view === 'commish') return <CommishVerify onBack={() => { setView('home'); refresh(); }} />;
-  if (view === 'commishdash') return <CommishDash onBack={() => setView('home')} />;
-  if (view === 'picks') return <LivePicks userId={session.user.id} onBack={() => setView('home')} />;
-  if (view === 'board') return <LiveBoard userId={session.user.id} onBack={() => setView('home')} />;
+  if (view === 'commish') return <CommishVerify initialCode={commishCode ?? undefined} onBack={() => { setView('home'); refresh(); }} />;
+  if (view === 'commishdash') return <CommishDash focusId={manageId} onBack={() => { setManageId(null); setView('home'); }} />;
+  // Add another league from My Leagues: fork by role (join with an invite code, or
+  // claim with a commish code), then return home refreshed.
+  if (view === 'add') return (
+    <>
+      <RoleChooser onPlayer={() => setView('join')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} />
+      <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
+      {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
+    </>
+  );
+  if (view === 'join') return (
+    <>
+      <RedeemForm userId={session.user.id} onJoined={() => { setView('home'); refresh(); }} />
+      <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
+    </>
+  );
+  if (view === 'board') return <LiveBoard userId={session.user.id} leagueId={target?.leagueId} rosterId={target?.rosterId} onBack={() => setView('home')} />;
+  if (view === 'results' && target) return <LeagueResults leagueId={target.leagueId} onBack={() => setView('home')} />;
   if (view === 'admin') return <AdminPage onBack={() => setView('home')} />;
   // Only a first-load failure blanks the screen; a background refresh failure keeps
   // whatever we already showed. Retry rather than mislead an enrolled user.
@@ -318,29 +411,36 @@ function Enroll({ session, view, setView }: { session: Session; view: OnboardVie
       <button onClick={refresh} className="mono" style={{ marginTop: 12, background: 'none', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', cursor: 'pointer' }}>↻ retry</button>
     </div>
   );
-  if (enrollments === null) return <Muted text="Loading your leagues…" />;
+  if (enrollments === null || !commishLoaded) return <Muted text="Loading your leagues…" />;
 
-  // Not enrolled yet → fork by role instead of defaulting everyone into the player form.
+  // A signed-in commissioner with no player roster of their own → straight to
+  // league management instead of the "how are you joining?" chooser.
+  if (enrollments.length === 0 && isCommish) return <CommishDash onBack={() => setView('home')} />;
+
+  // Genuinely new (no leagues at all) → fork by role.
   if (enrollments.length === 0) return (
-    <>
+    <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onCommish={() => setView('commish')} />
-        : <RedeemForm onJoined={refresh} />}
+        ? <RoleChooser onPlayer={() => setChoice('player')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} />
+        : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}      </div>
-    </>
+        {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
+      </div>
+      {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
+    </div>
   );
 
   return (
     <LeagueHome
       enrollments={enrollments}
+      commishLeagues={commishLeagues}
       cards={cards}
       commishIds={commishIds}
       userId={session.user.id}
-      onPicks={() => setView('picks')}
-      onBoard={() => setView('board')}
-      onManage={() => setView('commishdash')}
-      onVerifyCommish={() => setView('commish')}
+      onBoard={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('board'); }}
+      onResults={(leagueId) => { setTarget({ leagueId, rosterId: 0 }); setView('results'); }}
+      onManage={(id) => { setManageId(id); setView('commishdash'); }}
+      onAdd={() => setView('add')}
       isCommish={isCommish}
     />
   );
@@ -348,52 +448,194 @@ function Enroll({ session, view, setView }: { session: Session; view: OnboardVie
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, cards, commishIds, userId, onPicks, onBoard, onManage, onVerifyCommish, isCommish }: {
-  enrollments: Enrollment[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
-  onPicks: () => void; onBoard: () => void; onManage: () => void; onVerifyCommish: () => void; isCommish: boolean;
+function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onBoard, onResults, onManage, onAdd, isCommish }: {
+  enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
+  onBoard: (leagueId: string, rosterId: number) => void; onResults: (leagueId: string) => void; onManage: (leagueId: string) => void; onAdd: () => void; isCommish: boolean;
 }) {
+  const [filter, setFilter] = useState<'all' | 'commish'>('all');
+  const enrolledIds = new Set(enrollments.map((e) => e.league_id));
+  // Leagues you commission but have no player roster in (no enrollment card).
+  const commishOnly = commishLeagues.filter((l) => !enrolledIds.has(l.league_id));
+  const enrolledCommish = enrollments.filter((e) => commishIds.has(e.league_id));
+  const enrolledPlayer = enrollments.filter((e) => !commishIds.has(e.league_id));
+  const total = enrollments.length + commishOnly.length;
+  const commishCount = enrolledCommish.length + commishOnly.length;
+
+  const chip = (id: 'all' | 'commish', label: string, n: number) => (
+    <button onClick={() => setFilter(id)} className="mono" style={{
+      fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
+      color: filter === id ? 'var(--on-accent)' : 'var(--dim)', background: filter === id ? 'var(--you)' : 'var(--surface)',
+      border: `1px solid ${filter === id ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 999, padding: '5px 11px',
+    }}>{label} <span style={{ opacity: 0.6 }}>{n}</span></button>
+  );
+
   return (
     <>
-      <div className="grotesk" style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', marginBottom: 14 }}>
-        Your {enrollments.length === 1 ? 'league' : 'leagues'}
+      {/* brand hero — the QB mark + wordmark, tight to the content below */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 14, margin: '0 0 10px', flexWrap: 'wrap' }}>
+        <img src={`${import.meta.env.BASE_URL}brand/hero-mark.png`} alt="" style={{ height: 224, width: 'auto' }} />
+        <img src={`${import.meta.env.BASE_URL}brand/hero-wordmark.png`} alt="Drip Fantasy" style={{ height: 69, width: 'auto', marginTop: 8 }} />
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {enrollments.map((e) => (
-          <LeagueCard key={e.league_id} e={e} card={cards[e.league_id]} commish={commishIds.has(e.league_id)} userId={userId}
-            onPicks={onPicks} onBoard={onBoard} onManage={onManage} />
+      <SeasonCountdown />
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+        <div className="grotesk" style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>Your {total === 1 ? 'league' : 'leagues'}</div>
+        <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.08em' }}>{total} LEAGUE{total === 1 ? '' : 'S'}</span>
+      </div>
+      {/* Commish/all filter — only when you run at least one league. */}
+      {isCommish && <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>{chip('all', 'ALL', total)}{chip('commish', 'COMMISH', commishCount)}</div>}
+      {/* Commissioned leagues on top; players below (hidden under the commish filter). */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12, alignItems: 'start' }}>
+        {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} onResults={() => onResults(l.league_id)} />)}
+        {enrolledCommish.map((e) => (
+          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} />
+        ))}
+        {filter === 'all' && enrolledPlayer.map((e) => (
+          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} />
         ))}
       </div>
-      <div style={{ textAlign: 'center', marginTop: 16 }}>
-        {!isCommish && <button onClick={onVerifyCommish} className="mono" style={linkBtn}>I also run a league — verify as commissioner →</button>}
+      <div style={{ textAlign: 'center', marginTop: 18 }}>
+        <button onClick={onAdd} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>＋ add a league</button>
       </div>
     </>
   );
 }
 
-function LeagueCard({ e, card, commish, userId, onPicks, onBoard, onManage }: {
+// Week 1 of the 2026 NFL season opens WEDNESDAY Sep 9 at 8:20 PM ET (SEA
+// hosts the opener; the traditional Thursday slot went to the Melbourne
+// game). Lineups lock one hour before the week's first kickoff (see
+// nflSlate.ts), so the first pick lock of the season is 7:20 PM ET. The
+// banner retires itself once that moment passes.
+const SEASON_FIRST_LOCK = new Date('2026-09-09T19:20:00-04:00');
+
+function SeasonCountdown() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const ms = SEASON_FIRST_LOCK.getTime() - now;
+  if (ms <= 0) return null;
+  const s = Math.floor(ms / 1000);
+  const segs: [number, string][] = [
+    [Math.floor(s / 86400), 'DAYS'],
+    [Math.floor((s % 86400) / 3600), 'HRS'],
+    [Math.floor((s % 3600) / 60), 'MIN'],
+    [s % 60, 'SEC'],
+  ];
+  const when = SEASON_FIRST_LOCK.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: '14px 16px', marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+      <div style={{ minWidth: 220, flex: '1 1 220px' }}>
+        <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em' }}>Drip leagues go live Week 1 of the NFL season</div>
+        <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--dim)', marginTop: 5 }}>FIRST PICKS LOCK AT {when.toUpperCase()} ET</div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flex: 'none' }}>
+        {segs.map(([v, l]) => (
+          <div key={l} style={{ textAlign: 'center', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '9px 10px 7px', minWidth: 60 }}>
+            <div className="grotesk" style={{ fontSize: 28, fontWeight: 700, color: 'var(--you)', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{String(v).padStart(2, '0')}</div>
+            <div className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.18em', color: 'var(--faint)', marginTop: 5 }}>{l}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// A league you commission but don't play in — no matchup card, just a way in to manage it.
+function CommishOnlyCard({ l, onManage, onResults }: { l: AdminLeague; onManage: () => void; onResults: () => void }) {
+  // Mirror LeagueCard's anatomy (identity row + status pill, boxed info strip,
+  // full-width primary button) so play and commish-only cards read as one family.
+  // You don't have a team here, so the info strip shows roster-fill instead of a
+  // matchup, and the primary action is "manage" rather than "set lineup".
+  const full = l.enrolled >= l.rosters;
+  const statusColor = full ? 'var(--you)' : 'var(--warn)';
+  return (
+    <div style={{ ...card2 }}>
+      {/* identity row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="grotesk" style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>{l.name.slice(0, 1).toUpperCase()}</div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+            <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</span>
+            <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', borderRadius: 4, padding: '2px 6px' }}>⚑ COMMISSIONER</span>
+          </div>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.season} · {l.rosters}-team league</div>
+        </div>
+        <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: statusColor, border: `1px solid ${statusColor}`, borderRadius: 4, padding: '3px 7px', whiteSpace: 'nowrap', flexShrink: 0 }}>{full ? 'READY' : 'SETUP'}</span>
+      </div>
+
+      {/* info strip (mirrors LeagueCard's matchup strip) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '10px 12px', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6 }}>
+        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)', flexShrink: 0 }}>ROSTERS</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{l.enrolled}/{l.rosters} joined</span>
+        <span className="mono" style={{ fontSize: 9, color: full ? 'var(--you)' : 'var(--faint)', flexShrink: 0 }}>{full ? 'all in' : `${l.rosters - l.enrolled} open`}</span>
+      </div>
+
+      {/* actions */}
+      <button onClick={onManage} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 12, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>⚑ manage league</button>
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+        <button onClick={onResults} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>▦ scores</button>
+      </div>
+    </div>
+  );
+}
+
+function LeagueCard({ e, card, commish, userId, onBoard, onResults, onManage }: {
   e: Enrollment; card?: MatchupCard; commish: boolean; userId: string;
-  onPicks: () => void; onBoard: () => void; onManage: () => void;
+  onBoard: () => void; onResults: () => void; onManage: () => void;
 }) {
-  const { loadSimLeague, navigate } = useStore();
+  const { loadSimLeague, navigate, setDemoWeek } = useStore();
   const [building, setBuilding] = useState(false);
   const [buildNote, setBuildNote] = useState('');
   const [buildErr, setBuildErr] = useState<string | null>(null);
-  // The Drip Test League plays on the FULL app board: fetch the real source
-  // league, re-skin it, and enter the sim as this user's team.
-  const isDripTest = (e.league?.name ?? '').toLowerCase().includes('drip test');
-  const playFullBoard = async () => {
+  // The HERO board: the authentic full board built from this league's REAL rosters
+  // (setup/lineup for now; LIVE/FINAL come online when the feed populates). Enters
+  // as a live pilot (real sealed picks + opponent reveal) when a matchup exists.
+  const playHeroBoard = async () => {
     if (building) return;
-    setBuilding(true); setBuildErr(null);
+    setBuilding(true); setBuildErr(null); setBuildNote('Loading your board…');
     try {
-      const [{ built, youTeamId }, m] = await Promise.all([
-        buildDripTestLeague(e.sleeper_roster_id, setBuildNote),
-        myMatchup(e.league_id, e.sleeper_roster_id).catch(() => null),
-      ]);
-      // With a real matchup, run as a true pilot board (sealed-pick persistence on,
-      // opened on the matchup's week). Without one, fall back to a plain playtest.
+      // Open to the current NFL week (or the next upcoming if none is live) across
+      // the league's whole timeline — so a preseason-mode league lands on its next
+      // preseason game and rolls into Week 1 once preseason wraps.
+      const preseasonOn = !!e.league?.preseason_at;
+      const week = await defaultOpenWeek(e.league_id, e.league?.season ?? '2026', preseasonOn)
+        .catch(() => (preseasonOn ? PRESEASON_BASE + 1 : 1));
+      const m = await myMatchup(e.league_id, e.sleeper_roster_id, week).catch(() => null);
+      const { built, youTeamId } = await buildLiveLeague(e.league_id, e.sleeper_roster_id, week);
       const ctx = m ? { matchupId: m.id, userId, leagueId: e.league_id, rosterId: e.sleeper_roster_id, week: m.week } : null;
       loadSimLeague(built, youTeamId, ctx);
-      navigate({ name: 'matchup', week: ctx ? ctx.week : DEMO_WEEK, phase: 'setup' });
+      navigate({ name: 'matchup', week, phase: 'setup' });
+    } catch {
+      setBuildErr('Couldn’t load your board — check your connection and try again.');
+      setBuilding(false);
+    }
+  };
+  // The 2025 demo: play the FULL board on last year's play-by-play, built from
+  // YOUR league — your real roster + your league's teams as the opponent (its real
+  // Week-1 matchup when there is one). Enters the client-only SIM board (ctx null →
+  // the playable LOCK-IN / per-window replay, not the real-time live board), so you
+  // can run each window on 2025 data. Falls back to the canned demo league if your
+  // Week-1 roster isn't synced yet.
+  const playFullBoard = async () => {
+    if (building) return;
+    setBuilding(true); setBuildErr(null); setBuildNote('Loading your board…');
+    try {
+      const week = 1; // baked 2025 play-by-play exists for weeks 1–14; Week 1 is always synced
+      const picked = await (async () => {
+        try {
+          const live = await buildLiveLeague(e.league_id, e.sleeper_roster_id, week);
+          const roster = live.built.league.teams.find((t) => t.id === live.youTeamId)?.roster ?? [];
+          if (roster.length) { live.built.league.season = 2025; return live; } // it's a 2025 replay — label + injuries follow
+        } catch { /* fall through to the canned demo */ }
+        return buildDripTestLeague(e.sleeper_roster_id, setBuildNote);
+      })();
+      // Drop any live-league slate override so it replays clean baked 2025 windows,
+      // and enter the SIM board (ctx null → client-only playback, not the live board).
+      clearRuntimeSlate();
+      loadSimLeague(picked.built, picked.youTeamId, null);
+      setDemoWeek(week);
+      navigate({ name: 'matchup', week, phase: 'setup' });
     } catch {
       setBuildErr('Couldn’t load the board — check your connection and try again.');
       setBuilding(false);
@@ -433,20 +675,109 @@ function LeagueCard({ e, card, commish, userId, onPicks, onBoard, onManage }: {
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{opp?.team_name ?? (m ? `Roster ${oppRoster}` : 'schedule pending')}</span>
       </div>
 
-      {/* actions */}
-      <button onClick={isDripTest ? playFullBoard : onPicks} disabled={building} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: building ? 'default' : 'pointer', marginTop: 12, opacity: building ? 0.7 : 1, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
-        {building ? (buildNote || 'LOADING BOARD…') : '◈ SET YOUR LINEUP →'}
+      {/* actions — default goes to the REAL board for this league's season (the
+          live 2026 slate once the week is synced). The 2025 full-board sim is an
+          optional "see it play" demo until the season starts. */}
+      <button onClick={playHeroBoard} disabled={building} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: building ? 'default' : 'pointer', marginTop: 12, opacity: building ? 0.7 : 1, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
+        {building ? (buildNote || 'LOADING…') : <><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> SET YOUR LINEUP →</>}
       </button>
       {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{buildErr}</div>}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 18, marginTop: 10 }}>
-        {!isDripTest && <button onClick={onBoard} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board</button>}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>
+        <button onClick={onBoard} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board</button>
+        <button onClick={onResults} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>▦ scores</button>
+        <button onClick={playFullBoard} disabled={building} className="mono" title="try the full board on last year's data" style={{ ...linkBtn, color: 'var(--dim)', opacity: building ? 0.6 : 1 }}>{building ? (buildNote || 'loading…') : '▷ demo (2025)'}</button>
         {commish && <button onClick={onManage} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚑ manage league</button>}
       </div>
     </div>
   );
 }
 
-function RoleChooser({ onPlayer, onCommish }: { onPlayer: () => void; onCommish: () => void }) {
+// League-wide scoreboard + standings, from persisted final scores (matchup.home_
+// final/away_final, readable by any league member). Per-window detail stays
+// participant-only, so the board shows final totals; live/scheduled show a dash.
+function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => void }) {
+  const [rows, setRows] = useState<MatchupResult[] | null>(null);
+  const [teams, setTeams] = useState<Record<number, TeamInfo>>({});
+  useEffect(() => {
+    let ok = true;
+    leagueResults(leagueId).then((rs) => {
+      if (!ok) return;
+      setRows(rs);
+      const ids = Array.from(new Set(rs.flatMap((r) => [r.home_roster_id, r.away_roster_id])));
+      if (ids.length) matchupTeams(leagueId, ids).then((t) => { if (ok) setTeams(t); }).catch(() => {});
+    }).catch(() => setRows([]));
+    return () => { ok = false; };
+  }, [leagueId]);
+  const name = (rid: number) => teams[rid]?.team_name ?? `Roster ${rid}`;
+
+  const standings = useMemo(() => {
+    const s: Record<number, { rid: number; w: number; l: number; t: number; pf: number }> = {};
+    const get = (rid: number) => (s[rid] ??= { rid, w: 0, l: 0, t: 0, pf: 0 });
+    for (const r of rows ?? []) {
+      if (r.status !== 'final' || r.home_final == null || r.away_final == null) continue;
+      const h = get(r.home_roster_id), a = get(r.away_roster_id);
+      h.pf += Number(r.home_final); a.pf += Number(r.away_final);
+      if (r.home_final > r.away_final) { h.w++; a.l++; } else if (r.home_final < r.away_final) { a.w++; h.l++; } else { h.t++; a.t++; }
+    }
+    return Object.values(s).sort((x, y) => (y.w - x.w) || (y.pf - x.pf));
+  }, [rows]);
+
+  const weeks = useMemo(() => {
+    const m = new Map<number, MatchupResult[]>();
+    for (const r of rows ?? []) { if (!m.has(r.week)) m.set(r.week, []); m.get(r.week)!.push(r); }
+    return [...m.entries()].sort((a, b) => a[0] - b[0]);
+  }, [rows]);
+
+  const hdr: React.CSSProperties = { fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginBottom: 8 };
+  return (
+    <div>
+      <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>
+      <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>▦ Scores &amp; results</div>
+      {rows === null ? <Muted text="Loading…" />
+        : rows.length === 0 ? <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>No matchups scheduled yet — sync the season from Manage.</div>
+        : (
+          <>
+            {standings.some((s) => s.w + s.l + s.t > 0) && (
+              <div style={{ ...card, marginBottom: 12 }}>
+                <div style={hdr}>STANDINGS</div>
+                {standings.map((s, i) => (
+                  <div key={s.rid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
+                    <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', width: 16 }}>{i + 1}</span>
+                    <span style={{ flex: 1, fontSize: 12, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(s.rid)}</span>
+                    <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>{s.w}-{s.l}{s.t ? `-${s.t}` : ''}</span>
+                    <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 60, textAlign: 'right' }}>{Math.round(s.pf)} PF</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {weeks.map(([wk, ms]) => (
+              <div key={wk} style={{ ...card, marginBottom: 10 }}>
+                <div style={hdr}>WEEK {wk}</div>
+                {ms.map((r, i) => {
+                  const fin = r.status === 'final' && r.home_final != null && r.away_final != null;
+                  const homeWon = fin && Number(r.home_final) > Number(r.away_final);
+                  const awayWon = fin && Number(r.away_final) > Number(r.home_final);
+                  return (
+                    <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
+                      <span style={{ flex: 1, fontSize: 12, fontWeight: homeWon ? 700 : 400, color: homeWon ? 'var(--you)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{name(r.home_roster_id)}</span>
+                      <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', width: 30, textAlign: 'center' }}>{fin ? Math.round(Number(r.home_final)) : '—'}</span>
+                      <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>·</span>
+                      <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', width: 30, textAlign: 'center' }}>{fin ? Math.round(Number(r.away_final)) : '—'}</span>
+                      <span style={{ flex: 1, fontSize: 12, fontWeight: awayWon ? 700 : 400, color: awayWon ? 'var(--you)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(r.away_roster_id)}</span>
+                      <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: fin ? 'var(--dim)' : r.status === 'live' ? '#FF4F62' : 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 5px', flexShrink: 0 }}>{fin ? 'FINAL' : r.status === 'live' ? 'LIVE' : 'SCHED'}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </>
+        )}
+      <div style={{ textAlign: 'center', marginTop: 12 }}><button onClick={onBack} className="mono" style={linkBtn}>← my leagues</button></div>
+    </div>
+  );
+}
+
+function RoleChooser({ onPlayer, onCommish, onRequest }: { onPlayer: () => void; onCommish: () => void; onRequest?: () => void }) {
   const choice: React.CSSProperties = { width: '100%', textAlign: 'left', fontFamily: 'inherit', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, cursor: 'pointer' };
   return (
     <>
@@ -463,89 +794,73 @@ function RoleChooser({ onPlayer, onCommish }: { onPlayer: () => void; onCommish:
           <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>I run this league →</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Verify as commissioner with the code you were given, then share a player invite code with your league.</div>
         </button>
+        {onRequest && (
+          <button onClick={onRequest} style={choice}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>My league isn’t in the pilot yet →</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No code? Request one — we’ll set your league up. Sleeper · ESPN · Yahoo · Fleaflicker · MFL.</div>
+          </button>
+        )}
       </div>
     </>
   );
 }
 
-function CommishVerify({ onBack }: { onBack: () => void }) {
-  const [code, setCode] = useState('');
-  const [username, setUsername] = useState('');
-  const [tag, setTag] = useState<string | null>(null);
+function CommishVerify({ onBack, initialCode }: { onBack: () => void; initialCode?: string }) {
+  const [code, setCode] = useState(initialCode ?? '');
   const [league, setLeague] = useState('');
   const [invite, setInvite] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
 
-  const start = async () => {
-    if (!code.trim() || !username.trim() || busy) return;
+  // Admin-assigned model: the commish code the admin sent you IS the authorization.
+  // Redeem it → become this league's commissioner (any platform, no team-tagging).
+  const redeem = async (c0?: string) => {
+    const c = (c0 ?? code).trim();
+    if (!c || busy) return;
     setBusy(true); setErr(null);
-    const r = await startCommishVerify(code, username);
+    const r = await redeemCommish(c);
     setBusy(false);
-    if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not start verification.')); return; }
-    setTag(r.tag ?? null); setLeague(r.league ?? '');
+    if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not verify.')); return; }
+    setInvite(r.invite_code ?? null); setLeague(r.league ?? '');
+    try { localStorage.removeItem('dripCommishCode'); } catch { /* ignore */ }
   };
 
-  const confirm = async () => {
-    if (busy) return;
-    setBusy(true); setErr(null);
-    const r = await confirmCommishVerify(code);
-    setBusy(false);
-    if (!r.ok) { setErr(friendlyError(r.error ?? 'Not verified yet.')); return; }
-    setInvite(r.invite_code ?? null); setLeague(r.league ?? league);
-  };
 
-  if (invite) return (
-    <div style={card}>
-      <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--you)' }}>Verified — you’re the commissioner.</div>
-      <div className="mono" style={{ fontSize: 11, color: 'var(--dim)', marginTop: 8 }}>{league}. Share this player invite code with your league:</div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <div className="mono" style={{ flex: 1, fontSize: 20, fontWeight: 700, letterSpacing: '0.15em', color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '12px 14px', textAlign: 'center' }}>{invite}</div>
-        <button onClick={() => { navigator.clipboard?.writeText(invite); setCopied(true); }} className="mono" style={{ ...btn, padding: '0 14px' }}>{copied ? 'COPIED' : 'COPY'}</button>
+  if (invite) {
+    // One way to invite the league: the join link (no code to type). The raw code
+    // stays available as an inline fallback for anyone who'd rather type it.
+    const joinLink = `${window.location.origin}${window.location.pathname}?live=1&code=${invite}`;
+    return (
+      <div style={card}>
+        <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--you)' }}>Verified — you’re the commissioner.</div>
+        <div className="mono" style={{ fontSize: 11, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>{league}. Invite your league with one link — players who open it just sign in and confirm, no code to type.</div>
+        <button onClick={() => { navigator.clipboard?.writeText(joinLink); setCopied(true); }}
+          className="mono" style={{ ...btn, width: '100%', padding: '12px 0', marginTop: 14 }}>{copied ? '✓ invite link copied' : '⛓ Copy invite link'}</button>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>
+          Prefer a code? Share <span onClick={() => { navigator.clipboard?.writeText(invite); setCodeCopied(true); }} title="click to copy" style={{ color: 'var(--text)', fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer' }}>{codeCopied ? 'copied ✓' : invite}</span> — players enter it on the join screen.
+        </div>
+        <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={onBack} className="mono" style={linkBtn}>← done</button></div>
       </div>
-      <button onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}${window.location.pathname}?live=1&code=${invite}`); setCopied(true); }}
-        className="mono" style={{ ...btn, width: '100%', padding: '10px 0', marginTop: 8, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--bd)' }}>
-        ⛓ copy one-tap join link
-      </button>
-      <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>Players who open the link just sign in and confirm — no code to type. You can remove the tag from your Sleeper team name now.</div>
-      <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={onBack} className="mono" style={linkBtn}>← done</button></div>
-    </div>
-  );
+    );
+  }
 
   return (
     <>
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
         <div className="grotesk" style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>Verify as commissioner</div>
-        <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Enter the commissioner code you were given, and prove you run the league by tagging your Sleeper team name.</div>
+        <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Enter the commissioner code you were sent. That claims the league — then you invite your league mates.</div>
       </div>
       <div style={card}>
-        {!tag ? (
-          <>
-            <label className="mono" style={label}>COMMISSIONER CODE</label>
-            <input value={code} autoFocus autoCapitalize="characters" autoCorrect="off" spellCheck={false}
-              onChange={(e) => { setCode(e.target.value.toUpperCase()); setErr(null); }}
-              placeholder="e.g. 9F3A1C2D" style={{ ...input, letterSpacing: '0.12em', marginTop: 7, width: '100%', boxSizing: 'border-box' }} />
-            <label className="mono" style={{ ...label, display: 'block', marginTop: 12 }}>YOUR SLEEPER USERNAME</label>
-            <div style={{ display: 'flex', gap: 8, marginTop: 7 }}>
-              <input value={username} autoCapitalize="none" autoCorrect="off" spellCheck={false}
-                onChange={(e) => { setUsername(e.target.value); setErr(null); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') start(); }}
-                placeholder="your Sleeper handle" style={input} />
-              <button onClick={start} disabled={busy || !code.trim() || !username.trim()} className="mono" style={{ ...btn, opacity: busy || !code.trim() || !username.trim() ? 0.6 : 1 }}>{busy ? '…' : 'START'}</button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', lineHeight: 1.6 }}>
-              {league && <>Verifying <span style={{ color: 'var(--text)', fontWeight: 700 }}>{league}</span>.<br /></>}
-              In Sleeper, add this tag to your team name, then tap Check:
-            </div>
-            <div className="mono" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--you)', borderRadius: 6, padding: '12px 14px', textAlign: 'center', margin: '12px 0' }}>{tag}</div>
-            <button onClick={confirm} disabled={busy} className="mono" style={{ ...btn, width: '100%', padding: '11px 0', opacity: busy ? 0.6 : 1 }}>{busy ? 'CHECKING…' : 'CHECK ✓'}</button>
-            <div style={{ textAlign: 'center', marginTop: 10 }}><button onClick={() => { setTag(null); setErr(null); }} className="mono" style={linkBtn}>start over</button></div>
-          </>
-        )}
+        <label className="mono" style={label}>COMMISSIONER CODE</label>
+        <div style={{ display: 'flex', gap: 8, marginTop: 7 }}>
+          <input value={code} autoFocus autoCapitalize="characters" autoCorrect="off" spellCheck={false}
+            onChange={(e) => { setCode(e.target.value.toUpperCase()); setErr(null); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') redeem(); }}
+            placeholder="e.g. 9F3A1C2D" style={{ ...input, letterSpacing: '0.12em' }} />
+          <button onClick={() => redeem()} disabled={busy || !code.trim()} className="mono" style={{ ...btn, opacity: busy || !code.trim() ? 0.6 : 1 }}>{busy ? '…' : 'VERIFY'}</button>
+        </div>
         {err && <div className="mono" style={errStyle}>{err}</div>}
       </div>
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
@@ -553,14 +868,27 @@ function CommishVerify({ onBack }: { onBack: () => void }) {
   );
 }
 
-function RedeemForm({ onJoined }: { onJoined: () => void }) {
+function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void }) {
   const [code, setCode] = useState('');
   const [preview, setPreview] = useState<LeaguePreview | null>(null);
   const [username, setUsername] = useState('');
+  const [linked, setLinked] = useState(false); // username came from a prior link
   const [team, setTeam] = useState<PreviewRedeem | null>(null); // confirm step
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [askCode, setAskCode] = useState(false); // "don't have a code?" request sheet
+
+  // Returning player: pre-fill the Sleeper username they linked on a prior join
+  // so they don't have to type it again (still editable via "not me").
+  useEffect(() => {
+    let cancelled = false;
+    myLinkedSleeper(userId).then((s) => {
+      if (cancelled || !s?.username) return;
+      setUsername((u) => (u ? u : s.username));
+      setLinked(true);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [userId]);
 
   const find = async (c0?: string) => {
     const c = (c0 ?? code).trim();
@@ -604,6 +932,19 @@ function RedeemForm({ onJoined }: { onJoined: () => void }) {
     } catch (x) { setErr(friendlyError(x)); setBusy(false); }
   };
 
+  // Join the pool without picking a team (ESPN/Yahoo/etc., or anyone) — the
+  // commissioner assigns you a roster from the joined list. No Sleeper handle.
+  const joinPool = async () => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await joinLeague(code);
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not join.')); setBusy(false); return; }
+      try { localStorage.removeItem('dripInviteCode'); } catch { /* ignore */ }
+      onJoined();
+    } catch (x) { setErr(friendlyError(x)); setBusy(false); }
+  };
+
   return (
     <>
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
@@ -627,13 +968,22 @@ function RedeemForm({ onJoined }: { onJoined: () => void }) {
             </div>
             <label className="mono" style={label}>SLEEPER USERNAME</label>
             <div style={{ display: 'flex', gap: 8, marginTop: 7 }}>
-              <input value={username} autoFocus autoCapitalize="none" autoCorrect="off" spellCheck={false}
-                onChange={(e) => { setUsername(e.target.value); setErr(null); }}
+              <input value={username} autoFocus={!linked} autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                onChange={(e) => { setUsername(e.target.value); setLinked(false); setErr(null); }}
                 onKeyDown={(e) => { if (e.key === 'Enter') check(); }}
                 placeholder="your Sleeper handle" style={input} />
               <button onClick={check} disabled={busy || !username.trim()} className="mono" style={{ ...btn, opacity: busy || !username.trim() ? 0.6 : 1 }}>{busy ? '…' : 'NEXT →'}</button>
             </div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>We match your Sleeper account to your team in this league.</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>{linked ? 'Using the Sleeper account you linked before — edit if this league uses a different one.' : 'We match your Sleeper account to your team in this league.'}</div>
+            {/* Not on Sleeper (ESPN/Yahoo/etc.)? Join the pool and let the commish
+                assign your team — no handle needed. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0 10px' }}>
+              <span style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
+              <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', letterSpacing: '0.08em' }}>NOT ON SLEEPER?</span>
+              <span style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
+            </div>
+            <button onClick={joinPool} disabled={busy} className="mono" style={{ ...btn, width: '100%', padding: '10px 0', background: 'var(--bg)', color: 'var(--text)', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'JOIN & LET THE COMMISH ASSIGN ME'}</button>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5, textAlign: 'center' }}>Your commissioner maps you to your team from the joined list.</div>
           </div>
         )}
 
@@ -659,7 +1009,7 @@ function RedeemForm({ onJoined }: { onJoined: () => void }) {
           </div>
         )}
       </div>
-      {askCode && <RequestCodeModal initialSleeper={username} onClose={() => setAskCode(false)} />}
+      {askCode && <RequestCodeModal initialPlatform="" onClose={() => setAskCode(false)} />}
     </>
   );
 }

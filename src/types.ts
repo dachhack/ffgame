@@ -2,7 +2,10 @@ import type { Pos, FxKey } from './theme';
 
 export type { Pos, FxKey };
 
-export type WindowId = 'tnf' | 'early' | 'late' | 'snf' | 'mnf';
+// A game-time window id. Standard weeks use the fixed five (tnf/early/late/snf/
+// mnf); odd weeks derive extra ids at runtime from the real kickoffs (e.g. a
+// Wednesday opener → 'wed'), so this is an open string, not a closed union.
+export type WindowId = string;
 
 export interface GameWindow {
   id: WindowId;

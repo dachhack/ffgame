@@ -2,11 +2,14 @@ import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'reac
 import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile } from '../app/ui';
+import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
+import { setLiveGameFeed, feedRowsToWeek, hasGameFeed } from '../data/gameFeed';
 import { avatarUrl, teamLogo } from '../data/media';
-import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod } from '../data/nflSlate';
-import { WINDOWS, METRICS, metricById } from '../data/metrics';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, preseasonWeekNum } from '../data/nflSlate';
+import { METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById, type Powerup } from '../data/powerups';
-import { getTeam, getPlayer, gameForTeam } from '../data/league';
+import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '../data/league';
+import { buildLiveLeague } from '../data/liveBoard';
 import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
 } from '../engine/matchup';
@@ -14,9 +17,10 @@ import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type S
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
-import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, type PickRow } from '../data/liveApi';
+import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, leagueWeeklyBudget, leagueTestLiveAt, myMatchup, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import { Rulebook } from './Rulebook';
+import { PuIcon, GameIcon, Emoji, DripCoin, UI_ART } from '../app/gameIcons';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
 const TICK_MS = 700;
@@ -62,17 +66,9 @@ function fmtGameClock(c: number): string {
   return `Q${q} ${m}:${String(s).padStart(2, '0')}`;
 }
 
-// Drip coin — an actual minted-coin glyph (gold disc with the ◈ house mark),
-// so coin reads as currency wherever it appears instead of a bare symbol.
-function CoinIcon({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden style={{ display: 'inline-block', verticalAlign: 'text-bottom', flex: 'none' }}>
-      <circle cx="8" cy="8" r="7" fill="#F2C14E" stroke="#9A6B12" strokeWidth="1.4" />
-      <circle cx="8" cy="8" r="5.1" fill="none" stroke="#C9952B" strokeWidth="0.9" />
-      <path d="M8 4.6 L10.4 8 L8 11.4 L5.6 8 Z" fill="#9A6B12" />
-    </svg>
-  );
-}
+// Drip coin — the active icon set's coin artwork (minted-coin SVG on the
+// emoji set), so coin reads as currency wherever it appears.
+const CoinIcon = DripCoin;
 
 // A prominent coin-earn pill for the play-by-play log.
 function CoinPill({ amt }: { amt: number }) {
@@ -98,7 +94,7 @@ const DEMO_POWERUPS = [
 const EMPTY_REC: Record<string, never> = {};
 
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
-  const { youTeamId: YOU, navigate, liveCtx, coins, creditWeek, inventory, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
+  const { youTeamId: YOU, navigate, liveCtx, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const [demoBuff, setDemoBuff] = useState('garbage-time'); // the power-up the demo viewer armed
   const buffs = useMemo(() => (demo ? { [demoBuff]: true } : (applied[week]?.buffs ?? EMPTY_REC)), [demo, demoBuff, applied, week]);
   const buffsKey = JSON.stringify(buffs);
@@ -123,6 +119,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // Live pilot: hydrate this matchup's saved sealed picks from Supabase once, so a
   // returning manager sees the lineup they sealed. Won't clobber in-progress edits.
   const hydratedRef = useRef(false);
+  const [heroHydrated, setHeroHydrated] = useState(false); // saved picks loaded → safe to auto-save
   useEffect(() => {
     if (!liveCtx || hydratedRef.current) return;
     hydratedRef.current = true;
@@ -133,8 +130,25 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         lineup[`${r.game_window}#${r.roster_slot}`] = { playerId: r.player_slug, metricId: r.metric_id };
       }
       if (Object.keys(lineup).length) setPicks((prev) => (Object.keys(prev).length ? prev : lineup));
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => setHeroHydrated(true));
   }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Live board: auto-save the working lineup (debounced) so each window's picks
+  // are sealed by its own lock — there's no manual LOCK IN. Only after the saved
+  // lineup has hydrated, so we never clobber a returning manager's sealed picks.
+  useEffect(() => {
+    if (!liveCtx || !heroHydrated) return;
+    const t = setTimeout(() => {
+      const rows: PickRow[] = [];
+      for (const [key, p] of Object.entries(picks)) {
+        if (!p?.playerId) continue;
+        const [win, slot] = key.split('#');
+        if (win == null || slot == null) continue;
+        rows.push({ game_window: win, roster_slot: slot, player_slug: p.playerId, metric_id: p.metricId ?? null });
+      }
+      savePicks(liveCtx.matchupId, liveCtx.userId, rows).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [picks, liveCtx, heroHydrated]); // eslint-disable-line react-hooks/exhaustive-deps
   const [selSlot, setSelSlot] = useState<string | null>(null);
   // Per-window playback: each window runs its own clock + play/pause. The clock
   // is game-elapsed seconds by default, or REAL wall-clock seconds since kickoff
@@ -143,6 +157,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const [winClocks, setWinClocks] = useState<Record<string, number>>({});
   const [winPlaying, setWinPlaying] = useState<Record<string, boolean>>({});
   const [speed, setSpeed] = useState(1); // playback speed multiplier (1/2/4/8)
+  const [fieldsOpen, setFieldsOpen] = useState(false); // ▦ ALL GAMES field board overlay
   // Playback clock mode: 'game' = all games lockstep on game clock; 'feed' =
   // real-time reveal but scoring still resolves on game clock; 'real' = real-time
   // reveal AND cross-game effects (TE-TD drip nuke) resolve in real-time order.
@@ -168,7 +183,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     else if (pendingApply === 'metric-swap' || pendingApply === 'player-swap') { setSwapTarget({ key, win: key.split('#')[0] as WindowId }); setPendingApply(null); } // open the swap menu on the tapped live spot
   }
   function applyToWindow(win: WindowId) {
-    if (pendingApply === 'emp') { applyEmp(week, win, winClocks[win] ?? 0); setPendingApply(null); }
+    // On the live board a live window's "now" is its latest ingested play (winMax
+    // via effWinClock); the sim board uses the manual playback clock. Either way
+    // EMP freezes forward from the current position, never retroactively.
+    if (pendingApply === 'emp') { applyEmp(week, win, effWinClock(win)); setPendingApply(null); }
   }
   // Rosters expand in setup (you need them to set lineups), collapse otherwise.
   const [rosterOpen, setRosterOpen] = useState<{ you: boolean; their: boolean }>(() => ({ you: initialPhase === 'setup', their: initialPhase === 'setup' }));
@@ -183,9 +201,6 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // silently render every player at 0.0 (a broken-looking game) on a fetch error.
   const [loadFailed, setLoadFailed] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
-  // Live-pilot lock-in seal status (Supabase write): surfaced on the LOCK IN button.
-  const [sealing, setSealing] = useState(false);
-  const [sealError, setSealError] = useState(false);
   // In-board Rulebook (the hidden-metric mechanic is otherwise only explained in
   // the settings-gear modal — undiscoverable at the moment you must commit metrics).
   const [showRules, setShowRules] = useState(false);
@@ -244,11 +259,15 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   useEffect(() => {
     if (!liveCtx) return;
     let alive = true;
+    // Claim the week's game-feed slot up front (empty) so a 2026 live week can
+    // never fall back to the baked 2025 week of the same number mid-fetch.
+    setLiveGameFeed(liveCtx.week, { games: {}, teams: {} });
     const load = async () => {
       if (document.hidden) return; // don't refetch the week's plays in a background tab
       try {
-        const rows = await weekLivePlays(liveCtx.week);
+        const [rows, feeds] = await Promise.all([weekLivePlays(liveCtx.week), weekGameFeeds(liveCtx.week)]);
         setLivePlays(liveCtx.week, liveRowsToPbp(rows));
+        setLiveGameFeed(liveCtx.week, feedRowsToWeek(feeds));
         if (alive) setLivePbpVer((v) => v + 1);
       } catch { /* keep prior */ }
     };
@@ -276,11 +295,14 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   }, [youPools]);
 
   const effYouPicks = useMemo<Record<string, Pick>>(() => {
+    // Live board: score EXACTLY the lineup you saved — the worker resolves the
+    // sealed picks, so the board must not silently inject a default lineup.
+    if (liveCtx) return picks;
     // The demo always shows the seeded lineup (even in setup) so a viewer can edit
     // a metric on a real, populated board; the live game keeps setup hidden.
     if (phase === 'setup' && !demo) return picks;
     return { ...youDefault, ...picks };
-  }, [phase, picks, youDefault, demo]);
+  }, [phase, picks, youDefault, demo, liveCtx]);
 
   // Seed the demo's local lineup once so its setup board is populated and metric
   // edits (pickMetricFor needs picks[key]) take hold — never touches the store.
@@ -306,8 +328,72 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const earnings = useMemo(() => weekEarnings(resolved, 'you', week, turnoverCoin), [resolved, week, buffsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const weekCoins = earnings.total;
   const [earnOpen, setEarnOpen] = useState(false);
+  // Live board: page to another week's matchup — rebuild this league's board for
+  // the new week (its rosters, opponent + matchup ctx) and open it, exactly like
+  // entering the hero board fresh. Null unless a switch is in flight.
+  const [switchingWeek, setSwitchingWeek] = useState<number | null>(null);
+  const preseason = isPreseasonWeek(week);
+  // The selector pages the league's whole matchup timeline as ONE continuous
+  // range — preseason (offset) weeks first, then the regular season — so a
+  // preseason-enabled league flips PRE 1 → … → PRE 3 → WK 1 → … in one stride.
+  // Driven by the schedule the league actually has, so it only offers real weeks.
+  const orderedWeeks = (() => {
+    const ws = new Set(getActiveLeague().schedule.map((g) => g.week));
+    ws.add(week);
+    return [...ws].sort((a, b) => (isPreseasonWeek(a) ? 0 : 1) - (isPreseasonWeek(b) ? 0 : 1) || a - b);
+  })();
+  const wIdx = orderedWeeks.indexOf(week);
+  const prevWeek = wIdx > 0 ? orderedWeeks[wIdx - 1] : null;
+  const nextWeek = wIdx >= 0 && wIdx < orderedWeeks.length - 1 ? orderedWeeks[wIdx + 1] : null;
+  async function goToWeek(target: number | null) {
+    if (!liveCtx || switchingWeek != null || target == null) return;
+    if (!orderedWeeks.includes(target) || target === week) return;
+    setSwitchingWeek(target);
+    try {
+      const m = await myMatchup(liveCtx.leagueId, liveCtx.rosterId, target).catch(() => null);
+      const { built, youTeamId } = await buildLiveLeague(liveCtx.leagueId, liveCtx.rosterId, target);
+      const ctx = m ? { matchupId: m.id, userId: liveCtx.userId, leagueId: liveCtx.leagueId, rosterId: liveCtx.rosterId, week: m.week } : null;
+      loadSimLeague(built, youTeamId, ctx);
+      navigate({ name: 'matchup', week: target, phase: 'setup' });
+    } catch {
+      setSwitchingWeek(null); // stay put on failure
+    }
+  }
+  // Live board: the league's own weekly coin budget (set by the commissioner)
+  // replaces the generic flat-stipend copy in the earnings sheet.
+  const [leagueBudget, setLeagueBudget] = useState<number | null>(null);
   useEffect(() => {
-    if (demo) return; // the demo never touches the store's coin ledger
+    if (!liveCtx) { setLeagueBudget(null); return; }
+    leagueWeeklyBudget(liveCtx.leagueId).then(setLeagueBudget).catch(() => setLeagueBudget(null));
+  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Super-admin live-test mode: when the league has a test anchor, install the
+  // compressed slate timeline so this board runs Setup→Locked→Live→Final in real
+  // minutes. `testAnchor` drives the state memo; cleared when leaving the board.
+  const [testAnchor, setTestAnchor] = useState<number | null>(null);
+  useEffect(() => {
+    if (!liveCtx) { setTestTimeline(null); setTestAnchor(null); return; }
+    leagueTestLiveAt(liveCtx.leagueId).then((ms) => { setTestTimeline(ms); setTestAnchor(ms); }).catch(() => { setTestTimeline(null); setTestAnchor(null); });
+    return () => setTestTimeline(null);
+  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Hero board: the coin balance is the REAL team wallet (starts at 0, seeded by
+  // the commissioner). Load it once; the worker credits earnings in-season, so the
+  // board doesn't run the demo weekly-credit here.
+  const [liveWallet, setLiveWallet] = useState<number | null>(null);
+  useEffect(() => {
+    if (!liveCtx) { setLiveWallet(null); return; }
+    ensureWallet(liveCtx.matchupId).then((b) => setLiveWallet(Number(b ?? 0))).catch(() => setLiveWallet(0));
+  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+  const coinBal = liveCtx ? (liveWallet ?? 0) : coins;
+  // Buy a power-up into inventory, charged against the real wallet (hero board).
+  const buyFromWallet = async (id: string): Promise<boolean> => {
+    if (!liveCtx) return false;
+    const r = await walletBuyPowerup(liveCtx.matchupId, id).catch(() => null);
+    if (!r?.ok) return false;
+    grantPowerup(id); setLiveWallet(Number(r.balance ?? 0));
+    return true;
+  };
+  useEffect(() => {
+    if (demo || liveCtx) return; // demo/hero board never touch the store's coin ledger
     if (phase === 'live' || phase === 'final') creditWeek(week, weekCoins);
   }, [phase, week, weekCoins]);
 
@@ -341,10 +427,73 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // The playback ceiling for the active mode (game-elapsed vs real wall-clock).
   const winTarget = wallClock ? winRealMax : winMax;
 
+  // ── Real-time live board driver ─────────────────────────────────────────────
+  // The live board advances on the real clock: each window locks 1h before its
+  // real kickoff, goes LIVE at kickoff, and reads FINAL once its game window has
+  // elapsed. The play-by-play log fills in from the worker feed — which only
+  // carries plays that have already happened — so a LIVE window simply reveals
+  // everything ingested so far. No manual LOCK IN / ▶: the wall clock drives it.
+  const LOCK_LEAD_MS = 3_600_000;        // lineups lock 1h before kickoff
+  const GAME_WINDOW_MS = 4 * 3_600_000;  // a game reads "in progress" for ~4h after kickoff
+  type WinState = 'setup' | 'locked' | 'live' | 'final';
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!liveCtx) return;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [liveCtx]);
+  const liveWinState = useMemo(() => {
+    // Live-test mode compresses both the lock lead and the live duration so the
+    // whole flow plays out in minutes (windowKickoffMs already returns the
+    // compressed anchor-relative kickoff).
+    const lockLead = testTimelineOn() ? TEST_LOCK_LEAD_MS : LOCK_LEAD_MS;
+    const gameDur = testTimelineOn() ? TEST_GAME_MS : GAME_WINDOW_MS;
+    const out: Record<string, WinState> = {};
+    for (const w of windowsForWeek(week)) {
+      const k = windowKickoffMs(week, w.id);
+      let s: WinState = 'setup';
+      if (k != null) {
+        if (nowMs >= k + gameDur) s = 'final';
+        else if (nowMs >= k) s = 'live';
+        else if (nowMs >= k - lockLead) s = 'locked';
+      }
+      out[w.id] = s;
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [week, nowMs, livePbpVer, testAnchor]);
+  // Overall live-board phase, derived from its windows (all setup → setup, all
+  // final → final, else live). Drives the header + board-level gating; a manual
+  // phase tab is disabled on the live board.
+  const liveBoardPhase: Phase | null = useMemo(() => {
+    if (!liveCtx) return null;
+    const states = windowsForWeek(week).map((w) => liveWinState[w.id]);
+    if (!states.length) return 'setup';
+    if (states.every((s) => s === 'setup')) return 'setup';
+    if (states.every((s) => s === 'final')) return 'final';
+    return 'live';
+  }, [liveCtx, liveWinState, week]);
+  useEffect(() => { if (liveBoardPhase) setPhase(liveBoardPhase); }, [liveBoardPhase]);
+  const winRt = (wid: string): WinState | null => (liveCtx ? liveWinState[wid] ?? 'setup' : null);
+  const winPhaseFor = (wid: string): Phase => {
+    const s = winRt(wid);
+    if (!s) return phase;                              // sim/demo board: single global phase
+    return s === 'setup' ? 'setup' : s === 'final' ? 'final' : 'live'; // locked & live both render live
+  };
+  // A LIVE/FINAL window reveals every play ingested so far (winMax); locked/setup
+  // reveal nothing. The sim/demo board keeps its manual playback clock.
+  const effWinClock = (wid: string): number => {
+    if (!liveCtx) return winClocks[wid] ?? 0;
+    const s = winRt(wid);
+    return s === 'live' || s === 'final' ? (winMax[wid] ?? GAME_SECONDS) : 0;
+  };
+
   // On entering live/final — or switching clock mode — seed each window's
   // position + play state. (Toggling modes re-seeds to 0 so playback replays
-  // cleanly on the new axis rather than mixing units.)
+  // cleanly on the new axis rather than mixing units.) Sim/demo only — the live
+  // board is driven by the real clock above.
   useEffect(() => {
+    if (liveCtx) return;
     if (phase === 'setup') return;
     const clocks: Record<string, number> = {};
     const playing: Record<string, boolean> = {};
@@ -357,8 +506,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   }, [phase, winTarget]);
 
   // Single ticker advances every playing window toward its own (mode) max.
+  // Sim/demo only — the live board reveals plays on the real clock, not playback.
   useEffect(() => {
-    if (phase !== 'live') return;
+    if (liveCtx || phase !== 'live') return;
     const id = setInterval(() => {
       setWinClocks((prev) => {
         let changed = false;
@@ -426,8 +576,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       let next = prev; let changed = false;
       for (const rw of resolved.windows) {
         const id = rw.window.id;
-        const c = winClocks[id] ?? 0;
-        const active = phase === 'live' && c > 0 && c < (winTarget[id] ?? Infinity);
+        // Live board: a window's log is "active" while it's LIVE on the real
+        // clock; sim/demo uses the playback position.
+        const active = liveCtx ? winRt(id) === 'live' : (() => { const c = winClocks[id] ?? 0; return phase === 'live' && c > 0 && c < (winTarget[id] ?? Infinity); })();
         if (active !== (prevActive.current[id] ?? false)) {
           if (!changed) { next = { ...prev }; changed = true; }
           for (const s of rw.slots) next[slotKey(id, s.slotIndex)] = active;
@@ -436,7 +587,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       }
       return changed ? next : prev;
     });
-  }, [phase, winClocks, winMax, resolved]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, winClocks, winMax, resolved, liveCtx, liveWinState]);
 
   // ── totals at each window's own clock ──
   const { youTotal, themTotal } = useMemo(() => {
@@ -444,7 +596,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     if (phase === 'setup') return { youTotal: 0, themTotal: 0 };
     let y = 0; let t = 0;
     for (const rw of resolved.windows) {
-      const c = winClocks[rw.window.id] ?? 0;
+      // Live board: each window is sampled at its real-time position (all plays
+      // ingested so far for a live/final window, none for locked/setup).
+      const c = effWinClock(rw.window.id);
       for (const s of rw.slots) {
         if (!s.you || !s.their) continue;
         // In wall-clock mode each side is sampled at ITS game's clock for the
@@ -458,17 +612,25 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     }
     for (const b of resolved.bonuses ?? []) y += b.points; // armed-buff payouts
     return { youTotal: Math.round(y * 10) / 10, themTotal: Math.round(t * 10) / 10 };
-  }, [resolved, winClocks, phase, wallClock, week]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolved, winClocks, phase, wallClock, week, liveCtx, liveWinState, winMax]);
 
   // Every window has played out to its own end — the board is effectively final.
   const allWindowsDone = useMemo(() => {
     const ids = Object.keys(winTarget);
     return ids.length > 0 && ids.every((id) => (winClocks[id] ?? 0) >= (winTarget[id] ?? Infinity));
   }, [winClocks, winTarget]);
-  const boardFinal = phase === 'final' || (phase === 'live' && allWindowsDone);
+  // Live board is final only when the real clock has retired every window.
+  const boardFinal = liveCtx ? phase === 'final' : (phase === 'final' || (phase === 'live' && allWindowsDone));
 
-  const filledCount = Object.values(picks).filter((p) => p.metricId).length;
-  const totalSlots = totalSlotsWith(extraSlots);
+  // Count slots that have a player placed (the visible action). Previously this
+  // counted only metric-complete picks, so the "SLOTS SET" tally appeared frozen
+  // after placing a player but before choosing the hidden metric.
+  const filledCount = Object.values(picks).filter((p) => p.playerId).length;
+  // Placed players still missing their (required) hidden metric — those slots
+  // score 0 until a metric is chosen, so surface them as an interim step.
+  const metriclessCount = Object.values(picks).filter((p) => p.playerId && !p.metricId).length;
+  const totalSlots = totalSlotsWith(week, extraSlots);
   const anyPlaying = Object.values(winPlaying).some(Boolean);
   const extraSlotQty = inventory['extra-slot'] ?? 0;
 
@@ -478,13 +640,19 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const winLife = useMemo(() => {
     const out: Record<string, 'pending' | 'live' | 'closed'> = {};
     for (const id of Object.keys(winTarget)) {
-      const c = winClocks[id] ?? 0;
-      out[id] = c <= 0 ? 'pending' : c >= winTarget[id] ? 'closed' : 'live';
+      if (liveCtx) {
+        // Live board: the timeline is the real clock, not playback.
+        const s = liveWinState[id] ?? 'setup';
+        out[id] = s === 'live' ? 'live' : s === 'final' ? 'closed' : 'pending';
+      } else {
+        const c = winClocks[id] ?? 0;
+        out[id] = c <= 0 ? 'pending' : c >= winTarget[id] ? 'closed' : 'live';
+      }
     }
     return out;
-  }, [winClocks, winTarget]);
+  }, [winClocks, winTarget, liveCtx, liveWinState]);
   const anyStarted = Object.values(winLife).some((s) => s !== 'pending');
-  const liveWins = WINDOWS.filter((w) => winLife[w.id] === 'live');
+  const liveWins = windowsForWeek(week).filter((w) => winLife[w.id] === 'live');
   const preKickPhase = phase === 'live' && !anyStarted; // locked in, no game kicked yet
 
   // On lock-in, walk through EVERY UNOPPOSED player (your player with no
@@ -497,7 +665,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const backupPrompted = useRef<Set<string>>(new Set());
   useEffect(() => { if (phase !== 'live') backupPrompted.current = new Set(); }, [phase]);
   useEffect(() => {
-    if (phase !== 'live' || anyStarted || backupMenu) return;
+    // Sim/demo only — the live board doesn't force a lock-in interrupt (backups
+    // stay assignable from each spot). Its clock is real, not a manual kickoff.
+    if (liveCtx || phase !== 'live' || anyStarted || backupMenu) return;
     const next = resolved.windows.flatMap((w) => w.slots).find((s) => {
       if (!s.backup || !s.you) return false;
       const k = slotKey(s.win, s.slotIndex);
@@ -507,14 +677,23 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     if (next) { const k = slotKey(next.win, next.slotIndex); backupPrompted.current.add(k); setBackupMenu({ key: k, required: true }); }
   }, [phase, anyStarted, backupMenu, resolved, backupAssign]);
 
+  // Unopposed best-ball backups (your player, no head-to-head opponent, a scoring
+  // metric) that haven't yet been assigned to sub for a starter. On the live board
+  // these surface as a CTA during the locked/live period instead of a forced modal.
+  const pendingBackups = useMemo(() => resolved.windows.flatMap((w) => w.slots).filter((s) => {
+    if (!s.backup || !s.you) return false;
+    if (ZERO_BANK_METRICS.has(`${s.you.player.pos}:${s.you.metricId}`)) return false;
+    return !backupAssign[slotKey(s.win, s.slotIndex)];
+  }), [resolved, backupAssign]);
+
   // Everything currently in effect, with a back-out where the store supports it.
-  const activeEffects: { key: string; icon: string; name: string; detail: string; onRemove?: () => void }[] = [];
-  for (const id of Object.keys(buffs)) if (buffs[id]) { const p = powerupById(id); if (p) activeEffects.push({ key: 'b-' + id, icon: p.icon, name: p.name, detail: 'Armed · whole field', onRemove: phase === 'setup' ? () => disarmBuff(week, id) : undefined }); }
-  if (aw?.doubleOrNothing) { const s = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === aw.doubleOrNothing); activeEffects.push({ key: 'don', icon: '⚖️', name: 'Double or Nothing', detail: 'Staked ' + (s?.you?.player.name ?? '—'), onRemove: phase === 'setup' ? () => clearDoubleOrNothing(week) : undefined }); }
-  if (aw?.byeSteal) activeEffects.push({ key: 'bye', icon: '🪂', name: 'Bye Steal', detail: 'Fielded ' + (getPlayer(aw.byeSteal.playerId)?.name ?? '—'), onRemove: phase === 'setup' ? () => clearByeSteal(week) : undefined });
-  if (aw?.spy) { const sp = aw.spy; activeEffects.push({ key: 'spy', icon: '👁️', name: 'Spy', detail: `Revealed a slot’s ${sp.reveal}`, onRemove: preKickPhase ? () => clearSpy(week) : undefined }); }
-  for (const [win, n] of Object.entries(aw?.extraSlots ?? {})) if ((n ?? 0) > 0) { const wl = WINDOWS.find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'x-' + win, icon: '➕', name: 'Extra Slot', detail: `+${n} on ${wl}`, onRemove: phase === 'setup' ? () => removeExtraSlot(week, win as WindowId) : undefined }); }
-  for (const [win, c] of Object.entries(aw?.emp ?? {})) if (c != null) { const wl = WINDOWS.find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'emp-' + win, icon: '💥', name: 'EMP', detail: `Fired on ${wl}` }); }
+  const activeEffects: { key: string; id?: string; icon: string; name: string; detail: string; onRemove?: () => void }[] = [];
+  for (const id of Object.keys(buffs)) if (buffs[id]) { const p = powerupById(id); if (p) activeEffects.push({ key: 'b-' + id, id, icon: p.icon, name: p.name, detail: 'Armed · whole field', onRemove: phase === 'setup' ? () => disarmBuff(week, id) : undefined }); }
+  if (aw?.doubleOrNothing) { const s = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === aw.doubleOrNothing); activeEffects.push({ key: 'don', id: 'double-or-nothing', icon: '⚖️', name: 'Double or Nothing', detail: 'Staked ' + (s?.you?.player.name ?? '—'), onRemove: phase === 'setup' ? () => clearDoubleOrNothing(week) : undefined }); }
+  if (aw?.byeSteal) activeEffects.push({ key: 'bye', id: 'bye-steal', icon: '🪂', name: 'Bye Steal', detail: 'Fielded ' + (getPlayer(aw.byeSteal.playerId)?.name ?? '—'), onRemove: phase === 'setup' ? () => clearByeSteal(week) : undefined });
+  if (aw?.spy) { const sp = aw.spy; activeEffects.push({ key: 'spy', id: 'spy', icon: '👁️', name: 'Spy', detail: `Revealed a slot’s ${sp.reveal}`, onRemove: preKickPhase ? () => clearSpy(week) : undefined }); }
+  for (const [win, n] of Object.entries(aw?.extraSlots ?? {})) if ((n ?? 0) > 0) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'x-' + win, id: 'extra-slot', icon: '➕', name: 'Extra Slot', detail: `+${n} on ${wl}`, onRemove: phase === 'setup' ? () => removeExtraSlot(week, win as WindowId) : undefined }); }
+  for (const [win, c] of Object.entries(aw?.emp ?? {})) if (c != null) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'emp-' + win, id: 'emp', icon: '💥', name: 'EMP', detail: `Fired on ${wl}` }); }
 
   // Owned power-ups you can still apply right now, scoped to open windows. 'pre'
   // power-ups lock at the first kickoff; 'live' ones need a running window.
@@ -538,8 +717,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // never sits below an empty one.
   function compactPicks(p: Record<string, Pick>): Record<string, Pick> {
     const out: Record<string, Pick> = {};
-    for (const w of WINDOWS) {
-      const n = slotsFor(w.id, extraSlots);
+    for (const w of windowsForWeek(week)) {
+      const n = slotsFor(w.id, week, extraSlots);
       let idx = 0;
       for (let i = 0; i < n; i++) {
         const pk = p[slotKey(w.id, i)];
@@ -583,10 +762,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   }
 
   function assignFromRoster(playerId: string) {
-    if (phase !== 'setup') return;
     const win = playerWindow.get(playerId);
     if (!win) return;
-    const nSlots = slotsFor(win, extraSlots);
+    // Live board: a window is editable only until its own lock (1h pre-kick).
+    // Sim/demo board: editable while the single board phase is setup.
+    if (liveCtx ? winRt(win) !== 'setup' : phase !== 'setup') return;
+    const nSlots = slotsFor(win, week, extraSlots);
     // Already slotted in this window → just (re)select it.
     for (let i = 0; i < nSlots; i++) {
       const k = slotKey(win, i);
@@ -640,28 +821,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     setSelSlot(null);
   }
 
-  async function lockIn() {
-    // Live pilot: seal the chosen lineup to Supabase (the worker scores from this).
-    // The seal MUST land before we advance — otherwise a failed write leaves the
-    // board "live" locally while the worker scores an empty lineup. On failure we
-    // stay in setup and surface it so the user can retry; their picks are intact.
-    if (liveCtx) {
-      const rows: PickRow[] = [];
-      for (const [key, p] of Object.entries(effYouPicks)) {
-        if (!p?.playerId) continue;
-        const [win, slot] = key.split('#');
-        if (win == null || slot == null) continue;
-        rows.push({ game_window: win, roster_slot: slot, player_slug: p.playerId, metric_id: p.metricId ?? null });
-      }
-      setSealing(true); setSealError(false);
-      try {
-        await savePicks(liveCtx.matchupId, liveCtx.userId, rows);
-      } catch {
-        setSealing(false); setSealError(true);
-        return; // stay in setup — picks are NOT lost; the LOCK IN button offers retry
-      }
-      setSealing(false);
-    }
+  function lockIn() {
+    // Sim/demo only — the live board has no LOCK IN button (it auto-saves the
+    // lineup and locks each window on the real clock; see the auto-save effect).
     setPhase('live'); setSelSlot(null); setRosterOpen({ you: false, their: false });
   }
   // Demo kickoff (setup → live auto-play) and a way back to re-pick.
@@ -676,7 +838,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   function replayWin(wid: string) { setWinClocks((c) => ({ ...c, [wid]: 0 })); setWinPlaying((p) => ({ ...p, [wid]: true })); }
 
   const headline = phase === 'setup' ? 'Set Your Windows' : phase === 'live' ? 'Live Resolution' : `Week ${week} — Final`;
-  const subhead = `${you.name} vs ${opp.name} · each window plays on its own clock — hit ▶ on any window, or run them all.`;
+  // The real live board advances on real time (no manual per-window playback), so
+  // it drops the "hit ▶ / run them all" copy; the sim/demo replay keeps it.
+  const subhead = liveCtx
+    ? `${you.name} vs ${opp.name}`
+    : `${you.name} vs ${opp.name} · each window plays on its own clock — hit ▶ on any window, or run them all.`;
 
   if (loadFailed) {
     return (
@@ -762,7 +928,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                     const on = demoBuff === pu.id;
                     return (
                       <button key={pu.id} onClick={() => setDemoBuff(pu.id)} style={{ display: 'flex', alignItems: 'flex-start', gap: 11, padding: '10px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left', background: on ? 'color-mix(in srgb, var(--you) 9%, var(--surface))' : 'var(--surface)', border: `1.5px solid ${on ? 'var(--you)' : 'var(--bd)'}`, boxShadow: on ? '0 0 0 3px color-mix(in srgb, var(--you) 14%, transparent)' : 'none' }}>
-                        <span style={{ fontSize: 22, lineHeight: 1 }}>{pu.icon}</span>
+                        <span style={{ fontSize: 22, lineHeight: 1 }}><PuIcon id={pu.id} emoji={pu.icon} size={26} /></span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div className="grotesk" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>{pu.name}</div>
                           <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>{pu.blurb}</div>
@@ -851,30 +1017,120 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     );
   }
 
+  // A signed-in live user (reached the board through their leagues) — they're
+  // already "in", so the sim/demo board gives them a way back to their leagues and
+  // drops the "get a league code" invite CTA.
+  const loggedIn = (() => { try { return localStorage.getItem('dripLive') === '1'; } catch { return false; } })();
+  // ── Live-board header pieces (shared between the desktop single row and the
+  // mobile two-row layout so nothing overlaps on a narrow screen). ──
+  const liveLeaguesChip = (
+    <button onClick={() => navigate({ name: 'live' })} className="mono" title="Back to your leagues" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>← my leagues</button>
+  );
+  // Super-admin live-test badge — makes it obvious the board is on a compressed
+  // test clock, not the real slate.
+  const liveTestChip = testAnchor != null ? (
+    <span className="mono" title="Live-test mode: this league's windows run on a compressed schedule (super-admin toggle)." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 7px', whiteSpace: 'nowrap', flexShrink: 0 }}>🧪 TEST</span>
+  ) : null;
+  // Preseason badge — makes it obvious this board is a real 2026 preseason matchup,
+  // not a regular-season week.
+  const livePreseasonChip = preseason ? (
+    <span className="mono" title="Preseason: this league is playing a real 2026 NFL preseason matchup (super-admin toggle)." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, var(--surface))', border: '1px solid var(--you)', borderRadius: 4, padding: '5px 7px', whiteSpace: 'nowrap', flexShrink: 0 }}>🏈 PRESEASON</span>
+  ) : null;
+  const weekLabel = (w: number) => (isPreseasonWeek(w) ? `PRE ${preseasonWeekNum(w)}` : `WK ${w}`);
+  const liveWeekSel = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+      <button onClick={() => goToWeek(prevWeek)} disabled={prevWeek == null || switchingWeek != null} title="previous week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: prevWeek == null || switchingWeek != null ? 'default' : 'pointer', opacity: prevWeek == null ? 0.35 : 1 }}>‹</button>
+      <span className="mono" title="Week — page through the season" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', minWidth: 36, textAlign: 'center' }}>{switchingWeek != null ? `${weekLabel(switchingWeek)}…` : weekLabel(week)}</span>
+      <button onClick={() => goToWeek(nextWeek)} disabled={nextWeek == null || switchingWeek != null} title="next week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: nextWeek == null || switchingWeek != null ? 'default' : 'pointer', opacity: nextWeek == null ? 0.35 : 1 }}>›</button>
+    </div>
+  );
+  const liveScore = (
+    <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 16 }}>
+      <Avatar name={you.name} accent="var(--you)" size={isMobile ? 22 : 30} src={avatarUrl(you.ownerId)} />
+      <span className="mono" style={{ color: 'var(--text)', fontSize: isMobile ? 20 : 28, fontWeight: 700, lineHeight: 1 }}>{youTotal.toFixed(1)}</span>
+      <span className="mono" style={{ color: 'var(--faint)', fontSize: isMobile ? 10 : 13, fontWeight: 700, letterSpacing: '0.12em' }}>VS</span>
+      <span className="mono" style={{ color: 'var(--text)', fontSize: isMobile ? 20 : 28, fontWeight: 700, lineHeight: 1 }}>{themTotal.toFixed(1)}</span>
+      <Avatar name={opp.name} accent="var(--opp)" size={isMobile ? 22 : 30} src={avatarUrl(opp.ownerId)} />
+    </div>
+  );
+  const liveCoin = (
+    <button onClick={() => setEarnOpen(true)} title="Drip Coin — tap for earning opportunities" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 9px', cursor: 'pointer', flexShrink: 0 }}>
+      <CoinIcon size={13} />
+      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{Math.round(coinBal)}</span>
+      {phase === 'final' && weekCoins > 0 && <span style={{ fontSize: 8.5, color: 'var(--fx-streak)' }}>+{weekCoins}</span>}
+    </button>
+  );
+  const liveWeekResult = phase === 'final' ? (
+    <button onClick={() => navigate({ name: 'final', week })} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4, flexShrink: 0 }}>WEEK RESULT →</button>
+  ) : null;
+
   return (
     <>
       <header style={{ height: 'auto', minHeight: isMobile ? 52 : 60, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 8, padding: isMobile ? '7px 10px' : '8px 16px', position: 'sticky', top: 0, zIndex: 40, gap: isMobile ? 12 : 10 }}>
+        {liveCtx ? (
+          isMobile ? (
+            // Mobile: two stacked rows so the chips/score/coin never collide.
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
+                  {liveLeaguesChip}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  {liveCoin}
+                  {liveWeekResult}
+                  <SiteSettings />
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{liveWeekSel}{livePreseasonChip}{liveTestChip}</div>
+                {liveScore}
+              </div>
+            </div>
+          ) : (
+          // Desktop: minimal single row — Brand · big centered score · coin + gear.
+          // No phase tabs (status) or lock time; each window carries its own state.
+          <>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 9 }}>
+              <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
+              {liveLeaguesChip}
+              {liveWeekSel}
+              {livePreseasonChip}
+              {liveTestChip}
+            </div>
+            {liveScore}
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+              {liveCoin}
+              {liveWeekResult}
+              <SiteSettings />
+            </div>
+          </>
+          )
+        ) : (
+          <>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
-          <Brand onClick={() => navigate({ name: 'league' })} />
+          <Brand onClick={() => navigate({ name: 'league' })} hideDataSource={!!liveCtx} />
+          {loggedIn && !liveCtx && liveLeaguesChip}
           <div style={{ display: 'flex', gap: 2, padding: 3, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4 }}>
+            {/* On the live board the phase follows the real clock — the tabs are a
+                read-only progress indicator, not a switcher. */}
             {(['setup', 'live', 'final'] as Phase[]).map((p) => (
-              <button key={p} onClick={() => changePhase(p)} className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', padding: '9px 11px', borderRadius: 3, border: 'none', background: phase === p ? 'var(--sh)' : 'transparent', color: phase === p ? 'var(--you)' : 'var(--dim)' }}>
+              <button key={p} onClick={() => { if (!liveCtx) changePhase(p); }} className="mono" title={liveCtx ? 'The live board advances on real time' : undefined} style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', padding: '9px 11px', borderRadius: 3, border: 'none', cursor: liveCtx ? 'default' : 'pointer', background: phase === p ? 'var(--sh)' : 'transparent', color: phase === p ? 'var(--you)' : 'var(--dim)' }}>
                 {p.toUpperCase()}
               </button>
             ))}
           </div>
-          <SiteSettings />
-          {resolved.real && (
-            <span className="mono" title="This week resolves off real 2025 NFL play-by-play" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 3, padding: '3px 6px' }}>
-              ● REAL PBP
+          {!liveCtx && (
+            <span className="mono" title="A deterministic replay of real 2025 games — Setup builds a lineup, Live watches it play, Final jumps to the result. Switch freely; nothing here is a live game in progress." style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 6px' }}>
+              ⟳ REPLAY
             </span>
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 10, whiteSpace: 'nowrap', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
           <button onClick={() => setEarnOpen(true)} title="Drip Coin — tap for earning opportunities" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 9px', cursor: 'pointer' }}>
             <CoinIcon size={13} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{coins}</span>
-            {weekCoins > 0 && <span style={{ fontSize: 8.5, color: 'var(--fx-streak)' }}>+{weekCoins}</span>}
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{Math.round(coinBal)}</span>
+            {phase === 'final' && weekCoins > 0 && <span style={{ fontSize: 8.5, color: 'var(--fx-streak)' }}>+{weekCoins}</span>}
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <Avatar name={you.name} accent="var(--you)" size={20} src={avatarUrl(you.ownerId)} />
@@ -891,27 +1147,33 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               <button onClick={() => { setPicks(youDefault); setSelSlot(null); }} title="Fill every slot with your best available lineup" className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 ✨ Auto-fill
               </button>
+              {/* Teach the hidden-metric mechanic right where the user commits it. */}
+              <button onClick={() => setShowRules(true)} title="How scoring works" className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                📖 Rules
+              </button>
               <div style={{ textAlign: 'right' }}>
                 <div className="mono" style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--faint)' }}>LOCKS IN</div>
                 <div className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--warn)' }}>{weekLockLabel(week)}</div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-                <button onClick={lockIn} disabled={sealing} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4, boxShadow: '0 0 20px color-mix(in srgb, var(--you) 30%, transparent)', opacity: sealing ? 0.6 : 1, cursor: sealing ? 'default' : 'pointer' }}>
-                  {sealing ? 'SEALING…' : sealError ? 'RETRY LOCK IN →' : 'LOCK IN →'}
+              {/* Live board: no LOCK IN button — each window locks on the real clock
+                  and the lineup auto-saves. Sim/demo keeps the manual lock. */}
+              {liveCtx ? (
+                <span className="mono" title="Your lineup saves automatically and locks 1h before each window's kickoff." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 40%, var(--bd))', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', borderRadius: 4, padding: '6px 10px' }}>✓ AUTO-SAVES</span>
+              ) : (
+                <button onClick={lockIn} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4, boxShadow: '0 0 20px color-mix(in srgb, var(--you) 30%, transparent)' }}>
+                  LOCK IN →
                 </button>
-                {sealError && (
-                  <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.04em', color: 'var(--warn)' }}>
-                    Couldn't seal — your picks are safe. Tap to retry.
-                  </span>
-                )}
-              </div>
+              )}
             </div>
           )}
           {phase === 'live' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ display: 'inline-block', width: 8, height: 8, background: '#FF4F62', borderRadius: '50%', animation: 'lpulse 1.2s ease infinite' }} />
               <span className="mono" style={{ color: '#FF4F62', fontWeight: 700, letterSpacing: '0.14em', fontSize: 11 }}>LIVE</span>
-              <button onClick={toggleAll} className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px' }}>
+              {/* Live board plays on the real clock — no manual RUN ALL / clock-mode
+                  / speed controls. Those stay on the sim/demo replay only. */}
+              {!liveCtx && <>
+              <button onClick={toggleAll} title="Play — or pause — every game window at once" className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px' }}>
                 {anyPlaying ? '❚❚ PAUSE ALL' : '▶ RUN ALL'}
               </button>
               <button
@@ -926,6 +1188,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: speed > 1 ? 'var(--on-accent)' : 'var(--dim)', background: speed > 1 ? 'var(--you)' : 'var(--surface)', border: `1px solid ${speed > 1 ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '6px 10px' }}>
                 ⏩ {speed}×
               </button>
+              </>}
+              {hasGameFeed(week) && (
+                <button onClick={() => setFieldsOpen(true)} title="Every game with a slotted player, as live field visuals — your plays vs your opponent's" className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px' }}>
+                  ▦ FIELDS
+                </button>
+              )}
             </div>
           )}
           {phase === 'final' && (
@@ -933,10 +1201,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               WEEK RESULT →
             </button>
           )}
+          <SiteSettings />
         </div>
+          </>
+        )}
       </header>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 10 : 14, padding: isMobile ? 10 : 14, overflow: isMobile ? 'auto' : 'hidden', minHeight: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? undefined : 'flex-start', gap: isMobile ? 10 : 14, padding: isMobile ? 10 : 14, overflow: isMobile ? 'auto' : 'visible', minHeight: 0 }}>
         {!isMobile && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={!rosterOpen.you} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} />}
 
         {isMobile && (
@@ -974,53 +1245,71 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               </div>
             );
           })()}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 18, marginBottom: 10 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5, flexWrap: 'wrap' }}>
+          <div style={{ marginBottom: 10 }}>
+            {/* Top line: week identity on the left, slot tally on the right. */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--on-accent)', background: 'var(--you)', borderRadius: 4, padding: '4px 9px' }}>NFL WEEK {week}</span>
                 <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)' }}>{weekDateRange(week)}</span>
-                <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>2025 SEASON</span>
+                <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>{getActiveLeague().season} SEASON</span>
               </div>
-              <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{headline}</div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', maxWidth: 520 }}>
-                <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, lineHeight: 1.5 }}>{subhead}</div>
-                {phase === 'setup' && (
-                  <button onClick={() => setShowRules(true)} className="mono" style={{ flex: 'none', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 11, padding: '4px 10px', cursor: 'pointer' }}>
-                    📖 How scoring works
-                  </button>
-                )}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flex: 'none' }}>
+                <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>{phase === 'setup' ? 'SLOTS SET' : phase.toUpperCase()}</span>
+                {phase === 'setup' && <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{filledCount}/{totalSlots}</span>}
+                {phase === 'setup' && metriclessCount > 0 && <span className="mono" title="Each placed player needs a hidden metric to score." style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--warn)', letterSpacing: '0.04em' }}>· {metriclessCount} need a metric</span>}
               </div>
-              {phase === 'live' && (
-                <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, fontSize: 10, color: 'var(--dim)' }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', flex: 'none', background: clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--faint)' }} />
-                  <span style={{ fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)' }}>{clockMode === 'real' ? 'REAL CLOCK' : clockMode === 'feed' ? 'REAL FEED' : 'GAME CLOCK'}</span>
-                  <span>· {clockMode === 'real' ? 'log order & effects resolve by real time' : clockMode === 'feed' ? 'reveals live; order & effects on game clock' : 'all games lockstep on game time'}</span>
-                </div>
-              )}
+            </div>
+            {/* Headline + subhead on the left; power-ups fill the right instead of
+                stacking below (shorter, no dead space). Wraps on narrow screens. */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 0 }}>
+                <div className="grotesk" style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{headline}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 2, maxWidth: 520, lineHeight: 1.4 }}>{subhead}</div>
+              </div>
               {pendingApply ? (
-                <div className="mono" style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))', border: '1px solid var(--warn)', borderRadius: 6, padding: '7px 11px' }}>
-                  <span>{powerupById(pendingApply)?.icon} Tap a {powerupById(pendingApply)?.target === 'window' ? 'window' : 'spot'} to apply {powerupById(pendingApply)?.name}</span>
+                <div className="mono" style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))', border: '1px solid var(--warn)', borderRadius: 6, padding: '7px 11px' }}>
+                  <span><PuIcon id={pendingApply} emoji={powerupById(pendingApply)?.icon} size="1.4em" /> Tap a {powerupById(pendingApply)?.target === 'window' ? 'window' : 'spot'} to apply {powerupById(pendingApply)?.name}</span>
                   <button onClick={() => setPendingApply(null)} className="mono" style={{ background: 'none', border: 'none', color: 'var(--dim)', fontWeight: 700, fontSize: 9, letterSpacing: '0.1em' }}>CANCEL</button>
                 </div>
               ) : (
-                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'nowrap' }}>
-                  <button onClick={() => setPuView('active')} className="mono" style={{ flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--you)', borderRadius: 6, padding: '7px 9px' }}>
-                    ◈ ACTIVE{activeEffects.length > 0 ? ` · ${activeEffects.length}` : ''}
-                  </button>
-                  <button onClick={() => setPuView('apply')} className="mono" style={{ flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 6, padding: '7px 9px' }}>
-                    ✦ APPLY{appliable.length > 0 ? ` · ${appliable.length}` : ''}
-                  </button>
-                  <button onClick={() => setShopOpen(true)} className="mono" style={{ flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 9px' }}>
-                    🛒 SHOP
-                  </button>
+                <div style={{ flex: 'none' }}>
+                  <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 4 }}><Emoji e="⚡" size="1.25em" /> POWER-UPS</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => setPuView('active')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--you)', borderRadius: 6, padding: '7px 11px' }}>
+                      ◈ ACTIVE{activeEffects.length > 0 ? ` · ${activeEffects.length}` : ''}
+                    </button>
+                    <button onClick={() => setPuView('apply')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 6, padding: '7px 11px' }}>
+                      ✦ APPLY{appliable.length > 0 ? ` · ${appliable.length}` : ''}
+                    </button>
+                    <button onClick={() => setShopOpen(true)} className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 11px' }}>
+                      <Emoji e="🛒" size="1.3em" /> SHOP
+                    </button>
+                  </div>
                 </div>
               )}
-              <TargetPanel aw={aw} oppPicks={oppPicks} preKick={preKickPhase} onClearSpy={() => clearSpy(week)} />
             </div>
-            <div style={{ textAlign: 'right', flex: 'none' }}>
-              <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>{phase === 'setup' ? 'SLOTS SET' : 'WEEK ' + week}</div>
-              <div className="mono" style={{ fontSize: 12, color: 'var(--text)' }}>{phase === 'setup' ? `${filledCount}/${totalSlots}` : phase.toUpperCase()}</div>
-            </div>
+            {/* Conditional, full-width status lines below the headline row. */}
+            {preKickPhase && !liveCtx && (
+              <div className="mono" style={{ marginTop: 7, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))', border: '1px solid var(--warn)', borderRadius: 6, padding: '6px 10px' }}>
+                ▶ Nothing's kicked yet — press <span style={{ color: 'var(--text)' }}>RUN ALL</span> (or ▶ on a window) to play the week out.
+              </div>
+            )}
+            {/* Live board: a nudge (not a forced modal) to assign best-ball backups. */}
+            {liveCtx && phase === 'live' && pendingBackups.length > 0 && (
+              <button
+                onClick={() => { const s0 = pendingBackups[0]; setBackupMenu({ key: slotKey(s0.win, s0.slotIndex) }); }}
+                className="mono" style={{ marginTop: 7, display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, var(--surface))', border: '1px solid var(--you)', borderRadius: 6, padding: '7px 11px', cursor: 'pointer' }}>
+                🔁 {pendingBackups.length} unopposed {pendingBackups.length === 1 ? 'player' : 'players'} can sub in — assign {pendingBackups.length === 1 ? 'a backup' : 'backups'} →
+              </button>
+            )}
+            {phase === 'live' && !liveCtx && (
+              <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, fontSize: 10, color: 'var(--dim)' }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', flex: 'none', background: clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--faint)' }} />
+                <span style={{ fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)' }}>{clockMode === 'real' ? 'REAL CLOCK' : clockMode === 'feed' ? 'REAL FEED' : 'GAME CLOCK'}</span>
+                <span>· {clockMode === 'real' ? 'log order & effects resolve by real time' : clockMode === 'feed' ? 'reveals live; order & effects on game clock' : 'all games lockstep on game time'}</span>
+              </div>
+            )}
+            <TargetPanel aw={aw} oppPicks={oppPicks} preKick={preKickPhase} onClearSpy={() => clearSpy(week)} />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -1029,19 +1318,20 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 key={rw.window.id}
                 rw={rw}
                 week={week}
-                phase={phase}
-                clock={winClocks[rw.window.id] ?? 0}
+                phase={winPhaseFor(rw.window.id)}
+                realtime={winRt(rw.window.id)}
+                clock={effWinClock(rw.window.id)}
                 maxClock={winTarget[rw.window.id] ?? GAME_SECONDS}
                 wallClock={wallClock}
                 realClock={realResolve}
                 wallSeconds={(() => {
-                  const c = winClocks[rw.window.id] ?? 0;
+                  const c = effWinClock(rw.window.id);
                   // Real seconds elapsed at the current feed position: direct in
                   // wall modes; in game mode, scale the game position into the
                   // window's real-time span so the wall clock still advances.
                   return wallClock ? c : ((winMax[rw.window.id] ? c / winMax[rw.window.id] : 0) * (winRealMax[rw.window.id] ?? 0));
                 })()}
-                playing={!!winPlaying[rw.window.id]}
+                playing={liveCtx ? false : !!winPlaying[rw.window.id]}
                 onTogglePlay={() => setWinPlay(rw.window.id, !winPlaying[rw.window.id])}
                 onReplay={() => replayWin(rw.window.id)}
                 canApplyExtra={phase === 'setup' && extraSlotQty > 0}
@@ -1082,10 +1372,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         const curPlayer = cur ? getPlayer(cur.playerId) : null;
         if (!curPlayer) return null;
         const slottedIds = new Set(
-          Array.from({ length: slotsFor(swapTarget.win, extraSlots) }, (_, i) => effYouPicks[slotKey(swapTarget.win, i)]?.playerId).filter(Boolean) as string[],
+          Array.from({ length: slotsFor(swapTarget.win, week, extraSlots) }, (_, i) => effYouPicks[slotKey(swapTarget.win, i)]?.playerId).filter(Boolean) as string[],
         );
         const bench = (youPools[swapTarget.win] || []).filter((p) => !slottedIds.has(p.id));
-        const atClock = winClocks[swapTarget.win] ?? 0;
+        const atClock = effWinClock(swapTarget.win); // live board: the window's current real position
         // Stamp activation with the REAL time at the feed's current position, so
         // the swap can't retroactively grab a play already final in real time.
         const atRt = realTimeAt(curPlayer, week, atClock, cur!.metricId ?? undefined);
@@ -1110,7 +1400,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         if (!b) return null;
         // Only what's legitimately known when you sub: live points so far (not
         // the finals). At kickoff these are all 0 — it's a blind commitment.
-        const liveOf = (s: typeof b) => banksAtClock(s.events, winClocks[s.win] ?? 0).you;
+        const liveOf = (s: typeof b) => banksAtClock(s.events, effWinClock(s.win)).you;
         const starters = all
           .filter((s) => s.you && s.their)
           .map((s) => ({ key: slotKey(s.win, s.slotIndex), name: s.you!.player.name, score: liveOf(s), win: s.win }));
@@ -1130,7 +1420,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
       {pickerSlot && (() => {
         const { key, win } = pickerSlot;
-        const n = slotsFor(win, extraSlots);
+        const n = slotsFor(win, week, extraSlots);
         const slotted = new Set<string>();
         for (let i = 0; i < n; i++) { const pid = picks[slotKey(win, i)]?.playerId; if (pid) slotted.add(pid); }
         const current = picks[key]?.playerId;
@@ -1166,7 +1456,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         const slot = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === mulliganSlot);
         const p = slot?.you?.player;
         if (!p) return null;
-        const atClock = winClocks[slot!.win] ?? 0;
+        const atClock = effWinClock(slot!.win); // live board: the window's current real position
         const atRt = realTimeAt(p, week, atClock, slot!.you!.metricId ?? undefined);
         return (
           <MulliganModal
@@ -1181,18 +1471,62 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
       {puView === 'active' && <ActivePowerupsModal effects={activeEffects} onClose={() => setPuView(null)} />}
       {puView === 'apply' && <ApplyPowerupsModal items={appliable} inventory={inventory} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); setPuView(null); }} onClose={() => setPuView(null)} />}
-      {shopOpen && <ShopModal onClose={() => setShopOpen(false)} />}
+      {shopOpen && <ShopModal onClose={() => setShopOpen(false)} coinsOverride={liveCtx ? Math.round(coinBal) : undefined} onBuy={liveCtx ? buyFromWallet : undefined} />}
       {showRules && <Rulebook onClose={() => setShowRules(false)} />}
+      {fieldsOpen && (
+        <FieldBoard week={week} onClose={() => setFieldsOpen(false)} entries={(() => {
+          // One entry per slotted player: its team locates the NFL game, its
+          // side drives the play tinting, and its clock mirrors the slot rows
+          // (per-game real-time position in wall modes, shared window clock in
+          // game mode) so the board shows exactly what the board rows show.
+          //
+          // Tinting is by OUTCOME: an event helps its side when it banked
+          // points (delta) or fired an effect. Denial effects (nuke/erase/…)
+          // are logged on the VICTIM's side, so their benefit flips to the
+          // opponent — whose player's play at that clock is the pid we tint.
+          const DENIAL = new Set(['nuke', 'erase', 'stop', 'reset', 'compression', 'cold']);
+          const list: FieldBoardEntry[] = [];
+          for (const rw of resolved.windows) {
+            const c = effWinClock(rw.window.id);
+            for (const s of rw.slots) {
+              const side = { you: s.you, their: s.their };
+              const plays = {
+                you: s.you ? realPbpFor(week, s.you.player.id) ?? [] : [],
+                their: s.their ? realPbpFor(week, s.their.player.id) ?? [] : [],
+              };
+              const pids: Record<'you' | 'their', number[]> = { you: [], their: [] };
+              for (const ev of s.events) {
+                if (ev.drip) continue;
+                if (!(ev.delta > 0) && !ev.effect) continue;
+                const benefit = ev.effect && DENIAL.has(ev.effect.type) ? (ev.side === 'you' ? 'their' : 'you') : ev.side;
+                const pid = plays[benefit].find((rp) => rp.c === ev.clock)?.pid;
+                if (pid != null) pids[benefit].push(pid);
+              }
+              for (const sd of ['you', 'their'] as const) {
+                const p = side[sd];
+                if (p) list.push({ playerId: p.player.id, team: p.player.team, side: sd, pids: pids[sd], clock: wallClock ? clockAtRealTime(p.player, week, c, p.metricId ?? undefined) : c });
+              }
+            }
+          }
+          return list;
+        })()} />
+      )}
 
-      {earnOpen && <EarningsModal earnings={earnings} onReset={() => { resetDripCoin(); setEarnOpen(false); }} onClose={() => setEarnOpen(false)} />}
+      {earnOpen && <EarningsModal earnings={earnings} weeklyBudget={liveCtx && leagueBudget != null && leagueBudget !== WEEKLY_STIPEND ? leagueBudget : null} onReset={liveCtx ? undefined : () => { resetDripCoin(); setEarnOpen(false); }} onClose={() => setEarnOpen(false)} />}
     </>
   );
 }
 
 // ── Drip-coin earning opportunities, by position (risk pays more) ──
-function EarningsModal({ earnings, onReset, onClose }: { earnings: { stipend: number; unopposed: number; signature: number; turnover: number; total: number }; onReset: () => void; onClose: () => void }) {
+function EarningsModal({ earnings, weeklyBudget, onReset, onClose }: { earnings: { stipend: number; unopposed: number; signature: number; turnover: number; total: number }; weeklyBudget?: number | null; onReset?: () => void; onClose: () => void }) {
   const order: Pos[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
   const riskColor = (r: string) => (r === 'HIGH' ? 'var(--fx-nuke)' : r === 'MED' ? 'var(--warn)' : 'var(--dim)');
+  // A league with its own weekly budget replaces the flat sim stipend everywhere
+  // in this sheet — the tally line + total and the always-on explainer.
+  const budgetMode = weeklyBudget != null;
+  const stipendLabel = budgetMode ? 'Weekly budget' : 'Weekly stipend';
+  const stipendVal = budgetMode ? weeklyBudget! : earnings.stipend;
+  const shownTotal = budgetMode ? (earnings.total - earnings.stipend + weeklyBudget!) : earnings.total;
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '50px 16px', overflow: 'auto' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
@@ -1207,21 +1541,25 @@ function EarningsModal({ earnings, onReset, onClose }: { earnings: { stipend: nu
           {/* this week's running tally */}
           <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px' }}>
             <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 6 }}>THIS WEEK</div>
-            {([['Weekly stipend', earnings.stipend], ['Unopposed players', earnings.unopposed], ['Events of note', earnings.signature], ['Turnovers', earnings.turnover]] as [string, number][]).map(([k, v]) => (
+            {([[stipendLabel, stipendVal], ['Unopposed players', earnings.unopposed], ['Events of note', earnings.signature], ['Turnovers', earnings.turnover]] as [string, number][]).map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--dim)', padding: '2px 0' }}>
                 <span>{k}</span><span className="mono" style={{ color: v < 0 ? 'var(--opp)' : 'var(--fx-streak)', fontWeight: 700 }}>{v < 0 ? '' : '+'}{v}</span>
               </div>
             ))}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, color: 'var(--text)', padding: '5px 0 0', marginTop: 4, borderTop: '1px solid var(--bd)' }}>
-              <span>Total</span><span className="mono" style={{ color: 'var(--fx-mult)' }}>+{earnings.total}</span>
+              <span>Total</span><span className="mono" style={{ color: 'var(--fx-mult)' }}>+{shownTotal}</span>
             </div>
           </div>
           {/* always-on */}
           <div className="mono" style={{ fontSize: 9.5, lineHeight: 1.6, color: 'var(--dim)' }}>
-            <div>◈ <b style={{ color: 'var(--text)' }}>+{WEEKLY_STIPEND}</b> flat every week, just for playing.</div>
-            <div>◈ <b style={{ color: 'var(--text)' }}>+{UNOPPOSED_COIN}</b> for each unopposed player you field.</div>
+            {budgetMode
+              ? (weeklyBudget! > 0
+                ? <div><CoinIcon size={11} /> <b style={{ color: 'var(--text)' }}>+{weeklyBudget}</b> weekly budget from your commissioner.</div>
+                : <div><CoinIcon size={11} /> Coin is earned in-game — your commissioner hasn’t set a weekly budget.</div>)
+              : <div><CoinIcon size={11} /> <b style={{ color: 'var(--text)' }}>+{WEEKLY_STIPEND}</b> flat every week, just for playing.</div>}
+            <div><CoinIcon size={11} /> <b style={{ color: 'var(--text)' }}>+{UNOPPOSED_COIN}</b> for each unopposed player you field.</div>
             <div style={{ marginTop: 5 }}>Then coin only on <b style={{ color: 'var(--text)' }}>events of note</b> — a nuke / shutdown / wipe, a drip going HOT, or a DST suppress firing. Routine yards, catches and carries don't pay.</div>
-            <div style={{ marginTop: 5 }}>◈ <b style={{ color: 'var(--opp)' }}>−10</b> to the opponent for each INT thrown / fumble lost by your players (their giveaways pay you). <b style={{ color: 'var(--text)' }}>🦅 Ball Hawk</b> raises it to 25.</div>
+            <div style={{ marginTop: 5 }}><CoinIcon size={11} /> <b style={{ color: 'var(--opp)' }}>−10</b> to the opponent for each INT thrown / fumble lost by your players (their giveaways pay you). <b style={{ color: 'var(--text)' }}><PuIcon id="turnover-boost" emoji="🦅" size="1.2em" /> Ball Hawk</b> raises it to 25.</div>
           </div>
           {/* per-position signature rates */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1252,10 +1590,11 @@ function EarningsModal({ earnings, onReset, onClose }: { earnings: { stipend: nu
               </div>
             ))}
           </div>
-          {/* Dev/testing reset: top coin back to the grant and wipe owned + applied powerups. */}
-          <button onClick={onReset} title="Reset drip coin to the demo grant and clear all owned + applied powerups" className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 2, padding: '9px 12px', background: 'var(--bg)', border: '1px dashed var(--warn)', borderRadius: 6, color: 'var(--warn)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em' }}>
+          {/* Dev/testing reset: top coin back to the grant and wipe owned + applied
+              powerups. Demo-only — hidden on the hero board (real wallet). */}
+          {onReset && <button onClick={onReset} title="Reset drip coin to the demo grant and clear all owned + applied powerups" className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 2, padding: '9px 12px', background: 'var(--bg)', border: '1px dashed var(--warn)', borderRadius: 6, color: 'var(--warn)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em' }}>
             ↻ REFRESH DRIP COIN & CLEAR POWERUPS
-          </button>
+          </button>}
         </div>
       </div>
     </div>
@@ -1321,7 +1660,7 @@ function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMe
         </div>
         <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
-            <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 7 }}>🔀 METRIC SWAP {metricQty > 0 ? `· ×${metricQty}` : '· NONE OWNED'}</div>
+            <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 7 }}><PuIcon id="metric-swap" emoji="🔀" size="1.4em" /> METRIC SWAP {metricQty > 0 ? `· ×${metricQty}` : '· NONE OWNED'}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, opacity: metricQty > 0 ? 1 : 0.4, pointerEvents: metricQty > 0 ? 'auto' : 'none' }}>
               {METRICS[player.pos].filter((m) => m.id !== metricId).map((m) => (
                 <button key={m.id} onClick={() => onMetric(m.id)} title={m.ef} className="mono" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '7px 9px', color: 'var(--text)', textAlign: 'left' }}>
@@ -1332,7 +1671,7 @@ function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMe
             </div>
           </div>
           <div>
-            <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 7 }}>🔁 PLAYER SWAP {playerQty > 0 ? `· ×${playerQty}` : '· NONE OWNED'}</div>
+            <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 7 }}><PuIcon id="player-swap" emoji="🔁" size="1.4em" /> PLAYER SWAP {playerQty > 0 ? `· ×${playerQty}` : '· NONE OWNED'}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflow: 'auto', opacity: playerQty > 0 ? 1 : 0.4, pointerEvents: playerQty > 0 ? 'auto' : 'none' }}>
               {bench.length === 0 && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>No bench players in this window.</span>}
               {bench.map((p) => (
@@ -1351,7 +1690,9 @@ function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMe
 }
 
 // ── Roster aside ──────────────────────────────────────────────────────────
-function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, onToggle, bye = [], week, fluid }: {
+// Exported: the demo landing (DemoBoard) mounts the same rails so its setup
+// reads exactly like the hero board.
+export function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, onToggle, bye = [], week, fluid }: {
   side: 'you' | 'their';
   pools: Record<WindowId, Player[]>;
   picks: Record<string, Pick>;
@@ -1370,8 +1711,8 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
 
   if (collapsed && !fluid) {
     return (
-      <aside style={{ width: 26, flex: 'none' }} className="hide-narrow">
-        <button onClick={onToggle} title={`Show ${side === 'you' ? 'your' : 'their'} roster`} className="mono" style={{ width: 26, height: '100%', minHeight: 120, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '8px 0', background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, color: accent, cursor: 'pointer' } as React.CSSProperties}>
+      <aside style={{ width: 26, flex: 'none', position: 'sticky', top: 68, alignSelf: 'flex-start' }} className="hide-narrow">
+        <button onClick={onToggle} title={`Show ${side === 'you' ? 'your' : 'their'} roster`} className="mono" style={{ width: 26, minHeight: 160, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '8px 0', background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, color: accent, cursor: 'pointer' } as React.CSSProperties}>
           <span style={{ fontSize: 11 }}>{side === 'you' ? '▸' : '◂'}</span>
           <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.18em', writingMode: 'vertical-rl', textOrientation: 'mixed' }}>{side === 'you' ? 'YOUR' : 'THEIR'} ROSTER · {total}</span>
         </button>
@@ -1382,19 +1723,22 @@ function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, o
   return (
     <aside style={fluid
       ? { width: '100%', flex: 'none', overflow: 'auto', maxHeight: '44vh', display: 'flex', flexDirection: 'column', gap: 12, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: 10 }
-      : { width: side === 'you' ? 170 : 196, flex: 'none', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} className={fluid ? undefined : 'hide-narrow'}>
+      // Desktop: pin the rail below the sticky header so you can grab a player from
+      // anywhere on the board without scrolling back up; the rail scrolls on its own
+      // when the roster is long.
+      : { width: side === 'you' ? 170 : 196, flex: 'none', position: 'sticky', top: 68, alignSelf: 'flex-start', maxHeight: 'calc(100vh - 80px)', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} className={fluid ? undefined : 'hide-narrow'}>
       <button onClick={onToggle} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.2em', color: accent, fontWeight: 700 }}>{side === 'you' ? '◂' : '▸'} {side === 'you' ? 'YOUR' : 'THEIR'} ROSTER</span>
         <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{total}</span>
       </button>
-      {WINDOWS.map((w) => (
+      {windowsForWeek(week).map((w) => (
         <div key={w.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
             <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{w.label}</span>
             <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{w.time}</span>
           </div>
-          {pools[w.id].length === 0 && <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', padding: '0 4px' }}>— none playing —</span>}
-          {pools[w.id].map((p) => {
+          {(pools[w.id] ?? []).length === 0 && <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', padding: '0 4px' }}>— none playing —</span>}
+          {(pools[w.id] ?? []).map((p) => {
             // Never reveal which players the opponent has selected during setup.
             const assigned = assignedIds.has(p.id) && (side === 'you' || phase !== 'setup');
             const interactive = side === 'you' && phase === 'setup';
@@ -1483,7 +1827,7 @@ const POWERUP_HINT: Record<string, string> = {
 const SPOT_APPLY = new Set(['double-or-nothing', 'bye-steal', 'spy', 'mulligan', 'emp', 'metric-swap', 'player-swap']);
 
 // Shared modal shell for the two power-up cards.
-function PuShell({ title, subtitle, accent, onClose, children }: { title: string; subtitle: string; accent: string; onClose: () => void; children: ReactNode }) {
+function PuShell({ title, subtitle, accent, onClose, children }: { title: ReactNode; subtitle: string; accent: string; onClose: () => void; children: ReactNode }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '44px 16px', overflow: 'auto' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
@@ -1503,14 +1847,14 @@ function PuShell({ title, subtitle, accent, onClose, children }: { title: string
 // ACTIVE: everything currently in effect this week, with a back-out where the
 // power-up can still be unwound (before its window locks / kicks off).
 function ActivePowerupsModal({ effects, onClose }: {
-  effects: { key: string; icon: string; name: string; detail: string; onRemove?: () => void }[]; onClose: () => void;
+  effects: { key: string; id?: string; icon: string; name: string; detail: string; onRemove?: () => void }[]; onClose: () => void;
 }) {
   return (
     <PuShell title="◈ Active Power-Ups" subtitle="WHAT'S CURRENTLY IN EFFECT — BACK ANY OUT BEFORE IT LOCKS" accent="var(--you)" onClose={onClose}>
       {effects.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— nothing active —<br />arm or apply power-ups from ✦ APPLY</div>}
       {effects.map((e) => (
         <div key={e.key} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 8px', borderRadius: 5, background: 'color-mix(in srgb, var(--you) 9%, var(--bg))', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))' }}>
-          <span style={{ fontSize: 17, flex: 'none', lineHeight: 1.1 }}>{e.icon}</span>
+          <span style={{ fontSize: 22, flex: 'none', lineHeight: 1.1 }}><PuIcon id={e.id} emoji={e.icon} size={30} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{e.name}</div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 2 }}>{e.detail}</div>
@@ -1538,7 +1882,7 @@ function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose }: {
         const qty = inventory[p.id] ?? 0;
         return (
           <div key={p.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '7px 8px', borderRadius: 5, background: 'var(--bg)', border: '1px solid var(--bd)' }}>
-            <span style={{ fontSize: 17, flex: 'none', lineHeight: 1.1 }}>{p.icon}</span>
+            <span style={{ fontSize: 22, flex: 'none', lineHeight: 1.1 }}><PuIcon id={p.id} emoji={p.icon} size={30} /></span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{p.name}</span>
@@ -1566,7 +1910,7 @@ function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose }: {
 // Spy: after tapping a slate slot, choose what to reveal about the opponent there.
 function SpyRevealModal({ onPick, onClose }: { onPick: (r: 'player' | 'metric') => void; onClose: () => void }) {
   return (
-    <PuShell title="👁️ Spy — Reveal" subtitle="UNCOVER ONE THING ABOUT THE OPPONENT IN THIS SLOT" accent="var(--warn)" onClose={onClose}>
+    <PuShell title={<><PuIcon id="spy" emoji="👁️" size="1.2em" /> Spy — Reveal</>} subtitle="UNCOVER ONE THING ABOUT THE OPPONENT IN THIS SLOT" accent="var(--warn)" onClose={onClose}>
       {([['player', 'Reveal Player', 'See who the opponent slotted here.'], ['metric', 'Reveal Metric', 'See which metric the opponent chose here.']] as const).map(([r, label, blurb]) => (
         <button key={r} onClick={() => onPick(r)} className="mono" style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 3, padding: '10px 12px', borderRadius: 5, border: '1px solid var(--warn)', background: 'var(--bg)', cursor: 'pointer' }}>
           <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{label}</span>
@@ -1583,7 +1927,7 @@ function MulliganModal({ player, curMetric, inventory, onPick, onClose }: {
 }) {
   const options = METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === curMetric);
   return (
-    <PuShell title="🎲 Mulligan — Re-roll" subtitle={`PICK A NEW METRIC FOR ${player.name.toUpperCase()} · COUNTS ONLY PLAYS AFTER NOW (REAL TIME)`} accent="var(--warn)" onClose={onClose}>
+    <PuShell title={<><PuIcon id="mulligan" emoji="🎲" size="1.2em" /> Mulligan — Re-roll</>} subtitle={`PICK A NEW METRIC FOR ${player.name.toUpperCase()} · COUNTS ONLY PLAYS AFTER NOW (REAL TIME)`} accent="var(--warn)" onClose={onClose}>
       {options.map((m) => {
         const cur = m.id === curMetric;
         return (
@@ -1627,6 +1971,7 @@ function WindowSectionInner(props: {
   rw: ReturnType<typeof buildMatchup>['windows'][number];
   week: number;
   phase: Phase;
+  realtime?: 'setup' | 'locked' | 'live' | 'final' | null; // live board: real-clock window state (no manual playback)
   clock: number;
   maxClock: number;
   wallClock: boolean;
@@ -1661,7 +2006,7 @@ function WindowSectionInner(props: {
   onScout: (win: WindowId) => void;
   lockPlayer?: boolean; // demo setup: metric is editable, but the player is fixed
 }) {
-  const { rw, week, phase, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer } = props;
+  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer } = props;
   const w = rw.window;
   // Twin Generals: with the buff armed and ≥2 of your Field General QBs in this
   // window, the top two multipliers stack — link those QB spots so you can see
@@ -1672,28 +2017,35 @@ function WindowSectionInner(props: {
     if (fgKeys.length >= 2) fgKeys.forEach((k) => twinLinked.add(k));
   }
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
-  const done = clock >= maxClock;
+  // On the live board, "done" tracks the real-clock state (a LIVE window reveals
+  // all ingested plays but isn't over); otherwise it's the playback position.
+  const done = realtime ? realtime === 'final' : clock >= maxClock;
   const pct = Math.round((Math.min(clock, maxClock) / maxClock) * 100);
   // Live apply-mode: EMP targets the whole live window; Spy/Mulligan target a
   // single spot. Highlight what's eligible and dim the rest.
-  const empEligible = applyMode === 'emp' && phase === 'live' && clock > 0 && !done && aw?.emp?.[w.id] == null;
+  // Live-timing power-ups only apply to a genuinely LIVE window. On the live board
+  // a LOCKED window renders in the same 'live' phase (sealed, pre-kick), so gate
+  // on the real-clock state so a swap/mulligan/EMP can't land on a locked window.
+  // Sim/demo has no `realtime`, so this is a no-op there.
+  const liveNow = !realtime || realtime === 'live';
+  const empEligible = applyMode === 'emp' && liveNow && phase === 'live' && clock > 0 && !done && aw?.emp?.[w.id] == null;
   const spotEligible = (s: typeof rw.slots[number]) => {
-    if (applyMode === 'spy') return !!s.their;             // reveal the opponent here
-    if (applyMode === 'mulligan') return !!s.you && !done; // re-roll your metric
-    if (applyMode === 'metric-swap' || applyMode === 'player-swap') return !!s.you && !done; // swap this live spot
+    if (applyMode === 'spy') return !!s.their;                          // reveal the opponent here (locked period)
+    if (applyMode === 'mulligan') return liveNow && !!s.you && !done;   // re-roll your metric
+    if (applyMode === 'metric-swap' || applyMode === 'player-swap') return liveNow && !!s.you && !done; // swap this live spot
     return false;
   };
   const spotApplyMode = applyMode === 'spy' || applyMode === 'mulligan' || applyMode === 'metric-swap' || applyMode === 'player-swap';
   const [slateOpen, setSlateOpen] = useState(false);
   // The real NFL games feeding this window: map each window player's team to its
   // actual away@home matchup that week, and list the players involved.
-  interface SlateGame { away: string; home: string; you: string[]; their: string[] }
+  interface SlateGame { away: string; home: string; kickoff?: number; you: string[]; their: string[] }
   const slate: SlateGame[] = (() => {
     // Seed with every real NFL game in this window — so the chip shows even
     // before anyone is assigned (e.g. a lone TNF game).
     const games = new Map<string, SlateGame>();
     for (const g of gamesInWindow(week, w.id)) {
-      games.set(`${g.away}@${g.home}`, { away: g.away, home: g.home, you: [], their: [] });
+      games.set(`${g.away}@${g.home}`, { away: g.away, home: g.home, kickoff: g.kickoff, you: [], their: [] });
     }
     const add = (team: string | undefined, name: string, side: 'you' | 'their') => {
       const g = nflGameForTeam(week, team);
@@ -1709,6 +2061,31 @@ function WindowSectionInner(props: {
     return [...games.values()];
   })();
   const slateTeams = [...new Set(slate.flatMap((g) => [g.away, g.home]))];
+
+  // This window's own real-clock timeline (live board): locks 1h before its
+  // kickoff, goes live at kickoff. Shown per-window so each window carries its
+  // own Setup → Locked → Live → Final states + times, not just the board header.
+  const winKickSod = windowKickoffSod(week, w.id);
+  const lockLabel = fmtTimeOfDay(winKickSod - (testTimelineOn() ? TEST_LOCK_LEAD_MS / 1000 : 3600));
+  const kickLabel = fmtTimeOfDay(winKickSod);
+  // The state chip for this window's real-clock state.
+  const stateChip = !realtime ? null : realtime === 'setup' ? (
+    <span className="mono" title="Open — edit this window until it locks 1h before kickoff." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 4, padding: '3px 8px' }}>SETUP</span>
+  ) : realtime === 'locked' ? (
+    <span className="mono" title="Lineups are locked for this window — kickoff is within the hour." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '3px 8px' }}><Emoji e="🔒" size="1.25em" /> LOCKED</span>
+  ) : realtime === 'final' ? (
+    <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 4, padding: '3px 8px' }}>FINAL</span>
+  ) : (
+    <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: '#FF4F62', border: '1px solid #FF4F62', borderRadius: 4, padding: '3px 8px' }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#FF4F62', animation: 'lpulse 1.2s ease infinite' }} /> LIVE
+    </span>
+  );
+  // The time hint that pairs with the state: what's next on this window's clock.
+  const timeHint = !realtime ? null
+    : realtime === 'setup' ? `🔒 locks ${lockLabel} ET`
+    : realtime === 'locked' ? `▶ kicks ${kickLabel} ET`
+    : realtime === 'live' ? `kicked ${kickLabel} ET`
+    : null;
 
   return (
     <div>
@@ -1728,6 +2105,9 @@ function WindowSectionInner(props: {
 
         {phase === 'setup' ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            {/* Live board: this window's own state + lock time, right in its header. */}
+            {stateChip}
+            {timeHint && <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--warn)', letterSpacing: '0.04em' }}>{timeHint}</span>}
             {canApplyExtra && (
               <button
                 onClick={onApplyExtra}
@@ -1745,6 +2125,13 @@ function WindowSectionInner(props: {
             )}
             <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--dim)' }}>{setN}/{rw.slots.length} SET</span>
           </div>
+        ) : realtime ? (
+          // Live board: the window's state comes from the real clock — no manual
+          // playback. Show its state chip + the next milestone on its own clock.
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            {timeHint && <span className="mono" style={{ fontSize: 9, color: realtime === 'live' ? 'var(--faint)' : 'var(--warn)', fontWeight: 700, letterSpacing: '0.04em' }}>{timeHint}</span>}
+            {stateChip}
+          </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             {/* per-window clock */}
@@ -1757,7 +2144,7 @@ function WindowSectionInner(props: {
               done ? (
                 <button onClick={onReplay} className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 8px' }}>↺ REPLAY</button>
               ) : (
-                <button onClick={onTogglePlay} className="mono" style={{ fontSize: 11, color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 9px' }}>{playing ? '❚❚' : '▶'}</button>
+                <button onClick={onTogglePlay} title={playing ? 'Pause this window' : 'Play this window'} className="mono" style={{ fontSize: 11, color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 9px' }}>{playing ? '❚❚' : '▶'}</button>
               )
             )}
             <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: phase === 'final' || done ? 'var(--you)' : '#FF4F62' }}>
@@ -1794,7 +2181,7 @@ function WindowSectionInner(props: {
                       {teamLine(g.away)}
                       <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--faint)', flex: 'none' }}>@</span>
                       {teamLine(g.home)}
-                      <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--dim)', flex: 'none', marginLeft: 6 }}>{windowTimeLabel(week, w.id)}</span>
+                      <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--dim)', flex: 'none', marginLeft: 6 }}>{g.kickoff ? kickoffLabel(g.kickoff) : windowTimeLabel(week, w.id)}</span>
                     </div>
                     {(g.you.length > 0 || g.their.length > 0) && (
                       <div style={{ fontSize: 9.5, lineHeight: 1.5, marginTop: 6, paddingTop: 6, borderTop: '1px solid color-mix(in srgb, var(--bd) 60%, transparent)' }}>
@@ -1989,6 +2376,9 @@ export function SetupRow(props: {
           {/* metric picker — full card width, stacks cleanly */}
           {showPicker && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {!pick?.metricId && !editing && (
+                <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--warn)' }}>② PICK A METRIC ↓</div>
+              )}
               {editing && (
                 <button onClick={() => setEditing(false)} className="mono" style={{ width: '100%', textAlign: 'center', background: 'none', border: '1px dashed var(--bd)', borderRadius: 3, padding: '3px', fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)' }}>✕ KEEP {metric?.name?.toUpperCase()}</button>
               )}
@@ -2019,14 +2409,14 @@ export function SetupRow(props: {
           onDrop={(e) => { e.preventDefault(); onDropPlayer(e.dataTransfer.getData('text/plain')); }}
           style={{ minWidth: 0, minHeight: 78, background: emptyEligible ? 'color-mix(in srgb, var(--warn) 12%, transparent)' : selected ? 'var(--surface)' : 'transparent', border: `1px dashed ${emptyEligible ? 'var(--warn)' : selected ? 'var(--you)' : 'var(--bdh)'}`, borderLeft: `3px dashed ${emptyEligible ? 'var(--warn)' : selected ? 'var(--you)' : 'var(--bdh)'}`, borderRadius: 4, padding: '16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', opacity: applyDim ? 0.4 : 1 }}
         >
-          <span className="grotesk" style={{ fontSize: 20, color: emptyEligible ? 'var(--warn)' : 'var(--faint)' }}>{emptyEligible ? applyPu?.icon : '+'}</span>
+          <span className="grotesk" style={{ fontSize: 20, color: emptyEligible ? 'var(--warn)' : 'var(--faint)' }}>{emptyEligible ? <PuIcon id={applyPu?.id} emoji={applyPu?.icon} size={22} /> : '+'}</span>
           <span className="mono" style={{ fontSize: 10, color: emptyEligible ? 'var(--warn)' : 'var(--faint)', letterSpacing: '0.12em', fontWeight: emptyEligible ? 700 : 400 }}>{emptyEligible ? 'TAP TO FIELD BYE' : 'TAP TO PICK PLAYER'}</span>
         </div>
       )}
       <div onClick={hideScout ? undefined : onScout} title={hideScout ? 'Your opponent’s lineup is sealed until kickoff' : "Scout the opponent's possible players for this window"} style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: hideScout ? 'default' : 'pointer' }}>
         <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--dim)' }}>◆</span>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.16em', color: 'var(--faint)', fontWeight: 700 }}>SEALED · {winId.toUpperCase()}</span>
-        {!hideScout && <span className="mono" style={{ fontSize: 7.5, letterSpacing: '0.12em', color: 'var(--opp)', fontWeight: 700 }}>🔍 SCOUT</span>}
+        {!hideScout && <span className="mono" style={{ fontSize: 7.5, letterSpacing: '0.12em', color: 'var(--opp)', fontWeight: 700 }}><GameIcon name={UI_ART.scout} emoji="🔍" size="1.6em" /> SCOUT</span>}
       </div>
     </div>
     {infoMetric && <MetricInfo metric={infoMetric} onClose={() => setInfoMetric(null)} />}
@@ -2069,7 +2459,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
   onPick: (id: string) => void; onRemove: () => void; onClose: () => void;
   gated?: (p: Player) => boolean; onGated?: (p: Player) => void; // opt-in premium lock (default: none)
 }) {
-  const label = WINDOWS.find((w) => w.id === win)?.label ?? win.toUpperCase();
+  const label = windowsForWeek(week).find((w) => w.id === win)?.label ?? win.toUpperCase();
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflow: 'auto' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
@@ -2096,7 +2486,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
                   <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
                 </div>
                 {sel ? <span className="mono" style={{ fontSize: 8, color: 'var(--you)', flex: 'none' }}>CURRENT ✓</span>
-                  : isGated ? <span title="Premium position — unlock premium" style={{ fontSize: 12, flex: 'none' }}>🔒</span> : null}
+                  : isGated ? <span title="Premium position — unlock premium" style={{ fontSize: 14, flex: 'none' }}>🔒</span> : null}
               </button>
             );
           })}
@@ -2115,10 +2505,10 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
 // Lists every opponent player whose game falls in this window: who they COULD
 // field here. The actual pick stays sealed — the full pool is shown (no
 // removal of slotted players), so nothing leaks by commission or omission.
-function ScoutModal({ win, week, pool, oppName, onClose }: {
+export function ScoutModal({ win, week, pool, oppName, onClose }: {
   win: WindowId; week: number; pool: Player[]; oppName: string; onClose: () => void;
 }) {
-  const label = WINDOWS.find((w) => w.id === win)?.label ?? win.toUpperCase();
+  const label = windowsForWeek(week).find((w) => w.id === win)?.label ?? win.toUpperCase();
   const posOrder: Pos[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
   const sorted = [...pool].sort((a, b) => (posOrder.indexOf(a.pos) - posOrder.indexOf(b.pos)) || a.name.localeCompare(b.name));
   return (
@@ -2126,7 +2516,7 @@ function ScoutModal({ win, week, pool, oppName, onClose }: {
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, borderTop: '3px solid var(--opp)', boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>🔍 Scout · {label}</div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}><GameIcon name={UI_ART.scout} emoji="🔍" size="1.2em" /> Scout · {label}</div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>WHO {oppName.toUpperCase()} COULD FIELD HERE — PICK STAYS SEALED</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
@@ -2181,7 +2571,7 @@ function BuffFxRow({ side, fx, stake }: { side: 'you' | 'their'; fx?: BuffFx[]; 
     const c = stake === 'won' ? 'var(--fx-streak)' : 'var(--fx-nuke)';
     items.push(
       <span key="stake" className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 8, fontWeight: 700, letterSpacing: '0.04em', color: c, background: 'var(--surface)', border: `1px solid ${c}`, borderRadius: 3, padding: '2px 5px' }}>
-        ⚖️ DOUBLE OR NOTHING {stake === 'won' ? 'WON ×2' : 'LOST → 0'}
+        <PuIcon id="double-or-nothing" emoji="⚖️" size="1.5em" /> DOUBLE OR NOTHING {stake === 'won' ? 'WON ×2' : 'LOST → 0'}
       </span>,
     );
   }
@@ -2305,6 +2695,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
           return <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: col, textAlign: 'center', marginTop: 4 }}>{txt}</div>;
         })()}
         {(phase === 'final' || done) && <BuffFxRow side={mineBackup ? 'you' : 'their'} fx={mineBackup ? slot.youBuffFx : slot.theirBuffFx} />}
+        {open && slot.real && <FieldView week={week} team={be.player.team} clock={bclock} collapsible />}
         {open && (() => {
           const log = buildLog(bEvents);
           return (
@@ -2377,7 +2768,7 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
       )}
       {incomingName && !(final && slot.youSub) && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', marginTop: 3 }}>
-          🛟 backup {incomingName} on standby{final ? ' — did not sub in' : ''}
+          <PuIcon id="insurance" emoji="🛟" size="1.5em" /> backup {incomingName} on standby{final ? ' — did not sub in' : ''}
         </div>
       )}
       {final && slot.youSub && (
@@ -2403,6 +2794,9 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
       )}
       {final && <BuffFxRow side="you" fx={slot.youBuffFx} stake={slot.youStake} />}
       {final && <BuffFxRow side="their" fx={slot.theirBuffFx} />}
+      {open && slot.real && (
+        <SlotFieldViews week={week} youTeam={slot.you.player.team} theirTeam={slot.their.player.team} youClock={youClock} theirClock={theirClock} />
+      )}
       {open && (() => {
         const log = buildLog(visibleEvents);
         return (
@@ -2488,6 +2882,9 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
   const isMobile = useIsMobile();
+  // Plain-English explanation of the (often jargony) metric, for a hover tooltip
+  // on the chip — the board otherwise shows only the tag (DRIP/NUKE/SUPPRESS…).
+  const metricEf = metricId ? (metricById(player.pos, metricId)?.ef ?? '') : '';
   const { bigText, fullStats } = useStore();
   const fs = (n: number) => bigText ? Math.round(n * 1.3 * 10) / 10 : n; // larger-text mode bumps the small card labels
   const nuked = fx === 'nuke' && bank === 0 && !subName && suppressSpent == null;
@@ -2523,7 +2920,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // On mobile the chip is anchored to two lines (name over tag) so it's always
   // the same height regardless of label length; desktop keeps it inline.
   const metricChip = (
-    <div style={{ display: 'inline-flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? (side === 'you' ? 'flex-end' : 'flex-start') : 'baseline', maxWidth: '100%', gap: isMobile ? 0 : 5, marginTop: isMobile ? 2 : 0, padding: isMobile ? '2px 7px' : '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)` }}>
+    <div title={metricEf || undefined} style={{ display: 'inline-flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? (side === 'you' ? 'flex-end' : 'flex-start') : 'baseline', maxWidth: '100%', gap: isMobile ? 0 : 5, marginTop: isMobile ? 2 : 0, padding: isMobile ? '2px 7px' : '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)`, cursor: metricEf ? 'help' : undefined }}>
       <span className="grotesk" style={{ fontSize: isMobile ? 10.5 : 13, fontWeight: 700, color: accent, letterSpacing: '0.01em', lineHeight: 1.25, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{metricName}</span>
       <span className="mono" style={{ fontSize: fs(7), fontWeight: 700, letterSpacing: '0.1em', color: accent, opacity: 0.85, whiteSpace: 'nowrap', lineHeight: 1.25 }}>{tag}</span>
     </div>
@@ -2531,7 +2928,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // Statline: justified to the card's outer edge. Mobile uses a small fixed size
   // (not bumped by bigText) and wraps rather than ellipsing — so it never truncates.
   const statLine = suppressSpent != null
-    ? <div className="mono" style={{ fontSize: fs(9), color: 'var(--fx-stop)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>✕ {suppressSpent.toFixed(1)} spent on SUPPRESS</div>
+    ? <div className="mono" title="Suppress (a DST metric): it spends its own points to halve the opponent's drip in this window." style={{ fontSize: fs(9), color: 'var(--fx-stop)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge, cursor: 'help' }}>✕ {suppressSpent.toFixed(1)} spent on SUPPRESS</div>
     : subName
       ? <div className="mono" style={{ fontSize: fs(9.5), color: accent, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>⤴ {subName} scoring</div>
       : <div className="mono" style={isMobile

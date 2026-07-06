@@ -7,8 +7,11 @@ import { injuryFor } from '../data/injuries';
 import { REG_SEASON_WEEKS } from '../data/league';
 import { APP_VERSION, DATA_SOURCE } from './version';
 import { Rulebook } from '../screens/Rulebook';
+import { markBootSessionChecked } from '../screens/DemoBoard';
+import { Faq } from '../screens/Faq';
+import { GameIcon, UI_ART, BRAND_MARK, ICON_SETS } from './gameIcons';
 import { liveConfigured } from '../data/supabaseClient';
-import { getSession, onAuth, signOut } from '../data/liveApi';
+import { getSession, onAuth, signOut, isAdmin } from '../data/liveApi';
 
 /** True when the viewport is at/below `maxWidth` — drives the mobile layout. */
 export function useIsMobile(maxWidth = 760): boolean {
@@ -109,10 +112,12 @@ export function Avatar({ name, accent = 'var(--you)', size = 30, src }: { name: 
  *  toggles (previously inline chips). `superAdmin`, when provided, adds a super-admin
  *  entry at the bottom (shown only for admins in the live app). */
 export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
-  const { theme, setTheme, bigText, setBigText, fullStats, setFullStats, setSleeperUser, navigate } = useStore();
+  const { theme, setTheme, iconSet, setIconSet, bigText, setBigText, fullStats, setFullStats, setSleeperUser, navigate } = useStore();
   const [open, setOpen] = useState(false);
   const [rules, setRules] = useState(false);
+  const [faq, setFaq] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
+  const [admin, setAdmin] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   // Mirror the Supabase auth session so a signed-in player can sign out from any
   // page (this gear lives in every screen's header). No-op for the static build.
@@ -121,6 +126,13 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
     getSession().then(setSession).catch(() => {});
     return onAuth((s) => setSession(s));
   }, []);
+  // Resolve super-admin status from the session so the admin entry is reachable
+  // from the gear on ANY screen, not just the Live onboarding header. Server-side
+  // is_admin() + RLS are the real gate; this only decides whether to show the link.
+  useEffect(() => {
+    if (!session) { setAdmin(false); return; }
+    isAdmin().then(setAdmin).catch(() => setAdmin(false));
+  }, [session]);
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
@@ -183,6 +195,22 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
             </div>
           </div>
           <div>
+            <div style={lbl}>ICONS</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 7 }}>
+              {ICON_SETS.map((s) => {
+                const active = iconSet === s.id;
+                return (
+                  <button key={s.id} onClick={() => setIconSet(s.id)} title={s.id}
+                    style={{ display: 'flex', alignItems: 'center', gap: 7, textAlign: 'left', padding: '7px 10px', borderRadius: 5, fontFamily: MONO, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                      background: active ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${active ? 'var(--you)' : 'var(--bd)'}`, color: active ? 'var(--you)' : 'var(--dim)' }}>
+                    <GameIcon name="coin-gold" emoji="◈" size="1.4em" set={s.id} />
+                    <span style={{ flex: 1 }}>{s.name}</span>{active ? '✓' : ''}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
             <div style={lbl}>DISPLAY</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
               <button onClick={() => setBigText(!bigText)} aria-pressed={bigText} title="Bigger fine print" style={toggle(bigText)}>
@@ -198,15 +226,38 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
             className="mono"
             style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
           >
-            📖 Rulebook
+            <GameIcon name={UI_ART.rulebook} emoji="📖" size="1.5em" /> Rulebook
           </button>
-          {superAdmin && (
+          <button
+            onClick={() => { setOpen(false); setFaq(true); }}
+            className="mono"
+            style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, marginTop: -2, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
+          >
+            ❓ FAQ
+          </button>
+          {(superAdmin || admin) && (
             <button
-              onClick={() => { setOpen(false); superAdmin(); }}
+              onClick={() => {
+                setOpen(false);
+                // On the Live screen the parent passes an in-place opener (swaps the
+                // onboarding view); elsewhere, deep-link into the Live admin panel.
+                if (superAdmin) superAdmin();
+                else navigate({ name: 'live', view: 'admin' });
+              }}
               className="mono"
               style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, marginTop: -2, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
             >
-              ⚡ Super admin →
+              <GameIcon name={UI_ART.admin} emoji="⚡" size="1.5em" /> Super admin →
+            </button>
+          )}
+          {liveConfigured && !session && (
+            <button
+              onClick={() => { setOpen(false); navigate({ name: 'live' }); }}
+              className="mono"
+              title="Sign in to the live H2H pilot"
+              style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, marginTop: -2, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
+            >
+              ◢ Sign in
             </button>
           )}
           {session && (
@@ -214,10 +265,13 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
               onClick={() => {
                 setOpen(false);
                 signOut().catch(() => {});
-                // A clean logout also forgets the cached Sleeper "example" user
-                // (kept separately from the auth session) and returns to splash.
+                // A clean logout drops the live boot flag, forgets the cached
+                // Sleeper "example" user (kept separately from the auth
+                // session), and returns to the demo landing.
+                try { localStorage.removeItem('dripLive'); } catch { /* ignore */ }
                 setSleeperUser(null);
-                navigate({ name: 'splash' });
+                markBootSessionChecked(); // don't let the demo's boot check race the async signOut
+                navigate({ name: 'demo' });
               }}
               className="mono"
               title={session.user.email ?? 'Sign out'}
@@ -229,13 +283,18 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
         </div>
       )}
       {rules && <Rulebook onClose={() => setRules(false)} />}
+      {faq && <Faq onClose={() => setFaq(false)} onOpenRulebook={() => setRules(true)} />}
     </div>
   );
 }
 
 /** Demo role/week picker — assume any team and jump to any week before setup. */
 export function DemoControls({ compact }: { compact?: boolean }) {
-  const { youTeamId, setYouTeam, demoWeek, setDemoWeek, activeLeague } = useStore();
+  const { youTeamId, setYouTeam, demoWeek, setDemoWeek, activeLeague, isSimLeague } = useStore();
+  // "Play as any team" + the DEMO badge belong to the built-in sandbox demo only.
+  // For a real Sleeper-loaded league (or a live pilot) you ARE your team, so those
+  // affordances read as demo bleed — keep just the week navigator there.
+  const sandbox = !isSimLeague;
   const teams = [...activeLeague.teams].sort((a, b) => a.seed - b.seed);
   const selStyle: CSSProperties = {
     fontFamily: MONO, fontSize: 11, fontWeight: 700, color: 'var(--text)',
@@ -247,17 +306,19 @@ export function DemoControls({ compact }: { compact?: boolean }) {
     <div
       style={{
         display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-        background: 'var(--surface)', border: '1px dashed var(--bdh)', borderRadius: 6,
+        background: 'var(--surface)', border: `1px ${sandbox ? 'dashed var(--bdh)' : 'solid var(--bd)'}`, borderRadius: 6,
         padding: compact ? '8px 12px' : '10px 14px',
       }}
     >
-      <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 3, padding: '2px 6px' }}>DEMO</span>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-        <span style={lbl}>PLAY AS</span>
-        <select value={youTeamId} onChange={(e) => setYouTeam(e.target.value)} style={selStyle}>
-          {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-      </div>
+      {sandbox && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 3, padding: '2px 6px' }}>DEMO</span>}
+      {sandbox && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+          <span style={lbl}>PLAY AS</span>
+          <select value={youTeamId} onChange={(e) => setYouTeam(e.target.value)} style={selStyle}>
+            {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         <span style={lbl}>WEEK</span>
         <select value={demoWeek} onChange={(e) => setDemoWeek(Number(e.target.value))} style={selStyle}>
@@ -268,30 +329,43 @@ export function DemoControls({ compact }: { compact?: boolean }) {
   );
 }
 
-export function Brand({ onClick }: { onClick?: () => void }) {
+// Small faint version readout for headers that don't use <Brand> (which shows
+// the version under the wordmark) — keeps the running build identifiable on
+// every page.
+export function VersionTag({ style }: { style?: CSSProperties }) {
+  return (
+    <span className="mono" title="app version" style={{ fontSize: 8.5, letterSpacing: '0.08em', color: 'var(--faint)', whiteSpace: 'nowrap', ...style }}>{APP_VERSION}</span>
+  );
+}
+
+// `hideDataSource` drops the "· data Stathead" attribution (the hero/live board
+// isn't a 2025-data replay, so the demo attribution would mislead there).
+export function Brand({ onClick, hideDataSource = false }: { onClick?: () => void; hideDataSource?: boolean }) {
   return (
     <div
       onClick={onClick}
       style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, cursor: onClick ? 'pointer' : 'default' }}
     >
-      <div style={{ width: 13, height: 13, background: 'var(--you)', transform: 'rotate(45deg)', flex: 'none' }} />
+      <GameIcon name={BRAND_MARK} emoji={<div style={{ width: 13, height: 13, background: 'var(--you)', transform: 'rotate(45deg)', flex: 'none' }} />} size={18} style={{ verticalAlign: 'middle' }} />
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: 1.1 }}>
         <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)', whiteSpace: 'nowrap' }}>
           DRIP FANTASY
         </div>
         <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 7.5, letterSpacing: '0.06em', color: 'var(--faint)', marginTop: 2, whiteSpace: 'nowrap' }}>
           <span>{APP_VERSION}</span>
-          <span style={{ opacity: 0.5 }}>·</span>
-          <span>data</span>
-          <a
-            href={DATA_SOURCE.url}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            style={{ color: 'var(--you)', textDecoration: 'none', fontWeight: 700 }}
-          >
-            {DATA_SOURCE.name} ↗
-          </a>
+          {!hideDataSource && <>
+            <span style={{ opacity: 0.5 }}>·</span>
+            <span>data</span>
+            <a
+              href={DATA_SOURCE.url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              style={{ color: 'var(--you)', textDecoration: 'none', fontWeight: 700 }}
+            >
+              {DATA_SOURCE.name} ↗
+            </a>
+          </>}
         </div>
       </div>
     </div>

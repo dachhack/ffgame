@@ -1,6 +1,193 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-06-20 · Build `v0.9.8.0`_
+_Last updated: 2026-07-04 · Build `v0.94.2`_
+
+## Add-a-league request path + Splash retired (v0.94.2)
+- **"＋ add a league" now has a no-code path**: `RoleChooser` takes an
+  optional `onRequest` third choice ("My league isn't in the pilot yet →")
+  opening `RequestCodeModal`. Wired in BOTH RoleChooser mounts — the
+  My-Leagues `add` view and the fresh-sign-in no-enrollments fork.
+- **`Splash.tsx` is DELETED** — the `splash` route now renders `DemoBoard`
+  (route id kept for history/deep-link compat), so every legacy
+  `navigate({name:'splash'})` call site lands on the demo landing.
+- **Sign-out lands on the demo landing** (both paths: the LiveOnboard header
+  button and the SiteSettings gear — the gear now also clears `dripLive`,
+  which it previously left set). Both call `markBootSessionChecked()` (new
+  DemoBoard export) before navigating so the demo's one-shot boot session
+  check can't race the async `signOut()` and bounce the user back to `live`.
+
+## Demo UX fixes (v0.94.1)
+- **End-card "More demo" is a real input now** — the focus-the-bottom-bar
+  button (invisible feedback) is replaced by an inline Sleeper-username field
+  + GO in the end card itself, sharing state with the persistent bottom bar.
+- **↺ BACK TO START** header chip after FINAL (plus an end-card link) —
+  full reset to a pristine step-① board (`backToStart`), unlike
+  "change my lineup" which keeps the picks.
+- **Signed-in players land on their leagues**: `DemoBoard` checks
+  `getSession()` ONCE per app load (`bootSessionChecked` module flag) and
+  navigates to `live` — covers the first OAuth redirect / magic-link-in-new-tab
+  cases that beat the `dripLive` boot flag. The once-only guard keeps the
+  back button from being hijacked on later demo visits.
+- Dropped the CLEAN/REAL BOARD `DemoViewToggle` from the demo header
+  (the toggle still exists on the board-demo surface for signed-in flows).
+
+## Demo watch phase: expandable LOG & FIELD per duel (v0.94.0)
+Every duel row on the demo board expands once its window kicks off: a
+centered `▾ LOG & FIELD` chip under the row opens `DuelLog` (the GuidedDemo
+two-sided play log — scoring plays, effects, 🗑️×2 buff notes, ◇ coin —
+revealed to the window clock, auto-scrolling while live) plus
+`SlotFieldViews` (the real board's drive charts, both players' games, own
+⬢ FIELD collapse). Live windows sample at `wClock`, final windows at that
+window's max clock, so logs/fields stay browsable after FINAL. The featured
+(first-placed) duel's panel auto-opens at RUN (`openSlots` seeded in `run()`).
+Sealed windows don't expand. Ops note: the v0.93.0 Pages deploy failed with a
+transient GitHub "Deployment failed, try again later" AFTER a green build —
+the token can't rerun Actions jobs (403), so the fix is the repo's usual
+fresh-SHA-to-main re-trigger (v0.93.1 was exactly that).
+
+## Demo landing sets up like the hero board (v0.93.0)
+The demo landing's "pick your star" wizard is gone — setup is now the REAL
+hero-board interaction, reusing the actual components (`SetupRow`,
+`PlayerPicker`, `RosterAside`, `ScoutModal` — the latter two newly exported
+from `Matchup.tsx`):
+- **Both full rosters on display**: desktop shows the two roster rails
+  (yours draggable, theirs sealed-pool view) flanking the board; narrow
+  screens get the same rails as fluid toggle panels (opponent starts
+  collapsed). Assigned players strike through, exactly like the hero board.
+- **Drag or tap to field a player** (`assignFromRoster`/`assignToSlot` with
+  top-down `compact`, mirroring Matchup's semantics), then **seal the hidden
+  metric inline on the spot** (SetupRow's own "② PICK A METRIC ↓" list with
+  ⓘ info cards). 🔍 SCOUT on sealed opponent boxes opens the real scout modal.
+- **Guided prompt is state-derived, not a modal wizard**: ① build lineup →
+  ② seal metric → ③ arm power-up (Garbage Time / EMP / Momentum) & RUN.
+  `✦ AUTO-FILL` fills remaining spots from `defaultLineup` (dedup-aware);
+  RUN requires ≥1 fully-sealed pick and auto-fills the rest. EMP targets the
+  viewer's FIRST-placed player's window at a fixed halftime clock (1800s).
+  "↩ change my lineup" on the end card hands the auto-filled board back as
+  editable picks. Playout/watch phase unchanged from v0.92.0.
+- Verified headlessly both ways: mobile tap flow (place → metric → scout →
+  picker → auto-fill → run → FINAL → back to setup) and desktop HTML5
+  drag-and-drop from the rail onto a spot.
+
+## The demo IS the landing page (v0.92.0)
+Logged-out onboarding collapsed to one screen: `src/screens/DemoBoard.tsx`
+replaces `GuidedDemo.tsx` as the `demo` route's clean view AND becomes the boot
+route for logged-out visitors (`store.tsx` initial route: dripLive → `live`,
+remembered Sleeper user → `leagues`, else → `demo`; popstate fallback → `demo`).
+- **One playable board, zero gate**: the Drip Test League **Week 2** matchup
+  (`DEMO_WEEK = 2` in `config.ts` — Taco Time Titans vs Beach Day Ballers), a
+  tight version of the hero board: all 5 windows with real slate times + game
+  counts, both lineups (opponent picks render 🔒 SEALED until their window
+  kicks off), metric chips, unopposed-backup teaching text.
+- **Three guided decisions, everything else defaulted**: pick a star (best
+  contested duel per position, top 3) → seal his hidden metric → arm a power-up
+  (Garbage Time / EMP / Momentum) → `▶ RUN WEEK 2`. Playout is
+  window-SEQUENCED (TNF → … → MNF, ~50s at 1×), narrated by `demoNarration`
+  beats per live window, with `SlotFieldViews` under the featured duel and a
+  score header that ticks live. Backup (unopposed) slots bank 0 during
+  playout so the total never visibly drops when the engine zeroes them at
+  FINAL. End card = result + bonuses + the two conversion CTAs.
+- **Persistent CTAs per the onboarding spec**: a fixed bottom "MORE DEMO?"
+  bar (Sleeper username → `leagues` flow, same logic as Splash), a standing
+  "Request a code for your league" card (→ `RequestCodeModal`; the global
+  `RequestCodeFab` is hidden on this screen), and small `sign in · FAQ` in the
+  header + footer. `Splash.tsx` still exists (reachable) but is no longer the
+  landing. New analytics: `demo_step` / `demo_run` (see analytics-plan.md).
+- FAQ copy updated (demo opens Week 2, not Week 4). Verified end-to-end
+  headlessly (vite preview + Chromium): land → 3 steps → run → FINAL
+  100.8–36.3 → CTAs all functional.
+
+## Field visuals in the demo flow + lean live board (v0.89.0)
+- **Guided demo** (`GuidedDemo.tsx` watch step): `SlotFieldViews` renders the
+  duel's live field(s) under the duel card, driven by the demo clock — both
+  players' games, takeover/red-zone included. Intro narration points at it.
+- **Lean pilot board** (`LiveBoard.tsx`): new "⬢ AROUND THE LEAGUE" collapsible
+  card — every game the worker has plays for this week as a `FieldView` grid
+  (clock = MAX → always the latest play). `weekGameFeeds` is fetched in the
+  same refresh as scores/picks and installed via `setLiveGameFeed` (exclusive
+  overlay, never baked data on a live board).
+- Where visuals live on the live 2026 surfaces: the FULL matchup board
+  (Matchup.tsx with liveCtx) has per-slot fields under LOG + the ▦ FIELDS
+  all-games overlay with outcome tinting; the lean LiveBoard summary now has
+  the around-the-league grid (no tinting — it has no engine events).
+
+## Field visuals polish: outcome tinting, takeover, red zone (v0.88.0)
+- **Outcome-based tinting** replaces participation tinting on the ▦ FIELDS
+  board: `FieldBoardEntry.pids` now carries the plays a side actually BANKED on
+  — built in `Matchup.tsx` from the slot event logs (`delta > 0` or an effect;
+  denial effects nuke/erase/stop/reset/compression/cold log on the VICTIM's
+  side, so their benefit flips to the opponent, whose player's play at that
+  clock supplies the pid). Legend reads SCORED FOR YOU / FOR OPPONENT / BOTH.
+- **Scoring takeover** (`Field`): big TOUCHDOWN/FIELD GOAL/SAFETY pop over the
+  field (pure CSS `fvtakeover`, 2.8s, self-fading). Trigger is the most recent
+  scoring play within the last 3 plays — the TD's XP + ensuing kickoff share
+  its game-clock second, so requiring "latest play" would never fire. The
+  scorer line derives the team from the SCORE DELTA, not `tm` (offense at
+  snap), so pick-sixes/return TDs credit the right side.
+- **Red-zone glow**: the attacked end zone pulses (`bpulse`) whenever the
+  upcoming snap is inside the 20 (derived from the feed spot, no extra data).
+- **Preseason**: verified end-to-end — the worker polls preseason as board
+  weeks 101-103 into `game_feed`, the client live overlay is week-agnostic,
+  and the board header reads "PRESEASON WK N" (`isPreseasonWeek`). Live-test
+  the visuals in August before the regular season.
+
+## Live game feeds — field visuals Phase B (v0.87.0)
+The drive charts now light up on the LIVE pilot board, not just baked replays:
+- **Adapter**: `gameToFeed(summary)` moved into `scripts/espn/espnAdapter.mjs`
+  (shared by the baker and the worker; baker rebake byte-identical).
+- **DB**: `game_feed` table (`0057_game_feed.sql`) — one row per game per week,
+  `plays` jsonb = the GamePlay[] contract, whole-doc upsert per poll so ESPN
+  mid-game revisions reconcile by replacement. Authed-read RLS like live_play.
+  **Apply the migration before the worker ships.**
+- **Worker**: `pollGame` also upserts the game's feed from the same summary
+  (zero extra ESPN calls). The **simulator** time-releases baked
+  `public/gamefeed/` docs as `game_id 'SIM:<key>'` on the same clock as the
+  play feed (cleared on start + reset), so the dress rehearsal exercises the
+  visuals end-to-end.
+- **Client**: `gameFeed.ts` live overlay (`setLiveGameFeed`/`feedRowsToWeek`,
+  exclusive per week like realPbp so 2026 week N never falls back to baked
+  2025 week N — the board claims the slot with an empty overlay before the
+  first fetch). The 15s liveCtx poll in `Matchup.tsx` installs plays + feeds
+  together; ▦ FIELDS gates on `hasGameFeed(week)`.
+
+## Field board + collapsible fields (v0.86.0)
+- **Slot fields are collapsible**: `FieldCollapse` wraps `SlotFieldViews` and
+  the backup `FieldView collapsible` mount — a centered `⬢ FIELD ▾/▴` chip
+  (default open, per-slot state).
+- **▦ FIELDS — the all-games board** (`FieldBoard`, `src/app/FieldView.tsx`):
+  a full-screen overlay (live-phase header button, gated on `REAL_WEEKS`) with
+  NOTHING but drive charts — every NFL game holding a slotted player, one
+  `Field` each in a responsive grid, ESC/✕ to close. Entries are built in
+  `Matchup.tsx` mirroring the slot rows' clock math (`effWinClock` +
+  `clockAtRealTime` in wall modes), so the board matches the board rows.
+- **You/opponent play tinting**: per game, pid→side sets are built from each
+  slotted player's `realPbpFor` plays (pids are per-game, grouped per-game so
+  no cross-game collisions). The shown play tints arc, marker ring, situation
+  chip, text dot and card border — `--you` for your roster, `--opp` for the
+  opponent's, `--warn` when both touch the same play (turnovers, K/DST).
+
+## Play-by-play field visuals (v0.83.0)
+Sleeper-style drive chart per NFL game on the live board (see
+`docs/pbp-visuals-research.md` for the research + design):
+- **Data**: `scripts/pbp/genGameFeed.mjs` bakes `public/gamefeed/wN.json` from
+  ESPN summaries (cached in gitignored `scripts/pbp/espn-cache/`) — every
+  scrimmage play with down/distance/start-end yards-to-endzone/possession/text/
+  score (`GamePlay`, `src/data/gameFeed.ts`, lazy per-week loader). ESPN's
+  numeric `yardsToEndzone` is FLIPPED on ~2.6% of plays (mostly punts); the
+  baker derives it from `possessionText` instead (residual drive-continuity
+  mismatches: 0.03%, all ESPN sequence oddities like overturned plays).
+- **UI**: `src/app/FieldView.tsx` — SVG field (perspective tilt, yard lines,
+  end zones, first-down line, ball marker w/ team logo + abbr fallback, play
+  arc, situation chip, play text), driven by the same feed clock as the log
+  (`plays.filter(c <= clock)`, marker/banner from the NEXT play's start spot —
+  authoritative across penalties). `SlotFieldViews` renders ONE field when both
+  slot players share an NFL game, else two (side-by-side desktop / stacked
+  mobile). Mounted in `Matchup.tsx` above `TwoColLog` in both the H2H and
+  backup/unopposed open blocks, gated on `slot.real`.
+- Away team always attacks right (`x = away ? 100-yl : yl`) so the ball is
+  continuous across possession changes. `fvdraw` keyframes in `styles.css`.
+- Phase B (live): the poller's summary already carries `drives` — emit
+  `gameToFeed` rows into a `game_feed` table and install like `setLivePlays`.
 
 ## Zero synthetic player data (v0.9.8.0)
 All player production is now real 2025 nflverse PBP — the synthetic simulation
@@ -61,13 +248,12 @@ economy. No backend — everything is deterministic from `(playerId, week)` plus
 baked real play-by-play.
 
 ## Branches & shipping
-- **Develop on:** `claude/elegant-allen-j85njq` (the checked-out working branch).
-- **Mirror every ship to all three:** `claude/elegant-allen-j85njq`,
-  `claude/youthful-albattani-s9kprl` (triggers the Pages deploy), and `main`.
+- **Develop on:** a working branch, then open a PR to `main`.
+- **Deploy:** merging to `main` publishes to GitHub Pages automatically
+  (`.github/workflows/deploy.yml` triggers on every push to `main`).
   ```
-  git push -u origin claude/elegant-allen-j85njq
-  git push origin claude/elegant-allen-j85njq:claude/youthful-albattani-s9kprl
-  git push origin claude/elegant-allen-j85njq:main
+  git push -u origin <your-branch>
+  # open a PR and merge to main → Pages deploys automatically
   ```
 - **Bump `src/app/version.ts` (`APP_VERSION`) on every change.** Versioning is
   4-segment now (`v0.9.5.N`) to leave headroom before a real 1.0. The version

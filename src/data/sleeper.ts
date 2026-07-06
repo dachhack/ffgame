@@ -8,7 +8,7 @@ const CDN = 'https://sleepercdn.com/avatars/thumbs';
 
 export interface SleeperUser { userId: string; username: string; displayName: string; avatar: string | null; }
 export interface SleeperLeague {
-  leagueId: string; name: string; totalRosters: number; status: string; avatar: string | null;
+  leagueId: string; name: string; season: string; totalRosters: number; status: string; avatar: string | null;
   format: string;   // e.g. "Dynasty · Superflex"
   scoring: string;  // "PPR" | "Half-PPR" | "Standard"
   starters: number; // starting-lineup size
@@ -55,6 +55,7 @@ export async function getLeagues(userId: string, season = '2025'): Promise<Sleep
   return (d ?? []).map((lg) => ({
     leagueId: String(lg.league_id),
     name: String(lg.name ?? 'League'),
+    season: String(lg.season ?? season),
     totalRosters: Number(lg.total_rosters ?? 0),
     status: String(lg.status ?? ''),
     avatar: (lg.avatar as string) ?? null,

@@ -1,5 +1,5 @@
-import type { Player, WindowId, Pick, PbpEvent, Pos, BuffFx } from '../types';
-import { WINDOWS, METRICS, metricById } from '../data/metrics';
+import type { Player, WindowId, GameWindow, Pick, PbpEvent, Pos, BuffFx } from '../types';
+import { METRICS, metricById } from '../data/metrics';
 import { teamRoster, getPlayer } from '../data/league';
 import { hashStr } from '../data/players';
 
@@ -13,25 +13,32 @@ export interface SlotSwap { atClock: number; atRt?: number; toMetricId?: string;
 export type SlotSwaps = Record<string, SlotSwap>; // slotKey -> swap
 import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, defEarnScore, hadDefTd, hadLongPassTd, turnoversCommitted, clockAtRealTime, EMPTY_PLAYER, type SlotInput } from './sim';
 import { REAL_WEEKS } from '../data/realPbp';
-import { windowForTeam } from '../data/nflSlate';
+import { windowForTeam, windowsForWeek, gamesInWindow } from '../data/nflSlate';
 import { injuryFor } from '../data/injuries';
 
 // A roster grouped into the 5 windows by each player's REAL NFL game time slot
 // that week (their team's kickoff). A player only appears in — and can only be
 // assigned to — the window their game falls in. Players on bye don't appear.
 export function windowPools(teamId: string, week: number): Record<WindowId, Player[]> {
-  const pools: Record<WindowId, Player[]> = { tnf: [], early: [], late: [], snf: [], mnf: [] };
+  const pools: Record<WindowId, Player[]> = {};
+  for (const w of windowsForWeek(week)) pools[w.id] = [];
   for (const p of teamRoster(teamId)) {
     const win = windowForTeam(week, p.team);
-    if (win) pools[win].push(p);
+    if (win && pools[win]) pools[win].push(p);
   }
-  for (const w of Object.keys(pools) as WindowId[]) pools[w].sort((a, b) => projectedPoints(b, week) - projectedPoints(a, week));
+  for (const w of Object.keys(pools)) pools[w].sort((a, b) => projectedPoints(b, week) - projectedPoints(a, week));
   return pools;
 }
 
-/** Roster players whose NFL team is on bye this week (not assignable anywhere). */
+/** Roster players whose NFL team is on bye this week (not assignable anywhere).
+ *  A bye is only asserted when the week's slate is actually loaded AND the
+ *  player's team is known but genuinely absent from it — an unloaded slate or an
+ *  unknown team code must never masquerade as a bye (e.g. Week 1, which has no
+ *  real byes at all). */
 export function byePlayers(teamId: string, week: number): Player[] {
-  return teamRoster(teamId).filter((p) => !windowForTeam(week, p.team));
+  const anyGames = windowsForWeek(week).some((w) => gamesInWindow(week, w.id).length > 0);
+  if (!anyGames) return [];
+  return teamRoster(teamId).filter((p) => p.team && !windowForTeam(week, p.team));
 }
 
 /** A deterministic hidden metric for an auto/opponent pick. */
@@ -146,8 +153,8 @@ export function aiLineup(aiTeamId: string, humanTeamId: string, week: number, ex
   const aiBuffSet = new Set(aiBuffs(aiTeamId, week));
   const reg = 3300; // projection runs regulation only (no actual-week overtime peek)
   const picks: Record<string, Pick> = {};
-  for (const w of WINDOWS) {
-    const n = slotsFor(w.id, extra);
+  for (const w of windowsForWeek(week)) {
+    const n = slotsFor(w.id, week, extra);
     const aiPlayers = rank(aiPools[w.id]).slice(0, n);
     if (!aiPlayers.length) continue;
     // Threats: the opponent's likely fielded set this window (best n eligible by
@@ -180,14 +187,15 @@ export function aiLineup(aiTeamId: string, humanTeamId: string, week: number, ex
 
 /** Extra-slot powerups: per-window count of bonus slots applied this week. */
 export type ExtraSlots = Partial<Record<WindowId, number>>;
-/** Slots in a window including any Extra Slot powerups applied this week. */
-export function slotsFor(win: WindowId, extra?: ExtraSlots): number {
-  const base = WINDOWS.find((w) => w.id === win)?.slots ?? 0;
+/** Slots in a window including any Extra Slot powerups applied this week. The
+ *  window's base slot count is derived per week from the real slate. */
+export function slotsFor(win: WindowId, week: number, extra?: ExtraSlots): number {
+  const base = windowsForWeek(week).find((w) => w.id === win)?.slots ?? 0;
   return base + (extra?.[win] ?? 0);
 }
 /** Total lineup slots across all windows including extras. */
-export function totalSlotsWith(extra?: ExtraSlots): number {
-  return WINDOWS.reduce((n, w) => n + slotsFor(w.id, extra), 0);
+export function totalSlotsWith(week: number, extra?: ExtraSlots): number {
+  return windowsForWeek(week).reduce((n, w) => n + slotsFor(w.id, week, extra), 0);
 }
 
 /**
@@ -202,13 +210,13 @@ export function defaultLineup(teamId: string, week: number, extra?: ExtraSlots):
   // so it never starts an unavailable player). Questionable/Doubtful are fine.
   const healthy = (p: Player) => { const s = injuryFor(week, p.id); return s !== 'O' && s !== 'IR'; };
   const picks: Record<string, Pick> = {};
-  for (const w of WINDOWS) {
+  for (const w of windowsForWeek(week)) {
     // Projection-based, like the AI: rank healthy eligible players by historical
     // per-game production and give each its best projected metric — no peeking at
     // the week's actual box score. Every slot we can field is filled (fielding a
     // low projection still contests the slot vs. conceding a free unopposed spot).
     const ranked = pools[w.id].filter(healthy).sort((a, b) => projForRank(b, week) - projForRank(a, week));
-    for (let i = 0; i < slotsFor(w.id, extra); i++) {
+    for (let i = 0; i < slotsFor(w.id, week, extra); i++) {
       const p = ranked[i];
       if (p) picks[slotKey(w.id, i)] = { playerId: p.id, metricId: bestMetric(p, week, true) };
     }
@@ -258,7 +266,7 @@ export interface ResolvedSlot {
 }
 
 export interface ResolvedWindow {
-  window: typeof WINDOWS[number];
+  window: GameWindow;
   slots: ResolvedSlot[];
 }
 
@@ -326,8 +334,8 @@ export function buildMatchup(
   // matchup, else the AI's deterministic three (demo / pre-reveal).
   const theirBuffSet = new Set<string>(oppBuffs ?? aiBuffs(oppTeamId, week));
 
-  for (const w of WINDOWS) {
-    const nSlots = slotsFor(w.id, extraSlots);
+  for (const w of windowsForWeek(week)) {
+    const nSlots = slotsFor(w.id, week, extraSlots);
     // Pre-pass: collect this window's filled slots per side, so a Field
     // General QB can build a window-wide multiplier on its own side.
     const youIns: SlotInput[] = [];
@@ -526,6 +534,9 @@ export interface WeekEarnings { stipend: number; unopposed: number; signature: n
  * per-player turnovers — see turnoversCommitted.)
  */
 export function weekEarnings(m: ResolvedMatchup, side: 'you' | 'their', week: number, turnoverCoin = TURNOVER_COIN): WeekEarnings {
+  // No flat stipend in Week 1 — the season opens with the commissioner's seed
+  // budget only, so the board doesn't hand out a phantom +50 before any play.
+  const stipend = week <= 1 ? 0 : WEEKLY_STIPEND;
   let unopposed = 0, signature = 0, turnover = 0;
   for (const w of m.windows) for (const s of w.slots) {
     const me = side === 'you' ? s.you : s.their;
@@ -541,7 +552,7 @@ export function weekEarnings(m: ResolvedMatchup, side: 'you' | 'their', week: nu
     }
     if (opp) turnover += turnoverCoin * turnoversCommitted(opp.player, week); // their giveaway → you gain
   }
-  return { stipend: WEEKLY_STIPEND, unopposed, signature, turnover, total: WEEKLY_STIPEND + unopposed + signature + turnover };
+  return { stipend, unopposed, signature, turnover, total: stipend + unopposed + signature + turnover };
 }
 
 /**

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../app/store';
-import { resolveUser } from '../data/sleeper';
+import { getProvider } from '../data/providers';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
 
 // Inline "play it with YOUR team" capture — dropped onto the demo end-cards at the
@@ -19,7 +19,7 @@ export function SleeperHandoff({ heading = 'PLAY IT WITH YOUR REAL TEAM' }: { he
     if (!u || busy) return;
     setBusy(true); setErr(null);
     try {
-      const user = await resolveUser(u);
+      const user = await getProvider().resolveUser(u);
       if (!user) { setErr(`No Sleeper user “${u}”. Check the spelling.`); setBusy(false); return; }
       setSleeperUser(user);
       prefetchPlayerDirectory();

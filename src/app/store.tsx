@@ -3,12 +3,14 @@ import type { ThemeName } from '../theme';
 import type { WindowId, Pick } from '../types';
 import { LEAGUE, YOU_TEAM_ID, setActiveLeague, resetToDemoLeague, type BuiltLeague } from '../data/league';
 import { clearSyntheticWeeks, clearLivePlays } from '../data/realPbp';
+import { clearLiveGameFeeds } from '../data/gameFeed';
 import { clearRuntimeHeadshots } from '../data/media';
 import type { League } from '../types';
 import { powerupById } from '../data/powerups';
 import { DEMO_WEEK } from '../config';
-import type { SleeperUser } from '../data/sleeper';
+import { type ProviderUser, type ProviderId } from '../data/providers';
 import { track, identify, Ev } from './analytics';
+import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied } from '../data/liveApi';
 
 import type { SlotSwap } from '../engine/matchup';
 export type { SlotSwap };
@@ -30,10 +32,11 @@ export type Phase = 'setup' | 'live' | 'final';
 
 export type Route =
   | { name: 'splash' }
-  | { name: 'live' }            // authenticated live-H2H pilot (separate from the demo)
+  | { name: 'live'; view?: 'admin' } // authenticated live-H2H pilot (separate from the demo); `view:'admin'` deep-links straight to the super-admin panel
   | { name: 'demo'; view?: 'clean' | 'board' } // narrated guided demo: 'clean' explainer (default) or the real in-game board
   | { name: 'leagues' }
   | { name: 'sleeperLeague'; leagueId: string; leagueName: string }
+  | { name: 'connect'; provider: ProviderId }
   | { name: 'hub' }
   | { name: 'league' }
   | { name: 'matchup'; week: number; phase: Phase }
@@ -45,20 +48,10 @@ export interface LiveCtx { matchupId: string; userId: string; leagueId: string; 
 
 // ── URL routing ──────────────────────────────────────────────────────────────
 // Routes are mirrored into the URL hash (works on GitHub Pages with no server
-// config) so refresh keeps your place and screens are shareable/bookmarkable.
-const SIM_KEY = 'gc-sim';
-interface SimRef { leagueId: string; leagueName: string }
-function loadSimRef(): SimRef | null {
-  try { const s = localStorage.getItem(SIM_KEY); const o = s ? JSON.parse(s) : null; return o && o.leagueId ? o : null; } catch { return null; }
-}
-/** Remember (or clear) which real Sleeper league backs the current sim board, so a
- *  reload can send the user to that league's rebuild screen instead of silently
- *  rendering the baked demo in a sim-backed board route. */
-export function rememberSimLeague(ref: SimRef | null): void {
-  try { if (ref) localStorage.setItem(SIM_KEY, JSON.stringify(ref)); else localStorage.removeItem(SIM_KEY); } catch { /* ignore */ }
-}
-
-/** Route → URL hash. */
+// config) so the back button and refresh work and screens are shareable. The
+// Sleeper session isn't persisted (the demo re-asks each visit), so a cold load
+// of a sim/pilot-backed route can't rebuild its in-memory league — those fall
+// back to the returning-user default rather than showing stale data.
 function routeToHash(r: Route): string {
   switch (r.name) {
     case 'splash': return '#/';
@@ -66,6 +59,7 @@ function routeToHash(r: Route): string {
     case 'live': return '#/live';
     case 'demo': return r.view === 'board' ? '#/demo/board' : '#/demo';
     case 'sleeperLeague': return `#/sleeper/${encodeURIComponent(r.leagueId)}`;
+    case 'connect': return `#/connect/${encodeURIComponent(r.provider)}`;
     case 'hub': return '#/hub';
     case 'league': return '#/league';
     case 'matchup': return `#/matchup/${r.week}/${r.phase}`;
@@ -73,7 +67,9 @@ function routeToHash(r: Route): string {
   }
 }
 /** URL hash → Route, or null when the hash carries no (valid) route so the caller
- *  can fall back to its default (e.g. a first visit with no hash). */
+ *  can fall back to its default (e.g. a first visit with no hash). Board/sim
+ *  routes are intentionally not restored here — they need in-memory league state
+ *  a cold load doesn't have — so they resolve to the default instead. */
 function hashToRoute(hash: string): Route | null {
   const h = (hash || '').replace(/^#/, '').replace(/^\/+/, '').replace(/\/+$/, '');
   if (h === '') return null;
@@ -82,45 +78,29 @@ function hashToRoute(hash: string): Route | null {
     case 'leagues': return { name: 'leagues' };
     case 'live': return { name: 'live' };
     case 'demo': return { name: 'demo', view: seg[1] === 'board' ? 'board' : 'clean' };
-    case 'sleeper': {
-      if (!seg[1]) return null;
-      const leagueId = decodeURIComponent(seg[1]);
-      const sim = loadSimRef();
-      return { name: 'sleeperLeague', leagueId, leagueName: sim?.leagueId === leagueId ? sim.leagueName : '' };
-    }
-    case 'hub': return { name: 'hub' };
-    case 'league': return { name: 'league' };
-    case 'matchup': {
-      const week = Number(seg[1]);
-      if (!Number.isFinite(week)) return null;
-      const phase: Phase = seg[2] === 'live' ? 'live' : seg[2] === 'final' ? 'final' : 'setup';
-      return { name: 'matchup', week, phase };
-    }
-    case 'final': {
-      const week = Number(seg[1]);
-      if (!Number.isFinite(week)) return null;
-      return { name: 'final', week };
-    }
+    case 'connect': return seg[1] ? { name: 'connect', provider: decodeURIComponent(seg[1]) as ProviderId } : null;
     default: return null;
   }
 }
-/** Resolve the route to boot into: the URL hash if present, else the sleeper/splash
- *  default. A sim-backed board route can't restore its in-memory league on reload,
- *  so redirect it to that league's rebuild screen; a sleeperLeague route needs a
- *  remembered Sleeper user to rebuild. */
-function bootRoute(hasSleeperUser: boolean): Route {
-  let r = hashToRoute(typeof window !== 'undefined' ? window.location.hash : '') ?? (hasSleeperUser ? { name: 'leagues' } : { name: 'splash' });
-  const sim = loadSimRef();
-  if (sim && (r.name === 'hub' || r.name === 'league' || r.name === 'matchup' || r.name === 'final')) {
-    r = { name: 'sleeperLeague', leagueId: sim.leagueId, leagueName: sim.leagueName };
-  }
-  if (r.name === 'sleeperLeague' && !hasSleeperUser) r = { name: 'splash' };
-  return r;
+/** Boot route: the URL hash if it names a self-contained screen (refresh keeps
+ *  your place, screens are shareable), else the returning-user default — a
+ *  signed-in live user to their pilot, everyone else to the playable demo. */
+function bootRoute(): Route {
+  const r = hashToRoute(typeof window !== 'undefined' ? window.location.hash : '');
+  if (r) return r;
+  try { if (localStorage.getItem('dripLive') === '1') return { name: 'live' }; } catch { /* ignore */ }
+  return { name: 'demo' };
 }
+
+/** The three switchable icon skins: classic emoji, the Football Factory art
+ *  set, and the retro Pixel Bowl sprites. */
+export type IconSetName = 'emoji' | 'factory' | 'pixel';
 
 interface Store {
   theme: ThemeName;
   setTheme: (t: ThemeName) => void;
+  iconSet: IconSetName;
+  setIconSet: (s: IconSetName) => void;
   /** Larger-text mode (zooms the whole UI ~20% for readability). */
   bigText: boolean;
   setBigText: (v: boolean) => void;
@@ -129,8 +109,8 @@ interface Store {
   route: Route;
   navigate: (r: Route) => void;
   /** The Sleeper account whose leagues we're browsing (null → welcome splash). */
-  sleeperUser: SleeperUser | null;
-  setSleeperUser: (u: SleeperUser | null) => void;
+  sleeperUser: ProviderUser | null;
+  setSleeperUser: (u: ProviderUser | null) => void;
   /** The league the sim is currently running on (the baked DRIP demo by default). */
   activeLeague: League;
   /** True when a real Sleeper league is loaded (vs the baked DRIP demo). */
@@ -156,6 +136,9 @@ interface Store {
   inventory: Record<string, number>; // powerup id -> qty owned
   /** Buy a powerup with coins. Returns false if unaffordable. */
   buyPowerup: (id: string) => boolean;
+  /** Add a powerup to inventory WITHOUT touching the coin ledger (the hero board
+   *  charges the real DB wallet separately, then grants the item). */
+  grantPowerup: (id: string) => void;
   /** Consume one of a held powerup. Returns false if none held. */
   useConsumable: (id: string) => boolean;
   applied: Record<number, AppliedWeek>; // week -> applied powerup effects
@@ -202,6 +185,7 @@ interface Store {
 const Ctx = createContext<Store | null>(null);
 
 const THEME_KEY = 'gc-theme';
+const ICONSET_KEY = 'gc-iconset';
 const BIGTEXT_KEY = 'gc-bigtext';
 const FULLSTATS_KEY = 'gc-fullstats';
 const SLEEPER_KEY = 'gc-sleeper';
@@ -231,17 +215,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const saved = typeof localStorage !== 'undefined' ? (localStorage.getItem(THEME_KEY) as ThemeName | null) : null;
     return saved ?? 'neon';
   });
-  const [sleeperUser, setSleeperUserState] = useState<SleeperUser | null>(() => {
-    try { const s = localStorage.getItem(SLEEPER_KEY); return s ? JSON.parse(s) as SleeperUser : null; } catch { return null; }
+  // The Sleeper username is session-only on purpose: every visit to the demo
+  // requires re-entering it to reach its leagues, so nothing is remembered
+  // across loads. (Purge the key older builds persisted.)
+  const [sleeperUser, setSleeperUserState] = useState<ProviderUser | null>(() => {
+    try { localStorage.removeItem(SLEEPER_KEY); } catch { /* ignore */ }
+    return null;
   });
-  const setSleeperUser = (u: SleeperUser | null) => {
+  const setSleeperUser = (u: ProviderUser | null) => {
     setSleeperUserState(u);
     if (u) { identify(u.userId, { username: u.username }); track(Ev.sleeperConnected); }
-    try { if (u) localStorage.setItem(SLEEPER_KEY, JSON.stringify(u)); else localStorage.removeItem(SLEEPER_KEY); } catch { /* ignore */ }
   };
   // Boot from the URL hash (refresh keeps your place; screens are shareable), else
-  // your leagues if a Sleeper user is remembered, else the welcome splash.
-  const [route, setRoute] = useState<Route>(() => bootRoute(!!sleeperUser));
+  // the returning-user default: a signed-in live user to their pilot, everyone
+  // else to the playable demo. The ?live=1 / OAuth deep links in App.tsx still
+  // override this after mount.
+  const [route, setRoute] = useState<Route>(() => bootRoute());
   // Each navigate pushes the route into the URL hash so back/forward step between
   // screens and every screen has a real, bookmarkable URL.
   const navigate = (r: Route) => {
@@ -250,11 +239,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try { window.history.pushState({ __route: r }, '', routeToHash(r)); } catch { /* ignore */ }
   };
   useEffect(() => {
-    // Normalize the URL to the resolved boot route (a first visit, or a sim board
-    // route redirected to its rebuild screen, may differ from what's in the hash).
+    // Normalize the URL to the resolved boot route (a first visit, or a hash that
+    // named a non-restorable board route, may differ from what's in the address).
     try { window.history.replaceState({ __route: route }, '', routeToHash(route)); } catch { /* ignore */ }
-    // Back/forward: re-read the route from the (now-updated) hash.
-    const onPop = () => { setRoute(hashToRoute(window.location.hash) ?? { name: 'splash' }); };
+    // Back/forward: re-read the route from the (now-updated) hash; a hash that
+    // doesn't name a restorable screen falls back to the demo landing.
+    const onPop = () => { setRoute(hashToRoute(window.location.hash) ?? { name: 'demo' }); };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -268,7 +258,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [liveCtx, setLiveCtx] = useState<LiveCtx | null>(null);
   const loadSimLeague = (built: BuiltLeague, youId: string, ctx: LiveCtx | null = null) => {
     track(Ev.leagueOpened, { live: !!ctx, teams: built.league.teams?.length ?? null });
-    clearLivePlays();                   // drop any prior league's live overlay
+    clearLivePlays(); clearLiveGameFeeds(); // drop any prior league's live overlays
     setActiveLeague(built);             // swap the engine registry (non-React reads)
     setActiveLeagueState(built.league); // re-render React consumers
     setIsSimLeague(true);
@@ -283,9 +273,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     persist({ coins: DEMO_GRANT, inv: {}, applied: {} });
   };
   const exitSimLeague = () => {
-    resetToDemoLeague(); clearSyntheticWeeks(); clearLivePlays(); clearRuntimeHeadshots();
+    resetToDemoLeague(); clearSyntheticWeeks(); clearLivePlays(); clearLiveGameFeeds(); clearRuntimeHeadshots();
     setActiveLeagueState(LEAGUE); setIsSimLeague(false); setYouTeam(YOU_TEAM_ID); setLiveCtx(null);
-    rememberSimLeague(null); // no sim to restore on reload once we're back on the demo
+  };
+  const [iconSet, setIconSetState] = useState<IconSetName>(() => {
+    try {
+      // 'pixel' is parked — anyone who saved it drops back to the default.
+      const saved = localStorage.getItem(ICONSET_KEY) as IconSetName | null;
+      return saved === 'emoji' || saved === 'factory' ? saved : 'factory';
+    } catch { return 'factory'; }
+  });
+  const setIconSet = (s: IconSetName) => {
+    setIconSetState(s);
+    try { localStorage.setItem(ICONSET_KEY, s); } catch { /* ignore */ }
   };
   const [bigText, setBigTextState] = useState<boolean>(() => {
     try {
@@ -315,6 +315,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Persist coins + inventory + applied together. Pass next values explicitly so
   // we don't race React's async state.
   const persist = (next: { coins?: number; inv?: Record<string, number>; applied?: Record<number, AppliedWeek> }) => {
+    if (liveCtx) return; // live coins/inventory are server-backed — don't clobber the demo save
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({
         coins: next.coins ?? coins,
@@ -333,6 +334,50 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // updates in one handler (e.g. multiple power-up refunds from a single roster
   // change) compose via functional setters and still save the final result.
   useEffect(() => { persist({}); }, [coins, inventory, applied]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Entering a live pilot board: load the team's server-backed inventory (owned
+  // power-ups persist across devices) and start applied clean (armed powerups
+  // aren't server-backed yet). Leaving it: restore the demo save from localStorage.
+  const wasLive = useRef(false);
+  const appliedHydrated = useRef(false);
+  useEffect(() => {
+    if (liveCtx) {
+      wasLive.current = true;
+      appliedHydrated.current = false;
+      myInventory(liveCtx.matchupId).then((inv) => setInventory(inv ?? {})).catch(() => setInventory({}));
+      // Restore the full working applied-state: armed buffs (scored, from
+      // applied_state) + the working blob (extra slots, swaps, backups, targeted).
+      const wk = liveCtx.week;
+      Promise.all([myBuffs(liveCtx.matchupId).catch(() => [] as string[]), myHeroApplied(liveCtx.matchupId).catch(() => ({}))])
+        .then(([buffs, blob]) => {
+          const b = (blob ?? {}) as Partial<AppliedWeek>;
+          setApplied({ [wk]: {
+            extraSlots: b.extraSlots ?? {}, swaps: b.swaps ?? {}, backups: b.backups ?? {},
+            doubleOrNothing: b.doubleOrNothing, spy: b.spy, byeSteal: b.byeSteal, emp: b.emp,
+            buffs: Object.fromEntries((buffs ?? []).map((x) => [x, true as const])),
+          } });
+        })
+        .catch(() => setApplied({}))
+        .finally(() => { appliedHydrated.current = true; });
+    } else if (wasLive.current) {
+      wasLive.current = false;
+      appliedHydrated.current = false;
+      const s = loadState();
+      creditedWeeks.current = new Set(s.weeks);
+      setCoins(s.coins); setInventory(s.inv); setApplied(s.applied);
+    }
+  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live: persist the working applied blob (minus buffs → applied_state, and
+  // lineup → sealed_pick) on every change, once hydrated, so it restores anywhere.
+  useEffect(() => {
+    if (!liveCtx || !appliedHydrated.current) return;
+    const cur = applied[liveCtx.week];
+    if (!cur) return;
+    const rest: Record<string, unknown> = { ...cur };
+    delete rest.lineup; delete rest.buffs;
+    heroSetApplied(liveCtx.matchupId, rest).catch(() => {});
+  }, [applied, liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setTheme = (t: ThemeName) => {
     setThemeState(t);
@@ -355,10 +400,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
+  // Grant an owned powerup without spending store coin — the hero board charges
+  // the real DB wallet, then calls this to add the item to inventory.
+  const grantPowerup = (id: string): void => {
+    setInventory((prev) => { const next = { ...prev, [id]: (prev[id] ?? 0) + 1 }; persist({ inv: next }); return next; });
+  };
+
+  // Live leagues: keep owned inventory server-backed. Buys are recorded by
+  // wallet_buy_powerup; here we mirror consumes (arm/apply) and refunds (disarm/
+  // back-out) so ownership persists across devices. Fire-and-forget.
+  const syncInv = (id: string, delta: number): void => {
+    if (!liveCtx) return;
+    (delta < 0 ? consumeInventory : refundInventory)(liveCtx.matchupId, id).catch(() => {});
+  };
+  // The armed buff ids for a week (pre-mutation snapshot from `applied`).
+  const armedBuffs = (week: number): string[] => { const b = applied[week]?.buffs ?? {}; return Object.keys(b).filter((k) => b[k]); };
+  // Persist the armed buff set server-side on the hero board (survives reload).
+  const pushBuffs = (buffs: string[]): void => { if (liveCtx) heroSetBuffs(liveCtx.matchupId, buffs).catch(() => {}); };
+
   const useConsumable = (id: string): boolean => {
     if ((inventory[id] ?? 0) <= 0) return false;
     const nextInv = { ...inventory, [id]: inventory[id] - 1 };
-    setInventory(nextInv); persist({ inv: nextInv });
+    setInventory(nextInv); persist({ inv: nextInv }); syncInv(id, -1);
     return true;
   };
 
@@ -369,15 +432,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const nextInv = { ...inventory, [id]: inventory[id] - 1 };
     const cur: AppliedWeek = applied[week] ?? { extraSlots: {}, swaps: {}, backups: {} };
     const nextApplied = { ...applied, [week]: patch({ ...cur, extraSlots: cur.extraSlots ?? {}, swaps: cur.swaps ?? {}, backups: cur.backups ?? {} }) };
-    setInventory(nextInv); setApplied(nextApplied); persist({ inv: nextInv, applied: nextApplied });
+    setInventory(nextInv); setApplied(nextApplied); persist({ inv: nextInv, applied: nextApplied }); syncInv(id, -1);
     return true;
   };
 
   const applyExtraSlot = (week: number, win: WindowId): boolean =>
     consumeAndApply('extra-slot', week, (cur) => ({ ...cur, extraSlots: { ...cur.extraSlots, [win]: (cur.extraSlots[win] ?? 0) + 1 } }));
 
-  const armBuff = (week: number, id: string): boolean =>
-    applied[week]?.buffs?.[id] ? false : consumeAndApply(id, week, (cur) => ({ ...cur, buffs: { ...cur.buffs, [id]: true } }));
+  const armBuff = (week: number, id: string): boolean => {
+    if (applied[week]?.buffs?.[id]) return false;
+    const ok = consumeAndApply(id, week, (cur) => ({ ...cur, buffs: { ...cur.buffs, [id]: true } }));
+    if (ok) pushBuffs([...armedBuffs(week), id]);
+    return ok;
+  };
 
   // Disarm a previously-armed buff: clear the flag and refund the consumable.
   // Functional setters so several disarms in one tick compose (persist via effect).
@@ -388,7 +455,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const buffs = { ...cur.buffs }; delete buffs[id];
       return { ...prev, [week]: { ...cur, buffs } };
     });
-    setInventory((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
+    setInventory((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 })); syncInv(id, 1);
+    pushBuffs(armedBuffs(week).filter((b) => b !== id));
   };
 
   const setDoubleOrNothing = (week: number, slotKey: string): boolean =>
@@ -418,7 +486,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       mutate(nc);
       return { ...prev, [week]: nc };
     });
-    setInventory((prev) => ({ ...prev, [refundId]: (prev[refundId] ?? 0) + 1 }));
+    setInventory((prev) => ({ ...prev, [refundId]: (prev[refundId] ?? 0) + 1 })); syncInv(refundId, 1);
   };
   const clearDoubleOrNothing = (week: number): void => { if (applied[week]?.doubleOrNothing) clearApplied(week, 'double-or-nothing', (c) => { delete c.doubleOrNothing; }); };
   const clearSpy = (week: number): void => { if (applied[week]?.spy) clearApplied(week, 'spy', (c) => { delete c.spy; }); };
@@ -428,7 +496,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     clearApplied(week, 'extra-slot', (c) => { if (n - 1 > 0) c.extraSlots[win] = n - 1; else delete c.extraSlots[win]; });
   };
   // Refund an unlock-metric powerup (when a player swaps off / clears that metric).
-  const refundUnlock = (id: string): void => { setInventory((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 })); };
+  const refundUnlock = (id: string): void => { setInventory((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 })); syncInv(id, 1); };
 
   const applyMetricSwap = (week: number, slotKey: string, atClock: number, atRt: number, toMetricId: string): boolean =>
     consumeAndApply('metric-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, atRt, toMetricId } } }));
@@ -457,8 +525,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
-    [theme, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, liveCtx, youTeamId, demoWeek, coins, inventory, applied],
+    () => ({ theme, setTheme, iconSet, setIconSet, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    [theme, iconSet, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, liveCtx, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

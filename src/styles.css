@@ -19,6 +19,31 @@ a { color: inherit; }
 @keyframes flash { 0% { background-color: rgba(255,79,98,0.6); } 100% { background-color: transparent; } }
 @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-3px); } 40%, 80% { transform: translateX(3px); } }
 @keyframes slidein { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fvdraw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes fvtakeover { 0% { opacity: 0; transform: scale(0.6); } 12% { opacity: 1; transform: scale(1.1); } 20% { transform: scale(1); } 78% { opacity: 1; } 100% { opacity: 0; transform: scale(1); } }
+.fv-txt { animation: slidein .3s ease; }
 
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .grotesk { font-family: 'Space Grotesk', system-ui, sans-serif; }
+
+/* Management surfaces (super-admin + commissioner dashboards) — see adminUi.tsx.
+   Tab strips stay one row and scroll sideways instead of wrapping. */
+.mgmt-tabs { scrollbar-width: none; }
+.mgmt-tabs::-webkit-scrollbar { display: none; }
+@media (max-width: 760px) {
+  /* 16px inputs stop iOS Safari from zooming the page on focus; taller buttons
+     make the dense tool rows comfortably tappable. */
+  .mgmt input, .mgmt select { font-size: 16px !important; }
+  .mgmt button { min-height: 34px; }
+}
+
+/* Demo guidance: a pulsing accent ring that walks the viewer to the next
+   action (pick a player, then seal a metric) before RUN unlocks. */
+@keyframes guidepulse {
+  0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--you) 85%, transparent), 0 0 16px color-mix(in srgb, var(--you) 30%, transparent); }
+  50% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--you) 25%, transparent), 0 0 4px transparent; }
+}
+.guide-ring { animation: guidepulse 1.5s ease-in-out infinite; border-radius: 7px; }
+@media (prefers-reduced-motion: reduce) {
+  .guide-ring { animation: none; box-shadow: 0 0 0 2px var(--you); }
+}

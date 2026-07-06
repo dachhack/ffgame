@@ -1,24 +1,27 @@
 import { useState, type ReactNode } from 'react';
 import { useStore } from '../app/store';
-import { Brand, Header, SiteSettings, UserChip, Avatar, PosPill, PlayerImg, DemoControls } from '../app/ui';
-import { getTeam, teamRoster, gameForTeam, teamResults, freeAgents } from '../data/league';
+import { Brand, Header, SiteSettings, UserChip, Avatar, PlayerImg, DemoControls } from '../app/ui';
+import { getTeam, teamRoster, gameForTeam, teamResults } from '../data/league';
 import { TOTAL_SLOTS } from '../data/metrics';
 import { POWERUPS } from '../data/powerups';
 import { avatarUrl } from '../data/media';
 import { SLEEPER_HANDLE } from '../config';
 import { weekLockLabel } from '../data/nflSlate';
 import { APP_VERSION, DATA_SOURCE } from '../app/version';
+import { PuIcon, GameIcon, Emoji, COIN_GOLD } from '../app/gameIcons';
 import type { FantasyTeam } from '../types';
 
 type ModalState =
   | null
   | { type: 'roster'; teamId: string }
-  | { type: 'waivers' }
   | { type: 'schedule' }
   | { type: 'shop' };
 
 export function LeagueOverview() {
-  const { navigate, coins, youTeamId: YOU, demoWeek, activeLeague: LEAGUE_REF, sleeperUser } = useStore();
+  const { navigate, coins, youTeamId: YOU, demoWeek, activeLeague: LEAGUE_REF, sleeperUser, applied } = useStore();
+  // Real saved-lineup count for the week (was a hardcoded 0/8, which read as
+  // "your lineup got wiped" after you'd actually set it).
+  const slotsSet = Object.values(applied[demoWeek]?.lineup ?? {}).filter((p) => p.playerId).length;
   const [modal, setModal] = useState<ModalState>(null);
   const teams = [...LEAGUE_REF.teams].sort((a, b) => a.seed - b.seed);
   const you = getTeam(YOU)!;
@@ -56,7 +59,7 @@ export function LeagueOverview() {
               <Stat label="SEED" value={`#${you.seed}`} />
               <Stat label="RECORD" value={`${you.wins}-${you.losses}`} />
               <Stat label="POINTS FOR" value={you.pf.toFixed(0)} />
-              <Stat label="◈ DRIP COIN" value={`${coins}`} />
+              <Stat label={<><GameIcon name={COIN_GOLD} emoji="◈" size="1.4em" /> DRIP COIN</>} value={`${coins}`} />
             </div>
           </div>
 
@@ -65,9 +68,8 @@ export function LeagueOverview() {
 
           {/* toolbar */}
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-            <ToolButton onClick={() => setModal({ type: 'schedule' })}>📅 ALL MATCHUPS</ToolButton>
-            <ToolButton onClick={() => setModal({ type: 'waivers' })}>🔁 WAIVER WIRE</ToolButton>
-            <ToolButton onClick={() => setModal({ type: 'shop' })}>🛒 POWER-UP SHOP</ToolButton>
+            <ToolButton onClick={() => setModal({ type: 'schedule' })}><Emoji e="📅" /> ALL MATCHUPS</ToolButton>
+            <ToolButton onClick={() => setModal({ type: 'shop' })}><Emoji e="🛒" /> POWER-UP SHOP</ToolButton>
             <span style={{ fontSize: 11, color: 'var(--faint)' }}>Tap any team in standings to see their roster &amp; schedule.</span>
           </div>
 
@@ -85,7 +87,7 @@ export function LeagueOverview() {
                   <TeamMini team={opp} accent="var(--opp)" right />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid var(--bd)' }}>
-                  <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>0/{TOTAL_SLOTS} SLOTS SET · LOCKS {weekLockLabel(demoWeek)}</span>
+                  <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>{slotsSet}/{TOTAL_SLOTS} SLOTS SET · LOCKS {weekLockLabel(demoWeek)}</span>
                   <button
                     onClick={() => navigate({ name: 'matchup', week: demoWeek, phase: 'setup' })}
                     className="mono"
@@ -165,29 +167,32 @@ export function LeagueOverview() {
       </main>
 
       {modal?.type === 'roster' && <TeamModal teamId={modal.teamId} onClose={() => setModal(null)} onOpenTeam={(id) => setModal({ type: 'roster', teamId: id })} />}
-      {modal?.type === 'waivers' && <WaiverModal onClose={() => setModal(null)} />}
       {modal?.type === 'schedule' && <ScheduleModal onClose={() => setModal(null)} onOpenTeam={(id) => setModal({ type: 'roster', teamId: id })} />}
       {modal?.type === 'shop' && <ShopModal onClose={() => setModal(null)} />}
     </>
   );
 }
 
-export function ShopModal({ onClose }: { onClose: () => void }) {
+export function ShopModal({ onClose, coinsOverride, onBuy }: { onClose: () => void; coinsOverride?: number; onBuy?: (id: string) => Promise<boolean> }) {
   const { coins, inventory, buyPowerup } = useStore();
   const [flash, setFlash] = useState<string | null>(null);
-  function buy(id: string) {
-    if (buyPowerup(id)) { setFlash(id); setTimeout(() => setFlash((f) => (f === id ? null : f)), 600); }
+  // Hero board passes the real wallet balance + a wallet-charged buy; otherwise
+  // the demo store ledger drives affordability + purchase.
+  const bal = coinsOverride ?? coins;
+  async function buy(id: string) {
+    const ok = onBuy ? await onBuy(id) : buyPowerup(id);
+    if (ok) { setFlash(id); setTimeout(() => setFlash((f) => (f === id ? null : f)), 600); }
   }
   return (
-    <Modal title="Power-Up Shop" sub={`◈ ${coins} DRIP COIN · +5 per signature play`} onClose={onClose} maxWidth={560}>
+    <Modal title="Power-Up Shop" sub={<><GameIcon name={COIN_GOLD} emoji="◈" size="1.4em" /> {bal} DRIP COIN · +5 per signature play</>} onClose={onClose} maxWidth={560}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 480, overflow: 'auto' }}>
         {POWERUPS.map((p) => {
           const have = inventory[p.id] ?? 0;
-          const afford = coins >= p.price;
+          const afford = bal >= p.price;
           const timingTag = p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME';
           return (
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: 'var(--bg)', border: `1px solid ${flash === p.id ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, padding: '10px 12px', transition: 'border-color .3s' }}>
-              <span style={{ fontSize: 20, flex: 'none', width: 26, textAlign: 'center' }}>{p.icon}</span>
+              <span style={{ fontSize: 30, flex: 'none', width: 46, textAlign: 'center' }}><PuIcon id={p.id} emoji={p.icon} size={42} /></span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                   <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{p.name}</span>
@@ -203,7 +208,7 @@ export function ShopModal({ onClose }: { onClose: () => void }) {
                 className="mono"
                 style={{ flex: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', borderRadius: 4, padding: '8px 11px', border: 'none', cursor: afford ? 'pointer' : 'default', color: afford ? 'var(--bg)' : 'var(--faint)', background: afford ? 'var(--you)' : 'var(--surface)', opacity: afford ? 1 : 0.6 }}
               >
-                ◈ {p.price}
+                <GameIcon name={COIN_GOLD} emoji="◈" size="1.2em" /> {p.price}
               </button>
             </div>
           );
@@ -216,7 +221,7 @@ export function ShopModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value }: { label: ReactNode; value: string }) {
   return (
     <div style={{ textAlign: 'right' }}>
       <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.14em', color: 'var(--faint)' }}>{label}</div>
@@ -247,7 +252,7 @@ function TeamMini({ team, accent, right }: { team: FantasyTeam; accent: string; 
 
 // ── Modals ──────────────────────────────────────────────────────────────
 
-function Modal({ title, sub, onClose, children, maxWidth = 480 }: { title: string; sub?: string; onClose: () => void; children: ReactNode; maxWidth?: number }) {
+function Modal({ title, sub, onClose, children, maxWidth = 480 }: { title: string; sub?: ReactNode; onClose: () => void; children: ReactNode; maxWidth?: number }) {
   return (
     <div
       onClick={onClose}
@@ -313,30 +318,6 @@ function TeamModal({ teamId, onClose, onOpenTeam }: { teamId: string; onClose: (
           })}
         </div>
       )}
-    </Modal>
-  );
-}
-
-function WaiverModal({ onClose }: { onClose: () => void }) {
-  const fa = freeAgents(28);
-  return (
-    <Modal title="Waiver Wire" sub="TOP AVAILABLE FREE AGENTS · FAAB" onClose={onClose}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 460, overflow: 'auto' }}>
-        {fa.map((p, i) => {
-          const trend = i < 4 ? { t: '▲▲', c: 'var(--warn)' } : i < 10 ? { t: '▲', c: 'var(--you)' } : i < 20 ? { t: '—', c: 'var(--faint)' } : { t: '▼', c: 'var(--opp)' };
-          const faab = Math.max(1, Math.round((fa.length - i) / fa.length * 38));
-          return (
-            <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '7px 10px' }}>
-              <PosPill pos={p.pos} />
-              <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', flex: 1 }}>{p.name}</span>
-              <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 30 }}>{p.team}</span>
-              <span className="mono" style={{ fontSize: 11, color: trend.c, width: 24, textAlign: 'center' }}>{trend.t}</span>
-              <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 36, textAlign: 'right' }}>{faab}%</span>
-              <button className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 3, padding: '6px 9px' }}>CLAIM</button>
-            </div>
-          );
-        })}
-      </div>
     </Modal>
   );
 }

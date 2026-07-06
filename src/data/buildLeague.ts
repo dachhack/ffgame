@@ -1,18 +1,22 @@
-// Build a live, fully-playable League from a Sleeper league — rosters, real
-// 14-week schedule + scores, and a player registry — so the existing engine /
-// screens run the season sim on it unchanged. Per the chosen approach:
-//   • Standings + schedule + per-player weekly totals come from Sleeper (real).
+// Build a live, fully-playable League from ANY provider's NormalizedLeague —
+// rosters, real 14-week schedule + scores, and a player registry — so the
+// existing engine / screens run the season sim on it unchanged. Per the chosen
+// approach:
+//   • Standings + schedule + per-player weekly totals come from the provider (real).
 //   • Players we baked real play-by-play for (and every team K/DST) reuse it.
-//   • Everyone else gets a synthesized play timeline scaled to their real
-//     weekly Sleeper total — "hybrid texture".
+//   • Everyone else gets a synthesized play timeline scaled to their real weekly
+//     total — "hybrid texture".
+// The provider-specific fetch lives in buildSleeperLeague (below) / each provider
+// adapter; everything from NormalizedLeague onward is shared (buildFromNormalized).
 import type { League, FantasyTeam, Player, Pos, PlayerStats, ScheduleGame } from '../types';
 import { normName, shortName, hashStr } from './players';
 import { BAKED_SLUGS } from './bakedSlugs';
 import { SLEEPER_SLUG } from './sleeperSlug';
 import { setSyntheticWeeks, type RealPlay } from './realPbp';
 import { setRuntimeHeadshots, espnHeadshot } from './media';
-import { loadPlayerDirectory, type PlayerMeta } from './sleeperPlayers';
+import { loadPlayerDirectory } from './sleeperPlayers';
 import { REG_SEASON_WEEKS, type BuiltLeague } from './league';
+import type { NormalizedLeague, NormPlayer, NormTeam, NormMatchup } from './normalized';
 
 const BASE = 'https://api.sleeper.app/v1';
 
@@ -22,25 +26,28 @@ async function getJson<T>(url: string): Promise<T> {
   return r.json() as Promise<T>;
 }
 
-// Sleeper team codes → the baked NFL slate's codes.
+// Provider team codes → the baked NFL slate's codes.
 function normTeam(t: string | null | undefined): string {
   const u = String(t ?? '').toUpperCase();
   return u === 'LAR' ? 'LA' : u === 'WSH' ? 'WAS' : u === 'JAC' ? 'JAX' : u === 'OAK' ? 'LV' : u === 'SD' ? 'LAC' : u === 'STL' ? 'LA' : u;
 }
 
-/** Engine player id for a Sleeper player — a baked slug when we have its real
- *  play-by-play (incl. every team K/DST), else a synthetic id. */
-function engineId(meta: PlayerMeta): { id: string; baked: boolean; team: string } {
-  const team = normTeam(meta.team);
-  if (meta.pos === 'DEF') return { id: `${(team || meta.id).toLowerCase()}-dst`, baked: true, team: team || meta.id };
-  if (meta.pos === 'K' && team) return { id: `${team.toLowerCase()}-k`, baked: true, team };
-  // Exact Sleeper-id → baked slug (most reliable); else fall back to a normalized
-  // name match; else synthesize.
-  const exact = SLEEPER_SLUG[meta.id];
+/** Engine player id for a normalized player — a baked slug when we have its real
+ *  play-by-play (incl. every team K/DST), else a synthetic id. Crosswalk order is
+ *  provider-appropriate (Sleeper id → name → synth; ESPN id → name → synth), so a
+ *  Sleeper player resolves exactly as before and ESPN players reuse the same slugs. */
+function resolveEngineId(p: NormPlayer, synthPrefix: string): { id: string; baked: boolean; team: string } {
+  const team = normTeam(p.nflTeam);
+  if (p.pos === 'DEF') return { id: `${(team || p.key).toLowerCase()}-dst`, baked: true, team: team || p.key };
+  if (p.pos === 'K' && team) return { id: `${team.toLowerCase()}-k`, baked: true, team };
+  // Exact id → baked slug (most reliable): Sleeper id for Sleeper players, else
+  // the Sleeper id we joined in from ESPN's athlete id (the directory is the hub).
+  const exact = p.sleeperId ? SLEEPER_SLUG[p.sleeperId] : undefined;
   if (exact && BAKED_SLUGS[exact]) return { id: exact, baked: true, team: BAKED_SLUGS[exact].team };
-  const slug = normName(meta.full).replace(/\s+/g, '-');
-  if (BAKED_SLUGS[slug] && BAKED_SLUGS[slug].pos === meta.pos) return { id: slug, baked: true, team: BAKED_SLUGS[slug].team };
-  return { id: `sl-${meta.id}`, baked: false, team };
+  // Name match; else synthesize under the provider's prefix.
+  const slug = normName(p.full).replace(/\s+/g, '-');
+  if (BAKED_SLUGS[slug] && BAKED_SLUGS[slug].pos === p.pos) return { id: slug, baked: true, team: BAKED_SLUGS[slug].team };
+  return { id: `${synthPrefix}-${p.key}`, baked: false, team };
 }
 
 const Z: PlayerStats = { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 };
@@ -111,64 +118,33 @@ function synthPlays(pos: Pos, P: number): RealPlay[] {
   return out.map((p, i) => ({ ...p, c: Math.round(150 + ((3100 - 150) * (i + 1)) / (N + 1)) }));
 }
 
-interface SleeperRoster { roster_id: number; owner_id: string | null; players: string[] | null; settings?: Record<string, number>; }
-interface SleeperUser { user_id: string; display_name: string; metadata?: Record<string, string>; }
-interface SleeperMatch { roster_id: number; matchup_id: number | null; points: number; players_points?: Record<string, number>; }
-interface SleeperLeagueDetail { name: string; season: string; total_rosters: number; settings?: Record<string, number>; roster_positions?: string[]; scoring_settings?: Record<string, number> }
-
-function formatLabel(d: SleeperLeagueDetail): string {
-  const rp = d.roster_positions ?? [];
-  const sf = rp.includes('SUPER_FLEX') || rp.filter((p) => p === 'QB').length >= 2;
-  const st = d.settings ?? {};
-  const base = st.best_ball ? 'Best Ball' : st.type === 2 ? 'Dynasty' : st.type === 1 ? 'Keeper' : 'Redraft';
-  return `${base}${sf ? ' · Superflex' : ''} · ${d.total_rosters}-team`;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// SHARED BUILDER — NormalizedLeague → playable engine League (provider-agnostic)
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Build a playable League from a Sleeper league for the given user.
- * Returns the built league plus the user's own team id (YOU).
+ * Build a playable engine League from any provider's NormalizedLeague.
+ * Returns the built league plus the caller's own team id (YOU).
  */
-export async function buildSleeperLeague(
-  leagueId: string,
-  userId: string,
-  onProgress?: (note: string) => void,
+export function buildFromNormalized(
+  norm: NormalizedLeague,
   opts?: { addKdst?: boolean },
-): Promise<{ built: BuiltLeague; youTeamId: string }> {
-  onProgress?.('Reading league…');
-  const [detail, rosters, users] = await Promise.all([
-    getJson<SleeperLeagueDetail>(`${BASE}/league/${leagueId}`),
-    getJson<SleeperRoster[]>(`${BASE}/league/${leagueId}/rosters`),
-    getJson<SleeperUser[]>(`${BASE}/league/${leagueId}/users`),
-  ]);
-  const dir = await loadPlayerDirectory(onProgress);
-
-  const userById = new Map<string, SleeperUser>();
-  for (const u of users) userById.set(u.user_id, u);
-
-  // Regular-season length: up to the playoffs, capped at the baked slate (14).
-  const playoffStart = detail.settings?.playoff_week_start ?? 15;
-  const weeks = Math.min(REG_SEASON_WEEKS, Math.max(1, playoffStart - 1));
-
-  onProgress?.(`Loading ${weeks} weeks of results…`);
-  const matchupsByWeek: SleeperMatch[][] = await Promise.all(
-    Array.from({ length: weeks }, (_, i) => getJson<SleeperMatch[]>(`${BASE}/league/${leagueId}/matchups/${i + 1}`).catch(() => [])),
-  );
-
-  // Map every Sleeper roster to a team id, and remember roster_id → team id.
+): { built: BuiltLeague; youTeamId: string } {
+  const { weeks } = norm;
   const teamIdOf = (rid: number) => `r${rid}`;
   const players: Record<string, Player> = {};
   const seasonPts = new Map<string, number>();   // engineId → season PPR total
   const gamesPlayed = new Map<string, number>(); // engineId → weeks with >0
-  const idMap = new Map<string, { eid: string; meta: PlayerMeta; baked: boolean; team: string }>(); // sleeperId → engine mapping
+  const idMap = new Map<string, { eid: string; p: NormPlayer; baked: boolean; team: string }>();
 
-  const resolve = (sleeperId: string) => {
-    const cached = idMap.get(sleeperId);
+  const resolve = (key: string) => {
+    const cached = idMap.get(key);
     if (cached) return cached;
-    const meta = dir.get(sleeperId);
-    if (!meta) return null;
-    const { id, baked, team } = engineId(meta);
-    const m = { eid: id, meta, baked, team };
-    idMap.set(sleeperId, m);
+    const p = norm.players[key];
+    if (!p) return null;
+    const { id, baked, team } = resolveEngineId(p, norm.synthPrefix);
+    const m = { eid: id, p, baked, team };
+    idMap.set(key, m);
     return m;
   };
 
@@ -178,13 +154,13 @@ export async function buildSleeperLeague(
     const week = wi + 1;
     const pbp: Record<string, RealPlay[]> = {};
     const points: Record<string, number> = {};
-    for (const m of matchupsByWeek[wi]) {
-      for (const [sid, pts] of Object.entries(m.players_points ?? {})) {
-        const r = resolve(sid);
+    for (const m of norm.matchupsByWeek[wi] ?? []) {
+      for (const [key, pts] of Object.entries(m.playerPoints)) {
+        const r = resolve(key);
         if (!r) continue;
         seasonPts.set(r.eid, (seasonPts.get(r.eid) ?? 0) + pts);
         if (pts > 0) gamesPlayed.set(r.eid, (gamesPlayed.get(r.eid) ?? 0) + 1);
-        if (!r.baked) { points[r.eid] = Math.round(pts * 10) / 10; const ps = synthPlays(r.meta.pos, pts); if (ps.length) pbp[r.eid] = ps; }
+        if (!r.baked) { points[r.eid] = Math.round(pts * 10) / 10; const ps = synthPlays(r.p.pos, pts); if (ps.length) pbp[r.eid] = ps; }
       }
     }
     synthWeeks.push({ week, pbp, points });
@@ -193,45 +169,41 @@ export async function buildSleeperLeague(
 
   // Build the player registry + per-team rosters.
   const teams: FantasyTeam[] = [];
-  // Per-player headshots from Sleeper's espn_id, so roster players outside the
+  // Per-player headshots from the player's espn_id, so roster players outside the
   // baked crosswalk still get a real photo (baked HEADSHOTS still win).
   const runtimeHeadshots: Record<string, string> = {};
-  let youTeamId = teamIdOf(rosters[0]?.roster_id ?? 1);
-  for (const r of rosters) {
+  let youTeamId = teamIdOf(norm.teams[0]?.rosterId ?? 1);
+  for (const t of norm.teams) {
     const ids: string[] = [];
-    for (const sid of r.players ?? []) {
-      const m = resolve(sid);
+    for (const key of t.playerKeys) {
+      const m = resolve(key);
       if (!m) continue;
-      const hs = espnHeadshot(m.meta.espnId);
+      const hs = espnHeadshot(m.p.espnId);
       if (hs && !runtimeHeadshots[m.eid]) runtimeHeadshots[m.eid] = hs;
       if (!players[m.eid]) {
         const ppr = seasonPts.get(m.eid) ?? 0;
         const g = gamesPlayed.get(m.eid) ?? 0;
         players[m.eid] = {
           id: m.eid,
-          name: m.meta.pos === 'DEF' ? `${m.team} DST` : m.meta.pos === 'K' ? `${m.team} K` : shortName(m.meta.full),
-          full: m.meta.full,
-          pos: m.meta.pos,
+          name: m.p.pos === 'DEF' ? `${m.team} DST` : m.p.pos === 'K' ? `${m.team} K` : shortName(m.p.full),
+          full: m.p.full,
+          pos: m.p.pos,
           team: m.team || 'NFL',
-          stats: synthStats(m.meta.pos, ppr, g),
+          stats: synthStats(m.p.pos, ppr, g),
         };
       }
       if (!ids.includes(m.eid)) ids.push(m.eid);
     }
-    const u = r.owner_id ? userById.get(r.owner_id) : undefined;
-    const st = r.settings ?? {};
-    const pf = (st.fpts ?? 0) + (st.fpts_decimal ?? 0) / 100;
-    const pa = (st.fpts_against ?? 0) + (st.fpts_against_decimal ?? 0) / 100;
     teams.push({
-      id: teamIdOf(r.roster_id),
-      name: u?.metadata?.team_name || (u ? u.display_name : `Roster ${r.roster_id}`),
-      owner: u ? u.display_name : '—',
-      ownerId: r.owner_id ?? '',
+      id: teamIdOf(t.rosterId),
+      name: t.teamName,
+      owner: t.owner,
+      ownerId: t.ownerId,
       seed: 0,
-      wins: st.wins ?? 0, losses: st.losses ?? 0, pf, pa,
+      wins: t.wins, losses: t.losses, pf: t.pf, pa: t.pa,
       roster: ids,
     });
-    if (r.owner_id && r.owner_id === userId) youTeamId = teamIdOf(r.roster_id);
+    if (t.ownerId && t.ownerId === norm.youUserId) youTeamId = teamIdOf(t.rosterId);
   }
 
   // Many leagues don't roster kickers or team defenses, which leaves the K
@@ -239,13 +211,13 @@ export async function buildSleeperLeague(
   // asked, give any team missing one a real baked K and/or DST, each from a
   // random NFL team. Picks advance through a shuffled bag so a team's K and DST
   // are always from different NFL teams (and assignments stay distinct across
-  // the league). This only enriches the playable drip lineup; Sleeper
-  // standings/scores are untouched (they come from real Sleeper totals).
+  // the league). This only enriches the playable drip lineup; standings/scores
+  // are untouched (they come from the provider's real totals).
   if (opts?.addKdst) {
     // The 32 NFL teams, all of which have baked K + DST play-by-play.
     const NFL = ['ari', 'atl', 'bal', 'buf', 'car', 'chi', 'cin', 'cle', 'dal', 'den', 'det', 'gb', 'hou', 'ind', 'jax', 'kc', 'la', 'lac', 'lv', 'mia', 'min', 'ne', 'no', 'nyg', 'nyj', 'phi', 'pit', 'sea', 'sf', 'tb', 'ten', 'was'];
     // Deterministic shuffle (seeded by league) → a stable but random draw.
-    let seed = hashStr(`${leagueId}|kdst`);
+    let seed = hashStr(`${norm.id}|kdst`);
     const bag = [...NFL];
     for (let i = bag.length - 1; i > 0; i--) { seed = (seed * 1103515245 + 12345) & 0x7fffffff; const j = seed % (i + 1); [bag[i], bag[j]] = [bag[j], bag[i]]; }
     let pick = 0;
@@ -271,30 +243,132 @@ export async function buildSleeperLeague(
   teams.sort((a, b) => (b.wins - a.wins) || (b.pf - a.pf));
   teams.forEach((t, i) => { t.seed = i + 1; });
 
-  // Schedule: pair each week's matchups by matchup_id.
+  // Schedule: pair each week's matchups by matchupId.
   const schedule: ScheduleGame[] = [];
   for (let wi = 0; wi < weeks; wi++) {
-    const byMatch = new Map<number, SleeperMatch[]>();
-    for (const m of matchupsByWeek[wi]) {
-      if (m.matchup_id == null) continue;
-      (byMatch.get(m.matchup_id) ?? byMatch.set(m.matchup_id, []).get(m.matchup_id)!).push(m);
+    const byMatch = new Map<number, NormMatchup[]>();
+    for (const m of norm.matchupsByWeek[wi] ?? []) {
+      if (m.matchupId == null) continue;
+      (byMatch.get(m.matchupId) ?? byMatch.set(m.matchupId, []).get(m.matchupId)!).push(m);
     }
     for (const pair of byMatch.values()) {
       if (pair.length < 2) continue;
       const [h, a] = pair;
-      schedule.push({ week: wi + 1, homeId: teamIdOf(h.roster_id), awayId: teamIdOf(a.roster_id), homeScore: Math.round(h.points * 100) / 100, awayScore: Math.round(a.points * 100) / 100 });
+      schedule.push({ week: wi + 1, homeId: teamIdOf(h.rosterId), awayId: teamIdOf(a.rosterId), homeScore: Math.round(h.points * 100) / 100, awayScore: Math.round(a.points * 100) / 100 });
     }
   }
 
   setRuntimeHeadshots(runtimeHeadshots);
 
   const league: League = {
-    id: leagueId,
-    name: detail.name,
-    format: formatLabel(detail),
-    season: Number(detail.season) || 2025,
+    id: norm.id,
+    name: norm.name,
+    format: norm.format,
+    season: norm.season,
     teams,
     schedule,
   };
   return { built: { league, players, weeks }, youTeamId };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SLEEPER FETCH + NORMALIZE — the provider-specific half for Sleeper
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface SleeperRoster { roster_id: number; owner_id: string | null; players: string[] | null; settings?: Record<string, number>; }
+interface SleeperUser { user_id: string; display_name: string; metadata?: Record<string, string>; }
+interface SleeperMatch { roster_id: number; matchup_id: number | null; points: number; players_points?: Record<string, number>; }
+interface SleeperLeagueDetail { name: string; season: string; total_rosters: number; settings?: Record<string, number>; roster_positions?: string[]; scoring_settings?: Record<string, number> }
+
+function formatLabel(d: SleeperLeagueDetail): string {
+  const rp = d.roster_positions ?? [];
+  const sf = rp.includes('SUPER_FLEX') || rp.filter((p) => p === 'QB').length >= 2;
+  const st = d.settings ?? {};
+  const base = st.best_ball ? 'Best Ball' : st.type === 2 ? 'Dynasty' : st.type === 1 ? 'Keeper' : 'Redraft';
+  return `${base}${sf ? ' · Superflex' : ''} · ${d.total_rosters}-team`;
+}
+
+/** Fetch a Sleeper league and map it into the platform-agnostic NormalizedLeague. */
+export async function sleeperNormalize(
+  leagueId: string,
+  userId: string,
+  onProgress?: (note: string) => void,
+): Promise<NormalizedLeague> {
+  onProgress?.('Reading league…');
+  const [detail, rosters, users] = await Promise.all([
+    getJson<SleeperLeagueDetail>(`${BASE}/league/${leagueId}`),
+    getJson<SleeperRoster[]>(`${BASE}/league/${leagueId}/rosters`),
+    getJson<SleeperUser[]>(`${BASE}/league/${leagueId}/users`),
+  ]);
+  const dir = await loadPlayerDirectory(onProgress);
+
+  const userById = new Map<string, SleeperUser>();
+  for (const u of users) userById.set(u.user_id, u);
+
+  // Regular-season length: up to the playoffs, capped at the baked slate (14).
+  const playoffStart = detail.settings?.playoff_week_start ?? 15;
+  const weeks = Math.min(REG_SEASON_WEEKS, Math.max(1, playoffStart - 1));
+
+  onProgress?.(`Loading ${weeks} weeks of results…`);
+  const rawWeeks: SleeperMatch[][] = await Promise.all(
+    Array.from({ length: weeks }, (_, i) => getJson<SleeperMatch[]>(`${BASE}/league/${leagueId}/matchups/${i + 1}`).catch(() => [])),
+  );
+
+  // Player registry — every Sleeper id referenced by a roster or a weekly score
+  // that the directory knows about (unknowns are dropped, as before).
+  const players: Record<string, NormPlayer> = {};
+  const include = (sid: string) => {
+    if (players[sid]) return;
+    const meta = dir.get(sid);
+    if (!meta) return;
+    players[sid] = { key: sid, full: meta.full, pos: meta.pos, nflTeam: meta.team, sleeperId: sid, espnId: meta.espnId };
+  };
+  for (const r of rosters) for (const sid of r.players ?? []) include(sid);
+  for (const wk of rawWeeks) for (const m of wk) for (const sid of Object.keys(m.players_points ?? {})) include(sid);
+
+  const teams: NormTeam[] = rosters.map((r) => {
+    const u = r.owner_id ? userById.get(r.owner_id) : undefined;
+    const st = r.settings ?? {};
+    return {
+      rosterId: r.roster_id,
+      teamName: u?.metadata?.team_name || (u ? u.display_name : `Roster ${r.roster_id}`),
+      owner: u ? u.display_name : '—',
+      ownerId: r.owner_id ?? '',
+      wins: st.wins ?? 0, losses: st.losses ?? 0, ties: st.ties ?? 0,
+      pf: (st.fpts ?? 0) + (st.fpts_decimal ?? 0) / 100,
+      pa: (st.fpts_against ?? 0) + (st.fpts_against_decimal ?? 0) / 100,
+      playerKeys: (r.players ?? []).filter((sid) => players[sid]),
+    };
+  });
+
+  const matchupsByWeek: NormMatchup[][] = rawWeeks.map((wk) =>
+    wk.map((m) => ({ rosterId: m.roster_id, matchupId: m.matchup_id, points: m.points, playerPoints: m.players_points ?? {} })),
+  );
+
+  return {
+    id: leagueId,
+    name: detail.name,
+    season: Number(detail.season) || 2025,
+    format: formatLabel(detail),
+    weeks,
+    youUserId: userId,
+    synthPrefix: 'sl',
+    players,
+    teams,
+    matchupsByWeek,
+  };
+}
+
+/**
+ * Build a playable League from a Sleeper league for the given user.
+ * Returns the built league plus the user's own team id (YOU).
+ */
+export async function buildSleeperLeague(
+  leagueId: string,
+  userId: string,
+  onProgress?: (note: string) => void,
+  opts?: { addKdst?: boolean },
+): Promise<{ built: BuiltLeague; youTeamId: string }> {
+  const norm = await sleeperNormalize(leagueId, userId, onProgress);
+  return buildFromNormalized(norm, opts);
 }

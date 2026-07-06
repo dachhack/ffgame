@@ -44,9 +44,20 @@ export function friendlyError(x: unknown): string {
 }
 
 /** Where the magic-link returns the user — back into Live mode (?live=1). Must be
- *  added to Supabase Auth → URL Configuration → Redirect URLs. */
+ *  added to Supabase Auth → URL Configuration → Redirect URLs. Carries a pending
+ *  commish/invite code in the URL so it survives the round trip even when the
+ *  redirect lands on a different origin (e.g. apex → www), where localStorage
+ *  wouldn't carry over. */
 function redirectTo(): string {
-  return `${window.location.origin}${window.location.pathname}?live=1`;
+  let extra = '';
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const commish = p.get('commish') || localStorage.getItem('dripCommishCode');
+    const code = p.get('code') || localStorage.getItem('dripInviteCode');
+    if (commish) extra = `&commish=${encodeURIComponent(commish)}`;
+    else if (code) extra = `&code=${encodeURIComponent(code)}`;
+  } catch { /* ignore */ }
+  return `${window.location.origin}${window.location.pathname}?live=1${extra}`;
 }
 
 export async function sendMagicLink(email: string): Promise<void> {
@@ -109,6 +120,17 @@ export async function ensureAppUser(session: Session): Promise<void> {
   );
 }
 
+/** The signed-in user's previously-linked Sleeper account, if any (set on a prior
+ *  join or commish-verify). Lets a returning player skip re-typing their username.
+ *  RLS (`app_user_self`) restricts this to the caller's own row. */
+export async function myLinkedSleeper(userId: string): Promise<{ userId: string; username: string } | null> {
+  const { data } = await client().from('app_user')
+    .select('sleeper_user_id, sleeper_username').eq('id', userId).maybeSingle();
+  return data?.sleeper_user_id
+    ? { userId: data.sleeper_user_id as string, username: (data.sleeper_username as string | null) ?? '' }
+    : null;
+}
+
 export interface LeaguePreview { league_id: string; name: string; season: string; }
 
 /** Preview a league by invite code (so we can show "You're joining <name>"). */
@@ -145,22 +167,23 @@ export async function redeemInvite(code: string, sleeperUsername: string): Promi
 // ── "Request a code" lead capture (migration 0016) ───────────────────────────────
 /** Pre-auth request to have a pilot code set up for the visitor's league. Routes
  *  through a SECURITY DEFINER RPC granted to anon, so it works before sign-in. */
-export async function requestCode(input: { email?: string; sleeper?: string; league?: string; note?: string }): Promise<{ ok: boolean; error?: string }> {
+export async function requestCode(input: { email?: string; sleeper?: string; league?: string; leagueRef?: string; note?: string }): Promise<{ ok: boolean; error?: string }> {
   if (!supabase) return { ok: false, error: 'Live mode is not configured.' };
   const { data, error } = await client().rpc('request_code', {
-    p_email: input.email ?? null, p_sleeper: input.sleeper ?? null, p_league: input.league ?? null, p_note: input.note ?? null,
+    p_email: input.email ?? null, p_sleeper: input.sleeper ?? null, p_league: input.league ?? null,
+    p_league_ref: input.leagueRef ?? null, p_note: input.note ?? null,
   });
   if (error) return { ok: false, error: friendlyError(error) };
   return data as { ok: boolean; error?: string };
 }
 
-export interface Enrollment { league_id: string; team_name: string; sleeper_roster_id: number; avatar_url: string | null; league: { name: string; season: string } | null; }
+export interface Enrollment { league_id: string; team_name: string; sleeper_roster_id: number; avatar_url: string | null; league: { name: string; season: string; preseason_at?: string | null } | null; }
 
 /** The caller's enrolled memberships (RLS scopes to their own rows). */
 export async function myEnrollments(userId: string): Promise<Enrollment[]> {
   const { data, error } = await client()
     .from('league_membership')
-    .select('league_id, team_name, sleeper_roster_id, avatar_url, league:league_id(name, season)')
+    .select('league_id, team_name, sleeper_roster_id, avatar_url, league:league_id(name, season, preseason_at)')
     .eq('app_user_id', userId)
     .eq('enrolled', true);
   if (error) throw error;
@@ -189,6 +212,14 @@ export async function confirmCommishVerify(commishCode: string): Promise<Confirm
   return data as ConfirmCommish;
 }
 
+/** Admin-assigned commissioner: redeem the commish code the admin sent you → become
+ *  this league's commissioner (platform-agnostic, no Sleeper team-tagging). */
+export async function redeemCommish(commishCode: string): Promise<ConfirmCommish & { league_id?: string }> {
+  const { data, error } = await client().rpc('redeem_commish', { p_code: commishCode.trim() });
+  if (error) return { ok: false, error: error.message };
+  return data as ConfirmCommish & { league_id?: string };
+}
+
 // ── Sealed picks (live-H2H lineup) ──────────────────────────────────────────────
 export interface LiveMatchup { id: string; league_id: string; week: number; status: string; lock_at: string | null; home_roster_id: number; away_roster_id: number; home_coin: number | null; away_coin: number | null; }
 export interface PoolPlayer { slug: string; full: string; pos: string; }
@@ -202,11 +233,50 @@ export async function myRoster(userId: string): Promise<{ leagueId: string; rost
 }
 
 /** The caller's next/earliest matchup in a league. */
-export async function myMatchup(leagueId: string, rosterId: number): Promise<LiveMatchup | null> {
-  const { data } = await client().from('matchup').select('*')
-    .eq('league_id', leagueId).or(`home_roster_id.eq.${rosterId},away_roster_id.eq.${rosterId}`)
-    .order('week').limit(1).maybeSingle();
+export async function myMatchup(leagueId: string, rosterId: number, week?: number): Promise<LiveMatchup | null> {
+  let q = client().from('matchup').select('*')
+    .eq('league_id', leagueId).or(`home_roster_id.eq.${rosterId},away_roster_id.eq.${rosterId}`);
+  if (week != null) q = q.eq('week', week);
+  const { data } = await q.order('week').limit(1).maybeSingle();
   return (data as LiveMatchup) ?? null;
+}
+
+/** The week a league's board should open to: the current NFL week (its games in
+ *  progress), or — when none is live — the next upcoming week, across the league's
+ *  whole matchup timeline. Preseason (offset) weeks sort ahead of the regular
+ *  season by real kickoff, so a preseason league opens on its next preseason game
+ *  and rolls into Week 1 once preseason is done. Falls back to the first week. */
+export async function defaultOpenWeek(leagueId: string, season: string, preseasonEnabled: boolean): Promise<number> {
+  const [msRes, slRes] = await Promise.all([
+    client().from('matchup').select('week').eq('league_id', leagueId),
+    client().from('nfl_slate').select('week, kickoff').eq('season', season),
+  ]);
+  const weeks = [...new Set(((msRes.data ?? []) as { week: number }[]).map((r) => r.week))];
+  if (!weeks.length) return preseasonEnabled ? 101 : 1;
+  const kicks: Record<number, { first: number; last: number }> = {};
+  for (const r of (slRes.data ?? []) as { week: number; kickoff: string | null }[]) {
+    if (!r.kickoff) continue;
+    const t = Date.parse(r.kickoff);
+    const e = kicks[r.week] ?? (kicks[r.week] = { first: t, last: t });
+    e.first = Math.min(e.first, t); e.last = Math.max(e.last, t);
+  }
+  // Ordered by real kickoff (weeks with no known slate sort last). Open the first
+  // week that isn't fully over — i.e. live now or the soonest upcoming.
+  const ordered = weeks.slice().sort((a, b) => (kicks[a]?.first ?? Infinity) - (kicks[b]?.first ?? Infinity) || a - b);
+  const now = Date.now();
+  const GAME_MS = 4 * 3_600_000;
+  for (const w of ordered) { const k = kicks[w]; if (!k || now <= k.last + GAME_MS) return w; }
+  return ordered[ordered.length - 1];
+}
+
+export interface MatchupResult { id: string; week: number; home_roster_id: number; away_roster_id: number; home_final: number | null; away_final: number | null; status: string; }
+/** Every matchup in a league (all weeks) with its final totals — the scoreboard/
+ *  results feed. Readable by any league member (finals live on the matchup row). */
+export async function leagueResults(leagueId: string): Promise<MatchupResult[]> {
+  const { data } = await client().from('matchup')
+    .select('id, week, home_roster_id, away_roster_id, home_final, away_final, status')
+    .eq('league_id', leagueId).order('week');
+  return (data ?? []) as MatchupResult[];
 }
 
 /** The caller's player pool for a week (their Sleeper roster, from sleeper_lineup). */
@@ -250,9 +320,11 @@ export async function getMatchupState(matchupId: string): Promise<WindowScore[]>
 /** The live NFL slate for a week (worker-written from ESPN, migration 0029) —
  *  drives slate-gating + the K/DST bye check for the real current season. Empty
  *  until the worker has synced that week (then the client falls back to baked). */
-export interface SlateGame { away: string; home: string; win: string }
-export async function liveSlate(week: number): Promise<SlateGame[]> {
-  const { data } = await client().from('nfl_slate').select('away, home, win').eq('week', week);
+export interface SlateGame { away: string; home: string; win: string; kickoff?: string | null }
+export async function liveSlate(week: number, season?: string): Promise<SlateGame[]> {
+  let q = client().from('nfl_slate').select('away, home, win, kickoff').eq('week', week);
+  if (season) q = q.eq('season', season); // 2025 (demo) + 2026 rows share week #s — scope by season
+  const { data } = await q;
   return (data ?? []) as SlateGame[];
 }
 
@@ -299,6 +371,15 @@ export async function weekLivePlays(week: number): Promise<LivePlayRow[]> {
   return rows;
 }
 
+/** The week's per-game field-visual feeds (game_feed, readable by any authed
+ *  user) — drives FieldView/FieldBoard on the live board. */
+export interface GameFeedRow { key: string; away: string; home: string; plays: import('./gameFeed').GamePlay[]; }
+export async function weekGameFeeds(week: number): Promise<GameFeedRow[]> {
+  const { data } = await client().from('game_feed')
+    .select('key, away, home, plays').eq('week', week);
+  return (data ?? []) as GameFeedRow[];
+}
+
 /** The opponent's revealed armed buffs — readable only AFTER the matchup locks
  *  (applied_read_after_lock RLS). Returns null when the opponent's row isn't
  *  visible yet (pre-lock) so callers can keep the AI default; an array (possibly
@@ -313,13 +394,13 @@ export async function revealedOppBuffs(matchupId: string, userId: string): Promi
 // ── Super admin ─────────────────────────────────────────────────────────────────
 export type Controller = 'human' | 'ai';
 export type LineupPolicy = 'best_lineup' | 'ai' | 'empty';
-export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; }
+export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; provider?: string; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; weekly_budget?: number; test_live_at?: string | null; preseason_at?: string | null; }
 export interface AdminUser { id: string; email: string | null; sleeper_username: string | null; sleeper_user_id: string | null; enrolled: number; created_at: string; }
-export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; }
+export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; claim_email?: string | null; }
 export interface AdminAdmin { email: string; note: string | null; }
 export interface MemberRow { roster_id: number; owner_id: string | null; team_name: string; }
 export interface MatchupRow { sleeper_matchup_id: number | null; home_roster_id: number; away_roster_id: number; }
-export interface LineupRow { roster_id: number; starters: { slug: string; full: string; pos: string }[]; }
+export interface LineupRow { roster_id: number; starters: { slug: string; full: string; pos: string; team?: string }[]; }
 export interface AdminMatchup { id: string; week: number; home_roster_id: number; away_roster_id: number; status: string; lock_at: string | null; home_final: number | null; away_final: number | null; home_coin?: number | null; away_coin?: number | null; }
 export interface AdminOverride { sleeper_user_id: string; note: string | null; }
 export interface AdminAudit { table: string; op: string; row_id: string | null; at: string; detail?: string | null; actor?: string | null; }
@@ -358,8 +439,8 @@ export const adminAudit = (limit = 50) => rpc<AdminAudit[]>('admin_audit', { p_l
 export const commishAudit = (leagueId: string, limit = 50) => rpc<AdminAudit[]>('commish_audit', { p_league_id: leagueId, p_limit: limit });
 
 // Setup writers (the client fetches/parses Sleeper, these just persist).
-export const adminUpsertLeague = (sleeperId: string, season: string, name: string, settings: unknown) =>
-  rpc<{ ok: boolean; error?: string; league_id?: string }>('admin_upsert_league', { p_sleeper_id: sleeperId, p_season: season, p_name: name, p_settings: settings });
+export const adminUpsertLeague = (sleeperId: string, season: string, name: string, settings: unknown, provider?: string) =>
+  rpc<{ ok: boolean; error?: string; league_id?: string }>('admin_upsert_league', { p_sleeper_id: sleeperId, p_season: season, p_name: name, p_settings: settings, ...(provider ? { p_provider: provider } : {}) });
 export const adminUpsertMemberships = (leagueId: string, members: MemberRow[]) =>
   rpc<{ ok: boolean; count?: number }>('admin_upsert_memberships', { p_league_id: leagueId, p_members: members });
 export const adminUpsertMatchups = (leagueId: string, week: number, matchups: MatchupRow[], lockAt: string | null) =>
@@ -372,7 +453,7 @@ export const adminAdmins = () => rpc<AdminAdmin[]>('admin_admins');
 export const adminSetAdmin = (email: string, note: string, remove = false) =>
   rpc<{ ok: boolean; error?: string }>('admin_set_admin', { p_email: email, p_note: note, p_remove: remove });
 export const adminUsers = () => rpc<AdminUser[]>('admin_users');
-export interface CodeRequest { id: string; created_at: string; email: string | null; sleeper_username: string | null; league_name: string | null; note: string | null; handled: boolean; }
+export interface CodeRequest { id: string; created_at: string; email: string | null; sleeper_username: string | null; league_name: string | null; league_ref: string | null; note: string | null; handled: boolean; }
 export const adminCodeRequests = () => rpc<CodeRequest[]>('admin_code_requests');
 export const adminSetCodeRequestHandled = (id: string, handled: boolean) => rpc<{ ok: boolean }>('admin_set_code_request_handled', { p_id: id, p_handled: handled });
 export interface BoardPick { slug: string; metric: string | null; }
@@ -426,7 +507,82 @@ export async function dispatchSim(input: { mode?: 'live' | 'reset' | 'check' | '
   if (error) return { ok: false, error: friendlyError(error) };
   return data as { ok: boolean; error?: string };
 }
+/** Email an invite (share link + code) to a code-request, via the send-invite edge
+ *  function (admin-only; the function re-checks is_admin and sends through Gmail). */
+export async function sendInvite(input: { to: string; code: string; link: string; leagueName?: string; kind?: 'player' | 'commish' }): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await client().functions.invoke('send-invite', { body: input });
+  if (error) {
+    // On a non-2xx the FunctionsHttpError only says "non-2xx status code"; the real
+    // reason is in the response body (.context is the Response). Surface it.
+    let detail = '';
+    try {
+      const ctx = (error as { context?: Response }).context;
+      if (ctx && typeof ctx.json === 'function') detail = (await ctx.json())?.error ?? '';
+    } catch { /* body wasn't JSON — fall back to the generic message */ }
+    return { ok: false, error: detail || friendlyError(error) };
+  }
+  return data as { ok: boolean; error?: string };
+}
 export const adminLeagueMembers = (leagueId: string) => rpc<AdminMember[]>('admin_league_members', { p_league_id: leagueId });
+/** Super-admin: permanently delete a league and all its data (cascades). */
+export const adminDeleteLeague = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; name?: string }>('admin_delete_league', { p_league_id: leagueId });
+/** Commissioner/admin enrolls THEMSELVES on a roster — claim a team to play.
+ *  Call once per roster to claim multiple teams. */
+export const commishClaimRoster = (leagueId: string, rosterId: number) =>
+  rpc<{ ok: boolean; error?: string; status?: string }>('commish_claim_roster', { p_league_id: leagueId, p_roster_id: rosterId });
+/** Commissioner/admin grants drip coin to a team (additive). */
+export const commishSeedCoin = (leagueId: string, rosterId: number, amount: number) =>
+  rpc<{ ok: boolean; error?: string; balance?: number }>('commish_seed_coin', { p_league_id: leagueId, p_roster_id: rosterId, p_amount: amount });
+export interface RosterWallet { roster_id: number; coins: number }
+/** Admin/commish: every team's current coin balance. */
+export const adminLeagueWallets = (leagueId: string) => rpc<RosterWallet[]>('admin_league_wallets', { p_league_id: leagueId });
+/** The league's configured weekly coin budget (any member can read it — the board
+ *  shows it in place of the generic stipend when the league sets its own). Null
+ *  when unreadable/unset. */
+export const leagueWeeklyBudget = async (leagueId: string): Promise<number | null> => {
+  if (!supabase) return null;
+  const { data } = await supabase.from('league').select('weekly_budget').eq('id', leagueId).maybeSingle();
+  const b = (data as { weekly_budget?: number } | null)?.weekly_budget;
+  return b == null ? null : Number(b);
+};
+/** Super-admin: toggle a league's live-test mode (compressed real-time schedule). */
+export const adminSetTestLive = (leagueId: string, on: boolean) =>
+  rpc<{ ok: boolean; error?: string; test_live_at?: string | null }>('admin_set_test_live', { p_league_id: leagueId, p_on: on });
+/** Super-admin: toggle a league's preseason mode — clones its Week-1 pairings into
+ *  the preseason offset weeks (101-103) so it can play real 2026 preseason games. */
+export const adminSetPreseason = (leagueId: string, on: boolean) =>
+  rpc<{ ok: boolean; error?: string; preseason_at?: string | null; matchups?: number }>('admin_set_preseason', { p_league_id: leagueId, p_on: on });
+/** The league's live-test anchor (epoch ms) if test mode is on, else null. Any
+ *  member can read it — the board compresses its window timeline from this. */
+export const leagueTestLiveAt = async (leagueId: string): Promise<number | null> => {
+  if (!supabase) return null;
+  const { data } = await supabase.from('league').select('test_live_at').eq('id', leagueId).maybeSingle();
+  const t = (data as { test_live_at?: string | null } | null)?.test_live_at;
+  return t ? Date.parse(t) : null;
+};
+/** Commissioner/admin sets the league's flat weekly coin budget (0 disables). */
+export const commishSetWeeklyBudget = (leagueId: string, amount: number) =>
+  rpc<{ ok: boolean; error?: string; weekly_budget?: number }>('commish_set_weekly_budget', { p_league_id: leagueId, p_amount: amount });
+/** Commissioner/admin grants the league's weekly budget to every team for one
+ *  week (idempotent — re-running a week never double-credits). */
+export const commishGrantWeeklyBudget = (leagueId: string, week: number) =>
+  rpc<{ ok: boolean; error?: string; credited?: number; weekly_budget?: number }>('commish_grant_weekly_budget', { p_league_id: leagueId, p_week: week });
+/** Admin/commish-map a roster to a person — by a joined-user id (picked from the
+ *  pool) or by email (immediate enroll if signed in, else a pending claim that
+ *  links on their next sign-in). Empty email + no id clears the roster. */
+export const adminAssignRoster = (leagueId: string, rosterId: number, email: string, appUserId?: string) =>
+  rpc<{ ok: boolean; error?: string; status?: 'enrolled' | 'pending' | 'cleared' }>('admin_assign_roster',
+    { p_league_id: leagueId, p_roster_id: rosterId, p_email: email, ...(appUserId ? { p_app_user_id: appUserId } : {}) });
+/** Claim any rosters pre-assigned to my email (called after sign-in). */
+export const claimMyRosters = () => rpc<{ ok: boolean; claimed?: number }>('claim_my_rosters');
+/** Player joins a league's pool by invite code (any platform); the commissioner
+ *  then assigns them a roster from the pool. */
+export const joinLeague = (code: string) =>
+  rpc<{ ok: boolean; error?: string; league?: string; status?: 'joined' | 'enrolled' }>('join_league', { p_code: code.trim() });
+export interface LeagueJoiner { app_user_id: string; email: string | null; }
+/** Admin/commish: users who've joined a league's pool but aren't rostered yet. */
+export const adminLeagueJoiners = (leagueId: string) => rpc<LeagueJoiner[]>('admin_league_joiners', { p_league_id: leagueId });
 export const commishOverview = () => rpc<AdminLeague[]>('commish_overview');
 export interface MatchupPicks { home_roster_id: number; away_roster_id: number; home_app_user: string | null; away_app_user: string | null; picks: { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null }[]; home_lineup: { player_slug: string | null; pos: string | null }[]; away_lineup: { player_slug: string | null; pos: string | null }[]; home_buffs: string[]; away_buffs: string[]; home_unlocks?: string[]; away_unlocks?: string[]; home_extra?: number; away_extra?: number; }
 export const adminMatchupPicks = (matchupId: string) => rpc<MatchupPicks>('admin_matchup_picks', { p_matchup_id: matchupId });
@@ -436,6 +592,14 @@ export const LIVE_BUFFS = ['overtime', 'ot-shield', 'momentum', 'garbage-time', 
 export const armBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; buffs?: string[] }>('arm_buff', { p_matchup_id: matchupId, p_buff: buff });
 export const disarmBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; buffs?: string[] }>('disarm_buff', { p_matchup_id: matchupId, p_buff: buff });
 export const myBuffs = (matchupId: string) => rpc<string[]>('my_buffs', { p_matchup_id: matchupId });
+/** Hero board: persist the armed buff set (no wallet charge — paid at buy). */
+export const heroSetBuffs = (matchupId: string, buffs: string[]) =>
+  rpc<{ ok: boolean; error?: string }>('hero_set_buffs', { p_matchup_id: matchupId, p_buffs: buffs });
+/** Hero board: persist/read the full working applied blob (extra slots, swaps,
+ *  backups, targeted powerups) for cross-device restoration. */
+export const heroSetApplied = (matchupId: string, payload: unknown) =>
+  rpc<{ ok: boolean; error?: string }>('hero_set_applied', { p_matchup_id: matchupId, p_payload: payload });
+export const myHeroApplied = (matchupId: string) => rpc<Record<string, unknown>>('my_hero_applied', { p_matchup_id: matchupId });
 
 // Metric unlocks (M2): arm before a locked metric (Combo Drip / Return / Air Raid)
 // can be picked. Same applied_state store, free this season.
@@ -456,6 +620,15 @@ export const sellExtraSlot = (matchupId: string) => rpc<{ ok: boolean; error?: s
 // spend before week 1. ensure_wallet seeds once (idempotent) and returns balance.
 export const myWallet = (matchupId: string) => rpc<number>('my_wallet', { p_matchup_id: matchupId });
 export const ensureWallet = (matchupId: string) => rpc<number>('ensure_wallet', { p_matchup_id: matchupId });
+/** Buy a power-up into inventory, charged against the real team wallet + recorded
+ *  server-side. Returns the new balance. */
+export const walletBuyPowerup = (matchupId: string, powerupId: string) =>
+  rpc<{ ok: boolean; error?: string; balance?: number; charged?: number }>('wallet_buy_powerup', { p_matchup_id: matchupId, p_powerup_id: powerupId });
+/** The caller's server-backed owned inventory for a matchup's league → {id: qty}. */
+export const myInventory = (matchupId: string) => rpc<Record<string, number>>('my_inventory', { p_matchup_id: matchupId });
+/** Consume/refund one owned power-up server-side (arming vs disarming). */
+export const consumeInventory = (matchupId: string, powerupId: string) => rpc<{ ok: boolean; qty?: number }>('consume_inventory', { p_matchup_id: matchupId, p_powerup_id: powerupId });
+export const refundInventory = (matchupId: string, powerupId: string) => rpc<{ ok: boolean; qty?: number }>('refund_inventory', { p_matchup_id: matchupId, p_powerup_id: powerupId });
 export const adminSetState = (matchupId: string, states: { window: string; home: number; away: number }[], coin?: { home: number; away: number }, slotScores?: { win: string; side: string; slot: string; slug: string; metric: string | null; score: number }[]) =>
   rpc<{ ok: boolean }>('admin_set_state', { p_matchup_id: matchupId, p_states: states, p_home_coin: coin?.home ?? null, p_away_coin: coin?.away ?? null, p_slot_scores: slotScores ?? null });
 export const adminSetCoin = (matchupId: string, home: number, away: number) =>

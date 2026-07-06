@@ -29,10 +29,9 @@ then checks out the `ref` you pass. So `simulate.yml` must exist on the repo's
 default branch, and `GH_REF` should point at a branch that has the **current
 server code**.
 
-- After PR #1 merges → set `GH_REF=main` (simplest; main is current).
-- Before that → set `GH_REF=claude/youthful-albattani-s9kprl` (the deploy branch),
-  and make sure `simulate.yml` is also present on the default branch so the
-  dispatch endpoint can find it.
+- Set `GH_REF=main` (the default branch, which holds the current server code and
+  `simulate.yml`). If you ever dispatch against a different branch, make sure
+  `simulate.yml` is present there too so the dispatch endpoint can find it.
 
 ## What the button sends
 

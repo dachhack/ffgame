@@ -12,10 +12,12 @@ import {
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
 } from '../data/liveApi';
 import { powerupById } from '../data/powerups';
+import { PuIcon, GameIcon, Emoji, COIN_GOLD } from '../app/gameIcons';
 import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } from '../data/premiumClient';
 import { shortName } from '../data/players';
 import type { Player } from '../types';
 import { SetupRow, PlayerPicker } from './Matchup';
+import { REG_SEASON_WEEKS } from '../data/league';
 
 // Live pool entries are slug/full/pos; the reused setup card wants a Player. Build
 // a light one (zero stats — the setup board only displays name/pos/team/headshot).
@@ -42,7 +44,7 @@ const fmtLock = (iso: string | null) => {
   catch { return iso; }
 };
 
-export function LivePicks({ userId, onBack }: { userId: string; onBack: () => void }) {
+export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: string; leagueId?: string; rosterId?: number; onBack: () => void }) {
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
   const [myTeam, setMyTeam] = useState<TeamInfo | null>(null);
   const [roster, setRoster] = useState<{ leagueId: string; rosterId: number } | null>(null);
@@ -64,18 +66,21 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   const [err, setErr] = useState<string | null>(null);
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   const [matchPremium, setMatchPremium] = useState(true); // default true = no false locks until we know
+  const [weekSel, setWeekSel] = useState<number | null>(null); // null = default (earliest) week
 
   useEffect(() => { ensurePremiumTier(); }, []); // load the free/premium split for intent gating
   useEffect(() => {
     (async () => {
       try {
+        // Open the specific league/roster the card asked for; fall back to the
+        // user's default roster when none is given.
         setState('loading'); setErr(null);
-        const r = await myRoster(userId);
+        const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
         if (!r) { setState('none'); return; }
         setRoster(r);
         myMembership(r.leagueId, r.rosterId).then((mm) => { if (mm?.controller) setController(mm.controller); }).catch(() => {});
-        const m = await myMatchup(r.leagueId, r.rosterId);
-        if (!m) { setState('none'); return; }
+        const m = await myMatchup(r.leagueId, r.rosterId, weekSel ?? undefined);
+        if (!m) { setMatchup(null); setState('none'); return; }
         setMatchup(m);
         matchupPremium(m.id).then(setMatchPremium).catch(() => {}); // premium → no power-up locks (both sides get the full set)
         matchupTeams(r.leagueId, [r.rosterId]).then((t) => setMyTeam(t[r.rosterId] ?? null)).catch(() => {});
@@ -104,7 +109,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('error');
       }
     })();
-  }, [userId, attempt]);
+  }, [userId, leagueId, rosterId, weekSel, attempt]);
 
   const posBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, p.pos])), [pool]);
   const locked = !!matchup && (matchup.status !== 'scheduled' || (!!matchup.lock_at && new Date(matchup.lock_at) <= new Date()));
@@ -274,6 +279,17 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
     finally { setAiBusy(false); }
   };
 
+  // Week stepper: page through the whole scheduled season (matchup?.week while
+  // viewing a week, else the selected week; defaults to the earliest).
+  const curWeek = matchup?.week ?? weekSel ?? 1;
+  const weekNav = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+      <button onClick={() => setWeekSel(Math.max(1, curWeek - 1))} disabled={curWeek <= 1} className="mono" title="previous week" style={{ ...linkBtn, fontSize: 13, padding: '0 4px', opacity: curWeek <= 1 ? 0.35 : 1 }}>‹</button>
+      <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)' }}>WK {curWeek}</span>
+      <button onClick={() => setWeekSel(Math.min(REG_SEASON_WEEKS, curWeek + 1))} disabled={curWeek >= REG_SEASON_WEEKS} className="mono" title="next week" style={{ ...linkBtn, fontSize: 13, padding: '0 4px', opacity: curWeek >= REG_SEASON_WEEKS ? 0.35 : 1 }}>›</button>
+    </div>
+  );
+
   if (state === 'loading') return <Muted text="Loading your matchup…" />;
   if (state === 'error') return (
     <div style={card}>
@@ -289,9 +305,12 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   );
   if (state === 'none') return (
     <div style={card}>
-      <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>You’re all set — no matchup yet</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>No week {curWeek} matchup yet</div>
+        {weekNav}
+      </div>
       <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 10, lineHeight: 1.5 }}>
-        Your team is enrolled. Your week-1 matchup appears here once your commissioner syncs the schedule — check back closer to kickoff. {err && <><br />— {err}</>}
+        Your team is enrolled. Matchups appear here once your commissioner syncs the schedule — use ‹ › to page through the season, or check back closer to kickoff. {err && <><br />— {err}</>}
       </div>
       <div style={{ textAlign: 'center', marginTop: 14 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
     </div>
@@ -310,7 +329,10 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
               <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Week {matchup!.week} lineup</div>
             </div>
           </div>
-          <span className="mono" style={{ fontSize: 9, color: locked ? 'var(--opp)' : 'var(--you)', border: `1px solid ${locked ? 'var(--opp)' : 'var(--you)'}`, borderRadius: 4, padding: '3px 7px', flexShrink: 0 }}>{locked ? 'LOCKED' : `LOCKS ${fmtLock(matchup!.lock_at)}`}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            {weekNav}
+            <span className="mono" style={{ fontSize: 9, color: locked ? 'var(--opp)' : 'var(--you)', border: `1px solid ${locked ? 'var(--opp)' : 'var(--you)'}`, borderRadius: 4, padding: '3px 7px' }}>{locked ? 'LOCKED' : `LOCKS ${fmtLock(matchup!.lock_at)}`}</span>
+          </div>
         </div>
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
           Pick a player + a hidden metric per slot. Sealed picks stay hidden from your opponent until kickoff. {filled}/{SLOTS.length} set.
@@ -319,7 +341,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         {/* Season-long auto-pilot: AI sets the team's best lineup each week. */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--bd)' }}>
           <div style={{ minWidth: 0 }}>
-            <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: controller === 'ai' ? 'var(--you)' : 'var(--text)' }}>🤖 Auto-pilot {controller === 'ai' ? 'ON' : 'OFF'}</div>
+            <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: controller === 'ai' ? 'var(--you)' : 'var(--text)' }}><Emoji e="🤖" /> Auto-pilot {controller === 'ai' ? 'ON' : 'OFF'}</div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>{controller === 'ai' ? 'AI sets your best lineup each week. Turn off to pick yourself.' : 'Let AI set your best lineup automatically every week.'}</div>
           </div>
           <button onClick={toggleAi} disabled={aiBusy} className="mono"
@@ -336,7 +358,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         <div style={{ ...card, marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Power-ups</div>
-            <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--you)' }}>◆ {Math.round(coins)} coin</span>
+            <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--you)' }}><GameIcon name={COIN_GOLD} emoji="◆" size="1.3em" /> {Math.round(coins)} coin</span>
           </div>
           <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
             Arm before kickoff — each buffs your whole lineup all week, spent from your drip coin. Locks at kickoff.
@@ -344,7 +366,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
           {!matchPremium && (
             <div style={{ background: 'color-mix(in srgb, var(--you) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 35%, transparent)', borderRadius: 8, padding: '8px 9px', marginTop: 8 }}>
               <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--you)', lineHeight: 1.55 }}>
-                🔒 Premium unlocks K/DST/IDP + the full power-up set + special events. Both sides of a premium matchup get the full set — never pay-to-win.
+                <Emoji e="🔒" /> Premium unlocks K/DST/IDP + the full power-up set + special events. Both sides of a premium matchup get the full set — never pay-to-win.
               </div>
               <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
                 <button onClick={() => checkout('personal')} className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>Unlock for $5 · all your leagues</button>
@@ -361,7 +383,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
                 <button key={id} onClick={() => toggleBuff(id)} disabled={locked || !!buffBusy || !afford} title={pu?.blurb}
                   className="mono"
                   style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : afford ? 'var(--text)' : 'var(--faint)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked || !afford ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : afford ? 1 : 0.5 }}>
-                  {pu?.icon} {pu?.name ?? id} {on ? '✓' : puLocked(id) ? '🔒' : `◆${priceOf(id)}`}
+                  <PuIcon id={id} emoji={pu?.icon} size="1.4em" /> {pu?.name ?? id} {on ? '✓' : puLocked(id) ? <Emoji e="🔒" size="1.2em" /> : <><GameIcon name={COIN_GOLD} emoji="◆" size="1.2em" />{priceOf(id)}</>}
                 </button>
               );
             })}
@@ -379,7 +401,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
                 <button key={id} onClick={() => toggleUnlock(id)} disabled={locked || !!buffBusy || !afford} title={pu?.blurb}
                   className="mono"
                   style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : afford ? 'var(--text)' : 'var(--faint)', background: on ? 'var(--streak, var(--you))' : 'var(--bg)', border: `1px solid ${on ? 'var(--streak, var(--you))' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked || !afford ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : afford ? 1 : 0.5 }}>
-                  {pu?.icon} {pu?.name ?? id} {on ? '✓' : puLocked(id) ? '🔒' : `◆${priceOf(id)}`}
+                  <PuIcon id={id} emoji={pu?.icon} size="1.4em" /> {pu?.name ?? id} {on ? '✓' : puLocked(id) ? <Emoji e="🔒" size="1.2em" /> : <><GameIcon name={COIN_GOLD} emoji="◆" size="1.2em" />{priceOf(id)}</>}
                 </button>
               );
             })}
@@ -428,7 +450,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         <div style={{ ...card, marginBottom: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Extra slots</div>
-            <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{extra}/2 owned · ◆ {Math.round(coins)}</span>
+            <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{extra}/2 owned · <GameIcon name={COIN_GOLD} emoji="◆" size="1.2em" /> {Math.round(coins)}</span>
           </div>
           <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
             Add up to 2 bonus lineup slots (◆{priceOf('extra-slot')} each). An extra slot is one-sided — it plays unopposed as a best-ball backup. Choose its window, then a player + metric. Slate-gated like any pick.
@@ -436,12 +458,12 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
           <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
             <button onClick={buyExtra} disabled={locked || extraBusy || extra >= 2 || coins < priceOf('extra-slot')} className="mono"
               style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--you)', borderRadius: 14, padding: '6px 11px', cursor: locked || extra >= 2 || coins < priceOf('extra-slot') ? 'default' : 'pointer', opacity: locked || extra >= 2 || coins < priceOf('extra-slot') ? 0.5 : 1 }}>
-              ➕ extra slot ◆{priceOf('extra-slot')}
+              ➕ extra slot <GameIcon name={COIN_GOLD} emoji="◆" size="1.2em" />{priceOf('extra-slot')}
             </button>
             {extra > 0 && (
               <button onClick={sellExtra} disabled={locked || extraBusy} className="mono"
                 style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 14, padding: '6px 11px', cursor: locked ? 'default' : 'pointer', opacity: locked ? 0.5 : 1 }}>
-                ➖ sell ◆{priceOf('extra-slot')}
+                ➖ sell <GameIcon name={COIN_GOLD} emoji="◆" size="1.2em" />{priceOf('extra-slot')}
               </button>
             )}
           </div>
