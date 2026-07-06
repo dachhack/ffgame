@@ -16,6 +16,7 @@ import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
 import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
+import { Rulebook } from './Rulebook';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
 const TICK_MS = 700;
@@ -185,6 +186,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // Live-pilot lock-in seal status (Supabase write): surfaced on the LOCK IN button.
   const [sealing, setSealing] = useState(false);
   const [sealError, setSealError] = useState(false);
+  // In-board Rulebook (the hidden-metric mechanic is otherwise only explained in
+  // the settings-gear modal — undiscoverable at the moment you must commit metrics).
+  const [showRules, setShowRules] = useState(false);
   useEffect(() => {
     if (!REAL_WEEKS.has(week) || isRealWeekLoaded(week)) { setReady(true); setLoadFailed(false); return; }
     setReady(false); setLoadFailed(false);
@@ -973,7 +977,14 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>2025 SEASON</span>
               </div>
               <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{headline}</div>
-              <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, maxWidth: 520, lineHeight: 1.5 }}>{subhead}</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', maxWidth: 520 }}>
+                <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, lineHeight: 1.5 }}>{subhead}</div>
+                {phase === 'setup' && (
+                  <button onClick={() => setShowRules(true)} className="mono" style={{ flex: 'none', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 11, padding: '4px 10px', cursor: 'pointer' }}>
+                    📖 How scoring works
+                  </button>
+                )}
+              </div>
               {phase === 'live' && (
                 <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, fontSize: 10, color: 'var(--dim)' }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', flex: 'none', background: clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--faint)' }} />
@@ -1166,6 +1177,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       {puView === 'active' && <ActivePowerupsModal effects={activeEffects} onClose={() => setPuView(null)} />}
       {puView === 'apply' && <ApplyPowerupsModal items={appliable} inventory={inventory} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); setPuView(null); }} onClose={() => setPuView(null)} />}
       {shopOpen && <ShopModal onClose={() => setShopOpen(false)} />}
+      {showRules && <Rulebook onClose={() => setShowRules(false)} />}
 
       {earnOpen && <EarningsModal earnings={earnings} onReset={() => { resetDripCoin(); setEarnOpen(false); }} onClose={() => setEarnOpen(false)} />}
     </>

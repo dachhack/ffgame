@@ -8,6 +8,7 @@ import { METRICS } from '../data/metrics';
 import { loadRealWeek, realPointsFor } from '../data/realPbp';
 import { FX_COLOR, fmtClock, buildBeats, type Beat } from '../data/demoNarration';
 import { DemoViewToggle } from './DemoOverlay';
+import { SleeperHandoff } from './SleeperHandoff';
 import type { PbpEvent, WindowId } from '../types';
 
 // A best-in-class, zero-effort intro to Drip. Good game design is about CHOICES,
@@ -403,9 +404,14 @@ export function GuidedDemo() {
           {ended && (
             <div style={{ marginTop: 18, background: 'var(--surface)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: 18, textAlign: 'center' }}>
               <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>{youBank >= theirBank ? 'You took it.' : Math.abs(youBank - theirBank) <= 8 ? 'So close.' : 'That one got away.'} That’s one slot.</div>
-              <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>That was one slot. A real lineup is eight of them — every player, hidden metric, and power-up your call. Ready to run a full board with your own league?</div>
-              <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ ...cta, marginTop: 14 }}>Get started with Drip Fantasy →</button>
-              <button onClick={restart} className="mono" style={{ background: 'none', border: 'none', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', cursor: 'pointer', marginTop: 12 }}>↩ make different picks</button>
+              <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>That was one slot. A real lineup is eight of them — every player, hidden metric, and power-up your call. Run a full board with your own league:</div>
+              {/* Capture intent inline instead of bouncing to the splash to re-find
+                  the username box (SleeperHandoff → resolve → your real leagues). */}
+              <div style={{ marginTop: 14 }}><SleeperHandoff heading="PLAY IT WITH YOUR REAL TEAM" /></div>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 12 }}>
+                <button onClick={restart} className="mono" style={{ background: 'none', border: 'none', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', cursor: 'pointer' }}>↩ make different picks</button>
+                <button onClick={() => navigate({ name: 'hub' })} className="mono" style={{ background: 'none', border: 'none', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', cursor: 'pointer' }}>explore the demo league →</button>
+              </div>
             </div>
           )}
         </div>
