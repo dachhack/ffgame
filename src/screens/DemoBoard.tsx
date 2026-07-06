@@ -463,7 +463,7 @@ export function DemoBoard() {
                     </div>
                     {open && (
                       <>
-                        <DuelLog slot={s} clock={winClock} live={st === 'live'} />
+                        <DuelLog slot={s} clock={winClock} live={st === 'live'} armedPu={armedPu} />
                         <SlotFieldViews week={DEMO_WEEK} youTeam={s.you?.player.team} theirTeam={s.their?.player.team} youClock={winClock} theirClock={winClock} />
                       </>
                     )}
@@ -716,7 +716,7 @@ function MetricChip({ pos, metricId }: { pos: Player['pos']; metricId: string | 
 
 // Two-sided play log for one duel — scoring plays, effects, power-up notes and
 // coin, revealed up to the window's clock (the GuidedDemo log, per slot).
-function DuelLog({ slot, clock, live }: { slot: ResolvedSlot; clock: number; live: boolean }) {
+function DuelLog({ slot, clock, live, armedPu }: { slot: ResolvedSlot; clock: number; live: boolean; armedPu?: { id: string; icon: string } }) {
   const logRef = useRef<HTMLDivElement>(null);
   const rows = slot.events.filter((e) => e.clock <= clock && (e.delta > 0 || e.effect || e.coin || e.sig || e.buffNote));
   useEffect(() => { if (live) logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' }); }, [rows.length, live]);
@@ -736,7 +736,7 @@ function DuelLog({ slot, clock, live }: { slot: ResolvedSlot; clock: number; liv
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: mine ? 'var(--you)' : 'var(--opp)' }}>{actionText(e.play)}</span>
               {e.delta > 0 && <span style={{ color: 'var(--text)', fontWeight: 700 }}>+{e.delta.toFixed(1)}</span>}
               {e.effect && <span style={{ color: FX_COLOR[e.effect.type] ?? 'var(--text)', fontWeight: 700 }}>{e.effect.type === 'streak' ? '🔥 ' : ''}{e.effect.type.toUpperCase()}</span>}
-              {e.buffNote && <span style={{ color: 'var(--fx-streak, #36D399)', fontWeight: 700 }}><FxIcon k="power" emoji="🗑️" size="1.2em" />×2</span>}
+              {e.buffNote && <span style={{ color: 'var(--fx-streak, #36D399)', fontWeight: 700 }}><PuIcon id={armedPu?.id} emoji={armedPu?.icon ?? '🗑️'} size="1.2em" />×2</span>}
               {e.coin && <span style={{ color: 'var(--you)' }}><GameIcon name={COIN_GOLD} emoji="◇" size="1.2em" /></span>}
             </span>
           );
