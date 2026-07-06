@@ -441,10 +441,10 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
 
   return (
     <>
-      {/* brand hero — the QB mark + wordmark fill the empty space above the fold */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 28, margin: '2px 0 26px', flexWrap: 'wrap' }}>
+      {/* brand hero — the QB mark + wordmark, tight to the content below */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 14, margin: '0 0 10px', flexWrap: 'wrap' }}>
         <img src={`${import.meta.env.BASE_URL}brand/hero-mark.png`} alt="" style={{ height: 224, width: 'auto' }} />
-        <img src={`${import.meta.env.BASE_URL}brand/hero-wordmark.png`} alt="Drip Fantasy" style={{ height: 69, width: 'auto' }} />
+        <img src={`${import.meta.env.BASE_URL}brand/hero-wordmark.png`} alt="Drip Fantasy" style={{ height: 69, width: 'auto', marginTop: 8 }} />
       </div>
       <SeasonCountdown />
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
