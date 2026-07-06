@@ -36,6 +36,9 @@ export function App() {
       const code = p.get('code');
       if (code) { try { localStorage.setItem('dripInviteCode', code.toUpperCase()); } catch { /* ignore */ } }
       navigate({ name: 'live' });
+      // Consume the params so a later refresh doesn't teleport back into Live (the
+      // route now lives in the hash). Keep the path + the just-set #/live hash.
+      try { window.history.replaceState(window.history.state, '', window.location.pathname + '#/live'); } catch { /* ignore */ }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

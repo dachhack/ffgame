@@ -43,6 +43,81 @@ export type Route =
  *  persist its lineup to sealed_pick and align with the worker's scoring. */
 export interface LiveCtx { matchupId: string; userId: string; leagueId: string; rosterId: number; week: number; }
 
+// ── URL routing ──────────────────────────────────────────────────────────────
+// Routes are mirrored into the URL hash (works on GitHub Pages with no server
+// config) so refresh keeps your place and screens are shareable/bookmarkable.
+const SIM_KEY = 'gc-sim';
+interface SimRef { leagueId: string; leagueName: string }
+function loadSimRef(): SimRef | null {
+  try { const s = localStorage.getItem(SIM_KEY); const o = s ? JSON.parse(s) : null; return o && o.leagueId ? o : null; } catch { return null; }
+}
+/** Remember (or clear) which real Sleeper league backs the current sim board, so a
+ *  reload can send the user to that league's rebuild screen instead of silently
+ *  rendering the baked demo in a sim-backed board route. */
+export function rememberSimLeague(ref: SimRef | null): void {
+  try { if (ref) localStorage.setItem(SIM_KEY, JSON.stringify(ref)); else localStorage.removeItem(SIM_KEY); } catch { /* ignore */ }
+}
+
+/** Route → URL hash. */
+function routeToHash(r: Route): string {
+  switch (r.name) {
+    case 'splash': return '#/';
+    case 'leagues': return '#/leagues';
+    case 'live': return '#/live';
+    case 'demo': return r.view === 'board' ? '#/demo/board' : '#/demo';
+    case 'sleeperLeague': return `#/sleeper/${encodeURIComponent(r.leagueId)}`;
+    case 'hub': return '#/hub';
+    case 'league': return '#/league';
+    case 'matchup': return `#/matchup/${r.week}/${r.phase}`;
+    case 'final': return `#/final/${r.week}`;
+  }
+}
+/** URL hash → Route, or null when the hash carries no (valid) route so the caller
+ *  can fall back to its default (e.g. a first visit with no hash). */
+function hashToRoute(hash: string): Route | null {
+  const h = (hash || '').replace(/^#/, '').replace(/^\/+/, '').replace(/\/+$/, '');
+  if (h === '') return null;
+  const seg = h.split('/');
+  switch (seg[0]) {
+    case 'leagues': return { name: 'leagues' };
+    case 'live': return { name: 'live' };
+    case 'demo': return { name: 'demo', view: seg[1] === 'board' ? 'board' : 'clean' };
+    case 'sleeper': {
+      if (!seg[1]) return null;
+      const leagueId = decodeURIComponent(seg[1]);
+      const sim = loadSimRef();
+      return { name: 'sleeperLeague', leagueId, leagueName: sim?.leagueId === leagueId ? sim.leagueName : '' };
+    }
+    case 'hub': return { name: 'hub' };
+    case 'league': return { name: 'league' };
+    case 'matchup': {
+      const week = Number(seg[1]);
+      if (!Number.isFinite(week)) return null;
+      const phase: Phase = seg[2] === 'live' ? 'live' : seg[2] === 'final' ? 'final' : 'setup';
+      return { name: 'matchup', week, phase };
+    }
+    case 'final': {
+      const week = Number(seg[1]);
+      if (!Number.isFinite(week)) return null;
+      return { name: 'final', week };
+    }
+    default: return null;
+  }
+}
+/** Resolve the route to boot into: the URL hash if present, else the sleeper/splash
+ *  default. A sim-backed board route can't restore its in-memory league on reload,
+ *  so redirect it to that league's rebuild screen; a sleeperLeague route needs a
+ *  remembered Sleeper user to rebuild. */
+function bootRoute(hasSleeperUser: boolean): Route {
+  let r = hashToRoute(typeof window !== 'undefined' ? window.location.hash : '') ?? (hasSleeperUser ? { name: 'leagues' } : { name: 'splash' });
+  const sim = loadSimRef();
+  if (sim && (r.name === 'hub' || r.name === 'league' || r.name === 'matchup' || r.name === 'final')) {
+    r = { name: 'sleeperLeague', leagueId: sim.leagueId, leagueName: sim.leagueName };
+  }
+  if (r.name === 'sleeperLeague' && !hasSleeperUser) r = { name: 'splash' };
+  return r;
+}
+
 interface Store {
   theme: ThemeName;
   setTheme: (t: ThemeName) => void;
@@ -164,18 +239,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (u) { identify(u.userId, { username: u.username }); track(Ev.sleeperConnected); }
     try { if (u) localStorage.setItem(SLEEPER_KEY, JSON.stringify(u)); else localStorage.removeItem(SLEEPER_KEY); } catch { /* ignore */ }
   };
-  // Boot to your leagues if a Sleeper user is remembered, else the welcome splash.
-  const [route, setRoute] = useState<Route>(sleeperUser ? { name: 'leagues' } : { name: 'splash' });
-  // Browser back/forward: mirror each route into history state (URL unchanged) so the
-  // back button steps between in-app screens instead of dead-ending / leaving the site.
+  // Boot from the URL hash (refresh keeps your place; screens are shareable), else
+  // your leagues if a Sleeper user is remembered, else the welcome splash.
+  const [route, setRoute] = useState<Route>(() => bootRoute(!!sleeperUser));
+  // Each navigate pushes the route into the URL hash so back/forward step between
+  // screens and every screen has a real, bookmarkable URL.
   const navigate = (r: Route) => {
     setRoute(r);
     track(Ev.screenView, { screen: r.name });
-    try { window.history.pushState({ __route: r }, ''); } catch { /* ignore */ }
+    try { window.history.pushState({ __route: r }, '', routeToHash(r)); } catch { /* ignore */ }
   };
   useEffect(() => {
-    try { window.history.replaceState({ __route: route }, ''); } catch { /* ignore */ }
-    const onPop = (e: PopStateEvent) => { setRoute(((e.state as { __route?: Route } | null)?.__route) ?? { name: 'splash' }); };
+    // Normalize the URL to the resolved boot route (a first visit, or a sim board
+    // route redirected to its rebuild screen, may differ from what's in the hash).
+    try { window.history.replaceState({ __route: route }, '', routeToHash(route)); } catch { /* ignore */ }
+    // Back/forward: re-read the route from the (now-updated) hash.
+    const onPop = () => { setRoute(hashToRoute(window.location.hash) ?? { name: 'splash' }); };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -206,6 +285,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const exitSimLeague = () => {
     resetToDemoLeague(); clearSyntheticWeeks(); clearLivePlays(); clearRuntimeHeadshots();
     setActiveLeagueState(LEAGUE); setIsSimLeague(false); setYouTeam(YOU_TEAM_ID); setLiveCtx(null);
+    rememberSimLeague(null); // no sim to restore on reload once we're back on the demo
   };
   const [bigText, setBigTextState] = useState<boolean>(() => {
     try {

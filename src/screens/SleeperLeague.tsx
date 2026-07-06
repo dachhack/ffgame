@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useStore } from '../app/store';
+import { useStore, rememberSimLeague } from '../app/store';
 import { SiteSettings } from '../app/ui';
 import { getStandings, sleeperAvatarUrl, type SleeperStanding } from '../data/sleeper';
 import { buildSleeperLeague } from '../data/buildLeague';
@@ -47,6 +47,9 @@ export function SleeperLeague({ leagueId, leagueName }: { leagueId: string; leag
       const outcome = await buildRef.current!.p;
       if (!outcome.ok) throw outcome.error;
       loadSimLeague(outcome.built, outcome.youTeamId);
+      // Remember this league so a reload of a sim-backed board route lands here (to
+      // rebuild) rather than silently showing the baked demo.
+      rememberSimLeague({ leagueId, leagueName });
       navigate({ name: 'hub' });
     } catch (e) {
       setSimErr(buildErrorCopy(e));
