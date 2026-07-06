@@ -441,6 +441,7 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
 
   return (
     <>
+      <SeasonCountdown />
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
         <div className="grotesk" style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>Your {total === 1 ? 'league' : 'leagues'}</div>
         <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.08em' }}>{total} LEAGUE{total === 1 ? '' : 'S'}</span>
@@ -461,6 +462,45 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
         <button onClick={onAdd} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>＋ add a league</button>
       </div>
     </>
+  );
+}
+
+// Week 1 of the 2026 NFL season: TNF on Thu Sep 10 at 8:20 PM ET — the first
+// kickoff, i.e. the first moment picks lock. The banner retires itself once
+// the season is underway.
+const SEASON_KICKOFF = new Date('2026-09-10T20:20:00-04:00');
+
+function SeasonCountdown() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const ms = SEASON_KICKOFF.getTime() - now;
+  if (ms <= 0) return null;
+  const s = Math.floor(ms / 1000);
+  const segs: [number, string][] = [
+    [Math.floor(s / 86400), 'DAYS'],
+    [Math.floor((s % 86400) / 3600), 'HRS'],
+    [Math.floor((s % 3600) / 60), 'MIN'],
+    [s % 60, 'SEC'],
+  ];
+  const when = SEASON_KICKOFF.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: '14px 16px', marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+      <div style={{ minWidth: 220, flex: '1 1 220px' }}>
+        <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em' }}>Drip leagues go live Week 1 of the NFL season</div>
+        <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--dim)', marginTop: 5 }}>FIRST PICKS LOCK AT {when.toUpperCase()} ET</div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flex: 'none' }}>
+        {segs.map(([v, l]) => (
+          <div key={l} style={{ textAlign: 'center', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '9px 10px 7px', minWidth: 60 }}>
+            <div className="grotesk" style={{ fontSize: 28, fontWeight: 700, color: 'var(--you)', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{String(v).padStart(2, '0')}</div>
+            <div className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.18em', color: 'var(--faint)', marginTop: 5 }}>{l}</div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
