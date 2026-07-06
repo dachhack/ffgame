@@ -265,8 +265,8 @@ export function DemoBoard() {
       setWClock((c) => {
         const max = winMaxes[wIdx] ?? 0;
         const slots = resolved.windows[wIdx]?.slots.length ?? 1;
-        const ticks = 64 + 20 * (slots - 1); // ~27-53s per window at 1× (2×/4× available)
-        const stepSec = Math.max(30, Math.ceil(max / ticks));
+        const ticks = 128 + 40 * (slots - 1); // ~50-100s per window at 1× (2×/4× available)
+        const stepSec = Math.max(15, Math.ceil(max / ticks));
         const n = c + stepSec * speed;
         if (n >= max) {
           if (wIdx + 1 < resolved.windows.length) { setWIdx(wIdx + 1); return 0; }
