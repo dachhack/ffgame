@@ -6,7 +6,10 @@ name: Apply Supabase migrations
 # re-run), so it needs no migration tracking.
 on:
   push:
-    branches: [main]
+    # claude/demo-copy-scoring-bug-wbvdu0 is TEMPORARY (this session's dispatch
+    # token lacks actions:write, so the apply rides the push trigger — the same
+    # dance as runs #61-62). Revert to [main] before/at merge.
+    branches: [main, claude/demo-copy-scoring-bug-wbvdu0]
     paths: ['supabase/migrations/**']
   workflow_dispatch:
     inputs:
