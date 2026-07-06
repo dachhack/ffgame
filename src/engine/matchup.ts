@@ -493,14 +493,6 @@ export function buildMatchup(
   };
 }
 
-export const COIN_PER_SIG = 5;
-/** Drip coin earned by a side: +5 for every signature play its lineup makes. */
-export function signatureCoins(m: ResolvedMatchup, side: 'you' | 'their'): number {
-  let n = 0;
-  for (const w of m.windows) for (const s of w.slots) for (const e of s.events) if (e.side === side && e.sig) n++;
-  return n * COIN_PER_SIG;
-}
-
 // ── Drip-coin economy ────────────────────────────────────────────────────────
 export const WEEKLY_STIPEND = 50;     // flat, just for playing the week
 export const UNOPPOSED_COIN = 15;     // per unopposed player you field

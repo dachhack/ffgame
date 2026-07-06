@@ -242,9 +242,6 @@ let activeWeeks = 14;
 
 /** The maximum supported regular-season week (the baked NFL slate covers 1–14). */
 export const REG_SEASON_WEEKS = 14;
-/** The active league's regular-season length (≤ REG_SEASON_WEEKS). */
-export function activeRegSeasonWeeks(): number { return activeWeeks; }
-export function getActiveLeague(): League { return activeLeague; }
 
 /** A fully-built league + its player registry, ready to make active. */
 export interface BuiltLeague { league: League; players: Record<string, Player>; weeks: number; }

@@ -46,11 +46,6 @@ export interface Metric {
   lock?: string;        // powerup id that must be owned to pick this metric (per-week unlock)
 }
 
-export interface RosterEntry {
-  playerId: string;
-  starter: boolean;
-}
-
 export interface FantasyTeam {
   id: string;          // roster slug
   name: string;        // team name

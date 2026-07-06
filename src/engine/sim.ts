@@ -196,9 +196,6 @@ export function realRawPlays(playerId: string, week: number): RawPlay[] | null {
     .sort((a, b) => a.clock - b.clock);
 }
 
-export function hasRealPbp(playerId: string, week: number): boolean {
-  return realRawPlays(playerId, week) !== null;
-}
 
 // A projected "average game" play sequence built from a player's SEASON per-game
 // stats — historical performance, with no knowledge of the actual week. The AI
