@@ -14,6 +14,7 @@ import { DEMO_WEEK } from '../config';
 import { buildDripTestLeague } from '../data/dripTest';
 import { LivePicks } from './LivePicks';
 import { LiveBoard } from './LiveBoard';
+import { RequestCodeModal } from './RequestCode';
 import { AdminPage } from './AdminPage';
 import { CommishDash } from './CommishDash';
 import type { Session } from '@supabase/supabase-js';
@@ -264,7 +265,12 @@ function Enroll({ session, view, setView }: { session: Session; view: OnboardVie
   const [loadErr, setLoadErr] = useState(false);
   const [commishIds, setCommishIds] = useState<Set<string>>(new Set());
   const [cards, setCards] = useState<Record<string, MatchupCard>>({});
-  const [choice, setChoice] = useState<'none' | 'player'>('none');
+  // A commissioner's share link (?code=…) stashes dripInviteCode and promises
+  // "just sign in and confirm — no code to type." Honor that by skipping the
+  // role chooser and going straight to the pre-filled redeem form.
+  const [choice, setChoice] = useState<'none' | 'player'>(() => {
+    try { return localStorage.getItem('dripInviteCode') ? 'player' : 'none'; } catch { return 'none'; }
+  });
   const isCommish = commishIds.size > 0;
 
   const refresh = async () => {
@@ -544,6 +550,7 @@ function RedeemForm({ onJoined }: { onJoined: () => void }) {
   const [team, setTeam] = useState<PreviewRedeem | null>(null); // confirm step
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [askCode, setAskCode] = useState(false); // "don't have a code?" request sheet
 
   const find = async (c0?: string) => {
     const c = (c0 ?? code).trim();
@@ -634,7 +641,15 @@ function RedeemForm({ onJoined }: { onJoined: () => void }) {
           </div>
         )}
         {err && <div className="mono" style={errStyle}>{err}</div>}
+        {!team && (
+          <div style={{ textAlign: 'center', marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
+            {/* The FAB that requests a code is hidden inside /live, so a user who
+                lands here without one would otherwise be stranded. */}
+            <button onClick={() => setAskCode(true)} className="mono" style={linkBtn}>Don’t have a code? Request one for your league →</button>
+          </div>
+        )}
       </div>
+      {askCode && <RequestCodeModal initialSleeper={username} onClose={() => setAskCode(false)} />}
     </>
   );
 }
