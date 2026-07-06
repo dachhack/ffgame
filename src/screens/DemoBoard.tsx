@@ -59,6 +59,10 @@ export function DemoBoard() {
   // Coming back from a Sleeper sim: restore the baked Drip Test League so the
   // board always builds from the demo rosters.
   useEffect(() => { if (isSimLeague) exitSimLeague(); }, [isSimLeague, exitSimLeague]);
+  // The demo always starts fresh: landing here forgets any Sleeper username
+  // from earlier in the session, so reaching its leagues again means typing
+  // it again (nothing is persisted across visits either — see store.tsx).
+  useEffect(() => { if (sleeperUser) setSleeperUser(null); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { track(Ev.screenView, { screen: 'demo-board', week: DEMO_WEEK }); }, []);
   // Logged-in players go straight to their leagues (see bootSessionChecked).
   useEffect(() => {
