@@ -178,7 +178,8 @@ function AuthForm() {
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const reset = () => { setErr(null); setInfo(null); };
+  const [signupPending, setSignupPending] = useState(false); // awaiting email confirmation
+  const reset = () => { setErr(null); setInfo(null); setSignupPending(false); };
   const go = (m: AuthMode) => { setMode(m); setSent(false); reset(); };
 
   const run = async (fn: () => Promise<void>) => {
@@ -190,7 +191,7 @@ function AuthForm() {
   const submit = () => {
     if (!email.trim()) return;
     if (mode === 'signin') return run(() => signInPassword(email, password));
-    if (mode === 'signup') return run(async () => { const r = await signUpPassword(email, password); if (r.needsConfirm) setInfo('Account created — check your email to confirm, then sign in.'); });
+    if (mode === 'signup') return run(async () => { const r = await signUpPassword(email, password); if (r.needsConfirm) { setInfo('Account created — check your email to confirm, then sign in.'); setSignupPending(true); } });
     if (mode === 'forgot') return run(async () => { await sendPasswordReset(email); setInfo('If that email has an account, a reset link is on its way.'); });
     return run(async () => { await sendMagicLink(email); setSent(true); });
   };
@@ -268,6 +269,15 @@ function AuthForm() {
           style={{ ...btn, width: '100%', padding: '11px 0', marginTop: 14, opacity: busy || !email.trim() || (showPw && password.length < 6) ? 0.6 : 1 }}>{busy ? '…' : cta}</button>
         {err && <div className="mono" style={errStyle}>{err}</div>}
         {info && <div className="mono" style={{ ...errStyle, color: 'var(--you)' }}>{info}</div>}
+        {signupPending && (
+          // Didn't get the confirmation email? A magic link both confirms the
+          // address and signs them in, so it doubles as a resend + a way through.
+          <div style={{ textAlign: 'center', marginTop: 10 }}>
+            <button onClick={() => run(async () => { await sendMagicLink(email); setMode('magic'); setSent(true); })} disabled={busy} className="mono" style={{ ...linkBtn, opacity: busy ? 0.6 : 1 }}>
+              Didn’t get it? Email me a sign-in link →
+            </button>
+          </div>
+        )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, flexWrap: 'wrap', gap: 8 }}>
           {mode === 'signin' && <button onClick={() => go('signup')} className="mono" style={linkBtn}>create account</button>}
@@ -324,10 +334,16 @@ interface MatchupCard { matchup: LiveMatchup; teams: Record<number, TeamInfo>; }
 
 function Enroll({ session, view, setView, commishCode }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void; commishCode?: string | null }) {
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
+  const [loadErr, setLoadErr] = useState(false);
   const [commishLeagues, setCommishLeagues] = useState<AdminLeague[]>([]);
   const [commishLoaded, setCommishLoaded] = useState(false);
   const [cards, setCards] = useState<Record<string, MatchupCard>>({});
-  const [choice, setChoice] = useState<'none' | 'player'>('none');
+  // A commissioner's share link (?code=…) stashes dripInviteCode and promises
+  // "just sign in and confirm — no code to type." Honor that by skipping the
+  // role chooser and going straight to the pre-filled redeem form.
+  const [choice, setChoice] = useState<'none' | 'player'>(() => {
+    try { return localStorage.getItem('dripInviteCode') ? 'player' : 'none'; } catch { return 'none'; }
+  });
   // Which league "manage" opened — so the dashboard focuses that one, not all.
   const [manageId, setManageId] = useState<string | null>(null);
   // Which team's live board/picks a card opened (a manager can be in several).
@@ -338,6 +354,7 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
   const isCommish = commishIds.size > 0;
 
   const refresh = async () => {
+    setLoadErr(false);
     let rows: Enrollment[] = [];
     try {
       await ensureAppUser(session);
@@ -345,7 +362,12 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
       // leagues are enrolled this way, since there's no username to self-claim by).
       await claimMyRosters().catch(() => {});
       rows = await myEnrollments(session.user.id); setEnrollments(rows);
-    } catch { setEnrollments([]); }
+    } catch {
+      // Don't fake an empty enrollment on failure — that shows an already-enrolled
+      // user the "how are you joining?" form. Surface a retry instead (see below).
+      // commishLoaded is flipped so the loading gate clears and the error renders.
+      setLoadErr(true); setCommishLoaded(true); return;
+    }
     commishOverview().then((l) => setCommishLeagues(l ?? [])).catch(() => setCommishLeagues([])).finally(() => setCommishLoaded(true));
     // Each league's next matchup + opponent, for the home cards.
     for (const e of rows) {
@@ -381,6 +403,14 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
   if (view === 'board') return <LiveBoard userId={session.user.id} leagueId={target?.leagueId} rosterId={target?.rosterId} onBack={() => setView('home')} />;
   if (view === 'results' && target) return <LeagueResults leagueId={target.leagueId} onBack={() => setView('home')} />;
   if (view === 'admin') return <AdminPage onBack={() => setView('home')} />;
+  // Only a first-load failure blanks the screen; a background refresh failure keeps
+  // whatever we already showed. Retry rather than mislead an enrolled user.
+  if (loadErr && enrollments === null) return (
+    <div style={{ textAlign: 'center', padding: '24px 0' }}>
+      <Muted text="Couldn’t load your leagues." />
+      <button onClick={refresh} className="mono" style={{ marginTop: 12, background: 'none', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', cursor: 'pointer' }}>↻ retry</button>
+    </div>
+  );
   if (enrollments === null || !commishLoaded) return <Muted text="Loading your leagues…" />;
 
   // A signed-in commissioner with no player roster of their own → straight to
@@ -846,6 +876,7 @@ function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void
   const [team, setTeam] = useState<PreviewRedeem | null>(null); // confirm step
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [askCode, setAskCode] = useState(false); // "don't have a code?" request sheet
 
   // Returning player: pre-fill the Sleeper username they linked on a prior join
   // so they don't have to type it again (still editable via "not me").
@@ -970,7 +1001,15 @@ function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void
           </div>
         )}
         {err && <div className="mono" style={errStyle}>{err}</div>}
+        {!team && (
+          <div style={{ textAlign: 'center', marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
+            {/* The FAB that requests a code is hidden inside /live, so a user who
+                lands here without one would otherwise be stranded. */}
+            <button onClick={() => setAskCode(true)} className="mono" style={linkBtn}>Don’t have a code? Request one for your league →</button>
+          </div>
+        )}
       </div>
+      {askCode && <RequestCodeModal initialPlatform="" onClose={() => setAskCode(false)} />}
     </>
   );
 }

@@ -59,7 +59,8 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
   const [extra, setExtra] = useState<number>(0);
   const [extraPicks, setExtraPicks] = useState<{ win: string | null; player_slug: string | null; metric_id: string | null }[]>([]);
   const [extraBusy, setExtraBusy] = useState(false);
-  const [state, setState] = useState<'loading' | 'ready' | 'none'>('loading');
+  const [state, setState] = useState<'loading' | 'ready' | 'none' | 'error'>('loading');
+  const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -73,7 +74,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
       try {
         // Open the specific league/roster the card asked for; fall back to the
         // user's default roster when none is given.
-        setState('loading');
+        setState('loading'); setErr(null);
         const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
         if (!r) { setState('none'); return; }
         setRoster(r);
@@ -102,9 +103,13 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
         setUnlocks(new Set(un ?? []));
         ensureWallet(m.id).then((c) => setCoins(Number(c ?? 0))).catch(() => {}); // seeds once + balance
         setState('ready');
-      } catch (e) { setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('none'); }
+      } catch (e) {
+        // A real load failure is NOT "you're all set" — surface it distinctly with
+        // a retry, rather than telling the user everything's fine (see 'error' below).
+        setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('error');
+      }
     })();
-  }, [userId, leagueId, rosterId, weekSel]);
+  }, [userId, leagueId, rosterId, weekSel, attempt]);
 
   const posBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, p.pos])), [pool]);
   const locked = !!matchup && (matchup.status !== 'scheduled' || (!!matchup.lock_at && new Date(matchup.lock_at) <= new Date()));
@@ -286,6 +291,18 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
   );
 
   if (state === 'loading') return <Muted text="Loading your matchup…" />;
+  if (state === 'error') return (
+    <div style={card}>
+      <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Couldn’t load your matchup</div>
+      <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 10, lineHeight: 1.5 }}>
+        Check your connection and try again. {err && <><br />— {err}</>}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 14 }}>
+        <button onClick={() => setAttempt((a) => a + 1)} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>↻ retry</button>
+        <button onClick={onBack} className="mono" style={linkBtn}>← back</button>
+      </div>
+    </div>
+  );
   if (state === 'none') return (
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>

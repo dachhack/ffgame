@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile } from '../app/ui';
@@ -19,6 +19,7 @@ import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
 import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, leagueWeeklyBudget, leagueTestLiveAt, myMatchup, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
+import { Rulebook } from './Rulebook';
 import { PuIcon, GameIcon, Emoji, DripCoin, UI_ART } from '../app/gameIcons';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
 
@@ -87,14 +88,19 @@ const DEMO_POWERUPS = [
   { id: 'floodgates', icon: '🌊', name: 'Floodgates', blurb: 'Your drips ignore the opponent’s pauses and erases all game.' },
 ];
 
+// Stable empty record so props that fall back to "nothing" keep a constant
+// identity — lets the memoized WindowSection skip re-renders on every clock tick
+// (a fresh {} each render would look like a changed prop and defeat the memo).
+const EMPTY_REC: Record<string, never> = {};
+
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
   const { youTeamId: YOU, navigate, liveCtx, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const [demoBuff, setDemoBuff] = useState('garbage-time'); // the power-up the demo viewer armed
-  const buffs = demo ? { [demoBuff]: true } : (applied[week]?.buffs ?? {});
+  const buffs = useMemo(() => (demo ? { [demoBuff]: true } : (applied[week]?.buffs ?? EMPTY_REC)), [demo, demoBuff, applied, week]);
   const buffsKey = JSON.stringify(buffs);
   const extraSlots = applied[week]?.extraSlots ?? {};
   const swaps = applied[week]?.swaps ?? {};
-  const backupAssign = applied[week]?.backups ?? {};
+  const backupAssign = applied[week]?.backups ?? EMPTY_REC;
   const aw = applied[week];
   const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, emp: aw?.emp };
   const extrasKey = JSON.stringify(extras);
@@ -191,13 +197,20 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
   // Lazy-load this week's real play-by-play (per-week JSON) before resolving.
   const [ready, setReady] = useState(() => !REAL_WEEKS.has(week) || isRealWeekLoaded(week));
+  // Non-null → the week's plays failed to load; without this the board would
+  // silently render every player at 0.0 (a broken-looking game) on a fetch error.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  // In-board Rulebook (the hidden-metric mechanic is otherwise only explained in
+  // the settings-gear modal — undiscoverable at the moment you must commit metrics).
+  const [showRules, setShowRules] = useState(false);
   useEffect(() => {
-    if (!REAL_WEEKS.has(week) || isRealWeekLoaded(week)) { setReady(true); return; }
-    setReady(false);
+    if (!REAL_WEEKS.has(week) || isRealWeekLoaded(week)) { setReady(true); setLoadFailed(false); return; }
+    setReady(false); setLoadFailed(false);
     let alive = true;
-    loadRealWeek(week).then(() => { if (alive) setReady(true); });
+    loadRealWeek(week).then((ok) => { if (alive) { if (ok) setReady(true); else setLoadFailed(true); } });
     return () => { alive = false; };
-  }, [week]);
+  }, [week, loadAttempt]);
 
   const extraKey = JSON.stringify(extraSlots);
   const youPools = useMemo(() => windowPools(YOU, week), [week]);
@@ -211,7 +224,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   useEffect(() => {
     if (!liveCtx) { setLiveOppPicks(null); setLiveOppBuffs(null); return; }
     let alive = true;
+    let t: ReturnType<typeof setInterval> | undefined;
+    const stop = () => { if (t) { clearInterval(t); t = undefined; } };
     const load = async () => {
+      if (document.hidden) return; // don't poll a backgrounded tab
       try {
         const [rows, oppBuffs] = await Promise.all([
           getRevealedPicks(liveCtx.matchupId),
@@ -222,12 +238,18 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           if (r.app_user_id === liveCtx.userId || !r.player_slug) continue; // skip mine / empty
           opp[`${r.game_window}#${r.roster_slot}`] = { playerId: r.player_slug, metricId: r.metric_id };
         }
-        if (alive) { setLiveOppPicks(Object.keys(opp).length ? opp : null); setLiveOppBuffs(oppBuffs); }
+        if (alive) {
+          setLiveOppPicks(Object.keys(opp).length ? opp : null);
+          setLiveOppBuffs(oppBuffs);
+          // Sealed picks are immutable once revealed (RLS only exposes them after
+          // lock), so once the reveal lands there is nothing left to poll for.
+          if (Object.keys(opp).length) stop();
+        }
       } catch { /* keep prior */ }
     };
     load();
-    const t = setInterval(load, 8000);
-    return () => { alive = false; clearInterval(t); };
+    t = setInterval(load, 8000);
+    return () => { alive = false; stop(); };
   }, [liveCtx]);
 
   // Live pilot scoring: install the worker's ingested plays for the week so the
@@ -241,6 +263,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     // never fall back to the baked 2025 week of the same number mid-fetch.
     setLiveGameFeed(liveCtx.week, { games: {}, teams: {} });
     const load = async () => {
+      if (document.hidden) return; // don't refetch the week's plays in a background tab
       try {
         const [rows, feeds] = await Promise.all([weekLivePlays(liveCtx.week), weekGameFeeds(liveCtx.week)]);
         setLivePlays(liveCtx.week, liveRowsToPbp(rows));
@@ -250,7 +273,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     };
     load();
     const t = setInterval(load, 15000); // ~worker poll cadence
-    return () => { alive = false; clearInterval(t); };
+    // Refresh immediately when the tab returns to the foreground (a hidden-tab
+    // interval tick was skipped, so pull the latest right away).
+    const onVis = () => { if (!document.hidden) load(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { alive = false; clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
   }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The AI scouts which players you CAN field each window (the pool, not your spot
@@ -795,17 +822,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   }
 
   function lockIn() {
-    // Live pilot: seal the chosen lineup to Supabase (the worker scores from this).
-    if (liveCtx) {
-      const rows: PickRow[] = [];
-      for (const [key, p] of Object.entries(effYouPicks)) {
-        if (!p?.playerId) continue;
-        const [win, slot] = key.split('#');
-        if (win == null || slot == null) continue;
-        rows.push({ game_window: win, roster_slot: slot, player_slug: p.playerId, metric_id: p.metricId ?? null });
-      }
-      savePicks(liveCtx.matchupId, liveCtx.userId, rows).catch(() => {});
-    }
+    // Sim/demo only — the live board has no LOCK IN button (it auto-saves the
+    // lineup and locks each window on the real clock; see the auto-save effect).
     setPhase('live'); setSelSlot(null); setRosterOpen({ you: false, their: false });
   }
   // Demo kickoff (setup → live auto-play) and a way back to re-pick.
@@ -826,6 +844,22 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     ? `${you.name} vs ${opp.name}`
     : `${you.name} vs ${opp.name} · each window plays on its own clock — hit ▶ on any window, or run them all.`;
 
+  if (loadFailed) {
+    return (
+      <div className="mono" style={{ display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 240, color: 'var(--dim)', fontSize: 12, letterSpacing: '0.06em', textAlign: 'center', padding: 20 }}>
+        <div>COULDN'T LOAD WEEK {week}'S PLAYS.</div>
+        <div style={{ color: 'var(--faint)', fontSize: 10, maxWidth: 320, lineHeight: 1.6 }}>
+          Check your connection — without this data the board can't score. Nothing was lost.
+        </div>
+        <button
+          onClick={() => setLoadAttempt((n) => n + 1)}
+          style={{ fontFamily: 'inherit', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 6, padding: '8px 18px', cursor: 'pointer' }}
+        >
+          RETRY
+        </button>
+      </div>
+    );
+  }
   if (!ready) {
     return (
       <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 240, color: 'var(--dim)', fontSize: 12, letterSpacing: '0.08em' }}>
@@ -851,7 +885,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       <header style={{ flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 8, padding: isMobile ? '8px 10px' : '8px 16px', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <Brand onClick={() => navigate({ name: 'splash' })} />
-          <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← back</button>
+          <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ fontSize: 10, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '10px 12px', cursor: 'pointer' }}>← back</button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => navigate({ name: 'live' })} className="mono" title="See the real live head-to-head board"
@@ -1081,7 +1115,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             {/* On the live board the phase follows the real clock — the tabs are a
                 read-only progress indicator, not a switcher. */}
             {(['setup', 'live', 'final'] as Phase[]).map((p) => (
-              <button key={p} onClick={() => { if (!liveCtx) changePhase(p); }} className="mono" title={liveCtx ? 'The live board advances on real time' : undefined} style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', padding: '5px 9px', borderRadius: 3, border: 'none', cursor: liveCtx ? 'default' : 'pointer', background: phase === p ? 'var(--sh)' : 'transparent', color: phase === p ? 'var(--you)' : 'var(--dim)' }}>
+              <button key={p} onClick={() => { if (!liveCtx) changePhase(p); }} className="mono" title={liveCtx ? 'The live board advances on real time' : undefined} style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', padding: '9px 11px', borderRadius: 3, border: 'none', cursor: liveCtx ? 'default' : 'pointer', background: phase === p ? 'var(--sh)' : 'transparent', color: phase === p ? 'var(--you)' : 'var(--dim)' }}>
                 {p.toUpperCase()}
               </button>
             ))}
@@ -1108,6 +1142,15 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           <div style={{ height: 30, width: 1, background: 'var(--bd)' }} />
           {phase === 'setup' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              {/* Seed the ranked default lineup so a new user isn't forced to fill
+                  all eight slots by hand before they can lock in. */}
+              <button onClick={() => { setPicks(youDefault); setSelSlot(null); }} title="Fill every slot with your best available lineup" className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                ✨ Auto-fill
+              </button>
+              {/* Teach the hidden-metric mechanic right where the user commits it. */}
+              <button onClick={() => setShowRules(true)} title="How scoring works" className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                📖 Rules
+              </button>
               <div style={{ textAlign: 'right' }}>
                 <div className="mono" style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--faint)' }}>LOCKS IN</div>
                 <div className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--warn)' }}>{weekLockLabel(week)}</div>
@@ -1429,6 +1472,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       {puView === 'active' && <ActivePowerupsModal effects={activeEffects} onClose={() => setPuView(null)} />}
       {puView === 'apply' && <ApplyPowerupsModal items={appliable} inventory={inventory} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); setPuView(null); }} onClose={() => setPuView(null)} />}
       {shopOpen && <ShopModal onClose={() => setShopOpen(false)} coinsOverride={liveCtx ? Math.round(coinBal) : undefined} onBuy={liveCtx ? buyFromWallet : undefined} />}
+      {showRules && <Rulebook onClose={() => setShowRules(false)} />}
       {fieldsOpen && (
         <FieldBoard week={week} onClose={() => setFieldsOpen(false)} entries={(() => {
           // One entry per slotted player: its team locates the NFL game, its
@@ -1923,7 +1967,7 @@ function TargetPanel({ aw, oppPicks, preKick, onClearSpy }: {
 }
 
 // ── Window section ──────────────────────────────────────────────────────────
-function WindowSection(props: {
+function WindowSectionInner(props: {
   rw: ReturnType<typeof buildMatchup>['windows'][number];
   week: number;
   phase: Phase;
@@ -2191,6 +2235,29 @@ function WindowSection(props: {
     </div>
   );
 }
+
+// The live board re-renders Matchup every ~700ms tick (winClocks advances), which
+// would re-render all five WindowSections even though only the playing window's
+// clock changed. Skip the re-render when every DATA prop is unchanged: idle and
+// finished windows have identical data tick-to-tick, so only the advancing window
+// (whose `clock`/`wallSeconds` change) re-renders. Function props are treated as
+// always-equal (Matchup rebuilds these handler closures every render, but that's
+// irrelevant here) — SAFE because every piece of state a handler reads (picks,
+// phase, playing, applyMode, inventory, backups, armed, aw, …) is itself a compared
+// prop, so any change that would alter a handler's behavior also changes a data
+// prop and forces the re-render. A skipped window therefore never fires a handler
+// against stale state. (Verified: with one window live, toggling a second — idle,
+// memo-skipped — window still starts it, and scores resolve byte-identically.)
+const WindowSection = memo(WindowSectionInner, (a, b) => {
+  const ak = Object.keys(a), bk = Object.keys(b);
+  if (ak.length !== bk.length) return false;
+  for (const k of ak) {
+    const av = (a as Record<string, unknown>)[k], bv = (b as Record<string, unknown>)[k];
+    if (typeof av === 'function' && typeof bv === 'function') continue; // handler identity is irrelevant (see note above)
+    if (!Object.is(av, bv)) return false;
+  }
+  return true;
+});
 
 // ── Setup row ──
 // Marks the two Field General QBs that are paired under the Twin Generals power-up

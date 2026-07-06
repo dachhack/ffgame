@@ -38,8 +38,24 @@ export function baseScore(plays) {
 }
 
 async function weekPlayRows(week) {
-  const { data } = await db().from('live_play').select('player_slug,c,t,pid,k,y,td,ca,tg,"to"').eq('week', week);
-  return data ?? [];
+  // Page through the full week. PostgREST caps an un-ranged select at its
+  // max-rows default (1000); a busy Sunday runs to several thousand plays, so an
+  // un-paged read would silently truncate and the worker would compute the
+  // AUTHORITATIVE scores off an incomplete play set.
+  const PAGE = 1000;
+  const rows = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await db().from('live_play')
+      .select('player_slug,c,t,pid,k,y,td,ca,tg,"to"')
+      .eq('week', week)
+      .order('id', { ascending: true }) // stable total order (bigint PK) for paging
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+  return rows;
 }
 
 /** Fetch the week's plays ONCE and inject them into the engine's PBP cache. Call

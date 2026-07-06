@@ -9,7 +9,7 @@
 import { config } from './config.js';
 import { getState } from './sleeper.js';
 import { buildPlayerIndex } from './playerIndex.js';
-import { getGames, gamesToPoll, slateFromGames } from './poll/scoreboard.js';
+import { getGames, gamesToPollFrom, slateFromGames } from './poll/scoreboard.js';
 import { pollGame } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
 import { lockDueMatchups, finalizeMatchups, backfillLockAt } from './lock.js';
@@ -102,8 +102,9 @@ async function tick() {
   const locked = await lockDueMatchups();
   if (locked) log('locked', locked, 'matchups');
 
-  // Poll live games → persist plays (keyed at the board week).
-  const toPoll = await gamesToPoll(season, espnWeek, config.seasonType);
+  // Poll live games → persist plays (keyed at the board week). Reuse the scoreboard
+  // already fetched above (same espnWeek) instead of fetching the identical URL again.
+  const toPoll = gamesToPollFrom(games);
   let wrote = 0;
   for (const eventId of toPoll) { try { wrote += await pollGame(eventId, week, playerIndex); } catch (e) { log('poll game', eventId, e.message); } }
   if (toPoll.length) log('polled', toPoll.length, 'games,', wrote, 'play rows');

@@ -23,7 +23,7 @@ export interface RealPlay { c: number; t?: number; pid?: number; k: RealPlayKind
 interface WeekData { pbp: Record<string, RealPlay[]>; points: Record<string, number>; poss?: Record<string, number[][]>; wall?: Record<string, number[]>; ends?: Record<string, number>; kick?: Record<string, number>; }
 
 const cache = new Map<number, WeekData>();
-const inflight = new Map<number, Promise<void>>();
+const inflight = new Map<number, Promise<boolean>>();
 
 // ── Synthetic overlay (runtime) ──────────────────────────────────────────────
 // When a live Sleeper league is loaded, players we DON'T have baked play-by-play
@@ -70,16 +70,19 @@ export function isRealWeekLoaded(week: number): boolean {
   return cache.has(week);
 }
 
-/** Fetch + cache a week's real play-by-play (no-op if not a real week or already loaded). */
-export function loadRealWeek(week: number): Promise<void> {
-  if (!REAL_WEEKS.has(week) || cache.has(week)) return Promise.resolve();
+/** Fetch + cache a week's real play-by-play. Resolves `true` when the week's
+ *  plays are available (already-loaded or freshly fetched, and for non-real weeks
+ *  that need no fetch), or `false` when the fetch failed — so callers can show an
+ *  error + retry instead of silently rendering an all-zeros (DNP) board. */
+export function loadRealWeek(week: number): Promise<boolean> {
+  if (!REAL_WEEKS.has(week) || cache.has(week)) return Promise.resolve(true);
   let p = inflight.get(week);
   if (!p) {
     const url = `${import.meta.env.BASE_URL}pbp/w${week}.json`;
     p = fetch(url)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`pbp w${week}: HTTP ${r.status}`))))
-      .then((data: WeekData) => { cache.set(week, data); })
-      .catch((e) => { console.error('[realPbp] load failed', e); /* leave uncached → sim fallback */ })
+      .then((data: WeekData) => { cache.set(week, data); return true; })
+      .catch((e) => { console.error('[realPbp] load failed', e); return false; })
       .finally(() => { inflight.delete(week); });
     inflight.set(week, p);
   }

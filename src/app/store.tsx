@@ -46,6 +46,52 @@ export type Route =
  *  persist its lineup to sealed_pick and align with the worker's scoring. */
 export interface LiveCtx { matchupId: string; userId: string; leagueId: string; rosterId: number; week: number; }
 
+// ── URL routing ──────────────────────────────────────────────────────────────
+// Routes are mirrored into the URL hash (works on GitHub Pages with no server
+// config) so the back button and refresh work and screens are shareable. The
+// Sleeper session isn't persisted (the demo re-asks each visit), so a cold load
+// of a sim/pilot-backed route can't rebuild its in-memory league — those fall
+// back to the returning-user default rather than showing stale data.
+function routeToHash(r: Route): string {
+  switch (r.name) {
+    case 'splash': return '#/';
+    case 'leagues': return '#/leagues';
+    case 'live': return '#/live';
+    case 'demo': return r.view === 'board' ? '#/demo/board' : '#/demo';
+    case 'sleeperLeague': return `#/sleeper/${encodeURIComponent(r.leagueId)}`;
+    case 'connect': return `#/connect/${encodeURIComponent(r.provider)}`;
+    case 'hub': return '#/hub';
+    case 'league': return '#/league';
+    case 'matchup': return `#/matchup/${r.week}/${r.phase}`;
+    case 'final': return `#/final/${r.week}`;
+  }
+}
+/** URL hash → Route, or null when the hash carries no (valid) route so the caller
+ *  can fall back to its default (e.g. a first visit with no hash). Board/sim
+ *  routes are intentionally not restored here — they need in-memory league state
+ *  a cold load doesn't have — so they resolve to the default instead. */
+function hashToRoute(hash: string): Route | null {
+  const h = (hash || '').replace(/^#/, '').replace(/^\/+/, '').replace(/\/+$/, '');
+  if (h === '') return null;
+  const seg = h.split('/');
+  switch (seg[0]) {
+    case 'leagues': return { name: 'leagues' };
+    case 'live': return { name: 'live' };
+    case 'demo': return { name: 'demo', view: seg[1] === 'board' ? 'board' : 'clean' };
+    case 'connect': return seg[1] ? { name: 'connect', provider: decodeURIComponent(seg[1]) as ProviderId } : null;
+    default: return null;
+  }
+}
+/** Boot route: the URL hash if it names a self-contained screen (refresh keeps
+ *  your place, screens are shareable), else the returning-user default — a
+ *  signed-in live user to their pilot, everyone else to the playable demo. */
+function bootRoute(): Route {
+  const r = hashToRoute(typeof window !== 'undefined' ? window.location.hash : '');
+  if (r) return r;
+  try { if (localStorage.getItem('dripLive') === '1') return { name: 'live' }; } catch { /* ignore */ }
+  return { name: 'demo' };
+}
+
 /** The three switchable icon skins: classic emoji, the Football Factory art
  *  set, and the retro Pixel Bowl sprites. */
 export type IconSetName = 'emoji' | 'factory' | 'pixel';
@@ -180,25 +226,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setSleeperUserState(u);
     if (u) { identify(u.userId, { username: u.username }); track(Ev.sleeperConnected); }
   };
-  // Boot straight into the app for returning users, skipping the demo funnel:
-  //   • a signed-in live user (dripLive flag) → their leagues (Live onboard home),
-  //   • else the playable demo board (the landing page for everyone else —
-  //     Sleeper users type their username again each visit).
-  // The ?live=1 / OAuth deep links in App.tsx still override this after mount.
-  const [route, setRoute] = useState<Route>(() => {
-    try { if (localStorage.getItem('dripLive') === '1') return { name: 'live' }; } catch { /* ignore */ }
-    return { name: 'demo' };
-  });
-  // Browser back/forward: mirror each route into history state (URL unchanged) so the
-  // back button steps between in-app screens instead of dead-ending / leaving the site.
+  // Boot from the URL hash (refresh keeps your place; screens are shareable), else
+  // the returning-user default: a signed-in live user to their pilot, everyone
+  // else to the playable demo. The ?live=1 / OAuth deep links in App.tsx still
+  // override this after mount.
+  const [route, setRoute] = useState<Route>(() => bootRoute());
+  // Each navigate pushes the route into the URL hash so back/forward step between
+  // screens and every screen has a real, bookmarkable URL.
   const navigate = (r: Route) => {
     setRoute(r);
     track(Ev.screenView, { screen: r.name });
-    try { window.history.pushState({ __route: r }, ''); } catch { /* ignore */ }
+    try { window.history.pushState({ __route: r }, '', routeToHash(r)); } catch { /* ignore */ }
   };
   useEffect(() => {
-    try { window.history.replaceState({ __route: route }, ''); } catch { /* ignore */ }
-    const onPop = (e: PopStateEvent) => { setRoute(((e.state as { __route?: Route } | null)?.__route) ?? { name: 'demo' }); };
+    // Normalize the URL to the resolved boot route (a first visit, or a hash that
+    // named a non-restorable board route, may differ from what's in the address).
+    try { window.history.replaceState({ __route: route }, '', routeToHash(route)); } catch { /* ignore */ }
+    // Back/forward: re-read the route from the (now-updated) hash; a hash that
+    // doesn't name a restorable screen falls back to the demo landing.
+    const onPop = () => { setRoute(hashToRoute(window.location.hash) ?? { name: 'demo' }); };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
     // eslint-disable-next-line react-hooks/exhaustive-deps

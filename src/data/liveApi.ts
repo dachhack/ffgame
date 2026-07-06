@@ -352,9 +352,23 @@ export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[
  *  Drives the live full-board resolution off real plays. */
 export interface LivePlayRow { player_slug: string; c: number; t: number | null; pid: number | null; k: string; y: number; td: number; ca: number; tg: number; to: number | null; }
 export async function weekLivePlays(week: number): Promise<LivePlayRow[]> {
-  const { data } = await client().from('live_play')
-    .select('player_slug, c, t, pid, k, y, td, ca, tg, to').eq('week', week);
-  return (data ?? []) as LivePlayRow[];
+  // Page through the full result set. PostgREST caps an un-ranged select at its
+  // max-rows default (1000), so a busy NFL Sunday (several thousand plays) would
+  // silently truncate — and the board would score off an incomplete play set.
+  const PAGE = 1000;
+  const rows: LivePlayRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await client().from('live_play')
+      .select('player_slug, c, t, pid, k, y, td, ca, tg, to')
+      .eq('week', week)
+      .order('id', { ascending: true }) // stable total order (bigint PK) for paging
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const page = (data ?? []) as LivePlayRow[];
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+  return rows;
 }
 
 /** The week's per-game field-visual feeds (game_feed, readable by any authed

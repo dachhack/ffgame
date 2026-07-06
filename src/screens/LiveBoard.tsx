@@ -22,41 +22,53 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
   const [pool, setPool] = useState<Record<string, PoolPlayer>>({});
   const [wallets, setWallets] = useState<{ home: number | null; away: number | null } | null>(null);
   const [teams, setTeams] = useState<Record<number, TeamInfo>>({});
-  const [state, setState] = useState<'loading' | 'none' | 'ready'>('loading');
+  const [state, setState] = useState<'loading' | 'none' | 'ready' | 'error'>('loading');
+  const [attempt, setAttempt] = useState(0);
   const [weekSel, setWeekSel] = useState<number | null>(null); // null = default (earliest) week
   const [gameFeeds, setGameFeeds] = useState<GameFeedRow[]>([]); // field visuals (game_feed)
   const [fieldsOpen, setFieldsOpen] = useState(true);
 
   useEffect(() => {
     let unsub = () => {};
+    let alive = true;
     (async () => {
-      setState('loading');
-      const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
-      if (!r) { setState('none'); return; }
-      const m = await myMatchup(r.leagueId, r.rosterId, weekSel ?? undefined);
-      if (!m) { setMatchup(null); setState('none'); return; }
-      setMatchup(m); setYouAreHome(m.home_roster_id === r.rosterId);
-      const pl = await myPool(r.leagueId, m.week, r.rosterId);
-      setPool(Object.fromEntries(pl.map((p) => [p.slug, p])));
-      matchupTeams(r.leagueId, [m.home_roster_id, m.away_roster_id]).then(setTeams).catch(() => {});
-      const refresh = async () => {
-        const [mm, ss, pk, ww, gf] = await Promise.all([
-          getMatchup(m.id), getMatchupState(m.id), getRevealedPicks(m.id), matchupWallets(m.id).catch(() => null),
-          weekGameFeeds(m.week).catch(() => [] as GameFeedRow[]),
-        ]);
-        if (mm) setMatchup(mm);
-        setScores(ss); setPicks(pk); setWallets(ww);
-        // Install the worker's per-game feeds so FieldView resolves them (the
-        // live overlay is exclusive per week — never baked data on a live board).
-        setLiveGameFeed(m.week, feedRowsToWeek(gf));
-        setGameFeeds(gf);
-      };
-      await refresh();
-      setState('ready');
-      unsub = subscribeMatchup(m.id, refresh); // live push on score/status change
+      try {
+        setState('loading');
+        const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
+        if (!alive) return;
+        if (!r) { setState('none'); return; }
+        const m = await myMatchup(r.leagueId, r.rosterId, weekSel ?? undefined);
+        if (!alive) return;
+        if (!m) { setMatchup(null); setState('none'); return; }
+        setMatchup(m); setYouAreHome(m.home_roster_id === r.rosterId);
+        const pl = await myPool(r.leagueId, m.week, r.rosterId);
+        if (!alive) return;
+        setPool(Object.fromEntries(pl.map((p) => [p.slug, p])));
+        matchupTeams(r.leagueId, [m.home_roster_id, m.away_roster_id]).then((t) => alive && setTeams(t)).catch(() => {});
+        const refresh = async () => {
+          const [mm, ss, pk, ww, gf] = await Promise.all([
+            getMatchup(m.id), getMatchupState(m.id), getRevealedPicks(m.id), matchupWallets(m.id).catch(() => null),
+            weekGameFeeds(m.week).catch(() => [] as GameFeedRow[]),
+          ]);
+          if (mm) setMatchup(mm);
+          setScores(ss); setPicks(pk); setWallets(ww);
+          // Install the worker's per-game feeds so FieldView resolves them (the
+          // live overlay is exclusive per week — never baked data on a live board).
+          setLiveGameFeed(m.week, feedRowsToWeek(gf));
+          setGameFeeds(gf);
+        };
+        await refresh();
+        if (!alive) return;
+        setState('ready');
+        unsub = subscribeMatchup(m.id, refresh); // live push on score/status change
+      } catch {
+        // A network failure once left this stuck on "Loading the board…" forever;
+        // surface it with a retry instead.
+        if (alive) setState('error');
+      }
     })();
-    return () => unsub();
-  }, [userId, leagueId, rosterId, weekSel]);
+    return () => { alive = false; unsub(); };
+  }, [userId, leagueId, rosterId, weekSel, attempt]);
 
   const totals = useMemo(() => {
     const home = scores.reduce((t, s) => t + Number(s.home_score), 0);
@@ -75,6 +87,16 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
   );
 
   if (state === 'loading') return <Muted text="Loading the board…" />;
+  if (state === 'error') return (
+    <div style={card}>
+      <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Couldn’t load the board</div>
+      <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 10 }}>Check your connection and try again.</div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 14 }}>
+        <button onClick={() => setAttempt((a) => a + 1)} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>↻ retry</button>
+        <button onClick={onBack} className="mono" style={linkBtn}>← back</button>
+      </div>
+    </div>
+  );
   if (state === 'none') return (
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>

@@ -4,27 +4,96 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#142A2E" />
-    <meta name="description" content="Drip Fantasy — a real-time fantasy football game of hidden picks and live effects. PeakedInDynasty 2025 demo." />
+    <title>Drip Fantasy — Real-Time Fantasy Football with Hidden Picks &amp; Live Effects</title>
+    <meta
+      name="description"
+      content="Drip Fantasy is head-to-head fantasy football where you seal a hidden scoring metric behind every player, then watch picks reveal and effects fire live — nukes, erasures and hot streaks — over real NFL play-by-play."
+    />
+    <link rel="canonical" href="https://dripfantasy.com/" />
     <!-- Brand icons / social (files in public/). -->
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/drip_fantasy_logo2.png" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Drip Fantasy" />
-    <meta property="og:title" content="Drip Fantasy" />
-    <meta property="og:description" content="Real-time fantasy football — hidden picks, live effects, head-to-head." />
-    <meta property="og:url" content="https://dripfantasy.com" />
+    <meta property="og:title" content="Drip Fantasy — Real-Time Fantasy Football" />
+    <meta
+      property="og:description"
+      content="Head-to-head fantasy football of hidden picks and live effects. Seal a secret metric behind every player and watch it resolve live over real NFL play-by-play."
+    />
+    <meta property="og:url" content="https://dripfantasy.com/" />
+    <!-- NOTE: logo3 is ~square (448×454). A dedicated 1200×630 card would let this
+         switch back to twitter:card=summary_large_image without letterboxing. -->
     <meta property="og:image" content="https://dripfantasy.com/drip_fantasy_logo3.png" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Drip Fantasy" />
-    <meta name="twitter:description" content="Real-time fantasy football — hidden picks, live effects, head-to-head." />
+    <meta property="og:image:alt" content="Drip Fantasy logo" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Drip Fantasy — Real-Time Fantasy Football" />
+    <meta name="twitter:description" content="Hidden picks, live effects, head-to-head — resolved over real NFL play-by-play." />
     <meta name="twitter:image" content="https://dripfantasy.com/drip_fantasy_logo3.png" />
+    <meta name="twitter:image:alt" content="Drip Fantasy logo" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://dripfantasy.com/#website",
+            "url": "https://dripfantasy.com/",
+            "name": "Drip Fantasy",
+            "description": "Real-time fantasy football of hidden picks and live effects."
+          },
+          {
+            "@type": "VideoGame",
+            "name": "Drip Fantasy",
+            "url": "https://dripfantasy.com/",
+            "image": "https://dripfantasy.com/drip_fantasy_logo3.png",
+            "description": "Head-to-head fantasy football where every player is paired with a hidden scoring metric that carries a strategic effect — nuke, erase, hot streak, multiplier — resolved live over real NFL play-by-play.",
+            "applicationCategory": "Game",
+            "gamePlatform": "Web browser",
+            "genre": ["Fantasy sports", "Strategy"],
+            "operatingSystem": "Any",
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+          }
+        ]
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
-    <title>Drip Fantasy</title>
+    <!-- Load fonts without blocking first paint: fetch as `print`, then promote to
+         `all` once loaded. Non-JS agents get the plain stylesheet via <noscript>. -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+    </noscript>
   </head>
   <body>
     <div id="root"></div>
+    <!-- Crawlable / no-JS fallback. The React app replaces #root on load; this
+         content is only shown to agents that don't execute the module script. -->
+    <noscript>
+      <main style="max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; font-family: system-ui, sans-serif; line-height: 1.5;">
+        <h1>Drip Fantasy — Real-Time Fantasy Football</h1>
+        <p>
+          Drip Fantasy is a head-to-head fantasy football game of <strong>hidden picks</strong> and
+          <strong>live effects</strong>. Instead of accumulating raw points, you assign each roster player to a
+          game-time window slot and seal a hidden <strong>scoring metric</strong> behind them — one that also carries
+          a strategic effect: a <em>nuke</em> that wipes an opponent's banked score, an <em>erase</em> that cancels
+          their recent drip, a <em>hot streak</em> that doubles your rate. Your opponent does the same, sealed. When
+          the games kick off, picks reveal and effects fire live over real NFL play-by-play.
+        </p>
+        <p>
+          The web demo runs on a genuine 2025 NFL season with real box scores, schedule and scores. Build a lineup
+          across the five windows (TNF, Sunday early, Sunday late, SNF, MNF), seal a metric per slot, then watch it
+          resolve play by play.
+        </p>
+        <p><a href="/rulebook/">Read the full scoring rulebook →</a></p>
+        <p>This game requires JavaScript to play. Enable JavaScript, then reload <a href="https://dripfantasy.com/">dripfantasy.com</a>.</p>
+      </main>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

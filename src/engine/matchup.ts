@@ -501,14 +501,6 @@ export function buildMatchup(
   };
 }
 
-export const COIN_PER_SIG = 5;
-/** Drip coin earned by a side: +5 for every signature play its lineup makes. */
-export function signatureCoins(m: ResolvedMatchup, side: 'you' | 'their'): number {
-  let n = 0;
-  for (const w of m.windows) for (const s of w.slots) for (const e of s.events) if (e.side === side && e.sig) n++;
-  return n * COIN_PER_SIG;
-}
-
 // ── Drip-coin economy ────────────────────────────────────────────────────────
 export const WEEKLY_STIPEND = 50;     // flat, just for playing the week
 export const UNOPPOSED_COIN = 15;     // per unopposed player you field
@@ -636,8 +628,18 @@ function applyBackups(windows: ResolvedWindow[], side: 'you' | 'their', assign: 
   }
 }
 
-/** Running banks at a given clock (live phase) for one slot's event feed. */
+/** Running banks at a given clock (live phase) for one slot's event feed. The live
+ *  totals recompute this for every slot on every ~700ms tick; it's a pure O(events)
+ *  scan of an events array that only changes when the matchup re-resolves, so cache
+ *  results keyed by the array's identity → clock. Idle/finished windows (clock
+ *  unchanged tick-to-tick) become O(1); a re-resolution yields fresh arrays whose
+ *  old cache entries are garbage-collected with them (WeakMap). */
+const banksCache = new WeakMap<PbpEvent[], Map<number, { you: number; their: number }>>();
 export function banksAtClock(events: PbpEvent[], clock: number): { you: number; their: number } {
+  let byClock = banksCache.get(events);
+  if (!byClock) { byClock = new Map(); banksCache.set(events, byClock); }
+  const hit = byClock.get(clock);
+  if (hit) return hit;
   let you = 0;
   let their = 0;
   for (const e of events) {
@@ -645,5 +647,7 @@ export function banksAtClock(events: PbpEvent[], clock: number): { you: number; 
     you = e.youBank;
     their = e.theirBank;
   }
-  return { you, their };
+  const res = { you, their };
+  byClock.set(clock, res);
+  return res;
 }
