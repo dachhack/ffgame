@@ -10,7 +10,10 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "validate": "node scripts/espn/validate.mjs",
-    "gen:rulebook": "tsx scripts/gen-rulebook.mjs"
+    "gen:rulebook": "tsx scripts/gen-rulebook.mjs",
+    "check:prices": "tsx scripts/check-powerup-prices.mjs",
+    "check:metrics": "tsx scripts/check-locked-metrics.mjs",
+    "check:parity": "npm run check:prices && npm run check:metrics"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

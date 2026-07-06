@@ -1,0 +1,40 @@
+name: Validate SQL/TS parity
+
+# The client TypeScript and the server-authoritative SQL keep two mirrored maps:
+#   • power-up prices  — powerups.ts  ↔  powerup_price() (0026_coin_spend.sql)
+#   • locked-metric map — metrics.ts  ↔  locked_metric_unlock() (0024_locked_metrics.sql)
+# If either drifts, the shop charges a different price than the wallet, or a locked
+# metric isn't gated. These guards fail the build on any mismatch. Runs when either
+# side of a mirror changes.
+on:
+  push:
+    paths:
+      - 'src/data/powerups.ts'
+      - 'src/data/metrics.ts'
+      - 'supabase/migrations/0024_locked_metrics.sql'
+      - 'supabase/migrations/0026_coin_spend.sql'
+      - 'scripts/check-powerup-prices.mjs'
+      - 'scripts/check-locked-metrics.mjs'
+      - '.github/workflows/validate-parity.yml'
+  pull_request:
+    paths:
+      - 'src/data/powerups.ts'
+      - 'src/data/metrics.ts'
+      - 'supabase/migrations/0024_locked_metrics.sql'
+      - 'supabase/migrations/0026_coin_spend.sql'
+  workflow_dispatch:
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Power-up price parity (SQL ↔ TS)
+        run: npm run check:prices
+      - name: Locked-metric map parity (SQL ↔ TS)
+        run: npm run check:metrics
