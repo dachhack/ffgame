@@ -886,6 +886,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           <div style={{ height: 30, width: 1, background: 'var(--bd)' }} />
           {phase === 'setup' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              {/* Seed the ranked default lineup so a new user isn't forced to fill
+                  all eight slots by hand before they can lock in. */}
+              <button onClick={() => { setPicks(youDefault); setSelSlot(null); }} title="Fill every slot with your best available lineup" className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                ✨ Auto-fill
+              </button>
               <div style={{ textAlign: 'right' }}>
                 <div className="mono" style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--faint)' }}>LOCKS IN</div>
                 <div className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--warn)' }}>{weekLockLabel(week)}</div>
