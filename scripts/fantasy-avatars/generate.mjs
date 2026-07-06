@@ -37,6 +37,8 @@
 //   --key-only <file>     just chroma-key an existing PNG to <file>.keyed.png
 //   --grid-preview        with --grid: build the first contact sheet and slice
 //                         it back apart locally (no API call) to inspect both
+//   --verify              re-hash out/<style>/*.png against the manifest's
+//                         sha256 stamps; exit 1 if anything moved or changed
 //   --force               regenerate even if the output PNG already exists
 //   --dry-run             list what would be generated, no downloads/API calls
 //
@@ -45,6 +47,7 @@
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
@@ -123,7 +126,7 @@ const prompt = promptFor(clause);
 const keyOnly = flag('key-only'); // chroma-key an existing PNG, no API (testing/repair)
 
 const apiKey = process.env.GEMINI_API_KEY;
-if (!apiKey && !dryRun && !keyOnly && !has('grid-preview')) {
+if (!apiKey && !dryRun && !keyOnly && !has('grid-preview') && !has('verify')) {
   console.error('GEMINI_API_KEY is not set. Create one at https://aistudio.google.com/apikey');
   console.error('and run:  GEMINI_API_KEY=... node scripts/fantasy-avatars/generate.mjs ...');
   process.exit(1);
@@ -151,9 +154,26 @@ await mkdir(outDir, { recursive: true });
 if (!force) {
   const before = queue.length;
   queue = queue.filter((p) => !existsSync(path.join(outDir, `${p.slug}.png`)));
-  if (before !== queue.length && !keyOnly) console.log(`Skipping ${before - queue.length} already-generated (use --force to redo).`);
+  if (before !== queue.length && !keyOnly && !has('verify')) console.log(`Skipping ${before - queue.length} already-generated (use --force to redo).`);
 }
 queue = queue.slice(0, limit);
+
+// --verify: re-hash every generated PNG against the manifest so a folder can
+// be trusted (no renames/shuffles since generation) before wiring into the app.
+if (has('verify')) {
+  const m = JSON.parse(await readFile(path.join(outDir, 'manifest.json'), 'utf8'));
+  let bad = 0, checked = 0;
+  for (const [slug, entry] of Object.entries(m.players ?? {})) {
+    if (entry.status !== 'ok' || !entry.sha256) continue;
+    checked++;
+    const file = path.join(outDir, `${slug}.png`);
+    let actual;
+    try { actual = createHash('sha256').update(await readFile(file)).digest('hex').slice(0, 16); } catch { /* missing */ }
+    if (actual !== entry.sha256) { bad++; console.error(`  MISMATCH ${slug} — ${actual ? 'contents differ from manifest' : 'file missing'}`); }
+  }
+  console.log(`${checked} file(s) checked, ${bad} mismatch(es)`);
+  process.exit(bad ? 1 : 0);
+}
 
 if (!keyOnly) {
   console.log(`Style "${style}" → ${outDir}`);
@@ -297,6 +317,7 @@ const gridMutatePromptFor = (n, cols, rows) =>
 
 // ---- Generation ------------------------------------------------------------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const digest = (buf) => createHash('sha256').update(buf).digest('hex').slice(0, 16);
 
 async function fetchHeadshot(url) {
   const res = await fetch(url);
@@ -378,7 +399,7 @@ async function generateOne(p) {
       }
       await writeFile(path.join(outDir, `${p.slug}.png`), buf);
       console.log(`  ok      ${p.slug}`);
-      return { slug: p.slug, status: 'ok', ...(note ? { reason: note } : {}) };
+      return { slug: p.slug, status: 'ok', sha256: digest(buf), ...(note ? { reason: note } : {}) };
     } catch (e) {
       if (e.refused) {
         console.warn(`  REFUSED ${p.slug} — ${e.message}`);
@@ -417,19 +438,32 @@ async function generateBatch(players) {
         out = await callGemini(input, (pass === 1 ? gridPromptFor : gridMutatePromptFor)(players.length, cols, rows));
         input = { data: out.buf.toString('base64'), mime: out.mime };
       }
-      const cells = sliceGrid(out.buf, cols, rows, players.length);
+      // Slice ALL cells (including trailing empties) and sanity-check occupancy
+      // before writing anything: a player cell that came back empty, or content
+      // in a cell that should be empty, means the model shifted subjects around
+      // — files written from that sheet would carry the WRONG player's face
+      // under a right slug. Throw → the whole batch retries, then errors.
+      const cellCount = cols * rows;
+      const cells = sliceGrid(out.buf, cols, rows, cellCount);
+      const keyed = cells.map((c) => keyOutBackground(c));
+      const magentaWorked = keyed.some((k) => k.keyedFrac >= 0.05);
+      if (magentaWorked) {
+        for (let i = 0; i < cellCount; i++) {
+          if (i < players.length && keyed[i].keyedFrac >= 0.98) {
+            throw new Error(`grid drift: cell ${i} (${players[i].slug}) came back empty`);
+          }
+          if (i >= players.length && keyed[i].keyedFrac < 0.9) {
+            throw new Error(`grid drift: unexpected content in empty cell ${i}`);
+          }
+        }
+      }
       const batch = [];
       for (let i = 0; i < players.length; i++) {
-        let buf = cells[i];
-        let note;
-        if (!keepBg) {
-          const keyed = keyOutBackground(buf);
-          if (keyed.keyedFrac < 0.05) note = 'not keyed: cell background was not magenta';
-          else buf = keyed.buf;
-        }
+        const note = !keepBg && !magentaWorked ? 'not keyed: cell background was not magenta' : undefined;
+        const buf = keepBg || !magentaWorked ? cells[i] : keyed[i].buf;
         await writeFile(path.join(outDir, `${players[i].slug}.png`), buf);
         console.log(`  ok      ${players[i].slug}${note ? ` — ${note}` : ''}`);
-        batch.push({ slug: players[i].slug, status: 'ok', ...(note ? { reason: note } : {}) });
+        batch.push({ slug: players[i].slug, status: 'ok', sha256: digest(buf), ...(note ? { reason: note } : {}) });
       }
       return batch;
     } catch (e) {
@@ -504,6 +538,9 @@ for (const r of results) {
     espnId: source?.match(/full\/(\d+)\.png/)?.[1],
     source,
     passes,
+    // sha256 (truncated) of the written PNG — verifies files haven't been
+    // renamed or shuffled since generation.
+    ...(r.sha256 ? { sha256: r.sha256 } : {}),
   };
 }
 await writeFile(manifestPath, JSON.stringify({ style, model, prompt, players: manifest }, null, 2));

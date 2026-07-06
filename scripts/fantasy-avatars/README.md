@@ -55,6 +55,17 @@ without spending anything:
 node scripts/fantasy-avatars/generate.mjs --style dragonborn --grid 9 --limit 9 --grid-preview
 ```
 
+## ID integrity
+
+Output filenames are the app's player slugs and never pass through the
+model — only pixels do — so ids can't be "mutated" in single mode. Grid mode
+adds a drift check: before writing anything, every player cell must have
+content and every trailing cell must be empty magenta; a shifted sheet
+(content in the wrong cell) throws and the batch retries rather than saving
+wrong-face files. The manifest stamps each file's sha256, and
+`--verify --style <name>` re-hashes a folder against its manifest to prove
+nothing was renamed or shuffled since generation (exit 1 on mismatch).
+
 ## Trademarks & mutation passes
 
 Prompts keep the jersey's team colors but instruct Gemini to replace every
