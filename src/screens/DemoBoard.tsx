@@ -181,7 +181,10 @@ export function DemoBoard() {
 
   const placedN = Object.keys(picks).length;
   const pendingMetric = Object.values(picks).some((p) => !p.metricId);
-  const canRun = placedN > 0 && !pendingMetric;
+  // RUN unlocks only on a full board: every spot filled, every metric sealed.
+  const totalSlots = wins.reduce((a, w) => a + slotsFor(w.id, DEMO_WEEK), 0);
+  const allFilled = totalSlots > 0 && placedN >= totalSlots;
+  const canRun = allFilled && !pendingMetric;
   // Guidance targets: the single next spot to fill, and any picks still
   // missing their sealed metric — each gets the pulsing guide-ring.
   const firstEmptyKey = useMemo(() => {
@@ -262,7 +265,7 @@ export function DemoBoard() {
       setWClock((c) => {
         const max = winMaxes[wIdx] ?? 0;
         const slots = resolved.windows[wIdx]?.slots.length ?? 1;
-        const ticks = 32 + 10 * (slots - 1); // ~13-26s per window at 1× (2×/4× available)
+        const ticks = 64 + 20 * (slots - 1); // ~27-53s per window at 1× (2×/4× available)
         const stepSec = Math.max(30, Math.ceil(max / ticks));
         const n = c + stepSec * speed;
         if (n >= max) {
@@ -377,11 +380,11 @@ export function DemoBoard() {
   }
 
   // Guided prompt: derived from the board state, not a modal wizard.
-  const promptIdx = placedN === 0 ? 0 : pendingMetric ? 1 : 2;
+  const promptIdx = !allFilled ? 0 : pendingMetric ? 1 : 2;
   const prompts = [
     { title: 'Build your lineup', sub: narrow ? 'Open YOUR ROSTER below and tap a player (or tap any + spot) to field him. A player can only play in the window his real NFL game falls in.' : 'Drag a player from YOUR ROSTER onto a spot (or tap a spot). A player can only play in the window his real NFL game falls in.' },
     { title: 'Seal his hidden metric', sub: 'Pick how he scores, right on the spot. Your opponent can’t see it until his game kicks off — and you can 🔍 SCOUT who they could field against you.' },
-    { title: 'Arm a power-up & run the week', sub: 'One power-up bends the live games. Any spot you leave empty auto-fills with your best options when you run.' },
+    { title: 'Arm a power-up & run the week', sub: 'One power-up bends the live games — pick your edge, then run it.' },
   ];
 
   // ── Board pieces ───────────────────────────────────────────────────────────
@@ -420,8 +423,8 @@ export function DemoBoard() {
               const key = slotKey(w.id, si);
               // Walk the viewer: ring the next spot to fill, then any pick
               // whose hidden metric still needs sealing.
-              const guide = (promptIdx === 0 && key === firstEmptyKey)
-                || (promptIdx === 1 && !!picks[key] && !picks[key].metricId);
+              const guide = (!allFilled && key === firstEmptyKey)
+                || (!!picks[key] && !picks[key].metricId);
               return (
                 <div key={key} className={guide ? 'guide-ring' : undefined} style={{ borderRadius: 7 }}>
                   <SetupRow
@@ -489,9 +492,6 @@ export function DemoBoard() {
             <div className="grotesk" style={{ fontSize: 'clamp(19px, 5.5vw, 26px)', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1.15 }}>
               Fantasy football, but the picks are <span style={{ color: 'var(--you)' }}>sealed</span> and the game is <span style={{ color: 'var(--you)' }}>live</span>.
             </div>
-            <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 7, lineHeight: 1.5 }}>
-              This is a real week from the Drip Test League. Drag your starters in, seal their hidden metrics, arm a power-up — then run the week.
-            </div>
           </div>
 
           {scoreHdr}
@@ -542,7 +542,7 @@ export function DemoBoard() {
               </div>
               {!canRun && (
                 <div className="mono" style={{ fontSize: 8.5, fontWeight: nudged ? 700 : 400, color: nudged ? 'var(--warn)' : 'var(--faint)', marginTop: 7, textAlign: 'center', transition: 'color .2s' }}>
-                  {placedN === 0 ? '↑ field at least one player first — tap a glowing spot (or ✦ AUTO-FILL)' : '↑ seal a metric on every glowing spot first'}
+                  {!allFilled ? `↑ fill every spot to run — ${placedN}/${totalSlots} set (✦ AUTO-FILL does the rest)` : '↑ seal a metric on every glowing spot first'}
                 </div>
               )}
             </div>
