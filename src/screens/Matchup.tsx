@@ -173,13 +173,20 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
   // Lazy-load this week's real play-by-play (per-week JSON) before resolving.
   const [ready, setReady] = useState(() => !REAL_WEEKS.has(week) || isRealWeekLoaded(week));
+  // Non-null → the week's plays failed to load; without this the board would
+  // silently render every player at 0.0 (a broken-looking game) on a fetch error.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  // Live-pilot lock-in seal status (Supabase write): surfaced on the LOCK IN button.
+  const [sealing, setSealing] = useState(false);
+  const [sealError, setSealError] = useState(false);
   useEffect(() => {
-    if (!REAL_WEEKS.has(week) || isRealWeekLoaded(week)) { setReady(true); return; }
-    setReady(false);
+    if (!REAL_WEEKS.has(week) || isRealWeekLoaded(week)) { setReady(true); setLoadFailed(false); return; }
+    setReady(false); setLoadFailed(false);
     let alive = true;
-    loadRealWeek(week).then(() => { if (alive) setReady(true); });
+    loadRealWeek(week).then((ok) => { if (alive) { if (ok) setReady(true); else setLoadFailed(true); } });
     return () => { alive = false; };
-  }, [week]);
+  }, [week, loadAttempt]);
 
   const extraKey = JSON.stringify(extraSlots);
   const youPools = useMemo(() => windowPools(YOU, week), [week]);
@@ -193,7 +200,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   useEffect(() => {
     if (!liveCtx) { setLiveOppPicks(null); setLiveOppBuffs(null); return; }
     let alive = true;
+    let t: ReturnType<typeof setInterval> | undefined;
+    const stop = () => { if (t) { clearInterval(t); t = undefined; } };
     const load = async () => {
+      if (document.hidden) return; // don't poll a backgrounded tab
       try {
         const [rows, oppBuffs] = await Promise.all([
           getRevealedPicks(liveCtx.matchupId),
@@ -204,12 +214,18 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           if (r.app_user_id === liveCtx.userId || !r.player_slug) continue; // skip mine / empty
           opp[`${r.game_window}#${r.roster_slot}`] = { playerId: r.player_slug, metricId: r.metric_id };
         }
-        if (alive) { setLiveOppPicks(Object.keys(opp).length ? opp : null); setLiveOppBuffs(oppBuffs); }
+        if (alive) {
+          setLiveOppPicks(Object.keys(opp).length ? opp : null);
+          setLiveOppBuffs(oppBuffs);
+          // Sealed picks are immutable once revealed (RLS only exposes them after
+          // lock), so once the reveal lands there is nothing left to poll for.
+          if (Object.keys(opp).length) stop();
+        }
       } catch { /* keep prior */ }
     };
     load();
-    const t = setInterval(load, 8000);
-    return () => { alive = false; clearInterval(t); };
+    t = setInterval(load, 8000);
+    return () => { alive = false; stop(); };
   }, [liveCtx]);
 
   // Live pilot scoring: install the worker's ingested plays for the week so the
@@ -220,6 +236,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     if (!liveCtx) return;
     let alive = true;
     const load = async () => {
+      if (document.hidden) return; // don't refetch the week's plays in a background tab
       try {
         const rows = await weekLivePlays(liveCtx.week);
         setLivePlays(liveCtx.week, liveRowsToPbp(rows));
@@ -228,7 +245,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     };
     load();
     const t = setInterval(load, 15000); // ~worker poll cadence
-    return () => { alive = false; clearInterval(t); };
+    // Refresh immediately when the tab returns to the foreground (a hidden-tab
+    // interval tick was skipped, so pull the latest right away).
+    const onVis = () => { if (!document.hidden) load(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { alive = false; clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
   }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The AI scouts which players you CAN field each window (the pool, not your spot
@@ -610,8 +631,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     setSelSlot(null);
   }
 
-  function lockIn() {
+  async function lockIn() {
     // Live pilot: seal the chosen lineup to Supabase (the worker scores from this).
+    // The seal MUST land before we advance — otherwise a failed write leaves the
+    // board "live" locally while the worker scores an empty lineup. On failure we
+    // stay in setup and surface it so the user can retry; their picks are intact.
     if (liveCtx) {
       const rows: PickRow[] = [];
       for (const [key, p] of Object.entries(effYouPicks)) {
@@ -620,7 +644,14 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         if (win == null || slot == null) continue;
         rows.push({ game_window: win, roster_slot: slot, player_slug: p.playerId, metric_id: p.metricId ?? null });
       }
-      savePicks(liveCtx.matchupId, liveCtx.userId, rows).catch(() => {});
+      setSealing(true); setSealError(false);
+      try {
+        await savePicks(liveCtx.matchupId, liveCtx.userId, rows);
+      } catch {
+        setSealing(false); setSealError(true);
+        return; // stay in setup — picks are NOT lost; the LOCK IN button offers retry
+      }
+      setSealing(false);
     }
     setPhase('live'); setSelSlot(null); setRosterOpen({ you: false, their: false });
   }
@@ -638,6 +669,22 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const headline = phase === 'setup' ? 'Set Your Windows' : phase === 'live' ? 'Live Resolution' : `Week ${week} — Final`;
   const subhead = `${you.name} vs ${opp.name} · each window plays on its own clock — hit ▶ on any window, or run them all.`;
 
+  if (loadFailed) {
+    return (
+      <div className="mono" style={{ display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 240, color: 'var(--dim)', fontSize: 12, letterSpacing: '0.06em', textAlign: 'center', padding: 20 }}>
+        <div>COULDN'T LOAD WEEK {week}'S PLAYS.</div>
+        <div style={{ color: 'var(--faint)', fontSize: 10, maxWidth: 320, lineHeight: 1.6 }}>
+          Check your connection — without this data the board can't score. Nothing was lost.
+        </div>
+        <button
+          onClick={() => setLoadAttempt((n) => n + 1)}
+          style={{ fontFamily: 'inherit', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 6, padding: '8px 18px', cursor: 'pointer' }}
+        >
+          RETRY
+        </button>
+      </div>
+    );
+  }
   if (!ready) {
     return (
       <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 240, color: 'var(--dim)', fontSize: 12, letterSpacing: '0.08em' }}>
@@ -834,9 +881,16 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 <div className="mono" style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--faint)' }}>LOCKS IN</div>
                 <div className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--warn)' }}>{weekLockLabel(week)}</div>
               </div>
-              <button onClick={lockIn} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4, boxShadow: '0 0 20px color-mix(in srgb, var(--you) 30%, transparent)' }}>
-                LOCK IN →
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                <button onClick={lockIn} disabled={sealing} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4, boxShadow: '0 0 20px color-mix(in srgb, var(--you) 30%, transparent)', opacity: sealing ? 0.6 : 1, cursor: sealing ? 'default' : 'pointer' }}>
+                  {sealing ? 'SEALING…' : sealError ? 'RETRY LOCK IN →' : 'LOCK IN →'}
+                </button>
+                {sealError && (
+                  <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.04em', color: 'var(--warn)' }}>
+                    Couldn't seal — your picks are safe. Tap to retry.
+                  </span>
+                )}
+              </div>
             </div>
           )}
           {phase === 'live' && (
