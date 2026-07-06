@@ -28,12 +28,14 @@ node scripts/fantasy-avatars/generate.mjs --style elf --dry-run
 ```
 
 Outputs land at `scripts/fantasy-avatars/out/<style>/<slug>.png` **with
-transparent backgrounds**: Gemini can't emit an alpha channel, so the prompt
-demands a flat magenta ground and the script chroma-keys it out (flood fill
-from the borders, so magenta accents inside the character survive). If Gemini
-ignores the magenta ask for an image, it's saved opaque and flagged in the
-manifest. `--keep-bg` skips keying; `--key-only file.png` re-keys an existing
-magenta-background PNG without touching the API. Requires `npm install`
+transparent backgrounds**: Gemini can't emit an alpha channel, so the script
+chroma-keys each result. The prompt asks for a flat magenta ground, but the
+model frequently ignores that — so the keyer samples the image border to
+detect whatever flat background color actually came back and flood-fills it
+out from the edges (same-colored details inside the character survive). Only
+when the background isn't flat enough to key is the image saved opaque and
+flagged in the manifest. `--keep-bg` skips keying; `--key-only file.png`
+re-keys an existing PNG without touching the API. Requires `npm install`
 (pngjs).
 
 The run is resumable: already-generated players are skipped (use `--force`

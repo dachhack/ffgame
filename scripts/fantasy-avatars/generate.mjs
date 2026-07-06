@@ -42,8 +42,10 @@
 //   --force               regenerate even if the output PNG already exists
 //   --dry-run             list what would be generated, no downloads/API calls
 //
-// Backgrounds: Gemini can't output transparency, so the prompt demands a flat
-// magenta ground which is flood-fill keyed out locally (see keyOutBackground).
+// Backgrounds: Gemini can't output transparency, so results are keyed locally.
+// The prompt asks for flat magenta, but the model often ignores that — so the
+// keyer detects the actual background color from the image border and keys
+// whatever flat color came back (see keyOutBackground).
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -188,18 +190,45 @@ if (dryRun) {
 }
 
 // ---- Chroma key -------------------------------------------------------------
-// Gemini returns opaque images, so the prompt asks for a flat #FF00FF ground
-// and this keys it out: flood-fill near-magenta pixels connected to the image
-// border (interior magenta accents survive), then soften/despill the 1px rim.
-const KEY = { r: 255, g: 0, b: 255 };
-const HARD = 90;  // border-connected pixels this close to magenta are cleared
+// Gemini returns opaque images. The prompt asks for a flat #FF00FF ground, but
+// the model often ignores that and picks its own background — so instead of
+// assuming magenta, sample the image border to find the actual background
+// color, require it to be reasonably flat, then flood-fill it out from the
+// borders (interior patches of the same color survive) and soften the rim.
+const KEY = { r: 255, g: 0, b: 255 }; // what we ask for; used by grid stitching
+const HARD = 90;  // border-connected pixels this close to the bg color are cleared
 const SOFT = 170; // rim pixels between HARD and SOFT get partial alpha
+
+/** Modal border color, or null when the border isn't flat enough to key. */
+function detectBackground(data, w, h) {
+  const ring = [];
+  for (let x = 0; x < w; x++) ring.push(x, x + w * (h - 1));
+  for (let y = 1; y < h - 1; y++) ring.push(y * w, y * w + w - 1);
+  const buckets = new Map(); // 16-level quantized color → count
+  for (const p of ring) {
+    const i = p * 4;
+    const k = ((data[i] >> 4) << 8) | ((data[i + 1] >> 4) << 4) | (data[i + 2] >> 4);
+    buckets.set(k, (buckets.get(k) ?? 0) + 1);
+  }
+  const [modal] = [...buckets.entries()].sort((a, b) => b[1] - a[1])[0];
+  const key = { r: ((modal >> 8) & 15) * 17, g: ((modal >> 4) & 15) * 17, b: (modal & 15) * 17 };
+  const near = ring.filter((p) => {
+    const i = p * 4;
+    return Math.max(Math.abs(data[i] - key.r), Math.abs(data[i + 1] - key.g), Math.abs(data[i + 2] - key.b)) < HARD;
+  }).length;
+  return near / ring.length >= 0.6 ? key : null; // busts touch the bottom edge; 60% flat is plenty
+}
 
 function keyOutBackground(pngBuf) {
   const img = PNG.sync.read(pngBuf);
   const { width: w, height: h, data } = img;
+  const key = detectBackground(data, w, h);
+  if (!key) return { buf: pngBuf, keyedFrac: 0 };
+  // Only strip color spill on saturated magenta-family grounds — the despill
+  // math assumes r/b elevated over g and would tint art on neutral backdrops.
+  const despill = key.r > 160 && key.b > 160 && key.g < 110;
   const dist = (i) => Math.max(
-    Math.abs(data[i] - KEY.r), Math.abs(data[i + 1] - KEY.g), Math.abs(data[i + 2] - KEY.b),
+    Math.abs(data[i] - key.r), Math.abs(data[i + 1] - key.g), Math.abs(data[i + 2] - key.b),
   );
 
   // Flood fill from every border pixel across near-magenta neighbors.
@@ -231,9 +260,11 @@ function keyOutBackground(pngBuf) {
     if (!nearClear) continue;
     const d = dist(i);
     if (d < SOFT) data[i + 3] = Math.round(data[i + 3] * Math.min(1, (d - HARD) / (SOFT - HARD)));
-    const spillCap = Math.max(data[i + 1], Math.min(data[i], data[i + 2]));
-    if (data[i] > spillCap) data[i] = spillCap;
-    if (data[i + 2] > spillCap) data[i + 2] = spillCap;
+    if (despill) {
+      const spillCap = Math.max(data[i + 1], Math.min(data[i], data[i + 2]));
+      if (data[i] > spillCap) data[i] = spillCap;
+      if (data[i + 2] > spillCap) data[i + 2] = spillCap;
+    }
   }
   // If almost nothing keyed, Gemini likely ignored the magenta ask — keep the
   // original rather than shipping a nibbled image, and let the caller warn.
@@ -392,7 +423,7 @@ async function generateOne(p) {
         } else {
           const keyed = keyOutBackground(buf);
           // <5% cleared means the model ignored the magenta ask; keep original.
-          if (keyed.keyedFrac < 0.05) note = 'not keyed: background was not magenta';
+          if (keyed.keyedFrac < 0.05) note = 'not keyed: background not flat enough to key';
           else buf = keyed.buf;
         }
         if (note) console.warn(`  warn    ${p.slug} — ${note} (kept opaque)`);
@@ -446,8 +477,8 @@ async function generateBatch(players) {
       const cellCount = cols * rows;
       const cells = sliceGrid(out.buf, cols, rows, cellCount);
       const keyed = cells.map((c) => keyOutBackground(c));
-      const magentaWorked = keyed.some((k) => k.keyedFrac >= 0.05);
-      if (magentaWorked) {
+      const bgKeyed = keyed.some((k) => k.keyedFrac >= 0.05);
+      if (bgKeyed) {
         for (let i = 0; i < cellCount; i++) {
           if (i < players.length && keyed[i].keyedFrac >= 0.98) {
             throw new Error(`grid drift: cell ${i} (${players[i].slug}) came back empty`);
@@ -459,8 +490,8 @@ async function generateBatch(players) {
       }
       const batch = [];
       for (let i = 0; i < players.length; i++) {
-        const note = !keepBg && !magentaWorked ? 'not keyed: cell background was not magenta' : undefined;
-        const buf = keepBg || !magentaWorked ? cells[i] : keyed[i].buf;
+        const note = !keepBg && !bgKeyed ? 'not keyed: cell background not flat enough to key' : undefined;
+        const buf = keepBg || !bgKeyed ? cells[i] : keyed[i].buf;
         await writeFile(path.join(outDir, `${players[i].slug}.png`), buf);
         console.log(`  ok      ${players[i].slug}${note ? ` — ${note}` : ''}`);
         batch.push({ slug: players[i].slug, status: 'ok', sha256: digest(buf), ...(note ? { reason: note } : {}) });
