@@ -1,7 +1,12 @@
-// Lock / reveal. At a matchup's lock_at (first kickoff of the week), the server
-// flips the matchup to 'locked' and seals every pick (locked = true). ONLY the
-// service role can do this — the RLS WITH CHECK forbids clients from ever setting
-// locked — which is the moment the opponent's picks first become readable.
+// Lock / reveal — PER WINDOW. At a matchup's lock_at (first kickoff of the week)
+// the server flips the matchup to 'live', but picks seal window by window: each
+// window's picks lock (locked = true) at that window's OWN first kickoff, so a
+// MNF pick stays editable — and hidden — through Sunday ("late swap"). ONLY the
+// service role can flip locked — the RLS WITH CHECK forbids clients from ever
+// setting it — and a locked row is the moment the opponent can first read it.
+// The DB-side enforce_window_lock trigger (migration 0058) rejects client writes
+// into an already-kicked-off window, so the sweep's tick cadence is never an
+// integrity window.
 import { db } from './supabase.js';
 import { autoLineup } from './engine.js';
 import { wantsComboDrip, aiLiveBuffs } from '../../src/data/aiLineup.ts';
@@ -94,25 +99,60 @@ export async function backfillLockAt(week, kickoffMs) {
   return (data ?? []).length;
 }
 
-/** Lock any scheduled matchups whose lock_at has passed. Returns count locked. */
-export async function lockDueMatchups(now = new Date()) {
+/** Windows whose first kickoff has passed, from a {win → kickoffMs} map. Returns
+ *  null when the map is unknown (no slate) — callers then fall back to sealing
+ *  everything, the safe pre-0058 behavior. */
+function dueWindows(winKicks, now) {
+  if (!winKicks) return null;
+  const t = now.getTime();
+  return new Set(Object.keys(winKicks).filter((w) => Number.isFinite(winKicks[w]) && winKicks[w] <= t));
+}
+
+/** Lock any scheduled matchups whose lock_at has passed: flip status → 'live' and
+ *  seal the picks of windows already kicked off (all picks when `winKicks` is
+ *  unknown). Later windows stay unlocked — lockDueWindows seals each at its own
+ *  kickoff. Returns count of matchups locked. */
+export async function lockDueMatchups(now = new Date(), winKicks = null) {
   const iso = now.toISOString();
   const { data: due } = await db().from('matchup').select('id')
     .eq('status', 'scheduled').not('lock_at', 'is', null).lte('lock_at', iso);
   if (!due || !due.length) return 0;
   const ids = due.map((m) => m.id);
-  await db().from('sealed_pick').update({ locked: true, revealed_at: iso }).in('matchup_id', ids).eq('locked', false);
+  const dueWins = dueWindows(winKicks, now);
+  let q = db().from('sealed_pick').update({ locked: true, revealed_at: iso }).in('matchup_id', ids).eq('locked', false);
+  if (dueWins) q = q.in('game_window', [...dueWins]);
+  if (!dueWins || dueWins.size) await q;
   await db().from('matchup').update({ status: 'live' }).in('id', ids);
-  try { await materializeAutoLineups(ids, iso); } catch (e) { console.error('[lock] materialize auto-lineups', e?.message ?? e); }
+  try { await materializeAutoLineups(ids, iso, dueWins); } catch (e) { console.error('[lock] materialize auto-lineups', e?.message ?? e); }
   return ids.length;
 }
 
+/** Per-window lock sweep: on this week's already-live (or final) matchups, seal
+ *  any still-unlocked picks whose window has kicked off — the moment a window's
+ *  picks become final AND readable by the opponent. Runs every tick; a no-op
+ *  when nothing is newly due. Returns count of picks sealed. */
+export async function lockDueWindows(week, winKicks, now = new Date()) {
+  const dueWins = dueWindows(winKicks, now);
+  if (!dueWins || !dueWins.size) return 0;
+  const { data: ms } = await db().from('matchup').select('id')
+    .eq('week', week).in('status', ['live', 'final']);
+  if (!ms || !ms.length) return 0;
+  const { data } = await db().from('sealed_pick')
+    .update({ locked: true, revealed_at: now.toISOString() })
+    .in('matchup_id', ms.map((m) => m.id)).eq('locked', false).in('game_window', [...dueWins])
+    .select('id');
+  return (data ?? []).length;
+}
+
 /** At lock, write an auto-lineup (Sleeper starters + default metric) into
- *  sealed_pick — locked + revealed — for any side that is AI-controlled, or an
- *  enrolled manager who submitted no picks (unless the league policy is 'empty').
- *  Makes those lineups visible on the board and locks them; empty seats with no
- *  app_user are left to the resolver's auto-backup. */
-export async function materializeAutoLineups(matchupIds, iso = new Date().toISOString()) {
+ *  sealed_pick for any side that is AI-controlled, or an enrolled manager who
+ *  submitted no picks (unless the league policy is 'empty'). Rows in windows
+ *  already kicked off (`dueWins`) land locked + revealed; later windows land
+ *  UNLOCKED so they stay hidden from the opponent — and editable by a missed
+ *  manager — until their own kickoff seals them (lockDueWindows). With no
+ *  dueWins map (unknown slate) every row locks, the safe pre-0058 behavior.
+ *  Empty seats with no app_user are left to the resolver's auto-backup. */
+export async function materializeAutoLineups(matchupIds, iso = new Date().toISOString(), dueWins = null) {
   const { data: ms } = await db().from('matchup')
     .select('id,league_id,week,home_roster_id,away_roster_id').in('id', matchupIds);
   // The season starting balance, authoritative from the DB so the AI seeds the
@@ -150,10 +190,13 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       // upserted by the budget pass BEFORE these rows, so a `combodrip` pick
       // clears enforce_locked_metric and the extra 'x' rows clear enforce_slot_cap.
       if (isAi && hasPicks) await db().from('sealed_pick').delete().eq('matchup_id', m.id).eq('app_user_id', mem.app_user_id);
-      const rows = autoLineup(slugs, m.week, owned, extra).map((p) => ({
-        matchup_id: m.id, app_user_id: mem.app_user_id, game_window: p.win, roster_slot: p.slot,
-        player_slug: p.slug, metric_id: p.metric, locked: true, revealed_at: iso,
-      }));
+      const rows = autoLineup(slugs, m.week, owned, extra).map((p) => {
+        const sealNow = !dueWins || dueWins.has(p.win);
+        return {
+          matchup_id: m.id, app_user_id: mem.app_user_id, game_window: p.win, roster_slot: p.slot,
+          player_slug: p.slug, metric_id: p.metric, locked: sealNow, revealed_at: sealNow ? iso : null,
+        };
+      });
       if (rows.length) { await db().from('sealed_pick').upsert(rows, { onConflict: 'matchup_id,app_user_id,game_window,roster_slot' }); n++; }
     }
   }

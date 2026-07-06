@@ -309,7 +309,7 @@ export function buildMatchup(
   swaps: SlotSwaps = {},
   backupAssign: Record<string, string> = {},
   buffs: Record<string, boolean> = {},
-  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>> } = {},
+  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>>; autoBackups?: boolean } = {},
   realResolve = false, // resolve cross-game effects (TE-TD drip nuke) in real-time order
   oppBuffs?: string[], // live H2H: the opponent's REAL armed buffs (revealed at lock); AI default when omitted
 ): ResolvedMatchup {
@@ -445,8 +445,8 @@ export function buildMatchup(
   // Unopposed players are BACKUPS (best-ball insurance): a backup doesn't score
   // in its own slot, but its highest score can replace your lowest starter's
   // score when it beats it. Applied per side, before suppress/sum.
-  applyBackups(windows, 'you', backupAssign, false); // your backups: manual only
-  applyBackups(windows, 'their', {}, true);          // opponent: auto-maximize
+  applyBackups(windows, 'you', backupAssign, !!extras.autoBackups); // your backups: manual (auto in the demo, which has no assign UI)
+  applyBackups(windows, 'their', {}, true);                         // opponent: auto-maximize
 
   // DEF SUPPRESS (HALVING): your suppress DST halves every opposing slot (any
   // window) that scored at or below its threshold; their DST does the same to

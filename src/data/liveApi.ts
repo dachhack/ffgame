@@ -223,7 +223,7 @@ export async function redeemCommish(commishCode: string): Promise<ConfirmCommish
 // ── Sealed picks (live-H2H lineup) ──────────────────────────────────────────────
 export interface LiveMatchup { id: string; league_id: string; week: number; status: string; lock_at: string | null; home_roster_id: number; away_roster_id: number; home_coin: number | null; away_coin: number | null; }
 export interface PoolPlayer { slug: string; full: string; pos: string; }
-export interface PickRow { game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null; }
+export interface PickRow { game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null; locked?: boolean; }
 
 /** The caller's enrolled roster in a league (first enrolled membership). */
 export async function myRoster(userId: string): Promise<{ leagueId: string; rosterId: number } | null> {
@@ -286,17 +286,20 @@ export async function myPool(leagueId: string, week: number, rosterId: number): 
   return ((data?.starters_json) ?? []) as PoolPlayer[];
 }
 
-/** The caller's saved picks for a matchup. */
+/** The caller's saved picks for a matchup (locked = that window has sealed). */
 export async function myPicks(matchupId: string, userId: string): Promise<PickRow[]> {
   const { data } = await client().from('sealed_pick')
-    .select('game_window, roster_slot, player_slug, metric_id')
+    .select('game_window, roster_slot, player_slug, metric_id, locked')
     .eq('matchup_id', matchupId).eq('app_user_id', userId);
   return (data ?? []) as PickRow[];
 }
 
-/** Upsert the caller's sealed picks (only allowed by RLS while unlocked). */
+/** Upsert the caller's sealed picks. RLS + the window-lock trigger (migration
+ *  0058) only accept rows in windows that haven't kicked off — callers must
+ *  pre-filter locked windows out or the whole upsert fails. `locked` is stripped:
+ *  only the server sets it (the RLS WITH CHECK rejects it from clients anyway). */
 export async function savePicks(matchupId: string, userId: string, rows: PickRow[]): Promise<void> {
-  const payload = rows.map((r) => ({ matchup_id: matchupId, app_user_id: userId, ...r }));
+  const payload = rows.map(({ locked: _locked, ...r }) => ({ matchup_id: matchupId, app_user_id: userId, ...r }));
   const { error } = await client().from('sealed_pick').upsert(payload, { onConflict: 'matchup_id,app_user_id,game_window,roster_slot' });
   if (error) throw error;
 }
@@ -322,10 +325,18 @@ export async function getMatchupState(matchupId: string): Promise<WindowScore[]>
  *  until the worker has synced that week (then the client falls back to baked). */
 export interface SlateGame { away: string; home: string; win: string; kickoff?: string | null }
 export async function liveSlate(week: number, season?: string): Promise<SlateGame[]> {
-  let q = client().from('nfl_slate').select('away, home, win, kickoff').eq('week', week);
+  let q = client().from('nfl_slate').select('season, away, home, win, kickoff').eq('week', week);
   if (season) q = q.eq('season', season); // 2025 (demo) + 2026 rows share week #s — scope by season
   const { data } = await q;
-  return (data ?? []) as SlateGame[];
+  const rows = (data ?? []) as (SlateGame & { season?: string })[];
+  // Unscoped: keep only the newest season carrying this week, so a stale prior
+  // season's (past) kickoffs can never drive window-lock gating (window_kickoff()
+  // in migration 0058 scopes the same way).
+  if (!season && rows.length) {
+    const top = rows.map((r) => r.season ?? '').sort().pop();
+    return rows.filter((r) => (r.season ?? '') === top);
+  }
+  return rows;
 }
 
 /** Both teams' display identity (name + avatar) for a matchup — league members can

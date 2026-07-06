@@ -29,7 +29,7 @@
 <body>
 <a class="home" href="/">← Play Drip Fantasy</a>
 <h1>Drip Fantasy — Scoring Rulebook</h1>
-<p>Drip Fantasy is head-to-head fantasy where <strong>what</strong> you start matters less than <strong>how</strong> you score it. Every slot is a hidden bet: a player <em>and</em> a secret <strong>metric</strong> that decides how that player's real NFL game converts to points — and how it attacks or defends against your opponent. Picks stay sealed until kickoff.</p>
+<p>Drip Fantasy is head-to-head fantasy where <strong>what</strong> you start matters less than <strong>how</strong> you score it. Every slot is a hidden bet: a player <em>and</em> a secret <strong>metric</strong> that decides how that player's real NFL game converts to points — and how it attacks or defends against your opponent. Picks stay sealed until kickoff — <strong>each window's kickoff</strong>: your Sunday and Monday picks stay editable (and hidden) after Thursday's game reveals, so what you learn can change what you play.</p>
 <blockquote><strong>The §4 catalog and §6 power-up tables below are auto-generated</strong> from</blockquote>
 <blockquote><code>src/data/metrics.ts</code> and <code>src/data/powerups.ts</code> (run <code>npm run gen:rulebook</code>),</blockquote>
 <blockquote>so they can never drift from the live engine. The same data drives the in-app</blockquote>
@@ -44,6 +44,7 @@
 <li>Head-to-head, your slots are paired against your opponent's <strong>by window and slot position</strong>. Slot 1 fights slot 1, etc.</li>
 <li>Your score is the sum of every slot's banked points. Most metrics also <em>attack</em> the slot they're matched against — so a slot can win by scoring big <strong>or</strong> by zeroing out the player across from it.</li>
 <li>Picks are <strong>sealed</strong>: neither side sees the other's players or metrics until the window locks at kickoff.</li>
+<li>Windows lock <strong>one at a time, each at its own first kickoff</strong> — a TNF pick is final Thursday night, but your SUN/SNF/MNF picks stay editable until those windows kick off. Thursday's reveal is intel: you can counter-pick the rest of your week against what your opponent already showed. (Pre-match power-ups are the exception — they arm only before the week's FIRST kickoff.)</li>
 </ul>
 <hr />
 <h2>2. Two kinds of metric</h2>

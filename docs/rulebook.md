@@ -3,7 +3,9 @@
 Drip Fantasy is head-to-head fantasy where **what** you start matters less than
 **how** you score it. Every slot is a hidden bet: a player *and* a secret
 **metric** that decides how that player's real NFL game converts to points — and
-how it attacks or defends against your opponent. Picks stay sealed until kickoff.
+how it attacks or defends against your opponent. Picks stay sealed until kickoff —
+**each window's kickoff**: your Sunday and Monday picks stay editable (and hidden)
+after Thursday's game reveals, so what you learn can change what you play.
 
 > **The §4 catalog and §6 power-up tables below are auto-generated** from
 > `src/data/metrics.ts` and `src/data/powerups.ts` (run `npm run gen:rulebook`),
@@ -34,6 +36,11 @@ Your lineup is **8 slots** spread across the five game windows:
   zeroing out the player across from it.
 - Picks are **sealed**: neither side sees the other's players or metrics until the
   window locks at kickoff.
+- Windows lock **one at a time, each at its own first kickoff** — a TNF pick is
+  final Thursday night, but your SUN/SNF/MNF picks stay editable until those
+  windows kick off. Thursday's reveal is intel: you can counter-pick the rest of
+  your week against what your opponent already showed. (Pre-match power-ups are
+  the exception — they arm only before the week's FIRST kickoff.)
 
 ---
 

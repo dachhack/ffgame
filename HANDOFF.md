@@ -1,6 +1,64 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-04 · Build `v0.94.2`_
+_Last updated: 2026-07-06 · Build `v0.95.1`_
+
+## All 24 power-ups priced server-side + late-swap copy/ops (v0.95.1)
+- **`0059_powerup_prices.sql`**: `powerup_price()` now lists every catalog item.
+  Twelve (metric-swap, player-swap, mulligan, emp, spy, double-or-nothing,
+  bye-steal, trick-play, pick-six, hail-mary, turnover-boost,
+  unlock-carries-wipe) previously fell to the `else 9999` default, so
+  `wallet_buy_powerup` rejected them as `'unknown powerup'` while the shop
+  showed a price — the reactive/live toolkit was unbuyable in live leagues.
+- **`scripts/check-powerup-prices.mjs`** now (a) parses the LATEST
+  `powerup_price()` definition across migrations (create-or-replace semantics),
+  and (b) fails on OMISSIONS in both directions — the class of bug above can't
+  recur silently. All 24 in lockstep.
+- **Late-swap copy**: rulebook §1 + intro and the FAQ now advertise per-window
+  locks ("Sunday can answer what Thursday revealed"); rulebook HTML regenerated.
+- **Ops**: sunday-ops-runbook's lock section documents the two-stage lock
+  (`locked N matchups` at first kickoff, then `sealed N window picks` per
+  window) and adds a per-window dress-rehearsal checklist — the simulator
+  bulk-locks by design and never exercises the staged path.
+- NOTE: several newly-buyable power-ups remain unmodeled by the live resolver
+  (playtester findings §2 limitations) — buying works; effect coverage is the
+  open thread.
+
+## Per-window pick locks — "late swap" (v0.95.0)
+Picks now seal **per window at that window's own first kickoff**, not all at
+the week's first kickoff — the rulebook's "sealed until the window locks at
+kickoff" is finally literal. A MNF pick stays editable (and hidden) through
+Sunday; each window's reveal keeps riding the same `sealed_pick.locked` flag,
+so the opponent reads a window exactly when it kicks off.
+- **DB** (`0058_window_locks.sql`): `window_kickoff(week, win)` (min slate
+  kickoff, scoped to the newest season carrying that week) + an
+  `enforce_window_lock` trigger that rejects client pick writes into a
+  kicked-off window — the worker sweep's tick cadence is never an integrity
+  hole (no kickoff sniping). Service-role writes bypass (`auth.uid() is null`).
+- **Worker** (`lock.js`/`index.js`): `lockDueMatchups` still flips status →
+  live at `lock_at` but seals only due windows; new `lockDueWindows(week,
+  winKicks)` sweeps each later window at its kickoff (winKicks derived from the
+  tick's ESPN slate; unknown slate ⇒ seal-everything fallback).
+  `materializeAutoLineups` writes future-window rows UNLOCKED so an AI/missed
+  manager's later picks don't leak early (and a missed manager can still edit
+  them).
+- **Resolver** (`resolve.js`): `enrolledPicks` now distinguishes "has picks,
+  none sealed yet" (⇒ `[]`, fields nothing until the window locks) from "no
+  picks at all" (⇒ auto-lineup fallback) — without it, a real-but-unsealed
+  week resolved as a phantom AI lineup between Thursday and the manager's
+  first locked window. `prefetchTick` carries `hasPicks` alongside `picks`.
+- **Client** (`LivePicks.tsx`/`liveApi.ts`): per-window lock gating
+  (`winLocked` from server-sealed rows + slate kickoffs, 30s re-check; unknown
+  kickoff after week start fails safe to locked), per-window 🔒/locks-at chips,
+  SEAL visible until every window kicks off and filtering locked windows out
+  of the upsert, extra-slot rows follow their chosen window's lock. `myPicks`
+  returns `locked`; `liveSlate` season-scopes unscoped reads (a stale prior
+  season's past kickoffs must never lock a current week).
+- **Why**: this converts the week from one blind simultaneous move into a
+  multi-street game — Sunday/MNF picks can react to revealed TNF/early
+  results — the top recommendation of the design review (see session notes).
+  Pre-match power-ups/extra slots still arm only before the week's first
+  kickoff (status `scheduled` gate, unchanged). The sim harness
+  (`simulate.js`) still bulk-locks — it dress-rehearses a whole live week.
 
 ## Add-a-league request path + Splash retired (v0.94.2)
 - **"＋ add a league" now has a no-code path**: `RoleChooser` takes an

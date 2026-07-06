@@ -225,6 +225,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     if (!liveCtx) { setLiveOppPicks(null); setLiveOppBuffs(null); return; }
     let alive = true;
     let t: ReturnType<typeof setInterval> | undefined;
+    let slow = false;
     const stop = () => { if (t) { clearInterval(t); t = undefined; } };
     const load = async () => {
       if (document.hidden) return; // don't poll a backgrounded tab
@@ -241,9 +242,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         if (alive) {
           setLiveOppPicks(Object.keys(opp).length ? opp : null);
           setLiveOppBuffs(oppBuffs);
-          // Sealed picks are immutable once revealed (RLS only exposes them after
-          // lock), so once the reveal lands there is nothing left to poll for.
-          if (Object.keys(opp).length) stop();
+          // Windows reveal one at a time (each seals at its OWN kickoff), so keep
+          // polling all week — but back off once the first reveal lands: later
+          // reveals arrive at window kickoffs, hours apart, not seconds.
+          if (Object.keys(opp).length && !slow) { slow = true; stop(); t = setInterval(load, 60_000); }
         }
       } catch { /* keep prior */ }
     };
@@ -1214,7 +1216,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => toggleRoster('you')} className="mono" style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.you ? 'var(--you)' : 'var(--bd)'}`, color: rosterOpen.you ? 'var(--you)' : 'var(--dim)' }}>{rosterOpen.you ? '▾' : '▸'} YOUR ROSTER</button>
-              <button onClick={() => toggleRoster('their')} className="mono" style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.their ? 'var(--opp)' : 'var(--bd)'}`, color: rosterOpen.their ? 'var(--opp)' : 'var(--dim)' }}>{rosterOpen.their ? '▾' : '▸'} THEIR ROSTER</button>
+              <button onClick={() => toggleRoster('their')} className="mono" style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.their ? 'var(--opp)' : 'var(--bd)'}`, color: rosterOpen.their ? 'var(--opp)' : 'var(--dim)' }}>{rosterOpen.their ? '▾' : '▸'} OPPONENT ROSTER</button>
             </div>
             {rosterOpen.you && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={false} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} fluid />}
             {rosterOpen.their && <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} collapsed={false} onToggle={() => toggleRoster('their')} bye={byeTheir} week={week} fluid />}
@@ -1712,9 +1714,9 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, sealed, colla
   if (collapsed && !fluid) {
     return (
       <aside style={{ width: 26, flex: 'none', position: 'sticky', top: 68, alignSelf: 'flex-start' }} className="hide-narrow">
-        <button onClick={onToggle} title={`Show ${side === 'you' ? 'your' : 'their'} roster`} className="mono" style={{ width: 26, minHeight: 160, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '8px 0', background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, color: accent, cursor: 'pointer' } as React.CSSProperties}>
+        <button onClick={onToggle} title={`Show ${side === 'you' ? 'your' : 'the opponent'} roster`} className="mono" style={{ width: 26, minHeight: 160, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '8px 0', background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, color: accent, cursor: 'pointer' } as React.CSSProperties}>
           <span style={{ fontSize: 11 }}>{side === 'you' ? '▸' : '◂'}</span>
-          <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.18em', writingMode: 'vertical-rl', textOrientation: 'mixed' }}>{side === 'you' ? 'YOUR' : 'THEIR'} ROSTER · {total}</span>
+          <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.18em', writingMode: 'vertical-rl', textOrientation: 'mixed' }}>{side === 'you' ? 'YOUR' : 'OPPONENT'} ROSTER · {total}</span>
         </button>
       </aside>
     );
@@ -1728,7 +1730,7 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, sealed, colla
       // when the roster is long.
       : { width: side === 'you' ? 170 : 196, flex: 'none', position: 'sticky', top: 68, alignSelf: 'flex-start', maxHeight: 'calc(100vh - 80px)', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} className={fluid ? undefined : 'hide-narrow'}>
       <button onClick={onToggle} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}>
-        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.2em', color: accent, fontWeight: 700 }}>{side === 'you' ? '◂' : '▸'} {side === 'you' ? 'YOUR' : 'THEIR'} ROSTER</span>
+        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.2em', color: accent, fontWeight: 700 }}>{side === 'you' ? '◂' : '▸'} {side === 'you' ? 'YOUR' : 'OPPONENT'} ROSTER</span>
         <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{total}</span>
       </button>
       {windowsForWeek(week).map((w) => (

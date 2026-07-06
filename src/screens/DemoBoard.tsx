@@ -250,7 +250,9 @@ export function DemoBoard() {
   const resolved = useMemo(() => {
     if (!ready || !oppId || !runPicks) return null;
     const buffs = chosenBuff === 'emp' ? {} : { [chosenBuff]: true };
-    const extras = chosenBuff === 'emp' && empWin ? { emp: { [empWin]: EMP_AT } } : {};
+    // The demo has no backup-assign UI, so your unopposed backups auto-sub into
+    // your weakest starters at FINAL (the AI side always does this).
+    const extras = { autoBackups: true, ...(chosenBuff === 'emp' && empWin ? { emp: { [empWin]: EMP_AT } } : {}) };
     return buildMatchup(youId, oppId, DEMO_WEEK, runPicks, oppPicks, {}, {}, {}, buffs, extras);
   }, [ready, oppId, youId, runPicks, chosenBuff, empWin, oppPicks]);
 
@@ -289,10 +291,14 @@ export function DemoBoard() {
     return i === wIdx ? 'live' : 'upcoming';
   };
   const slotBanks = (s: ResolvedSlot, st: WinState) => {
-    // An unopposed player is a BACKUP: it banks nothing in its own slot (its
-    // score can sub into a starter slot at FINAL), so never tick it live —
-    // the total would visibly drop when the engine zeroes it at the end.
-    if (s.backup) return { you: 0, their: 0 };
+    // An unopposed player is a BACKUP: its points accrue live in its own row
+    // (the real board does the same), but they bank toward the team total only
+    // by subbing into a starter spot at FINAL (applyBackups) — so the total
+    // skips backup rows (see below) and the row itself keeps ticking.
+    if (s.backup && st === 'final') {
+      const wouldBe = s.backupScore ?? 0;
+      return { you: s.you ? wouldBe : 0, their: s.their ? wouldBe : 0 };
+    }
     return st === 'final' ? { you: s.youFinal, their: s.theirFinal }
       : st === 'live' ? banksAtClock(s.events, wClock)
         : { you: 0, their: 0 };
@@ -301,7 +307,10 @@ export function DemoBoard() {
   let youTot = 0, theirTot = 0;
   if (resolved) {
     if (ended) { youTot = resolved.youFinal; theirTot = resolved.theirFinal; }
-    else resolved.windows.forEach((w, i) => w.slots.forEach((s) => { const b = slotBanks(s, winState(i)); youTot += b.you; theirTot += b.their; }));
+    else resolved.windows.forEach((w, i) => w.slots.forEach((s) => {
+      if (s.backup) return; // counts only via its FINAL sub, already in the starter's slot
+      const b = slotBanks(s, winState(i)); youTot += b.you; theirTot += b.their;
+    }));
   }
 
   // Narration: teaching beats from the live window's merged events (+ the EMP).
@@ -494,7 +503,7 @@ export function DemoBoard() {
           {/* hero one-liner */}
           <div style={{ textAlign: 'center', margin: '6px 0 14px' }}>
             <div className="grotesk" style={{ fontSize: 'clamp(19px, 5.5vw, 26px)', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1.15 }}>
-              Fantasy football, but the picks are <span style={{ color: 'var(--you)' }}>sealed</span> and the game is <span style={{ color: 'var(--you)' }}>live</span>.
+              Next-level fantasy football <span style={{ color: 'var(--you)' }}>strategy</span>
             </div>
           </div>
 
@@ -541,7 +550,7 @@ export function DemoBoard() {
                       : { background: 'var(--surface)', color: 'var(--faint)', border: '1px dashed var(--bd)', cursor: 'default' }),
                   }}
                 >
-                  ▶ RUN WEEK {DEMO_WEEK}
+                  {canRun ? `▶ RUN WEEK ${DEMO_WEEK}` : `FILL ALL YOUR PICKS TO RUN WEEK ${DEMO_WEEK}`}
                 </button>
               </div>
               {!canRun && (
@@ -557,7 +566,7 @@ export function DemoBoard() {
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setRosterOpen((o) => ({ ...o, you: !o.you }))} className={promptIdx === 0 && !rosterOpen.you ? 'mono guide-ring' : 'mono'} style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.you ? 'var(--you)' : 'var(--bd)'}`, color: rosterOpen.you ? 'var(--you)' : 'var(--dim)', cursor: 'pointer' }}>{rosterOpen.you ? '▾' : '▸'} YOUR ROSTER</button>
-                <button onClick={() => setRosterOpen((o) => ({ ...o, their: !o.their }))} className="mono" style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.their ? 'var(--opp)' : 'var(--bd)'}`, color: rosterOpen.their ? 'var(--opp)' : 'var(--dim)', cursor: 'pointer' }}>{rosterOpen.their ? '▾' : '▸'} THEIR ROSTER</button>
+                <button onClick={() => setRosterOpen((o) => ({ ...o, their: !o.their }))} className="mono" style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.their ? 'var(--opp)' : 'var(--bd)'}`, color: rosterOpen.their ? 'var(--opp)' : 'var(--dim)', cursor: 'pointer' }}>{rosterOpen.their ? '▾' : '▸'} OPPONENT ROSTER</button>
               </div>
               {rosterOpen.you && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase="setup" collapsed={false} onToggle={() => setRosterOpen((o) => ({ ...o, you: !o.you }))} bye={byeYou} week={DEMO_WEEK} fluid />}
               {rosterOpen.their && <RosterAside side="their" pools={oppPools} picks={{}} phase="setup" sealed collapsed={false} onToggle={() => setRosterOpen((o) => ({ ...o, their: !o.their }))} bye={byeTheir} week={DEMO_WEEK} fluid />}
@@ -634,7 +643,7 @@ export function DemoBoard() {
 
           {/* request-a-code — the standing CTA under the board */}
           <div style={{ marginTop: 16, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14, textAlign: 'center' }}>
-            <div className="grotesk" style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)' }}>Want this on your real league?</div>
+            <div className="grotesk" style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)' }}>Want this for your league?</div>
             <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 4, lineHeight: 1.5 }}>We’ll set it up and send you a code — Sleeper · ESPN · MFL · Fleaflicker.</div>
             <button onClick={() => setRequesting(true)} className="mono" style={{ ...cta, marginTop: 10 }}><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> Request a code for your league</button>
           </div>
@@ -762,11 +771,23 @@ function SlotRow({ slot, state, you, their, frozen, armedPu, noBorder }: {
   frozen?: boolean; armedPu?: { id?: string; icon: string; name: string }; noBorder?: boolean;
 }) {
   const sealed = state === 'upcoming'; // opponent picks + metrics unseal at kickoff
+  // Unused-at-final backup: its accrued points are struck (they banked 0 —
+  // a backup only counts by subbing into a starter spot, which applyBackups
+  // resolves at FINAL).
+  const backupStruck = !!slot.backup && state === 'final' && !slot.backupUsed;
   const side = (who: 'you' | 'their') => {
     const pick = who === 'you' ? slot.you : slot.their;
+    const sub = who === 'you' ? slot.youSub : slot.theirSub; // a backup that replaced this starter's score at FINAL
     const right = who === 'their';
     if (!pick) {
-      return <div className="mono" style={{ flex: 1, minWidth: 0, fontSize: 8.5, color: 'var(--faint)', textAlign: right ? 'right' : 'left' }}>{who === 'you' ? '— empty —' : slot.you ? 'UNOPPOSED · you bank a backup' : '—'}</div>;
+      const label = who === 'you'
+        ? (slot.their ? 'UNOPPOSED · their backup' : '— empty —')
+        : slot.you
+          ? (state === 'final'
+            ? (slot.backupUsed ? '✓ BACKUP · subbed into a starter spot' : '✕ BACKUP · didn’t beat a starter — banks 0')
+            : 'UNOPPOSED · you bank a backup')
+          : '—';
+      return <div className="mono" style={{ flex: 1, minWidth: 0, fontSize: 8.5, color: 'var(--faint)', textAlign: right ? 'right' : 'left' }}>{label}</div>;
     }
     if (who === 'their' && sealed) {
       return (
@@ -787,6 +808,7 @@ function SlotRow({ slot, state, you, their, frozen, armedPu, noBorder }: {
             <span className="mono" style={{ fontSize: 7.5, color: 'var(--faint)' }}>{pick.player.pos} · {pick.player.team}</span>
             {(who === 'you' || !sealed) && <MetricChip pos={pick.player.pos} metricId={pick.metricId} />}
             {who === 'you' && armedPu && <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, color: 'var(--fx-streak, #36D399)' }}><PuIcon id={armedPu.id} emoji={armedPu.icon} size="1.4em" /> {armedPu.name.toUpperCase()}</span>}
+            {state === 'final' && sub && <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, color: 'var(--warn)' }}>🛟 {sub.name} subbed in</span>}
           </div>
         </div>
       </div>
@@ -799,9 +821,9 @@ function SlotRow({ slot, state, you, their, frozen, armedPu, noBorder }: {
         {state === 'upcoming'
           ? <span style={{ fontSize: 9, color: 'var(--faint)' }}>–&nbsp;·&nbsp;–</span>
           : <span style={{ fontSize: 11.5, fontWeight: 700 }}>
-              <span style={{ color: 'var(--you)' }}>{you.toFixed(1)}</span>
+              <span style={{ color: 'var(--you)', textDecoration: backupStruck && slot.you ? 'line-through' : undefined, opacity: backupStruck && slot.you ? 0.55 : 1 }}>{you.toFixed(1)}</span>
               <span style={{ color: 'var(--faint)' }}> · </span>
-              <span style={{ color: 'var(--opp)' }}>{their.toFixed(1)}</span>
+              <span style={{ color: 'var(--opp)', textDecoration: backupStruck && slot.their ? 'line-through' : undefined, opacity: backupStruck && slot.their ? 0.55 : 1 }}>{their.toFixed(1)}</span>
             </span>}
       </div>
       {side('their')}
