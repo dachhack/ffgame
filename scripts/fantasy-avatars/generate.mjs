@@ -30,6 +30,9 @@
 //   --grid N              pack N players per API call as a contact sheet and
 //                         slice the result — ~N× cheaper, lower per-face detail
 //                         (try 9; 25 max is sensible at Gemini's ~1024px output)
+//   --passes N            re-feed each result through Gemini N-1 extra times
+//                         with a "mutate away from the real face" prompt
+//                         (multiplies cost by N; does NOT erase likeness rights)
 //   --keep-bg             skip chroma-keying, save Gemini's opaque output as-is
 //   --key-only <file>     just chroma-key an existing PNG to <file>.keyed.png
 //   --grid-preview        with --grid: build the first contact sheet and slice
@@ -63,15 +66,30 @@ const STYLES = {
 };
 
 // The wrapper around the style clause. Keeps team colors so avatars still read
-// as "your player". Gemini can't emit an alpha channel, so we ask for a solid
-// magenta ground (no NFL team wears it, no fantasy skin tone is it) and
-// chroma-key it to transparency after download.
+// as "your player", but scrubs real trademarks: NFL shields, team logos, and
+// wordmarks get replaced with invented fantasy heraldry. Gemini can't emit an
+// alpha channel, so we ask for a solid magenta ground (no NFL team wears it,
+// no fantasy skin tone is it) and chroma-key it to transparency after download.
+const NO_TRADEMARKS =
+  `Keep the jersey and its team colors, but REPLACE every real-world logo, NFL shield, ` +
+  `team emblem, wordmark, and brand mark with invented fantasy heraldry (fictional crests, ` +
+  `sigils, or runes in the same spots) — no real trademarks may appear anywhere. `;
+
 const promptFor = (clause) =>
   `Transform this NFL player headshot into a stylized fantasy character portrait: ${clause}. ` +
-  `Keep the pose, framing, and jersey/team colors recognizable from the original photo. ` +
+  `Keep the pose and framing recognizable from the original photo. ${NO_TRADEMARKS}` +
   `Render as a detailed pixel-art style bust portrait, head and shoulders only, centered, ` +
   `no text or watermarks. The entire background must be one solid flat uniform bright ` +
   `magenta color (#FF00FF) — no gradient, no shadow, no vignette, no outline glow.`;
+
+// Pass 2+ re-feeds the generated art (not the photo) to push it further from
+// the source likeness: same character, mutated features.
+const mutatePromptFor = () =>
+  `Push this fantasy character portrait further from any real person: mutate and exaggerate ` +
+  `the facial structure (brow, jaw, nose, eyes, skin texture) into the fantasy species so the ` +
+  `face is no longer recognizable as the original subject, while keeping the same art style, ` +
+  `pose, palette, jersey colors, and overall character design. ${NO_TRADEMARKS}` +
+  `Keep the entire background one solid flat uniform bright magenta color (#FF00FF).`;
 
 // ---- CLI ------------------------------------------------------------------
 const args = process.argv.slice(2);
@@ -92,6 +110,7 @@ const force = has('force');
 const dryRun = has('dry-run');
 const keepBg = has('keep-bg');
 const grid = flag('grid') ? Number(flag('grid')) : 0; // players per API call, 0 = one per call
+const passes = flag('passes') ? Number(flag('passes')) : 1; // 2+ re-feeds output to mutate away from the source face
 
 const clause = customPrompt ?? STYLES[style];
 if (!clause) {
@@ -263,9 +282,18 @@ const gridPromptFor = (n, cols, rows) =>
   `Transform EVERY headshot into a stylized fantasy character portrait: ${clause}. ` +
   `Keep each transformed character in exactly the same grid cell as its source photo — one character ` +
   `per cell, same layout, no swapping, merging, or moving subjects between cells. Keep each player's ` +
-  `pose and jersey/team colors recognizable. Render as detailed pixel-art style bust portraits, ` +
+  `pose recognizable. ${NO_TRADEMARKS}Render as detailed pixel-art style bust portraits, ` +
   `no text or watermarks. All background inside and between cells must stay one solid flat uniform ` +
   `bright magenta color (#FF00FF) — no gradients, shadows, or grid lines. Leave empty magenta cells empty.`;
+
+const gridMutatePromptFor = (n, cols, rows) =>
+  `This image is a ${cols}x${rows} grid of ${n} fantasy character portraits on a solid magenta ` +
+  `background. For EVERY portrait: push it further from any real person — mutate and exaggerate the ` +
+  `facial structure (brow, jaw, nose, eyes, skin texture) into the fantasy species so no face is ` +
+  `recognizable as a real individual, while keeping each character's art style, pose, palette, and ` +
+  `jersey colors. Keep every character in exactly the same grid cell — no swapping, merging, or ` +
+  `moving subjects. ${NO_TRADEMARKS}All background inside and between cells must stay one solid ` +
+  `flat uniform bright magenta color (#FF00FF). Leave empty magenta cells empty.`;
 
 // ---- Generation ------------------------------------------------------------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -329,8 +357,12 @@ let quotaWall = false; // set when the plan's quota is exhausted — stop the ru
 async function generateOne(p) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const headshot = await fetchHeadshot(p.url);
-      const out = await callGemini(headshot);
+      let input = await fetchHeadshot(p.url);
+      let out;
+      for (let pass = 1; pass <= passes; pass++) {
+        out = await callGemini(input, pass === 1 ? prompt : mutatePromptFor());
+        input = { data: out.buf.toString('base64'), mime: out.mime };
+      }
       let buf = out.buf;
       let note;
       if (!keepBg) {
@@ -379,10 +411,12 @@ async function generateBatch(players) {
     try {
       const shots = await Promise.all(players.map((p) => fetchHeadshot(p.url)));
       const stitched = stitchGrid(shots.map((s) => Buffer.from(s.data, 'base64')), cols, rows);
-      const out = await callGemini(
-        { data: stitched.toString('base64'), mime: 'image/png' },
-        gridPromptFor(players.length, cols, rows),
-      );
+      let input = { data: stitched.toString('base64'), mime: 'image/png' };
+      let out;
+      for (let pass = 1; pass <= passes; pass++) {
+        out = await callGemini(input, (pass === 1 ? gridPromptFor : gridMutatePromptFor)(players.length, cols, rows));
+        input = { data: out.buf.toString('base64'), mime: out.mime };
+      }
       const cells = sliceGrid(out.buf, cols, rows, players.length);
       const batch = [];
       for (let i = 0; i < players.length; i++) {
