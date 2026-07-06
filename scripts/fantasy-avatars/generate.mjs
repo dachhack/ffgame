@@ -158,6 +158,13 @@ async function callGemini(headshot) {
     const body = await res.text().catch(() => '');
     const err = new Error(`Gemini HTTP ${res.status}: ${body.slice(0, 300)}`);
     err.retryable = res.status === 429 || res.status >= 500;
+    if (res.status === 429) {
+      // Daily/plan quota (vs. a per-minute rate blip) — retrying won't help.
+      err.quota = /quota|plan and billing/i.test(body);
+      // Google includes RetryInfo like "retryDelay": "14s" — honor it.
+      const m = body.match(/"retryDelay":\s*"(\d+)s"/);
+      if (m) err.retryAfterMs = Number(m[1]) * 1000;
+    }
     throw err;
   }
   const json = await res.json();
@@ -174,6 +181,8 @@ async function callGemini(headshot) {
 }
 
 const results = [];
+let quotaWall = false; // set when the plan's quota is exhausted — stop the run
+
 async function generateOne(p) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
@@ -187,9 +196,14 @@ async function generateOne(p) {
         console.warn(`  REFUSED ${p.slug} — ${e.message}`);
         return { slug: p.slug, status: 'refused', reason: e.message };
       }
+      if (e.quota) {
+        // Daily/billing quota exhausted — every further request would 429 too.
+        quotaWall = true;
+        return { slug: p.slug, status: 'quota' };
+      }
       if (attempt < 3 && (e.retryable || e.code === 'ECONNRESET' || e.name === 'TypeError')) {
-        const wait = 2000 * 2 ** (attempt - 1);
-        console.warn(`  retry   ${p.slug} in ${wait / 1000}s — ${e.message}`);
+        const wait = e.retryAfterMs ?? 2000 * 2 ** (attempt - 1);
+        console.warn(`  retry   ${p.slug} in ${Math.round(wait / 1000)}s — ${e.message.slice(0, 120)}`);
         await sleep(wait);
         continue;
       }
@@ -201,7 +215,7 @@ async function generateOne(p) {
 
 let cursor = 0;
 async function worker() {
-  while (cursor < queue.length) {
+  while (cursor < queue.length && !quotaWall) {
     const p = queue[cursor++];
     results.push(await generateOne(p));
   }
@@ -212,10 +226,22 @@ await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, wo
 const manifestPath = path.join(outDir, 'manifest.json');
 let manifest = {};
 try { manifest = JSON.parse(await readFile(manifestPath, 'utf8')); } catch { /* first run */ }
-for (const r of results) manifest[r.slug] = { status: r.status, ...(r.reason ? { reason: r.reason } : {}) };
+for (const r of results) {
+  if (r.status === 'quota') continue; // not an outcome — the run just stopped here
+  manifest[r.slug] = { status: r.status, ...(r.reason ? { reason: r.reason } : {}) };
+}
 await writeFile(manifestPath, JSON.stringify({ style, model, prompt, players: manifest }, null, 2));
 
 const tally = results.reduce((a, r) => ((a[r.status] = (a[r.status] ?? 0) + 1), a), {});
 console.log(`\nDone: ${tally.ok ?? 0} ok, ${tally.refused ?? 0} refused, ${tally.error ?? 0} error`);
 console.log(`Manifest: ${manifestPath}`);
 if (tally.refused) console.log('Refusals are usually Gemini declining identifiable-person edits; try rewording the prompt.');
+if (quotaWall) {
+  console.error(
+    '\nSTOPPED: your Gemini plan quota is exhausted (HTTP 429 "check your plan and billing").' +
+    '\nThe free tier allows very few image generations per day. Enable billing on the key\'s' +
+    '\nproject at https://aistudio.google.com to run at roster scale, or rerun tomorrow —' +
+    '\nalready-generated players are skipped, so the run resumes where it stopped.',
+  );
+  process.exit(2);
+}
