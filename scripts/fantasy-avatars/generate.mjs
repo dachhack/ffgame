@@ -496,7 +496,15 @@ let manifest = {};
 try { manifest = JSON.parse(await readFile(manifestPath, 'utf8')); } catch { /* first run */ }
 for (const r of results) {
   if (r.status === 'quota') continue; // not an outcome — the run just stopped here
-  manifest[r.slug] = { status: r.status, ...(r.reason ? { reason: r.reason } : {}) };
+  const source = roster.find((p) => p.slug === r.slug)?.url;
+  manifest[r.slug] = {
+    status: r.status,
+    ...(r.reason ? { reason: r.reason } : {}),
+    // Same slug the app keys players by (HEADSHOTS, rosters) — file: <slug>.png.
+    espnId: source?.match(/full\/(\d+)\.png/)?.[1],
+    source,
+    passes,
+  };
 }
 await writeFile(manifestPath, JSON.stringify({ style, model, prompt, players: manifest }, null, 2));
 
