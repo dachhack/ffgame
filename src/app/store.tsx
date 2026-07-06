@@ -237,8 +237,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
   const [iconSet, setIconSetState] = useState<IconSetName>(() => {
     try {
+      // 'pixel' is parked — anyone who saved it drops back to the default.
       const saved = localStorage.getItem(ICONSET_KEY) as IconSetName | null;
-      return saved === 'emoji' || saved === 'factory' || saved === 'pixel' ? saved : 'factory';
+      return saved === 'emoji' || saved === 'factory' ? saved : 'factory';
     } catch { return 'factory'; }
   });
   const setIconSet = (s: IconSetName) => {
