@@ -196,25 +196,49 @@ if (dryRun) {
 // color, require it to be reasonably flat, then flood-fill it out from the
 // borders (interior patches of the same color survive) and soften the rim.
 const KEY = { r: 255, g: 0, b: 255 }; // what we ask for; used by grid stitching
-const HARD = 90;  // border-connected pixels this close to the bg color are cleared
-const SOFT = 170; // rim pixels between HARD and SOFT get partial alpha
+const HARD = 70;   // Euclidean RGB distance: border-connected pixels this close are cleared
+const SOFT = 140;  // rim pixels between HARD and SOFT get partial alpha
+const POCKET = 48; // enclosed (unconnected) pixels this close are cleared too
 
-/** Modal border color, or null when the border isn't flat enough to key. */
+const rgbDist = (r1, g1, b1, r2, g2, b2) =>
+  Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2);
+
+const hueOf = (r, g, b) => {
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  if (!d) return 0;
+  const h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return h * 60;
+};
+const hueDelta = (a, b) => {
+  const x = Math.abs(a - b) % 360;
+  return x > 180 ? 360 - x : x;
+};
+
+/** Background color estimated from the border ring, or null when the border
+ *  isn't flat enough to key: modal 16-level bucket, refined to the exact mean
+ *  of the ring pixels in that bucket (gradients pull the raw bucket color). */
 function detectBackground(data, w, h) {
   const ring = [];
   for (let x = 0; x < w; x++) ring.push(x, x + w * (h - 1));
   for (let y = 1; y < h - 1; y++) ring.push(y * w, y * w + w - 1);
-  const buckets = new Map(); // 16-level quantized color → count
+  const buckets = new Map();
   for (const p of ring) {
     const i = p * 4;
     const k = ((data[i] >> 4) << 8) | ((data[i + 1] >> 4) << 4) | (data[i + 2] >> 4);
     buckets.set(k, (buckets.get(k) ?? 0) + 1);
   }
   const [modal] = [...buckets.entries()].sort((a, b) => b[1] - a[1])[0];
-  const key = { r: ((modal >> 8) & 15) * 17, g: ((modal >> 4) & 15) * 17, b: (modal & 15) * 17 };
+  let r = 0, g = 0, b = 0, n = 0;
+  for (const p of ring) {
+    const i = p * 4;
+    const k = ((data[i] >> 4) << 8) | ((data[i + 1] >> 4) << 4) | (data[i + 2] >> 4);
+    if (k !== modal) continue;
+    r += data[i]; g += data[i + 1]; b += data[i + 2]; n++;
+  }
+  const key = { r: r / n, g: g / n, b: b / n };
   const near = ring.filter((p) => {
     const i = p * 4;
-    return Math.max(Math.abs(data[i] - key.r), Math.abs(data[i + 1] - key.g), Math.abs(data[i + 2] - key.b)) < HARD;
+    return rgbDist(data[i], data[i + 1], data[i + 2], key.r, key.g, key.b) < SOFT;
   }).length;
   return near / ring.length >= 0.6 ? key : null; // busts touch the bottom edge; 60% flat is plenty
 }
@@ -224,12 +248,19 @@ function keyOutBackground(pngBuf) {
   const { width: w, height: h, data } = img;
   const key = detectBackground(data, w, h);
   if (!key) return { buf: pngBuf, keyedFrac: 0 };
-  // Only strip color spill on saturated magenta-family grounds — the despill
-  // math assumes r/b elevated over g and would tint art on neutral backdrops.
-  const despill = key.r > 160 && key.b > 160 && key.g < 110;
-  const dist = (i) => Math.max(
-    Math.abs(data[i] - key.r), Math.abs(data[i + 1] - key.g), Math.abs(data[i + 2] - key.b),
-  );
+  // Magenta/pink-family ground? Then despill the rim, and let the flood also
+  // take connected pixels whose HUE matches the key even when brightness has
+  // drifted far (Gemini paints gradients/vignettes). Hue separates the bg from
+  // team colors — Vikings purple sits ~30° away from magenta and stays put.
+  const magentaKey = key.r > 150 && key.b > 110 && key.g < 110;
+  const keyHue = hueOf(key.r, key.g, key.b);
+  const dist = (i) => rgbDist(data[i], data[i + 1], data[i + 2], key.r, key.g, key.b);
+  const bgLike = (i) => {
+    if (dist(i) < HARD) return true;
+    if (!magentaKey) return false;
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    return r - g > 60 && b - g > 30 && hueDelta(hueOf(r, g, b), keyHue) < 22;
+  };
 
   // Flood fill from every border pixel across near-magenta neighbors.
   const cleared = new Uint8Array(w * h);
@@ -238,7 +269,7 @@ function keyOutBackground(pngBuf) {
   for (let y = 0; y < h; y++) stack.push(y * w, y * w + w - 1);
   while (stack.length) {
     const p = stack.pop();
-    if (cleared[p] || dist(p * 4) >= HARD) continue;
+    if (cleared[p] || !bgLike(p * 4)) continue;
     cleared[p] = 1;
     const x = p % w, y = (p / w) | 0;
     if (x > 0) stack.push(p - 1);
@@ -247,24 +278,53 @@ function keyOutBackground(pngBuf) {
     if (y < h - 1) stack.push(p + w);
   }
 
+  // Pocket sweep: background enclosed by the subject (gaps between dreadlocks,
+  // under arms) never connects to the border, so the flood fill misses it.
+  // Clear unconnected pixels that closely match the bg color — tighter
+  // tolerance than the flood so near-bg art (a pink tongue on a magenta
+  // ground) isn't punched out.
+  for (let p = 0; p < w * h; p++) {
+    if (!cleared[p] && dist(p * 4) < POCKET) cleared[p] = 1;
+  }
+
   let hit = 0;
+  const rim = [];
   for (let p = 0; p < w * h; p++) {
     const i = p * 4;
     if (cleared[p]) { data[i + 3] = 0; hit++; continue; }
-    // Rim pass: pixels touching the cleared region get alpha from their
-    // magenta-ness (anti-aliased edge) plus a despill of the magenta cast.
     const x = p % w, y = (p / w) | 0;
-    const nearClear =
+    if (
       (x > 0 && cleared[p - 1]) || (x < w - 1 && cleared[p + 1]) ||
-      (y > 0 && cleared[p - w]) || (y < h - 1 && cleared[p + w]);
-    if (!nearClear) continue;
-    const d = dist(i);
-    if (d < SOFT) data[i + 3] = Math.round(data[i + 3] * Math.min(1, (d - HARD) / (SOFT - HARD)));
-    if (despill) {
-      const spillCap = Math.max(data[i + 1], Math.min(data[i], data[i + 2]));
-      if (data[i] > spillCap) data[i] = spillCap;
-      if (data[i + 2] > spillCap) data[i + 2] = spillCap;
+      (y > 0 && cleared[p - w]) || (y < h - 1 && cleared[p + w])
+    ) rim.push(p);
+  }
+
+  // Rim pass, up to 3px deep: edge pixels fade by their bg-similarity and get
+  // despilled. Expansion stops at solid-subject pixels, so only the blended
+  // fringe band is touched — wide gradients around hair need more than 1px.
+  const softened = new Uint8Array(w * h);
+  let frontier = rim;
+  for (let depth = 0; depth < 3 && frontier.length; depth++) {
+    const next = [];
+    for (const p of frontier) {
+      if (softened[p] || cleared[p]) continue;
+      softened[p] = 1;
+      const i = p * 4;
+      const d = dist(i);
+      if (d >= SOFT) continue; // solid subject — leave it, don't expand past it
+      data[i + 3] = Math.round(data[i + 3] * Math.min(1, Math.max(0, (d - HARD) / (SOFT - HARD))));
+      if (magentaKey) {
+        const spillCap = Math.max(data[i + 1], Math.min(data[i], data[i + 2]));
+        if (data[i] > spillCap) data[i] = spillCap;
+        if (data[i + 2] > spillCap) data[i + 2] = spillCap;
+      }
+      const x = p % w, y = (p / w) | 0;
+      if (x > 0) next.push(p - 1);
+      if (x < w - 1) next.push(p + 1);
+      if (y > 0) next.push(p - w);
+      if (y < h - 1) next.push(p + w);
     }
+    frontier = next;
   }
   // If almost nothing keyed, Gemini likely ignored the magenta ask — keep the
   // original rather than shipping a nibbled image, and let the caller warn.
