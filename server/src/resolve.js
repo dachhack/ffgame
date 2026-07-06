@@ -71,14 +71,25 @@ export async function injectWeekPlays(week) {
 // of ~6 × 600). When `ctx` is absent (sim / single-matchup CLI) they self-fetch,
 // byte-identical to before.
 
-/** Enrolled side's revealed picks: [{ win, slot, slug, metric }] — or null if the
- *  manager isn't enrolled / picks aren't locked yet (caller uses the fallback). */
+/** Enrolled side's revealed picks: [{ win, slot, slug, metric }] — LOCKED rows
+ *  only (windows seal at their own kickoff, so mid-week this is the windows
+ *  already underway). Returns [] when the manager HAS picks but none are sealed
+ *  yet (e.g. a deliberately-empty TNF — nothing fields until Sunday); null only
+ *  when they have no picks at all (caller then uses the auto-lineup fallback).
+ *  Without the distinction, a manager's real-but-unsealed week would resolve as
+ *  a phantom AI lineup until their first window locked. */
 async function enrolledPicks(matchup, membership, ctx) {
   if (!(membership?.enrolled && membership.app_user_id && matchup.status !== 'scheduled')) return null;
-  if (ctx) { const ps = ctx.picks.get(`${matchup.id}:${membership.app_user_id}`); return ps && ps.length ? ps : null; }
-  const { data } = await db().from('sealed_pick').select('game_window,roster_slot,player_slug,metric_id')
-    .eq('matchup_id', matchup.id).eq('app_user_id', membership.app_user_id).eq('locked', true);
-  return data && data.length ? data.map((p) => ({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id })) : null;
+  const key = `${matchup.id}:${membership.app_user_id}`;
+  if (ctx) {
+    const ps = ctx.picks.get(key);
+    if (ps && ps.length) return ps;
+    return ctx.hasPicks.has(key) ? [] : null;
+  }
+  const { data } = await db().from('sealed_pick').select('game_window,roster_slot,player_slug,metric_id,locked')
+    .eq('matchup_id', matchup.id).eq('app_user_id', membership.app_user_id).not('player_slug', 'is', null);
+  if (!data || !data.length) return null;
+  return data.filter((p) => p.locked).map((p) => ({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id }));
 }
 
 /** A roster's real Sleeper starters (the unenrolled-opponent fallback / player pool). */
@@ -124,7 +135,7 @@ export async function prefetchTick(live, week) {
     db().from('league').select('id,lineup_policy').in('id', leagueIds),
     db().from('sleeper_lineup').select('league_id,roster_id,starters_json').in('league_id', leagueIds).eq('week', week),
     db().from('applied_state').select('matchup_id,app_user_id,payload_json').in('matchup_id', matchupIds),
-    db().from('sealed_pick').select('matchup_id,app_user_id,game_window,roster_slot,player_slug,metric_id').in('matchup_id', matchupIds).eq('locked', true),
+    db().from('sealed_pick').select('matchup_id,app_user_id,game_window,roster_slot,player_slug,metric_id,locked').in('matchup_id', matchupIds).not('player_slug', 'is', null),
   ]);
   const members = new Map();   // leagueId -> Map(roster -> member)
   for (const m of mem.data ?? []) {
@@ -136,13 +147,16 @@ export async function prefetchTick(live, week) {
   for (const r of lu.data ?? []) lineups.set(`${r.league_id}:${r.roster_id}`, (r.starters_json ?? []).map((s) => s.player_slug).filter(Boolean));
   const applied = new Map();   // `${matchupId}:${appUser}` -> payload
   for (const r of ap.data ?? []) applied.set(`${r.matchup_id}:${r.app_user_id}`, r.payload_json ?? {});
-  const picks = new Map();     // `${matchupId}:${appUser}` -> [{win,slot,slug,metric}]
+  const picks = new Map();     // `${matchupId}:${appUser}` -> [{win,slot,slug,metric}] (LOCKED rows)
+  const hasPicks = new Set();  // `${matchupId}:${appUser}` — has ANY pick rows, locked or not
   for (const p of pk.data ?? []) {
     const k = `${p.matchup_id}:${p.app_user_id}`;
+    hasPicks.add(k);
+    if (!p.locked) continue; // unsealed window — not revealed, not scored yet
     if (!picks.has(k)) picks.set(k, []);
     picks.get(k).push({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id });
   }
-  return { members, policy, lineups, applied, picks };
+  return { members, policy, lineups, applied, picks, hasPicks };
 }
 
 /** Resolve one matchup → write matchup_state (per game_window) + finals when final.

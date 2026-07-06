@@ -67,6 +67,12 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   const [matchPremium, setMatchPremium] = useState(true); // default true = no false locks until we know
   const [weekSel, setWeekSel] = useState<number | null>(null); // null = default (earliest) week
+  // Per-window locking ("late swap"): each window's picks seal at that window's
+  // OWN first kickoff, not the week's. Kickoffs come from the live slate; the
+  // server-sealed flags on our own rows are the authoritative override.
+  const [winKickIso, setWinKickIso] = useState<Record<string, string>>({});
+  const [lockedWins, setLockedWins] = useState<Set<string>>(new Set());
+  const [nowTs, setNowTs] = useState(() => Date.now());
 
   useEffect(() => { ensurePremiumTier(); }, []); // load the free/premium split for intent gating
   useEffect(() => {
@@ -87,14 +93,24 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
         const [pl, pk, bf, un, ex, slate] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId), myBuffs(m.id), myUnlocks(m.id), myExtra(m.id).catch(() => 0), liveSlate(m.week).catch(() => [])]);
         // Apply the live ESPN slate (overrides baked 2025) before gating below.
         setRuntimeSlate(m.week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId })));
+        // Each window's first kickoff — drives per-window lock gating below.
+        const wkick: Record<string, string> = {};
+        for (const g of slate) {
+          if (!g.kickoff) continue;
+          if (!wkick[g.win] || Date.parse(g.kickoff) < Date.parse(wkick[g.win])) wkick[g.win] = g.kickoff;
+        }
+        setWinKickIso(wkick);
         setPool(pl);
         const map: Record<string, { player_slug: string | null; metric_id: string | null }> = {};
         const xs: { win: string | null; player_slug: string | null; metric_id: string | null }[] = [];
+        const lw = new Set<string>();
         for (const p of pk) {
+          if (p.locked) lw.add(p.game_window); // the server already sealed this window
           const xm = /^x(\d+)$/.exec(p.roster_slot); // extra slots are 'x0','x1',…
           if (xm) xs[Number(xm[1])] = { win: p.game_window, player_slug: p.player_slug, metric_id: p.metric_id };
           else map[`${p.game_window}-${p.roster_slot}`] = { player_slug: p.player_slug, metric_id: p.metric_id };
         }
+        setLockedWins(lw);
         setPicks(map);
         const n = Number(ex ?? 0);
         setExtra(n);
@@ -112,7 +128,24 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
   }, [userId, leagueId, rosterId, weekSel, attempt]);
 
   const posBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, p.pos])), [pool]);
+  // The week has started (first kickoff passed) — gates power-ups/extra slots,
+  // which arm pre-week. Picks lock PER WINDOW (winLocked below), not here.
   const locked = !!matchup && (matchup.status !== 'scheduled' || (!!matchup.lock_at && new Date(matchup.lock_at) <= new Date()));
+  // Re-check the clock every 30s so windows flip to locked while the screen is open.
+  useEffect(() => {
+    const id = setInterval(() => setNowTs(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  /** A window's picks are final: the server sealed our rows, or its first kickoff
+   *  passed. Once the week starts, a window with no known kickoff is treated as
+   *  locked (fail safe — never leave picks editable mid-slate on missing data). */
+  const winLocked = (winId: string): boolean => {
+    if (!locked) return false;
+    if (lockedWins.has(winId)) return true;
+    const iso = winKickIso[winId];
+    return iso ? Date.parse(iso) <= nowTs : true;
+  };
+  const allLocked = !!matchup && locked && WINDOWS.every((w) => winLocked(w.id));
 
   // Slate-gating: a player can only fill a slot in the window their real NFL team
   // plays that week. Players on a bye are eligible nowhere; players whose team we
@@ -188,7 +221,10 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
       return { game_window: s.win, roster_slot: s.slot, player_slug: p?.player_slug ?? null, metric_id: p?.metric_id ?? null };
     });
     const extraRows: PickRow[] = extraPicks.map((ep, i) => ({ game_window: ep.win ?? '', roster_slot: `x${i}`, player_slug: ep.player_slug ?? null, metric_id: ep.metric_id ?? null }));
-    const rows = [...baseRows, ...extraRows].filter((r) => r.game_window && r.player_slug); // only filled slots
+    // Only filled slots, and only windows still open — a locked window's rows are
+    // sealed server-side and would fail the whole upsert (RLS + 0058 trigger).
+    const rows = [...baseRows, ...extraRows].filter((r) => r.game_window && r.player_slug && !winLocked(r.game_window));
+    if (!rows.length) { setSaved(true); setSaving(false); return; } // nothing editable to write
     try { await savePicks(matchup.id, userId, rows); setSaved(true); }
     catch (e) { setErr(e instanceof Error ? e.message : 'Could not seal picks.'); }
     finally { setSaving(false); }
@@ -331,11 +367,11 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             {weekNav}
-            <span className="mono" style={{ fontSize: 9, color: locked ? 'var(--opp)' : 'var(--you)', border: `1px solid ${locked ? 'var(--opp)' : 'var(--you)'}`, borderRadius: 4, padding: '3px 7px' }}>{locked ? 'LOCKED' : `LOCKS ${fmtLock(matchup!.lock_at)}`}</span>
+            <span className="mono" style={{ fontSize: 9, color: allLocked ? 'var(--opp)' : 'var(--you)', border: `1px solid ${allLocked ? 'var(--opp)' : 'var(--you)'}`, borderRadius: 4, padding: '3px 7px' }}>{allLocked ? 'LOCKED' : locked ? 'LOCKS BY WINDOW' : `FIRST LOCK ${fmtLock(matchup!.lock_at)}`}</span>
           </div>
         </div>
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
-          Pick a player + a hidden metric per slot. Sealed picks stay hidden from your opponent until kickoff. {filled}/{SLOTS.length} set.
+          Pick a player + a hidden metric per slot. Each window locks at its own kickoff — later windows stay editable all weekend, and your opponent can’t see a pick until its window kicks off. {filled}/{SLOTS.length} set.
           {gateOn && <><br />Each slot only takes players whose real NFL team plays in that window. Players on a bye can’t be slotted.</>}
         </div>
         {/* Season-long auto-pilot: AI sets the team's best lineup each week. */}
@@ -413,13 +449,17 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
         const winSlots = SLOTS.filter((s) => s.win === w.id);
         const elig = gateOn ? pool.filter((pl) => winBySlug[pl.slug] === 'any' || winBySlug[pl.slug] === w.id).length : pool.length;
         const setN = winSlots.filter((s) => picks[s.key]?.player_slug && picks[s.key]?.metric_id).length;
+        const wLocked = winLocked(w.id);
         return (
-        <div key={w.id} style={{ ...card, marginBottom: 10 }}>
+        <div key={w.id} style={{ ...card, marginBottom: 10, opacity: wLocked ? 0.75 : 1 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700 }}>{w.label} · {w.sub}</div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
               {gateOn && <span className="mono" style={{ fontSize: 9, color: elig ? 'var(--faint)' : 'var(--opp)' }}>{elig} eligible</span>}
               <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: setN === winSlots.length ? 'var(--you)' : 'var(--faint)' }}>{setN}/{winSlots.length} SET</span>
+              <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: wLocked ? 'var(--opp)' : 'var(--faint)' }}>
+                {wLocked ? <><Emoji e="🔒" size="1.2em" /> LOCKED</> : winKickIso[w.id] ? `locks ${fmtLock(winKickIso[w.id])}` : 'locks at kickoff'}
+              </span>
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -431,11 +471,11 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
                   key={s.key} slotKeyStr={s.key} winId={w.id as WindowId} week={week} pick={pick}
                   selected={false} inventory={synthInv} armed={armedMap} appliedPu={[]} applyMode={null}
                   onApplyToSpot={() => {}}
-                  onOpenPicker={() => { if (!locked) setPickerSlot({ key: s.key, win: w.id as WindowId }); }}
-                  onPickMetric={(m) => setSlot(s.key, { metric_id: m })}
-                  onClearSlot={() => setSlot(s.key, { player_slug: null, metric_id: null })}
+                  onOpenPicker={() => { if (!wLocked) setPickerSlot({ key: s.key, win: w.id as WindowId }); }}
+                  onPickMetric={(m) => { if (!wLocked) setSlot(s.key, { metric_id: m }); }}
+                  onClearSlot={() => { if (!wLocked) setSlot(s.key, { player_slug: null, metric_id: null }); }}
                   onDropPlayer={() => {}} onScout={() => {}}
-                  lockPlayer={locked} resolve={(id) => playersBySlug[id]} hideScout
+                  lockPlayer={wLocked} resolve={(id) => playersBySlug[id]} hideScout
                 />
               );
             })}
@@ -470,17 +510,20 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
           {extraPicks.map((ep, i) => {
             const eligible = ep.win ? eligibleFor(ep.win, ep.player_slug) : [];
             const ms = metricsFor(ep.player_slug);
+            // The slot's pick follows its chosen window's lock; an unassigned slot
+            // stays editable while any window is still open.
+            const epLocked = ep.win ? winLocked(ep.win) : allLocked;
             return (
               <div key={i} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <select value={ep.win ?? ''} disabled={locked} onChange={(e) => setExtraSlot(i, { win: e.target.value || null })} style={{ ...sel, flex: 0.9 }}>
+                <select value={ep.win ?? ''} disabled={epLocked} onChange={(e) => setExtraSlot(i, { win: e.target.value || null })} style={{ ...sel, flex: 0.9 }}>
                   <option value="">— window —</option>
-                  {WINDOWS.map((w) => <option key={w.id} value={w.id}>{w.label}</option>)}
+                  {WINDOWS.map((w) => <option key={w.id} value={w.id} disabled={winLocked(w.id)}>{w.label}{winLocked(w.id) ? ' 🔒' : ''}</option>)}
                 </select>
-                <select value={ep.player_slug ?? ''} disabled={locked || !ep.win} onChange={(e) => setExtraSlot(i, { player_slug: e.target.value || null })} style={{ ...sel, flex: 1.3 }}>
+                <select value={ep.player_slug ?? ''} disabled={epLocked || !ep.win} onChange={(e) => setExtraSlot(i, { player_slug: e.target.value || null })} style={{ ...sel, flex: 1.3 }}>
                   <option value="">{ep.win ? (eligible.length ? '— player —' : '— none this window —') : '— pick a window —'}</option>
                   {eligible.map((pl) => <option key={pl.slug} value={pl.slug}>{pl.full} ({pl.pos}{teamBySlug[pl.slug] ? ` · ${teamBySlug[pl.slug]}` : ''})</option>)}
                 </select>
-                <select value={ep.metric_id ?? ''} disabled={locked || !ep.player_slug} onChange={(e) => setExtraSlot(i, { metric_id: e.target.value || null })} style={{ ...sel, flex: 1 }}>
+                <select value={ep.metric_id ?? ''} disabled={epLocked || !ep.player_slug} onChange={(e) => setExtraSlot(i, { metric_id: e.target.value || null })} style={{ ...sel, flex: 1 }}>
                   <option value="">— metric —</option>
                   {ms.map((m) => <option key={m.id} value={m.id}>{m.lock ? '🔓 ' : ''}{m.name} · {m.tag}</option>)}
                 </select>
@@ -491,9 +534,9 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
       )}
 
       {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', margin: '4px 0 10px' }}>{err}</div>}
-      {!locked && <button onClick={seal} disabled={saving} className="mono" style={{ ...btn, opacity: saving ? 0.6 : 1 }}>{saving ? 'SEALING…' : saved ? 'SEALED ✓ — UPDATE' : 'SEAL LINEUP'}</button>}
-      {saved && !locked && <div className="mono" style={{ fontSize: 9.5, color: 'var(--you)', textAlign: 'center', marginTop: 8 }}>Saved. Editable until kickoff.</div>}
-      {locked && <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', textAlign: 'center' }}>This week is locked — picks are final.</div>}
+      {!allLocked && <button onClick={seal} disabled={saving} className="mono" style={{ ...btn, opacity: saving ? 0.6 : 1 }}>{saving ? 'SEALING…' : saved ? 'SEALED ✓ — UPDATE' : 'SEAL LINEUP'}</button>}
+      {saved && !allLocked && <div className="mono" style={{ fontSize: 9.5, color: 'var(--you)', textAlign: 'center', marginTop: 8 }}>Saved. Each window stays editable until it kicks off.</div>}
+      {allLocked && <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', textAlign: 'center' }}>Every window has kicked off — picks are final.</div>}
       <div style={{ textAlign: 'center', marginTop: 14 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
 
       {pickerSlot && (() => {

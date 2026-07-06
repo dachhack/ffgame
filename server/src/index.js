@@ -12,7 +12,7 @@ import { buildPlayerIndex } from './playerIndex.js';
 import { getGames, gamesToPollFrom, slateFromGames } from './poll/scoreboard.js';
 import { pollGame } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
-import { lockDueMatchups, finalizeMatchups, backfillLockAt } from './lock.js';
+import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt } from './lock.js';
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues } from './sync.js';
 import { db } from './supabase.js';
@@ -98,9 +98,22 @@ async function tick() {
     if (filled) log('backfilled lock_at on', filled, 'matchups');
   }
 
-  // Lock any matchups whose kickoff has passed (reveals sealed picks).
-  const locked = await lockDueMatchups();
+  // First kickoff per window (ms) — drives per-window pick sealing. Null when the
+  // slate carries no kickoffs, which falls back to sealing everything at lock_at.
+  const winKicks = {};
+  for (const g of slate) {
+    const ms = g.kickoff ? Date.parse(g.kickoff) : NaN;
+    if (Number.isFinite(ms)) winKicks[g.win] = Math.min(winKicks[g.win] ?? Infinity, ms);
+  }
+  const wk = Object.keys(winKicks).length ? winKicks : null;
+
+  // Lock any matchups whose first kickoff has passed (status → live; seals the
+  // windows already underway), then sweep this week's later windows — each one's
+  // picks seal (and reveal to the opponent) at its OWN kickoff.
+  const locked = await lockDueMatchups(new Date(), wk);
   if (locked) log('locked', locked, 'matchups');
+  const sealed = await lockDueWindows(week, wk);
+  if (sealed) log('sealed', sealed, 'window picks');
 
   // Poll live games → persist plays (keyed at the board week). Reuse the scoreboard
   // already fetched above (same espnWeek) instead of fetching the identical URL again.

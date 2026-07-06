@@ -225,6 +225,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     if (!liveCtx) { setLiveOppPicks(null); setLiveOppBuffs(null); return; }
     let alive = true;
     let t: ReturnType<typeof setInterval> | undefined;
+    let slow = false;
     const stop = () => { if (t) { clearInterval(t); t = undefined; } };
     const load = async () => {
       if (document.hidden) return; // don't poll a backgrounded tab
@@ -241,9 +242,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         if (alive) {
           setLiveOppPicks(Object.keys(opp).length ? opp : null);
           setLiveOppBuffs(oppBuffs);
-          // Sealed picks are immutable once revealed (RLS only exposes them after
-          // lock), so once the reveal lands there is nothing left to poll for.
-          if (Object.keys(opp).length) stop();
+          // Windows reveal one at a time (each seals at its OWN kickoff), so keep
+          // polling all week — but back off once the first reveal lands: later
+          // reveals arrive at window kickoffs, hours apart, not seconds.
+          if (Object.keys(opp).length && !slow) { slow = true; stop(); t = setInterval(load, 60_000); }
         }
       } catch { /* keep prior */ }
     };
