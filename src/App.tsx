@@ -68,9 +68,11 @@ export function App() {
         {route.name === 'matchup' && <Matchup key={`m${route.week}-${youTeamId}`} week={route.week} initialPhase={route.phase} />}
         {route.name === 'final' && <MatchupFinal key={`f${route.week}-${youTeamId}`} week={route.week} />}
       </Suspense>
-      {/* Persistent "out" across the funnel — request a pilot code for your league.
-          Hidden inside the live pilot itself (you're already in). */}
-      {route.name !== 'live' && <RequestCodeFab />}
+      {/* Persistent "out" across the discovery funnel — request a pilot code for
+          your league. Hidden inside the live pilot (you're already in) and on the
+          board/demo/final screens, where its fixed bottom-left position otherwise
+          overlaps the playback and lineup controls. */}
+      {!['live', 'matchup', 'demo', 'final'].includes(route.name) && <RequestCodeFab />}
     </div>
   );
 }

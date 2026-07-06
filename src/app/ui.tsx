@@ -152,7 +152,7 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
         title="Settings"
         aria-expanded={open}
         style={{
-          width: 26, height: 22, borderRadius: 4, fontSize: 13, lineHeight: 1, cursor: 'pointer',
+          width: 34, height: 34, borderRadius: 5, fontSize: 15, lineHeight: 1, cursor: 'pointer',
           background: open ? 'var(--sh)' : 'var(--surface)', border: `1px solid ${open ? 'var(--you)' : 'var(--bd)'}`,
           color: open ? 'var(--you)' : 'var(--dim)',
         }}
@@ -162,7 +162,7 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
       {open && (
         <div
           style={{
-            position: 'absolute', top: 28, right: 0, zIndex: 60, width: 208,
+            position: 'absolute', top: 40, right: 0, zIndex: 60, width: 208,
             background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 12,
             boxShadow: '0 10px 28px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column', gap: 14,
           }}

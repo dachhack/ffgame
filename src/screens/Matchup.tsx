@@ -719,7 +719,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       <header style={{ flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 8, padding: isMobile ? '8px 10px' : '8px 16px', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <Brand onClick={() => navigate({ name: 'splash' })} />
-          <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← back</button>
+          <button onClick={() => navigate({ name: 'splash' })} className="mono" style={{ fontSize: 10, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '10px 12px', cursor: 'pointer' }}>← back</button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => navigate({ name: 'live' })} className="mono" title="See the real live head-to-head board"
@@ -858,7 +858,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           <Brand onClick={() => navigate({ name: 'league' })} />
           <div style={{ display: 'flex', gap: 2, padding: 3, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4 }}>
             {(['setup', 'live', 'final'] as Phase[]).map((p) => (
-              <button key={p} onClick={() => changePhase(p)} className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', padding: '5px 9px', borderRadius: 3, border: 'none', background: phase === p ? 'var(--sh)' : 'transparent', color: phase === p ? 'var(--you)' : 'var(--dim)' }}>
+              <button key={p} onClick={() => changePhase(p)} className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', padding: '9px 11px', borderRadius: 3, border: 'none', background: phase === p ? 'var(--sh)' : 'transparent', color: phase === p ? 'var(--you)' : 'var(--dim)' }}>
                 {p.toUpperCase()}
               </button>
             ))}
