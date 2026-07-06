@@ -66,6 +66,7 @@ const STYLES = {
   orc: 'as a battle-hardened orc — green-grey skin, tusks, tribal war paint',
   elf: 'as a regal high elf — pointed ears, luminous skin, silver circlet',
   dwarf: 'as a stout dwarven champion — braided beard, rune-etched armor',
+  barbarian: 'as a hulking barbarian warlord — war paint, fur-trimmed pauldrons, battle scars, wild braided hair',
   wizard: 'as an arcane wizard — wide-brimmed hat, crackling magical energy',
   knight: 'as an armored paladin knight — polished plate armor, heraldic colors',
   vampire: 'as an elegant vampire lord — pale skin, crimson eyes, high collar',
