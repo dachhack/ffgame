@@ -506,3 +506,33 @@ the playtester; no engine/app code):
   → 10.0 buys/season, extra-slot 0 → 4.9, occasional legit amp-2 pair (1.0).
   Opt-out Δ 9.3 pts (was 10.0 measured with the waste; same conclusion).
   Wallet still bounded (101-111), cancellation r=0.96, home 49.3%.
+
+## 15. First-buy variety probe (`firstbuy.mjs`) — the amp default is REAL dominance
+The last open homogenization question: everyone''s first purchase is an
+amplifier — is that dominance, or herd behavior a roster-aware manager could
+beat? New probe: ONE purchase allowed, per-matchup lift measured exactly
+(deterministic resolver) on paired draws; blind rules vs a hindsight oracle.
+14 wk × 100, vs stripped-honest field:
+- **Blind rules:** always-momentum +16.6 (WR 60.7%) tops the board;
+  combo-if-elite-dual-threat +15.8 (WR 61.2%) statistically TIES it; every
+  other conditioning attempt (air-raid with a top-8 QB, combined
+  roster-aware) lands at +14.0 or below. **No observable-feature rule beats
+  just buying an amp.** The choice AMONG the three amps barely matters
+  blind (+14.6-16.6, WR ≈ 61% for all three).
+- **Oracle (hindsight argmax):** +25.1, WR 67.2% — and only 64.7% of its
+  picks are amps (air-raid 16.0%, extra-slot 11.2%, combo-drip 8.0%). So
+  variety EXISTS per-matchup, but the 8.5-pt gap between oracle and best
+  blind rule is driven by unobservable outcomes (which QB actually spikes,
+  which bench player blows up) — luck, not surfaceable skill. Roster
+  projections don''t reach it; my rules tried.
+- **Per-buy readings:** unconditional combo +12.5 (fair for the right
+  roster — the AI''s conditional buy is correct); always-air-raid +7.0 at
+  ◎60 (per-coin 1.17 vs momentum''s 2.37 — would need ~◎35 to compete);
+  extra-slot +4.3 solo (structurally weak as a lone buy; its §12 value was
+  in stacks).
+- **Design read:** first-buy homogenization is honest dominance, not a
+  bug a smarter UI could fix. If more first-buy variety is wanted, the
+  lever is PRICE (air-raid ~◎35-40, or amp price nudges up), not
+  conditioning hints. Otherwise: the amp default is a fine casual
+  auto-pilot, and the skill expression lives where §10-§14 put it —
+  metric picks, targeted plays, and knowing when NOT to spend.

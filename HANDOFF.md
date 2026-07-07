@@ -59,6 +59,14 @@ Full design + decisions in `docs/native-league-plan.md`.
   priority/rotation, locked-week freeze, RLS leaks). All pass; `npm run build`
   green. Deferred (documented): trades, FAAB, realtime draft push, keepers.
 
+## First-buy variety probe — amp default is real dominance (tools only)
+Findings §15, new tools/playtester/firstbuy.mjs: one-purchase A/B with blind
+roster-aware rules vs a hindsight oracle. No observable rule beats
+always-buy-an-amp (+16.6; combo-if-elite-dual ties at +15.8); the oracle''s
+35% non-amp picks are luck-driven, not surfaceable. If first-buy variety is
+wanted the lever is PRICE (air-raid ~◎35-40 vs current ◎60; extra-slot is
+structurally weak solo) — a design call for the owner, not a code fix.
+
 ## Saver probe + amp-bundle instruments — capacity pricing validated (tools only)
 Findings §14. Playtester-only change (no engine/app code): aggregate.mjs
 gets amp-pair/amp-trio levers (trio is SUPERLINEAR: +68.8 margin vs +46.3
