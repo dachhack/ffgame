@@ -179,8 +179,10 @@ in-app), rosters (drafted in-app), weekly pools (materialized from rosters).
   `PlayerImg`'s new `espnId` fallback (baked slug map → ESPN id → team logo →
   position pill, all behind the mark-free switch).
 - Self-serve avatars: `set_team_avatar` (manager) + `set_league_avatar`
-  (commissioner), https-only; `AvatarPicker` preset gallery = DiceBear
-  generated crests + NFL team logos. Team identity card (avatar + rename) on
+  (commissioner), https-only; `AvatarPicker` preset gallery = **72 first-party
+  Drip tiles** (`public/avatars/`, cut from the owner's three avatar sheets —
+  hero busts, action poses, gear; see the v0.99.5 HANDOFF entry for the
+  slicing geometry) + NFL team logos. Team identity card (avatar + rename) on
   the team screen, rendered pre-draft too; league crest on league cards.
 
 ## 4. What's deliberately deferred

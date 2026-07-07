@@ -1,6 +1,29 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.99.4`_
+_Last updated: 2026-07-07 · Build `v0.99.5`_
+
+## First-party Drip avatar gallery (v0.99.5)
+The owner supplied three 8×3 avatar sheets (helmet-bust player set, action-pose
+set, fields/helmets/footballs gear set); they're cut into **72 first-party
+192×192 webp tiles** under `public/avatars/` (~750KB) and are now THE avatar
+gallery — DiceBear is GONE (it was unverifiable from the sandbox anyway); NFL
+team logos remain as extra options. No DB change (`set_team_avatar` /
+`set_league_avatar` store URLs).
+- `src/data/dripAvatars.ts` (generated): ordered file list + `dripAvatarUrl()`
+  — URLs are absolute on `AVATAR_ORIGIN = https://dripfantasy.com`, so a stored
+  pick renders on any surface and passes the RPC https gate even when picked
+  from a dev origin (the tradeoff: dev picks point at prod assets — fine).
+- Slicing pipeline (for future sheets): the sheets were AI-generated with
+  NON-uniform per-sheet grids — tiles ≈162px wide at centers `169 + 245k`,
+  rows measured per sheet (01: 180-365/406-562/660-788 — row 2+3 label chips
+  OVERLAP tile bottoms and are cropped out; 03/04: 166-338/388-560/612-786).
+  Method: overlay candidate boxes + zoomed coordinate rulers on the sheet,
+  eyeball, iterate, then contact-sheet the crops for a final visual check.
+  Center-square crop → 192², webp q85. Raw sheets are NOT committed (repo
+  hygiene); tiles are the artifact.
+- Tile naming: `hero-*` (24 busts — listed first in the picker), `action-*`
+  (24 poses), `gear-*` (24 fields/helmets/balls). Two sheets had duplicate
+  labels → `-2` suffixes (action-phase-shift-2 etc.).
 
 ## Native-league media: headshots, logos, team + league avatars (v0.99.4)
 Player pictures + NFL team logos across the draft room / team screens, and
