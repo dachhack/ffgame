@@ -12,12 +12,18 @@ import type { Pos } from '../types';
 import { buildDraftPool } from '../data/nativeLeague';
 import { NFL_CODES } from '../data/kdst';
 import { DRIP_AVATARS, dripAvatarUrl } from '../data/dripAvatars';
+import { ADP_2026, ADP_AS_OF } from '../data/adp2026';
+import { PROJ_2026, PROJ_AS_OF } from '../data/proj2026';
+import { statsForSlug } from '../data/players';
 import {
   createNativeLeague, seedLeaguePool, nativeGenerateSchedule,
   startDraft, draftState, makeDraftPick, draftTick,
   leaguePool, nativeRosters, nativeTeamState, dropPlayer, addFreeAgent,
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
   setTeamName, setTeamAvatar, setLeagueAvatar,
+  setDraftQueue, myDraftQueue, setAutodraft,
+  commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick,
+  nominate, placeBid,
   type DraftState, type LeaguePoolPlayer, type NativeTeamState,
 } from '../data/liveApi';
 
@@ -90,6 +96,8 @@ export function NativeCreate({ onDone, onBack }: {
   const [teams, setTeams] = useState(8);
   const [rounds, setRounds] = useState(12);
   const [clock, setClock] = useState(90);
+  const [mode, setMode] = useState<'snake' | 'auction'>('snake');
+  const [budget, setBudget] = useState(200);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [err, setErr] = useState<string | null>(null);
@@ -101,7 +109,7 @@ export function NativeCreate({ onDone, onBack }: {
     setBusy(true); setErr(null);
     try {
       setNote('Creating your league…');
-      const r = await createNativeLeague(name, '2026', teams, rounds, clock);
+      const r = await createNativeLeague(name, '2026', teams, rounds, clock, mode, budget);
       if (!r.ok || !r.league_id) { setErr(friendlyError(r.error ?? 'Could not create the league.')); setBusy(false); return; }
       setNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
@@ -155,6 +163,16 @@ export function NativeCreate({ onDone, onBack }: {
           <div><div className="mono" style={label}>ROSTER SIZE</div><div style={{ marginTop: 7 }}>{num(rounds, setRounds, 5, 25, 1)}</div></div>
           <div><div className="mono" style={label}>PICK CLOCK (SEC)</div><div style={{ marginTop: 7 }}>{num(clock, setClock, 15, 600, 15)}</div></div>
         </div>
+        <div style={{ display: 'flex', gap: 18, marginTop: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div>
+            <div className="mono" style={label}>DRAFT TYPE</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+              <Chip on={mode === 'snake'} onClick={() => setMode('snake')}>SNAKE</Chip>
+              <Chip on={mode === 'auction'} onClick={() => setMode('auction')}>AUCTION</Chip>
+            </div>
+          </div>
+          {mode === 'auction' && <div><div className="mono" style={label}>BUDGET ($ / TEAM)</div><div style={{ marginTop: 7 }}>{num(budget, setBudget, 50, 1000, 25)}</div></div>}
+        </div>
         <button onClick={create} disabled={busy || !name.trim()} className="mono"
           style={{ ...btn, width: '100%', marginTop: 16, opacity: busy || !name.trim() ? 0.6 : 1 }}>
           {busy ? (note || 'CREATING…') : 'CREATE LEAGUE →'}
@@ -170,14 +188,79 @@ export function NativeCreate({ onDone, onBack }: {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Player card: baked ADP + StatHead projection + real 2025 season line
+// ─────────────────────────────────────────────────────────────────────────────
+function PlayerCard({ p, onClose, action, queued, onQueue }: {
+  p: LeaguePoolPlayer; onClose: () => void;
+  action?: { label: string; run: () => void } | null;
+  queued?: boolean; onQueue?: () => void;
+}) {
+  const adp = ADP_2026.get(p.slug);
+  const proj = PROJ_2026.get(p.slug);
+  const st = p.pos === 'K' || p.pos === 'DEF' ? null : statsForSlug(p.slug, p.pos as Pos);
+  const stat = (label: string, v: string | number | null | undefined) => (
+    v == null || v === '' ? null : (
+      <div style={{ textAlign: 'center', minWidth: 60 }}>
+        <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{v}</div>
+        <div className="mono" style={{ fontSize: 7.5, letterSpacing: '0.12em', color: 'var(--faint)', marginTop: 2 }}>{label}</div>
+      </div>
+    )
+  );
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 400 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={56} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{p.full_name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+              <PosPill pos={p.pos as Pos} />
+              <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>{p.team}</span>
+              <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>pool #{p.rank}</span>
+            </div>
+          </div>
+          <button onClick={onClose} className="mono" style={{ ...linkBtn, fontSize: 14 }}>✕</button>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-around', gap: 8, marginTop: 14, padding: '10px 0', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6 }}>
+          {stat('ADP', adp != null ? adp.toFixed(1) : '—')}
+          {stat('PROJ PPG', proj != null ? proj.toFixed(1) : '—')}
+          {st && stat("'25 PPR", Math.round(st.ppr))}
+          {st && stat("'25 GP", st.games)}
+        </div>
+        {st && (
+          <div style={{ display: 'flex', justifyContent: 'space-around', gap: 8, marginTop: 8, padding: '10px 0', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6 }}>
+            {p.pos === 'QB' && <>{stat('PASS YDS', st.passYds)}{stat('PASS TD', st.passTds)}{stat('RUSH YDS', st.rushYds)}{stat('INT', st.ints)}</>}
+            {p.pos === 'RB' && <>{stat('RUSH YDS', st.rushYds)}{stat('RUSH TD', st.rushTds)}{stat('REC', st.receptions)}{stat('REC YDS', st.recYds)}</>}
+            {(p.pos === 'WR' || p.pos === 'TE') && <>{stat('REC', st.receptions)}{stat('REC YDS', st.recYds)}{stat('REC TD', st.recTds)}{stat('TGT', st.targets)}</>}
+          </div>
+        )}
+        <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 8 }}>
+          ADP: consensus {ADP_AS_OF} · projections: StatHead {PROJ_AS_OF} · 2025 line: real season totals
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          {onQueue && <button onClick={onQueue} className="mono" style={{ ...ghostBtn, flex: 1 }}>{queued ? '★ QUEUED — REMOVE' : '☆ ADD TO QUEUE'}</button>}
+          {action && <button onClick={action.run} className="mono" style={{ ...btn, flex: 1 }}>{action.label}</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Draft room
 // ─────────────────────────────────────────────────────────────────────────────
+type DraftTab = 'players' | 'board' | 'teams' | 'queue';
+
 export function DraftRoom({ leagueId, onBack, onTeam }: {
   leagueId: string; onBack: () => void; onTeam: () => void;
 }) {
   const [st, setSt] = useState<DraftState | null>(null);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
   const [team, setTeam] = useState<NativeTeamState | null>(null);
+  const [queue, setQueue] = useState<string[]>([]);
+  const [tab, setTab] = useState<DraftTab>('players');
+  const [teamView, setTeamView] = useState<number | null>(null);
+  const [cardFor, setCardFor] = useState<LeaguePoolPlayer | null>(null);
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
   const [busy, setBusy] = useState(false);
@@ -197,26 +280,30 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
   useEffect(() => {
     refresh();
     leaguePool(leagueId).then(setPool).catch(() => {});
-    nativeTeamState(leagueId).then(setTeam).catch(() => {});
-    const poll = setInterval(refresh, 4000);
+    nativeTeamState(leagueId).then((t) => {
+      setTeam(t);
+      if (t.my_roster_id != null) myDraftQueue(leagueId, t.my_roster_id).then(setQueue).catch(() => {});
+    }).catch(() => {});
+    const poll = setInterval(refresh, 3000);
     const clock = setInterval(() => setNow(Date.now()), 500);
     return () => { clearInterval(poll); clearInterval(clock); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
 
-  // Advance the draft when the on-clock seat is overdue (vacant seats, expired
-  // clocks). draft_tick is idempotent + advisory-locked, so any member may call.
-  const deadlineMs = st?.deadline_at ? Date.parse(st.deadline_at) : null;
+  // Advance the room when the active clock is overdue or the seat is auto —
+  // draft_tick autopicks (snake), awards lots + auto-nominates (auction).
+  const activeDeadline = st?.lot ? st.lot.deadline_at : st?.deadline_at;
+  const deadlineMs = activeDeadline ? Date.parse(activeDeadline) : null;
   const overdueMs = deadlineMs != null ? (now + skew.current) - deadlineMs : null;
   useEffect(() => {
-    if (st?.status !== 'live' || ticking.current) return;
-    if ((overdueMs != null && overdueMs > 1500) || st.on_clock_auto) {
+    if (st?.status !== 'live' || st.paused || ticking.current) return;
+    if ((overdueMs != null && overdueMs > 1200) || (!st.lot && st.on_clock_auto)) {
       ticking.current = true;
-      draftTick(leagueId).then((r) => { if ((r.autopicks ?? 0) > 0) refresh(); }).catch(() => {})
+      draftTick(leagueId).then((r) => { if ((r.autopicks ?? 0) + (r.lots_awarded ?? 0) > 0) refresh(); }).catch(() => {})
         .finally(() => { ticking.current = false; });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [now, st?.status, st?.on_clock]);
+  }, [now, st?.status, st?.on_clock, st?.lot?.slug]);
 
   const byRoster = useMemo(() => {
     const m: Record<number, { team: string | null; avatar: string | null }> = {};
@@ -227,7 +314,11 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
   const poolBySlug = useMemo(() => new Map(pool.map((p) => [p.slug, p])), [pool]);
   const taken = useMemo(() => new Set((st?.picks ?? []).map((p) => p.slug)), [st?.picks]);
   const myRoster = team?.my_roster_id ?? null;
-  const myTurn = st?.status === 'live' && st.on_clock != null && st.on_clock === myRoster;
+  const isCommish = !!team?.is_commish;
+  const auction = st?.mode === 'auction';
+  const myTurn = st?.status === 'live' && !st.paused && st.on_clock != null && st.on_clock === myRoster;
+  const myBudget = auction ? st?.budgets?.find((b) => b.roster_id === myRoster) : null;
+  const lotOpen = !!st?.lot;
 
   const avail = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -236,44 +327,31 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
   }, [pool, taken, q, pos]);
 
-  const mine = useMemo(() => (st?.picks ?? []).filter((p) => p.roster_id === myRoster), [st?.picks, myRoster]);
-
-  const pick = async (slug: string) => {
-    if (busy || !myTurn) return;
+  const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+    if (busy) return;
     setBusy(true); setErr(null);
-    try {
-      const r = await makeDraftPick(leagueId, slug);
-      if (!r.ok) setErr(friendlyError(r.error ?? 'Could not make the pick.'));
-      await refresh();
-    } catch (x) { setErr(friendlyError(x)); }
+    try { const r = await fn(); if (!r.ok) setErr(friendlyError(r.error ?? 'That didn’t work.')); await refresh(); }
+    catch (x) { setErr(friendlyError(x)); }
     finally { setBusy(false); }
   };
 
-  const begin = async () => {
-    if (busy) return;
-    setBusy(true); setErr(null);
-    try {
-      const r = await startDraft(leagueId);
-      if (!r.ok) setErr(friendlyError(r.error ?? 'Could not start the draft.'));
-      await refresh();
-    } catch (x) { setErr(friendlyError(x)); }
-    finally { setBusy(false); }
+  const saveQueue = (next: string[]) => {
+    setQueue(next);
+    if (myRoster != null) setDraftQueue(leagueId, myRoster, next).catch(() => {});
+  };
+  const toggleQueue = (slug: string) =>
+    saveQueue(queue.includes(slug) ? queue.filter((s) => s !== slug) : [...queue, slug]);
+  const moveQueue = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= queue.length) return;
+    const next = queue.slice(); [next[i], next[j]] = [next[j], next[i]];
+    saveQueue(next);
   };
 
-  // Pre-draft pool refresh: rebuilds from the live Sleeper directory + baked
-  // 2026 ADP, picking up rookie signings / ADP moves since the league was
-  // created. Commissioner-only (the RPC enforces it).
-  const [reseedNote, setReseedNote] = useState<string | null>(null);
-  const reseed = async () => {
-    if (busy) return;
-    setBusy(true); setErr(null); setReseedNote(null);
-    try {
-      const players = await buildDraftPool(setReseedNote);
-      const r = await seedLeaguePool(leagueId, players);
-      if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not refresh the pool.')); }
-      else { setReseedNote(`Pool refreshed — ${r.players} players.`); setPool(await leaguePool(leagueId)); }
-    } catch (x) { setErr(friendlyError(x)); }
-    finally { setBusy(false); }
+  const act = (slug: string) => {
+    if (!myTurn) return;
+    if (auction) { if (!lotOpen) run(() => nominate(leagueId, slug, 1)); }
+    else run(() => makeDraftPick(leagueId, slug));
   };
 
   if (!st) return (
@@ -285,55 +363,109 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
 
   const teams = st.order?.length ?? 0;
   const round = teams ? Math.min(st.rounds, Math.floor((st.current_overall - 1) / teams) + 1) : 1;
-  const secsLeft = deadlineMs != null ? Math.max(0, Math.ceil((deadlineMs - (now + skew.current)) / 1000)) : null;
-  const recent = (st.picks ?? []).slice(-4).reverse();
+  const secsLeft = st.paused ? null : deadlineMs != null ? Math.max(0, Math.ceil((deadlineMs - (now + skew.current)) / 1000)) : null;
+  const lotPlayer = st.lot ? poolBySlug.get(st.lot.slug) : null;
+  const canBid = auction && lotOpen && myRoster != null && st.lot!.roster_id !== myRoster
+    && (myBudget?.spots_left ?? 0) > 0 && st.status === 'live' && !st.paused;
+  const quickBids = canBid
+    ? [st.lot!.bid + 1, st.lot!.bid + 5, st.lot!.bid + 10].filter((a, i, arr) => a <= (myBudget?.max_bid ?? 0) && arr.indexOf(a) === i)
+    : [];
+
+  const tabChip = (id: DraftTab, label: string) => (
+    <Chip key={id} on={tab === id} onClick={() => setTab(id)}>{label}</Chip>
+  );
+
+  const pickRowsFor = (rid: number) => (st.picks ?? []).filter((p) => p.roster_id === rid);
+  const shortName = (slug: string) => {
+    const full = poolBySlug.get(slug)?.full_name ?? slug;
+    const parts = full.split(' ');
+    return parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(' ')}` : full;
+  };
 
   return (
     <div>
       <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>
-      <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>⛏ Draft room</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>⛏ Draft room</div>
+        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)' }}>{auction ? 'AUCTION' : 'SNAKE'}</span>
+        {st.paused && <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 7px' }}>⏸ PAUSED</span>}
+      </div>
 
       {st.status === 'pending' && (
         <div style={{ ...card, marginBottom: 12 }}>
           <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>Waiting to start</div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
-            {st.rounds} rounds · {st.pick_seconds}s per pick · snake order (randomized at start). Invite your league from the league card first — seats still empty when you start are drafted by the AI.
+            {auction
+              ? <>{st.rounds} roster spots · ${st.budget} budget per team · nomination rotates the draft order. Queue players now — empty seats auto-nominate.</>
+              : <>{st.rounds} rounds · {st.pick_seconds}s per pick · snake order (randomized at start). Queue players now — your queue drafts for you if the clock runs out.</>}
           </div>
-          <button onClick={begin} disabled={busy} className="mono" style={{ ...btn, width: '100%', marginTop: 12, opacity: busy ? 0.6 : 1 }}>▶ START THE DRAFT</button>
-          <button onClick={reseed} disabled={busy} className="mono" style={{ ...ghostBtn, width: '100%', marginTop: 8, opacity: busy ? 0.6 : 1 }}>↻ REFRESH PLAYER POOL (2026 ADP)</button>
-          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8 }}>Commissioner only — everyone else sees the board light up. Refresh picks up ADP moves and free-agent signings since the league was created.</div>
-          {reseedNote && <div className="mono" style={{ fontSize: 10, color: 'var(--you)', marginTop: 8 }}>{reseedNote}</div>}
+          {isCommish && <button onClick={() => run(() => startDraft(leagueId))} disabled={busy} className="mono" style={{ ...btn, width: '100%', marginTop: 12, opacity: busy ? 0.6 : 1 }}>▶ START THE DRAFT</button>}
+          {isCommish && <button onClick={() => run(async () => seedLeaguePool(leagueId, await buildDraftPool()).then(async (r) => { setPool(await leaguePool(leagueId)); return r; }))} disabled={busy} className="mono" style={{ ...ghostBtn, width: '100%', marginTop: 8, opacity: busy ? 0.6 : 1 }}>↻ REFRESH PLAYER POOL (2026 ADP)</button>}
           {err && <div className="mono" style={errStyle}>{err}</div>}
         </div>
       )}
 
       {st.status === 'live' && (
         <div style={{ ...card, marginBottom: 12, borderLeft: '3px solid var(--you)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              {st.on_clock != null && (
-                <Avatar name={teamName(st.on_clock) ?? `Team ${st.on_clock}`} src={byRoster[st.on_clock]?.avatar} size={38} />
-              )}
-              <div>
-                <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>ROUND {round} / {st.rounds} · PICK {st.current_overall}</div>
-                <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: myTurn ? 'var(--you)' : 'var(--text)', marginTop: 4 }}>
-                  {myTurn ? 'YOUR PICK' : `On the clock: ${teamName(st.on_clock) ?? `Team ${st.on_clock} (auto)`}`}
+          {/* auction lot */}
+          {auction && lotOpen && lotPlayer ? (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <PlayerImg playerId={lotPlayer.slug} espnId={lotPlayer.espn_id} team={lotPlayer.team} pos={lotPlayer.pos as Pos} size={44} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>{lotPlayer.full_name}</div>
+                  <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 3 }}>
+                    ${st.lot!.bid} — {teamName(st.lot!.roster_id) ?? `Team ${st.lot!.roster_id}`}
+                    {st.lot!.roster_id === myRoster && <span style={{ color: 'var(--you)', fontWeight: 700 }}> (you)</span>}
+                  </div>
                 </div>
+                {secsLeft != null && (
+                  <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: secsLeft <= 5 ? 'var(--opp)' : 'var(--you)' }}>
+                    0:{String(secsLeft).padStart(2, '0')}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                {quickBids.map((a) => (
+                  <button key={a} onClick={() => myRoster != null && run(() => placeBid(leagueId, myRoster, a))} disabled={busy}
+                    className="mono" style={{ ...btn, padding: '8px 14px' }}>BID ${a}</button>
+                ))}
+                {!canBid && st.lot!.roster_id === myRoster && <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>You're the high bidder.</span>}
+                {myBudget && <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginLeft: 'auto' }}>my budget ${myBudget.budget} · max bid ${myBudget.max_bid}</span>}
               </div>
             </div>
-            {secsLeft != null && (
-              <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: secsLeft <= 10 ? 'var(--opp)' : 'var(--you)' }}>
-                {Math.floor(secsLeft / 60)}:{String(secsLeft % 60).padStart(2, '0')}
-              </div>
-            )}
-          </div>
-          {recent.length > 0 && (
-            <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 10, lineHeight: 1.6 }}>
-              {recent.map((p) => (
-                <div key={p.overall}>
-                  #{p.overall} {teamName(p.roster_id) ?? `Team ${p.roster_id}`} → <span style={{ color: 'var(--text)' }}>{poolBySlug.get(p.slug)?.full_name ?? p.slug}</span>{p.auto ? ' 🤖' : ''}
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                {st.on_clock != null && (
+                  <Avatar name={teamName(st.on_clock) ?? `Team ${st.on_clock}`} src={byRoster[st.on_clock]?.avatar} size={38} />
+                )}
+                <div>
+                  <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>
+                    {auction ? `NOMINATION ${st.current_overall}` : `ROUND ${round} / ${st.rounds} · PICK ${st.current_overall}`}
+                  </div>
+                  <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: myTurn ? 'var(--you)' : 'var(--text)', marginTop: 4 }}>
+                    {myTurn ? (auction ? 'YOUR NOMINATION — pick a player below' : 'YOUR PICK')
+                      : `${auction ? 'Nominating' : 'On the clock'}: ${teamName(st.on_clock) ?? `Team ${st.on_clock} (auto)`}`}
+                  </div>
                 </div>
-              ))}
+              </div>
+              {secsLeft != null && (
+                <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: secsLeft <= 10 ? 'var(--opp)' : 'var(--you)' }}>
+                  {Math.floor(secsLeft / 60)}:{String(secsLeft % 60).padStart(2, '0')}
+                </div>
+              )}
+            </div>
+          )}
+          {/* commish controls */}
+          {isCommish && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+              <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)', alignSelf: 'center' }}>⚑ COMMISH</span>
+              {st.paused
+                ? <button onClick={() => run(() => commishResumeDraft(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5 }}>▶ RESUME</button>
+                : <button onClick={() => run(() => commishPauseDraft(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5 }}>⏸ PAUSE</button>}
+              {!auction && <button onClick={() => run(() => commishForcePick(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5 }}>⏭ FORCE PICK</button>}
+              {!auction && <button onClick={() => run(() => commishUndoPick(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5, color: 'var(--opp)' }}>↩ UNDO PICK</button>}
             </div>
           )}
           {err && <div className="mono" style={errStyle}>{err}</div>}
@@ -344,54 +476,184 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
         <div style={{ ...card, marginBottom: 12 }}>
           <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--you)' }}>Draft complete.</div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
-            Rosters are live and weekly lineup pools are built. Run your team from the roster screen — waivers and free agency are open.
+            Rosters are live and weekly lineup pools are built. Waivers and free agency are open.
           </div>
           <button onClick={onTeam} className="mono" style={{ ...btn, width: '100%', marginTop: 12 }}>⇄ MANAGE MY TEAM</button>
+          {isCommish && st.mode === 'snake' && (
+            <button onClick={() => run(() => commishUndoPick(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, width: '100%', marginTop: 8, fontSize: 9.5 }}>↩ UNDO LAST PICK (reopens the draft)</button>
+          )}
         </div>
       )}
 
-      {/* my roster so far */}
-      {mine.length > 0 && (
-        <div style={{ ...card, marginBottom: 12 }}>
-          <div style={hdr}>MY PICKS ({mine.length}/{st.rounds})</div>
-          {mine.map((p) => {
-            const pl = poolBySlug.get(p.slug);
+      {/* tabs */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+        {tabChip('players', `PLAYERS (${avail.length})`)}
+        {tabChip('board', 'BOARD')}
+        {tabChip('teams', 'TEAMS')}
+        {tabChip('queue', `☆ QUEUE (${queue.length})`)}
+      </div>
+
+      {/* PLAYERS — available list with ADP + projections */}
+      {tab === 'players' && (
+        <div style={card}>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players or teams…" style={{ ...input, marginBottom: 10 }} />
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+            {POS_FILTERS.map((p) => <Chip key={p} on={pos === p} onClick={() => setPos(p)}>{posLabel(p)}</Chip>)}
+          </div>
+          <div className="mono" style={{ display: 'flex', gap: 8, padding: '0 0 4px 38px', fontSize: 7.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>
+            <span style={{ flex: 1 }}>PLAYER</span><span style={{ width: 40, textAlign: 'right' }}>ADP</span><span style={{ width: 40, textAlign: 'right' }}>PROJ</span><span style={{ width: 84 }} />
+          </div>
+          <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+            {avail.slice(0, 120).map((p) => {
+              const adp = ADP_2026.get(p.slug); const proj = PROJ_2026.get(p.slug);
+              const inQ = queue.includes(p.slug);
+              return (
+                <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
+                  <button onClick={() => setCardFor(p)} style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+                    <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
+                    <PosPill pos={p.pos as Pos} />
+                    <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
+                  </button>
+                  <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 40, textAlign: 'right' }}>{adp != null ? adp.toFixed(0) : '—'}</span>
+                  <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 40, textAlign: 'right' }}>{proj != null ? proj.toFixed(1) : '—'}</span>
+                  <button onClick={() => toggleQueue(p.slug)} title={inQ ? 'remove from queue' : 'add to queue'} className="mono"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: inQ ? 'var(--warn)' : 'var(--faint)', padding: '0 2px' }}>{inQ ? '★' : '☆'}</button>
+                  <button onClick={() => act(p.slug)} disabled={!myTurn || busy || (auction && lotOpen)} className="mono"
+                    style={{ ...btn, padding: '6px 10px', fontSize: 10, opacity: myTurn && !busy && !(auction && lotOpen) ? 1 : 0.35 }}>
+                    {auction ? 'NOM $1' : 'PICK'}
+                  </button>
+                </div>
+              );
+            })}
+            {avail.length > 120 && <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', padding: '8px 0' }}>…{avail.length - 120} more — narrow the search.</div>}
+          </div>
+        </div>
+      )}
+
+      {/* BOARD — the full rounds × teams grid */}
+      {tab === 'board' && (
+        <div style={{ ...card, overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', minWidth: teams * 92 + 34 }}>
+            <thead>
+              <tr>
+                <th className="mono" style={{ fontSize: 8, color: 'var(--faint)', padding: 4 }}>RD</th>
+                {(st.order ?? []).map((rid) => (
+                  <th key={rid} style={{ padding: 4 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                      <Avatar name={teamName(rid) ?? `Team ${rid}`} src={byRoster[rid]?.avatar} size={22} />
+                      <span className="mono" style={{ fontSize: 8, color: rid === myRoster ? 'var(--you)' : 'var(--dim)', maxWidth: 84, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{teamName(rid) ?? `Team ${rid}`}</span>
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: st.rounds }, (_, r) => (
+                <tr key={r}>
+                  <td className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', padding: 4, textAlign: 'center' }}>{r + 1}</td>
+                  {(st.order ?? []).map((rid, c) => {
+                    // snake: even rounds flow right→left; auction: order-of-award per team
+                    const cell = auction
+                      ? pickRowsFor(rid)[r]
+                      : (st.picks ?? []).find((pk) => pk.round === r + 1 && pk.roster_id === rid);
+                    const overallHere = !auction && st.status === 'live'
+                      && st.current_overall === r * teams + (r % 2 === 0 ? c + 1 : teams - c);
+                    const pl = cell ? poolBySlug.get(cell.slug) : null;
+                    return (
+                      <td key={rid} style={{ padding: 3 }}>
+                        <div style={{
+                          width: 86, minHeight: 34, borderRadius: 5, padding: '4px 6px', boxSizing: 'border-box',
+                          background: cell ? `var(--pos-${pl?.pos ?? 'WR'}-bg)` : 'var(--bg)',
+                          border: `1px solid ${overallHere ? 'var(--you)' : 'var(--bd)'}`,
+                          boxShadow: overallHere ? '0 0 8px color-mix(in srgb, var(--you) 45%, transparent)' : 'none',
+                        }}>
+                          {cell ? (
+                            <>
+                              <div style={{ fontSize: 9.5, fontWeight: 700, color: `var(--pos-${pl?.pos ?? 'WR'}-fg)`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shortName(cell.slug)}</div>
+                              <div className="mono" style={{ fontSize: 7.5, color: `var(--pos-${pl?.pos ?? 'WR'}-fg)`, opacity: 0.75 }}>
+                                {pl?.pos ?? ''} {pl?.team ?? ''}{cell.price != null ? ` · $${cell.price}` : ''}{cell.auto ? ' 🤖' : ''}
+                              </div>
+                            </>
+                          ) : <div className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{overallHere ? '⏱ on clock' : '—'}</div>}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* TEAMS — every roster so far */}
+      {tab === 'teams' && (
+        <div style={card}>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+            {(st.order ?? []).map((rid) => (
+              <Chip key={rid} on={(teamView ?? myRoster) === rid} onClick={() => setTeamView(rid)}>
+                {teamName(rid) ?? `Team ${rid}`}{auction && st.budgets ? ` $${st.budgets.find((b) => b.roster_id === rid)?.budget ?? ''}` : ''}
+              </Chip>
+            ))}
+          </div>
+          {(() => {
+            const rid = teamView ?? myRoster ?? (st.order ?? [])[0];
+            if (rid == null) return null;
+            const rows = pickRowsFor(rid);
+            return rows.length === 0
+              ? <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>No picks yet.</div>
+              : rows.map((pk) => {
+                const pl = poolBySlug.get(pk.slug);
+                return (
+                  <div key={pk.overall} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
+                    <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 30 }}>{auction ? `$${pk.price ?? 1}` : `R${pk.round}`}</span>
+                    <PlayerImg playerId={pk.slug} espnId={pl?.espn_id} team={pl?.team} pos={(pl?.pos ?? 'WR') as Pos} size={24} />
+                    <PosPill pos={(pl?.pos ?? 'WR') as Pos} />
+                    <span style={{ fontSize: 12, color: 'var(--text)', flex: 1 }}>{pl?.full_name ?? pk.slug}</span>
+                    <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{pl?.team}{pk.auto ? ' 🤖' : ''}</span>
+                  </div>
+                );
+              });
+          })()}
+        </div>
+      )}
+
+      {/* QUEUE — my private wishlist + autodraft */}
+      {tab === 'queue' && (
+        <div style={card}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+            <div style={hdr}>MY QUEUE</div>
+            {myRoster != null && (
+              <Chip on={!!st.my_autodraft} onClick={() => run(() => setAutodraft(leagueId, myRoster, !st.my_autodraft))}>
+                🤖 AUTODRAFT {st.my_autodraft ? 'ON' : 'OFF'}
+              </Chip>
+            )}
+          </div>
+          {queue.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>Empty — tap ☆ on any player. If your clock runs out (or autodraft is on), your queue picks for you, in order, before best-available.</div>}
+          {queue.map((slug, i) => {
+            const p = poolBySlug.get(slug);
+            const gone = taken.has(slug);
             return (
-              <div key={p.overall} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
-                <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 30 }}>R{p.round}</span>
-                <PlayerImg playerId={p.slug} espnId={pl?.espn_id} team={pl?.team} pos={(pl?.pos ?? 'WR') as Pos} size={24} />
-                <PosPill pos={(pl?.pos ?? 'WR') as Pos} />
-                <span style={{ fontSize: 12, color: 'var(--text)', flex: 1 }}>{pl?.full_name ?? p.slug}</span>
-                <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{pl?.team}</span>
+              <div key={slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)', opacity: gone ? 0.45 : 1 }}>
+                <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 18 }}>{i + 1}</span>
+                {p && <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />}
+                <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, textDecoration: gone ? 'line-through' : 'none' }}>{p?.full_name ?? slug}</span>
+                {gone && <span className="mono" style={{ fontSize: 8.5, color: 'var(--opp)' }}>TAKEN</span>}
+                <button onClick={() => moveQueue(i, -1)} className="mono" style={{ ...linkBtn, padding: '0 3px' }}>↑</button>
+                <button onClick={() => moveQueue(i, 1)} className="mono" style={{ ...linkBtn, padding: '0 3px' }}>↓</button>
+                <button onClick={() => toggleQueue(slug)} className="mono" style={{ ...linkBtn, color: 'var(--opp)', padding: '0 3px' }}>✕</button>
               </div>
             );
           })}
         </div>
       )}
 
-      {/* the board */}
-      {st.status !== 'complete' && (
-        <div style={card}>
-          <div style={hdr}>AVAILABLE ({avail.length})</div>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players or teams…" style={{ ...input, marginBottom: 10 }} />
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-            {POS_FILTERS.map((p) => <Chip key={p} on={pos === p} onClick={() => setPos(p)}>{posLabel(p)}</Chip>)}
-          </div>
-          <div style={{ maxHeight: 420, overflowY: 'auto' }}>
-            {avail.slice(0, 120).map((p) => (
-              <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
-                <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 30 }}>#{p.rank}</span>
-                <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
-                <PosPill pos={p.pos as Pos} />
-                <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
-                <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 34 }}>{p.team}</span>
-                <button onClick={() => pick(p.slug)} disabled={!myTurn || busy} className="mono"
-                  style={{ ...btn, padding: '6px 12px', fontSize: 10, opacity: myTurn && !busy ? 1 : 0.35 }}>PICK</button>
-              </div>
-            ))}
-            {avail.length > 120 && <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', padding: '8px 0' }}>…{avail.length - 120} more — narrow the search.</div>}
-          </div>
-        </div>
+      {cardFor && (
+        <PlayerCard p={cardFor} onClose={() => setCardFor(null)}
+          queued={queue.includes(cardFor.slug)} onQueue={() => toggleQueue(cardFor.slug)}
+          action={myTurn && !taken.has(cardFor.slug) && !(auction && lotOpen)
+            ? { label: auction ? 'NOMINATE $1' : 'DRAFT HIM', run: () => { const s = cardFor.slug; setCardFor(null); act(s); } }
+            : null} />
       )}
     </div>
   );

@@ -681,8 +681,8 @@ export const adminRegenCode = (leagueId: string, which: 'invite' | 'commish') =>
 
 // ── Native leagues (migration 0064): created in-app, rosters built by draft ─────
 export interface NativeCreateResult { ok: boolean; error?: string; league_id?: string; roster_id?: number; invite_code?: string; }
-export const createNativeLeague = (name: string, season: string, teams: number, rounds: number, pickSeconds: number) =>
-  rpc<NativeCreateResult>('create_native_league', { p_name: name, p_season: season, p_teams: teams, p_rounds: rounds, p_pick_seconds: pickSeconds });
+export const createNativeLeague = (name: string, season: string, teams: number, rounds: number, pickSeconds: number, mode: 'snake' | 'auction' = 'snake', budget = 200) =>
+  rpc<NativeCreateResult>('create_native_league', { p_name: name, p_season: season, p_teams: teams, p_rounds: rounds, p_pick_seconds: pickSeconds, p_mode: mode, p_budget: budget });
 /** Claim the lowest open seat in a native league by invite code. */
 export const nativeJoin = (code: string, teamName?: string) =>
   rpc<{ ok: boolean; error?: string; league_id?: string; roster_id?: number; status?: string; league?: string }>(
@@ -700,20 +700,54 @@ export const nativeGenerateSchedule = (leagueId: string, weeks = 14) =>
 
 export const startDraft = (leagueId: string, order?: number[]) =>
   rpc<{ ok: boolean; error?: string; order?: number[] }>('start_draft', { p_league_id: leagueId, p_order: order ?? null });
-export interface DraftPickRow { overall: number; round: number; roster_id: number; slug: string; auto: boolean; }
+export interface DraftPickRow { overall: number; round: number; roster_id: number; slug: string; auto: boolean; price?: number | null; }
 export interface DraftState {
-  error?: string; status: 'pending' | 'live' | 'complete'; rounds: number; pick_seconds: number;
-  order: number[] | null; current_overall: number; on_clock: number | null;
-  /** True ⇒ the on-clock seat is vacant/AI — a draft_tick will autopick it now. */
+  error?: string; status: 'pending' | 'live' | 'complete'; mode: 'snake' | 'auction'; rounds: number; pick_seconds: number;
+  paused: boolean;
+  order: number[] | null; current_overall: number;
+  /** Snake: the seat on the clock. Auction: the seat whose turn it is to nominate. */
+  on_clock: number | null;
+  /** True ⇒ the on-clock seat is vacant/AI/autodraft — a draft_tick will act now. */
   on_clock_auto: boolean | null;
   deadline_at: string | null; server_now: string; picks: DraftPickRow[];
+  budget: number | null;
+  lot: { slug: string; bid: number; roster_id: number; deadline_at: string } | null;
+  budgets: { roster_id: number; budget: number; spots_left: number; max_bid: number }[] | null;
+  my_autodraft: boolean;
 }
 export const draftState = (leagueId: string) => rpc<DraftState>('draft_state', { p_league_id: leagueId });
+/** Replace a seat's private draft queue with an ordered slug list. */
+export const setDraftQueue = (leagueId: string, rosterId: number, slugs: string[]) =>
+  rpc<{ ok: boolean; error?: string; queued?: number }>('set_draft_queue', { p_league_id: leagueId, p_roster_id: rosterId, p_slugs: slugs });
+/** The caller's own queue (RLS hides everyone else's). */
+export async function myDraftQueue(leagueId: string, rosterId: number): Promise<string[]> {
+  const { data, error } = await client().from('draft_queue')
+    .select('slug, pos').eq('league_id', leagueId).eq('roster_id', rosterId).order('pos');
+  if (error) throw error;
+  return ((data ?? []) as { slug: string }[]).map((r) => r.slug);
+}
+export const setAutodraft = (leagueId: string, rosterId: number, on: boolean) =>
+  rpc<{ ok: boolean; error?: string; autodraft?: boolean }>('set_autodraft', { p_league_id: leagueId, p_roster_id: rosterId, p_on: on });
+export const commishPauseDraft = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string }>('commish_pause_draft', { p_league_id: leagueId });
+export const commishResumeDraft = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string }>('commish_resume_draft', { p_league_id: leagueId });
+/** Force the on-clock pick through: a chosen slug, or queue/best-available. */
+export const commishForcePick = (leagueId: string, slug?: string) =>
+  rpc<{ ok: boolean; error?: string }>('commish_force_pick', { p_league_id: leagueId, p_slug: slug ?? null });
+export const commishUndoPick = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; undone_overall?: number; slug?: string }>('commish_undo_pick', { p_league_id: leagueId });
+/** Auction: open a lot (the nominating seat, or the commissioner on its behalf). */
+export const nominate = (leagueId: string, slug: string, bid = 1) =>
+  rpc<{ ok: boolean; error?: string; lot?: string; bid?: number }>('nominate', { p_league_id: leagueId, p_slug: slug, p_bid: bid });
+export const placeBid = (leagueId: string, rosterId: number, amount: number) =>
+  rpc<{ ok: boolean; error?: string; bid?: number }>('place_bid', { p_league_id: leagueId, p_roster_id: rosterId, p_amount: amount });
 export const makeDraftPick = (leagueId: string, slug: string) =>
   rpc<{ ok: boolean; error?: string; overall?: number; roster_id?: number; slug?: string; complete?: boolean }>(
     'make_draft_pick', { p_league_id: leagueId, p_slug: slug });
-/** Advance the draft clock (expired/vacant/AI seats autopick). Idempotent — any member may call. */
-export const draftTick = (leagueId: string) => rpc<{ ok: boolean; error?: string; autopicks?: number }>('draft_tick', { p_league_id: leagueId });
+/** Advance the draft: snake autopicks (queue → best available) and auction lot
+ *  awards + auto-nominations. Idempotent — any member's poll may call it. */
+export const draftTick = (leagueId: string) => rpc<{ ok: boolean; error?: string; autopicks?: number; lots_awarded?: number }>('draft_tick', { p_league_id: leagueId });
 
 export interface LeaguePoolPlayer { slug: string; full_name: string; pos: string; team: string; rank: number; waived_until: string | null; espn_id?: string | null; }
 export async function leaguePool(leagueId: string): Promise<LeaguePoolPlayer[]> {

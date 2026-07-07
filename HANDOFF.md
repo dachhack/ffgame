@@ -1,6 +1,44 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.99.5`_
+_Last updated: 2026-07-07 · Build `v0.100.0`_
+
+## Draft room v2: queue/autodraft/board/cards, commish controls, AUCTION (v0.100.0)
+The full draft feature set, plus uniform avatar tiles.
+- **DB (`0067_draft_features.sql`)**: `draft_queue` (private per-seat wishlist,
+  RLS owner-read; `set_draft_queue` replaces whole list; EVERY autopick takes
+  queue → best-available), `league_membership.autodraft` (+`set_autodraft` —
+  seat picks instantly), commish controls (`commish_pause_draft`/`resume` —
+  clock/lot freezes and restores via `pause_remaining`; `commish_force_pick`
+  slug-or-auto; `commish_undo_pick` unwinds the last pick, reopens a completed
+  draft), and **auction mode**: `draft.mode/budget/lot_*/nom_idx/lot_seconds`,
+  `draft_pick.price`, `league_membership.draft_budget`; `nominate` + `place_bid`
+  (max bid always reserves $1 per unfilled spot — `auction_max_bid`); awards +
+  auto-nominations run inside `draft_tick` (same poll/worker path as snake;
+  vacant/AI/autodraft seats auto-nominate queue-first at $1 and don't bid — AI
+  teams fill at $1, a known v1 imbalance). `draft_state` v3: mode/paused/lot/
+  budgets/my_autodraft; `create_native_league` gains p_mode/p_budget (7-arg;
+  5-arg dropped). Probes → **167 assertions** (12: queue autopick, autodraft,
+  pause gates+frozen tick, force+undo roundtrip; 13: full auction lifecycle:
+  budgets, nomination/bid gates, max-bid floor, pause-lot, award+price,
+  auto-nominate, completion, no negative budgets).
+- **Data**: `src/data/proj2026.ts` (GENERATED — StatHead 2026 projections, 300
+  players incl. rookie model; refresh alongside adp2026.ts).
+- **Client (`NativeLeague.tsx` DraftRoom rewritten)**: tabs — PLAYERS (ADP +
+  PROJ columns, ☆ queue toggle, row → **PlayerCard** modal: headshot, ADP,
+  projected PPG, real 2025 season line via statsForSlug, draft/nominate/queue
+  actions), BOARD (rounds×teams grid, pos-colored cells, $price + 🤖 tags,
+  on-clock glow), TEAMS (per-roster picks + auction budgets on chips), QUEUE
+  (reorder/remove, TAKEN strikethrough, 🤖 AUTODRAFT toggle). Commish bar on
+  the live card (⏸/▶/⏭ FORCE/↩ UNDO). Auction lot panel: player, current
+  bid + high bidder, bell countdown, BID +1/+5/+10 quick bids gated by
+  max-bid, budget chip; nomination banner. NativeCreate gains SNAKE/AUCTION +
+  budget. 3s poll; tick fires on overdue clock OR auto seat OR expired lot.
+- **Avatars**: all 72 tiles recut to uniform 192² framing — short source bands
+  (gear footballs) get blur-extend letterbox fill instead of zoomed crops.
+- **Worker**: sweepNative counts lots_awarded too (draft_tick handles both
+  modes — no new sweep).
+- Known v1 gaps: no auction undo; AI seats never counter-bid; queue is
+  replace-on-write (no realtime sync between a manager's two open tabs).
 
 ## First-party Drip avatar gallery (v0.99.5)
 The owner supplied three 8×3 avatar sheets (helmet-bust player set, action-pose
