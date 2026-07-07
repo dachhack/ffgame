@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, type CSSProperties, type ReactNode } from 
 import type { Session } from '@supabase/supabase-js';
 import type { Pos, ThemeName } from '../theme';
 import { useStore } from './store';
-import { headshot, teamLogo } from '../data/media';
+import { headshot, espnHeadshot, teamLogo } from '../data/media';
 import { injuryFor } from '../data/injuries';
 import { REG_SEASON_WEEKS } from '../data/league';
 import { APP_VERSION, DATA_SOURCE } from './version';
@@ -58,10 +58,12 @@ export function Img({ src, size, radius, alt, fallback }: { src?: string | null;
   );
 }
 
-// Player image: ESPN headshot → team logo → position pill.
-export function PlayerImg({ playerId, team, pos, size = 30 }: { playerId: string; team?: string | null; pos: Pos; size?: number }) {
+// Player image: ESPN headshot → team logo → position pill. `espnId` covers
+// players outside the baked slug→headshot map (2026 rookies — native-league
+// pools carry the directory's espn_id per player).
+export function PlayerImg({ playerId, espnId, team, pos, size = 30 }: { playerId: string; espnId?: string | null; team?: string | null; pos: Pos; size?: number }) {
   return (
-    <Img src={headshot(playerId)} size={size} radius={Math.round(size * 0.3)} alt={playerId}
+    <Img src={headshot(playerId) ?? espnHeadshot(espnId)} size={size} radius={Math.round(size * 0.3)} alt={playerId}
       fallback={<Img src={teamLogo(team)} size={size} radius={Math.round(size * 0.3)} fallback={<PosPill pos={pos} />} />} />
   );
 }

@@ -1,6 +1,36 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.99.3`_
+_Last updated: 2026-07-07 · Build `v0.99.4`_
+
+## Native-league media: headshots, logos, team + league avatars (v0.99.4)
+Player pictures + NFL team logos across the draft room / team screens, and
+self-serve avatars for teams and the league.
+- **DB (`0066_native_media.sql`)**: `league_pool.espn_id` (seeded from the
+  Sleeper directory → rookies get headshots; the baked HEADSHOTS map only
+  covers ~600 2025 vets by slug) via `seed_league_pool` v2; `league.avatar_url`;
+  `set_team_avatar` (manager/commish/admin, https-only ≤300 chars, null clears)
+  + `set_league_avatar` (commish); `native_team_state` v2 adds
+  my_team/my_avatar/league_avatar/is_commish + avatar per waiver_order row.
+  Probes → 112 assertions (espn_id storage, avatar permission/scheme gates,
+  clear/reset, identity fields). ⚠ apply 0066 (and 0065 if still pending) on
+  merge.
+- **Client**: `PlayerImg` gains an `espnId` prop (`headshot(slug) ??
+  espnHeadshot(espnId)` → team logo → pos pill, all behind the mark-free
+  switch); pool pipeline carries espnId end-to-end (DraftPoolEntry →
+  seedLeaguePool → league_pool → LeaguePoolPlayer). Draft board / my-picks /
+  roster / free-agent / drop-picker rows all render PlayerImg 24px; the
+  on-clock banner + waiver order show team Avatars.
+- **Avatars**: `AvatarPicker` preset gallery — 32 DiceBear generated crests
+  (bottts-neutral/fun-emoji/shapes/rings, deterministic seeds) + 32 NFL team
+  logos. TeamManage gets a team-identity card (avatar + ✎ rename via the
+  previously-unexposed `set_team_name`; shown PRE-draft too so the draft board
+  has identities) and a commish-only LEAGUE ⚑ crest picker. League crest shows
+  on league cards (myEnrollments league join + LeagueCard). Team avatars flow
+  everywhere `league_membership.avatar_url` already rendered (cards, boards).
+- ⚠ NOT verified from this sandbox: api.dicebear.com (egress proxy 403 — the
+  ESPN CDN checked out fine). Picker tiles fall back to a dashed placeholder
+  and saved avatars fall back to initials, so a CDN outage degrades softly —
+  but eyeball the DiceBear tiles render on the deployed picker.
 
 ## 2026 draft pool: rookies + consensus ADP (v0.99.3)
 The native-league draft pool is now built for the CURRENT season, rookies

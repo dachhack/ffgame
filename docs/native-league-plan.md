@@ -173,6 +173,16 @@ in-app), rosters (drafted in-app), weekly pools (materialized from rosters).
   cover the core "manage your team" loop. The `native_roster` model makes a
   trade a two-row swap inside one RPC when we want it.
 
+### Media (v0.99.4)
+
+- `league_pool.espn_id` (0066) — headshots for everyone incl. rookies via
+  `PlayerImg`'s new `espnId` fallback (baked slug map → ESPN id → team logo →
+  position pill, all behind the mark-free switch).
+- Self-serve avatars: `set_team_avatar` (manager) + `set_league_avatar`
+  (commissioner), https-only; `AvatarPicker` preset gallery = DiceBear
+  generated crests + NFL team logos. Team identity card (avatar + rename) on
+  the team screen, rendered pre-draft too; league crest on league cards.
+
 ## 4. What's deliberately deferred
 
 1. **Trades** (two-sided accept + commish veto, then `native_materialize`).
