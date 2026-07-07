@@ -536,3 +536,30 @@ beat? New probe: ONE purchase allowed, per-matchup lift measured exactly
   conditioning hints. Otherwise: the amp default is a fine casual
   auto-pilot, and the skill expression lives where §10-§14 put it —
   metric picks, targeted plays, and knowing when NOT to spend.
+
+## 16. Air Raid reprice ◎60 → ◎40 (v0.99.2, migration 0065) — a real second buy
+§15 said first-buy variety needs a PRICE lever; this ships one. Air Raid''s
+scoring is untouched — only the price moves.
+- **As a lone first buy (firstbuy re-run):** unchanged by design — lifts are
+  price-independent (+7.0 solo; conditioning on an elite QB still loses to
+  always-amp). The amp stays the correct FIRST buy; the reprice was never
+  going to change that.
+- **As a SECOND buy (new season probes, team 0 deviates, 30 seasons):**
+  steady amp-only 50.2% → amp-then-raid 51.2% (5.1 raid weeks/season) →
+  **raid-then-amp 52.9% (14/14 raid weeks) — best measured steady policy,
+  +2.7 pts over amp-only.** At ◎40 the unlock fits ALONGSIDE an amp inside
+  the weekly income (~◎74), so it stacks instead of competing — the amp
+  multiplies drip while passbig floors the QB slot. At ◎60 the pair
+  (◎120-135/wk) never fit; the reprice is what unlocked the pairing.
+- **Magnitude check:** +2.7 is a real but modest edge — a third of the
+  opt-out penalty (9.3), and it''s a DEVIANT''s edge vs an amp-only field;
+  symmetric adoption cancels (r≈0.96). This is the "buying power-ups to
+  win is a strategy, but never certain" target, not a new must-buy.
+- **Aggregate re-run:** air-raid 1.65 pts/◎10 at ◎40 (was 1.17) — now
+  flagged CHEAP-EDGE but still below the amps'' 2.0-2.5 solo. WATCH: if a
+  future battery shows raid-then-amp creeping past ~54%, dial to ◎45-50.
+- Shipped: powerups.ts price 40, migration 0065 (powerup_price v4),
+  rulebook regen, price-parity checker green. The AI mirrors do NOT buy
+  Air Raid (aiLiveBuffs is amps-only) — the probes drive it via the season
+  policy hook; teaching the shipping AI a QB-conditional raid buy is a
+  separate call (it would also need an aiMetric passbig hook).

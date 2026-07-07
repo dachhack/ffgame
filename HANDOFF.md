@@ -1,6 +1,19 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.99.1`_
+_Last updated: 2026-07-07 · Build `v0.99.2`_
+
+## Air Raid reprice ◎60 → ◎40 (v0.99.2, migration 0065 — NOT yet applied)
+Findings §16. Price-only change (scoring untouched): powerups.ts + 0065
+powerup_price v4, rulebook regen, parity checker green. Measured: as a lone
+buy nothing changes (amp still the right first buy); as a SECOND buy the ◎40
+raid now fits alongside an amp inside weekly income — raid-then-amp is the
+best measured steady policy at 52.9% (+2.7 over amp-only, 30 seasons). Real
+but modest; symmetric adoption cancels. WATCH: dial to ◎45-50 if it creeps
+past ~54%. Season.mjs gained makeRaid() team-0 policies. The shipping AI
+still doesn't buy Air Raid (aiLiveBuffs is amps-only; would also need an
+aiMetric passbig hook) — separate design call. ⚠ 0065 must be applied via
+the migrate-workflow dance when this merges. (Renumbered from 0064: the
+native-leagues merge claimed 0064 first.)
 
 ## Native leagues gated to super admin for closed testing (v0.99.1)
 Owner call: test before opening up. `create_native_league` now requires
