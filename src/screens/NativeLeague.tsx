@@ -25,7 +25,8 @@ import {
   setDraftQueue, myDraftQueue, setAutodraft,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick,
   nominate, placeBid, setLotProxy,
-  type DraftState, type LeaguePoolPlayer, type NativeTeamState,
+  leagueTrades, proposeTrade, respondTrade, cancelTrade,
+  type DraftState, type LeaguePoolPlayer, type NativeTeamState, type TradeRow,
 } from '../data/liveApi';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
@@ -914,6 +915,9 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pendingAdd, setPendingAdd] = useState<LeaguePoolPlayer | null>(null); // roster full → pick a drop
+  // FAAB: a waiver claim needs a blind bid — collected in a small modal.
+  const [claimFor, setClaimFor] = useState<{ p: LeaguePoolPlayer; drop?: string } | null>(null);
+  const [bidDraft, setBidDraft] = useState('');
   const [picking, setPicking] = useState<'team' | 'league' | null>(null);      // avatar picker target
   const [nameDraft, setNameDraft] = useState<string | null>(null);             // non-null ⇒ renaming
   const skew = useRef(0);
@@ -973,9 +977,18 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
     if (myRoster == null) return;
     setPendingAdd(null);
     const onWaivers = waivedFor(p) != null;
+    // FAAB league: a claim carries a blind bid — ask for it first.
+    if (onWaivers && team?.waiver_mode === 'faab') { setClaimFor({ p, drop: dropSlug }); setBidDraft(''); return; }
     return run(() => onWaivers
       ? submitWaiverClaim(leagueId, myRoster, p.slug, dropSlug)
       : addFreeAgent(leagueId, myRoster, p.slug, dropSlug));
+  };
+  const submitClaimBid = () => {
+    if (myRoster == null || !claimFor) return;
+    const bid = Math.max(0, parseInt(bidDraft || '0', 10) || 0);
+    const { p, drop } = claimFor;
+    setClaimFor(null); setBidDraft('');
+    run(() => submitWaiverClaim(leagueId, myRoster, p.slug, drop, bid));
   };
   const addOrClaim = (p: LeaguePoolPlayer) => { if (full) setPendingAdd(p); else doAdd(p); };
 
@@ -1063,6 +1076,16 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
 
       {identityCard}
 
+      {/* over-limit lockout: no adds/claims/weekly lineups until legal */}
+      {team.roster_issue && (
+        <div style={{ ...card, marginBottom: 12, borderLeft: '3px solid var(--opp)' }}>
+          <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--opp)' }}>⚠ Roster over its limits</div>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>
+            {team.roster_issue}. Adds, waiver claims, and weekly lineups are locked until your roster is legal — drops (and trades that get you legal) always work.
+          </div>
+        </div>
+      )}
+
       {/* desktop: my team on the left, the market on the right; phones stack */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }}>
       <div style={{ flex: '1 1 380px', minWidth: 320 }}>
@@ -1102,6 +1125,7 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
                 ＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}
                 {c.drop_slug && <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}> · dropping {poolBySlug.get(c.drop_slug)?.full_name ?? c.drop_slug}</span>}
               </span>
+              {team.waiver_mode === 'faab' && <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--you)' }}>${c.bid ?? 0}</span>}
               <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 3, padding: '2px 5px' }}>PENDING</span>
               <button onClick={() => run(() => cancelWaiverClaim(c.id))} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>cancel</button>
             </div>
@@ -1120,7 +1144,11 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
       <div style={{ flex: '1 1 380px', minWidth: 320 }}>
       {/* free agents / waiver wire */}
       <div style={{ ...card, marginBottom: 12 }}>
-        <div style={hdr}>PLAYER POOL ({free.length} available)</div>
+        <div style={hdr}>
+          PLAYER POOL ({free.length} available)
+          {team.waiver_mode === 'faab' && team.my_faab != null ? ` · 💰 FAAB $${team.my_faab}` : ''}
+          {team.fa_open === false && team.fa_start_min != null ? ` · 🔒 FA opens ${fmtEtMin(team.fa_start_min)} ET` : ''}
+        </div>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players or teams…" style={{ ...input, marginBottom: 10 }} />
         <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
           {POS_FILTERS.map((p) => <Chip key={p} on={pos === p} onClick={() => setPos(p)}>{posLabel(p)}</Chip>)}
@@ -1136,10 +1164,18 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
                 <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
                 {left != null && <span className="mono" style={{ fontSize: 8.5, color: 'var(--warn)' }} title="on waivers">⏳ {fmtLeft(left)}</span>}
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 34 }}>{p.team}</span>
-                <button onClick={() => addOrClaim(p)} disabled={busy || myRoster == null} className="mono"
-                  style={{ ...btn, padding: '6px 10px', fontSize: 10, opacity: busy || myRoster == null ? 0.5 : 1 }}>
-                  {left != null ? 'CLAIM' : 'ADD'}
-                </button>
+                {(() => {
+                  // over-limit rosters are locked out; the FA window gates instant adds only
+                  const blocked = !!team.roster_issue || (left == null && team.fa_open === false);
+                  return (
+                    <button onClick={() => addOrClaim(p)} disabled={busy || myRoster == null || blocked} className="mono"
+                      title={team.roster_issue ? 'roster over its limits — drop players first'
+                        : left == null && team.fa_open === false ? 'free agency is closed right now' : undefined}
+                      style={{ ...btn, padding: '6px 10px', fontSize: 10, opacity: busy || myRoster == null || blocked ? 0.4 : 1 }}>
+                      {left != null ? 'CLAIM' : 'ADD'}
+                    </button>
+                  );
+                })()}
               </div>
             );
           })}
@@ -1154,17 +1190,52 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
           <div key={w.roster_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
             <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', width: 16 }}>{i + 1}</span>
             <Avatar name={w.team ?? `Team ${w.roster_id}`} src={w.avatar} size={20} />
-            <span style={{ fontSize: 12, color: w.roster_id === myRoster ? 'var(--you)' : 'var(--text)', fontWeight: w.roster_id === myRoster ? 700 : 400 }}>
+            <span style={{ fontSize: 12, color: w.roster_id === myRoster ? 'var(--you)' : 'var(--text)', fontWeight: w.roster_id === myRoster ? 700 : 400, flex: 1 }}>
               {w.team ?? `Team ${w.roster_id}`}
             </span>
+            {team.waiver_mode === 'faab' && w.faab != null && (
+              <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--dim)' }}>${w.faab}</span>
+            )}
           </div>
         ))}
-        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>Winning a claim sends you to the back of the line.</div>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
+          {team.waiver_mode === 'faab'
+            ? 'FAAB: claims carry blind bids from your season budget — highest bid wins, the order above only breaks ties. Winners still rotate to the back.'
+            : 'Winning a claim sends you to the back of the line.'}
+          {team.waiver_clear_min != null && ` Waivers clear daily at ${fmtEtMin(team.waiver_clear_min)} ET (${team.waiver_hold_days ?? 1}-day hold).`}
+        </div>
       </div>
+
+      <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order}
+        rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review} onChanged={refresh} />
       </div>{/* /market column */}
       </div>{/* /two-column row */}
 
       {pickers}
+
+      {/* FAAB claim → collect the blind bid */}
+      {claimFor && (
+        <div onClick={() => setClaimFor(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 360 }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Claim {claimFor.p.full_name}</div>
+            {claimFor.drop && (
+              <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 6 }}>dropping {poolBySlug.get(claimFor.drop)?.full_name ?? claimFor.drop}</div>
+            )}
+            <div className="mono" style={{ ...label, marginTop: 12 }}>BLIND BID — YOU HAVE ${team.my_faab ?? 0}</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 7 }}>
+              <input value={bidDraft} autoFocus inputMode="numeric" placeholder="$0"
+                onChange={(e) => setBidDraft(e.target.value.replace(/\D/g, ''))}
+                onKeyDown={(e) => { if (e.key === 'Enter') submitClaimBid(); }}
+                style={{ ...input, width: 110 }} />
+              <button onClick={submitClaimBid} disabled={busy} className="mono" style={{ ...btn, flex: 1 }}>SUBMIT CLAIM</button>
+            </div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>
+              Highest bid wins when waivers clear; only the winner pays. $0 is a legal bid.
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 10 }}><button onClick={() => setClaimFor(null)} className="mono" style={linkBtn}>cancel</button></div>
+          </div>
+        </div>
+      )}
 
       {/* roster full → choose a drop for the pending add */}
       {pendingAdd && (
@@ -1180,6 +1251,157 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
               </div>
             ))}
             <div style={{ textAlign: 'center', marginTop: 12 }}><button onClick={() => setPendingAdd(null)} className="mono" style={linkBtn}>cancel</button></div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Trade center — propose, answer, and follow trades (0072). Executions apply
+// instantly unless the league routes accepted trades through the commissioner.
+// ─────────────────────────────────────────────────────────────────────────────
+function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeReview, onChanged }: {
+  leagueId: string; myRoster: number | null;
+  teams: { roster_id: number; team: string | null }[];
+  rosters: { roster_id: number; slug: string }[];
+  poolBySlug: Map<string, LeaguePoolPlayer>;
+  tradeReview?: 'none' | 'commish';
+  onChanged: () => void;
+}) {
+  const [trades, setTrades] = useState<TradeRow[]>([]);
+  const [open, setOpen] = useState(false);
+  const [partner, setPartner] = useState<number | null>(null);
+  const [give, setGive] = useState<string[]>([]);
+  const [get, setGet] = useState<string[]>([]);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = () => leagueTrades(leagueId).then((t) => { if (Array.isArray(t)) setTrades(t); }).catch(() => {});
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+
+  const teamName = (rid: number) => teams.find((t) => t.roster_id === rid)?.team ?? `Team ${rid}`;
+  const pname = (s: string) => poolBySlug.get(s)?.full_name ?? s;
+  const toggle = (list: string[], set: (v: string[]) => void, slug: string) =>
+    set(list.includes(slug) ? list.filter((s) => s !== slug) : [...list, slug]);
+
+  const act = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await fn();
+      if (!r.ok) setErr(friendlyError(r.error ?? 'That didn’t work.'));
+      await load(); onChanged();
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  const propose = async () => {
+    if (busy || myRoster == null || partner == null || give.length + get.length === 0) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await proposeTrade(leagueId, myRoster, partner, give, get, note.trim() || undefined);
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not propose the trade.')); return; }
+      setOpen(false); setPartner(null); setGive([]); setGet([]); setNote('');
+      await load();
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+
+  const statusChip = (t: TradeRow) => {
+    const [label, color] =
+      t.status === 'pending' ? ['OFFERED', 'var(--warn)']
+      : t.status === 'accepted' ? ['AWAITING COMMISH', 'var(--warn)']
+      : t.status === 'executed' ? ['EXECUTED', 'var(--you)']
+      : t.status === 'vetoed' ? ['VETOED', 'var(--opp)']
+      : [t.status.toUpperCase(), 'var(--faint)'];
+    return <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color, border: `1px solid ${color}`, borderRadius: 3, padding: '2px 5px', whiteSpace: 'nowrap' }}>{label}</span>;
+  };
+  const shown = trades.slice(0, 8);
+  const pickList = (rid: number | null, sel: string[], set: (v: string[]) => void) => (
+    <div style={{ flex: '1 1 150px', minWidth: 140, maxHeight: 220, overflowY: 'auto', border: '1px solid var(--bd)', borderRadius: 6, padding: 6 }}>
+      {rosters.filter((r) => r.roster_id === rid).map((r) => {
+        const p = poolBySlug.get(r.slug);
+        const on = sel.includes(r.slug);
+        return (
+          <button key={r.slug} onClick={() => toggle(sel, set, r.slug)} className="mono"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', background: on ? 'color-mix(in srgb, var(--you) 14%, transparent)' : 'none', border: 'none', borderRadius: 4, padding: '4px 5px', cursor: 'pointer' }}>
+            <span style={{ fontSize: 11, color: on ? 'var(--you)' : 'var(--text)', fontWeight: on ? 700 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{on ? '☑' : '☐'} {p?.full_name ?? r.slug}</span>
+            <span style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p?.pos}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+        <div style={hdr}>TRADES{tradeReview === 'commish' ? ' · commish reviews' : ''}</div>
+        {myRoster != null && (
+          <button onClick={() => { setOpen(true); setErr(null); }} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5 }}>＋ PROPOSE</button>
+        )}
+      </div>
+      {err && <div className="mono" style={{ ...errStyle, marginTop: 0, marginBottom: 8 }}>{err}</div>}
+      {shown.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>No trades yet — send the first offer.</div>}
+      {shown.map((t) => (
+        <div key={t.id} style={{ padding: '7px 0', borderTop: '1px solid var(--bd)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, minWidth: 180, lineHeight: 1.5 }}>
+              <b style={{ color: t.from_roster === myRoster ? 'var(--you)' : 'var(--text)' }}>{teamName(t.from_roster)}</b>
+              {' '}sends {t.give.map(pname).join(', ') || '—'} ·{' '}
+              <b style={{ color: t.to_roster === myRoster ? 'var(--you)' : 'var(--text)' }}>{teamName(t.to_roster)}</b>
+              {' '}sends {t.get.map(pname).join(', ') || '—'}
+            </span>
+            {statusChip(t)}
+          </div>
+          {t.note && <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 3 }}>“{t.note}”</div>}
+          {(t.status === 'pending' || t.status === 'accepted') && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              {t.status === 'pending' && t.to_roster === myRoster && <>
+                <button onClick={() => act(() => respondTrade(t.id, true))} disabled={busy} className="mono" style={{ ...btn, padding: '6px 12px', fontSize: 9.5 }}>✓ ACCEPT</button>
+                <button onClick={() => act(() => respondTrade(t.id, false))} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '6px 12px', fontSize: 9.5, color: 'var(--opp)' }}>✕ DECLINE</button>
+              </>}
+              {t.from_roster === myRoster && (
+                <button onClick={() => act(() => cancelTrade(t.id))} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>withdraw</button>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {open && myRoster != null && (
+        <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 460, maxHeight: '85vh', overflowY: 'auto' }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Propose a trade</div>
+            <div className="mono" style={{ ...label, marginTop: 12 }}>TRADE WITH</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
+              {teams.filter((t) => t.roster_id !== myRoster).map((t) => (
+                <Chip key={t.roster_id} on={partner === t.roster_id} onClick={() => { setPartner(t.roster_id); setGet([]); }}>
+                  {t.team ?? `Team ${t.roster_id}`}
+                </Chip>
+              ))}
+            </div>
+            {partner != null && (
+              <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 150px', minWidth: 140 }}>
+                  <div className="mono" style={{ ...label, marginBottom: 5 }}>YOU SEND</div>
+                  {pickList(myRoster, give, setGive)}
+                </div>
+                <div style={{ flex: '1 1 150px', minWidth: 140 }}>
+                  <div className="mono" style={{ ...label, marginBottom: 5 }}>YOU GET</div>
+                  {pickList(partner, get, setGet)}
+                </div>
+              </div>
+            )}
+            <input value={note} maxLength={140} onChange={(e) => setNote(e.target.value)} placeholder="Add a note (optional)…" style={{ ...input, marginTop: 12 }} />
+            {err && <div className="mono" style={errStyle}>{err}</div>}
+            <button onClick={propose} disabled={busy || partner == null || give.length + get.length === 0}
+              className="mono" style={{ ...btn, width: '100%', marginTop: 12, opacity: busy || partner == null || give.length + get.length === 0 ? 0.5 : 1 }}>
+              ⇄ SEND THE OFFER{tradeReview === 'commish' ? ' (commish must approve)' : ''}
+            </button>
+            <div style={{ textAlign: 'center', marginTop: 10 }}><button onClick={() => setOpen(false)} className="mono" style={linkBtn}>cancel</button></div>
           </div>
         </div>
       )}

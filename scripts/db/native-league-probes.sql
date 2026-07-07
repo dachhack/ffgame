@@ -1016,4 +1016,229 @@ begin
     like 'https://dripfantasy.com/avatars/%', '21v bad URL falls back to site art');
 end $$;
 
+-- ── 22. commissioner roster tools (0072) ─────────────────────────────────────
+do $$
+declare lid uuid := current_setting('probe.caps_lid')::uuid; r jsonb;
+begin
+  -- commish-only
+  perform probe_as('b');
+  perform assert_err(commish_move_player(lid, 'c-te1', 1), 'forbidden', '22a move commish-only');
+  perform probe_as('a');
+  -- the override may OVERFILL on purpose — the move reports the new illegality
+  r := commish_move_player(lid, 'c-te1', 1);
+  perform assert_ok(r, '22b overfill allowed');
+  perform assert_true((r ->> 'roster_issue') like '%6 players%', '22b2 overfill reported');
+  perform assert_true(roster_illegal_reason(lid, 1) is not null, '22b3 roster flagged illegal');
+  -- remove straight to free agency (no waiver hold) → legal again
+  r := commish_remove_player(lid, 'c-rb2', false);
+  perform assert_ok(r, '22c remove to FA');
+  perform assert_true(not exists (select 1 from native_roster where league_id = lid and slug = 'c-rb2'), '22d off the roster');
+  perform assert_true((select waived_until from league_pool where league_id = lid and slug = 'c-rb2') is null, '22e no waiver hold');
+  perform assert_true(roster_illegal_reason(lid, 1) is null, '22f back to legal');
+  perform assert_true(exists (select 1 from native_roster where league_id = lid and roster_id = 1
+    and slug = 'c-te1' and acquired = 'commish'), '22g acquired = commish');
+  -- remove WITH a waiver hold, then a commish move clears the hold
+  perform assert_ok(commish_remove_player(lid, 'c-te1', true), '22h remove to waivers');
+  perform assert_true((select waived_until from league_pool where league_id = lid and slug = 'c-te1') > now(), '22i on waivers');
+  perform assert_ok(commish_move_player(lid, 'c-te1', 1), '22j move clears the hold');
+  perform assert_true((select waived_until from league_pool where league_id = lid and slug = 'c-te1') is null, '22k hold cleared');
+  perform assert_err(commish_move_player(lid, 'c-te1', 1), 'already', '22l no-op move rejected');
+  perform assert_err(commish_move_player(lid, 'not-a-player', 2), 'not in pool', '22m unknown player');
+end $$;
+
+-- ── 23. FAAB waivers (0072) ──────────────────────────────────────────────────
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text;
+begin
+  perform probe_as('a');
+  r := create_native_league('Txn League', '2026', 2, 5, 60);
+  perform assert_ok(r, '23a create');
+  lid := (r ->> 'league_id')::uuid;
+  perform set_config('probe.txn_lid', lid::text, false);
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Txn'), '23b B joins');
+  perform probe_as('a');
+  for i in 1..10 loop pool := pool || jsonb_build_object('slug', 't-rb' || i, 'full', 'T RB ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  for i in 1..2 loop
+    pool := pool || jsonb_build_object('slug', 't-k' || i, 'full', 'T K ' || i, 'pos', 'K', 'team', 'T');
+    pool := pool || jsonb_build_object('slug', 't-d' || i, 'full', 'T D ' || i, 'pos', 'DEF', 'team', 'T');
+  end loop;
+  perform assert_ok(seed_league_pool(lid, pool), '23c seed');
+  perform assert_ok(start_draft(lid, '[1,2]'::jsonb), '23d start');
+  for i in 1..12 loop
+    update draft set deadline_at = now() - interval '1 second' where league_id = lid and status = 'live';
+    perform draft_tick(lid);
+    exit when (select status from draft where league_id = lid) = 'complete';
+  end loop;
+  perform assert_true((select status from draft where league_id = lid) = 'complete', '23e drafted out');
+  perform assert_true(exists (select 1 from native_roster where league_id = lid and roster_id = 1 and slug = 't-rb5'), '23f expected draft shape');
+
+  -- switch to FAAB ($50) — commish only
+  perform probe_as('b');
+  perform assert_err(set_transaction_rules(lid, 'faab', 50, null), 'forbidden', '23g rules commish-only');
+  perform probe_as('a');
+  perform assert_ok(set_transaction_rules(lid, 'faab', 50, null), '23h enable FAAB');
+  r := roster_rules(lid);
+  perform assert_true((r ->> 'waiver_mode') = 'faab' and (r ->> 'faab_budget')::int = 50, '23i rules readable');
+  r := native_team_state(lid);
+  perform assert_true((r ->> 'my_faab')::int = 50 and (r -> 'waiver_order' -> 0 ->> 'faab') is not null, '23j balances surfaced');
+
+  -- drop → blind bids → highest bid wins and pays
+  perform assert_ok(drop_player(lid, 1, 't-rb1'), '23k A drops RB1');
+  perform assert_err(submit_waiver_claim(lid, 1, 't-rb1', 't-rb4', 60), 'FAAB balance', '23l bid over budget');
+  perform assert_ok(submit_waiver_claim(lid, 1, 't-rb1', 't-rb4', 30), '23m A bids $30');
+  perform probe_as('b');
+  perform assert_ok(submit_waiver_claim(lid, 2, 't-rb1', 't-rb2', 20), '23n B bids $20');
+  update league_pool set waived_until = now() - interval '1 second' where league_id = lid and slug = 't-rb1';
+  r := process_waivers(lid);
+  perform assert_true((r ->> 'won')::int = 1 and (r ->> 'lost')::int = 1, '23o one winner');
+  perform assert_true(exists (select 1 from native_roster where league_id = lid and roster_id = 1 and slug = 't-rb1'), '23p high bid wins');
+  perform assert_true(member_faab(lid, 1) = 20, '23q winner pays');
+  perform assert_true(member_faab(lid, 2) = 50, '23r loser keeps the money');
+  perform assert_true(exists (select 1 from waiver_claim where league_id = lid and roster_id = 2
+    and status = 'lost' and note = 'outbid'), '23s loss noted as outbid');
+end $$;
+
+-- ── 24. trades with optional commissioner review (0072) ──────────────────────
+do $$
+declare lid uuid := current_setting('probe.txn_lid')::uuid; r jsonb; tid uuid;
+begin
+  -- gates: only the giving seat proposes; pieces must be on the stated rosters
+  perform probe_as('b');
+  perform assert_err(propose_trade(lid, 1, 2, '["t-rb5"]'::jsonb, '["t-rb6"]'::jsonb), 'not your seat', '24a wrong seat');
+  perform assert_err(propose_trade(lid, 2, 1, '["t-rb5"]'::jsonb, '[]'::jsonb), 'your own players', '24b not his player');
+  perform assert_err(propose_trade(lid, 2, 1, '["t-rb2"]'::jsonb, '["t-rb2"]'::jsonb), 'once', '24c dup piece');
+
+  -- review = none → acceptance executes immediately
+  perform probe_as('a');
+  r := propose_trade(lid, 1, 2, '["t-rb5"]'::jsonb, '["t-rb6"]'::jsonb, 'RB swap');
+  perform assert_ok(r, '24d propose');
+  tid := (r ->> 'trade_id')::uuid;
+  perform probe_as('b');
+  r := respond_trade(tid, true);
+  perform assert_true((r ->> 'status') = 'executed', '24e accept executes');
+  perform assert_true(exists (select 1 from native_roster where league_id = lid and roster_id = 1
+    and slug = 't-rb6' and acquired = 'trade'), '24f piece landed');
+  perform assert_true(exists (select 1 from native_roster where league_id = lid and roster_id = 2 and slug = 't-rb5'), '24g other piece landed');
+
+  -- review = commish → acceptance parks the trade for a ruling
+  perform probe_as('a');
+  perform assert_ok(set_transaction_rules(lid, null, null, 'commish'), '24h enable review');
+  r := propose_trade(lid, 1, 2, '["t-rb6"]'::jsonb, '["t-rb5"]'::jsonb);
+  tid := (r ->> 'trade_id')::uuid;
+  perform probe_as('b');
+  r := respond_trade(tid, true);
+  perform assert_true((r ->> 'status') = 'accepted', '24i parked for review');
+  perform assert_true(exists (select 1 from native_roster where league_id = lid and roster_id = 1 and slug = 't-rb6'), '24j not executed yet');
+  perform assert_err(commish_rule_trade(tid, true), 'forbidden', '24k ruling commish-only');
+  perform probe_as('a');
+  r := commish_rule_trade(tid, true);
+  perform assert_true((r ->> 'status') = 'executed', '24l approved → executed');
+  perform assert_true(exists (select 1 from native_roster where league_id = lid and roster_id = 1 and slug = 't-rb5'), '24m swapped back');
+
+  -- veto kills even a still-pending offer
+  r := propose_trade(lid, 1, 2, '["t-rb5"]'::jsonb, '["t-rb6"]'::jsonb);
+  tid := (r ->> 'trade_id')::uuid;
+  r := commish_rule_trade(tid, false);
+  perform assert_true((r ->> 'status') = 'vetoed', '24n vetoed');
+
+  -- an accept that would overfill a roster fails loudly and leaves the offer up
+  perform assert_ok(set_transaction_rules(lid, null, null, 'none'), '24n2 review back off');
+  r := propose_trade(lid, 1, 2, '["t-rb1","t-rb5"]'::jsonb, '["t-rb6"]'::jsonb);
+  tid := (r ->> 'trade_id')::uuid;
+  perform probe_as('b');
+  perform assert_err(respond_trade(tid, true), 'overfill', '24o 2-for-1 overfills');
+  perform assert_true((select status from trade_proposal where id = tid) = 'pending', '24p offer survives');
+  perform probe_as('a');
+  perform assert_ok(cancel_trade(tid), '24q proposer cancels');
+  perform assert_true((select count(*) from jsonb_array_elements(league_trades(lid))) >= 4, '24r trade log visible');
+end $$;
+
+-- ── 25. illegal-roster lockout (0072): no FA/waivers/weekly picks until legal ─
+do $$
+declare
+  lid uuid := current_setting('probe.caps_lid')::uuid;
+  plid uuid := current_setting('probe.lid')::uuid;
+  r jsonb; fslug text; mid uuid; raised boolean := false;
+begin
+  perform probe_as('a');
+  -- overfill roster 1 (6/5) via the commish override
+  perform assert_ok(commish_move_player(lid, 'c-te2', 1), '25a overfill');
+  r := native_team_state(lid);
+  perform assert_true((r ->> 'roster_issue') is not null, '25b issue surfaced to the manager');
+  -- locked out of waivers and free agency…
+  perform assert_err(submit_waiver_claim(lid, 1, 'c-qb1', 'c-qb3'), 'over its limits', '25c claims locked');
+  perform assert_err(add_free_agent(lid, 1, 'c-k1', 'c-te2'), 'over its limits', '25d FA locked');
+  -- …but drops always work, and legality restores everything
+  perform assert_ok(drop_player(lid, 1, 'c-te2'), '25e drop allowed');
+  perform assert_true(roster_illegal_reason(lid, 1) is null, '25f legal again');
+  perform assert_ok(submit_waiver_claim(lid, 1, 'c-te2', 'c-qb3'), '25g claims unlocked');
+
+  -- weekly picks: overfill B's roster in the SCHEDULED league → sealed_pick
+  -- rejects B's lineup writes until B drops back to legal
+  select lp.slug into fslug from league_pool lp
+  where lp.league_id = plid
+    and not exists (select 1 from native_roster nr where nr.league_id = plid and nr.slug = lp.slug)
+    and (lp.waived_until is null or lp.waived_until <= now())
+  order by lp.rank limit 1;
+  perform assert_true(fslug is not null, '25h a free agent exists');
+  perform assert_ok(commish_move_player(plid, fslug, 2), '25i overfill B');
+  select m.id into mid from matchup m
+  where m.league_id = plid and (m.home_roster_id = 2 or m.away_roster_id = 2)
+  order by m.week limit 1;
+  perform assert_true(mid is not null, '25j B has a matchup');
+  perform probe_as('b');
+  begin
+    insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
+    values (mid, '00000000-0000-0000-0000-00000000000b', 'snf', 'snf#0', 'qb1');
+    raised := false;
+  exception when others then
+    raised := true;
+    perform assert_true(sqlerrm like '%over limits%', '25k lockout message');
+  end;
+  perform assert_true(raised, '25l weekly pick rejected while illegal');
+  perform probe_as('a');
+  perform assert_ok(commish_remove_player(plid, fslug, false), '25m commish fixes B');
+  perform probe_as('b');
+  insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
+  values (mid, '00000000-0000-0000-0000-00000000000b', 'snf', 'snf#0', 'qb1');
+  perform assert_true(true, '25n weekly pick accepted once legal');
+  delete from sealed_pick where matchup_id = mid and app_user_id = '00000000-0000-0000-0000-00000000000b';
+end $$;
+
+-- ── 26. commish-set waiver clear times + free-agency periods (0072) ──────────
+do $$
+declare
+  lid uuid := current_setting('probe.txn_lid')::uuid;
+  r jsonb; cm int; fs int; fe int; wu timestamptz;
+begin
+  perform probe_as('a');
+  -- clear time 2 minutes AGO daily, 2-day hold → a drop clears in ~48h
+  cm := (et_minutes(now()) + 1438) % 1440;
+  perform assert_ok(set_transaction_rules(lid, null, null, null, cm, 2, null, null), '26a set daily clear');
+  r := roster_rules(lid);
+  perform assert_true((r ->> 'waiver_clear_min')::int = cm and (r ->> 'waiver_hold_days')::int = 2, '26b schedule readable');
+  perform assert_ok(drop_player(lid, 1, 't-rb5'), '26c drop under the schedule');
+  select waived_until into wu from league_pool where league_id = lid and slug = 't-rb5';
+  perform assert_true(wu > now() + interval '47 hours' and wu <= now() + interval '48 hours', '26d ~48h hold');
+  -- back to rolling 24h
+  perform assert_ok(set_transaction_rules(lid, null, null, null, -1, null, null, null), '26e clear back to rolling');
+  perform assert_true(waiver_hold_until(lid) between now() + interval '23 hours 59 minutes'
+    and now() + interval '24 hours 1 minute', '26f rolling restored');
+
+  -- free agency window: a 2-minute slot 5 hours from now = CLOSED right now
+  fs := (et_minutes(now()) + 300) % 1440; fe := (fs + 2) % 1440;
+  perform assert_err(set_transaction_rules(lid, null, null, null, null, null, fs, fs), 'different times', '26g equal-times gate');
+  perform assert_ok(set_transaction_rules(lid, null, null, null, null, null, fs, fe), '26h set FA window');
+  perform assert_err(add_free_agent(lid, 1, 't-rb7'), 'free agency is closed', '26i FA gated by the window');
+  -- claims are NOT gated by the FA window (they resolve on the waiver clock)
+  perform probe_as('b');
+  perform assert_ok(submit_waiver_claim(lid, 2, 't-rb5', 't-rb2', 5), '26j claims still open');
+  perform probe_as('a');
+  -- window off → instant pickups again
+  perform assert_ok(set_transaction_rules(lid, null, null, null, null, null, -1, -1), '26k window off');
+  perform assert_ok(add_free_agent(lid, 1, 't-rb7'), '26l FA open again');
+end $$;
+
 select 'ALL PROBES PASSED' as result;

@@ -703,14 +703,62 @@ export const createNativeLeague = (
     p_mode: mode, p_budget: budget, p_lot_seconds: lotSeconds, p_max_lots: maxLots,
     p_night_start_min: nightStartMin, p_night_end_min: nightEndMin, p_pos_caps: posCaps,
   });
-/** Read the league's roster rules (any member; the commish editor's loader). */
+/** Read the league's roster + transaction rules (any member; the commish editors' loader). */
 export const rosterRules = (leagueId: string) =>
-  rpc<{ ok?: boolean; error?: string; rounds?: number; draft_status?: string; pos_caps?: PosCaps }>(
+  rpc<{ ok?: boolean; error?: string; rounds?: number; draft_status?: string; pos_caps?: PosCaps;
+        waiver_mode?: 'rolling' | 'faab'; faab_budget?: number; trade_review?: 'none' | 'commish';
+        waiver_clear_min?: number | null; waiver_hold_days?: number;
+        fa_start_min?: number | null; fa_end_min?: number | null }>(
     'roster_rules', { p_league_id: leagueId });
 /** Commissioner: edit position limits any time; roster size only pre-draft. */
 export const setRosterRules = (leagueId: string, rounds: number | null, posCaps: PosCaps | null) =>
   rpc<{ ok: boolean; error?: string; rounds?: number; pos_caps?: PosCaps }>(
     'set_roster_rules', { p_league_id: leagueId, p_rounds: rounds, p_pos_caps: posCaps });
+
+// ── Transactions (0072): commish roster tools, FAAB waivers, trades ──────────
+export type WaiverMode = 'rolling' | 'faab';
+export type TradeReview = 'none' | 'commish';
+/** Commissioner: waiver mode / FAAB budget / trade review / waiver clear
+ *  schedule / FA window. Nulls = unchanged; the schedule knobs accept -1 to
+ *  CLEAR (clear time → rolling 24h; FA window → always open).
+ *  NOTE: sending mode or budget resets every seat's FAAB balance. */
+export const setTransactionRules = (
+  leagueId: string, waiverMode: WaiverMode | null, faabBudget: number | null, tradeReview: TradeReview | null,
+  waiverClearMin: number | null = null, waiverHoldDays: number | null = null,
+  faStartMin: number | null = null, faEndMin: number | null = null,
+) =>
+  rpc<{ ok: boolean; error?: string; waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: TradeReview }>(
+    'set_transaction_rules', {
+      p_league_id: leagueId, p_waiver_mode: waiverMode, p_faab_budget: faabBudget, p_trade_review: tradeReview,
+      p_waiver_clear_min: waiverClearMin, p_waiver_hold_days: waiverHoldDays,
+      p_fa_start_min: faStartMin, p_fa_end_min: faEndMin,
+    });
+/** Commissioner override: put any pool player on any roster (clears waiver holds;
+ *  position limits bypassed, roster size still enforced). */
+export const commishMovePlayer = (leagueId: string, slug: string, toRoster: number) =>
+  rpc<{ ok: boolean; error?: string }>('commish_move_player', { p_league_id: leagueId, p_slug: slug, p_to_roster: toRoster });
+/** Commissioner override: pull a player off his roster — to waivers or straight to FA. */
+export const commishRemovePlayer = (leagueId: string, slug: string, waive = true) =>
+  rpc<{ ok: boolean; error?: string }>('commish_remove_player', { p_league_id: leagueId, p_slug: slug, p_waive: waive });
+
+export interface TradeRow {
+  id: string; from_roster: number; to_roster: number; give: string[]; get: string[];
+  status: 'pending' | 'accepted' | 'executed' | 'rejected' | 'cancelled' | 'vetoed';
+  note: string | null; created_at: string; resolved_at: string | null;
+}
+export const leagueTrades = (leagueId: string, limit = 30) =>
+  rpc<TradeRow[] | { error: string }>('league_trades', { p_league_id: leagueId, p_limit: limit });
+export const proposeTrade = (leagueId: string, fromRoster: number, toRoster: number, give: string[], get: string[], note?: string) =>
+  rpc<{ ok: boolean; error?: string; trade_id?: string }>('propose_trade', {
+    p_league_id: leagueId, p_from_roster: fromRoster, p_to_roster: toRoster,
+    p_give: give, p_get: get, p_note: note ?? null,
+  });
+export const respondTrade = (tradeId: string, accept: boolean) =>
+  rpc<{ ok: boolean; error?: string; status?: string }>('respond_trade', { p_trade_id: tradeId, p_accept: accept });
+export const cancelTrade = (tradeId: string) =>
+  rpc<{ ok: boolean; error?: string; status?: string }>('cancel_trade', { p_trade_id: tradeId });
+export const commishRuleTrade = (tradeId: string, approve: boolean) =>
+  rpc<{ ok: boolean; error?: string; status?: string }>('commish_rule_trade', { p_trade_id: tradeId, p_approve: approve });
 /** Mock draft (0070): a practice room where every other seat is a named AI.
  *  Same settings surface as a real league (snake/auction, live/slow clocks,
  *  parallel lots); no schedule, no season, deletable any time. */
@@ -827,20 +875,33 @@ export const dropPlayer = (leagueId: string, rosterId: number, slug: string) =>
   rpc<{ ok: boolean; error?: string }>('drop_player', { p_league_id: leagueId, p_roster_id: rosterId, p_slug: slug });
 export const addFreeAgent = (leagueId: string, rosterId: number, addSlug: string, dropSlug?: string) =>
   rpc<{ ok: boolean; error?: string }>('add_free_agent', { p_league_id: leagueId, p_roster_id: rosterId, p_add_slug: addSlug, p_drop_slug: dropSlug ?? null });
-export const submitWaiverClaim = (leagueId: string, rosterId: number, addSlug: string, dropSlug?: string) =>
-  rpc<{ ok: boolean; error?: string; claim_id?: string; clears_at?: string }>('submit_waiver_claim', { p_league_id: leagueId, p_roster_id: rosterId, p_add_slug: addSlug, p_drop_slug: dropSlug ?? null });
+export const submitWaiverClaim = (leagueId: string, rosterId: number, addSlug: string, dropSlug?: string, bid = 0) =>
+  rpc<{ ok: boolean; error?: string; claim_id?: string; clears_at?: string; bid?: number }>('submit_waiver_claim', { p_league_id: leagueId, p_roster_id: rosterId, p_add_slug: addSlug, p_drop_slug: dropSlug ?? null, p_bid: bid });
 export const cancelWaiverClaim = (claimId: string) =>
   rpc<{ ok: boolean; error?: string }>('cancel_waiver_claim', { p_claim_id: claimId });
 /** Resolve every due claim in waiver-priority order. Idempotent — safe to call on load. */
 export const processWaivers = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; won?: number; lost?: number }>('process_waivers', { p_league_id: leagueId });
-export interface WaiverClaimRow { id: string; add_slug: string; drop_slug: string | null; status: string; note: string | null; created_at: string; }
+export interface WaiverClaimRow { id: string; add_slug: string; drop_slug: string | null; status: string; note: string | null; created_at: string; bid?: number; }
 export interface NativeTeamState {
   error?: string; my_roster_id: number | null; draft_status: string; roster_cap: number | null; server_now: string;
   /** Per-position roster limits (null value = uncapped). */
   pos_caps?: PosCaps;
+  /** Waiver system: rolling priority (default) or FAAB blind bids. */
+  waiver_mode?: WaiverMode;
+  trade_review?: TradeReview;
+  /** My remaining FAAB budget (FAAB leagues only). */
+  my_faab?: number | null;
+  /** Why my roster is illegal (over size / position limits) — locked out of
+   *  FA, waivers, and weekly picks until null. */
+  roster_issue?: string | null;
+  /** Is free agency open right now (commish-set daily window)? */
+  fa_open?: boolean;
+  fa_start_min?: number | null; fa_end_min?: number | null;
+  /** Daily ET waiver clear time (minutes since midnight; null = rolling 24h). */
+  waiver_clear_min?: number | null; waiver_hold_days?: number;
   my_team?: string | null; my_avatar?: string | null; league_avatar?: string | null; is_commish?: boolean;
-  waiver_order: { roster_id: number; team: string | null; priority: number | null; avatar?: string | null }[];
+  waiver_order: { roster_id: number; team: string | null; priority: number | null; avatar?: string | null; faab?: number | null }[];
   my_claims: WaiverClaimRow[];
 }
 export const nativeTeamState = (leagueId: string) => rpc<NativeTeamState>('native_team_state', { p_league_id: leagueId });
