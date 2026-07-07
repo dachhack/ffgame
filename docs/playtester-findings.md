@@ -473,3 +473,36 @@ capacity removal so a paid buff is never silently dropped. Full battery after:
 - Open thread: an `amp-pair`/`amp-trio` aggregate lever (arming 2–3 amps WITH
   capacity priced in) would put a blind-EV number on the bundles; today only
   the adversary measures them.
+
+## 14. Saver probe + amp-bundle EV — capacity pricing validated (v0.98.0 tools)
+§13's open thread, run: does hoarding coin for a capacity stack beat the
+steady one-amp-a-week meta? Three new instruments (this change touches only
+the playtester; no engine/app code):
+- **`aggregate.mjs` amp-pair / amp-trio levers** (bundles WITH capacity priced
+  in): pair (◎185) 69.8% WR / +33.9 margin, trio (◎305) 81.7% WR / **+68.8
+  margin — SUPERLINEAR** (singles sum to +46.3; the amps compound: momentum
+  raises the drip that garbage-time doubles inside the overtime the third amp
+  keeps alive). Per-coin the trio (2.26 pts/◎10) matches the singles
+  (2.0-2.5) — capacity gates the stack by WALLET SIZE, not by efficiency
+  decay. That makes the saver question the real test:
+- **`season.mjs` saver probe** (team 0 hoards until the bundle fits, splurges,
+  repeats; others steady): **steady 50.2% > saver-pair 46.7% (5.3 splurges/
+  season) > saver-trio 45.7% (3.1) > opt-out 41.0%.** Hoarding LOSES — the
+  naked weeks bleed more than the splurge weeks return, because a week''s win
+  is binary: the trio''s +69 margin in one week buys the same 1 win a single
+  amp''s +16 usually buys, while a naked week is a coin-flip forfeited at -9.
+  Superlinear points, sublinear WINS. The economy is closed; capacity prices
+  need no adjustment.
+- **`adversary.mjs` capacity-aware search** (greedy step now bundles amp-2/
+  amp-3 into an over-cap trial and prices them): ◎200 ceiling +66.4 (was
+  +60.2 blind to bundles, +81.7 pre-capacity — net −19%). +amp-2 appears in
+  51% of hindsight lines: the PAIR is a legitimate rich-manager play; the
+  trio stays priced out of a ◎200 budget. FREE ceiling unchanged (+35.0).
+- **Correction to §13''s season numbers**: `seasonBudget` (the season sim''s
+  own budget mirror) had missed the 0063 capacity rule, so carried-over
+  wallets occasionally bought a second amp the engine then silently dropped
+  (wasted coin, ~9% of amp buys). Fixed to mirror lock.js. Corrected meta:
+  amp buys 183 → 167/season and the freed coin diversifies — combo-drip 1.6
+  → 10.0 buys/season, extra-slot 0 → 4.9, occasional legit amp-2 pair (1.0).
+  Opt-out Δ 9.3 pts (was 10.0 measured with the waste; same conclusion).
+  Wallet still bounded (101-111), cancellation r=0.96, home 49.3%.

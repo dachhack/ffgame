@@ -2,6 +2,22 @@
 
 _Last updated: 2026-07-07 · Build `v0.98.0`_
 
+## Saver probe + amp-bundle instruments — capacity pricing validated (tools only)
+Findings §14. Playtester-only change (no engine/app code): aggregate.mjs
+gets amp-pair/amp-trio levers (trio is SUPERLINEAR: +68.8 margin vs +46.3
+summed singles, same pts/◎10 as singles); season.mjs gets a saver probe
+(team 0 hoards for the bundle → steady 50.2% beats saver-pair 46.7% and
+saver-trio 45.7% — hoarding loses, economy closed, no price change needed);
+adversary.mjs greedy step is now capacity-aware (bundles+prices amp-2/amp-3
+into over-cap trials → honest ◎200 ceiling +66.4, still −19% vs pre-capacity;
++amp-2 in 51% of hindsight lines = the pair is the legit rich play). Also
+FIXED: season.mjs `seasonBudget` had missed the 0063 capacity rule (wasted
+~9% of amp buys on engine-dropped second amps); corrected meta diversifies —
+combo-drip 1.6→10 buys/season, extra-slot 0→4.9, opt-out Δ 9.3.
+NOTE for future sims: THREE AI budget mirrors must stay in lockstep now —
+server/src/lock.js aiBudgetPass, tools/playtester/lib.mjs aiLoadout, and
+tools/playtester/season.mjs seasonBudget.
+
 ## Amplifier capacity — Second Amp / Third Amp unlocks (v0.98.0)
 Design call (replaces the amplifier-surcharge idea): the drip amplifiers
 (Momentum · Overtime · Garbage Time) are limited to ONE armed per week by
