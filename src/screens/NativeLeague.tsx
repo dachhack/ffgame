@@ -16,7 +16,7 @@ import { ADP_2026, ADP_AS_OF } from '../data/adp2026';
 import { PROJ_2026, PROJ_AS_OF } from '../data/proj2026';
 import { statsForSlug } from '../data/players';
 import {
-  createNativeLeague, seedLeaguePool, nativeGenerateSchedule,
+  createNativeLeague, createMockDraft, deleteMockDraft, seedLeaguePool, nativeGenerateSchedule,
   startDraft, draftState, makeDraftPick, draftTick,
   leaguePool, nativeRosters, nativeTeamState, dropPlayer, addFreeAgent,
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
@@ -106,6 +106,10 @@ function Chip({ on, children, onClick }: { on?: boolean; children: React.ReactNo
 export function NativeCreate({ onDone, onBack }: {
   onDone: (leagueId: string, rosterId: number) => void; onBack: () => void;
 }) {
+  // LEAGUE = the real thing (invites, schedule, season). MOCK = a practice
+  // draft against named AI teams: same settings surface, no season behind it,
+  // starts immediately and lands straight in the draft room.
+  const [kind, setKind] = useState<'league' | 'mock'>('league');
   const [name, setName] = useState('');
   const [teams, setTeams] = useState(8);
   const [rounds, setRounds] = useState(12);
@@ -129,12 +133,27 @@ export function NativeCreate({ onDone, onBack }: {
   const [copied, setCopied] = useState(false);
 
   const create = async () => {
-    if (busy || !name.trim()) return;
+    if (busy || (kind === 'league' && !name.trim())) return;
     setBusy(true); setErr(null);
     try {
-      setNote('Creating your league…');
       const pickSecs = pace === 'slow' ? clockHrs * 3600 : clock;
       const lotSecs = pace === 'slow' ? bellHrs * 3600 : bellSecs;
+      if (kind === 'mock') {
+        // Mock: create vs the AI, seed the pool, start, straight into the room.
+        setNote('Spinning up your AI opponents…');
+        const r = await createMockDraft(teams, rounds, pickSecs, mode, budget, lotSecs,
+          mode === 'auction' ? maxLots : 1);
+        if (!r.ok || !r.league_id) { setErr(friendlyError(r.error ?? 'Could not create the mock draft.')); setBusy(false); return; }
+        setNote('Building the 2026 player pool…');
+        const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
+        if (!pool.ok) { setErr(friendlyError(pool.error ?? 'Could not seed the player pool.')); setBusy(false); return; }
+        setNote('Starting the draft…');
+        const started = await startDraft(r.league_id);
+        if (!started.ok) { setErr(friendlyError(started.error ?? 'Could not start the draft.')); setBusy(false); return; }
+        onDone(r.league_id, r.roster_id ?? 1);
+        return;
+      }
+      setNote('Creating your league…');
       const r = await createNativeLeague(name, '2026', teams, rounds, pickSecs, mode, budget, lotSecs,
         mode === 'auction' ? maxLots : 1,
         nightOn ? nightStart * 60 : null, nightOn ? nightEnd * 60 : null);
@@ -179,13 +198,29 @@ export function NativeCreate({ onDone, onBack }: {
   return (
     <>
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
-        <div className="grotesk" style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>Start a fresh league</div>
-        <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Create it here, invite friends, draft in the app. No Sleeper / ESPN / Yahoo league required.</div>
+        <div className="grotesk" style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>
+          {kind === 'mock' ? 'Run a mock draft' : 'Start a fresh league'}
+        </div>
+        <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
+          {kind === 'mock'
+            ? 'Practice any draft format against AI teams. Nothing is kept — delete it when you’re done.'
+            : 'Create it here, invite friends, draft in the app. No Sleeper / ESPN / Yahoo league required.'}
+        </div>
       </div>
       <div style={card}>
-        <label className="mono" style={label}>LEAGUE NAME</label>
-        <input value={name} autoFocus maxLength={40} onChange={(e) => { setName(e.target.value); setErr(null); }}
-          onKeyDown={(e) => { if (e.key === 'Enter') create(); }} placeholder="e.g. Sunday Drip Society" style={{ ...input, marginTop: 7 }} />
+        {/* real league vs a throwaway practice room against the AI */}
+        <div className="mono" style={label}>WHAT ARE WE DRAFTING?</div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 7, marginBottom: 16 }}>
+          <Chip on={kind === 'league'} onClick={() => setKind('league')}>REAL LEAGUE</Chip>
+          <Chip on={kind === 'mock'} onClick={() => setKind('mock')}>🤖 MOCK DRAFT</Chip>
+        </div>
+        {kind === 'league' && (
+          <>
+            <label className="mono" style={label}>LEAGUE NAME</label>
+            <input value={name} autoFocus maxLength={40} onChange={(e) => { setName(e.target.value); setErr(null); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') create(); }} placeholder="e.g. Sunday Drip Society" style={{ ...input, marginTop: 7 }} />
+          </>
+        )}
         <div style={{ display: 'flex', gap: 18, marginTop: 16, flexWrap: 'wrap' }}>
           <div><div className="mono" style={label}>TEAMS</div><div style={{ marginTop: 7 }}>{num(teams, setTeams, 2, 14, 1)}</div></div>
           <div><div className="mono" style={label}>ROSTER SIZE</div><div style={{ marginTop: 7 }}>{num(rounds, setRounds, 5, 25, 1)}</div></div>
@@ -217,7 +252,9 @@ export function NativeCreate({ onDone, onBack }: {
           {mode === 'auction' && <div><div className="mono" style={label}>LOTS AT ONCE</div><div style={{ marginTop: 7 }}>{num(maxLots, setMaxLots, 1, 4, 1)}</div></div>}
         </div>
         {/* overnight quiet hours: clocks skip these ET hours entirely — no
-            deadline can land (or expire) while the league sleeps */}
+            deadline can land (or expire) while the league sleeps. Mocks skip
+            this — a practice room shouldn't sleep on you. */}
+        {kind === 'league' && (
         <div style={{ display: 'flex', gap: 18, marginTop: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div>
             <div className="mono" style={label}>OVERNIGHT PAUSE (ET)</div>
@@ -233,18 +270,21 @@ export function NativeCreate({ onDone, onBack }: {
             </>
           )}
         </div>
+        )}
         {pace === 'slow' && (
           <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>
             Slow drafts run for days. Fairness is built in: any bid restarts the full bid window (no sniping), hidden max bids answer for you while you're away, and a missed turn nominates from your own queue.
           </div>
         )}
-        <button onClick={create} disabled={busy || !name.trim()} className="mono"
-          style={{ ...btn, width: '100%', marginTop: 16, opacity: busy || !name.trim() ? 0.6 : 1 }}>
-          {busy ? (note || 'CREATING…') : 'CREATE LEAGUE →'}
+        <button onClick={create} disabled={busy || (kind === 'league' && !name.trim())} className="mono"
+          style={{ ...btn, width: '100%', marginTop: 16, opacity: busy || (kind === 'league' && !name.trim()) ? 0.6 : 1 }}>
+          {busy ? (note || 'CREATING…') : kind === 'mock' ? '🤖 START THE MOCK →' : 'CREATE LEAGUE →'}
         </button>
         {err && <div className="mono" style={errStyle}>{err}</div>}
         <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
-          You take seat 1 as commissioner. A 14-week head-to-head schedule is generated automatically; seats that stay empty are drafted and managed by the AI.
+          {kind === 'mock'
+            ? 'You take seat 1; every other seat is an AI team that picks, nominates, and bids on its own. The draft starts the moment the room opens.'
+            : 'You take seat 1 as commissioner. A 14-week head-to-head schedule is generated automatically; seats that stay empty are drafted and managed by the AI.'}
         </div>
       </div>
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
@@ -369,7 +409,12 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
     if (st?.status !== 'live' || st.paused || ticking.current) return;
     if ((overdueMs != null && overdueMs > 1200) || st.on_clock_auto) {
       ticking.current = true;
-      draftTick(leagueId).then((r) => { if ((r.autopicks ?? 0) + (r.lots_awarded ?? 0) > 0) refresh(); }).catch(() => {})
+      // A failing tick must be VISIBLE: swallowing it leaves the room frozen at
+      // 0:00 with nothing to go on. The 3s poll clears the banner on recovery.
+      draftTick(leagueId).then((r) => {
+        if (r.error) setErr(friendlyError(r.error));
+        if ((r.autopicks ?? 0) + (r.lots_awarded ?? 0) > 0) refresh();
+      }).catch(() => {})
         .finally(() => { ticking.current = false; });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -423,6 +468,19 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
     else run(() => makeDraftPick(leagueId, slug));
   };
 
+  // Mock rooms are disposable — delete leaves the room, so don't refresh a
+  // league that no longer exists (run() would).
+  const deleteMock = async () => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await deleteMockDraft(leagueId);
+      if (r.ok) { onBack(); return; }
+      setErr(friendlyError(r.error ?? 'Could not delete the mock.'));
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+
   if (!st) return (
     <div>
       <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>
@@ -454,6 +512,7 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
         <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>⛏ Draft room</div>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)' }}>{auction ? 'AUCTION' : 'SNAKE'}</span>
+        {st.is_mock && <span className="mono" title="practice room vs the AI — nothing is kept" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 7px' }}>🤖 MOCK</span>}
         {st.paused && <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 7px' }}>⏸ PAUSED</span>}
         {st.night && (
           <span className="mono" title="clocks skip these hours — deadlines never land overnight"
@@ -578,6 +637,7 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
                 : <button onClick={() => run(() => commishPauseDraft(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5 }}>⏸ PAUSE</button>}
               {!auction && <button onClick={() => run(() => commishForcePick(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5 }}>⏭ FORCE PICK</button>}
               {!auction && <button onClick={() => run(() => commishUndoPick(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5, color: 'var(--opp)' }}>↩ UNDO PICK</button>}
+              {st.is_mock && <button onClick={deleteMock} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5, color: 'var(--opp)' }}>🗑 DELETE MOCK</button>}
             </div>
           )}
           {err && <div className="mono" style={errStyle}>{err}</div>}
@@ -586,11 +646,15 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
 
       {st.status === 'complete' && (
         <div style={{ ...card, marginBottom: 12 }}>
-          <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--you)' }}>Draft complete.</div>
+          <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--you)' }}>{st.is_mock ? 'Mock draft complete.' : 'Draft complete.'}</div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
-            Rosters are live and weekly lineup pools are built. Waivers and free agency are open.
+            {st.is_mock
+              ? 'That was the whole show — review it on the BOARD and TEAMS tabs. Nothing carries into a season; delete the room when you’re done.'
+              : 'Rosters are live and weekly lineup pools are built. Waivers and free agency are open.'}
           </div>
-          <button onClick={onTeam} className="mono" style={{ ...btn, width: '100%', marginTop: 12 }}>⇄ MANAGE MY TEAM</button>
+          {st.is_mock
+            ? <button onClick={deleteMock} disabled={busy} className="mono" style={{ ...btn, width: '100%', marginTop: 12 }}>🗑 DELETE THIS MOCK</button>
+            : <button onClick={onTeam} className="mono" style={{ ...btn, width: '100%', marginTop: 12 }}>⇄ MANAGE MY TEAM</button>}
           {isCommish && st.mode === 'snake' && (
             <button onClick={() => run(() => commishUndoPick(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, width: '100%', marginTop: 8, fontSize: 9.5 }}>↩ UNDO LAST PICK (reopens the draft)</button>
           )}

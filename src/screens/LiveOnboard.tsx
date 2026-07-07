@@ -6,7 +6,7 @@ import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   getSession, onAuth, signOut, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, myEnrollments, myLinkedSleeper, claimMyRosters,
-  redeemCommish, isAdmin, commishOverview, friendlyError,
+  redeemCommish, isAdmin, commishOverview, friendlyError, deleteMockDraft,
   myMatchup, matchupTeams, leagueResults, defaultOpenWeek,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
 } from '../data/liveApi';
@@ -458,6 +458,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       onDraft={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('draft'); }}
       onTeam={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('team'); }}
       onAdd={() => setView('add')}
+      onDeleted={refresh}
       isCommish={isCommish}
     />
   );
@@ -465,10 +466,11 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onBoard, onResults, onManage, onDraft, onTeam, onAdd, isCommish }: {
+function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onBoard, onResults, onManage, onDraft, onTeam, onAdd, onDeleted, isCommish }: {
   enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
   onBoard: (leagueId: string, rosterId: number) => void; onResults: (leagueId: string) => void; onManage: (leagueId: string) => void;
-  onDraft: (leagueId: string, rosterId: number) => void; onTeam: (leagueId: string, rosterId: number) => void; onAdd: () => void; isCommish: boolean;
+  onDraft: (leagueId: string, rosterId: number) => void; onTeam: (leagueId: string, rosterId: number) => void; onAdd: () => void;
+  onDeleted: () => void; isCommish: boolean;
 }) {
   const [filter, setFilter] = useState<'all' | 'commish'>('all');
   const enrolledIds = new Set(enrollments.map((e) => e.league_id));
@@ -504,12 +506,14 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
       {/* Commissioned leagues on top; players below (hidden under the commish filter). */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12, alignItems: 'start' }}>
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} onResults={() => onResults(l.league_id)} />)}
-        {enrolledCommish.map((e) => (
-          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} />
-        ))}
-        {filter === 'all' && enrolledPlayer.map((e) => (
-          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} />
-        ))}
+        {enrolledCommish.map((e) => e.league?.is_mock
+          ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
+          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} />
+        )}
+        {filter === 'all' && enrolledPlayer.map((e) => e.league?.is_mock
+          ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
+          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} />
+        )}
       </div>
       <div style={{ textAlign: 'center', marginTop: 18 }}>
         <button onClick={onAdd} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>＋ add a league</button>
@@ -593,6 +597,42 @@ function CommishOnlyCard({ l, onManage, onResults }: { l: AdminLeague; onManage:
       <button onClick={onManage} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 12, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>⚑ manage league</button>
       <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
         <button onClick={onResults} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>▦ scores</button>
+      </div>
+    </div>
+  );
+}
+
+// A mock draft (0070): a practice room vs the AI. No season behind it, so no
+// lineup CTA and no matchup strip — the whole card is "get back in" or "wipe it".
+function MockLeagueCard({ e, onDraft, onDeleted }: { e: Enrollment; onDraft: () => void; onDeleted: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const del = async () => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await deleteMockDraft(e.league_id);
+      if (r.ok) { onDeleted(); return; }
+      setErr(friendlyError(r.error ?? 'Could not delete the mock.'));
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ ...card2, borderLeft: '3px solid var(--warn)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 18 }}>🤖</div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+            <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'Mock draft'}</span>
+            <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>🤖 MOCK DRAFT</span>
+          </div>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 3 }}>practice vs the AI · nothing is kept</div>
+        </div>
+      </div>
+      <button onClick={onDraft} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 12, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>⛏ ENTER THE DRAFT ROOM</button>
+      {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{err}</div>}
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+        <button onClick={del} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)', opacity: busy ? 0.6 : 1 }}>🗑 delete this mock</button>
       </div>
     </div>
   );

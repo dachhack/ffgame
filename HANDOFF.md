@@ -1,6 +1,46 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.102.0`_
+_Last updated: 2026-07-07 · Build `v0.103.0`_
+
+## Mock drafts vs the AI + frozen-auction fix (v0.103.0)
+Practice rooms for every draft shape (snake/auction × live/slow), and the bug
+that froze multi-lot auctions.
+- **MOCK DRAFTS (`0070_mock_drafts.sql`)**: a mock is a normal native league
+  with `league.is_mock = true` and seats 2..N handed to named bots
+  (`controller = 'ai'` — Otto Pick, Max Bid, Al Gorithm, …). One flag buys the
+  feature because the machinery already existed: `draft_tick` autopicks /
+  auto-nominates any non-live-human seat, and the 0068/0069 auction AI values
+  players and counter-bids second-price. `create_mock_draft(teams, rounds,
+  pick_seconds, mode, budget, lot_seconds, max_lots)` wraps
+  `create_native_league` (same validation + closed-testing gate). A mock gets
+  NO schedule (client skips `native_generate_schedule`, so
+  `native_materialize` no-ops — nothing leaks into the season pipeline), NO
+  joiners (`native_join` refuses is_mock), and NO permanence
+  (`delete_mock_draft`, commish/admin, refuses real leagues; cascade wipes the
+  tree). `draft_state` v7 adds `is_mock`.
+- **FROZEN-AUCTION FIX (found by the new probes — this was the live "stuck at
+  0:00, 0/N lots open" screenshot)**: with parallel lots, one `draft_tick` can
+  auto-nominate for several AI/vacant seats back-to-back, but
+  `native_autopick_slug`/`native_queue_pick` only excluded ROSTERED players —
+  not players already on the block. The second seat re-nominated the same
+  best-ranked player, hit `auction_lot`'s (league_id, slug) unique constraint,
+  and aborted the whole tick — every tick, forever. Both helpers now skip
+  on-the-block slugs (queue entries are skipped, not pruned — the seat may
+  still win that lot). Regression pinned in probe 19d2. Relatedly the room no
+  longer swallows `draft_tick` errors — a failing tick shows in the banner.
+- **Client**: the create wizard opens with REAL LEAGUE / 🤖 MOCK DRAFT. Mock
+  path: no name (server stamps "Mock <date>"), no overnight-pause controls,
+  create → seed pool → auto-`start_draft` → straight into the room. The room
+  shows a 🤖 MOCK chip, commish controls gain 🗑 DELETE MOCK, and the
+  completion card becomes review-and-delete (no team-manage CTA). My-leagues
+  home renders mocks as their own card (enter the draft room / delete) instead
+  of a lineup card.
+- Probes → **276 assertions** (18: mock snake — gate, bot seats, join refusal,
+  is_mock in state, AI picks instantly then waits on the human, manual human
+  pick mid-clock, full run-out with 1 K + 1 DEF per roster, no
+  sleeper_lineup/matchup rows, delete permissions; 19: mock auction — both
+  lots auto-filled by AI with distinct top-ranked players, counter-bids
+  landed, human outbids live, full run-out, budgets non-negative, cleanup).
 
 ## Overnight quiet hours + parallel auction lots (v0.102.0)
 Both draft types can now sleep, and auctions can run several lots at once.

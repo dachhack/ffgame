@@ -733,4 +733,131 @@ begin
   perform assert_true((select count(*) from auction_lot where league_id = lid) = 0, '17x no orphan lots');
 end $$;
 
+-- ── 18. mock drafts (0070): AI opponents, solo practice, delete ──────────────
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text;
+begin
+  -- same closed-testing gate as real native leagues
+  perform probe_as('b');
+  perform assert_err(create_mock_draft(4), 'closed testing', '18a non-admin gated');
+
+  -- SNAKE mock: creator + 3 named bots
+  perform probe_as('a');
+  r := create_mock_draft(4, 5, 60, 'snake');
+  perform assert_ok(r, '18b create mock snake');
+  lid := (r ->> 'league_id')::uuid;
+  perform assert_true((select is_mock from league where id = lid), '18c is_mock set');
+  perform assert_true((select count(*) from league_membership where league_id = lid and controller = 'ai') = 3, '18d three AI seats');
+  perform assert_true(not exists (select 1 from league_membership where league_id = lid
+    and sleeper_roster_id > 1 and team_name like 'Team %'), '18e bots have names');
+  -- an invite code exists but seats nobody
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_err(native_join(code), 'solo practice', '18f join refused');
+
+  -- pool: 16 skill + 4 K + 4 DEF (≥ 4 teams × 5 rounds)
+  perform probe_as('a');
+  for i in 1..8 loop
+    pool := pool || jsonb_build_object('slug', 'mk-rb' || i, 'full', 'MK RB ' || i, 'pos', 'RB', 'team', 'T');
+    pool := pool || jsonb_build_object('slug', 'mk-wr' || i, 'full', 'MK WR ' || i, 'pos', 'WR', 'team', 'T');
+  end loop;
+  for i in 1..4 loop
+    pool := pool || jsonb_build_object('slug', 'mk-k' || i, 'full', 'MK K ' || i, 'pos', 'K', 'team', 'T');
+    pool := pool || jsonb_build_object('slug', 'mk-d' || i, 'full', 'MK D ' || i, 'pos', 'DEF', 'team', 'T');
+  end loop;
+  perform assert_ok(seed_league_pool(lid, pool), '18g seed');
+  perform assert_ok(start_draft(lid, '[2,1,3,4]'::jsonb), '18h start');
+  r := draft_state(lid);
+  perform assert_true((r ->> 'is_mock')::boolean, '18i state says mock');
+  perform assert_true((r ->> 'on_clock')::int = 2 and (r ->> 'on_clock_auto')::boolean, '18j AI on the clock reads auto');
+
+  -- one tick: the AI leadoff seat picks instantly, then it's the human's turn
+  perform draft_tick(lid);
+  r := draft_state(lid);
+  perform assert_true((r ->> 'on_clock')::int = 1 and not (r ->> 'on_clock_auto')::boolean, '18k human up after AI pick');
+  perform assert_true((select count(*) from draft_pick where league_id = lid) = 1
+    and (select auto from draft_pick where league_id = lid and overall = 1), '18l AI pick marked auto');
+  -- the human drafts by hand, mid-clock
+  perform assert_ok(make_draft_pick(lid, 'mk-wr1'), '18m human picks');
+  -- next tick carries the AI seats to the human's round-2 turn (snake: 3,4 → 4,3)
+  perform draft_tick(lid);
+  r := draft_state(lid);
+  perform assert_true((r ->> 'on_clock')::int = 1, '18n human up again in round 2');
+  perform assert_true((select count(*) from draft_pick where league_id = lid) = 6, '18o AI filled to my pick');
+
+  -- run it out (expired human clocks autopick, same as a real draft)
+  for i in 1..30 loop
+    update draft set deadline_at = now() - interval '1 second' where league_id = lid and status = 'live';
+    perform draft_tick(lid);
+    exit when (select status from draft where league_id = lid) = 'complete';
+  end loop;
+  perform assert_true((select status from draft where league_id = lid) = 'complete', '18p mock snake completes');
+  perform assert_true((select count(*) from native_roster where league_id = lid) = 20, '18q all 20 picks made');
+  perform assert_true(not exists (
+    select 1 from native_roster nr join league_pool lp on lp.league_id = nr.league_id and lp.slug = nr.slug
+    where nr.league_id = lid group by nr.roster_id
+    having count(*) filter (where lp.pos = 'K') <> 1 or count(*) filter (where lp.pos = 'DEF') <> 1
+  ), '18r every roster ends with 1 K + 1 DEF');
+  -- no schedule ⇒ nothing materializes into the season pipeline
+  perform assert_true(not exists (select 1 from sleeper_lineup where league_id = lid), '18s no season lineups');
+  perform assert_true(not exists (select 1 from matchup where league_id = lid), '18t no schedule');
+
+  -- deletion: only the mock's commish/admin, and only mocks
+  perform probe_as('b');
+  perform assert_err(delete_mock_draft(lid), 'forbidden', '18u stranger cannot delete');
+  perform probe_as('a');
+  perform assert_err(delete_mock_draft(current_setting('probe.lid')::uuid), 'not a mock', '18v real league refused');
+  perform assert_ok(delete_mock_draft(lid), '18w delete mock');
+  perform assert_true(not exists (select 1 from league where id = lid), '18x league gone');
+end $$;
+
+-- ── 19. mock AUCTION: AI nominates, counter-bids, and the room self-runs ─────
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; nlots int;
+begin
+  perform probe_as('a');
+  -- 3 teams · 5 spots · $20 · 2 parallel lots, human takes seat 1
+  r := create_mock_draft(3, 5, 60, 'auction', 20, 15, 2);
+  perform assert_ok(r, '19a create mock auction');
+  lid := (r ->> 'league_id')::uuid;
+  for i in 1..20 loop
+    pool := pool || jsonb_build_object('slug', 'ma-rb' || i, 'full', 'MA RB ' || i, 'pos', 'RB', 'team', 'T');
+  end loop;
+  perform assert_ok(seed_league_pool(lid, pool), '19b seed');
+  perform assert_ok(start_draft(lid, '[2,3,1]'::jsonb), '19c start');
+
+  -- one tick: the two AI seats nominate both lots without waiting for a bell
+  perform draft_tick(lid);
+  select count(*) into nlots from auction_lot where league_id = lid;
+  perform assert_true(nlots = 2, '19d AI fills both lots');
+  -- regression (0070): back-to-back auto-nominations must pick DISTINCT players
+  -- (autopick used to ignore the block and re-nominate the top-ranked player,
+  -- aborting the tick on auction_lot's unique constraint — a frozen room)
+  perform assert_true((select count(distinct slug) from auction_lot where league_id = lid) = 2
+    and exists (select 1 from auction_lot where league_id = lid and slug = 'ma-rb1')
+    and exists (select 1 from auction_lot where league_id = lid and slug = 'ma-rb2'), '19d2 top-2 ranked on the block');
+  -- AI counter-bidding already priced the top of the board above the $1 open
+  perform assert_true((select max(bid) from auction_lot where league_id = lid) > 1, '19e counter-bids landed');
+
+  -- the human can outbid a live lot
+  r := draft_state(lid);
+  perform assert_true((r ->> 'is_mock')::boolean, '19f state says mock');
+  perform assert_ok(place_bid(lid, 1, (select min(bid) from auction_lot where league_id = lid) + 1,
+    (select id from auction_lot where league_id = lid order by bid limit 1)), '19g human bids');
+
+  -- run it out: bells + windows expire until every roster is full
+  for i in 1..40 loop
+    update auction_lot set deadline = deadline - interval '2 days' where league_id = lid;
+    update draft set deadline_at = coalesce(deadline_at, now()) - interval '2 days'
+      where league_id = lid and status = 'live';
+    perform draft_tick(lid);
+    exit when (select status from draft where league_id = lid) = 'complete';
+  end loop;
+  perform assert_true((select status from draft where league_id = lid) = 'complete', '19h mock auction completes');
+  perform assert_true((select count(*) from native_roster where league_id = lid) = 15, '19i 15 spots filled');
+  perform assert_true(not exists (select 1 from league_membership where league_id = lid and draft_budget < 0), '19j no negative budgets');
+  perform assert_true(not exists (select 1 from sleeper_lineup where league_id = lid), '19k no season lineups');
+  perform assert_ok(delete_mock_draft(lid), '19l delete mock');
+end $$;
+
 select 'ALL PROBES PASSED' as result;
