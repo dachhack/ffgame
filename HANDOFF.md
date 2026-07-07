@@ -1,6 +1,44 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.101.0`_
+_Last updated: 2026-07-07 · Build `v0.102.0`_
+
+## Overnight quiet hours + parallel auction lots (v0.102.0)
+Both draft types can now sleep, and auctions can run several lots at once.
+- **OVERNIGHT (`0069_night_multilot.sql`) — night-aware clocks, not frozen
+  state**: every deadline the engine sets (pick clock, nomination window, bid
+  bell) goes through `awake_deadline(from, secs, night_start_min,
+  night_end_min)` which counts only awake ET time (America/New_York → DST
+  safe; wrap-around windows like 22:00→10:00 supported). Consequences: NO
+  deadline can ever expire overnight (no 3am autopicks, no 10:00:01 avalanche
+  — remaining clock always burns in daylight); manual picks/bids stay legal at
+  night (a night bid gives rivals until morning + the full window). Config per
+  league at creation (`draft.night_start_min/night_end_min`, both-or-neither);
+  wizard gets 🌙 OVERNIGHT PAUSE (ET) + FROM/UNTIL hour steppers; the room
+  header shows the quiet-hours chip (highlighted while night). Pure-function
+  probes pin exact answers incl. a 36h clock spanning two nights.
+- **PARALLEL LOTS**: the lot moved off the draft row into `auction_lot`
+  (member-readable; `lot_proxy` now keyed per lot, still no read policy).
+  `draft.max_lots` 1–4; the nomination turn advances on NOMINATION (not
+  award), so the room fills to capacity; `deadline_at` is the next nominator's
+  window only while capacity exists. THE MONEY RULES that make simultaneous
+  bidding safe (`auction_lot_max`): committed = Σ bids on lots you hold;
+  capacity = spots left − lots held; max on another lot = budget − committed −
+  $1×(capacity−1); no capacity ⇒ can't bid or nominate. A seat can never win
+  into a negative budget or an overfull roster (probed: 17l–17n exact math).
+  Awards are per-lot at each lot's own quiet-window bell; `draft_state` v6
+  returns `lots[]` (each with the caller's own `my_proxy` + per-lot `my_max`)
+  and budgets gain `committed`. `place_bid`/`set_lot_proxy` take an optional
+  lot id (default = oldest open lot, so single-lot flows are unchanged).
+- **Client**: stacked lot panels (per-lot bell, quick bids gated by per-lot
+  max, per-lot 🕶 MAX input), nomination banner shows only when the room has
+  capacity, budget strip shows committed + lots open; wizard gains LOTS AT
+  ONCE (auction). `ai_lot_willingness` v2 returns the UNCAPPED model value —
+  the per-lot cap now lives in the resolver (old `auction_max_bid` dropped).
+- Probes → **239 assertions** (16: exact awake_deadline arithmetic ×6 + config
+  gates + state surface; 17: parallel lots — turn advances on nomination,
+  capacity gate at max_lots, committed-money max enforced to the dollar, lot
+  independence, bell frees capacity + reopens the nomination clock, full
+  run-out clean). Sections 13–15 ported to the lot-table model.
 
 ## AI counter-bidding + slow drafts with fair auction turns (v0.101.0)
 Closes the two v0.100.0 auction gaps and adds days-long draft pacing.

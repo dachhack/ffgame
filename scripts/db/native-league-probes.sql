@@ -478,7 +478,7 @@ begin
   perform assert_err(nominate(lid, 'a-rb1', 25), 'max', '13i opening bid over max');
   perform assert_ok(nominate(lid, 'a-rb1', 3), '13j nominate at $3');
   r := draft_state(lid);
-  perform assert_true((r -> 'lot' ->> 'slug') = 'a-rb1' and (r -> 'lot' ->> 'bid')::int = 3, '13k lot open');
+  perform assert_true((r -> 'lots' -> 0 ->> 'slug') = 'a-rb1' and (r -> 'lots' -> 0 ->> 'bid')::int = 3, '13k lot open');
 
   -- bidding gates
   perform assert_err(place_bid(lid, 1, 4), 'high bidder', '13l cannot outbid yourself');
@@ -491,9 +491,9 @@ begin
   perform assert_ok(commish_pause_draft(lid), '13p pause lot');
   perform assert_err(place_bid(lid, 1, 6), 'paused', '13p2 no bids while paused');
   perform assert_ok(commish_resume_draft(lid), '13q resume lot');
-  perform assert_true((select lot_deadline from draft where league_id = lid) > now(), '13r lot clock restored');
+  perform assert_true((select deadline from auction_lot where league_id = lid) > now(), '13r lot clock restored');
   -- award at the bell
-  update draft set lot_deadline = now() - interval '1 second' where league_id = lid;
+  update auction_lot set deadline = now() - interval '1 second' where league_id = lid;
   r := draft_tick(lid);
   perform assert_true((r ->> 'lots_awarded')::int = 1, '13s lot awarded');
   perform assert_true(exists (select 1 from native_roster where league_id = lid and roster_id = 2 and slug = 'a-rb1'), '13t B owns him');
@@ -502,12 +502,12 @@ begin
   -- next nominator (seat 2, human): expire the nomination clock → auto-nominate at $1
   update draft set deadline_at = now() - interval '1 second' where league_id = lid;
   r := draft_tick(lid);
-  perform assert_true((select lot_slug from draft where league_id = lid) is not null, '13w auto-nominated');
-  perform assert_true((select lot_bid from draft where league_id = lid) = 1 and (select lot_roster from draft where league_id = lid) = 2, '13x $1 by seat 2');
+  perform assert_true((select count(*) from auction_lot where league_id = lid) = 1, '13w auto-nominated');
+  perform assert_true((select bid from auction_lot where league_id = lid) = 1 and (select roster_id from auction_lot where league_id = lid) = 2, '13x $1 by seat 2');
   -- run the auction out: expire everything until complete
   for i in 1..20 loop
-    update draft set lot_deadline = coalesce(lot_deadline, now()) - interval '1 hour',
-                     deadline_at = coalesce(deadline_at, now()) - interval '1 hour'
+    update auction_lot set deadline = deadline - interval '1 hour' where league_id = lid;
+    update draft set deadline_at = coalesce(deadline_at, now()) - interval '1 hour'
       where league_id = lid and status = 'live';
     perform draft_tick(lid);
     exit when (select status from draft where league_id = lid) = 'complete';
@@ -540,17 +540,17 @@ begin
   -- A nominates the RANK-1 player at $1 → the vacant AI seat counters at once
   -- (its model values rank 1 at ~$6-8 on a $20 budget; nominator max was $1).
   perform assert_ok(nominate(lid, 'p-rb1', 1), '14f nominate rank 1 at $1');
-  select lot_bid, lot_roster into ai_bid, ai_holder from draft where league_id = lid;
+  select bid, roster_id into ai_bid, ai_holder from auction_lot where league_id = lid;
   perform assert_true(ai_holder = 3, '14g AI seat counter-bid and holds');
-  perform assert_true(ai_bid > 1 and ai_bid <= auction_max_bid(lid, 3, 5), '14h AI price sane');
+  perform assert_true(ai_bid > 1 and ai_bid <= auction_lot_max(lid, 3, 5, (select id from auction_lot where league_id = lid)), '14h AI price sane');
   -- the AI bid reset the bell to the FULL slow window (no sniping)
-  perform assert_true((select lot_deadline from draft where league_id = lid) > now() + interval '7 hours', '14i full-window reset');
+  perform assert_true((select deadline from auction_lot where league_id = lid) > now() + interval '7 hours', '14i full-window reset');
 
   -- a human beating the AI's whole valuation takes it and keeps it
   perform probe_as('b');
   perform assert_ok(place_bid(lid, 2, 9), '14j B bids $9 over AI max');
-  perform assert_true((select lot_roster from draft where league_id = lid) = 2, '14k B holds');
-  update draft set lot_deadline = now() - interval '1 second' where league_id = lid;
+  perform assert_true((select roster_id from auction_lot where league_id = lid) = 2, '14k B holds');
+  update auction_lot set deadline = now() - interval '1 second' where league_id = lid;
   perform draft_tick(lid);
   perform assert_true((select price from draft_pick where league_id = lid and overall = 1) = 9, '14l B paid $9');
   perform assert_true((select draft_budget from league_membership where league_id = lid and sleeper_roster_id = 2) = 11, '14m budget 20-9');
@@ -558,13 +558,13 @@ begin
   -- nominator seat 2 (human) misses the window → auto-nominates; lot opens
   update draft set deadline_at = now() - interval '1 second' where league_id = lid;
   perform draft_tick(lid);
-  perform assert_true((select lot_slug from draft where league_id = lid) is not null, '14n missed turn auto-nominates');
+  perform assert_true((select count(*) from auction_lot where league_id = lid) = 1, '14n missed turn auto-nominates');
 
   -- run the slow auction out: AI keeps bidding by value, nothing goes negative
   -- slow clocks are 8h/12h — leap 2 days per iteration so every window expires
   for i in 1..80 loop
-    update draft set lot_deadline = coalesce(lot_deadline, now()) - interval '2 days',
-                     deadline_at = coalesce(deadline_at, now()) - interval '2 days'
+    update auction_lot set deadline = deadline - interval '2 days' where league_id = lid;
+    update draft set deadline_at = coalesce(deadline_at, now()) - interval '2 days'
       where league_id = lid and status = 'live';
     perform draft_tick(lid);
     exit when (select status from draft where league_id = lid) = 'complete';
@@ -595,33 +595,142 @@ begin
   -- B sets a hidden max of $10 → proxy takes the lot at holder_max+1 = $2
   perform probe_as('b');
   perform assert_ok(set_lot_proxy(lid, 2, 10), '15f B sets hidden max $10');
-  perform assert_true((select lot_roster from draft where league_id = lid) = 2, '15g proxy holds the lot');
-  perform assert_true((select lot_bid from draft where league_id = lid) = 2, '15h at $2, not $10');
+  perform assert_true((select roster_id from auction_lot where league_id = lid) = 2, '15g proxy holds the lot');
+  perform assert_true((select bid from auction_lot where league_id = lid) = 2, '15h at $2, not $10');
   r := draft_state(lid);
-  perform assert_true((r ->> 'my_proxy')::int = 10, '15i B sees own proxy');
+  perform assert_true((r -> 'lots' -> 0 ->> 'my_proxy')::int = 10, '15i B sees own proxy');
   perform probe_as('a');
   r := draft_state(lid);
-  perform assert_true(r ->> 'my_proxy' is null, '15j A cannot see B''s max');
+  perform assert_true(r -> 'lots' -> 0 ->> 'my_proxy' is null, '15j A cannot see B''s max');
   perform assert_true((select count(*) from pg_policies where tablename = 'lot_proxy') = 0, '15k proxy table unreadable');
 
   -- A bids $5 manually → B's proxy answers instantly at $6, A told "outbid"
   r := place_bid(lid, 1, 5);
   perform assert_ok(r, '15l A bids $5');
   perform assert_true(coalesce((r ->> 'outbid')::boolean, false), '15m A told outbid');
-  perform assert_true((select lot_roster from draft where league_id = lid) = 2 and (select lot_bid from draft where league_id = lid) = 6, '15n proxy defends at $6');
+  perform assert_true((select roster_id from auction_lot where league_id = lid) = 2 and (select bid from auction_lot where league_id = lid) = 6, '15n proxy defends at $6');
 
   -- A sets a BIGGER hidden max ($12) → beats B's $10 at second+1 = $11
   r := set_lot_proxy(lid, 1, 12);
   perform assert_ok(r, '15o A sets max $12');
-  perform assert_true((select lot_roster from draft where league_id = lid) = 1 and (select lot_bid from draft where league_id = lid) = 11, '15p A wins the duel at $11');
+  perform assert_true((select roster_id from auction_lot where league_id = lid) = 1 and (select bid from auction_lot where league_id = lid) = 11, '15p A wins the duel at $11');
   perform assert_err(set_lot_proxy(lid, 1, 17), 'max bid', '15q proxy respects budget floor');
 
   -- bell → A pays $11; proxies cleared for the next lot
-  update draft set lot_deadline = now() - interval '1 second' where league_id = lid;
+  update auction_lot set deadline = now() - interval '1 second' where league_id = lid;
   perform draft_tick(lid);
   perform assert_true((select price from draft_pick where league_id = lid and overall = 1) = 11, '15r paid $11');
   perform assert_true((select draft_budget from league_membership where league_id = lid and sleeper_roster_id = 1) = 9, '15s budget 20-11');
   perform assert_true((select count(*) from lot_proxy where league_id = lid) = 0, '15t proxies cleared');
+end $$;
+
+-- ── 16. night-aware clock arithmetic (0069) — pure function, exact answers ──
+do $$
+begin
+  -- July ⇒ EDT (−04). Quiet hours 22:00→10:00 (1320→600).
+  -- 9pm + 2h clock: 1h awake tonight, 1h tomorrow morning → 11:00.
+  perform assert_true(awake_deadline('2026-07-07 21:00:00-04', 7200, 1320, 600)
+    = '2026-07-08 11:00:00-04'::timestamptz, '16a clock spans the night');
+  -- set DURING the night: starts counting at 10:00 → 10:10.
+  perform assert_true(awake_deadline('2026-07-08 02:00:00-04', 600, 1320, 600)
+    = '2026-07-08 10:10:00-04'::timestamptz, '16b night start defers to morning');
+  -- non-wrapping window 01:00→05:00: 00:30 + 1h → 30min awake + night + 30min = 05:30.
+  perform assert_true(awake_deadline('2026-07-08 00:30:00-04', 3600, 60, 300)
+    = '2026-07-08 05:30:00-04'::timestamptz, '16c non-wrap window');
+  -- clock that fits before the night is untouched.
+  perform assert_true(awake_deadline('2026-07-07 12:00:00-04', 3600, 1320, 600)
+    = '2026-07-07 13:00:00-04'::timestamptz, '16d daytime clock unchanged');
+  -- no config = plain addition.
+  perform assert_true(awake_deadline('2026-07-07 21:00:00-04', 7200, null, null)
+    = '2026-07-07 23:00:00-04'::timestamptz, '16e no quiet hours');
+  -- 36h slow clock from 6pm crosses TWO nights (12h/night): 36h awake
+  -- = 4h (18→22) + 12h (10→22) + 12h (10→22) + 8h → day+3 06:00... verify:
+  perform assert_true(awake_deadline('2026-07-07 18:00:00-04', 129600, 1320, 600)
+    = '2026-07-10 18:00:00-04'::timestamptz, '16f multi-night clock');
+end $$;
+
+-- config storage + state surface
+do $$
+declare lid uuid; r jsonb;
+begin
+  perform probe_as('a');
+  perform assert_err(create_native_league('X', '2026', 2, 5, 60, 'snake', 200, 15, 1, 1320, null),
+    'start and an end', '16g night needs both bounds');
+  r := create_native_league('Night Owls', '2026', 2, 5, 60, 'snake', 200, 15, 1, 1320, 600);
+  perform assert_ok(r, '16h create with quiet hours');
+  lid := (r ->> 'league_id')::uuid;
+  perform assert_true((select night_start_min from draft where league_id = lid) = 1320, '16i stored');
+  r := draft_state(lid);
+  perform assert_true((r -> 'night' ->> 'start_min')::int = 1320 and (r -> 'night' ->> 'end_min')::int = 600, '16j state exposes night');
+end $$;
+
+-- ── 17. parallel lots (0069): capacity, committed money, independence ────────
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text;
+  lot1 uuid; lot2 uuid;
+begin
+  perform probe_as('a');
+  r := create_native_league('Two Rings', '2026', 2, 5, 60, 'auction', 20, 30, 2);
+  perform assert_ok(r, '17a create max_lots=2');
+  lid := (r ->> 'league_id')::uuid;
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Rings'), '17b B joins');
+  perform probe_as('a');
+  for i in 1..12 loop pool := pool || jsonb_build_object('slug', 'm-rb' || i, 'full', 'M RB ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  perform assert_ok(seed_league_pool(lid, pool), '17c seed');
+  perform assert_ok(start_draft(lid, '[1,2]'::jsonb), '17d start');
+
+  -- A nominates lot 1; the TURN advances to B while lot 1 runs
+  perform assert_ok(nominate(lid, 'm-rb1', 1), '17e A opens lot 1');
+  r := draft_state(lid);
+  perform assert_true((r ->> 'on_clock')::int = 2, '17f nomination turn advanced to B');
+  perform assert_true(jsonb_array_length(r -> 'lots') = 1, '17g one lot open');
+  -- B nominates lot 2 in parallel
+  perform probe_as('b');
+  perform assert_ok(nominate(lid, 'm-rb2', 2), '17h B opens lot 2');
+  select id into lot1 from auction_lot where league_id = lid and slug = 'm-rb1';
+  select id into lot2 from auction_lot where league_id = lid and slug = 'm-rb2';
+  -- room is at capacity: a third nomination must wait for a bell
+  perform probe_as('a');
+  perform assert_err(nominate(lid, 'm-rb3', 1), 'lots are open', '17i capacity gate');
+  perform assert_true((select deadline_at from draft where league_id = lid) is null, '17j no nomination clock at capacity');
+  -- a player on the block cannot be nominated twice (would be caught by capacity
+  -- anyway here, but the uniqueness rule matters once a bell frees a slot)
+  perform assert_true(exists (select 1 from auction_lot where league_id = lid and slug = 'm-rb2'), '17k lot 2 exists');
+
+  -- committed-money math: B holds lot 2 at $2 (committed 2, held 1, 5 spots)
+  -- → max on lot 1 = 20 − 2 − (4−1)·$1 = 15; $16 must be rejected, $15 legal.
+  perform probe_as('b');
+  perform assert_true(auction_lot_max(lid, 2, 5, lot1) = 15, '17l committed max math');
+  r := place_bid(lid, 2, 16, lot1);
+  perform assert_err(r, 'max bid', '17m over committed max');
+  perform assert_ok(place_bid(lid, 2, 15, lot1), '17n $15 legal');
+  -- lots are independent: lot 2 untouched by lot-1 bidding
+  perform assert_true((select bid from auction_lot where id = lot2) = 2, '17o lot 2 unaffected');
+
+  -- award lot 1 only → capacity frees → nomination clock reopens (A's turn)
+  update auction_lot set deadline = now() - interval '1 second' where id = lot1;
+  r := draft_tick(lid);
+  perform assert_true((r ->> 'lots_awarded')::int = 1, '17p one bell, one award');
+  perform assert_true(exists (select 1 from native_roster where league_id = lid and roster_id = 2 and slug = 'm-rb1'), '17q B won lot 1 at $15');
+  perform assert_true((select draft_budget from league_membership where league_id = lid and sleeper_roster_id = 2) = 5, '17r paid from budget');
+  perform assert_true(exists (select 1 from auction_lot where id = lot2), '17s lot 2 still running');
+  r := draft_state(lid);
+  perform assert_true((r ->> 'on_clock')::int = 1 and (r ->> 'deadline_at') is not null, '17t nomination reopened for A');
+
+  -- run it out: both seats fill all 5 spots, money stays sane
+  for i in 1..40 loop
+    update auction_lot set deadline = deadline - interval '2 days' where league_id = lid;
+    update draft set deadline_at = coalesce(deadline_at, now()) - interval '2 days'
+      where league_id = lid and status = 'live';
+    perform draft_tick(lid);
+    exit when (select status from draft where league_id = lid) = 'complete';
+  end loop;
+  perform assert_true((select status from draft where league_id = lid) = 'complete', '17u completes');
+  perform assert_true((select count(*) from native_roster where league_id = lid) = 10, '17v 10 spots filled');
+  perform assert_true(not exists (select 1 from league_membership where league_id = lid and draft_budget < 0), '17w no negative budgets');
+  perform assert_true((select count(*) from auction_lot where league_id = lid) = 0, '17x no orphan lots');
 end $$;
 
 select 'ALL PROBES PASSED' as result;

@@ -39,6 +39,13 @@ const hdr: React.CSSProperties = { fontSize: 10, letterSpacing: '0.12em', color:
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 const posLabel = (p: string) => (p === 'DEF' ? 'D/ST' : p);
 
+/** "10 PM" from minutes-since-midnight ET. */
+function fmtEtMin(m: number): string {
+  const h = Math.floor(m / 60) % 24;
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}${m % 60 ? ':' + String(m % 60).padStart(2, '0') : ''} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
 /** Countdown text at any scale: "2d 4h", "7h 12m", "3:07". */
 function fmtCountdown(secs: number): string {
   if (secs >= 86400) return `${Math.floor(secs / 86400)}d ${Math.floor((secs % 86400) / 3600)}h`;
@@ -111,6 +118,10 @@ export function NativeCreate({ onDone, onBack }: {
   const [clockHrs, setClockHrs] = useState(12);   // slow: pick/nomination window
   const [bellSecs, setBellSecs] = useState(15);   // live auction bell
   const [bellHrs, setBellHrs] = useState(8);      // slow auction bell
+  const [maxLots, setMaxLots] = useState(1);      // auction: parallel lots
+  const [nightOn, setNightOn] = useState(false);  // overnight quiet hours (ET)
+  const [nightStart, setNightStart] = useState(22);
+  const [nightEnd, setNightEnd] = useState(10);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [err, setErr] = useState<string | null>(null);
@@ -124,7 +135,9 @@ export function NativeCreate({ onDone, onBack }: {
       setNote('Creating your league…');
       const pickSecs = pace === 'slow' ? clockHrs * 3600 : clock;
       const lotSecs = pace === 'slow' ? bellHrs * 3600 : bellSecs;
-      const r = await createNativeLeague(name, '2026', teams, rounds, pickSecs, mode, budget, lotSecs);
+      const r = await createNativeLeague(name, '2026', teams, rounds, pickSecs, mode, budget, lotSecs,
+        mode === 'auction' ? maxLots : 1,
+        nightOn ? nightStart * 60 : null, nightOn ? nightEnd * 60 : null);
       if (!r.ok || !r.league_id) { setErr(friendlyError(r.error ?? 'Could not create the league.')); setBusy(false); return; }
       setNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
@@ -201,6 +214,24 @@ export function NativeCreate({ onDone, onBack }: {
           {mode === 'auction' && (pace === 'live'
             ? <div><div className="mono" style={label}>BID BELL (SEC)</div><div style={{ marginTop: 7 }}>{num(bellSecs, setBellSecs, 10, 60, 5)}</div></div>
             : <div><div className="mono" style={label}>BID WINDOW (HRS)</div><div style={{ marginTop: 7 }}>{num(bellHrs, setBellHrs, 1, 48, 1)}</div></div>)}
+          {mode === 'auction' && <div><div className="mono" style={label}>LOTS AT ONCE</div><div style={{ marginTop: 7 }}>{num(maxLots, setMaxLots, 1, 4, 1)}</div></div>}
+        </div>
+        {/* overnight quiet hours: clocks skip these ET hours entirely — no
+            deadline can land (or expire) while the league sleeps */}
+        <div style={{ display: 'flex', gap: 18, marginTop: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div>
+            <div className="mono" style={label}>OVERNIGHT PAUSE (ET)</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+              <Chip on={!nightOn} onClick={() => setNightOn(false)}>OFF</Chip>
+              <Chip on={nightOn} onClick={() => setNightOn(true)}>🌙 ON</Chip>
+            </div>
+          </div>
+          {nightOn && (
+            <>
+              <div><div className="mono" style={label}>FROM ({nightStart % 12 === 0 ? 12 : nightStart % 12} {nightStart < 12 ? 'AM' : 'PM'})</div><div style={{ marginTop: 7 }}>{num(nightStart, setNightStart, 0, 23, 1)}</div></div>
+              <div><div className="mono" style={label}>UNTIL ({nightEnd % 12 === 0 ? 12 : nightEnd % 12} {nightEnd < 12 ? 'AM' : 'PM'})</div><div style={{ marginTop: 7 }}>{num(nightEnd, setNightEnd, 0, 23, 1)}</div></div>
+            </>
+          )}
         </div>
         {pace === 'slow' && (
           <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>
@@ -297,7 +328,7 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
   const [cardFor, setCardFor] = useState<LeaguePoolPlayer | null>(null);
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
-  const [proxyDraft, setProxyDraft] = useState('');
+  const [proxyDraft, setProxyDraft] = useState<Record<string, string>>({});   // per-lot hidden-max inputs
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -325,20 +356,24 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
 
-  // Advance the room when the active clock is overdue or the seat is auto —
-  // draft_tick autopicks (snake), awards lots + auto-nominates (auction).
-  const activeDeadline = st?.lot ? st.lot.deadline_at : st?.deadline_at;
-  const deadlineMs = activeDeadline ? Date.parse(activeDeadline) : null;
+  // Advance the room when ANY clock (nomination/pick or a lot's bell) is
+  // overdue, or the acting seat is auto — draft_tick autopicks (snake), awards
+  // due lots + auto-nominates (auction).
+  const allDeadlines = [
+    ...(st?.deadline_at ? [Date.parse(st.deadline_at)] : []),
+    ...(st?.lots ?? []).map((l) => Date.parse(l.deadline_at)),
+  ];
+  const deadlineMs = allDeadlines.length ? Math.min(...allDeadlines) : null;
   const overdueMs = deadlineMs != null ? (now + skew.current) - deadlineMs : null;
   useEffect(() => {
     if (st?.status !== 'live' || st.paused || ticking.current) return;
-    if ((overdueMs != null && overdueMs > 1200) || (!st.lot && st.on_clock_auto)) {
+    if ((overdueMs != null && overdueMs > 1200) || st.on_clock_auto) {
       ticking.current = true;
       draftTick(leagueId).then((r) => { if ((r.autopicks ?? 0) + (r.lots_awarded ?? 0) > 0) refresh(); }).catch(() => {})
         .finally(() => { ticking.current = false; });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [now, st?.status, st?.on_clock, st?.lot?.slug]);
+  }, [now, st?.status, st?.on_clock, st?.lots?.length]);
 
   const byRoster = useMemo(() => {
     const m: Record<number, { team: string | null; avatar: string | null }> = {};
@@ -353,7 +388,6 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
   const auction = st?.mode === 'auction';
   const myTurn = st?.status === 'live' && !st.paused && st.on_clock != null && st.on_clock === myRoster;
   const myBudget = auction ? st?.budgets?.find((b) => b.roster_id === myRoster) : null;
-  const lotOpen = !!st?.lot;
 
   const avail = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -384,8 +418,8 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
   };
 
   const act = (slug: string) => {
-    if (!myTurn) return;
-    if (auction) { if (!lotOpen) run(() => nominate(leagueId, slug, 1)); }
+    if (!myTurn) return;   // auction: on_clock is null while the room is at lot capacity
+    if (auction) run(() => nominate(leagueId, slug, 1));
     else run(() => makeDraftPick(leagueId, slug));
   };
 
@@ -398,13 +432,10 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
 
   const teams = st.order?.length ?? 0;
   const round = teams ? Math.min(st.rounds, Math.floor((st.current_overall - 1) / teams) + 1) : 1;
-  const secsLeft = st.paused ? null : deadlineMs != null ? Math.max(0, Math.ceil((deadlineMs - (now + skew.current)) / 1000)) : null;
-  const lotPlayer = st.lot ? poolBySlug.get(st.lot.slug) : null;
-  const canBid = auction && lotOpen && myRoster != null && st.lot!.roster_id !== myRoster
-    && (myBudget?.spots_left ?? 0) > 0 && st.status === 'live' && !st.paused;
-  const quickBids = canBid
-    ? [st.lot!.bid + 1, st.lot!.bid + 5, st.lot!.bid + 10].filter((a, i, arr) => a <= (myBudget?.max_bid ?? 0) && arr.indexOf(a) === i)
-    : [];
+  const nomMs = st.deadline_at ? Date.parse(st.deadline_at) : null;
+  const nomSecsLeft = st.paused ? null : nomMs != null ? Math.max(0, Math.ceil((nomMs - (now + skew.current)) / 1000)) : null;
+  const lotSecsLeft = (l: { deadline_at: string }) =>
+    st.paused ? null : Math.max(0, Math.ceil((Date.parse(l.deadline_at) - (now + skew.current)) / 1000));
 
   const tabChip = (id: DraftTab, label: string) => (
     <Chip key={id} on={tab === id} onClick={() => setTab(id)}>{label}</Chip>
@@ -424,6 +455,13 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
         <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>⛏ Draft room</div>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)' }}>{auction ? 'AUCTION' : 'SNAKE'}</span>
         {st.paused && <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 7px' }}>⏸ PAUSED</span>}
+        {st.night && (
+          <span className="mono" title="clocks skip these hours — deadlines never land overnight"
+            style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '2px 7px',
+              color: st.night.is_night ? 'var(--warn)' : 'var(--faint)', border: `1px solid ${st.night.is_night ? 'var(--warn)' : 'var(--bd)'}` }}>
+            🌙 {fmtEtMin(st.night.start_min)}–{fmtEtMin(st.night.end_min)} ET{st.night.is_night ? ' · quiet hours' : ''}
+          </span>
+        )}
       </div>
 
       {st.status === 'pending' && (
@@ -442,63 +480,76 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
 
       {st.status === 'live' && (
         <div style={{ ...card, marginBottom: 12, borderLeft: '3px solid var(--you)' }}>
-          {/* auction lot */}
-          {auction && lotOpen && lotPlayer ? (
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <PlayerImg playerId={lotPlayer.slug} espnId={lotPlayer.espn_id} team={lotPlayer.team} pos={lotPlayer.pos as Pos} size={44} />
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>{lotPlayer.full_name}</div>
-                  <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 3 }}>
-                    ${st.lot!.bid} — {teamName(st.lot!.roster_id) ?? `Team ${st.lot!.roster_id}`}
-                    {st.lot!.roster_id === myRoster && <span style={{ color: 'var(--you)', fontWeight: 700 }}> (you)</span>}
+          {/* auction lots — up to max_lots run in parallel, each with its own bell */}
+          {auction && (st.lots ?? []).map((lot, li) => {
+            const lp = poolBySlug.get(lot.slug);
+            const left = lotSecsLeft(lot);
+            const iHold = lot.roster_id === myRoster;
+            const canBidLot = myRoster != null && !iHold && (lot.my_max ?? 0) > lot.bid && !st.paused;
+            const quick = canBidLot
+              ? [lot.bid + 1, lot.bid + 5, lot.bid + 10].filter((a, i, arr) => a <= (lot.my_max ?? 0) && arr.indexOf(a) === i)
+              : [];
+            const pd = proxyDraft[lot.id] ?? '';
+            return (
+              <div key={lot.id} style={{ borderTop: li ? '1px solid var(--bd)' : 'none', paddingTop: li ? 10 : 0, marginTop: li ? 10 : 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <PlayerImg playerId={lot.slug} espnId={lp?.espn_id} team={lp?.team} pos={(lp?.pos ?? 'WR') as Pos} size={44} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>{lp?.full_name ?? lot.slug}</div>
+                    <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 3 }}>
+                      ${lot.bid} — {teamName(lot.roster_id) ?? `Team ${lot.roster_id}`}
+                      {iHold && <span style={{ color: 'var(--you)', fontWeight: 700 }}> (you)</span>}
+                    </div>
                   </div>
+                  {left != null && (
+                    <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: left <= 5 ? 'var(--opp)' : 'var(--you)' }}>
+                      {fmtCountdown(left)}
+                    </div>
+                  )}
                 </div>
-                {secsLeft != null && (
-                  <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: secsLeft <= 5 ? 'var(--opp)' : 'var(--you)' }}>
-                    {fmtCountdown(secsLeft)}
-                  </div>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                {quickBids.map((a) => (
-                  <button key={a} onClick={() => myRoster != null && run(() => placeBid(leagueId, myRoster, a))} disabled={busy}
-                    className="mono" style={{ ...btn, padding: '8px 14px' }}>BID ${a}</button>
-                ))}
-                {!canBid && st.lot!.roster_id === myRoster && <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>You're the high bidder.</span>}
-                {myBudget && <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginLeft: 'auto' }}>my budget ${myBudget.budget} · max bid ${myBudget.max_bid}</span>}
-              </div>
-              {/* hidden max (proxy): the fair way to win while you're away —
-                  answers rival bids second-price style, never shows your ceiling */}
-              {myRoster != null && (myBudget?.spots_left ?? 0) > 0 && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap', borderTop: '1px solid var(--bd)', paddingTop: 8 }}>
-                  <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>🕶 HIDDEN MAX</span>
-                  {st.my_proxy != null
-                    ? <>
-                        <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--you)' }}>${st.my_proxy}</span>
-                        <button onClick={() => run(() => setLotProxy(leagueId, myRoster, null))} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>clear</button>
-                      </>
-                    : <>
-                        <input value={proxyDraft} inputMode="numeric" placeholder="$"
-                          onChange={(e) => setProxyDraft(e.target.value.replace(/\D/g, ''))}
-                          onKeyDown={(e) => { if (e.key === 'Enter' && proxyDraft) { run(() => setLotProxy(leagueId, myRoster, parseInt(proxyDraft, 10))); setProxyDraft(''); } }}
-                          style={{ ...input, width: 74, padding: '6px 8px', fontSize: 12 }} />
-                        <button onClick={() => { if (proxyDraft) { run(() => setLotProxy(leagueId, myRoster, parseInt(proxyDraft, 10))); setProxyDraft(''); } }}
-                          disabled={busy || !proxyDraft} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5 }}>SET</button>
-                        <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>bids for you while you're away — nobody sees it</span>
-                      </>}
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {quick.map((a) => (
+                    <button key={a} onClick={() => myRoster != null && run(() => placeBid(leagueId, myRoster, a, lot.id))} disabled={busy}
+                      className="mono" style={{ ...btn, padding: '7px 12px' }}>BID ${a}</button>
+                  ))}
+                  {iHold && <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>You're the high bidder.</span>}
+                  {!iHold && (lot.my_max ?? 0) > 0 && <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>my max here ${lot.my_max}</span>}
+                  {/* hidden max (proxy): answers rival bids second-price style
+                      while you're away — nobody ever sees your ceiling */}
+                  {myRoster != null && (lot.my_max ?? 0) > 0 && (
+                    <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginLeft: 'auto' }}>
+                      <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>🕶 MAX</span>
+                      {lot.my_proxy != null
+                        ? <>
+                            <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--you)' }}>${lot.my_proxy}</span>
+                            <button onClick={() => run(() => setLotProxy(leagueId, myRoster, null, lot.id))} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>clear</button>
+                          </>
+                        : <>
+                            <input value={pd} inputMode="numeric" placeholder="$"
+                              onChange={(e) => setProxyDraft({ ...proxyDraft, [lot.id]: e.target.value.replace(/\D/g, '') })}
+                              onKeyDown={(e) => { if (e.key === 'Enter' && pd) { run(() => setLotProxy(leagueId, myRoster, parseInt(pd, 10), lot.id)); setProxyDraft({ ...proxyDraft, [lot.id]: '' }); } }}
+                              style={{ ...input, width: 60, padding: '5px 7px', fontSize: 11 }} />
+                            <button onClick={() => { if (pd) { run(() => setLotProxy(leagueId, myRoster, parseInt(pd, 10), lot.id)); setProxyDraft({ ...proxyDraft, [lot.id]: '' }); } }}
+                              disabled={busy || !pd} className="mono" style={{ ...ghostBtn, padding: '5px 9px', fontSize: 9 }}>SET</button>
+                          </>}
+                    </span>
+                  )}
                 </div>
-              )}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+              </div>
+            );
+          })}
+
+          {/* nomination / pick banner (auction shows it only when the room has
+              lot capacity — on_clock is the next nominator then) */}
+          {(!auction || st.on_clock != null) && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', borderTop: auction && (st.lots ?? []).length > 0 ? '1px solid var(--bd)' : 'none', paddingTop: auction && (st.lots ?? []).length > 0 ? 10 : 0, marginTop: auction && (st.lots ?? []).length > 0 ? 10 : 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                 {st.on_clock != null && (
                   <Avatar name={teamName(st.on_clock) ?? `Team ${st.on_clock}`} src={byRoster[st.on_clock]?.avatar} size={38} />
                 )}
                 <div>
                   <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>
-                    {auction ? `NOMINATION ${st.current_overall}` : `ROUND ${round} / ${st.rounds} · PICK ${st.current_overall}`}
+                    {auction ? `NOMINATION ${st.current_overall + (st.lots ?? []).length}` : `ROUND ${round} / ${st.rounds} · PICK ${st.current_overall}`}
                   </div>
                   <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: myTurn ? 'var(--you)' : 'var(--text)', marginTop: 4 }}>
                     {myTurn ? (auction ? 'YOUR NOMINATION — pick a player below' : 'YOUR PICK')
@@ -506,11 +557,16 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
                   </div>
                 </div>
               </div>
-              {secsLeft != null && (
-                <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: secsLeft <= 10 ? 'var(--opp)' : 'var(--you)' }}>
-                  {fmtCountdown(secsLeft)}
+              {nomSecsLeft != null && (
+                <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: nomSecsLeft <= 10 ? 'var(--opp)' : 'var(--you)' }}>
+                  {fmtCountdown(nomSecsLeft)}
                 </div>
               )}
+            </div>
+          )}
+          {auction && myBudget && (
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 8 }}>
+              my budget ${myBudget.budget}{myBudget.committed > 0 ? ` · committed $${myBudget.committed}` : ''} · max new bid ${myBudget.max_bid} · {(st.lots ?? []).length}/{st.max_lots} lots open
             </div>
           )}
           {/* commish controls */}
@@ -574,8 +630,8 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
                   <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 40, textAlign: 'right' }}>{proj != null ? proj.toFixed(1) : '—'}</span>
                   <button onClick={() => toggleQueue(p.slug)} title={inQ ? 'remove from queue' : 'add to queue'} className="mono"
                     style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: inQ ? 'var(--warn)' : 'var(--faint)', padding: '0 2px' }}>{inQ ? '★' : '☆'}</button>
-                  <button onClick={() => act(p.slug)} disabled={!myTurn || busy || (auction && lotOpen)} className="mono"
-                    style={{ ...btn, padding: '6px 10px', fontSize: 10, opacity: myTurn && !busy && !(auction && lotOpen) ? 1 : 0.35 }}>
+                  <button onClick={() => act(p.slug)} disabled={!myTurn || busy} className="mono"
+                    style={{ ...btn, padding: '6px 10px', fontSize: 10, opacity: myTurn && !busy ? 1 : 0.35 }}>
                     {auction ? 'NOM $1' : 'PICK'}
                   </button>
                 </div>
@@ -707,7 +763,7 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
       {cardFor && (
         <PlayerCard p={cardFor} onClose={() => setCardFor(null)}
           queued={queue.includes(cardFor.slug)} onQueue={() => toggleQueue(cardFor.slug)}
-          action={myTurn && !taken.has(cardFor.slug) && !(auction && lotOpen)
+          action={myTurn && !taken.has(cardFor.slug)
             ? { label: auction ? 'NOMINATE $1' : 'DRAFT HIM', run: () => { const s = cardFor.slug; setCardFor(null); act(s); } }
             : null} />
       )}
