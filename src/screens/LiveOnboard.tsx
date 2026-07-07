@@ -91,9 +91,18 @@ export function LiveOnboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
-  // Management views (super-admin + commissioner dashboard) get the full desktop
-  // width; the onboarding/player screens stay a comfortable single column.
-  const wide = view === 'admin' || view === 'commishdash';
+  // Management + in-league play views get real desktop width (their screens
+  // lay out side-by-side columns that collapse on phones); onboarding/auth
+  // forms stay a comfortable single column.
+  const pageMax =
+    view === 'admin' || view === 'commishdash' ? 1080
+    : view === 'draft' ? 1160
+    : view === 'team' ? 940
+    : view === 'results' ? 760
+    : view === 'create' ? 620
+    : view === 'home' ? 960
+    : 440;
+  const wide = pageMax > 700;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -115,7 +124,7 @@ export function LiveOnboard() {
       </header>
 
       <main style={{ flex: 1, display: 'flex', alignItems: wide ? 'flex-start' : 'center', justifyContent: 'center', padding: '24px 16px' }}>
-        <div style={{ width: '100%', maxWidth: wide ? 1080 : view === 'home' ? 960 : 440 }}>
+        <div style={{ width: '100%', maxWidth: pageMax }}>
           {!liveConfigured ? <NotConfigured />
             : !ready ? <Muted text="Loading…" />
             : recovery ? <SetPassword onDone={() => setRecovery(false)} />

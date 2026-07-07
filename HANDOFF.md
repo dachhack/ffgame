@@ -1,6 +1,18 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.105.0`_
+_Last updated: 2026-07-07 · Build `v0.105.1`_
+
+## Desktop widths for in-league screens (v0.105.1)
+The player screens were locked to the 440px mobile column on any display.
+- `LiveOnboard` page shell now sizes per view: draft 1160 · team 940 ·
+  results 760 · create 620 · home 960 · admin/commish 1080 · auth/join 440.
+- `DraftRoom` becomes two columns on desktop — board left (`flex 1.3 1
+  460px`, maxHeight 560), PLAYERS/TEAMS/QUEUE panel right (`flex 1 1
+  400px`) — collapsing to the stacked mobile layout under ~900px (flex-wrap,
+  no media queries). `TeamManage` likewise: my roster + claims left, player
+  pool + waiver order right.
+- Verified with headless-Chromium screenshots at 1440px (snake, auction,
+  team) and 420px (stacked) via the throwaway stub harness.
 
 ## Draft room v3 — Sleeper-style board-first layout (v0.105.0)
 Pure client restyle of `DraftRoom` (`src/screens/NativeLeague.tsx`); no SQL.

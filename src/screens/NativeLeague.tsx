@@ -712,11 +712,14 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
         </div>
       )}
 
+      {/* Desktop: board + player panel side by side; phones: stacked (the
+          flex bases make the columns collapse under ~900px). */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }}>
       {/* THE BOARD — always on screen (Sleeper-style): one column per team,
           cells colored by position, snake direction arrows on open cells, and
           the view follows the on-clock pick. */}
       {teams > 0 && (
-        <div style={{ ...card, padding: 8, marginBottom: 12, maxHeight: 320, overflow: 'auto' }}>
+        <div style={{ ...card, padding: 8, flex: '1.3 1 460px', minWidth: 320, maxHeight: 560, overflow: 'auto', boxSizing: 'border-box' }}>
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${teams}, 88px)`, gap: 4, width: 'max-content' }}>
             {(st.order ?? []).map((rid) => (
               <div key={`bh-${rid}`} style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 5, padding: '2px 2px 6px' }}>
@@ -772,6 +775,8 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
         </div>
       )}
 
+      {/* the tabbed panel (players / teams / queue) — the second column */}
+      <div style={{ flex: '1 1 400px', minWidth: 320 }}>
       {/* tabs */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
         {tabChip('players', `PLAYERS (${avail.length})`)}
@@ -795,7 +800,7 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
           <div className="mono" style={{ display: 'flex', gap: 8, padding: '0 0 4px 62px', fontSize: 7.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>
             <span style={{ flex: 1 }}>PLAYER</span><span style={{ width: 38, textAlign: 'right' }}>ADP</span><span style={{ width: 38, textAlign: 'right' }}>PROJ</span><span style={{ width: 20 }} />
           </div>
-          <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 480, overflowY: 'auto' }}>
             {avail.slice(0, 120).map((p) => {
               const adp = ADP_2026.get(p.slug); const proj = PROJ_2026.get(p.slug);
               const inQ = queue.includes(p.slug);
@@ -889,6 +894,8 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
           })}
         </div>
       )}
+      </div>{/* /tab panel column */}
+      </div>{/* /board + panel row */}
 
       {cardFor && (
         <PlayerCard p={cardFor} onClose={() => setCardFor(null)}
@@ -1064,6 +1071,9 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
 
       {identityCard}
 
+      {/* desktop: my team on the left, the market on the right; phones stack */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }}>
+      <div style={{ flex: '1 1 380px', minWidth: 320 }}>
       {/* my roster */}
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={hdr}>MY ROSTER ({mine.length}{cap != null ? `/${cap}` : ''})</div>
@@ -1113,6 +1123,9 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
         </div>
       )}
 
+      </div>{/* /my-team column */}
+
+      <div style={{ flex: '1 1 380px', minWidth: 320 }}>
       {/* free agents / waiver wire */}
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={hdr}>PLAYER POOL ({free.length} available)</div>
@@ -1156,6 +1169,8 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
         ))}
         <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>Winning a claim sends you to the back of the line.</div>
       </div>
+      </div>{/* /market column */}
+      </div>{/* /two-column row */}
 
       {pickers}
 
