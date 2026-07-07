@@ -177,13 +177,13 @@ export async function requestCode(input: { email?: string; sleeper?: string; lea
   return data as { ok: boolean; error?: string };
 }
 
-export interface Enrollment { league_id: string; team_name: string; sleeper_roster_id: number; avatar_url: string | null; league: { name: string; season: string; preseason_at?: string | null; provider?: string; avatar_url?: string | null } | null; }
+export interface Enrollment { league_id: string; team_name: string; sleeper_roster_id: number; avatar_url: string | null; league: { name: string; season: string; preseason_at?: string | null; provider?: string; avatar_url?: string | null; is_mock?: boolean } | null; }
 
 /** The caller's enrolled memberships (RLS scopes to their own rows). */
 export async function myEnrollments(userId: string): Promise<Enrollment[]> {
   const { data, error } = await client()
     .from('league_membership')
-    .select('league_id, team_name, sleeper_roster_id, avatar_url, league:league_id(name, season, preseason_at, provider, avatar_url)')
+    .select('league_id, team_name, sleeper_roster_id, avatar_url, league:league_id(name, season, preseason_at, provider, avatar_url, is_mock)')
     .eq('app_user_id', userId)
     .eq('enrolled', true);
   if (error) throw error;
@@ -691,6 +691,20 @@ export const createNativeLeague = (
     p_mode: mode, p_budget: budget, p_lot_seconds: lotSeconds, p_max_lots: maxLots,
     p_night_start_min: nightStartMin, p_night_end_min: nightEndMin,
   });
+/** Mock draft (0070): a practice room where every other seat is a named AI.
+ *  Same settings surface as a real league (snake/auction, live/slow clocks,
+ *  parallel lots); no schedule, no season, deletable any time. */
+export const createMockDraft = (
+  teams: number, rounds: number, pickSeconds: number,
+  mode: 'snake' | 'auction' = 'snake', budget = 200, lotSeconds = 15, maxLots = 1,
+) =>
+  rpc<NativeCreateResult>('create_mock_draft', {
+    p_teams: teams, p_rounds: rounds, p_pick_seconds: pickSeconds,
+    p_mode: mode, p_budget: budget, p_lot_seconds: lotSeconds, p_max_lots: maxLots,
+  });
+/** Wipe a mock draft (its commissioner or an admin); refuses real leagues. */
+export const deleteMockDraft = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string }>('delete_mock_draft', { p_league_id: leagueId });
 /** Claim the lowest open seat in a native league by invite code. */
 export const nativeJoin = (code: string, teamName?: string) =>
   rpc<{ ok: boolean; error?: string; league_id?: string; roster_id?: number; status?: string; league?: string }>(
@@ -728,6 +742,8 @@ export interface DraftState {
   night: { start_min: number; end_min: number; is_night: boolean } | null;
   budgets: { roster_id: number; budget: number; committed: number; spots_left: number; max_bid: number }[] | null;
   my_autodraft: boolean;
+  /** Practice room vs the AI — no schedule/season behind it, deletable. */
+  is_mock?: boolean;
 }
 export const draftState = (leagueId: string) => rpc<DraftState>('draft_state', { p_league_id: leagueId });
 /** Replace a seat's private draft queue with an ordered slug list. */
