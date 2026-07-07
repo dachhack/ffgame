@@ -65,21 +65,52 @@ function schedule(M, W) {
 }
 
 /** Blind budget pass with a CARRIED-OVER wallet (no per-week reseed). Mirrors
- *  server/src/lock.js:aiBudgetPass priority order: EV buffs → combo-drip → extra slots. */
+ *  server/src/lock.js:aiBudgetPass priority order: EV buffs → combo-drip → extra
+ *  slots — including the amp-capacity rule (0063): an amp beyond the cap needs
+ *  Second/Third Amp bought first, and only when BOTH unlock and amp fit. */
 function seasonBudget(wallet, roster, key, week) {
   let bal = wallet;
   const owned = new Set(), buffs = new Set();
   let extra = 0;
   const buy = (item) => { const p = powerupById(item)?.price ?? 9999; if (bal >= p) { bal -= p; return true; } return false; };
+  const AMPS = new Set(['momentum', 'garbage-time', 'overtime']);
+  const ampCap = () => 1 + (buffs.has('amp-2') ? 1 : 0) + (buffs.has('amp-2') && buffs.has('amp-3') ? 1 : 0);
   const desired = [...aiLiveBuffs(key, week)];
   if (roster.some((s) => wantsComboDrip(s, slugMeta(s).pos))) desired.push('unlock-combo-drip');
-  for (const item of desired) if (buy(item)) (item.startsWith('unlock-') ? owned : buffs).add(item);
+  for (const item of desired) {
+    if (AMPS.has(item) && [...buffs].filter((b) => AMPS.has(b)).length >= ampCap()) {
+      const need = buffs.has('amp-2') ? 'amp-3' : 'amp-2';
+      if (bal < (powerupById(need)?.price ?? 9999) + (powerupById(item)?.price ?? 9999)) continue;
+      buy(need); buffs.add(need);
+    }
+    if (buy(item)) (item.startsWith('unlock-') ? owned : buffs).add(item);
+  }
   for (let i = 0; i < EXTRA_SLOT_CAP; i++) { if (buy('extra-slot')) extra++; else break; }
   return { owned, buffs, extra, wallet: bal };
 }
 
+// ── Saver policies (team-0 probes): buy NOTHING until the amp bundle fits the
+// wallet, then splurge on the whole bundle at once; repeat. Tests whether
+// hoarding toward a capacity stack beats the steady one-amp-a-week meta.
+const SAVER_BUNDLES = {
+  pair: ['momentum', 'garbage-time', 'amp-2'],                       // ◎185
+  trio: ['momentum', 'garbage-time', 'overtime', 'amp-2', 'amp-3'],  // ◎305
+};
+function makeSaver(bundle) {
+  const items = SAVER_BUNDLES[bundle];
+  const total = items.reduce((n, id) => n + (powerupById(id)?.price ?? 9999), 0);
+  const policy = (wallet) => {
+    if (wallet < total) return { owned: new Set(), buffs: new Set(), extra: 0, wallet };
+    policy.splurges++;
+    return { owned: new Set(), buffs: new Set(items), extra: 0, wallet: wallet - total };
+  };
+  policy.splurges = 0;
+  return policy;
+}
+
 // ── Run one season. skip = Set of team ids that buy NOTHING all year ('all' = none buy).
-function runSeason(seed, skip = new Set()) {
+// t0policy: optional (wallet, roster, key, week) → load override for team 0 (saver probes).
+function runSeason(seed, skip = new Set(), t0policy = null) {
   const rand = rng(seed);
   const pool = seasonPool();
   const rosters = draftRosters(rand, pool, M);
@@ -96,6 +127,7 @@ function runSeason(seed, skip = new Set()) {
     // Each team sets its blind loadout from its current wallet.
     const load = rosters.map((r, t) => {
       if (skip === 'all' || skip.has(t)) return { owned: new Set(), buffs: new Set(), extra: 0, wallet: wallet[t] };
+      if (t === 0 && t0policy) return t0policy(wallet[0], r, `${seed}:t0`, week);
       const l = seasonBudget(wallet[t], r, `${seed}:t${t}`, week);
       for (const b of [...l.buffs, ...l.owned]) buys[b] = (buys[b] || 0) + 1;
       if (l.extra) buys['extra-slot'] = (buys['extra-slot'] || 0) + l.extra;
@@ -133,12 +165,16 @@ const buysTotal = {};
 let corrSum = 0;           // standings correlation: full-budget vs no-budget league
 let strengthCorrSum = 0;   // wins vs roster strength (sanity: sim rewards roster)
 let devWith = 0, devWithout = 0, devGames = 0; // mandatory-tax probe (team 0)
+let savPair = 0, savTrio = 0, savPairN = 0, savTrioN = 0; // saver probes (team 0)
 
 for (let s = 0; s < SEASONS; s++) {
   const seed = baseSeed + s * 101;
   const A = runSeason(seed);                    // everyone buys (full logic)
   const C = runSeason(seed, 'all');             // nobody buys (lineups only)
   const B = runSeason(seed, new Set([0]));      // team 0 opts out, rest buy
+  const pairPolicy = makeSaver('pair'), trioPolicy = makeSaver('trio');
+  const D = runSeason(seed, new Set(), pairPolicy); // team 0 hoards for the pair bundle
+  const E = runSeason(seed, new Set(), trioPolicy); // team 0 hoards for the full stack
 
   A.walletByWeek.forEach((v, i) => { walletTraj[i] += v / SEASONS; });
   homeWRsum += A.homeWR; scoreAll.push(...A.scores); coinAll.push(...A.coins);
@@ -146,6 +182,8 @@ for (let s = 0; s < SEASONS; s++) {
   corrSum += pearson(A.wins, C.wins);
   strengthCorrSum += pearson(A.wins, A.strength);
   devWith += A.wins[0]; devWithout += B.wins[0]; devGames += W;
+  savPair += D.wins[0]; savPairN += pairPolicy.splurges;
+  savTrio += E.wins[0]; savTrioN += trioPolicy.splurges;
 }
 
 console.log('── economy ──');
@@ -166,3 +204,10 @@ console.log('\n── mandatory-tax probe (team 0) ──');
 const wWith = devWith / devGames * 100, wWithout = devWithout / devGames * 100;
 console.log(`  team 0 win-rate — buying ${fmt(wWith)}%  vs  opting out ${fmt(wWithout)}%  (Δ ${fmt(wWith - wWithout)} pts)`);
 console.log(`  ${wWith - wWithout >= 5 ? '⇒ power-ups are a MANDATORY TAX (opting out costs real win-rate)' : '⇒ opting out is ~free ⇒ power-ups are near-cosmetic to outcomes'}`);
+
+console.log('\n── saver probe (team 0 hoards coin for an amp bundle, others steady) ──');
+const wPair = savPair / devGames * 100, wTrio = savTrio / devGames * 100;
+console.log(`  steady buyer ${fmt(wWith)}%  ·  opt-out ${fmt(wWithout)}%`);
+console.log(`  saver-pair (◎185: momentum+garbage+2nd amp)      ${fmt(wPair)}%  (${fmt(savPairN / SEASONS, 1)} splurge weeks/season)`);
+console.log(`  saver-trio (◎305: all three amps + capacity)     ${fmt(wTrio)}%  (${fmt(savTrioN / SEASONS, 1)} splurge weeks/season)`);
+console.log(`  ${Math.max(wPair, wTrio) > wWith + 2 ? '⇒ HOARDING BEATS STEADY — capacity prices need a look' : '⇒ steady buying holds up — naked saving weeks cost more than the splurge returns'}`);

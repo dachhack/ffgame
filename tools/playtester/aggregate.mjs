@@ -45,6 +45,11 @@ const LEVERS = [
   { id: 'counter-nuke', cost: price('counter-nuke'), build: () => ({ buffs: new Set(['counter-nuke']) }) },
   { id: 'insurance', cost: price('insurance'), build: () => ({ buffs: new Set(['insurance']) }) },
   { id: 'carries-wipe', cost: price('unlock-carries-wipe'), build: () => ({ buffs: new Set(['unlock-carries-wipe']) }) },
+  // Amp bundles WITH capacity priced in (0063) — blind EV of running 2-3 amps.
+  { id: 'amp-pair', cost: price('momentum') + price('garbage-time') + price('amp-2'),
+    build: () => ({ buffs: new Set(['momentum', 'garbage-time', 'amp-2']) }) },
+  { id: 'amp-trio', cost: price('momentum') + price('garbage-time') + price('overtime') + price('amp-2') + price('amp-3'),
+    build: () => ({ buffs: new Set(['momentum', 'garbage-time', 'overtime', 'amp-2', 'amp-3']) }) },
 
   // Free metric choices (cost 0) — the suspect "is a default-overridable metric
   // dominant?" levers. NUKE wipes the matched opponent's bank; TE-TD also knocks
