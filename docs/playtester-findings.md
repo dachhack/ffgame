@@ -412,3 +412,30 @@ reach parity; RATE RESET still has nothing to steal vs a drip (rate isn't
 points) — consider a small erase component or fold the metric; wr-stop/erase
 remain blind traps (correct for counters, but the trap labeling from the design
 review still applies).
+
+
+## 12. Post-retune full battery (v0.97.1, merged @ 42c8c46)
+Full sweep after the spike-nuke/steal retune + one-per-purchase Combo Drip.
+- **Invariants:** all hold (mirror 0; honest WR 51.0%).
+- **Harness (14 wk x 150):** honest home WR 50.5%; score mean 115.1 (up from
+  ~97 pre-retune — steals + nuke yardage add real points; watch inflation).
+- **Aggregate:** the offensive trio still tops the board (garbage 60.8% /
+  overtime 60.4% / momentum 59.4%) — homogenization unchanged, the economy
+  pass's target. te-nuke now +2.0 (51.9%), rb-nuke-1 45.8% (band), def-suppress
+  neutral; the -all overrides remain traps by design. ot-shield crept to 52.8%
+  (+2.4) — minor watch.
+- **Double Combo (new probe):** a 2nd Combo Drip lifts margin +3.2 for ◎65
+  (≈0.5 pts/◎10 vs the buffs' ~2.0-2.5) and only 41% of rosters even have a
+  2nd candidate — legal but rarely correct. The one-per-purchase rule needs no
+  further cap; the price does the work.
+- **Season (12 x 14 x 30):** wallet bounded (96-107), cancellation r=0.96,
+  roster r=0.65, home 49.0%. **Opt-out probe Δ 11.2 pts** (2.9 pre-retune, 5.0
+  at 10 seasons) — power-ups are now genuinely mandatory. Defensible for a
+  coin-economy game (autopilot buys for AFK managers), but it sharpens the
+  homogenization problem: everyone MUST buy the same trio. The amplifier
+  stacking surcharge (economy pass) now has two reasons to exist.
+- **Adversary (14 wk x 20, ◎200):** FREE +35.0 / PAID +81.7 — ceiling up from
+  +17.4/+72 pre-retune, as §11 predicted (perfect TD foresight makes spike-
+  nukes precision weapons; blind EV is the guard). Lines are diversified
+  (nuke/denial/drip mixes) and NO line stacks a second combodrip on one unlock
+  — one-per-purchase holds under adversarial search.
