@@ -22,7 +22,7 @@ import { NFL_CODES } from './kdst';
 import { ADP_2026 } from './adp2026';
 import { loadPlayerDirectory } from './sleeperPlayers';
 
-export interface DraftPoolEntry { slug: string; full: string; pos: string; team: string; }
+export interface DraftPoolEntry { slug: string; full: string; pos: string; team: string; espnId?: string; }
 
 const POOL_POS = new Set(['QB', 'RB', 'WR', 'TE']);
 const POOL_CAP = 1200;      // server accepts 2000; keep the board browsable
@@ -102,7 +102,9 @@ export async function buildDraftPool(onProgress?: (note: string) => void): Promi
       ?? (p.rank != null ? BENCH_BASE + p.rank : FLOOR);
     const prev = best.get(slug);
     if (!prev || score < prev.score) {
-      best.set(slug, { slug, full: p.full, pos: p.pos, team: p.team ?? 'FA', score });
+      // espnId rides along so the draft board / team screens can render
+      // headshots for players outside the baked 2025 map (i.e. rookies).
+      best.set(slug, { slug, full: p.full, pos: p.pos, team: p.team ?? 'FA', espnId: p.espnId, score });
     }
   }
   const rows = [...best.values(), ...kdstEntries()];

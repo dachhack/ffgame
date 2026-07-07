@@ -328,4 +328,50 @@ begin
 end $$;
 reset role;
 
+-- ── 11. media (0066): espn_id in the pool + team/league avatars ──────────────
+do $$
+declare lid uuid := current_setting('probe.lid')::uuid; lid2 uuid; r jsonb;
+begin
+  -- espn_id flows through seed_league_pool (fresh league — lid's draft is closed)
+  perform probe_as('a');
+  r := create_native_league('Media League', '2026', 2, 5, 60);
+  perform assert_ok(r, '11a create second league');
+  lid2 := (r ->> 'league_id')::uuid;
+  r := seed_league_pool(lid2, '[{"slug":"x-one","full":"X One","pos":"QB","team":"KC","espn_id":"12345"},{"slug":"x-two","full":"X Two","pos":"RB","team":"SF"}]'::jsonb);
+  perform assert_ok(r, '11b seed with espn_id');
+  perform assert_true((select espn_id from league_pool where league_id = lid2 and slug = 'x-one') = '12345', '11c espn_id stored');
+  perform assert_true((select espn_id from league_pool where league_id = lid2 and slug = 'x-two') is null, '11d espn_id optional');
+
+  -- team avatar: own seat yes, someone else's no, bad scheme rejected, clearable
+  perform probe_as('b');
+  r := set_team_avatar(lid, 2, 'https://example.com/crest.png');
+  perform assert_ok(r, '11e own avatar');
+  perform assert_true((select avatar_url from league_membership where league_id = lid and sleeper_roster_id = 2) = 'https://example.com/crest.png', '11f avatar stored');
+  perform assert_err(set_team_avatar(lid, 3, 'https://example.com/x.png'), 'forbidden', '11g not your seat');
+  perform assert_err(set_team_avatar(lid, 2, 'http://example.com/x.png'), 'https', '11h https only');
+  r := set_team_avatar(lid, 2, null);
+  perform assert_ok(r, '11i clear avatar');
+  perform assert_true((select avatar_url from league_membership where league_id = lid and sleeper_roster_id = 2) is null, '11j cleared');
+  r := set_team_avatar(lid, 2, 'https://example.com/crest2.png');
+  perform assert_ok(r, '11k re-set avatar');
+
+  -- league avatar: commissioner only
+  perform assert_err(set_league_avatar(lid, 'https://example.com/league.png'), 'forbidden', '11l non-commish league avatar');
+  perform probe_as('a');
+  r := set_league_avatar(lid, 'https://example.com/league.png');
+  perform assert_ok(r, '11m commish league avatar');
+
+  -- native_team_state v2 identity fields
+  perform probe_as('b');
+  r := native_team_state(lid);
+  perform assert_true((r ->> 'my_team') = 'Bravo Squad', '11n my_team');
+  perform assert_true((r ->> 'my_avatar') = 'https://example.com/crest2.png', '11o my_avatar');
+  perform assert_true((r ->> 'league_avatar') = 'https://example.com/league.png', '11p league_avatar');
+  perform assert_true((r ->> 'is_commish')::boolean = false, '11q not commish');
+  perform assert_true(r -> 'waiver_order' -> 0 ? 'avatar', '11r waiver_order carries avatar');
+  perform probe_as('a');
+  r := native_team_state(lid);
+  perform assert_true((r ->> 'is_commish')::boolean, '11s commish flag');
+end $$;
+
 select 'ALL PROBES PASSED' as result;

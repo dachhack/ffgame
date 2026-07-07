@@ -177,13 +177,13 @@ export async function requestCode(input: { email?: string; sleeper?: string; lea
   return data as { ok: boolean; error?: string };
 }
 
-export interface Enrollment { league_id: string; team_name: string; sleeper_roster_id: number; avatar_url: string | null; league: { name: string; season: string; preseason_at?: string | null; provider?: string } | null; }
+export interface Enrollment { league_id: string; team_name: string; sleeper_roster_id: number; avatar_url: string | null; league: { name: string; season: string; preseason_at?: string | null; provider?: string; avatar_url?: string | null } | null; }
 
 /** The caller's enrolled memberships (RLS scopes to their own rows). */
 export async function myEnrollments(userId: string): Promise<Enrollment[]> {
   const { data, error } = await client()
     .from('league_membership')
-    .select('league_id, team_name, sleeper_roster_id, avatar_url, league:league_id(name, season, preseason_at, provider)')
+    .select('league_id, team_name, sleeper_roster_id, avatar_url, league:league_id(name, season, preseason_at, provider, avatar_url)')
     .eq('app_user_id', userId)
     .eq('enrolled', true);
   if (error) throw error;
@@ -690,8 +690,11 @@ export const nativeJoin = (code: string, teamName?: string) =>
 export const setTeamName = (leagueId: string, rosterId: number, name: string) =>
   rpc<{ ok: boolean; error?: string; team_name?: string }>('set_team_name', { p_league_id: leagueId, p_roster_id: rosterId, p_name: name });
 /** Seed the draftable player universe (commissioner, pre-draft only). */
-export const seedLeaguePool = (leagueId: string, players: { slug: string; full: string; pos: string; team: string }[]) =>
-  rpc<{ ok: boolean; error?: string; players?: number }>('seed_league_pool', { p_league_id: leagueId, p_players: players });
+export const seedLeaguePool = (leagueId: string, players: { slug: string; full: string; pos: string; team: string; espnId?: string }[]) =>
+  rpc<{ ok: boolean; error?: string; players?: number }>('seed_league_pool', {
+    p_league_id: leagueId,
+    p_players: players.map(({ espnId, ...p }) => ({ ...p, espn_id: espnId ?? null })),
+  });
 export const nativeGenerateSchedule = (leagueId: string, weeks = 14) =>
   rpc<{ ok: boolean; error?: string; weeks?: number; matchups?: number }>('native_generate_schedule', { p_league_id: leagueId, p_weeks: weeks });
 
@@ -712,10 +715,10 @@ export const makeDraftPick = (leagueId: string, slug: string) =>
 /** Advance the draft clock (expired/vacant/AI seats autopick). Idempotent — any member may call. */
 export const draftTick = (leagueId: string) => rpc<{ ok: boolean; error?: string; autopicks?: number }>('draft_tick', { p_league_id: leagueId });
 
-export interface LeaguePoolPlayer { slug: string; full_name: string; pos: string; team: string; rank: number; waived_until: string | null; }
+export interface LeaguePoolPlayer { slug: string; full_name: string; pos: string; team: string; rank: number; waived_until: string | null; espn_id?: string | null; }
 export async function leaguePool(leagueId: string): Promise<LeaguePoolPlayer[]> {
   const { data, error } = await client().from('league_pool')
-    .select('slug, full_name, pos, team, rank, waived_until')
+    .select('slug, full_name, pos, team, rank, waived_until, espn_id')
     .eq('league_id', leagueId).order('rank').range(0, 1999);
   if (error) throw error;
   return (data ?? []) as LeaguePoolPlayer[];
@@ -742,10 +745,17 @@ export const processWaivers = (leagueId: string) =>
 export interface WaiverClaimRow { id: string; add_slug: string; drop_slug: string | null; status: string; note: string | null; created_at: string; }
 export interface NativeTeamState {
   error?: string; my_roster_id: number | null; draft_status: string; roster_cap: number | null; server_now: string;
-  waiver_order: { roster_id: number; team: string | null; priority: number | null }[];
+  my_team?: string | null; my_avatar?: string | null; league_avatar?: string | null; is_commish?: boolean;
+  waiver_order: { roster_id: number; team: string | null; priority: number | null; avatar?: string | null }[];
   my_claims: WaiverClaimRow[];
 }
 export const nativeTeamState = (leagueId: string) => rpc<NativeTeamState>('native_team_state', { p_league_id: leagueId });
+/** Pick your own team's avatar (manager, commish or admin); null clears it. */
+export const setTeamAvatar = (leagueId: string, rosterId: number, url: string | null) =>
+  rpc<{ ok: boolean; error?: string; avatar?: string | null }>('set_team_avatar', { p_league_id: leagueId, p_roster_id: rosterId, p_url: url });
+/** Pick the league's crest (commissioner/admin); null clears it. */
+export const setLeagueAvatar = (leagueId: string, url: string | null) =>
+  rpc<{ ok: boolean; error?: string; avatar?: string | null }>('set_league_avatar', { p_league_id: leagueId, p_url: url });
 
 /** Subscribe to live score changes for a matchup. Returns an unsubscribe fn. */
 export function subscribeMatchup(matchupId: string, onChange: () => void): () => void {

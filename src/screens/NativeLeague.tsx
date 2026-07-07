@@ -7,14 +7,16 @@
 //     seats (any client's poll advances it via draft_tick), searchable board.
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PosPill } from '../app/ui';
+import { PosPill, PlayerImg, Avatar, Img } from '../app/ui';
 import type { Pos } from '../types';
 import { buildDraftPool } from '../data/nativeLeague';
+import { NFL_CODES } from '../data/kdst';
 import {
   createNativeLeague, seedLeaguePool, nativeGenerateSchedule,
   startDraft, draftState, makeDraftPick, draftTick,
   leaguePool, nativeRosters, nativeTeamState, dropPlayer, addFreeAgent,
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
+  setTeamName, setTeamAvatar, setLeagueAvatar,
   type DraftState, type LeaguePoolPlayer, type NativeTeamState,
 } from '../data/liveApi';
 
@@ -29,6 +31,46 @@ const hdr: React.CSSProperties = { fontSize: 10, letterSpacing: '0.12em', color:
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 const posLabel = (p: string) => (p === 'DEF' ? 'D/ST' : p);
+
+// ── Avatar picker: a preset gallery (no uploads to host) ─────────────────────
+// Generated crests via DiceBear (a free avatar CDN — plain <img> URLs, seeded so
+// the same pick renders forever) + the 32 NFL team logos.
+function avatarOptions(seedBase: string): string[] {
+  const out: string[] = [];
+  for (const style of ['bottts-neutral', 'fun-emoji', 'shapes', 'rings']) {
+    for (let i = 1; i <= 8; i++) {
+      out.push(`https://api.dicebear.com/9.x/${style}/png?seed=${encodeURIComponent(`${seedBase}-${i}`)}&size=96`);
+    }
+  }
+  for (const code of NFL_CODES) out.push(`https://a.espncdn.com/i/teamlogos/nfl/500/${code}.png`);
+  return out;
+}
+
+function AvatarPicker({ title, seed, onPick, onClose }: {
+  title: string; seed: string; onPick: (url: string | null) => void; onClose: () => void;
+}) {
+  const options = useMemo(() => avatarOptions(seed), [seed]);
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 420, maxHeight: '75vh', overflowY: 'auto' }}>
+        <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{title}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(52px, 1fr))', gap: 8, marginTop: 12 }}>
+          {options.map((url) => (
+            <button key={url} onClick={() => onPick(url)} title="use this avatar"
+              style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 8, padding: 4, cursor: 'pointer', lineHeight: 0 }}>
+              {/* a CDN that can't be reached shows a dim placeholder, not a broken image */}
+              <Img src={url} size={44} radius={6} fallback={<div style={{ width: 44, height: 44, borderRadius: 6, background: 'var(--surface)', border: '1px dashed var(--bd)' }} />} />
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
+          <button onClick={() => onPick(null)} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>remove avatar</button>
+          <button onClick={onClose} className="mono" style={linkBtn}>cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function Chip({ on, children, onClick }: { on?: boolean; children: React.ReactNode; onClick: () => void }) {
   return (
@@ -179,8 +221,8 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
   }, [now, st?.status, st?.on_clock]);
 
   const byRoster = useMemo(() => {
-    const m: Record<number, { team: string | null }> = {};
-    for (const w of team?.waiver_order ?? []) m[w.roster_id] = { team: w.team };
+    const m: Record<number, { team: string | null; avatar: string | null }> = {};
+    for (const w of team?.waiver_order ?? []) m[w.roster_id] = { team: w.team, avatar: w.avatar ?? null };
     return m;
   }, [team]);
   const teamName = (rid: number | null | undefined) => (rid == null ? null : byRoster[rid]?.team ?? null);
@@ -270,10 +312,15 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
       {st.status === 'live' && (
         <div style={{ ...card, marginBottom: 12, borderLeft: '3px solid var(--you)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-            <div>
-              <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>ROUND {round} / {st.rounds} · PICK {st.current_overall}</div>
-              <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: myTurn ? 'var(--you)' : 'var(--text)', marginTop: 4 }}>
-                {myTurn ? 'YOUR PICK' : `On the clock: ${teamName(st.on_clock) ?? `Team ${st.on_clock} (auto)`}`}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              {st.on_clock != null && (
+                <Avatar name={teamName(st.on_clock) ?? `Team ${st.on_clock}`} src={byRoster[st.on_clock]?.avatar} size={38} />
+              )}
+              <div>
+                <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>ROUND {round} / {st.rounds} · PICK {st.current_overall}</div>
+                <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: myTurn ? 'var(--you)' : 'var(--text)', marginTop: 4 }}>
+                  {myTurn ? 'YOUR PICK' : `On the clock: ${teamName(st.on_clock) ?? `Team ${st.on_clock} (auto)`}`}
+                </div>
               </div>
             </div>
             {secsLeft != null && (
@@ -314,6 +361,7 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
             return (
               <div key={p.overall} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
                 <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 30 }}>R{p.round}</span>
+                <PlayerImg playerId={p.slug} espnId={pl?.espn_id} team={pl?.team} pos={(pl?.pos ?? 'WR') as Pos} size={24} />
                 <PosPill pos={(pl?.pos ?? 'WR') as Pos} />
                 <span style={{ fontSize: 12, color: 'var(--text)', flex: 1 }}>{pl?.full_name ?? p.slug}</span>
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{pl?.team}</span>
@@ -335,6 +383,7 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
             {avail.slice(0, 120).map((p) => (
               <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
                 <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 30 }}>#{p.rank}</span>
+                <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
                 <PosPill pos={p.pos as Pos} />
                 <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 34 }}>{p.team}</span>
@@ -364,6 +413,8 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pendingAdd, setPendingAdd] = useState<LeaguePoolPlayer | null>(null); // roster full → pick a drop
+  const [picking, setPicking] = useState<'team' | 'league' | null>(null);      // avatar picker target
+  const [nameDraft, setNameDraft] = useState<string | null>(null);             // non-null ⇒ renaming
   const skew = useRef(0);
 
   const refresh = async () => {
@@ -434,14 +485,69 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
     </div>
   );
 
+  // Team identity: avatar + name (self-serve), league crest (commissioner).
+  // Rendered pre-draft too, so avatars are set before draft night shows them.
+  const identityCard = myRoster != null && (
+    <div style={{ ...card, marginBottom: 12, borderLeft: '3px solid var(--you)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button onClick={() => setPicking('team')} title="change avatar" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 0 }}>
+          <Avatar name={team.my_team ?? `Team ${myRoster}`} src={team.my_avatar} size={46} />
+        </button>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          {nameDraft === null ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>{team.my_team ?? `Team ${myRoster}`}</span>
+              <button onClick={() => setNameDraft(team.my_team ?? '')} className="mono" style={linkBtn}>✎ rename</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input value={nameDraft} autoFocus maxLength={40} onChange={(e) => setNameDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && nameDraft.trim()) { run(() => setTeamName(leagueId, myRoster, nameDraft)); setNameDraft(null); } if (e.key === 'Escape') setNameDraft(null); }}
+                style={{ ...input, padding: '7px 10px', fontSize: 13 }} />
+              <button onClick={() => { if (nameDraft.trim()) { run(() => setTeamName(leagueId, myRoster, nameDraft)); } setNameDraft(null); }}
+                disabled={busy || !nameDraft.trim()} className="mono" style={{ ...btn, padding: '7px 12px', fontSize: 10 }}>SAVE</button>
+            </div>
+          )}
+          <button onClick={() => setPicking('team')} className="mono" style={{ ...linkBtn, color: 'var(--dim)', padding: 0, marginTop: 4 }}>change avatar</button>
+        </div>
+        {team.is_commish && (
+          <button onClick={() => setPicking('league')} title="league crest (commissioner)"
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+            <Avatar name="League" accent="var(--warn)" src={team.league_avatar} size={34} />
+            <span className="mono" style={{ fontSize: 8, letterSpacing: '0.08em', color: 'var(--faint)' }}>LEAGUE ⚑</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  const pickers = (
+    <>
+      {picking === 'team' && myRoster != null && (
+        <AvatarPicker title="Pick your team avatar" seed={`${leagueId}-${myRoster}`}
+          onPick={(url) => { setPicking(null); run(() => setTeamAvatar(leagueId, myRoster, url)); }}
+          onClose={() => setPicking(null)} />
+      )}
+      {picking === 'league' && (
+        <AvatarPicker title="Pick the league crest" seed={leagueId}
+          onPick={(url) => { setPicking(null); run(() => setLeagueAvatar(leagueId, url)); }}
+          onClose={() => setPicking(null)} />
+      )}
+    </>
+  );
+
   if (team.draft_status !== 'complete') return (
     <div>
       <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>
+      <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>⇄ Team management</div>
+      {err && <div className="mono" style={{ ...errStyle, marginBottom: 10 }}>{err}</div>}
+      {identityCard}
       <div style={card}>
         <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>Rosters arrive at the draft</div>
-        <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Waivers and free agency open once the draft is complete.</div>
+        <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Waivers and free agency open once the draft is complete. Set your team name and avatar now — they show on the draft board.</div>
         <button onClick={onDraft} className="mono" style={{ ...btn, width: '100%', marginTop: 12 }}>⛏ TO THE DRAFT ROOM</button>
       </div>
+      {pickers}
     </div>
   );
 
@@ -454,12 +560,15 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
       <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>⇄ Team management</div>
       {err && <div className="mono" style={{ ...errStyle, marginBottom: 10 }}>{err}</div>}
 
+      {identityCard}
+
       {/* my roster */}
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={hdr}>MY ROSTER ({mine.length}{cap != null ? `/${cap}` : ''})</div>
         {mine.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>No players yet.</div>}
         {mine.map((p) => (
           <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
+            <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
             <PosPill pos={p.pos as Pos} />
             <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
             <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 34 }}>{p.team}</span>
@@ -508,6 +617,7 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
             return (
               <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
                 <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 30 }}>#{p.rank}</span>
+                <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
                 <PosPill pos={p.pos as Pos} />
                 <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
                 {left != null && <span className="mono" style={{ fontSize: 8.5, color: 'var(--warn)' }} title="on waivers">⏳ {fmtLeft(left)}</span>}
@@ -529,6 +639,7 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
         {[...team.waiver_order].sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99)).map((w, i) => (
           <div key={w.roster_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
             <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', width: 16 }}>{i + 1}</span>
+            <Avatar name={w.team ?? `Team ${w.roster_id}`} src={w.avatar} size={20} />
             <span style={{ fontSize: 12, color: w.roster_id === myRoster ? 'var(--you)' : 'var(--text)', fontWeight: w.roster_id === myRoster ? 700 : 400 }}>
               {w.team ?? `Team ${w.roster_id}`}
             </span>
@@ -537,6 +648,8 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
         <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>Winning a claim sends you to the back of the line.</div>
       </div>
 
+      {pickers}
+
       {/* roster full → choose a drop for the pending add */}
       {pendingAdd && (
         <div onClick={() => setPendingAdd(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -544,6 +657,7 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Roster full — drop who for {pendingAdd.full_name}?</div>
             {mine.map((p) => (
               <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)', marginTop: 6 }}>
+                <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
                 <PosPill pos={p.pos as Pos} />
                 <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1 }}>{p.full_name}</span>
                 <button onClick={() => doAdd(pendingAdd, p.slug)} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9.5, color: 'var(--opp)' }}>DROP</button>
