@@ -1,6 +1,57 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.106.0`_
+_Last updated: 2026-07-07 · Build `v0.107.0`_
+
+## Playoffs — the endgame (v0.107.0)
+`0073_playoffs.sql` + a 🏆 PLAYOFFS dashboard tab. Playoff matchups are
+ORDINARY matchup rows (same lock→live→final pipeline, same board, same
+materialized lineups) tagged `is_playoff`/`playoff_round`/`bracket_pos`/
+`playoff_label` — nothing downstream changes.
+- **Settings** (`settings_json.playoff_teams` ∈ {2,4,6,8}, default 4;
+  `playoff_start_week`, default 15) via `set_playoff_rules` — editable until
+  any playoff game starts. Guard: no regular-season games may exist at the
+  start week or later.
+- **Seeding** = `league_standings` (final non-playoff games; wins → PF →
+  seat; 0-0 teams sort by seat, never null).
+- **`generate_playoffs(league, seeds?)`** builds round 1 from live standings
+  — or from an EXPLICIT commish seed order (override: exactly N distinct
+  member seats; the panel's ↑↓ arrows edit it, CUSTOM ORDER badge + reset).
+  Fixed brackets, higher seed hosts: 2 = title game; 4 = semis 1v4/2v3; 6 =
+  3v6 + 4v5 with top-2 byes; 8 = 1v8/4v5/3v6/2v7. Stamps the plan into
+  `settings_json.playoff_bracket` (seeds locked at generation); re-runnable
+  while everything is still scheduled.
+- **CONSOLATION LADDER** (`matchup.is_consolation`): everyone below the cut
+  starts on a ladder in standings order and PLAYS every playoff week —
+  adjacent rungs pair off (odd team out: bottom rung sits), winners climb a
+  rung, losers drop, ties hold (`reorder_ladder`/`make_consolation_round`).
+  Playoff losers join at the TOP of the ladder as they're eliminated
+  (ordered by seed) — which makes the semifinal losers' championship-week
+  pairing the **3rd Place Game**. Consolation games never block bracket
+  advancement; the live ladder lives in `playoff_bracket.consolation` and
+  settles into the final below-the-cut order when the title game ends.
+- **`advance_playoffs`** — IDEMPOTENT + member-callable (the panel calls it
+  on every load, `process_waivers`-style): when a round is fully final it
+  creates the next round one week later (6-team semis: seed 1 hosts W(4v5),
+  seed 2 hosts W(3v6); ties advance the better seed via `better_seed`), and
+  when the championship is final it crowns `settings_json.playoff_champion`.
+- **`playoff_state`** — one-shot poll: settings, generated/underway,
+  seeds, all bracket matchups (+computed winners), champion, standings.
+- **Client**: dashboard `LeagueRow` gains a 🏆 PLAYOFFS tab (native):
+  champion banner, settings (team-count chips + start-week stepper, locked
+  once underway), generate/regenerate, bracket columns per round with score
+  cards + winner highlights + seed numbers, and a standings table with the
+  playoff line marked.
+- Probes → **446 assertions** (27: settings gates + league-size fit,
+  deterministic standings from fabricated finals, commish-only generate,
+  1v4/2v3 semis at the start week, regenerate-while-scheduled, no-op early
+  advance, TIE advances the better seed, settings/bracket lock underway,
+  champion crowned + idempotent re-advance, full state payload incl. the
+  semi losers' 3rd-place game, and a 2-team league going straight to a
+  title game; 28: a 6-team league end-to-end — custom-seed validation
+  gates, an override field that skips the standings leader, the below-cut
+  pair playing week 1, a ladder upset reordering rungs, semifinal losers
+  dropping into the 3rd Place Game, a consolation TIE holding rungs, and
+  the settled final ladder).
 
 ## Transactions: commish roster tools, FAAB, trades (v0.106.0)
 `0072_transactions.sql` + dashboard/team-management UI.

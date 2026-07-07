@@ -759,6 +759,38 @@ export const cancelTrade = (tradeId: string) =>
   rpc<{ ok: boolean; error?: string; status?: string }>('cancel_trade', { p_trade_id: tradeId });
 export const commishRuleTrade = (tradeId: string, approve: boolean) =>
   rpc<{ ok: boolean; error?: string; status?: string }>('commish_rule_trade', { p_trade_id: tradeId, p_approve: approve });
+
+// ── Playoffs (0073): the endgame for native leagues ───────────────────────────
+export interface StandingsRow { roster_id: number; team: string | null; wins: number; losses: number; ties: number; pf: number; pa: number; }
+export interface PlayoffMatchup {
+  id: string; week: number; round: number; pos: number; label: string | null; status: string;
+  /** Consolation-ladder game (never blocks bracket advancement). */
+  consolation: boolean;
+  home: number; away: number; home_final: number | null; away_final: number | null; winner: number | null;
+}
+export interface PlayoffState {
+  error?: string; ok?: boolean;
+  playoff_teams: number; playoff_start_week: number;
+  generated: boolean; underway: boolean;
+  rounds: number | null; seeds: number[] | null;
+  /** The live consolation ladder, top rung first (final below-the-cut order once the title game ends). */
+  consolation: number[];
+  champion: number | null; champion_team: string | null;
+  matchups: PlayoffMatchup[]; standings: StandingsRow[];
+}
+/** Everything the playoff view needs (any member). */
+export const playoffState = (leagueId: string) => rpc<PlayoffState>('playoff_state', { p_league_id: leagueId });
+export const leagueStandings = (leagueId: string) => rpc<StandingsRow[] | { error: string }>('league_standings', { p_league_id: leagueId });
+/** Commissioner: bracket size (2/4/6/8) + start week — locked once underway. */
+export const setPlayoffRules = (leagueId: string, teams: number | null, startWeek: number | null) =>
+  rpc<{ ok: boolean; error?: string }>('set_playoff_rules', { p_league_id: leagueId, p_teams: teams, p_start_week: startWeek });
+/** Commissioner: (re)build round 1 — standings seeding, or an explicit seed
+ *  order (override). Locked once underway. */
+export const generatePlayoffs = (leagueId: string, seeds: number[] | null = null) =>
+  rpc<{ ok: boolean; error?: string }>('generate_playoffs', { p_league_id: leagueId, p_seeds: seeds });
+/** Idempotent: creates the next round when the current one is final; crowns the champ. */
+export const advancePlayoffs = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; advanced?: boolean; champion?: number }>('advance_playoffs', { p_league_id: leagueId });
 /** Mock draft (0070): a practice room where every other seat is a named AI.
  *  Same settings surface as a real league (snake/auction, live/slow clocks,
  *  parallel lots); no schedule, no season, deletable any time. */

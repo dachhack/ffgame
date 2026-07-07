@@ -9,7 +9,9 @@ import {
   rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
   setTransactionRules, commishMovePlayer, commishRemovePlayer, commishRuleTrade,
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
+  playoffState, setPlayoffRules, generatePlayoffs, advancePlayoffs,
   type WaiverMode, type TradeReview, type TradeRow, type LeaguePoolPlayer, type NativeRosterRow,
+  type PlayoffState, type PlayoffMatchup,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
   type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy, type LeagueKdst, type KdstMode,
 } from '../data/liveApi';
@@ -219,7 +221,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 // One league's management card — the whole commissioner/admin toolset for a
 // league, organized under a tab strip (Setup / Members / Picks / Matchups /
 // K-DST / Audit). Used by both the super-admin Leagues tab and CommishDash.
-export type LeagueTab = 'overview' | 'draft' | 'rosters' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst';
+export type LeagueTab = 'overview' | 'draft' | 'rosters' | 'playoffs' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst';
 
 // ── Roster rules editor (native leagues, 0071): per-position limits any time,
 // roster size while the draft is still pending. ∞ = uncapped (stored null).
@@ -663,10 +665,11 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
   const statusChip = (color: string): React.CSSProperties => ({ ...mono, fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color, border: `1px solid ${color}`, borderRadius: 4, padding: '2px 5px', whiteSpace: 'nowrap' });
   const leagueTabs: TabDef<LeagueTab>[] = [
     { id: 'overview', label: 'SETUP' },
-    // Native leagues draft + manage rosters in-app — both live in the dashboard.
+    // Native leagues draft, manage rosters, and run playoffs in-app.
     ...(l.provider === 'native' ? [
       { id: 'draft', label: '⛏ DRAFT' } as TabDef<LeagueTab>,
       { id: 'rosters', label: 'ROSTERS' } as TabDef<LeagueTab>,
+      { id: 'playoffs', label: '🏆 PLAYOFFS' } as TabDef<LeagueTab>,
     ] : []),
     { id: 'members', label: 'MEMBERS' },
     { id: 'ready', label: 'PICKS' },
@@ -716,6 +719,9 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
 
       {/* commissioner roster tools + trade rulings (native leagues only) */}
       {tab === 'rosters' && l.provider === 'native' && <NativeRosterTools leagueId={l.league_id} />}
+
+      {/* the endgame: standings, bracket, champion (native leagues only) */}
+      {tab === 'playoffs' && l.provider === 'native' && <PlayoffPanel leagueId={l.league_id} />}
 
       {tab === 'overview' && (
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -1698,5 +1704,189 @@ function KdstSelect({ suffix, value, taken, onChange }: { suffix: 'k' | 'dst'; v
         return <option key={c} value={slug}>{c.toUpperCase()} {suffix === 'k' ? 'K' : 'DEF'}{isTaken ? ' • taken' : ''}</option>;
       })}
     </select>
+  );
+}
+
+// ── PLAYOFFS tab (native leagues, 0073): settings → standings/seeds →
+// bracket → champion. advance_playoffs is idempotent, so every load calls it
+// first — finished rounds roll forward without anyone pressing a button.
+function PlayoffPanel({ leagueId }: { leagueId: string }) {
+  const [st, setSt] = useState<PlayoffState | null>(null);
+  const [teams, setTeams] = useState(4);
+  const [startWeek, setStartWeek] = useState(15);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  // The commish can reorder seeding before generating; defaults to standings.
+  const [seedOrder, setSeedOrder] = useState<number[] | null>(null);
+  const load = async () => {
+    await advancePlayoffs(leagueId).catch(() => {});
+    const s = await playoffState(leagueId);
+    if (s.error || !s.ok) { setMsg(s.error ?? 'could not load playoffs'); return; }
+    setSt(s); setTeams(s.playoff_teams); setStartWeek(s.playoff_start_week);
+    setSeedOrder((cur) => cur ?? s.standings.map((x) => x.roster_id));
+  };
+  useEffect(() => { load().catch((e) => setMsg(errMsg(e, 'load failed'))); /* eslint-disable-next-line */ }, [leagueId]);
+  if (!st) return <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', marginTop: 12 }}>{msg ?? 'loading playoffs…'}</div>;
+
+  const teamName = (rid: number) => st.standings.find((s) => s.roster_id === rid)?.team ?? `Team ${rid}`;
+  const seedOf = (rid: number) => { const i = (st.seeds ?? []).indexOf(rid); return i >= 0 ? i + 1 : null; };
+  const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try { const r = await fn(); setMsg(r.ok ? '✓ done' : (r.error ?? 'that didn’t work')); await load(); }
+    catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); }
+  };
+  const rounds: PlayoffMatchup[][] = [];
+  const conRounds: PlayoffMatchup[][] = [];
+  for (const m of st.matchups) { ((m.consolation ? conRounds : rounds)[m.round - 1] ??= []).push(m); }
+  const standingsIds = st.standings.map((x) => x.roster_id);
+  const order = seedOrder ?? standingsIds;
+  const customOrder = order.join(',') !== standingsIds.join(',');
+  const moveSeed = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= order.length) return;
+    const next = order.slice(); [next[i], next[j]] = [next[j], next[i]];
+    setSeedOrder(next);
+  };
+  const toggle = (on: boolean, label: string, onClick: () => void, off = false) => (
+    <button onClick={onClick} disabled={off} className="mono" style={{ ...mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', cursor: off ? 'default' : 'pointer', opacity: off ? 0.5 : 1, color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 999, padding: '4px 10px' }}>{label}</button>
+  );
+  const side = (m: PlayoffMatchup, rid: number, score: number | null) => {
+    const won = m.winner === rid;
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0' }}>
+        <span className="mono" style={{ ...mono, fontSize: 8, color: 'var(--faint)', width: 14 }}>{seedOf(rid) ? `#${seedOf(rid)}` : ''}</span>
+        <span style={{ fontSize: 11.5, fontWeight: won ? 700 : 400, color: won ? 'var(--you)' : 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{teamName(rid)}{won ? ' ✓' : ''}</span>
+        <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: won ? 'var(--you)' : 'var(--dim)' }}>{score != null ? Number(score).toFixed(0) : '—'}</span>
+      </div>
+    );
+  };
+  return (
+    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {st.champion != null && (
+        <div style={{ background: 'var(--bg)', border: '1px solid var(--you)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: '12px 14px' }}>
+          <span className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--you)' }}>🏆 {st.champion_team ?? teamName(st.champion)} — league champion</span>
+        </div>
+      )}
+      {msg && <div className="mono" style={{ ...mono, fontSize: 9.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</div>}
+
+      <div>
+        <div style={subhead}>PLAYOFF SETTINGS</div>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div>
+            <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>TEAMS</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
+              {[2, 4, 6, 8].map((n) => toggle(teams === n, String(n), () => setTeams(n), st.underway))}
+            </div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>START WEEK</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5, opacity: st.underway ? 0.5 : 1 }}>
+              <button onClick={() => !st.underway && setStartWeek(Math.max(2, startWeek - 1))} className="mono" style={stepBtnStyle}>−</button>
+              <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', minWidth: 24, textAlign: 'center' }}>{startWeek}</span>
+              <button onClick={() => !st.underway && setStartWeek(Math.min(18, startWeek + 1))} className="mono" style={stepBtnStyle}>＋</button>
+            </div>
+          </div>
+          {!st.underway && (
+            <button onClick={() => run(() => setPlayoffRules(leagueId, teams, startWeek))} disabled={busy} className="mono" style={btn(true)}>✓ save</button>
+          )}
+          {!st.underway && (
+            <button onClick={() => run(() => generatePlayoffs(leagueId, order.slice(0, teams)))} disabled={busy} className="mono" style={btn(true)}>
+              {st.generated ? '↻ regenerate bracket' : '🏆 generate bracket'}
+            </button>
+          )}
+          {st.underway && <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--warn)' }}>playoffs underway — settings locked</span>}
+        </div>
+        <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+          Seeding = regular-season standings (wins, then points-for). Higher seeds host; a 6-team bracket gives the top two seeds byes; ties advance the better seed. Rounds are one week apart from the start week; finished rounds roll forward automatically.
+        </div>
+      </div>
+
+      {st.generated && rounds.length > 0 && (
+        <div>
+          <div style={subhead}>BRACKET</div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            {rounds.map((ms, ri) => (
+              <div key={ri} style={{ flex: '1 1 180px', minWidth: 170, maxWidth: 260 }}>
+                <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700, marginBottom: 6 }}>
+                  {ms[0]?.label?.toUpperCase() ?? `ROUND ${ri + 1}`} · WK {ms[0]?.week}
+                </div>
+                {ms.map((m) => (
+                  <div key={m.id} style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '6px 9px', marginBottom: 8 }}>
+                    {side(m, m.home, m.home_final)}
+                    <div style={{ borderTop: '1px solid var(--bd)' }} />
+                    {side(m, m.away, m.away_final)}
+                    <div className="mono" style={{ ...mono, fontSize: 7.5, color: 'var(--faint)', marginTop: 3 }}>{m.status.toUpperCase()}</div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {st.generated && ((st.consolation ?? []).length > 0 || conRounds.some((r) => r?.length)) && (
+        <div>
+          <div style={subhead}>CONSOLATION LADDER</div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            {conRounds.map((ms, ri) => ms?.length ? (
+              <div key={ri} style={{ flex: '1 1 180px', minWidth: 170, maxWidth: 260 }}>
+                <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700, marginBottom: 6 }}>WK {ms[0].week}</div>
+                {ms.map((m) => (
+                  <div key={m.id} style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '6px 9px', marginBottom: 8 }}>
+                    {m.label && m.label !== 'Consolation' && <div className="mono" style={{ ...mono, fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', marginBottom: 2 }}>{m.label.toUpperCase()}</div>}
+                    {side(m, m.home, m.home_final)}
+                    <div style={{ borderTop: '1px solid var(--bd)' }} />
+                    {side(m, m.away, m.away_final)}
+                    <div className="mono" style={{ ...mono, fontSize: 7.5, color: 'var(--faint)', marginTop: 3 }}>{m.status.toUpperCase()}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null)}
+            <div style={{ flex: '1 1 150px', minWidth: 140 }}>
+              <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700, marginBottom: 6 }}>LADDER{st.champion != null ? ' (FINAL)' : ''}</div>
+              {(st.consolation ?? []).map((rid, i) => (
+                <div key={rid} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '3px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
+                  <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, color: 'var(--dim)', width: 20 }}>{teams + i + 1}.</span>
+                  <span style={{ fontSize: 11, color: 'var(--text)' }}>{teamName(rid)}</span>
+                </div>
+              ))}
+              <div className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>Winners climb a rung each week; playoff losers join at the top as they fall.</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+          <div style={subhead}>SEEDING{st.underway ? ' (LOCKED)' : ''}</div>
+          {customOrder && !st.underway && <>
+            <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, color: 'var(--warn)' }}>CUSTOM ORDER</span>
+            <button onClick={() => setSeedOrder(standingsIds)} className="mono" style={{ ...linkBtn, fontSize: 9 }}>↺ back to standings</button>
+          </>}
+        </div>
+        {order.map((rid, i) => {
+          const row = st.standings.find((x) => x.roster_id === rid);
+          const seeded = i < teams;
+          return (
+            <div key={rid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
+              <span className="mono" style={{ ...mono, fontSize: 9, fontWeight: 700, color: seeded ? 'var(--you)' : 'var(--faint)', width: 22 }}>{seeded ? `#${i + 1}` : '—'}</span>
+              <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, fontWeight: seeded ? 700 : 400 }}>{row?.team ?? `Team ${rid}`}</span>
+              <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', width: 52, textAlign: 'right' }}>{row ? `${row.wins}-${row.losses}${row.ties ? `-${row.ties}` : ''}` : ''}</span>
+              <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', width: 64, textAlign: 'right' }}>{row ? `PF ${Number(row.pf).toFixed(0)}` : ''}</span>
+              {!st.underway && <>
+                <button onClick={() => moveSeed(i, -1)} className="mono" style={{ ...linkBtn, padding: '0 3px' }}>↑</button>
+                <button onClick={() => moveSeed(i, 1)} className="mono" style={{ ...linkBtn, padding: '0 3px' }}>↓</button>
+              </>}
+            </div>
+          );
+        })}
+        <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6 }}>
+          {st.underway ? 'Seeds locked into the bracket.'
+            : `Top ${teams} make the playoffs — everyone else starts on the consolation ladder. Use ↑↓ to override the seeding before generating.`}
+        </div>
+      </div>
+    </div>
   );
 }
