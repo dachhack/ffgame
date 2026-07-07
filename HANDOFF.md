@@ -1,6 +1,19 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.99.1`_
+_Last updated: 2026-07-07 · Build `v0.99.2`_
+
+## Air Raid reprice ◎60 → ◎40 (v0.99.2, migration 0065 — NOT yet applied)
+Findings §16. Price-only change (scoring untouched): powerups.ts + 0065
+powerup_price v4, rulebook regen, parity checker green. Measured: as a lone
+buy nothing changes (amp still the right first buy); as a SECOND buy the ◎40
+raid now fits alongside an amp inside weekly income — raid-then-amp is the
+best measured steady policy at 52.9% (+2.7 over amp-only, 30 seasons). Real
+but modest; symmetric adoption cancels. WATCH: dial to ◎45-50 if it creeps
+past ~54%. Season.mjs gained makeRaid() team-0 policies. The shipping AI
+still doesn't buy Air Raid (aiLiveBuffs is amps-only; would also need an
+aiMetric passbig hook) — separate design call. ⚠ 0065 must be applied via
+the migrate-workflow dance when this merges. (Renumbered from 0064: the
+native-leagues merge claimed 0064 first.)
 
 ## Native leagues gated to super admin for closed testing (v0.99.1)
 Owner call: test before opening up. `create_native_league` now requires
@@ -58,6 +71,14 @@ Full design + decisions in `docs/native-league-plan.md`.
   autopick caps/forced K-DEF, completion+materialization, waiver
   priority/rotation, locked-week freeze, RLS leaks). All pass; `npm run build`
   green. Deferred (documented): trades, FAAB, realtime draft push, keepers.
+
+## First-buy variety probe — amp default is real dominance (tools only)
+Findings §15, new tools/playtester/firstbuy.mjs: one-purchase A/B with blind
+roster-aware rules vs a hindsight oracle. No observable rule beats
+always-buy-an-amp (+16.6; combo-if-elite-dual ties at +15.8); the oracle''s
+35% non-amp picks are luck-driven, not surfaceable. If first-buy variety is
+wanted the lever is PRICE (air-raid ~◎35-40 vs current ◎60; extra-slot is
+structurally weak solo) — a design call for the owner, not a code fix.
 
 ## Saver probe + amp-bundle instruments — capacity pricing validated (tools only)
 Findings §14. Playtester-only change (no engine/app code): aggregate.mjs

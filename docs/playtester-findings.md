@@ -506,3 +506,60 @@ the playtester; no engine/app code):
   → 10.0 buys/season, extra-slot 0 → 4.9, occasional legit amp-2 pair (1.0).
   Opt-out Δ 9.3 pts (was 10.0 measured with the waste; same conclusion).
   Wallet still bounded (101-111), cancellation r=0.96, home 49.3%.
+
+## 15. First-buy variety probe (`firstbuy.mjs`) — the amp default is REAL dominance
+The last open homogenization question: everyone''s first purchase is an
+amplifier — is that dominance, or herd behavior a roster-aware manager could
+beat? New probe: ONE purchase allowed, per-matchup lift measured exactly
+(deterministic resolver) on paired draws; blind rules vs a hindsight oracle.
+14 wk × 100, vs stripped-honest field:
+- **Blind rules:** always-momentum +16.6 (WR 60.7%) tops the board;
+  combo-if-elite-dual-threat +15.8 (WR 61.2%) statistically TIES it; every
+  other conditioning attempt (air-raid with a top-8 QB, combined
+  roster-aware) lands at +14.0 or below. **No observable-feature rule beats
+  just buying an amp.** The choice AMONG the three amps barely matters
+  blind (+14.6-16.6, WR ≈ 61% for all three).
+- **Oracle (hindsight argmax):** +25.1, WR 67.2% — and only 64.7% of its
+  picks are amps (air-raid 16.0%, extra-slot 11.2%, combo-drip 8.0%). So
+  variety EXISTS per-matchup, but the 8.5-pt gap between oracle and best
+  blind rule is driven by unobservable outcomes (which QB actually spikes,
+  which bench player blows up) — luck, not surfaceable skill. Roster
+  projections don''t reach it; my rules tried.
+- **Per-buy readings:** unconditional combo +12.5 (fair for the right
+  roster — the AI''s conditional buy is correct); always-air-raid +7.0 at
+  ◎60 (per-coin 1.17 vs momentum''s 2.37 — would need ~◎35 to compete);
+  extra-slot +4.3 solo (structurally weak as a lone buy; its §12 value was
+  in stacks).
+- **Design read:** first-buy homogenization is honest dominance, not a
+  bug a smarter UI could fix. If more first-buy variety is wanted, the
+  lever is PRICE (air-raid ~◎35-40, or amp price nudges up), not
+  conditioning hints. Otherwise: the amp default is a fine casual
+  auto-pilot, and the skill expression lives where §10-§14 put it —
+  metric picks, targeted plays, and knowing when NOT to spend.
+
+## 16. Air Raid reprice ◎60 → ◎40 (v0.99.2, migration 0065) — a real second buy
+§15 said first-buy variety needs a PRICE lever; this ships one. Air Raid''s
+scoring is untouched — only the price moves.
+- **As a lone first buy (firstbuy re-run):** unchanged by design — lifts are
+  price-independent (+7.0 solo; conditioning on an elite QB still loses to
+  always-amp). The amp stays the correct FIRST buy; the reprice was never
+  going to change that.
+- **As a SECOND buy (new season probes, team 0 deviates, 30 seasons):**
+  steady amp-only 50.2% → amp-then-raid 51.2% (5.1 raid weeks/season) →
+  **raid-then-amp 52.9% (14/14 raid weeks) — best measured steady policy,
+  +2.7 pts over amp-only.** At ◎40 the unlock fits ALONGSIDE an amp inside
+  the weekly income (~◎74), so it stacks instead of competing — the amp
+  multiplies drip while passbig floors the QB slot. At ◎60 the pair
+  (◎120-135/wk) never fit; the reprice is what unlocked the pairing.
+- **Magnitude check:** +2.7 is a real but modest edge — a third of the
+  opt-out penalty (9.3), and it''s a DEVIANT''s edge vs an amp-only field;
+  symmetric adoption cancels (r≈0.96). This is the "buying power-ups to
+  win is a strategy, but never certain" target, not a new must-buy.
+- **Aggregate re-run:** air-raid 1.65 pts/◎10 at ◎40 (was 1.17) — now
+  flagged CHEAP-EDGE but still below the amps'' 2.0-2.5 solo. WATCH: if a
+  future battery shows raid-then-amp creeping past ~54%, dial to ◎45-50.
+- Shipped: powerups.ts price 40, migration 0065 (powerup_price v4),
+  rulebook regen, price-parity checker green. The AI mirrors do NOT buy
+  Air Raid (aiLiveBuffs is amps-only) — the probes drive it via the season
+  policy hook; teaching the shipping AI a QB-conditional raid buy is a
+  separate call (it would also need an aiMetric passbig hook).

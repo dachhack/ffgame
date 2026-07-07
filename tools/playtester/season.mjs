@@ -108,6 +108,29 @@ function makeSaver(bundle) {
   return policy;
 }
 
+// ── Air Raid policies (team-0 probes, §16): does the ◎40 reprice make it a
+// viable SECOND buy? amp-then-raid buys the proven amp first and adds Air Raid
+// when the wallet still covers it; raid-then-amp inverts the priority. The
+// owned unlock flips the QB onto passbig via the load's metricOverride.
+function makeRaid(order) {
+  const policy = (wallet, roster, key, week) => {
+    let bal = wallet;
+    const buffs = new Set(), owned = new Set();
+    const buy = (id) => { const p = powerupById(id)?.price ?? 9999; if (bal < p) return false; bal -= p; return true; };
+    const amp = aiLiveBuffs(key, week)[0];
+    for (const it of (order === 'raid-first' ? ['unlock-pass-td10', amp] : [amp, 'unlock-pass-td10'])) {
+      if (buy(it)) (it.startsWith('unlock-') ? owned : buffs).add(it);
+    }
+    if (owned.has('unlock-pass-td10')) policy.raids++;
+    return {
+      owned, buffs, extra: 0, wallet: bal,
+      metricOverride: owned.has('unlock-pass-td10') ? (p, pos) => (pos === 'QB' ? 'passbig' : null) : null,
+    };
+  };
+  policy.raids = 0;
+  return policy;
+}
+
 // ── Run one season. skip = Set of team ids that buy NOTHING all year ('all' = none buy).
 // t0policy: optional (wallet, roster, key, week) → load override for team 0 (saver probes).
 function runSeason(seed, skip = new Set(), t0policy = null) {
@@ -166,6 +189,7 @@ let corrSum = 0;           // standings correlation: full-budget vs no-budget le
 let strengthCorrSum = 0;   // wins vs roster strength (sanity: sim rewards roster)
 let devWith = 0, devWithout = 0, devGames = 0; // mandatory-tax probe (team 0)
 let savPair = 0, savTrio = 0, savPairN = 0, savTrioN = 0; // saver probes (team 0)
+let raidA = 0, raidB = 0, raidAN = 0, raidBN = 0;         // Air Raid reprice probes (team 0)
 
 for (let s = 0; s < SEASONS; s++) {
   const seed = baseSeed + s * 101;
@@ -184,6 +208,11 @@ for (let s = 0; s < SEASONS; s++) {
   devWith += A.wins[0]; devWithout += B.wins[0]; devGames += W;
   savPair += D.wins[0]; savPairN += pairPolicy.splurges;
   savTrio += E.wins[0]; savTrioN += trioPolicy.splurges;
+  const ampRaid = makeRaid('amp-first'), raidAmp = makeRaid('raid-first');
+  const F = runSeason(seed, new Set(), ampRaid);   // team 0: amp, then Air Raid when it fits
+  const G = runSeason(seed, new Set(), raidAmp);   // team 0: Air Raid first, amp when it fits
+  raidA += F.wins[0]; raidAN += ampRaid.raids;
+  raidB += G.wins[0]; raidBN += raidAmp.raids;
 }
 
 console.log('── economy ──');
@@ -211,3 +240,9 @@ console.log(`  steady buyer ${fmt(wWith)}%  ·  opt-out ${fmt(wWithout)}%`);
 console.log(`  saver-pair (◎185: momentum+garbage+2nd amp)      ${fmt(wPair)}%  (${fmt(savPairN / SEASONS, 1)} splurge weeks/season)`);
 console.log(`  saver-trio (◎305: all three amps + capacity)     ${fmt(wTrio)}%  (${fmt(savTrioN / SEASONS, 1)} splurge weeks/season)`);
 console.log(`  ${Math.max(wPair, wTrio) > wWith + 2 ? '⇒ HOARDING BEATS STEADY — capacity prices need a look' : '⇒ steady buying holds up — naked saving weeks cost more than the splurge returns'}`);
+
+console.log('\n── Air Raid probe (team 0 also buys the repriced Air Raid, others steady) ──');
+const wRaidA = raidA / devGames * 100, wRaidB = raidB / devGames * 100;
+console.log(`  steady buyer (amp only)                          ${fmt(wWith)}%`);
+console.log(`  amp-then-raid (Air Raid when wallet allows)      ${fmt(wRaidA)}%  (${fmt(raidAN / SEASONS, 1)} raid weeks/season)`);
+console.log(`  raid-then-amp (Air Raid first, amp when it fits) ${fmt(wRaidB)}%  (${fmt(raidBN / SEASONS, 1)} raid weeks/season)`);
