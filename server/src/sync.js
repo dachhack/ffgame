@@ -37,8 +37,17 @@ export async function importLeague(leagueId, season = config.season) {
     sleeper_league_id: leagueId, season, name: league?.name ?? 'League',
     settings_json: { settings: league?.settings, scoring: league?.scoring_settings, roster_positions: league?.roster_positions },
     synced_at: new Date().toISOString(),
-  }, { onConflict: 'sleeper_league_id,season' }).select('id, invite_code').single(); // invite_code is DB-generated on insert (migration 0002)
+  }, { onConflict: 'sleeper_league_id,season' }).select('id, invite_code, avatar_url').single(); // invite_code is DB-generated on insert (migration 0002)
   const lid = leagueRow.id;
+
+  // League crest (0071): the Sleeper avatar when the league has one, else a
+  // random first-party tile — filled only while the crest is NULL, so a
+  // commissioner's pick (or an earlier import's) survives every re-sync.
+  if (!leagueRow.avatar_url) {
+    let crest = league?.avatar ? `https://sleepercdn.com/avatars/thumbs/${league.avatar}` : null;
+    if (!crest) crest = (await db().rpc('random_drip_avatar')).data ?? null;
+    if (crest) await db().from('league').update({ avatar_url: crest }).eq('id', lid).is('avatar_url', null);
+  }
 
   // Which Sleeper users are enrolled pilot testers? (app_user linked by sleeper id)
   const ownerIds = users.map((u) => String(u.user_id));

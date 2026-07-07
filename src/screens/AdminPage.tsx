@@ -6,6 +6,7 @@ import {
   adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminSetPreseason, type LeagueJoiner,
   setTeamController, setLineupPolicy,
   leagueKdst, setKdstMode, setTeamKdst,
+  rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
   type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy, type LeagueKdst, type KdstMode,
 } from '../data/liveApi';
@@ -216,6 +217,70 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 // K-DST / Audit). Used by both the super-admin Leagues tab and CommishDash.
 type LeagueTab = 'overview' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst';
 
+// ── Roster rules editor (native leagues, 0071): per-position limits any time,
+// roster size while the draft is still pending. ∞ = uncapped (stored null).
+const CAP_UNLIMITED = 11;
+const posShort = (p: string) => (p === 'DEF' ? 'D/ST' : p);
+function RosterRulesEditor({ leagueId }: { leagueId: string }) {
+  const [rounds, setRounds] = useState<number | null>(null);
+  const [draftStatus, setDraftStatus] = useState('');
+  const [caps, setCaps] = useState<Record<(typeof POS_CAP_KEYS)[number], number> | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    rosterRules(leagueId).then((r) => {
+      if (r.error || !r.ok) { setMsg(r.error ?? 'could not load roster rules'); return; }
+      setRounds(r.rounds ?? 12);
+      setDraftStatus(r.draft_status ?? '');
+      setCaps(Object.fromEntries(POS_CAP_KEYS.map((k) =>
+        [k, r.pos_caps?.[k] ?? CAP_UNLIMITED])) as Record<(typeof POS_CAP_KEYS)[number], number>);
+    }).catch((e) => setMsg(errMsg(e, 'could not load roster rules')));
+  }, [leagueId]);
+  if (!caps || rounds == null) return <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>{msg ?? 'loading rules…'}</div>;
+  const pending = draftStatus === 'pending';
+  const save = async () => {
+    if (saving) return;
+    setSaving(true); setMsg(null);
+    try {
+      const posCaps = Object.fromEntries(POS_CAP_KEYS.map((k) =>
+        [k, caps[k] >= CAP_UNLIMITED ? null : caps[k]])) as PosCaps;
+      const r = await setRosterRules(leagueId, pending ? rounds : null, posCaps);
+      setMsg(r.ok ? '✓ saved — new limits apply immediately' : (r.error ?? 'save failed'));
+    } catch (e) { setMsg(errMsg(e, 'save failed')); }
+    finally { setSaving(false); }
+  };
+  const stepBtn: React.CSSProperties = { ...mono, fontSize: 11, fontWeight: 700, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 8px', cursor: 'pointer' };
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>ROSTER SIZE</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, opacity: pending ? 1 : 0.5 }}>
+            <button onClick={() => pending && setRounds(Math.max(5, rounds - 1))} className="mono" style={stepBtn} disabled={!pending}>−</button>
+            <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{rounds}</span>
+            <button onClick={() => pending && setRounds(Math.min(25, rounds + 1))} className="mono" style={stepBtn} disabled={!pending}>＋</button>
+          </div>
+        </div>
+        {POS_CAP_KEYS.map((k) => (
+          <div key={k} style={{ textAlign: 'center' }}>
+            <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{posShort(k)} MAX</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+              <button onClick={() => setCaps({ ...caps, [k]: Math.max(0, caps[k] - 1) })} className="mono" style={stepBtn}>−</button>
+              <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{caps[k] >= CAP_UNLIMITED ? '∞' : caps[k]}</span>
+              <button onClick={() => setCaps({ ...caps, [k]: Math.min(CAP_UNLIMITED, caps[k] + 1) })} className="mono" style={stepBtn}>＋</button>
+            </div>
+          </div>
+        ))}
+        <button onClick={save} disabled={saving} className="mono" style={btn(true)}>{saving ? 'saving…' : '✓ save rules'}</button>
+      </div>
+      <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+        Limits cap how many of a position a roster may hold (∞ = no limit, 0 bans it) — enforced at the draft, free agency, waivers, and auction bids; the AI drafts to them too. Roster size {pending ? 'can change until the draft starts' : 'is locked once the draft starts'}. Rosters already over a lowered limit keep their players — the limit blocks new adds.
+      </div>
+      {msg && <div className="mono" style={{ ...mono, fontSize: 9.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{msg}</div>}
+    </div>
+  );
+}
+
 export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsible = false, defaultOpen = true }: {
   l: AdminLeague; reload: () => void; admin?: boolean; defaultTab?: '' | LeagueTab;
   /** Collapsible card: the header toggles the management panel (CommishDash uses
@@ -413,6 +478,14 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
             </div>
             <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>Players join with the invite link (button above) or by typing the invite code. The commish code claims league management.</div>
           </div>
+          {/* roster rules — native leagues only (imported rosters live on their platform) */}
+          {l.provider === 'native' && (
+            <div>
+              <div style={subhead}>ROSTER RULES</div>
+              <RosterRulesEditor leagueId={l.league_id} />
+            </div>
+          )}
+          {l.provider !== 'native' && (
           <div>
             <div style={subhead}>SCHEDULE</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -420,6 +493,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
               <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>pulls the whole season's matchups + lineups from {l.provider === 'espn' ? 'ESPN' : 'Sleeper'}</span>
             </div>
           </div>
+          )}
           {admin && (
             <div>
               <div style={subhead}>ADMIN MODES</div>

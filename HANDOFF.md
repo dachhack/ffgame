@@ -1,6 +1,59 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.103.0`_
+_Last updated: 2026-07-07 · Build `v0.104.0`_
+
+## Roster rules + league crests (v0.104.0)
+Configurable per-position roster limits (now binding HUMANS, not just the AI),
+and league avatars everywhere: random at creation, platform crest on import.
+- **THE MODEL (`0071_roster_rules_avatars.sql`)**: Drip has no positional
+  starting lineup — the weekly board fields 8 kickoff-window slots and any
+  position fills any slot — so the real roster levers are total size
+  (`draft.rounds`, existing) and PER-POSITION LIMITS, now stored in
+  `league.settings_json->'pos_caps'` ({"QB":3,…}; null value = uncapped;
+  absent blob = the legacy defaults QB 3 / TE 3 / K 1 / D-ST 1, so old
+  leagues are unchanged). `league_pos_cap`/`league_pos_caps`/`pos_cap_error`
+  are the primitives; `validate_pos_caps` keeps rosters fillable (Σ caps ≥
+  rounds); cap 0 bans a position (and lifts the K/D-ST endgame requirement,
+  which otherwise stays).
+- **ENFORCEMENT** — before 0071 the caps bound only AI; a human could draft
+  12 kickers. Now every human acquisition path is checked: snake picks
+  (`native_exec_pick` v3 — chosen picks only; autopick is trusted and its
+  tiny-pool fallback deliberately stays uncapped rather than freeze a draft),
+  auction `nominate`/`place_bid`/`set_lot_proxy` (counting lots the seat
+  already holds — parallel lots can't sneak a 2nd QB past a 1-QB cap; and
+  `resolve_lot_proxies` v3 zeroes at-cap challengers so a stale hidden max
+  can't win illegally), `add_free_agent`/`submit_waiver_claim` (net of the
+  same-move drop, so QB-for-QB swaps stay legal) and `process_waivers`
+  (re-checked at resolution → note 'position limit'). The AI reads the same
+  config (`native_autopick_slug` v4, `ai_lot_willingness` v4). Lowering a cap
+  under a roster's current count grandfathers the roster — it only blocks
+  new adds.
+- **EDITOR**: `set_roster_rules(league, rounds?, pos_caps?)` — commish/admin;
+  caps any time (immediate), roster size only while the draft is pending
+  (auction budget re-validated). `roster_rules(league)` reads them back.
+  Client: the create wizard (league AND mock) gets a ROSTER LIMITS row of six
+  steppers (∞ past 10 → null) + a "8 weekly starters / N bench" explainer;
+  CommishDash/AdminPage `LeagueRow` SETUP tab gets a ROSTER RULES editor for
+  native leagues (the provider-sync SCHEDULE section now hides for native);
+  TeamManage shows per-position usage vs limits; the draft room greys picks
+  to LIMIT at cap (server still enforces). `native_team_state` v3 and
+  `draft_state` v8 surface `pos_caps`.
+- **LEAGUE CRESTS**: `random_drip_avatar()` (the 72 first-party tiles,
+  embedded in SQL — mirror of `src/data/dripAvatars.ts`).
+  `create_native_league` v5 stamps one at creation (mocks inherit);
+  existing crest-less native leagues backfilled. Imports:
+  `admin_upsert_league` v2 gains `p_avatar` and fills the crest ONLY while
+  null (platform URL → else random tile; invalid URLs fall back) — so a
+  commissioner's pick survives every re-sync. Client Sleeper importer passes
+  `sleeperAvatarUrl(league.avatar)`; ESPN/Yahoo/MFL/Fleaflicker send null
+  (their adapters have no avatar) → random tile. Worker `importLeague`
+  (`server/src/sync.js`) does the same fill-if-null after its upsert.
+- Probes → **322 assertions** (20: cap validation gates, resize while
+  pending + commish-only + locked-once-live, human draft enforcement, capped
+  autopick run-out (≤1 QB, ≤2 RB, 0 K, =1 D-ST per roster), FA/waiver caps
+  net-of-drop, live cap edits; 21: auction nominate/bid/proxy cap checks with
+  lots-held counting, creation + mock crests, platform crest stored,
+  re-sync never clobbers, null/invalid → site art).
 
 ## Mock drafts vs the AI + frozen-auction fix (v0.103.0)
 Practice rooms for every draft shape (snake/auction × live/slow), and the bug

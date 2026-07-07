@@ -860,4 +860,160 @@ begin
   perform assert_ok(delete_mock_draft(lid), '19l delete mock');
 end $$;
 
+-- ── 20. roster rules (0071): per-position limits, humans + AI + editor ───────
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text;
+begin
+  perform probe_as('a');
+  -- validation gates
+  perform assert_err(create_native_league('Bad Caps', '2026', 2, 5, 60, 'snake', 200, 15, 1, null, null,
+    '{"QB":1,"FLEX":2}'::jsonb), 'unknown position', '20a unknown position key');
+  perform assert_err(create_native_league('Tight Caps', '2026', 2, 5, 60, 'snake', 200, 15, 1, null, null,
+    '{"QB":1,"RB":1,"WR":1,"TE":1,"K":0,"DEF":0}'::jsonb), 'too tight', '20b unfillable caps');
+
+  -- QB≤1, RB≤2, no kickers, DEF≤1 (WR/TE uncapped)
+  r := create_native_league('Caps FC', '2026', 2, 5, 60, 'snake', 200, 15, 1, null, null,
+    '{"QB":1,"RB":2,"K":0,"DEF":1}'::jsonb);
+  perform assert_ok(r, '20c create with caps');
+  lid := (r ->> 'league_id')::uuid;
+  perform set_config('probe.caps_lid', lid::text, false);
+
+  -- editor: roster size is free while pending, commish-only
+  perform probe_as('b');
+  perform assert_err(set_roster_rules(lid, 7, null), 'forbidden', '20d editor commish-only');
+  perform probe_as('a');
+  perform assert_ok(set_roster_rules(lid, 7, null), '20e resize while pending');
+  perform assert_true((roster_rules(lid) ->> 'rounds')::int = 7, '20f resize stuck');
+  perform assert_ok(set_roster_rules(lid, 5, null), '20g resize back');
+
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Caps'), '20h B joins');
+  perform probe_as('a');
+  for i in 1..3 loop pool := pool || jsonb_build_object('slug', 'c-qb' || i, 'full', 'C QB ' || i, 'pos', 'QB', 'team', 'T'); end loop;
+  for i in 1..6 loop
+    pool := pool || jsonb_build_object('slug', 'c-rb' || i, 'full', 'C RB ' || i, 'pos', 'RB', 'team', 'T');
+    pool := pool || jsonb_build_object('slug', 'c-wr' || i, 'full', 'C WR ' || i, 'pos', 'WR', 'team', 'T');
+  end loop;
+  for i in 1..2 loop
+    pool := pool || jsonb_build_object('slug', 'c-te' || i, 'full', 'C TE ' || i, 'pos', 'TE', 'team', 'T');
+    pool := pool || jsonb_build_object('slug', 'c-k' || i, 'full', 'C K ' || i, 'pos', 'K', 'team', 'T');
+    pool := pool || jsonb_build_object('slug', 'c-dst' || i, 'full', 'C DST ' || i, 'pos', 'DEF', 'team', 'T');
+  end loop;
+  perform assert_ok(seed_league_pool(lid, pool), '20i seed');
+  perform assert_ok(start_draft(lid, '[1,2]'::jsonb), '20j start');
+  r := draft_state(lid);
+  perform assert_true((r -> 'pos_caps' ->> 'QB')::int = 1 and (r -> 'pos_caps' ->> 'K')::int = 0
+    and r -> 'pos_caps' -> 'WR' = 'null'::jsonb, '20k caps surfaced in draft_state');
+
+  -- human enforcement on the clock
+  perform assert_ok(make_draft_pick(lid, 'c-qb1'), '20l A takes a QB');
+  perform probe_as('b');
+  perform assert_err(make_draft_pick(lid, 'c-k1'), 'does not roster', '20m K banned');
+  perform assert_ok(make_draft_pick(lid, 'c-qb2'), '20n B takes a QB');
+  perform assert_err(make_draft_pick(lid, 'c-qb3'), 'at most 1 QB', '20o QB cap binds B');
+  perform assert_ok(make_draft_pick(lid, 'c-rb1'), '20p B takes an RB');
+  perform probe_as('a');
+  perform assert_err(make_draft_pick(lid, 'c-qb3'), 'at most 1 QB', '20q QB cap binds A');
+  perform assert_ok(make_draft_pick(lid, 'c-rb2'), '20r A takes an RB');
+
+  -- run it out: expired human clocks autopick under the same caps
+  for i in 1..15 loop
+    update draft set deadline_at = now() - interval '1 second' where league_id = lid and status = 'live';
+    perform draft_tick(lid);
+    exit when (select status from draft where league_id = lid) = 'complete';
+  end loop;
+  perform assert_true((select status from draft where league_id = lid) = 'complete', '20s draft completes');
+  perform assert_true(not exists (
+    select 1 from native_roster nr join league_pool lp on lp.league_id = nr.league_id and lp.slug = nr.slug
+    where nr.league_id = lid group by nr.roster_id
+    having count(*) filter (where lp.pos = 'QB') > 1
+        or count(*) filter (where lp.pos = 'RB') > 2
+        or count(*) filter (where lp.pos = 'K') <> 0
+        or count(*) filter (where lp.pos = 'DEF') <> 1
+  ), '20t every roster obeys the caps (and no K drafted)');
+
+  -- free agency + waivers respect caps
+  perform assert_err(add_free_agent(lid, 1, 'c-qb3'), 'at most 1 QB', '20u FA over cap');
+  perform assert_ok(add_free_agent(lid, 1, 'c-qb3', 'c-qb1'), '20v same-position swap legal');
+  -- (with a non-QB drop, so the roster-full check passes and the CAP binds)
+  perform assert_err(submit_waiver_claim(lid, 1, 'c-qb1', 'c-rb2'), 'at most 1 QB', '20w claim over cap');
+  -- rounds lock once live/complete; caps stay editable and take effect at once
+  perform assert_err(set_roster_rules(lid, 6, null), 'locked', '20x rounds locked after start');
+  perform assert_ok(set_roster_rules(lid, null, '{"QB":2,"RB":2,"K":0,"DEF":1}'::jsonb), '20y raise QB cap');
+  perform assert_ok(submit_waiver_claim(lid, 1, 'c-qb1', 'c-rb2'), '20z claim fits under the new cap');
+  r := native_team_state(lid);
+  perform assert_true((r -> 'pos_caps' ->> 'QB')::int = 2, '20z2 caps in team state');
+end $$;
+
+-- ── 21. roster caps in auctions + league crests (0071) ───────────────────────
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text; av text;
+begin
+  -- AUCTION: a bid/nomination/hidden-max is a commitment — cap-checked
+  perform probe_as('a');
+  r := create_native_league('Cap Auction', '2026', 2, 5, 60, 'auction', 20, 15, 1, null, null,
+    '{"QB":1}'::jsonb);
+  perform assert_ok(r, '21a create capped auction');
+  lid := (r ->> 'league_id')::uuid;
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Bids'), '21b B joins');
+  perform probe_as('a');
+  for i in 1..4 loop
+    pool := pool || jsonb_build_object('slug', 'x-qb' || i, 'full', 'X QB ' || i, 'pos', 'QB', 'team', 'T');
+    pool := pool || jsonb_build_object('slug', 'x-rb' || i, 'full', 'X RB ' || i, 'pos', 'RB', 'team', 'T');
+    pool := pool || jsonb_build_object('slug', 'x-wr' || i, 'full', 'X WR ' || i, 'pos', 'WR', 'team', 'T');
+  end loop;
+  perform assert_ok(seed_league_pool(lid, pool), '21c seed');
+  perform assert_ok(start_draft(lid, '[1,2]'::jsonb), '21d start');
+
+  perform assert_ok(nominate(lid, 'x-qb1', 1), '21e A nominates a QB');
+  perform probe_as('b');
+  perform assert_ok(place_bid(lid, 2, 2), '21f B outbids');
+  update auction_lot set deadline = now() - interval '1 second' where league_id = lid;
+  perform draft_tick(lid);
+  perform assert_true(exists (select 1 from native_roster where league_id = lid and roster_id = 2 and slug = 'x-qb1'), '21g B wins the QB');
+  -- B is at the QB cap: no nominating, bidding, or proxying another QB
+  perform assert_err(nominate(lid, 'x-qb2', 1), 'at most 1 QB', '21h nomination cap-checked');
+  perform assert_ok(nominate(lid, 'x-rb1', 1), '21i RB nomination fine');
+  perform probe_as('a');
+  perform assert_ok(place_bid(lid, 1, 2), '21j A takes the RB lot');
+  update auction_lot set deadline = now() - interval '1 second' where league_id = lid;
+  perform draft_tick(lid);
+  perform assert_ok(nominate(lid, 'x-qb2', 1), '21k A (0 QB) nominates a QB');
+  perform probe_as('b');
+  perform assert_err(place_bid(lid, 2, 2), 'at most 1 QB', '21l bid cap-checked');
+  perform assert_err(set_lot_proxy(lid, 2, 5), 'at most 1 QB', '21m hidden max cap-checked');
+
+  -- LEAGUE CRESTS: a random first-party tile at creation…
+  perform probe_as('a');
+  select avatar_url into av from league where id = lid;
+  perform assert_true(av like 'https://dripfantasy.com/avatars/%', '21n native league gets a crest');
+  r := create_mock_draft(2, 5, 60);
+  perform assert_ok(r, '21o mock created');
+  perform assert_true((select avatar_url from league where id = (r ->> 'league_id')::uuid)
+    like 'https://dripfantasy.com/avatars/%', '21p mock gets a crest');
+  perform assert_ok(delete_mock_draft((r ->> 'league_id')::uuid), '21q mock cleaned up');
+
+  -- …the platform's crest on import when it has one…
+  r := admin_upsert_league('sleeper-av1', '2026', 'Imported One', '{}'::jsonb, 'sleeper',
+    'https://sleepercdn.com/avatars/thumbs/abc123');
+  perform assert_ok(r, '21r import with platform avatar');
+  perform assert_true((select avatar_url from league where id = (r ->> 'league_id')::uuid)
+    = 'https://sleepercdn.com/avatars/thumbs/abc123', '21s platform crest stored');
+  -- …which a re-sync never clobbers…
+  r := admin_upsert_league('sleeper-av1', '2026', 'Imported One', '{}'::jsonb, 'sleeper',
+    'https://sleepercdn.com/avatars/thumbs/DIFFERENT');
+  perform assert_true((select avatar_url from league where id = (r ->> 'league_id')::uuid)
+    = 'https://sleepercdn.com/avatars/thumbs/abc123', '21t re-sync keeps the crest');
+  -- …and a platform with no avatar (or a bad URL) falls back to site art.
+  r := admin_upsert_league('espn-av2', '2026', 'Imported Two', '{}'::jsonb, 'espn', null);
+  perform assert_true((select avatar_url from league where id = (r ->> 'league_id')::uuid)
+    like 'https://dripfantasy.com/avatars/%', '21u no-avatar import gets site art');
+  r := admin_upsert_league('espn-av3', '2026', 'Imported Three', '{}'::jsonb, 'espn', 'http://not-https');
+  perform assert_true((select avatar_url from league where id = (r ->> 'league_id')::uuid)
+    like 'https://dripfantasy.com/avatars/%', '21v bad URL falls back to site art');
+end $$;
+
 select 'ALL PROBES PASSED' as result;

@@ -450,8 +450,14 @@ export const adminAudit = (limit = 50) => rpc<AdminAudit[]>('admin_audit', { p_l
 export const commishAudit = (leagueId: string, limit = 50) => rpc<AdminAudit[]>('commish_audit', { p_league_id: leagueId, p_limit: limit });
 
 // Setup writers (the client fetches/parses Sleeper, these just persist).
-export const adminUpsertLeague = (sleeperId: string, season: string, name: string, settings: unknown, provider?: string) =>
-  rpc<{ ok: boolean; error?: string; league_id?: string }>('admin_upsert_league', { p_sleeper_id: sleeperId, p_season: season, p_name: name, p_settings: settings, ...(provider ? { p_provider: provider } : {}) });
+export const adminUpsertLeague = (sleeperId: string, season: string, name: string, settings: unknown, provider?: string, avatar?: string | null) =>
+  rpc<{ ok: boolean; error?: string; league_id?: string }>('admin_upsert_league', {
+    p_sleeper_id: sleeperId, p_season: season, p_name: name, p_settings: settings,
+    p_provider: provider ?? 'sleeper',
+    // platform crest — stored only while the league has no crest yet (a null
+    // gets a random first-party tile server-side)
+    p_avatar: avatar ?? null,
+  });
 export const adminUpsertMemberships = (leagueId: string, members: MemberRow[]) =>
   rpc<{ ok: boolean; count?: number }>('admin_upsert_memberships', { p_league_id: leagueId, p_members: members });
 export const adminUpsertMatchups = (leagueId: string, week: number, matchups: MatchupRow[], lockAt: string | null) =>
@@ -681,26 +687,42 @@ export const adminRegenCode = (leagueId: string, which: 'invite' | 'commish') =>
 
 // ── Native leagues (migration 0064): created in-app, rosters built by draft ─────
 export interface NativeCreateResult { ok: boolean; error?: string; league_id?: string; roster_id?: number; invite_code?: string; }
+/** Per-position roster limits (0071). null = uncapped. Absent blob = legacy
+ *  defaults (QB 3, TE 3, K 1, D/ST 1, RB/WR uncapped). Enforced server-side
+ *  for humans AND honored by the AI. */
+export type PosCaps = { QB: number | null; RB: number | null; WR: number | null; TE: number | null; K: number | null; DEF: number | null };
+export const POS_CAP_KEYS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 export const createNativeLeague = (
   name: string, season: string, teams: number, rounds: number, pickSeconds: number,
   mode: 'snake' | 'auction' = 'snake', budget = 200, lotSeconds = 15, maxLots = 1,
   nightStartMin: number | null = null, nightEndMin: number | null = null,
+  posCaps: PosCaps | null = null,
 ) =>
   rpc<NativeCreateResult>('create_native_league', {
     p_name: name, p_season: season, p_teams: teams, p_rounds: rounds, p_pick_seconds: pickSeconds,
     p_mode: mode, p_budget: budget, p_lot_seconds: lotSeconds, p_max_lots: maxLots,
-    p_night_start_min: nightStartMin, p_night_end_min: nightEndMin,
+    p_night_start_min: nightStartMin, p_night_end_min: nightEndMin, p_pos_caps: posCaps,
   });
+/** Read the league's roster rules (any member; the commish editor's loader). */
+export const rosterRules = (leagueId: string) =>
+  rpc<{ ok?: boolean; error?: string; rounds?: number; draft_status?: string; pos_caps?: PosCaps }>(
+    'roster_rules', { p_league_id: leagueId });
+/** Commissioner: edit position limits any time; roster size only pre-draft. */
+export const setRosterRules = (leagueId: string, rounds: number | null, posCaps: PosCaps | null) =>
+  rpc<{ ok: boolean; error?: string; rounds?: number; pos_caps?: PosCaps }>(
+    'set_roster_rules', { p_league_id: leagueId, p_rounds: rounds, p_pos_caps: posCaps });
 /** Mock draft (0070): a practice room where every other seat is a named AI.
  *  Same settings surface as a real league (snake/auction, live/slow clocks,
  *  parallel lots); no schedule, no season, deletable any time. */
 export const createMockDraft = (
   teams: number, rounds: number, pickSeconds: number,
   mode: 'snake' | 'auction' = 'snake', budget = 200, lotSeconds = 15, maxLots = 1,
+  posCaps: PosCaps | null = null,
 ) =>
   rpc<NativeCreateResult>('create_mock_draft', {
     p_teams: teams, p_rounds: rounds, p_pick_seconds: pickSeconds,
     p_mode: mode, p_budget: budget, p_lot_seconds: lotSeconds, p_max_lots: maxLots,
+    p_pos_caps: posCaps,
   });
 /** Wipe a mock draft (its commissioner or an admin); refuses real leagues. */
 export const deleteMockDraft = (leagueId: string) =>
@@ -744,6 +766,8 @@ export interface DraftState {
   my_autodraft: boolean;
   /** Practice room vs the AI — no schedule/season behind it, deletable. */
   is_mock?: boolean;
+  /** Per-position roster limits (null value = uncapped). */
+  pos_caps?: PosCaps;
 }
 export const draftState = (leagueId: string) => rpc<DraftState>('draft_state', { p_league_id: leagueId });
 /** Replace a seat's private draft queue with an ordered slug list. */
@@ -813,6 +837,8 @@ export const processWaivers = (leagueId: string) =>
 export interface WaiverClaimRow { id: string; add_slug: string; drop_slug: string | null; status: string; note: string | null; created_at: string; }
 export interface NativeTeamState {
   error?: string; my_roster_id: number | null; draft_status: string; roster_cap: number | null; server_now: string;
+  /** Per-position roster limits (null value = uncapped). */
+  pos_caps?: PosCaps;
   my_team?: string | null; my_avatar?: string | null; league_avatar?: string | null; is_commish?: boolean;
   waiver_order: { roster_id: number; team: string | null; priority: number | null; avatar?: string | null }[];
   my_claims: WaiverClaimRow[];

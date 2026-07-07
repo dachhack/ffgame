@@ -18,6 +18,7 @@ import { statsForSlug } from '../data/players';
 import {
   createNativeLeague, createMockDraft, deleteMockDraft, seedLeaguePool, nativeGenerateSchedule,
   startDraft, draftState, makeDraftPick, draftTick,
+  POS_CAP_KEYS, type PosCaps,
   leaguePool, nativeRosters, nativeTeamState, dropPlayer, addFreeAgent,
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
   setTeamName, setTeamAvatar, setLeagueAvatar,
@@ -38,6 +39,10 @@ const hdr: React.CSSProperties = { fontSize: 10, letterSpacing: '0.12em', color:
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 const posLabel = (p: string) => (p === 'DEF' ? 'D/ST' : p);
+/** Cap stepper sentinel: values ≥ this render as ∞ and are stored as null. */
+const CAP_UNLIMITED = 11;
+const capsToPosCaps = (caps: Record<(typeof POS_CAP_KEYS)[number], number>): PosCaps =>
+  Object.fromEntries(POS_CAP_KEYS.map((k) => [k, caps[k] >= CAP_UNLIMITED ? null : caps[k]])) as PosCaps;
 
 /** "10 PM" from minutes-since-midnight ET. */
 function fmtEtMin(m: number): string {
@@ -126,6 +131,10 @@ export function NativeCreate({ onDone, onBack }: {
   const [nightOn, setNightOn] = useState(false);  // overnight quiet hours (ET)
   const [nightStart, setNightStart] = useState(22);
   const [nightEnd, setNightEnd] = useState(10);
+  // Per-position roster limits. Stepping past CAP_MAX = no limit (∞, stored
+  // null). Defaults mirror the pre-0071 hard-coded rules.
+  const [caps, setCaps] = useState<Record<(typeof POS_CAP_KEYS)[number], number>>(
+    { QB: 3, RB: CAP_UNLIMITED, WR: CAP_UNLIMITED, TE: 3, K: 1, DEF: 1 });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [err, setErr] = useState<string | null>(null);
@@ -142,7 +151,7 @@ export function NativeCreate({ onDone, onBack }: {
         // Mock: create vs the AI, seed the pool, start, straight into the room.
         setNote('Spinning up your AI opponents…');
         const r = await createMockDraft(teams, rounds, pickSecs, mode, budget, lotSecs,
-          mode === 'auction' ? maxLots : 1);
+          mode === 'auction' ? maxLots : 1, capsToPosCaps(caps));
         if (!r.ok || !r.league_id) { setErr(friendlyError(r.error ?? 'Could not create the mock draft.')); setBusy(false); return; }
         setNote('Building the 2026 player pool…');
         const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
@@ -156,7 +165,7 @@ export function NativeCreate({ onDone, onBack }: {
       setNote('Creating your league…');
       const r = await createNativeLeague(name, '2026', teams, rounds, pickSecs, mode, budget, lotSecs,
         mode === 'auction' ? maxLots : 1,
-        nightOn ? nightStart * 60 : null, nightOn ? nightEnd * 60 : null);
+        nightOn ? nightStart * 60 : null, nightOn ? nightEnd * 60 : null, capsToPosCaps(caps));
       if (!r.ok || !r.league_id) { setErr(friendlyError(r.error ?? 'Could not create the league.')); setBusy(false); return; }
       setNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
@@ -250,6 +259,28 @@ export function NativeCreate({ onDone, onBack }: {
             ? <div><div className="mono" style={label}>BID BELL (SEC)</div><div style={{ marginTop: 7 }}>{num(bellSecs, setBellSecs, 10, 60, 5)}</div></div>
             : <div><div className="mono" style={label}>BID WINDOW (HRS)</div><div style={{ marginTop: 7 }}>{num(bellHrs, setBellHrs, 1, 48, 1)}</div></div>)}
           {mode === 'auction' && <div><div className="mono" style={label}>LOTS AT ONCE</div><div style={{ marginTop: 7 }}>{num(maxLots, setMaxLots, 1, 4, 1)}</div></div>}
+        </div>
+        {/* roster limits — the max a roster may hold at each position. There is
+            no positional starting lineup in Drip (the weekly board fields 8
+            time-window slots, any position), so limits + roster size ARE the
+            roster rules. ∞ = no limit; 0 bans the position. */}
+        <div style={{ marginTop: 14 }}>
+          <div className="mono" style={label}>ROSTER LIMITS — MAX PER POSITION (∞ = NO LIMIT)</div>
+          <div style={{ display: 'flex', gap: 14, marginTop: 7, flexWrap: 'wrap' }}>
+            {POS_CAP_KEYS.map((k) => (
+              <div key={k} style={{ textAlign: 'center' }}>
+                <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{posLabel(k)}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
+                  <button onClick={() => setCaps({ ...caps, [k]: Math.max(0, caps[k] - 1) })} className="mono" style={{ ...ghostBtn, padding: '5px 9px' }}>−</button>
+                  <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', minWidth: 24, textAlign: 'center' }}>{caps[k] >= CAP_UNLIMITED ? '∞' : caps[k]}</span>
+                  <button onClick={() => setCaps({ ...caps, [k]: Math.min(CAP_UNLIMITED, caps[k] + 1) })} className="mono" style={{ ...ghostBtn, padding: '5px 9px' }}>＋</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
+            Everyone fields 8 weekly starters (the game's kickoff windows — any position); the other {Math.max(0, rounds - 8)} roster spots are bench. K and D/ST are auto-filled late in every draft unless you set them to 0.
+          </div>
         </div>
         {/* overnight quiet hours: clocks skip these ET hours entirely — no
             deadline can land (or expire) while the league sleeps. Mocks skip
@@ -433,6 +464,26 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
   const auction = st?.mode === 'auction';
   const myTurn = st?.status === 'live' && !st.paused && st.on_clock != null && st.on_clock === myRoster;
   const myBudget = auction ? st?.budgets?.find((b) => b.roster_id === myRoster) : null;
+
+  // Position limits: grey out players my roster can't legally take (the server
+  // enforces too — this just saves the round trip). Auction counts lots I hold.
+  const myPosCount = useMemo(() => {
+    const c: Record<string, number> = {};
+    if (myRoster == null) return c;
+    for (const pk of st?.picks ?? []) {
+      if (pk.roster_id !== myRoster) continue;
+      const p = poolBySlug.get(pk.slug)?.pos; if (p) c[p] = (c[p] ?? 0) + 1;
+    }
+    for (const l of st?.lots ?? []) {
+      if (l.roster_id !== myRoster) continue;
+      const p = poolBySlug.get(l.slug)?.pos; if (p) c[p] = (c[p] ?? 0) + 1;
+    }
+    return c;
+  }, [st?.picks, st?.lots, myRoster, poolBySlug]);
+  const atCap = (pos: string) => {
+    const cap = st?.pos_caps?.[pos as keyof PosCaps];
+    return cap != null && (myPosCount[pos] ?? 0) >= cap;
+  };
 
   const avail = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -694,9 +745,10 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
                   <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 40, textAlign: 'right' }}>{proj != null ? proj.toFixed(1) : '—'}</span>
                   <button onClick={() => toggleQueue(p.slug)} title={inQ ? 'remove from queue' : 'add to queue'} className="mono"
                     style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: inQ ? 'var(--warn)' : 'var(--faint)', padding: '0 2px' }}>{inQ ? '★' : '☆'}</button>
-                  <button onClick={() => act(p.slug)} disabled={!myTurn || busy} className="mono"
-                    style={{ ...btn, padding: '6px 10px', fontSize: 10, opacity: myTurn && !busy ? 1 : 0.35 }}>
-                    {auction ? 'NOM $1' : 'PICK'}
+                  <button onClick={() => act(p.slug)} disabled={!myTurn || busy || atCap(p.pos)} className="mono"
+                    title={atCap(p.pos) ? `position limit reached (${posLabel(p.pos)})` : undefined}
+                    style={{ ...btn, padding: '6px 10px', fontSize: 10, opacity: myTurn && !busy && !atCap(p.pos) ? 1 : 0.35 }}>
+                    {atCap(p.pos) ? 'LIMIT' : auction ? 'NOM $1' : 'PICK'}
                   </button>
                 </div>
               );
@@ -827,7 +879,7 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
       {cardFor && (
         <PlayerCard p={cardFor} onClose={() => setCardFor(null)}
           queued={queue.includes(cardFor.slug)} onQueue={() => toggleQueue(cardFor.slug)}
-          action={myTurn && !taken.has(cardFor.slug)
+          action={myTurn && !taken.has(cardFor.slug) && !atCap(cardFor.pos)
             ? { label: auction ? 'NOMINATE $1' : 'DRAFT HIM', run: () => { const s = cardFor.slug; setCardFor(null); act(s); } }
             : null} />
       )}
@@ -1001,6 +1053,13 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
       {/* my roster */}
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={hdr}>MY ROSTER ({mine.length}{cap != null ? `/${cap}` : ''})</div>
+        {/* position usage vs the league's limits (∞ = uncapped) */}
+        {team.pos_caps && mine.length > 0 && (
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginBottom: 6 }}>
+            {POS_CAP_KEYS.map((k) =>
+              `${posLabel(k)} ${mine.filter((p) => p.pos === k).length}/${team.pos_caps![k] ?? '∞'}`).join(' · ')}
+          </div>
+        )}
         {mine.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>No players yet.</div>}
         {mine.map((p) => (
           <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
