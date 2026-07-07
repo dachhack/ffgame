@@ -1241,4 +1241,156 @@ begin
   perform assert_ok(add_free_agent(lid, 1, 't-rb7'), '26l FA open again');
 end $$;
 
+-- ── 27. playoffs (0073): settings, seeding, bracket, tiebreaks, champion ─────
+do $$
+declare
+  plid uuid := current_setting('probe.lid')::uuid; r jsonb;
+  s1 int; s2 int; s3 int; s4 int; semi1 uuid; semi2 uuid; finalm uuid; champ int;
+begin
+  -- settings: commish-only, sane bounds
+  perform probe_as('b');
+  perform assert_err(set_playoff_rules(plid, 4, 15), 'forbidden', '27a settings commish-only');
+  perform probe_as('a');
+  perform assert_err(set_playoff_rules(plid, 8, 15), 'playoff teams', '27b 8 teams > 4-team league');
+  perform assert_err(set_playoff_rules(plid, 3, 15), 'playoff teams', '27c odd bracket rejected');
+  perform assert_ok(set_playoff_rules(plid, 4, 15), '27d set 4 teams @ week 15');
+
+  -- fabricate a regular season: weeks 1-2 final with known scores so the
+  -- standings (wins → PF) are deterministic: seat 1 > 2 > 3 > 4
+  update matchup set status = 'final',
+      home_final = 120 - home_roster_id * 5, away_final = 100 - away_roster_id * 5
+    where league_id = plid and week in (1, 2) and not is_playoff;
+  r := league_standings(plid);
+  perform assert_true(jsonb_array_length(r) = 4, '27e standings cover the league');
+  s1 := (r -> 0 ->> 'roster_id')::int; s2 := (r -> 1 ->> 'roster_id')::int;
+  s3 := (r -> 2 ->> 'roster_id')::int; s4 := (r -> 3 ->> 'roster_id')::int;
+
+  -- generate: commish-only, round 1 = semis at week 15, higher seeds host
+  perform probe_as('b');
+  perform assert_err(generate_playoffs(plid), 'forbidden', '27f generate commish-only');
+  perform probe_as('a');
+  perform assert_ok(generate_playoffs(plid), '27g bracket generated');
+  perform assert_true((select count(*) from matchup where league_id = plid and is_playoff) = 2, '27h two semis');
+  select id into semi1 from matchup where league_id = plid and is_playoff and not is_consolation and playoff_round = 1 and bracket_pos = 1;
+  select id into semi2 from matchup where league_id = plid and is_playoff and not is_consolation and playoff_round = 1 and bracket_pos = 2;
+  perform assert_true((select home_roster_id = s1 and away_roster_id = s4 and week = 15 and playoff_label = 'Semifinal'
+    from matchup where id = semi1), '27i semi 1 = 1v4 at home');
+  perform assert_true((select home_roster_id = s2 and away_roster_id = s3 from matchup where id = semi2), '27j semi 2 = 2v3');
+  -- a regenerate is legal while everything is still scheduled
+  perform assert_ok(generate_playoffs(plid), '27k regenerate while scheduled');
+  select id into semi1 from matchup where league_id = plid and is_playoff and not is_consolation and playoff_round = 1 and bracket_pos = 1;
+  select id into semi2 from matchup where league_id = plid and is_playoff and not is_consolation and playoff_round = 1 and bracket_pos = 2;
+
+  -- advancing early is a no-op
+  r := advance_playoffs(plid);
+  perform assert_true(not (r ->> 'advanced')::boolean, '27l no advance before finals');
+
+  -- semis final: seed 1 wins big; semi 2 ends in a TIE → better seed advances
+  update matchup set status = 'final', home_final = 150, away_final = 80 where id = semi1;
+  update matchup set status = 'final', home_final = 99, away_final = 99 where id = semi2;
+  r := advance_playoffs(plid);
+  perform assert_true((r ->> 'advanced')::boolean and (r ->> 'week')::int = 16, '27m championship created @ 16');
+  select id into finalm from matchup where league_id = plid and is_playoff and not is_consolation and playoff_round = 2;
+  perform assert_true((select playoff_label = 'Championship' and home_roster_id = s1 and away_roster_id = s2
+    from matchup where id = finalm), '27n tie sent the better seed through; 1 hosts');
+  -- settings + bracket lock once underway
+  perform assert_err(set_playoff_rules(plid, 2, 15), 'underway', '27o settings locked');
+  perform assert_err(generate_playoffs(plid), 'underway', '27p bracket locked');
+
+  -- crown the champion (idempotent advance)
+  update matchup set status = 'final', home_final = 88, away_final = 110 where id = finalm;
+  r := advance_playoffs(plid);
+  champ := (r ->> 'champion')::int;
+  perform assert_true(champ = s2, '27q underdog wins the title');
+  r := advance_playoffs(plid);
+  perform assert_true((r ->> 'champion')::int = s2, '27r advance stays idempotent');
+  r := playoff_state(plid);
+  perform assert_true((r ->> 'champion')::int = s2 and (r ->> 'champion_team') is not null, '27s state carries the champ');
+  -- 3 bracket games + the semi losers' 3rd-place game on the ladder
+  perform assert_true(jsonb_array_length(r -> 'matchups') = 4 and (r ->> 'generated')::boolean, '27t full bracket in state');
+
+  -- a 2-team league gets a one-game bracket (no schedule required)
+  perform assert_ok(set_playoff_rules(current_setting('probe.txn_lid')::uuid, 2, 15), '27u 2-team rules');
+  perform assert_ok(generate_playoffs(current_setting('probe.txn_lid')::uuid), '27v 2-team bracket');
+  perform assert_true((select count(*) = 1 from matchup
+    where league_id = current_setting('probe.txn_lid')::uuid and is_playoff
+      and playoff_label = 'Championship'), '27w straight to the title game');
+end $$;
+
+-- ── 28. seed override + consolation ladder (0073) ────────────────────────────
+do $$
+declare
+  lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text;
+  semi1 uuid; semi2 uuid; con1 uuid; finalm uuid; third uuid; con2 uuid;
+begin
+  perform probe_as('a');
+  r := create_native_league('Ladder League', '2026', 6, 5, 60);
+  perform assert_ok(r, '28a create');
+  lid := (r ->> 'league_id')::uuid;
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Ladder'), '28b B joins');
+  perform probe_as('a');
+  for i in 1..20 loop pool := pool || jsonb_build_object('slug', 'll-rb' || i, 'full', 'LL RB ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  for i in 1..6 loop
+    pool := pool || jsonb_build_object('slug', 'll-k' || i, 'full', 'LL K ' || i, 'pos', 'K', 'team', 'T');
+    pool := pool || jsonb_build_object('slug', 'll-d' || i, 'full', 'LL D ' || i, 'pos', 'DEF', 'team', 'T');
+  end loop;
+  perform assert_ok(seed_league_pool(lid, pool), '28c seed pool');
+  perform assert_ok(start_draft(lid, '[1,2,3,4,5,6]'::jsonb), '28d start draft');
+  for i in 1..40 loop
+    update draft set deadline_at = now() - interval '1 second' where league_id = lid and status = 'live';
+    perform draft_tick(lid);
+    exit when (select status from draft where league_id = lid) = 'complete';
+  end loop;
+  perform assert_true((select status from draft where league_id = lid) = 'complete', '28e drafted out');
+
+  -- commish seed override: gates, then a field that skips the #1 standings team
+  perform assert_ok(set_playoff_rules(lid, 4, 15), '28f 4-team bracket');
+  perform assert_err(generate_playoffs(lid, '[2,3,4]'::jsonb), 'exactly 4', '28g wrong length');
+  perform assert_err(generate_playoffs(lid, '[2,3,4,4]'::jsonb), 'different', '28h duplicate seed');
+  perform assert_err(generate_playoffs(lid, '[2,3,4,99]'::jsonb), 'different', '28i unknown team');
+  perform assert_ok(generate_playoffs(lid, '[2,3,4,5]'::jsonb), '28j custom field');
+  select id into semi1 from matchup where league_id = lid and is_playoff and not is_consolation and playoff_round = 1 and bracket_pos = 1;
+  select id into semi2 from matchup where league_id = lid and is_playoff and not is_consolation and playoff_round = 1 and bracket_pos = 2;
+  perform assert_true((select home_roster_id = 2 and away_roster_id = 5 from matchup where id = semi1), '28k semi 1 = custom 1v4');
+  perform assert_true((select home_roster_id = 3 and away_roster_id = 4 from matchup where id = semi2), '28l semi 2 = custom 2v3');
+
+  -- the two teams below the cut start on the ladder and PLAY (1 v 6)
+  select id into con1 from matchup where league_id = lid and is_playoff and is_consolation and playoff_round = 1;
+  perform assert_true((select home_roster_id = 1 and away_roster_id = 6 and playoff_label = 'Consolation'
+    from matchup where id = con1), '28m ladder round 1 = 1v6');
+  r := playoff_state(lid);
+  perform assert_true(r -> 'consolation' = '[1, 6]'::jsonb, '28n ladder stamped');
+
+  -- week 15 finals: 2 and 4 advance; 6 upsets 1 on the ladder
+  update matchup set status = 'final', home_final = 120, away_final = 90 where id = semi1;   -- 2 > 5
+  update matchup set status = 'final', home_final = 80, away_final = 100 where id = semi2;   -- 4 > 3
+  update matchup set status = 'final', home_final = 70, away_final = 95 where id = con1;     -- 6 > 1
+  r := advance_playoffs(lid);
+  perform assert_true((r ->> 'advanced')::boolean, '28o round 2 created');
+  select id into finalm from matchup where league_id = lid and is_playoff and not is_consolation and playoff_round = 2;
+  perform assert_true((select playoff_label = 'Championship' and home_roster_id = 2 and away_roster_id = 4
+    from matchup where id = finalm), '28p title game 2v4');
+  -- semifinal losers dropped onto the ladder's top: 3rd place game + ladder game
+  select id into third from matchup where league_id = lid and is_playoff and is_consolation and playoff_round = 2 and bracket_pos = 1;
+  select id into con2 from matchup where league_id = lid and is_playoff and is_consolation and playoff_round = 2 and bracket_pos = 2;
+  perform assert_true((select home_roster_id = 3 and away_roster_id = 5 and playoff_label = '3rd Place Game'
+    from matchup where id = third), '28q semi losers play for 3rd');
+  perform assert_true((select home_roster_id = 6 and away_roster_id = 1 and playoff_label = 'Consolation'
+    from matchup where id = con2), '28r ladder reordered by the upset');
+  r := playoff_state(lid);
+  perform assert_true(r -> 'consolation' = '[3, 5, 6, 1]'::jsonb, '28s losers join the ladder top');
+
+  -- championship week finals: 5 takes 3rd; the ladder game TIES (rungs hold)
+  update matchup set status = 'final', home_final = 100, away_final = 130 where id = finalm; -- 4 wins it all
+  update matchup set status = 'final', home_final = 90, away_final = 110 where id = third;   -- 5 > 3
+  update matchup set status = 'final', home_final = 77, away_final = 77 where id = con2;     -- tie
+  r := advance_playoffs(lid);
+  perform assert_true((r ->> 'champion')::int = 4, '28t underdog champion');
+  r := playoff_state(lid);
+  perform assert_true(r -> 'consolation' = '[5, 3, 6, 1]'::jsonb, '28u final ladder: swap for 3rd, tie holds');
+  perform assert_true((r ->> 'champion_team') is not null, '28v champ named');
+end $$;
+
 select 'ALL PROBES PASSED' as result;
