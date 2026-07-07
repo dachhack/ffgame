@@ -55,22 +55,29 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
     if (metricId === 'passbig') return play.kind === 'pass' ? play.yards * 0.04 + (play.td ? 10 : 0) : 0; // Air Raid unlock: 10 pts / passing TD
     if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0;  // yards + TD points, flat
   }
+  // NUKE metrics also score scrimmage yards (0.04/yd) under a SPIKE profile
+  // (big per-TD, discounted yardage). Measured (findings §2/§10/§11): pure
+  // 6-per-TD forfeited a starter's whole production (~60-70% EV loss), making
+  // NUKE a trap and foreclosing the trailing-team gamble; the spike profile
+  // prices its variance+denial at a fair single-flip discount (~46% blind)
+  // while keeping the boom big enough to gamble on.
+  const scrimmage = (play.kind === 'rush' || play.kind === 'rec') ? play.yards * 0.04 : 0;
   if (pos === 'RB') {
     if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 : 0; // drip, no TD
     if (metricId === 'carries') return play.kind === 'rush' ? 0.5 : 0; // COMPRESSION
     if (metricId === 'rec') return play.catch ? 1 : 0;
-    if (metricId === 'td') return play.td ? 6 : 0; // NUKE
+    if (metricId === 'td') return scrimmage + (play.td ? 10 : 0); // NUKE
   }
   if (pos === 'WR') {
     if (metricId === 'recyd') return play.catch ? play.yards * 0.1 * (hot ? 2 : 1) : 0;
     if (metricId === 'rec') return play.catch ? 1 : 0;
-    if (metricId === 'tgt') return play.target ? 0.5 : 0;
-    if (metricId === 'td') return play.td ? 6 : 0;
+    if (metricId === 'tgt') return play.target ? 1 : 0;
+    if (metricId === 'td') return scrimmage + (play.td ? 10 : 0);
   }
   if (pos === 'TE') {
     if (metricId === 'tgt') return play.target ? 1 : 0;
     if (metricId === 'rec') return play.catch ? 1.5 : 0;
-    if (metricId === 'td') return play.td ? 8 : 0; // NUKE
+    if (metricId === 'td') return scrimmage + (play.td ? 12 : 0); // NUKE
   }
   if (pos === 'K') {
     // 'neg' (SHUTDOWN) scores 0 directly — it's a pure effect. 'banker' scores
@@ -654,7 +661,10 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     if (play.clock < mine.nukedUntil) continue;
     // A big bank wipe of the victim (`opp`). Counter-Nuke (reflect onto the
     // attacker) and Insurance (keep half) protect YOUR slot the first time.
-    const nukeWipe = (wiped: number): string => {
+    // `stealPct` > 0 (the td-metric NUKE) credits the attacker a quarter of
+    // what was removed — the WR/TE carry-wipe buff passes 0 (it already pays
+    // its own coin bounty) and a reflected nuke steals nothing.
+    const nukeWipe = (wiped: number, stealPct = 0.25): string => {
       if (oppSide === 'you' && youBuffs.has('counter-nuke') && !cnUsed) {
         cnUsed = true; const back = mine.bank; mine.bank = 0; mine.hist = []; nukeDrip(mine, play.clock); // reflected: the attacker is wiped + drip-suppressed instead
         recBuff('you', 'counter-nuke', back, true); // reflected the nuke back onto the attacker
@@ -663,10 +673,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       if (oppSide === 'you' && youBuffs.has('insurance') && !insUsed) {
         insUsed = true; opp.bank = Math.round(wiped * 0.5 * 10) / 10; opp.hist = []; // half the bank refunded AND the drip survives (no rate-reset/blackout) — the "soften" counter to counter-nuke's "reflect"
         recBuff('you', 'insurance', opp.bank); // half your bank refunded instead of zeroed
-        return ` · 🛟 INSURED ${opp.bank.toFixed(1)}`;
+        const ins = stealPct > 0 ? stealCut(wiped * 0.5) : 0; // steal from what was actually removed (the un-insured half)
+        return ` · 🛟 INSURED ${opp.bank.toFixed(1)}${ins > 0 ? ` · steal +${ins.toFixed(1)}` : ''}`;
       }
       opp.bank = 0; opp.hist = []; nukeDrip(opp, play.clock);
-      return '';
+      const stolen = stealPct > 0 ? stealCut(wiped) : 0; // a TD nuke KEEPS a quarter of the bank it wipes (see stealCut)
+      return stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : '';
     };
     const myFam = play.side === 'you' ? youFam : theirFam;
     const oppFam = play.side === 'you' ? theirFam : youFam;
@@ -692,6 +704,15 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     let evMult: number | undefined; // FG multiplier shown on this play in the log
     let buffNote: string | undefined; // an active powerup changed this play's score
     const sideMult = (play.side === 'you' ? opts.youMult?.(play.clock) : opts.theirMult?.(play.clock)) ?? 1;
+    // DENIAL STEAL: erase/reset/compression credit the denier a QUARTER of the
+    // points they remove, so denial's payoff scales with the threat it counters
+    // instead of being pure forfeited-EV subtraction (measured in the findings:
+    // pure denial never paid its opportunity cost). Flat — no FG/garbage mult.
+    const stealCut = (removed: number): number => {
+      const steal = Math.round(removed * 0.25 * 10) / 10;
+      if (steal > 0) { mine.bank += steal; mine.hist.push({ clock: play.clock, pts: steal }); pts += steal; }
+      return steal;
+    };
     if (iAmDrip) {
       if (myDripKind?.includes(play.kind)) {
         mine.rate += play.yards * myDripRate;
@@ -786,8 +807,9 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
           const cutoff = play.clock - eraseWindow;
           let erased = 0;
           opp.hist = opp.hist.filter((h) => { if (h.clock >= cutoff) { erased += h.pts; return false; } return true; });
-          if (erased > 0) { opp.bank = Math.max(0, opp.bank - erased); sig = true; }
-          effect = { type: 'erase', text: erased > 0 ? `ERASE −${erased.toFixed(1)} · drip stop` : 'DRIP STOP' };
+          let stolen = 0;
+          if (erased > 0) { opp.bank = Math.max(0, opp.bank - erased); stolen = stealCut(erased); sig = true; }
+          effect = { type: 'erase', text: erased > 0 ? `ERASE −${erased.toFixed(1)}${stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : ''} · drip stop` : 'DRIP STOP' };
         } else if (play.kind === 'rec' && myFam === 'reset') {
           opp.paused = true;
           const had = opp.rate; opp.rate = 0; opp.streak = 0; opp.hot = false;
@@ -816,10 +838,18 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         if (h.clock >= cutoff) { erased += h.pts; return false; }
         return true;
       });
-      if (erased > 0) { opp.bank = Math.max(0, opp.bank - erased); effect = { type: 'erase', text: `ERASE −${erased.toFixed(1)}` }; sig = true; }
+      if (erased > 0) {
+        opp.bank = Math.max(0, opp.bank - erased);
+        const stolen = stealCut(erased);
+        effect = { type: 'erase', text: `ERASE −${erased.toFixed(1)}${stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : ''}` }; sig = true;
+      }
     } else if (myFam === 'reset' && play.catch) {
       const last = opp.hist[opp.hist.length - 1];
-      if (last) { const cut = last.pts * 0.5; opp.bank = Math.max(0, opp.bank - cut); last.pts -= cut; effect = { type: 'reset', text: 'RATE RESET' }; sig = true; }
+      if (last) {
+        const cut = last.pts * 0.5; opp.bank = Math.max(0, opp.bank - cut); last.pts -= cut;
+        const stolen = stealCut(cut);
+        effect = { type: 'reset', text: `RATE RESET${stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : ''}` }; sig = true;
+      }
     } else if (myFam === 'stop' && play.target && opp.hist.length) {
       effect = { type: 'stop', text: 'CLOCK STOP' };
     }
@@ -833,7 +863,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       if (cut > 0) {
         opp.bank = Math.max(0, opp.bank - cut);
         last.pts -= cut;
-        if (!effect) effect = { type: 'reset', text: `COMPRESSION −${cut.toFixed(1)}` };
+        const stolen = stealCut(cut);
+        if (!effect) effect = { type: 'reset', text: `COMPRESSION −${cut.toFixed(1)}${stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : ''}` };
         sig = true;
       }
     }
@@ -845,7 +876,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const myBuffs = play.side === 'you' ? youBuffs : theirBuffs;
     if ((myPlayer.player.pos === 'WR' || myPlayer.player.pos === 'TE') && myBuffs.has('unlock-carries-wipe') && play.kind === 'rush' && opp.bank > 0) {
       const wiped = opp.bank;
-      const suffix = nukeWipe(wiped); opp.paused = true;
+      const suffix = nukeWipe(wiped, 0); opp.paused = true; // no steal — the wipe pays its own coin bounty
       if (!effect) effect = { type: 'nuke', text: `✕ CARRY WIPE −${wiped.toFixed(1)}${suffix}` };
       recBuff(play.side, 'unlock-carries-wipe', wiped, true); // wiped the opponent's bank
       coinAmt = 25; // the carry wipe pays its own bounty regardless of the primary metric

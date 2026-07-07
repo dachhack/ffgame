@@ -112,7 +112,13 @@ function coinFor(slots: SlotRes[], side: 'home' | 'away'): number {
  *  path simply hands them through, the way the demo's buildMatchup does.
  *  Trick Play / Pick Six / Hail Mary also arrive in these sets — they're armed
  *  team buffs; their flat awards resolve here (see awardFor). */
-export interface LiveBuffs { homeBuffs?: Set<string>; awayBuffs?: Set<string>; }
+export interface LiveBuffs {
+  homeBuffs?: Set<string>; awayBuffs?: Set<string>;
+  /** Combo-Drip unlocks purchased this week, per side (one combodrip slot per
+   *  purchase). Defaults to 1 — the single-unlock loadout every legacy caller
+   *  (playtester, forceResolve) represents with a plain `unlocks` set. */
+  homeComboQty?: number; awayComboQty?: number;
+}
 
 /** A side's real-time slot swap (Metric Swap / Player Swap / Mulligan). Cuts
  *  over at atRt (real seconds since the pre-swap player's first snap) mapped
@@ -166,6 +172,38 @@ function awardFor(buffs: Set<string>, picks: LivePick[], week: number): { pick: 
  *  `extras` carries each side's applied targeted power-ups (swaps / EMP /
  *  Double-or-Nothing / Bye Steal) — the live counterpart of buildMatchup's. */
 export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[], week: number, buffs: LiveBuffs = {}, extras: LiveExtrasBySide = {}): LiveResult {
+  // COMBO DRIP is ONE-FOR-ONE: one combodrip slot per unlock PURCHASED (buy
+  // two, field two — the coin economy limits the stack, not a hard cap).
+  // Picks beyond the purchased quantity downgrade to the position's standard
+  // drip. Enforced here so every surface (worker, admin force-resolve,
+  // playtester, the hindsight adversary) agrees; the DB trigger + apply RPCs
+  // (migrations 0061/0062) reject the excess at write time.
+  const capCombo = (picks: LivePick[], qty: number): LivePick[] => {
+    let used = 0;
+    return picks.map((p) => {
+      if (p.metricId !== 'combodrip') return p;
+      if (used < qty) { used++; return p; }
+      return { ...p, metricId: p.player.pos === 'RB' ? 'rush' : 'recyd' };
+    });
+  };
+  homePicks = capCombo(homePicks, buffs.homeComboQty ?? 1);
+  awayPicks = capCombo(awayPicks, buffs.awayComboQty ?? 1);
+  // Same rule for live swaps INTO combodrip: sealed combodrip slots plus swap
+  // targets must stay within the purchased quantity (re-picking the combo
+  // slot's own metric doesn't count against it).
+  const capSwapCombo = (x: LiveExtras | undefined, picks: LivePick[], qty: number) => {
+    if (!x?.swaps) return;
+    let have = picks.filter((p) => p.metricId === 'combodrip').length;
+    for (const [k, s] of Object.entries(x.swaps)) {
+      if (s.toMetricId !== 'combodrip') continue;
+      const selfIsCombo = picks.some((p) => p.metricId === 'combodrip' && `${p.win}|${p.slot}` === k);
+      if (selfIsCombo) continue; // no net change
+      if (have < qty) { have++; continue; }
+      delete x.swaps[k].toMetricId; // keep any player swap; drop the over-quantity metric change
+    }
+  };
+  capSwapCombo(extras.home, homePicks, buffs.homeComboQty ?? 1);
+  capSwapCombo(extras.away, awayPicks, buffs.awayComboQty ?? 1);
   const reg = REAL_WEEKS.has(week) ? 3600 : 3300;
   const homeBuffs = buffs.homeBuffs ?? new Set<string>();
   const awayBuffs = buffs.awayBuffs ?? new Set<string>();

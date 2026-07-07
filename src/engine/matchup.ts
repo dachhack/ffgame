@@ -316,6 +316,12 @@ export function buildMatchup(
   const youPools = windowPools(youTeamId, week);
   const oppPools = windowPools(oppTeamId, week);
 
+  // COMBO DRIP is one-for-one (one slot per unlock purchased). The demo/sim
+  // board already enforces this at pick time — sealing a locked metric consumes
+  // one unlock from inventory (Matchup.tsx useConsumable) — and the AI fields
+  // at most one (aiLineup), so no engine-side cap is needed here. The live
+  // resolver (resolveLiveMatchup) caps by purchased quantity.
+
   const windows: ResolvedWindow[] = [];
   let anyReal = false;
   let maxClock = 3300;

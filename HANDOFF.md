@@ -1,6 +1,53 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.96.0`_
+_Last updated: 2026-07-07 · Build `v0.97.1`_
+
+## Combo Drip: one slot PER PURCHASE, buyable multiple times (v0.97.1)
+0061 read "single-use" as a hard cap of one combodrip slot per lineup; the
+intended rule (design call) is ONE-FOR-ONE — each ◎65 unlock purchase permits
+one combodrip slot, and you may buy several if you can afford them (the tight
+coin economy is the stack limiter: 3 slots = ◎195 ≈ 3 weeks of income).
+- **DB (`0062_combodrip_qty.sql`)**: `applied_state.payload_json.unlockQty
+  ['unlock-combo-drip']` counts purchases (legacy set-flag-without-qty reads
+  as 1); `arm_unlock` on combo always buys ONE MORE (new charge, qty+1);
+  `disarm_unlock` refunds one and trims now-excess picks (highest slots
+  first); the sealed_pick trigger + `apply_targeted` enforce picks ≤ qty
+  ('Combo Drip is one per unlock — you own N…').
+- **Engine**: `resolveLiveMatchup` caps by `homeComboQty`/`awayComboQty`
+  (default 1 — the single-unlock loadout legacy callers represent with a
+  set); resolve.js passes the real qty from applied_state. buildMatchup's
+  0061 cap is REMOVED — the demo already enforces one-per-purchase at pick
+  time (useConsumable eats an unlock per locked-metric seal). AI unchanged
+  (buys ≤1 unlock → fields ≤1).
+- **Client (`LivePicks`)**: the Combo Drip chip is a counter — shows ✓×N,
+  tapping buys another (◆65 each), a ➖ chip removes one (refund; server may
+  trim the excess pick → full reload to mirror).
+- Verified: 5 scratch-DB probes (arm×2→qty2, two picks ok / third rejected,
+  disarm-one trims highest slot, disarm-last clears flag, legacy flag reads
+  qty 1) + engine qty check (qty 1 vs 2 resolve differently) + invariants.
+- NOTE: the playtester passes owned-set loadouts (engine default qty 1), so
+  multi-combo economics aren't measured yet — pair with the amplifier-
+  surcharge/saver season probe when tuning the economy pass.
+
+## Mechanics retune #2 — fair-priced variance & denial, single-use Combo Drip (v0.97.0)
+Driven by findings §10 (late swap had nothing profitable to buy) — see §11 for
+the full before/after table.
+- **NUKE spike profile** (`sim.ts scorePlay`): `td` = 0.04/yd scrimmage +
+  10/TD (RB+WR) · 12/TD (TE), wipe+blackout unchanged, PLUS the nuke steals a
+  quarter of the bank it wipes (`nukeWipe(stealPct)`; carry-wipe passes 0).
+- **Denial steals** (`stealCut` in resolveSlot): erase/reset-cut/compression
+  credit the denier 25% of points removed; WR Targets 1.0/target.
+- **Combo Drip SINGLE-USE** (user directive): one combodrip slot per lineup —
+  engine caps in resolveLiveMatchup + buildMatchup (extras downgrade to the
+  standard drip; swaps into combodrip dropped when another slot runs it), the
+  AI keeps its best dual-threat only (`aiLineup`), and migration
+  **0061** adds a sealed_pick trigger + the apply_targeted combodrip check.
+- Measured: rb-nuke-1 45.8% (target band), protect-at-parity in lateswap,
+  gamble conversion ~doubled; invariants/season all hold; power-up opt-out cost
+  rose 2.9 → 5.0 pts (they matter now). Metric catalog + rulebook regenerated.
+- Client note: a second combodrip pick now fails at SEAL with the trigger's
+  message ('Combo Drip is single-use — one slot per lineup'); SetupRow doesn't
+  yet grey the option client-side — cosmetic follow-up.
 
 ## Targeted power-ups score in LIVE leagues (v0.96.0)
 0059 made everything buyable; this makes the targeted/reactive set actually

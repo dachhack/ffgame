@@ -6,7 +6,7 @@ import type { Pos, WindowId } from '../types';
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
   myBuffs, armBuff, disarmBuff, LIVE_BUFFS,
-  myUnlocks, armUnlock, disarmUnlock,
+  myUnlocks, armUnlock, disarmUnlock, myComboQty,
   myWallet, ensureWallet,
   myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium, startCheckout,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
@@ -54,6 +54,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
   const [picks, setPicks] = useState<Record<string, { player_slug: string | null; metric_id: string | null }>>({});
   const [buffs, setBuffs] = useState<Set<string>>(new Set());
   const [unlocks, setUnlocks] = useState<Set<string>>(new Set());
+  const [comboQty, setComboQty] = useState(0); // Combo-Drip unlocks purchased (one slot per purchase)
   const [coins, setCoins] = useState<number>(0);
   const [buffBusy, setBuffBusy] = useState<string | null>(null);
   const [extra, setExtra] = useState<number>(0);
@@ -90,7 +91,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
         setMatchup(m);
         matchupPremium(m.id).then(setMatchPremium).catch(() => {}); // premium → no power-up locks (both sides get the full set)
         matchupTeams(r.leagueId, [r.rosterId]).then((t) => setMyTeam(t[r.rosterId] ?? null)).catch(() => {});
-        const [pl, pk, bf, un, ex, slate] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId), myBuffs(m.id), myUnlocks(m.id), myExtra(m.id).catch(() => 0), liveSlate(m.week).catch(() => [])]);
+        const [pl, pk, bf, un, ex, slate, cq] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId), myBuffs(m.id), myUnlocks(m.id), myExtra(m.id).catch(() => 0), liveSlate(m.week).catch(() => []), myComboQty(m.id, userId).catch(() => 0)]);
         // Apply the live ESPN slate (overrides baked 2025) before gating below.
         setRuntimeSlate(m.week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId })));
         // Each window's first kickoff — drives per-window lock gating below.
@@ -117,6 +118,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
         setExtraPicks(Array.from({ length: n }, (_, i) => xs[i] ?? { win: null, player_slug: null, metric_id: null }));
         setBuffs(new Set(bf ?? []));
         setUnlocks(new Set(un ?? []));
+        setComboQty(Number(cq ?? 0));
         ensureWallet(m.id).then((c) => setCoins(Number(c ?? 0))).catch(() => {}); // seeds once + balance
         setState('ready');
       } catch (e) {
@@ -283,7 +285,8 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
 
   const toggleUnlock = async (id: string) => {
     if (!matchup || locked || buffBusy) return;
-    const armed = unlocks.has(id);
+    const combo = id === 'unlock-combo-drip';
+    const armed = unlocks.has(id) && !combo; // combo: every tap BUYS ANOTHER (one slot per purchase); ➖ removes one
     if (!armed && puLocked(id)) { markGatedAttempt('powerup:' + id); setErr(upgradeMsg); return; }
     if (!armed && coins < priceOf(id)) { setErr(insufficientMsg(id)); return; }
     setBuffBusy(id); setErr(null);
@@ -291,6 +294,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
       const r = armed ? await disarmUnlock(matchup.id, id) : await armUnlock(matchup.id, id);
       if (r.ok && r.unlocks) {
         setUnlocks(new Set(r.unlocks));
+        if (combo && typeof r.comboQty === 'number') setComboQty(r.comboQty);
         refreshCoins();
         // Disarming an unlock clears dependent picks server-side — mirror locally.
         if (armed) setPicks((prev) => {
@@ -303,6 +307,19 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
         });
       } else setErr(r.error === 'insufficient' ? insufficientMsg(id) : (r.error ?? 'Could not update unlocks.'));
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not update unlocks.'); }
+    finally { setBuffBusy(null); }
+  };
+
+  /** Remove ONE Combo-Drip purchase (refund). The server clears any now-excess
+   *  combodrip picks (highest slots first) — reload to mirror it exactly. */
+  const disarmComboOne = async () => {
+    if (!matchup || locked || buffBusy || comboQty <= 0) return;
+    setBuffBusy('unlock-combo-drip'); setErr(null);
+    try {
+      const r = await disarmUnlock(matchup.id, 'unlock-combo-drip');
+      if (r.ok) { setAttempt((a) => a + 1); } // full reload — picks may have been trimmed server-side
+      else setErr(r.error ?? 'Could not remove the Combo Drip.');
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Could not remove the Combo Drip.'); }
     finally { setBuffBusy(null); }
   };
 
@@ -431,14 +448,23 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
             {LIVE_UNLOCKS.map((id) => {
               const pu = powerupById(id);
-              const on = unlocks.has(id);
-              const afford = on || coins >= priceOf(id);
+              const combo = id === 'unlock-combo-drip';
+              const on = combo ? comboQty > 0 : unlocks.has(id);
+              // Combo Drip is one slot PER PURCHASE — the chip always offers to
+              // buy another, so affordability matters even when armed.
+              const afford = (on && !combo) || coins >= priceOf(id);
               return (
-                <button key={id} onClick={() => toggleUnlock(id)} disabled={locked || !!buffBusy || !afford} title={pu?.blurb}
+                <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                <button onClick={() => toggleUnlock(id)} disabled={locked || !!buffBusy || !afford} title={combo ? `${pu?.blurb ?? ''} Tap to buy another (◆${priceOf(id)} each).` : pu?.blurb}
                   className="mono"
                   style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : afford ? 'var(--text)' : 'var(--faint)', background: on ? 'var(--streak, var(--you))' : 'var(--bg)', border: `1px solid ${on ? 'var(--streak, var(--you))' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked || !afford ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : afford ? 1 : 0.5 }}>
-                  <PuIcon id={id} emoji={pu?.icon} size="1.4em" /> {pu?.name ?? id} {on ? '✓' : puLocked(id) ? <Emoji e="🔒" size="1.2em" /> : <><GameIcon name={COIN_GOLD} emoji="◆" size="1.2em" />{priceOf(id)}</>}
+                  <PuIcon id={id} emoji={pu?.icon} size="1.4em" /> {pu?.name ?? id} {on ? (combo ? `✓ ×${comboQty} ＋` : '✓') : puLocked(id) ? <Emoji e="🔒" size="1.2em" /> : <><GameIcon name={COIN_GOLD} emoji="◆" size="1.2em" />{priceOf(id)}</>}
                 </button>
+                {combo && comboQty > 0 && !locked && (
+                  <button onClick={disarmComboOne} disabled={!!buffBusy} title="Remove one Combo Drip (refund; may clear its pick)" className="mono"
+                    style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 14, padding: '6px 8px', cursor: 'pointer' }}>➖</button>
+                )}
+                </span>
               );
             })}
           </div>

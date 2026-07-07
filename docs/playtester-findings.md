@@ -364,3 +364,51 @@ windows, unmeasured because the projection model is mean-only (no per-player
 variance); partial margins resolve window subsets, so cross-window couplings
 (suppress/banker/backups spanning locked+unlocked windows) are approximated; the
 opponent never adapts (a human meta could punish known policies).
+
+## 11. Mechanics retune #2 — price variance & denial fairly; Combo Drip single-use (shipped)
+§10 showed late swap's information had nothing profitable to buy. Three changes
+(v0.97.0), each measured with the same seeds as the pre-tune baselines:
+
+1. **NUKE spike profile** — the `td` metric now scores scrimmage yards at 0.04/yd
+   plus a bigger boom (10/TD RB+WR, 12/TD TE), keeps the wipe+blackout, **and
+   steals a quarter of the bank it wipes** (insurance-softened wipes steal from
+   the removed half; the carry-wipe buff is excluded — it pays its own bounty).
+2. **Denial steals** — erase / rate-reset(cut) / compression credit the denier
+   25% of the points removed; WR Targets 0.5 → 1.0/target.
+3. **Combo Drip single-use** — one combodrip slot per lineup, enforced in the
+   engine (extras downgrade to the standard drip), the AI (best dual-threat
+   only), a sealed_pick trigger + apply_targeted (migration 0061).
+
+| reading | before | after |
+|---|--:|--:|
+| rb-nuke-1 (top RB flip, blind) | ~35% | **45.8%** |
+| wr-nuke-1 (top WR flip — worst-case single) | ~26-30% | 41.1% |
+| te-nuke-1 / te-nuke-all | 50.4% | 51.9% (no runaway) |
+| wr-erase-all / wr-stop-all (blind torture tests) | 33.7% / 26.4% | 36.0% / 33.4% |
+| lateswap gamble1 fired-cohort | 8.6% vs 25.2% | **16.2% vs 25.2%** |
+| lateswap behind-at-half (gamble1) | 13.7% vs 26.7% | 20.0% vs 26.7% |
+| lateswap protect T=15 fired-cohort | 78.2% vs 81.7% | **81.1% vs 81.7% (parity)** |
+
+**Reading:** single-flip nukes are now a fair-ish discount (RB in the 44-48
+target band; the WR number is the worst-case top-starter flip), lead-protection
+denial reaches statistical parity, and the trailing gamble roughly doubled its
+conversion — still below stand-pat, which is arguably correct (a gamble should
+cost EV; the crude test policy fires in bad spots too). Blind -all overrides
+remain traps, as they should.
+
+**Regression:** invariants all hold (mirror 0, honest WR 51.0%; the nuke-suppress
+invariant tightened 8.2 → 4.7 — the spike victim rebuilds less). Season economy:
+wallet bounded, cancellation r=0.96, wins-vs-roster r=0.74, and the opt-out probe
+moved 2.9 → **5.0 pts** — power-ups now carry real (but not oppressive) weight,
+which was the design review's ask. Hindsight adversary: exploit LINES diversified
+(nukes/denial/drip mix; the multi-combodrip stack is gone — single-use holds) but
+the hindsight ceiling ROSE (FREE +35 on a weeks-1-4 spot check) — expected, per
+§6: perfect TD foresight makes spike-nukes precision weapons; blind EV (the thing
+real players face) is the guard.
+
+**Next iteration candidates:** a spot-smart gamble policy (flip only vs
+drip-heavy opponent windows where the steal pays) to see if informed gambling can
+reach parity; RATE RESET still has nothing to steal vs a drip (rate isn't
+points) — consider a small erase component or fold the metric; wr-stop/erase
+remain blind traps (correct for counters, but the trap labeling from the design
+review still applies).
