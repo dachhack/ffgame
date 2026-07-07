@@ -1,6 +1,38 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.97.1`_
+_Last updated: 2026-07-07 · Build `v0.98.0`_
+
+## Amplifier capacity — Second Amp / Third Amp unlocks (v0.98.0)
+Design call (replaces the amplifier-surcharge idea): the drip amplifiers
+(Momentum · Overtime · Garbage Time) are limited to ONE armed per week by
+default. Two new pre-kickoff power-ups raise the cap as a purchasable product
+instead of a hidden tax: **Second Amp** (`amp-2`, ◎40) → cap 2, **Third Amp**
+(`amp-3`, ◎60, requires Second) → cap 3. Full stack now ◎305 vs the old ◎205.
+Prices are drip coin — NOT real money — per the "premium is never
+pay-to-win" promise; flag to the owner if real-$ was actually intended.
+- **Engine (`src/data/powerups.ts`)**: `AMPLIFIERS`/`isAmplifier`/
+  `ampCapacity`/`capAmplifiers` — the cap is enforced authoritatively at
+  resolve in BOTH engines (`resolveLiveMatchup` + `buildMatchup` wrap the
+  buff sets), dropping excess amps in fixed priority (momentum >
+  garbage-time > overtime) so arm order never changes scoring.
+- **DB (`0063_amplifier_capacity.sql`)**: `is_live_buff` v2 (+amp-2/amp-3),
+  `is_amplifier()`, `powerup_price` v3 (amp-2 40 / amp-3 60), `arm_buff` v3
+  rejects `'amp order'` (Third before Second) and `'amp limit'` (arming an
+  amp beyond cap, with a detail message), `disarm_buff` v2 rejects removing
+  capacity still in use (`'amps in use'`) — a paid buff can never be
+  silently dropped at resolve. 16 scratch-DB probes pass (arm/disarm gates,
+  dup, prices, spend/refund symmetry).
+- **Client**: LivePicks renders the new chips (LIVE_BUFFS + `detail` shown on
+  arm errors); demo `store.armBuff` mirrors the gates and `disarmBuff`
+  CASCADES (removing Second Amp also disarms Third + now-excess amps, all
+  refunded); ApplyPowerupsModal disables ARM with an inline reason.
+- **AI (server/src/lock.js `aiBudgetPass` + tools/playtester/lib.mjs
+  `aiLoadout` — keep in lockstep)**: buys capacity before an over-cap amp,
+  and only when BOTH the unlock and the amp fit the balance. The demo AI
+  (`aiBuffs`) gets its needed capacity free (it has no wallet).
+- Motivation: findings §12 — power-ups had become mandatory (opt-out tax
+  11.2 pts) because stacking all three amps was strictly correct. See the
+  new findings § for the measured effect.
 
 ## Combo Drip: one slot PER PURCHASE, buyable multiple times (v0.97.1)
 0061 read "single-use" as a hard cap of one combodrip slot per lineup; the

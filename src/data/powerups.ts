@@ -36,6 +36,8 @@ export const POWERUPS: Powerup[] = [
   { id: 'hail-mary', name: 'Hail Mary', blurb: 'Arm before kickoff: if a QB in your starting spots throws a touchdown of 40+ yards, bank a flat +15.', kind: 'action', timing: 'pre', price: 35, icon: '🙏' },
   { id: 'momentum', name: 'Momentum', blurb: 'Arm before kickoff: all week, your drips run 3× when hot instead of 2×.', kind: 'action', timing: 'pre', price: 70, icon: '📈' },
   { id: 'garbage-time', name: 'Garbage Time', blurb: 'Arm before kickoff: any points your players score in the final 5 game-minutes count double.', kind: 'action', timing: 'pre', price: 75, icon: '🗑️' },
+  { id: 'amp-2', name: 'Second Amp', blurb: 'Amplifiers (Momentum · Overtime · Garbage Time) are limited to ONE per week. Arm this to run a second one alongside it.', kind: 'action', timing: 'pre', price: 40, icon: '🔊' },
+  { id: 'amp-3', name: 'Third Amp', blurb: 'The full stack: with Second Amp armed, this unlocks a third amplifier for the week — Momentum, Overtime AND Garbage Time together.', kind: 'action', timing: 'pre', price: 60, icon: '📢' },
   { id: 'floodgates', name: 'Floodgates', blurb: 'Arm before kickoff: your drips are immune to opponent pauses and erases all week (TD wipes still apply).', kind: 'action', timing: 'pre', price: 85, icon: '🌊' },
   { id: 'overtime', name: 'Overtime', blurb: 'Arm before kickoff: your Field General multiplier and drips carry into overtime. Without it they reset the moment regulation ends.', kind: 'action', timing: 'pre', price: 60, icon: '⏱️' },
   { id: 'ot-shield', name: 'Overtime Shield', blurb: 'Arm before kickoff: any points your opponent scores in overtime this week are negated.', kind: 'action', timing: 'pre', price: 70, icon: '🧊' },
@@ -52,4 +54,32 @@ export const POWERUPS: Powerup[] = [
 
 export function powerupById(id: string): Powerup | undefined {
   return POWERUPS.find((p) => p.id === id);
+}
+
+// ── Drip AMPLIFIERS are capacity-limited ─────────────────────────────────────
+// Momentum / Overtime / Garbage Time all multiply the same drip accrual, and
+// the measured meta (findings §2/§12) is "everyone stacks all three". Capacity
+// replaces the old anything-goes stack: ONE amplifier per week by default; the
+// Second Amp (◎40) and Third Amp (◎60) power-ups raise the cap to 2 and 3 —
+// the full stack now costs its amps PLUS ◎100 of capacity, priced as product
+// instead of a hidden surcharge.
+export const AMPLIFIERS = ['momentum', 'garbage-time', 'overtime'] as const;
+export const isAmplifier = (id: string): boolean => (AMPLIFIERS as readonly string[]).includes(id);
+
+/** How many amplifiers a buff set may run: 1 + Second Amp + Third Amp. */
+export function ampCapacity(buffs: ReadonlySet<string>): number {
+  return 1 + (buffs.has('amp-2') ? 1 : 0) + (buffs.has('amp-2') && buffs.has('amp-3') ? 1 : 0);
+}
+
+/** Authoritative engine-side cap: drop amplifiers beyond capacity, in fixed
+ *  priority order (momentum > garbage-time > overtime) so every surface —
+ *  worker, demo, playtester — resolves the same set regardless of arm order. */
+export function capAmplifiers(buffs: ReadonlySet<string>): Set<string> {
+  const cap = ampCapacity(buffs);
+  const armed = (AMPLIFIERS as readonly string[]).filter((a) => buffs.has(a));
+  if (armed.length <= cap) return new Set(buffs);
+  const keep = new Set(armed.slice(0, cap));
+  const out = new Set<string>();
+  for (const b of buffs) if (!isAmplifier(b) || keep.has(b)) out.add(b);
+  return out;
 }

@@ -7,7 +7,7 @@ import { setLiveGameFeed, feedRowsToWeek, hasGameFeed } from '../data/gameFeed';
 import { avatarUrl, teamLogo } from '../data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, preseasonWeekNum } from '../data/nflSlate';
 import { METRICS, metricById } from '../data/metrics';
-import { POWERUPS, powerupById, type Powerup } from '../data/powerups';
+import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '../data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '../data/league';
 import { buildLiveLeague } from '../data/liveBoard';
 import {
@@ -715,6 +715,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
   // Owned power-ups you can still apply right now, scoped to open windows. 'pre'
   // power-ups lock at the first kickoff; 'live' ones need a running window.
+  const armedSet = new Set(Object.keys(buffs).filter((k) => buffs[k]));
   const appliable = POWERUPS.filter((p) => (inventory[p.id] ?? 0) > 0).map((p) => {
     const buff = isTeamBuff(p.id);
     let ok = false; let deadline = '';
@@ -727,7 +728,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     }
     if (buff && buffs[p.id]) ok = false; // already armed → lives in Active
     const action: 'arm' | 'apply' | 'hint' = buff ? 'arm' : SPOT_APPLY.has(p.id) ? 'apply' : 'hint';
-    return { p, ok, deadline, action };
+    // Amplifier capacity (mirrors store.armBuff / server arm_buff gates).
+    let blocked: string | undefined;
+    if (p.id === 'amp-3' && !armedSet.has('amp-2')) blocked = 'Arm Second Amp first';
+    else if (isAmplifier(p.id) && [...armedSet].filter(isAmplifier).length >= ampCapacity(armedSet)) {
+      blocked = `Amp limit ${ampCapacity(armedSet)} — arm ${armedSet.has('amp-2') ? 'Third' : 'Second'} Amp to run more`;
+    }
+    return { p, ok, deadline, action, blocked };
   }).filter((x) => x.ok);
 
   // ── setup interactions ──
@@ -1907,13 +1914,13 @@ function ActivePowerupsModal({ effects, onClose }: {
 
 // APPLY: only the power-ups you can still use right now, per the open windows.
 function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose }: {
-  items: { p: Powerup; deadline: string; action: 'arm' | 'apply' | 'hint' }[]; inventory: Record<string, number>;
+  items: { p: Powerup; deadline: string; action: 'arm' | 'apply' | 'hint'; blocked?: string }[]; inventory: Record<string, number>;
   onArm: (id: string) => void; onApply: (id: string) => void; onClose: () => void;
 }) {
   return (
     <PuShell title="✦ Apply Power-Ups" subtitle="USABLE NOW — APPLY EACH BEFORE ITS WINDOW CLOSES" accent="var(--warn)" onClose={onClose}>
       {items.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— nothing to apply right now —<br />power-ups appear here while their window is open</div>}
-      {items.map(({ p, deadline, action }) => {
+      {items.map(({ p, deadline, action, blocked }) => {
         const qty = inventory[p.id] ?? 0;
         return (
           <div key={p.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '7px 8px', borderRadius: 5, background: 'var(--bg)', border: '1px solid var(--bd)' }}>
@@ -1926,9 +1933,10 @@ function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose }: {
               </div>
               <div style={{ fontSize: 10, lineHeight: 1.45, color: 'var(--dim)', marginTop: 2 }}>{p.blurb}</div>
               {action === 'hint' && POWERUP_HINT[p.id] && <div className="mono" style={{ fontSize: 8.5, color: 'var(--warn)', marginTop: 3 }}>↳ {POWERUP_HINT[p.id]}</div>}
+              {action === 'arm' && blocked && <div className="mono" style={{ fontSize: 8.5, color: 'var(--warn)', marginTop: 3 }}>↳ {blocked}</div>}
             </div>
             {action === 'arm' ? (
-              <button onClick={() => onArm(p.id)} disabled={qty <= 0} className="mono" style={{ flex: 'none', alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', border: '1px solid var(--you)', color: 'var(--on-accent)', background: 'var(--you)' }}>ARM</button>
+              <button onClick={() => onArm(p.id)} disabled={qty <= 0 || !!blocked} className="mono" style={{ flex: 'none', alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: blocked ? 'not-allowed' : 'pointer', border: '1px solid var(--you)', color: 'var(--on-accent)', background: 'var(--you)', opacity: blocked ? 0.45 : 1 }}>ARM</button>
             ) : action === 'apply' ? (
               <button onClick={() => onApply(p.id)} disabled={qty <= 0} className="mono" style={{ flex: 'none', alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', border: '1px solid var(--warn)', color: 'var(--on-accent)', background: 'var(--warn)' }}>APPLY</button>
             ) : (
