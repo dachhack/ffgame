@@ -185,6 +185,16 @@ in-app), rosters (drafted in-app), weekly pools (materialized from rosters).
   slicing geometry) + NFL team logos. Team identity card (avatar + rename) on
   the team screen, rendered pre-draft too; league crest on league cards.
 
+### Draft room v2 (v0.100.0 — migration 0067)
+
+Queue (private, autopicks take it first), autodraft toggle, full draft board
+grid, per-team draft views, ADP + StatHead projections columns, player cards
+(ADP / projection / real 2025 line), commissioner controls (pause with frozen
+clocks, force pick, undo — undo even reopens a completed draft), and **auction
+mode** (rotating nomination, open lot with rolling bid clock, per-team budgets
+with a $1-per-open-spot max-bid floor, prices on picks). All of it drives
+through the same `draft_tick` poll/worker path as snake.
+
 ## 4. What's deliberately deferred
 
 1. **Trades** (two-sided accept + commish veto, then `native_materialize`).
@@ -195,8 +205,10 @@ in-app), rosters (drafted in-app), weekly pools (materialized from rosters).
 5. **Roster limits by position at draft time for humans** — the autopick honors
    caps, but a human may draft 7 QBs if they insist. Harmless (the game's slots
    are position-agnostic); revisit if playtests show confusion.
-6. **Realtime draft push** — the room polls at 4s, which is fine at pilot
+6. **Realtime draft push** — the room polls at 3s, which is fine at pilot
    scale; `supabase.channel` on `draft_pick` is a drop-in upgrade later.
+7. **Auction v2** — AI counter-bidding (AI seats currently fill at $1 without
+   contesting), auction undo, and configurable lot clocks in the create wizard.
 
 ## 5. Deploy checklist
 

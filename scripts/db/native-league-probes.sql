@@ -374,4 +374,147 @@ begin
   perform assert_true((r ->> 'is_commish')::boolean, '11s commish flag');
 end $$;
 
+-- ── 12. draft features (0067): queue, autodraft, pause/force/undo ────────────
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text;
+begin
+  perform probe_as('a');
+  r := create_native_league('Snake Two', '2026', 2, 5, 60);
+  perform assert_ok(r, '12a create');
+  lid := (r ->> 'league_id')::uuid;
+  perform set_config('probe.lid3', lid::text, false);
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Team'), '12b B joins');
+  perform probe_as('a');
+  for i in 1..4 loop pool := pool || jsonb_build_object('slug', 's-qb' || i, 'full', 'S QB ' || i, 'pos', 'QB', 'team', 'T'); end loop;
+  for i in 1..8 loop pool := pool || jsonb_build_object('slug', 's-rb' || i, 'full', 'S RB ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  for i in 1..8 loop pool := pool || jsonb_build_object('slug', 's-wr' || i, 'full', 'S WR ' || i, 'pos', 'WR', 'team', 'T'); end loop;
+  for i in 1..4 loop pool := pool || jsonb_build_object('slug', 's-te' || i, 'full', 'S TE ' || i, 'pos', 'TE', 'team', 'T'); end loop;
+  perform assert_ok(seed_league_pool(lid, pool), '12c seed');
+end $$;
+do $$
+declare lid uuid := current_setting('probe.lid3')::uuid; r jsonb;
+begin
+  perform probe_as('d');
+  perform assert_err(set_draft_queue(lid, 2, '["s-rb2"]'::jsonb), 'forbidden', '12d outsider queue');
+  perform probe_as('b');
+  r := set_draft_queue(lid, 2, '["s-rb2","nope","s-wr3","s-rb2"]'::jsonb);
+  perform assert_ok(r, '12e B sets queue');
+  perform assert_true((r ->> 'queued')::int = 2, '12f unknown + dup dropped');
+  perform probe_as('a');
+  perform assert_ok(start_draft(lid, '[1,2]'::jsonb), '12g start');
+  -- A picks 1st
+  perform assert_ok(make_draft_pick(lid, 's-qb1'), '12h A picks');
+  -- B on the clock: expire → tick must take B's QUEUE head (s-rb2), not best rank
+  update draft set deadline_at = now() - interval '1 second' where league_id = lid;
+  r := draft_tick(lid);
+  perform assert_true((select slug from draft_pick where league_id = lid and overall = 2) = 's-rb2', '12i queue autopick');
+  -- snake: B again (round 2). autodraft toggle → instant pick from queue (s-wr3)
+  perform probe_as('b');
+  perform assert_ok(set_autodraft(lid, 2, true), '12j autodraft on');
+  r := draft_state(lid);
+  perform assert_true((r ->> 'on_clock')::int = 2 and (r ->> 'on_clock_auto')::boolean, '12k autodraft seat flagged');
+  r := draft_tick(lid);
+  perform assert_true((select slug from draft_pick where league_id = lid and overall = 3) = 's-wr3', '12l autodraft queue pick');
+  perform assert_ok(set_autodraft(lid, 2, false), '12m autodraft off');
+
+  -- A on the clock (overall 4): pause gates
+  perform probe_as('b');
+  perform assert_err(commish_pause_draft(lid), 'forbidden', '12n pause is commish-only');
+  perform probe_as('a');
+  perform assert_ok(commish_pause_draft(lid), '12o pause');
+  perform assert_err(make_draft_pick(lid, 's-rb1'), 'paused', '12p no picks while paused');
+  update draft set deadline_at = now() - interval '1 hour' where league_id = lid;
+  r := draft_tick(lid);
+  perform assert_true((r ->> 'autopicks')::int = 0, '12q tick frozen while paused');
+  perform assert_ok(commish_resume_draft(lid), '12r resume');
+  perform assert_true((select deadline_at from draft where league_id = lid) > now(), '12s clock restored');
+  -- force pick: explicit slug, then undo it
+  r := commish_force_pick(lid, 's-te1');
+  perform assert_ok(r, '12t force pick');
+  perform assert_true((select slug from draft_pick where league_id = lid and overall = 4) = 's-te1', '12u forced onto board');
+  r := commish_undo_pick(lid);
+  perform assert_ok(r, '12v undo');
+  perform assert_true(not exists (select 1 from draft_pick where league_id = lid and overall = 4), '12w pick removed');
+  perform assert_true(not exists (select 1 from native_roster where league_id = lid and slug = 's-te1'), '12x roster unwound');
+  perform assert_true((select current_overall from draft where league_id = lid) = 4, '12y back on the clock');
+  -- force with NO slug → queue/best-available
+  r := commish_force_pick(lid);
+  perform assert_ok(r, '12z force best');
+  -- run it out
+  for i in 1..12 loop
+    update draft set deadline_at = now() - interval '1 second' where league_id = lid and status = 'live';
+    perform draft_tick(lid);
+    exit when (select status from draft where league_id = lid) = 'complete';
+  end loop;
+  perform assert_true((select status from draft where league_id = lid) = 'complete', '12zz snake completes');
+end $$;
+
+-- ── 13. auction mode (0067) ───────────────────────────────────────────────────
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text;
+begin
+  perform probe_as('a');
+  r := create_native_league('Auction House', '2026', 2, 5, 60, 'auction', 20);
+  perform assert_ok(r, '13a create auction');
+  lid := (r ->> 'league_id')::uuid;
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Bids'), '13b B joins');
+  perform probe_as('a');
+  for i in 1..12 loop pool := pool || jsonb_build_object('slug', 'a-rb' || i, 'full', 'A RB ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  perform assert_ok(seed_league_pool(lid, pool), '13c seed');
+  perform assert_ok(start_draft(lid, '[1,2]'::jsonb), '13d start');
+  perform assert_true((select draft_budget from league_membership where league_id = lid and sleeper_roster_id = 2) = 20, '13e budgets seeded');
+  r := draft_state(lid);
+  perform assert_true((r ->> 'mode') = 'auction' and (r ->> 'on_clock')::int = 1, '13f nominator is seat 1');
+  perform assert_true((r -> 'budgets' -> 0 ->> 'max_bid')::int = 16, '13g max bid reserves $1/spot');
+
+  -- nomination gates
+  perform probe_as('b');
+  perform assert_err(nominate(lid, 'a-rb1', 1), 'not your nomination', '13h wrong seat');
+  perform probe_as('a');
+  perform assert_err(nominate(lid, 'a-rb1', 25), 'max', '13i opening bid over max');
+  perform assert_ok(nominate(lid, 'a-rb1', 3), '13j nominate at $3');
+  r := draft_state(lid);
+  perform assert_true((r -> 'lot' ->> 'slug') = 'a-rb1' and (r -> 'lot' ->> 'bid')::int = 3, '13k lot open');
+
+  -- bidding gates
+  perform assert_err(place_bid(lid, 1, 4), 'high bidder', '13l cannot outbid yourself');
+  perform probe_as('b');
+  perform assert_err(place_bid(lid, 2, 3), 'beat', '13m must beat current bid');
+  perform assert_err(place_bid(lid, 2, 19), 'max bid', '13n over max');
+  perform assert_ok(place_bid(lid, 2, 5), '13o B bids $5');
+  -- pause freezes the lot; resume restores its clock
+  perform probe_as('a');
+  perform assert_ok(commish_pause_draft(lid), '13p pause lot');
+  perform assert_err(place_bid(lid, 1, 6), 'paused', '13p2 no bids while paused');
+  perform assert_ok(commish_resume_draft(lid), '13q resume lot');
+  perform assert_true((select lot_deadline from draft where league_id = lid) > now(), '13r lot clock restored');
+  -- award at the bell
+  update draft set lot_deadline = now() - interval '1 second' where league_id = lid;
+  r := draft_tick(lid);
+  perform assert_true((r ->> 'lots_awarded')::int = 1, '13s lot awarded');
+  perform assert_true(exists (select 1 from native_roster where league_id = lid and roster_id = 2 and slug = 'a-rb1'), '13t B owns him');
+  perform assert_true((select draft_budget from league_membership where league_id = lid and sleeper_roster_id = 2) = 15, '13u paid $5');
+  perform assert_true((select price from draft_pick where league_id = lid and overall = 1) = 5, '13v price recorded');
+  -- next nominator (seat 2, human): expire the nomination clock → auto-nominate at $1
+  update draft set deadline_at = now() - interval '1 second' where league_id = lid;
+  r := draft_tick(lid);
+  perform assert_true((select lot_slug from draft where league_id = lid) is not null, '13w auto-nominated');
+  perform assert_true((select lot_bid from draft where league_id = lid) = 1 and (select lot_roster from draft where league_id = lid) = 2, '13x $1 by seat 2');
+  -- run the auction out: expire everything until complete
+  for i in 1..20 loop
+    update draft set lot_deadline = coalesce(lot_deadline, now()) - interval '1 hour',
+                     deadline_at = coalesce(deadline_at, now()) - interval '1 hour'
+      where league_id = lid and status = 'live';
+    perform draft_tick(lid);
+    exit when (select status from draft where league_id = lid) = 'complete';
+  end loop;
+  perform assert_true((select status from draft where league_id = lid) = 'complete', '13y auction completes');
+  perform assert_true((select count(*) from native_roster where league_id = lid) = 10, '13z all 10 spots filled');
+  perform assert_true(not exists (select 1 from league_membership where league_id = lid and draft_budget < 0), '13zz no negative budgets');
+end $$;
+
 select 'ALL PROBES PASSED' as result;

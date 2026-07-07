@@ -20,7 +20,8 @@ export async function sweepNative(log = () => {}) {
   for (const d of live ?? []) {
     try {
       const { data } = await db().rpc('draft_tick', { p_league_id: d.league_id });
-      drafts += Number(data?.autopicks ?? 0);
+      // snake autopicks + auction lot awards/auto-nominations, one counter
+      drafts += Number(data?.autopicks ?? 0) + Number(data?.lots_awarded ?? 0);
     } catch (e) { log('draft_tick', d.league_id, e.message); }
   }
 
