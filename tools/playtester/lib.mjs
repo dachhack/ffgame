@@ -108,9 +108,20 @@ export function aiLoadout(slugs, key, week) {
   const owned = new Set(), buffs = new Set();
   let extra = 0;
   // Mirror server/src/lock.js:aiBudgetPass — EV buffs first, then combodrip, then extra.
+  // Amplifiers are capacity-limited (0063): an amp beyond capacity needs the
+  // Second/Third Amp unlock bought first; skip the amp if that isn't affordable.
+  const AMPS = new Set(['momentum', 'garbage-time', 'overtime']);
+  const ampCap = () => 1 + (buffs.has('amp-2') ? 1 : 0) + (buffs.has('amp-2') && buffs.has('amp-3') ? 1 : 0);
   const desired = [...aiLiveBuffs(key, week)];
   if (slugs.some((s) => wantsComboDrip(s, slugMeta(s).pos))) desired.push('unlock-combo-drip');
   for (const item of desired) {
+    if (AMPS.has(item) && [...buffs].filter((b) => AMPS.has(b)).length >= ampCap()) {
+      const need = buffs.has('amp-2') ? 'amp-3' : 'amp-2';
+      const needPrice = powerupById(need)?.price ?? 9999;
+      // Capacity only pays off with the amp on top — skip both unless BOTH fit.
+      if (bal < needPrice + (powerupById(item)?.price ?? 9999)) continue;
+      bal -= needPrice; buffs.add(need);
+    }
     const price = powerupById(item)?.price ?? 9999;
     if (bal >= price) { bal -= price; (item.startsWith('unlock-') ? owned : buffs).add(item); }
   }

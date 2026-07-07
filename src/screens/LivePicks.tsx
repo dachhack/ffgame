@@ -278,7 +278,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
     try {
       const r = armed ? await disarmBuff(matchup.id, id) : await armBuff(matchup.id, id);
       if (r.ok && r.buffs) { setBuffs(new Set(r.buffs)); refreshCoins(); }
-      else setErr(r.error === 'insufficient' ? insufficientMsg(id) : (r.error ?? 'Could not update power-ups.'));
+      else setErr(r.error === 'insufficient' ? insufficientMsg(id) : (r.detail ?? r.error ?? 'Could not update power-ups.'));
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not update power-ups.'); }
     finally { setBuffBusy(null); }
   };

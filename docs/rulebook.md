@@ -202,6 +202,8 @@ during a live window (never retroactive).
 | 🙏 **Hail Mary** | ◎ 35 | action | Arm before kickoff: if a QB in your starting spots throws a touchdown of 40+ yards, bank a flat +15. |
 | 📈 **Momentum** | ◎ 70 | action | Arm before kickoff: all week, your drips run 3× when hot instead of 2×. |
 | 🗑️ **Garbage Time** | ◎ 75 | action | Arm before kickoff: any points your players score in the final 5 game-minutes count double. |
+| 🔊 **Second Amp** | ◎ 40 | action | Amplifiers (Momentum · Overtime · Garbage Time) are limited to ONE per week. Arm this to run a second one alongside it. |
+| 📢 **Third Amp** | ◎ 60 | action | The full stack: with Second Amp armed, this unlocks a third amplifier for the week — Momentum, Overtime AND Garbage Time together. |
 | 🌊 **Floodgates** | ◎ 85 | action | Arm before kickoff: your drips are immune to opponent pauses and erases all week (TD wipes still apply). |
 | ⏱️ **Overtime** | ◎ 60 | action | Arm before kickoff: your Field General multiplier and drips carry into overtime. Without it they reset the moment regulation ends. |
 | 🧊 **Overtime Shield** | ◎ 70 | action | Arm before kickoff: any points your opponent scores in overtime this week are negated. |

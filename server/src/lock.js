@@ -64,8 +64,28 @@ async function aiBudgetPass(m, rosterId, appUserId, starters, seed) {
   //    lock are kept without re-charging, so a depleted balance can't drop a bought item.
   const desired = [...aiLiveBuffs(`${m.league_id}:${rosterId}`, m.week)];
   if (starters.some((s) => s.player_slug && wantsComboDrip(s.player_slug, s.pos))) desired.push('unlock-combo-drip');
+  // Amplifiers are capacity-limited (1 + Second Amp + Third Amp, migration
+  // 0063): buying an amplifier beyond capacity requires buying the capacity
+  // unlock first — if THAT isn't affordable, skip the amp. (Mirrored in
+  // tools/playtester/lib.mjs aiLoadout — keep in lockstep.)
+  const AMPS = new Set(['momentum', 'garbage-time', 'overtime']);
+  const ampCap = () => 1 + (own.buffs.has('amp-2') ? 1 : 0) + (own.buffs.has('amp-2') && own.buffs.has('amp-3') ? 1 : 0);
+  const balance = async () => {
+    const { data } = await db().from('team_wallet').select('coins')
+      .eq('league_id', m.league_id).eq('roster_id', rosterId).maybeSingle();
+    return Number(data?.coins ?? 0);
+  };
   for (const item of desired) {
     if (own.buffs.has(item) || own.unlocks.has(item)) continue;
+    if (AMPS.has(item) && [...own.buffs].filter((b) => AMPS.has(b)).length >= ampCap()) {
+      const need = own.buffs.has('amp-2') ? 'amp-3' : 'amp-2';
+      // Capacity only pays off with the amp on top — skip both unless BOTH fit,
+      // so a failed amp buy can't strand a paid-for capacity unlock.
+      const both = (powerupById(need)?.price ?? 9999) + (powerupById(item)?.price ?? 9999);
+      if ((await balance()) < both) continue;
+      if (!(await spend(need, `${m.id}:ai:${need}:${rosterId}`))) continue;
+      own.buffs.add(need);
+    }
     if (await spend(item, `${m.id}:ai:${item}:${rosterId}`)) (item.startsWith('unlock-') ? own.unlocks : own.buffs).add(item);
   }
 

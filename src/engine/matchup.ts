@@ -1,5 +1,6 @@
 import type { Player, WindowId, GameWindow, Pick, PbpEvent, Pos, BuffFx } from '../types';
 import { METRICS, metricById } from '../data/metrics';
+import { capAmplifiers, isAmplifier } from '../data/powerups';
 import { teamRoster, getPlayer } from '../data/league';
 import { hashStr } from '../data/players';
 
@@ -96,6 +97,11 @@ export function aiBuffs(teamId: string, week: number): string[] {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff; // LCG step for a varied draw
     out.push(pool.splice(seed % pool.length, 1)[0]);
   }
+  // The demo AI's buffs are free (no wallet), so grant the amp capacity its
+  // draw needs — otherwise capAmplifiers would silently waste part of the draw.
+  const amps = out.filter(isAmplifier).length;
+  if (amps >= 2) out.push('amp-2');
+  if (amps >= 3) out.push('amp-3');
   return out;
 }
 
@@ -335,10 +341,11 @@ export function buildMatchup(
   let youSuppress = 0, theirSuppress = 0;
   // Armed pre-match buffs that modify scoring (Momentum / Garbage Time /
   // Floodgates / Overtime). Only the human side carries buffs in the demo.
-  const youBuffSet = new Set(Object.keys(buffs).filter((k) => buffs[k]));
+  // Drip AMPLIFIERS are capacity-limited (1 + Second Amp + Third Amp).
+  const youBuffSet = capAmplifiers(new Set(Object.keys(buffs).filter((k) => buffs[k])));
   // The opponent's armed power-ups: their REAL revealed loadout in a live H2H
   // matchup, else the AI's deterministic three (demo / pre-reveal).
-  const theirBuffSet = new Set<string>(oppBuffs ?? aiBuffs(oppTeamId, week));
+  const theirBuffSet = capAmplifiers(new Set<string>(oppBuffs ?? aiBuffs(oppTeamId, week)));
 
   for (const w of windowsForWeek(week)) {
     const nSlots = slotsFor(w.id, week, extraSlots);

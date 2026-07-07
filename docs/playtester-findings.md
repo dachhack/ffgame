@@ -412,3 +412,64 @@ reach parity; RATE RESET still has nothing to steal vs a drip (rate isn't
 points) — consider a small erase component or fold the metric; wr-stop/erase
 remain blind traps (correct for counters, but the trap labeling from the design
 review still applies).
+
+
+## 12. Post-retune full battery (v0.97.1, merged @ 42c8c46)
+Full sweep after the spike-nuke/steal retune + one-per-purchase Combo Drip.
+- **Invariants:** all hold (mirror 0; honest WR 51.0%).
+- **Harness (14 wk x 150):** honest home WR 50.5%; score mean 115.1 (up from
+  ~97 pre-retune — steals + nuke yardage add real points; watch inflation).
+- **Aggregate:** the offensive trio still tops the board (garbage 60.8% /
+  overtime 60.4% / momentum 59.4%) — homogenization unchanged, the economy
+  pass's target. te-nuke now +2.0 (51.9%), rb-nuke-1 45.8% (band), def-suppress
+  neutral; the -all overrides remain traps by design. ot-shield crept to 52.8%
+  (+2.4) — minor watch.
+- **Double Combo (new probe):** a 2nd Combo Drip lifts margin +3.2 for ◎65
+  (≈0.5 pts/◎10 vs the buffs' ~2.0-2.5) and only 41% of rosters even have a
+  2nd candidate — legal but rarely correct. The one-per-purchase rule needs no
+  further cap; the price does the work.
+- **Season (12 x 14 x 30):** wallet bounded (96-107), cancellation r=0.96,
+  roster r=0.65, home 49.0%. **Opt-out probe Δ 11.2 pts** (2.9 pre-retune, 5.0
+  at 10 seasons) — power-ups are now genuinely mandatory. Defensible for a
+  coin-economy game (autopilot buys for AFK managers), but it sharpens the
+  homogenization problem: everyone MUST buy the same trio. The amplifier
+  stacking surcharge (economy pass) now has two reasons to exist.
+- **Adversary (14 wk x 20, ◎200):** FREE +35.0 / PAID +81.7 — ceiling up from
+  +17.4/+72 pre-retune, as §11 predicted (perfect TD foresight makes spike-
+  nukes precision weapons; blind EV is the guard). Lines are diversified
+  (nuke/denial/drip mixes) and NO line stacks a second combodrip on one unlock
+  — one-per-purchase holds under adversarial search.
+
+## 13. Amplifier capacity — Second/Third Amp unlocks (v0.98.0, migration 0063)
+Design change replacing the stacking-surcharge idea from §11/§12: amplifiers
+(Momentum / Overtime / Garbage Time) are capped at ONE armed per week; the
+"Second Amp" (◎40) and "Third Amp" (◎60, requires Second) power-ups raise the
+cap to 2 and 3. The engine (`capAmplifiers`) enforces the cap at resolve on
+every surface; `arm_buff`/`disarm_buff` reject over-cap arms and in-use
+capacity removal so a paid buff is never silently dropped. Full battery after:
+- **Invariants:** all hold (mirror 0, honest WR 51.0%). Engine probe: 10/10
+  capacity/priority cases; the demo AI never loses a drawn amp (capacity is
+  granted free to its walletless draws).
+- **Aggregate:** SINGLE amps unchanged (garbage 60.8% / overtime 60.4% /
+  momentum 59.4%) — capacity intentionally does not touch the first amp.
+- **Season (12×14×30):** buy mix is IDENTICAL to v0.97.1 (overtime 70 /
+  momentum 59.5 / garbage 53.8 buys per season ≈ 1.09 amps per team-week) —
+  at the ◎100 seed and ~◎74/week income a second amp (+◎40 capacity) was
+  never affordable, so the cap does not bind for the budget AI. Wallet
+  bounded (96–107), cancellation r=0.97, home 49.7%. **Opt-out Δ 10.0 pts**
+  (11.2 in §12 — statistically unchanged): the tax comes from the FIRST amp,
+  which capacity deliberately leaves alone; if the tax itself needs shrinking,
+  that is a single-amp pricing lever, not a capacity lever.
+- **Adversary (◎200, where capacity binds): PAID ceiling +81.7 → +60.2**
+  (−26%), FREE unchanged (+35.0). Amps nearly vanish from exploit lines
+  (garbage-time 11.1%, momentum 7.5%, overtime 0% adopted vs the old
+  every-line-stacks meta) — the rich-manager amp stack is priced out, and the
+  search shifts to metric-override lines (passbig/td/tgt) plus ot-shield
+  (76.1% — cheap insurance against the mirror). Rich-vs-poor amp inequality
+  was the whole point: capacity converts it from a hidden stack into two
+  visible ◎-priced purchases.
+- **Cost of the full stack:** ◎205 → ◎305 (amps + ◎100 capacity) — >4 weeks
+  of income; effectively a deliberate splurge, not a default.
+- Open thread: an `amp-pair`/`amp-trio` aggregate lever (arming 2–3 amps WITH
+  capacity priced in) would put a blind-EV number on the bundles; today only
+  the adversary measures them.

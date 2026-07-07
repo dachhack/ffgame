@@ -6,7 +6,7 @@ import { clearSyntheticWeeks, clearLivePlays } from '../data/realPbp';
 import { clearLiveGameFeeds } from '../data/gameFeed';
 import { clearRuntimeHeadshots } from '../data/media';
 import type { League } from '../types';
-import { powerupById } from '../data/powerups';
+import { powerupById, isAmplifier, ampCapacity, capAmplifiers } from '../data/powerups';
 import { DEMO_WEEK } from '../config';
 import { type ProviderUser, type ProviderId } from '../data/providers';
 import { track, identify, Ev } from './analytics';
@@ -459,6 +459,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const armBuff = (week: number, id: string): boolean => {
     if (applied[week]?.buffs?.[id]) return false;
+    // Amplifier capacity: at most 1 + Second Amp + Third Amp armed amplifiers,
+    // and Third Amp only on top of Second — same gates as arm_buff server-side.
+    const armed = new Set(armedBuffs(week));
+    if (id === 'amp-3' && !armed.has('amp-2')) return false;
+    if (isAmplifier(id) && [...armed].filter(isAmplifier).length >= ampCapacity(armed)) return false;
     const ok = consumeAndApply(id, week, (cur) => ({ ...cur, buffs: { ...cur.buffs, [id]: true } }));
     if (ok) pushBuffs([...armedBuffs(week), id]);
     return ok;
@@ -466,15 +471,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Disarm a previously-armed buff: clear the flag and refund the consumable.
   // Functional setters so several disarms in one tick compose (persist via effect).
+  // Removing amp capacity (Second/Third Amp) cascades: Third Amp goes with
+  // Second, and amplifiers beyond the reduced cap disarm too — everything is
+  // refunded, so the engine's capAmplifiers never silently drops a paid buff.
   const disarmBuff = (week: number, id: string): void => {
     if (!applied[week]?.buffs?.[id]) return;
+    const drop = new Set([id]);
+    const armed = new Set(armedBuffs(week));
+    if (id === 'amp-2' && armed.has('amp-3')) drop.add('amp-3');
+    if (id === 'amp-2' || id === 'amp-3') {
+      const left = new Set([...armed].filter((b) => !drop.has(b)));
+      const keep = capAmplifiers(left);
+      for (const b of left) if (isAmplifier(b) && !keep.has(b)) drop.add(b);
+    }
     setApplied((prev) => {
       const cur = prev[week]; if (!cur?.buffs?.[id]) return prev;
-      const buffs = { ...cur.buffs }; delete buffs[id];
+      const buffs = { ...cur.buffs }; for (const b of drop) delete buffs[b];
       return { ...prev, [week]: { ...cur, buffs } };
     });
-    setInventory((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 })); syncInv(id, 1);
-    pushBuffs(armedBuffs(week).filter((b) => b !== id));
+    setInventory((prev) => { const next = { ...prev }; for (const b of drop) next[b] = (next[b] ?? 0) + 1; return next; });
+    for (const b of drop) syncInv(b, 1);
+    pushBuffs(armedBuffs(week).filter((b) => !drop.has(b)));
   };
 
   const setDoubleOrNothing = (week: number, slotKey: string): boolean =>

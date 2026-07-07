@@ -599,9 +599,9 @@ export interface MatchupPicks { home_roster_id: number; away_roster_id: number; 
 export const adminMatchupPicks = (matchupId: string) => rpc<MatchupPicks>('admin_matchup_picks', { p_matchup_id: matchupId });
 
 // ── Live power-up loadout (M1): arm/disarm in-slot team buffs, pre-lock ──────────
-export const LIVE_BUFFS = ['overtime', 'ot-shield', 'momentum', 'garbage-time', 'floodgates', 'counter-nuke', 'insurance', 'fg-stack'] as const;
-export const armBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; buffs?: string[] }>('arm_buff', { p_matchup_id: matchupId, p_buff: buff });
-export const disarmBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; buffs?: string[] }>('disarm_buff', { p_matchup_id: matchupId, p_buff: buff });
+export const LIVE_BUFFS = ['overtime', 'ot-shield', 'momentum', 'garbage-time', 'amp-2', 'amp-3', 'floodgates', 'counter-nuke', 'insurance', 'fg-stack'] as const;
+export const armBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; detail?: string; buffs?: string[] }>('arm_buff', { p_matchup_id: matchupId, p_buff: buff });
+export const disarmBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; detail?: string; buffs?: string[] }>('disarm_buff', { p_matchup_id: matchupId, p_buff: buff });
 export const myBuffs = (matchupId: string) => rpc<string[]>('my_buffs', { p_matchup_id: matchupId });
 /** Hero board: persist the armed buff set (no wallet charge — paid at buy). */
 export const heroSetBuffs = (matchupId: string, buffs: string[]) =>

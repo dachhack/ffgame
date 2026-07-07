@@ -25,6 +25,7 @@
 //     coin, returned per side. (No DB sink yet; surfaced for a future column.)
 import type { Player, PbpEvent, Pos } from '../types';
 import { metricById } from '../data/metrics';
+import { capAmplifiers } from '../data/powerups';
 import { REAL_WEEKS } from '../data/realPbp';
 import { resolveSlot, windowFgMult, teTdNukeClocks, defEarnScore, hadDefTd, hadLongPassTd, clockAtRealTime, EMPTY_PLAYER, type SlotInput } from './sim';
 import { banksAtClock, threwTrickTd } from './matchup';
@@ -205,8 +206,11 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
   capSwapCombo(extras.home, homePicks, buffs.homeComboQty ?? 1);
   capSwapCombo(extras.away, awayPicks, buffs.awayComboQty ?? 1);
   const reg = REAL_WEEKS.has(week) ? 3600 : 3300;
-  const homeBuffs = buffs.homeBuffs ?? new Set<string>();
-  const awayBuffs = buffs.awayBuffs ?? new Set<string>();
+  // Drip AMPLIFIERS are capacity-limited (1 + Second Amp + Third Amp) — cap
+  // authoritatively here so every surface agrees; the arm RPC and clients
+  // reject the excess at write time (migration 0063).
+  const homeBuffs = capAmplifiers(buffs.homeBuffs ?? new Set<string>());
+  const awayBuffs = capAmplifiers(buffs.awayBuffs ?? new Set<string>());
   const hx = extras.home ?? {};
   const ax = extras.away ?? {};
   const key = (p: { win: string; slot: string }) => `${p.win}|${p.slot}`;
