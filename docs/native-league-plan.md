@@ -207,8 +207,15 @@ through the same `draft_tick` poll/worker path as snake.
    are position-agnostic); revisit if playtests show confusion.
 6. **Realtime draft push** — the room polls at 3s, which is fine at pilot
    scale; `supabase.channel` on `draft_pick` is a drop-in upgrade later.
-7. **Auction v2** — AI counter-bidding (AI seats currently fill at $1 without
-   contesting), auction undo, and configurable lot clocks in the create wizard.
+7. ~~Auction v2 — AI counter-bidding, configurable lot clocks~~ **Landed in
+   v0.101.0 (0068)**: AI seats bid a rank-based value model through a
+   second-price proxy resolver; humans get hidden max bids (the same
+   mechanism), any price change restarts the full bid window (no sniping),
+   and missed nomination turns auto-nominate from the manager's queue — which
+   together make **slow auctions fair**: being offline costs nothing. Slow
+   pacing (hour-scale pick/bid windows up to 48h) ships in the create wizard.
+   Still deferred: auction undo, pre-lot watchlist maxes, overnight clock
+   pauses, on-the-clock notifications.
 
 ## 5. Deploy checklist
 

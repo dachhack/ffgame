@@ -1,6 +1,47 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.100.0`_
+_Last updated: 2026-07-07 · Build `v0.101.0`_
+
+## AI counter-bidding + slow drafts with fair auction turns (v0.101.0)
+Closes the two v0.100.0 auction gaps and adds days-long draft pacing.
+- **AI bidding = value model + second-price proxies (`0068_slow_auction_ai.sql`)**:
+  `ai_player_value` (budget × 0.34 × e^(−rank/45), floor $1),
+  `ai_lot_willingness` (±15% deterministic per-seat jitter; 0 when positional
+  caps / forced-K-DEF endgame make the player useless; capped at
+  auction_max_bid), `resolve_lot_proxies` — ONE closed-form second-price step
+  over ALL seats (AI willingness + human hidden maxes, holder included):
+  highest max wins at second-highest+1 capped at its own max, ties keep the
+  holder. Stable in one call (traced: no +1 ping-pong, no runaway extensions).
+  Runs inside draft_tick (before the bell — a change restarts the window),
+  after place_bid (proxies answer a manual bid instantly, response carries
+  `outbid`), after nominate, and after set_lot_proxy.
+- **SLOW-MODE FAIRNESS (the design decision)**: (1) any price/holder change
+  resets the bell to the FULL lot_seconds window → sniping is impossible, the
+  lot closes only after a fully quiet window; (2) humans get HIDDEN MAX BIDS
+  (`lot_proxy`, no select policy — readable only as `draft_state.my_proxy` for
+  your own seat) — the same mechanism AI uses, so being offline costs nothing;
+  (3) a missed nomination window auto-nominates from the seat's own QUEUE at
+  $1 (0067) — turns never stall and land on players the manager chose.
+  Proxies are per-lot (cleared on nominate + award).
+- **Slow clocks**: `create_native_league` v3 (+p_lot_seconds; 8-arg, 7-arg
+  dropped) — pick/nomination window up to 48h, bell 10s–48h. NativeCreate
+  gains ⚡LIVE / 🐢SLOW pace chips (seconds vs hours steppers + a fairness
+  blurb); countdowns render "2d 4h" / "7h 12m" / "3:07" (`fmtCountdown`).
+  Slow SNAKE needed no new mechanics (queue + autodraft + worker sweep).
+- **Client**: lot panel gains the 🕶 HIDDEN MAX row (set/clear, shows only
+  your own; "bids for you while you're away — nobody sees it").
+- Probes → **205 assertions** (14: AI counters a $1 nomination on a vacant-seat
+  league, price sane vs max-bid, full-window reset, human-over-AI-valuation
+  wins, missed-turn auto-nomination, full slow-auction run-out with no
+  negative budgets and every award priced — note the AI correctly STOPS
+  bidding late-draft to reserve K/DEF budget; 15: deterministic human proxy
+  duel — proxy takes lot at holder+1 not its ceiling, privacy both in
+  draft_state and pg_policies, instant defense at second+1 with `outbid`
+  feedback, bigger proxy beats smaller at second+1, budget-floor gate, award
+  at proxy price + proxies cleared).
+- Deferred: per-lot proxy pre-set before nomination (watchlist maxes),
+  overnight clock pauses for slow drafts, on-the-clock notifications (no
+  email/push infra for managers yet).
 
 ## Draft room v2: queue/autodraft/board/cards, commish controls, AUCTION (v0.100.0)
 The full draft feature set, plus uniform avatar tiles.
