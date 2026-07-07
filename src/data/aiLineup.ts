@@ -156,8 +156,9 @@ export function aiLineup(slugs: string[], week = 0, owned: Set<string> = new Set
   // full window keeps its higher-projected starters and benches the weaker ones — never
   // sitting a WR ranked 23rd behind one ranked 65th just because of roster order.
   tagged.sort((a, b) => statsForSlug(b.slug, b.pos).ppr - statsForSlug(a.slug, a.pos).ppr);
-  // COMBO DRIP is single-use (one slot per lineup) — keep it on the BEST
-  // dual-threat only; later candidates fall back to the position default.
+  // COMBO DRIP is one-for-one (one slot per unlock purchased). The AI's budget
+  // pass buys at most ONE unlock, so keep it on the BEST dual-threat only;
+  // later candidates fall back to the position default.
   let comboUsed = false;
   for (const t of tagged) {
     if (t.metric !== 'combodrip') continue;

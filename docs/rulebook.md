@@ -107,7 +107,7 @@ its hot streak can still be **cooled** by an opponent who banks points every pla
 | **Carries** | COMPRESSION | 0.5 / carry | 0.5 per carry. A 3+ carry streak with no opponent score compresses: each further carry trims the opponent’s most recent score by 25% — and you keep a quarter of every point trimmed. |
 | **Receptions** | RATE RESET | 1 pt / catch | Each catch zeroes the opponent’s active drip rate (they keep the bank, rebuild from scratch); against a flat scorer it halves their last play — and you steal a quarter of any points cut. |
 | **Touchdowns** | NUKE | 0.04 / yd + 10 / TD | Boom-or-bust: scrimmage yards at a discount (0.04/yd) plus a big 10 per TD — and each TD wipes the opponent’s entire banked score AND steals a quarter of it. |
-| **Combo Drip** | RUSH+REC DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk, SINGLE-USE — one Combo Drip slot per lineup): carries AND catches both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; a TD wipes the bank. 4 straight productive touches goes hot → drip doubles (a stuffed run or incomplete cools it). |
+| **Combo Drip** | RUSH+REC DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk, ONE SLOT PER PURCHASE — buy it again to field another): carries AND catches both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; a TD wipes the bank. 4 straight productive touches goes hot → drip doubles (a stuffed run or incomplete cools it). |
 | **Return Yards** | RUSH+RET DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk): carries AND kick/punt return yards both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; 4 straight productive touches (rush 3+ / return 10+) goes hot → drip doubles, a stuffed run or short return cools it. |
 
 ### Wide Receiver
@@ -118,7 +118,7 @@ its hot streak can still be **cooled** by an opponent who banks points every pla
 | **Receptions** | ERASE | 1 pt / catch | Each catch erases the opponent’s drip from the last 10 clock-minutes — and you steal a quarter of every point you erase. |
 | **Targets** | CLOCK STOP | 1 pt / target | Every target stops the opponent’s drip clock. No erase — pure denial. |
 | **Touchdowns** | NUKE | 0.04 / yd + 10 / TD | Boom-or-bust: scrimmage yards at a discount (0.04/yd) plus a big 10 per TD — and each TD wipes the opponent’s entire banked score AND steals a quarter of it. |
-| **Combo Drip** | RUSH+REC DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk, SINGLE-USE — one Combo Drip slot per lineup): catches AND carries both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; a TD wipes the bank. 4 straight productive touches goes hot → drip doubles (a stuffed run or incomplete cools it). |
+| **Combo Drip** | RUSH+REC DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk, ONE SLOT PER PURCHASE — buy it again to field another): catches AND carries both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; a TD wipes the bank. 4 straight productive touches goes hot → drip doubles (a stuffed run or incomplete cools it). |
 | **Return Yards** | REC+RET DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk): catches AND kick/punt return yards both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; 4 straight (catch / 10+ return) goes hot → drip doubles, an incomplete or short return cools it. |
 
 ### Tight End
@@ -129,7 +129,7 @@ its hot streak can still be **cooled** by an opponent who banks points every pla
 | **Targets** | WIDE ERASE | 1 pt / target | Every target — catch or incompletion — erases the opponent’s drip from the last 15 min (you steal a quarter of every point erased). Wider than any WR, and fires on volume alone. |
 | **Receptions** | ERASE | 1.5 pts / catch | Each catch erases the opponent’s drip from the last 10 clock-minutes — and you steal a quarter of every point you erase. |
 | **Touchdowns** | 12-PT NUKE | 0.04 / yd + 12 / TD | The strongest single play in the game. Yards at a discount (0.04/yd) plus 12 per TD; each TD wipes the matched opponent’s entire bank (you steal a quarter of it) AND knocks every opposing drip in the window down by 1.0 pts/min (min 0). |
-| **Combo Drip** | RUSH+REC DRIP | 0.005 / yd → rate (pts/min) | Unlock (1 wk, SINGLE-USE — one Combo Drip slot per lineup): catches AND carries both feed one drip rate (yds × 0.005 pts/min, TE rate) that accrues while your team has the ball. Immune to WR/RB pauses like any TE drip; a TD wipes the bank. 4 straight productive touches goes hot → drip doubles (an incomplete cools it). |
+| **Combo Drip** | RUSH+REC DRIP | 0.005 / yd → rate (pts/min) | Unlock (1 wk, ONE SLOT PER PURCHASE — buy it again to field another): catches AND carries both feed one drip rate (yds × 0.005 pts/min, TE rate) that accrues while your team has the ball. Immune to WR/RB pauses like any TE drip; a TD wipes the bank. 4 straight productive touches goes hot → drip doubles (an incomplete cools it). |
 | **Return Yards** | REC+RET DRIP | 0.005 / yd → rate (pts/min) | Unlock (1 wk): catches AND kick/punt return yards both feed one drip rate (yds × 0.005 pts/min, TE rate) that accrues while your team has the ball. Immune to WR/RB pauses like any TE drip; 4 straight (catch / 10+ return) goes hot → drip doubles, an incomplete or short return cools it. |
 
 ### Kicker
@@ -195,7 +195,7 @@ during a live window (never retroactive).
 | ➕ **Extra Slot** | ◎ 80 | action | Add a slot to any window — for you AND your opponent. Must be applied before any window starts. |
 | 🏈 **Return Yards** | ◎ 60 | metric | This week only: unlock the Return Yards metric for a kick/punt returner — flat 0.1 pts per real return yard + 6 per return TD. |
 | 💥 **WR/TE Carries** | ◎ 70 | action | Arm before kickoff: all week, every carry by a WR or TE in your starting spots wipes its matched opponent to 0 — a plus-up on TOP of whatever metric that slot is scoring. |
-| 🌀 **Combo Drip** | ◎ 65 | metric | This week only: unlock a Rush + Receiving combo drip for ONE player (single-use — one Combo Drip slot per lineup). Both carries AND catches feed a single drip rate (yds × 0.01 pts/min). |
+| 🌀 **Combo Drip** | ◎ 65 | metric | This week only: unlock a Rush + Receiving combo drip for ONE player — both carries AND catches feed a single drip rate (yds × 0.01 pts/min). One slot per purchase: buy it again to field another. |
 | 🚀 **Air Raid** | ◎ 60 | metric | This week only: unlock a QB metric where passing TDs are worth 10 pts (plus 0.04 / passing yd). Flat — no nuke or erase. |
 | 🎺 **Trick Play** | ◎ 90 | action | Arm before kickoff: if ANY non-QB in your starting spots throws a TD pass this week, your lineup banks a flat +50. |
 | 🛡️ **Pick Six** | ◎ 45 | action | Arm before kickoff: if any of your DST starters returns an INT or fumble for a touchdown, bank a flat +25. |

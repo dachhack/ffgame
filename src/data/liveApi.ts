@@ -638,9 +638,17 @@ export async function myTargeted(matchupId: string, userId: string): Promise<Tar
 
 // Metric unlocks (M2): arm before a locked metric (Combo Drip / Return / Air Raid)
 // can be picked. Same applied_state store, free this season.
-export const armUnlock = (matchupId: string, unlock: string) => rpc<{ ok: boolean; error?: string; unlocks?: string[] }>('arm_unlock', { p_matchup_id: matchupId, p_unlock: unlock });
-export const disarmUnlock = (matchupId: string, unlock: string) => rpc<{ ok: boolean; error?: string; unlocks?: string[] }>('disarm_unlock', { p_matchup_id: matchupId, p_unlock: unlock });
+export const armUnlock = (matchupId: string, unlock: string) => rpc<{ ok: boolean; error?: string; unlocks?: string[]; comboQty?: number }>('arm_unlock', { p_matchup_id: matchupId, p_unlock: unlock });
+export const disarmUnlock = (matchupId: string, unlock: string) => rpc<{ ok: boolean; error?: string; unlocks?: string[]; comboQty?: number }>('disarm_unlock', { p_matchup_id: matchupId, p_unlock: unlock });
 export const myUnlocks = (matchupId: string) => rpc<string[]>('my_unlocks', { p_matchup_id: matchupId });
+/** Combo-Drip unlocks purchased this week (one combodrip slot per purchase).
+ *  A legacy set flag without a qty reads as 1. Own applied_state row, RLS-readable. */
+export async function myComboQty(matchupId: string, userId: string): Promise<number> {
+  const { data } = await client().from('applied_state').select('payload_json')
+    .eq('matchup_id', matchupId).eq('app_user_id', userId).maybeSingle();
+  const pj = data?.payload_json as { unlocks?: string[]; unlockQty?: Record<string, number> } | null;
+  return Number(pj?.unlockQty?.['unlock-combo-drip'] ?? (pj?.unlocks?.includes('unlock-combo-drip') ? 1 : 0));
+}
 
 // Persistent coin wallet (M3): both sides' banked balances for a matchup.
 export const matchupWallets = (matchupId: string) => rpc<{ home: number | null; away: number | null } | null>('matchup_wallets', { p_matchup_id: matchupId });

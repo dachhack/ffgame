@@ -316,25 +316,11 @@ export function buildMatchup(
   const youPools = windowPools(youTeamId, week);
   const oppPools = windowPools(oppTeamId, week);
 
-  // COMBO DRIP is SINGLE-USE — one slot per lineup (mirrors resolveLiveMatchup
-  // and the DB trigger, migration 0061). Extra combodrip picks beyond the first
-  // downgrade to the position's standard drip.
-  const capCombo = (pools: Record<WindowId, Player[]>, picks: Record<string, Pick>): Record<string, Pick> => {
-    let seen = false;
-    const out = { ...picks };
-    for (const w of windowsForWeek(week)) {
-      for (let i = 0; i < slotsFor(w.id, week, extraSlots); i++) {
-        const k = slotKey(w.id, i);
-        if (out[k]?.metricId !== 'combodrip') continue;
-        if (!seen) { seen = true; continue; }
-        const pl = lookup(pools, out, k);
-        out[k] = { ...out[k], metricId: pl?.player.pos === 'RB' ? 'rush' : 'recyd' };
-      }
-    }
-    return out;
-  };
-  youPicks = capCombo(youPools, youPicks);
-  oppPicks = capCombo(oppPools, oppPicks);
+  // COMBO DRIP is one-for-one (one slot per unlock purchased). The demo/sim
+  // board already enforces this at pick time — sealing a locked metric consumes
+  // one unlock from inventory (Matchup.tsx useConsumable) — and the AI fields
+  // at most one (aiLineup), so no engine-side cap is needed here. The live
+  // resolver (resolveLiveMatchup) caps by purchased quantity.
 
   const windows: ResolvedWindow[] = [];
   let anyReal = false;
