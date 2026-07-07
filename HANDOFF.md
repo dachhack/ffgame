@@ -1,6 +1,21 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.105.1`_
+_Last updated: 2026-07-07 · Build `v0.105.2`_
+
+## Create → commish dashboard, with the draft as a dashboard tab (v0.105.2)
+- Creating a REAL league no longer shows the interstitial "League created"
+  card → it lands directly on that league's commissioner dashboard
+  (CommishDash focused on the new league), opened to a new **⛏ DRAFT tab**.
+  The invite link stays one click away in the dashboard header. Mock flow
+  unchanged (straight into the room).
+- `LeagueRow` (AdminPage/CommishDash) gains the DRAFT tab for native
+  leagues — it embeds the real `DraftRoom` (`embedded` prop: no back link,
+  no cross-view MANAGE MY TEAM CTA; the dashboard provides the chrome).
+  Commish gets start/seed/pause/force/undo + the live board without leaving
+  management.
+- Wiring: `NativeCreate` gains `onLeague(leagueId)`; `CommishDash` gains
+  `defaultTab`; LiveOnboard tracks `manageTab` ('draft' after creation,
+  reset on normal "manage" entry).
 
 ## Desktop widths for in-league screens (v0.105.1)
 The player screens were locked to the 440px mobile column on any display.

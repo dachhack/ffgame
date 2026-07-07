@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { commishOverview, type AdminLeague } from '../data/liveApi';
-import { LeagueRow } from './AdminPage';
+import { LeagueRow, type LeagueTab } from './AdminPage';
 import { card, linkBtn, mono, Muted, errMsg } from './adminUi';
 
 // Commissioner dashboard — one tabbed management card (LeagueRow) per league you
-// run. Opened from a league card's "manage" (focusId → just that league) or as
-// the landing screen for commish-only accounts (all your leagues).
-export function CommishDash({ onBack, focusId }: { onBack: () => void; focusId?: string | null }) {
+// run. Opened from a league card's "manage" (focusId → just that league), as
+// the landing screen for commish-only accounts (all your leagues), or right
+// after creating a league (defaultTab 'draft' → land on the draft room).
+export function CommishDash({ onBack, focusId, defaultTab }: {
+  onBack: () => void; focusId?: string | null; defaultTab?: LeagueTab;
+}) {
   const [leagues, setLeagues] = useState<AdminLeague[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   // Keep already-loaded leagues on a failed refresh; surface the real error.
@@ -43,7 +46,7 @@ export function CommishDash({ onBack, focusId }: { onBack: () => void; focusId?:
           // With several leagues, cards collapse to just their header (first one
           // starts open) so the list stays scannable; a lone/focused league is
           // always expanded.
-          <LeagueRow key={l.league_id} l={l} reload={load} admin={false} defaultTab="members"
+          <LeagueRow key={l.league_id} l={l} reload={load} admin={false} defaultTab={defaultTab ?? 'members'}
             collapsible={shown.length > 1} defaultOpen={i === 0} />
         ))}
 

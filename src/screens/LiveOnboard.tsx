@@ -15,7 +15,7 @@ import { buildLiveLeague } from '../data/liveBoard';
 import { PRESEASON_BASE, clearRuntimeSlate } from '../data/nflSlate';
 import { LiveBoard } from './LiveBoard';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
-import { AdminPage } from './AdminPage';
+import { AdminPage, type LeagueTab } from './AdminPage';
 import { CommishDash } from './CommishDash';
 import { NativeCreate, DraftRoom, TeamManage } from './NativeLeague';
 import { RequestCodeModal } from './RequestCode';
@@ -356,6 +356,8 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   });
   // Which league "manage" opened — so the dashboard focuses that one, not all.
   const [manageId, setManageId] = useState<string | null>(null);
+  // Which tab the dashboard opens on (fresh league creation lands on DRAFT).
+  const [manageTab, setManageTab] = useState<LeagueTab | undefined>(undefined);
   // Which team's live board/picks a card opened (a manager can be in several).
   const [target, setTarget] = useState<{ leagueId: string; rosterId: number } | null>(null);
   // "My league isn't in the pilot yet" → the request-a-code capture sheet.
@@ -394,7 +396,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   }, [session.user.id]);
 
   if (view === 'commish') return <CommishVerify initialCode={commishCode ?? undefined} onBack={() => { setView('home'); refresh(); }} />;
-  if (view === 'commishdash') return <CommishDash focusId={manageId} onBack={() => { setManageId(null); setView('home'); }} />;
+  if (view === 'commishdash') return <CommishDash focusId={manageId} defaultTab={manageTab} onBack={() => { setManageId(null); setManageTab(undefined); setView('home'); }} />;
   // Add another league from My Leagues: fork by role (join with an invite code, or
   // claim with a commish code), then return home refreshed.
   if (view === 'add') return (
@@ -410,6 +412,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (view === 'create') return (
     <NativeCreate
       onDone={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); refresh(); setView('draft'); }}
+      onLeague={(leagueId) => { setManageId(leagueId); setManageTab('draft'); refresh(); setView('commishdash'); }}
       onBack={() => setView('home')} />
   );
   if (view === 'draft' && target) return (
@@ -463,7 +466,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       userId={session.user.id}
       onBoard={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('board'); }}
       onResults={(leagueId) => { setTarget({ leagueId, rosterId: 0 }); setView('results'); }}
-      onManage={(id) => { setManageId(id); setView('commishdash'); }}
+      onManage={(id) => { setManageId(id); setManageTab(undefined); setView('commishdash'); }}
       onDraft={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('draft'); }}
       onTeam={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('team'); }}
       onAdd={() => setView('add')}
