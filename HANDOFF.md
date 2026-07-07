@@ -1,6 +1,33 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.105.0`_
+_Last updated: 2026-07-07 · Build `v0.105.2`_
+
+## Create → commish dashboard, with the draft as a dashboard tab (v0.105.2)
+- Creating a REAL league no longer shows the interstitial "League created"
+  card → it lands directly on that league's commissioner dashboard
+  (CommishDash focused on the new league), opened to a new **⛏ DRAFT tab**.
+  The invite link stays one click away in the dashboard header. Mock flow
+  unchanged (straight into the room).
+- `LeagueRow` (AdminPage/CommishDash) gains the DRAFT tab for native
+  leagues — it embeds the real `DraftRoom` (`embedded` prop: no back link,
+  no cross-view MANAGE MY TEAM CTA; the dashboard provides the chrome).
+  Commish gets start/seed/pause/force/undo + the live board without leaving
+  management.
+- Wiring: `NativeCreate` gains `onLeague(leagueId)`; `CommishDash` gains
+  `defaultTab`; LiveOnboard tracks `manageTab` ('draft' after creation,
+  reset on normal "manage" entry).
+
+## Desktop widths for in-league screens (v0.105.1)
+The player screens were locked to the 440px mobile column on any display.
+- `LiveOnboard` page shell now sizes per view: draft 1160 · team 940 ·
+  results 760 · create 620 · home 960 · admin/commish 1080 · auth/join 440.
+- `DraftRoom` becomes two columns on desktop — board left (`flex 1.3 1
+  460px`, maxHeight 560), PLAYERS/TEAMS/QUEUE panel right (`flex 1 1
+  400px`) — collapsing to the stacked mobile layout under ~900px (flex-wrap,
+  no media queries). `TeamManage` likewise: my roster + claims left, player
+  pool + waiver order right.
+- Verified with headless-Chromium screenshots at 1440px (snake, auction,
+  team) and 420px (stacked) via the throwaway stub harness.
 
 ## Draft room v3 — Sleeper-style board-first layout (v0.105.0)
 Pure client restyle of `DraftRoom` (`src/screens/NativeLeague.tsx`); no SQL.

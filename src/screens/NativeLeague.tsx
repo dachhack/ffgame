@@ -108,8 +108,12 @@ function Chip({ on, children, onClick }: { on?: boolean; children: React.ReactNo
 // ─────────────────────────────────────────────────────────────────────────────
 // Create wizard
 // ─────────────────────────────────────────────────────────────────────────────
-export function NativeCreate({ onDone, onBack }: {
-  onDone: (leagueId: string, rosterId: number) => void; onBack: () => void;
+export function NativeCreate({ onDone, onLeague, onBack }: {
+  /** Mock created → straight into the draft room. */
+  onDone: (leagueId: string, rosterId: number) => void;
+  /** Real league created → its commissioner dashboard (invite + DRAFT tab). */
+  onLeague: (leagueId: string) => void;
+  onBack: () => void;
 }) {
   // LEAGUE = the real thing (invites, schedule, season). MOCK = a practice
   // draft against named AI teams: same settings surface, no season behind it,
@@ -138,8 +142,6 @@ export function NativeCreate({ onDone, onBack }: {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [err, setErr] = useState<string | null>(null);
-  const [made, setMade] = useState<{ leagueId: string; rosterId: number; invite: string } | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const create = async () => {
     if (busy || (kind === 'league' && !name.trim())) return;
@@ -173,28 +175,13 @@ export function NativeCreate({ onDone, onBack }: {
       setNote('Generating the season schedule…');
       const sched = await nativeGenerateSchedule(r.league_id, 14);
       if (!sched.ok) { setErr(friendlyError(sched.error ?? 'Could not build the schedule.')); setBusy(false); return; }
-      setMade({ leagueId: r.league_id, rosterId: r.roster_id ?? 1, invite: r.invite_code ?? '' });
+      // Straight to the league's commissioner dashboard: invite link up top,
+      // the draft one tab away.
+      onLeague(r.league_id);
+      return;
     } catch (x) { setErr(friendlyError(x)); }
     finally { setBusy(false); }
   };
-
-  if (made) {
-    const joinLink = `${window.location.origin}${window.location.pathname}?live=1&code=${made.invite}`;
-    return (
-      <div style={card}>
-        <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--you)' }}>League created.</div>
-        <div className="mono" style={{ fontSize: 11, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
-          {name} · {teams} teams · {rounds}-round draft. Share the invite link — friends who open it sign in and grab an open seat. No other fantasy app needed.
-        </div>
-        <button onClick={() => { navigator.clipboard?.writeText(joinLink); setCopied(true); }}
-          className="mono" style={{ ...btn, width: '100%', marginTop: 14 }}>{copied ? '✓ invite link copied' : '⛓ Copy invite link'}</button>
-        <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>
-          Or share the code <span style={{ color: 'var(--text)', fontWeight: 700, letterSpacing: '0.1em' }}>{made.invite}</span>. Empty seats autodraft, so you can start whenever.
-        </div>
-        <button onClick={() => onDone(made.leagueId, made.rosterId)} className="mono" style={{ ...btn, width: '100%', marginTop: 14 }}>→ OPEN THE DRAFT ROOM</button>
-      </div>
-    );
-  }
 
   const num = (v: number, set: (n: number) => void, min: number, max: number, step: number) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -387,8 +374,11 @@ function PlayerCard({ p, onClose, action, queued, onQueue }: {
 // ─────────────────────────────────────────────────────────────────────────────
 type DraftTab = 'players' | 'teams' | 'queue';
 
-export function DraftRoom({ leagueId, onBack, onTeam }: {
+export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   leagueId: string; onBack: () => void; onTeam: () => void;
+  /** Mounted inside the commish dashboard's DRAFT tab — no back link or
+   *  cross-view CTAs (the dashboard provides the chrome). */
+  embedded?: boolean;
 }) {
   const [st, setSt] = useState<DraftState | null>(null);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
@@ -539,7 +529,7 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
 
   if (!st) return (
     <div>
-      <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>
+      {!embedded && <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>}
       <div className="mono" style={{ textAlign: 'center', fontSize: 11, color: 'var(--dim)' }}>{err ?? 'Loading the draft…'}</div>
     </div>
   );
@@ -559,7 +549,7 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
 
   return (
     <div>
-      <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>
+      {!embedded && <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
         <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>⛏ Draft room</div>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)' }}>{auction ? 'AUCTION' : 'SNAKE'}</span>
@@ -705,18 +695,23 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
           </div>
           {st.is_mock
             ? <button onClick={deleteMock} disabled={busy} className="mono" style={{ ...btn, width: '100%', marginTop: 12 }}>🗑 DELETE THIS MOCK</button>
-            : <button onClick={onTeam} className="mono" style={{ ...btn, width: '100%', marginTop: 12 }}>⇄ MANAGE MY TEAM</button>}
+            : !embedded
+              ? <button onClick={onTeam} className="mono" style={{ ...btn, width: '100%', marginTop: 12 }}>⇄ MANAGE MY TEAM</button>
+              : null}
           {isCommish && st.mode === 'snake' && (
             <button onClick={() => run(() => commishUndoPick(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, width: '100%', marginTop: 8, fontSize: 9.5 }}>↩ UNDO LAST PICK (reopens the draft)</button>
           )}
         </div>
       )}
 
+      {/* Desktop: board + player panel side by side; phones: stacked (the
+          flex bases make the columns collapse under ~900px). */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }}>
       {/* THE BOARD — always on screen (Sleeper-style): one column per team,
           cells colored by position, snake direction arrows on open cells, and
           the view follows the on-clock pick. */}
       {teams > 0 && (
-        <div style={{ ...card, padding: 8, marginBottom: 12, maxHeight: 320, overflow: 'auto' }}>
+        <div style={{ ...card, padding: 8, flex: '1.3 1 460px', minWidth: 320, maxHeight: 560, overflow: 'auto', boxSizing: 'border-box' }}>
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${teams}, 88px)`, gap: 4, width: 'max-content' }}>
             {(st.order ?? []).map((rid) => (
               <div key={`bh-${rid}`} style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 5, padding: '2px 2px 6px' }}>
@@ -772,6 +767,8 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
         </div>
       )}
 
+      {/* the tabbed panel (players / teams / queue) — the second column */}
+      <div style={{ flex: '1 1 400px', minWidth: 320 }}>
       {/* tabs */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
         {tabChip('players', `PLAYERS (${avail.length})`)}
@@ -795,7 +792,7 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
           <div className="mono" style={{ display: 'flex', gap: 8, padding: '0 0 4px 62px', fontSize: 7.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>
             <span style={{ flex: 1 }}>PLAYER</span><span style={{ width: 38, textAlign: 'right' }}>ADP</span><span style={{ width: 38, textAlign: 'right' }}>PROJ</span><span style={{ width: 20 }} />
           </div>
-          <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 480, overflowY: 'auto' }}>
             {avail.slice(0, 120).map((p) => {
               const adp = ADP_2026.get(p.slug); const proj = PROJ_2026.get(p.slug);
               const inQ = queue.includes(p.slug);
@@ -889,6 +886,8 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
           })}
         </div>
       )}
+      </div>{/* /tab panel column */}
+      </div>{/* /board + panel row */}
 
       {cardFor && (
         <PlayerCard p={cardFor} onClose={() => setCardFor(null)}
@@ -1064,6 +1063,9 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
 
       {identityCard}
 
+      {/* desktop: my team on the left, the market on the right; phones stack */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }}>
+      <div style={{ flex: '1 1 380px', minWidth: 320 }}>
       {/* my roster */}
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={hdr}>MY ROSTER ({mine.length}{cap != null ? `/${cap}` : ''})</div>
@@ -1113,6 +1115,9 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
         </div>
       )}
 
+      </div>{/* /my-team column */}
+
+      <div style={{ flex: '1 1 380px', minWidth: 320 }}>
       {/* free agents / waiver wire */}
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={hdr}>PLAYER POOL ({free.length} available)</div>
@@ -1156,6 +1161,8 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
         ))}
         <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>Winning a claim sends you to the back of the line.</div>
       </div>
+      </div>{/* /market column */}
+      </div>{/* /two-column row */}
 
       {pickers}
 

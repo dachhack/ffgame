@@ -22,6 +22,7 @@ import { isMarkFree, setMarkFree } from '../data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '../data/liveApi';
 import { POWERUPS } from '../data/powerups';
 import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, errMsg, type TabDef } from './adminUi';
+import { DraftRoom } from './NativeLeague';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
 
@@ -215,7 +216,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 // One league's management card — the whole commissioner/admin toolset for a
 // league, organized under a tab strip (Setup / Members / Picks / Matchups /
 // K-DST / Audit). Used by both the super-admin Leagues tab and CommishDash.
-type LeagueTab = 'overview' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst';
+export type LeagueTab = 'overview' | 'draft' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst';
 
 // ── Roster rules editor (native leagues, 0071): per-position limits any time,
 // roster size while the draft is still pending. ∞ = uncapped (stored null).
@@ -423,6 +424,8 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
   const statusChip = (color: string): React.CSSProperties => ({ ...mono, fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color, border: `1px solid ${color}`, borderRadius: 4, padding: '2px 5px', whiteSpace: 'nowrap' });
   const leagueTabs: TabDef<LeagueTab>[] = [
     { id: 'overview', label: 'SETUP' },
+    // Native leagues draft in-app — the room lives right in the dashboard.
+    ...(l.provider === 'native' ? [{ id: 'draft', label: '⛏ DRAFT' } as TabDef<LeagueTab>] : []),
     { id: 'members', label: 'MEMBERS' },
     { id: 'ready', label: 'PICKS' },
     { id: 'matchups', label: 'MATCHUPS' },
@@ -461,6 +464,13 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
       {busy && busy !== 'sync' && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{busy}</div>}
 
       <TabBar tabs={leagueTabs} active={tab} onSelect={showTab} style={{ margin: '10px -14px 0', padding: '0 8px' }} />
+
+      {/* the in-app draft room, embedded (native leagues only) */}
+      {tab === 'draft' && l.provider === 'native' && (
+        <div style={{ marginTop: 12 }}>
+          <DraftRoom leagueId={l.league_id} embedded onBack={() => {}} onTeam={() => {}} />
+        </div>
+      )}
 
       {tab === 'overview' && (
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
