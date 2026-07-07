@@ -123,8 +123,25 @@ separates "the mechanic is weak" from "the random field never triggered it".
 npx tsx tools/playtester/scenario.mjs --week=1-14 --n=200
 ```
 
+## `lateswap.mjs` — score-aware late swap (per-window locks, v0.95.0)
+Windows seal one at a time, so a manager picks each later window knowing the real
+margin of the windows already played. Both sides still lock a window at the same
+kickoff (and slate-gating partitions rosters by window), so the measurable edge is
+score-state VARIANCE management, not counter-picking. Policies: `gamble` (trailing →
+skill players to the TD nuke), `gamble1` (only the weakest), `hail` (MNF-only, down
+big), `protect` (leading → denial). Paired A/B vs blind honest; fired-cohort and
+behind-at-half columns are the signal. See findings §10 — every variant measured
+NEGATIVE: the metric menu prices variance at a ruinous EV discount, so there is
+nothing profitable to spend the live-margin information on until NUKE/denial are
+retuned.
+
+```
+npx tsx tools/playtester/lateswap.mjs --week=1-14 --n=120
+```
+
 ## Not yet modeled
-The pure resolver does not implement these power-ups, so the harness reports no
-signal for them: `double-or-nothing`, `turnover-boost`, `spy`, `trick-play`,
-`hail-mary`, `pick-six`, `bye-steal`, `metric-swap`, `player-swap`, `mulligan`,
-`emp`. Measuring them needs either engine support or a separate driver.
+`resolveLiveMatchup` now implements the targeted power-ups (v0.96.0: `double-or-
+nothing`, `bye-steal`, `emp`, `metric-swap`/`player-swap`/`mulligan` via extras, and
+the `trick-play`/`pick-six`/`hail-mary` awards), so drivers CAN measure them — only
+`lateswap.mjs` does so far. Still unmodeled anywhere: `turnover-boost` (no per-player
+turnover feed) and `spy` (pure information; needs an information-value driver).

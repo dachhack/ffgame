@@ -325,3 +325,42 @@ _On the ceiling: Twin Generals was ruled OUT as a nerf target (§2 finding 5 —
 balances it). The only remaining ceiling lever is the single-FG curve + amplifier compounding
 (§ probe 2), and since everything cancels in symmetric play (§1) that's a feel/variance choice,
 not a balance fix — left to the designer's taste rather than recommended._
+
+## 10. Late swap — score-aware variance policies all measure NEGATIVE (`lateswap.mjs`)
+Per-window locks (v0.95.0) let a manager set each later window knowing the real
+margin so far. Both sides still lock a window at the same kickoff and slate-gating
+partitions rosters by window — so earlier reveals never expose the opponent's
+same-window pick, and the testable edge is **score-state variance management**:
+gamble when trailing, deny when leading. Paired A/B (same rosters, home runs the
+policy vs home honest, away fixed honest), weeks 1–14 × 120, seed 909.
+
+| policy | fired | fired-cohort WR vs ctrl | behind-at-half WR vs ctrl |
+|---|--:|---|---|
+| gamble T=0 (trailing → all skill → `td`) | 66% | **6.3% vs 32.8%** (n=1105) | 6.3% vs 26.7% |
+| gamble T=15 | 49% | 3.9% vs 22.2% | 13.7% vs 26.7% |
+| gamble1 T=10 (only the WEAKEST player flips) | 53% | 8.6% vs 25.2% | 13.7% vs 26.7% |
+| hail T=20 (MNF only, down 20+) | 21% | **0.0% vs 4.0%** (n=354) | 25.3% vs 26.7% |
+| protect T=0 (leading → denial) | 67% | 58.5% vs 71.0% | 26.0% vs 26.7% |
+| protect T=15 | 50% | 78.2% vs 81.7% | 28.0% vs 26.7% |
+
+**Every variant loses, including the surgically minimal ones.** Trailing teams that
+gamble convert a ~27% comeback rate into 6–14%; the desperate MNF hail mary converts
+ZERO of an already-nearly-dead cohort; lead-protection denial costs more of your own
+EV than it removes from the opponent's variance. Raising the trigger threshold only
+converges back to control from below.
+
+**Reading (design, not tooling):** the live-margin information is real, but the
+metric menu offers **no fair variance/EV trade to spend it on** — `td` is not a
+lottery ticket at a small EV discount, it's a ~60%-EV-loss ticket (§2), and denial
+only partially bites. This sharpens §4's priority: the drip monoculture doesn't just
+homogenize blind play — it **forecloses the adaptive layer** that per-window locks
+created. Retuning NUKE/denial so variance is purchasable near fair EV is what makes
+late-swap decisions live; re-run this module after any such retune (expect the
+gamble cohort to approach — not exceed — control, with the gap as the price of
+variance).
+
+**Limitations:** metric flips only — late swap also allows PLAYER changes in later
+windows, unmeasured because the projection model is mean-only (no per-player
+variance); partial margins resolve window subsets, so cross-window couplings
+(suppress/banker/backups spanning locked+unlocked windows) are approximated; the
+opponent never adapts (a human meta could punish known policies).
