@@ -1,6 +1,18 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.99.0`_
+_Last updated: 2026-07-07 · Build `v0.99.1`_
+
+## Native leagues gated to super admin for closed testing (v0.99.1)
+Owner call: test before opening up. `create_native_league` now requires
+`is_admin()` ('native leagues are in closed testing'); the RoleChooser "Start a
+fresh league →" option renders only for admins (both mounts — the add-league
+view and the fresh-sign-in fork). Creation is the single choke point — every
+other native RPC needs an existing native league — so un-gating later is
+deleting one check + one prop condition. `native_join` stays open: the admin
+can invite non-admin test accounts. Probes updated (93 assertions): non-admin
+create is refused; probe identity switching got a `probe_as()` helper that sets
+BOTH uid and email claims (is_admin() reads the email — the old uid-only
+switches would have leaked A's admin bit into B's probes).
 
 ## Native leagues: in-app draft, waivers, team management (v0.99.0)
 Kills the game's biggest structural liability — needing a league that already

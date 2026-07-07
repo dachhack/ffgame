@@ -12,6 +12,14 @@
 > add/drop. That's what migration `0064_native_leagues.sql` adds, and it's live
 > in this branch end-to-end: create → invite → snake draft → waivers/FA →
 > weekly lineups → the existing live H2H pipeline, unchanged.
+>
+> **Rollout gate (v0.99.1):** league *creation* is restricted to super admins
+> (`is_admin()`) while the feature is in closed testing — enforced in
+> `create_native_league` itself and mirrored in the UI (the "Start a fresh
+> league" option only renders for admins). Creation is the single choke point
+> (every other native RPC requires an existing native league), so opening the
+> feature up later is deleting one check. *Joining* a native league by invite
+> code stays open to everyone, so an admin can test with non-admin accounts.
 
 ---
 

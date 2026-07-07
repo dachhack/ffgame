@@ -121,7 +121,7 @@ export function LiveOnboard() {
             : recovery ? <SetPassword onDone={() => setRecovery(false)} />
             : !session ? <AuthForm />
             : claiming ? <Muted text="Setting up your league…" />
-            : <Enroll session={session} view={view} setView={setView} commishCode={pendingCommish} />}
+            : <Enroll session={session} view={view} setView={setView} commishCode={pendingCommish} admin={admin} />}
         </div>
       </main>
     </div>
@@ -333,7 +333,7 @@ function SetPassword({ onDone }: { onDone: () => void }) {
 // Per-league matchup snapshot for the home cards: the next matchup + both teams' identity.
 interface MatchupCard { matchup: LiveMatchup; teams: Record<number, TeamInfo>; }
 
-function Enroll({ session, view, setView, commishCode }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void; commishCode?: string | null }) {
+function Enroll({ session, view, setView, commishCode, admin }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void; commishCode?: string | null; admin?: boolean }) {
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
   const [loadErr, setLoadErr] = useState(false);
   const [commishLeagues, setCommishLeagues] = useState<AdminLeague[]>([]);
@@ -390,7 +390,9 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
   // claim with a commish code), then return home refreshed.
   if (view === 'add') return (
     <>
-      <RoleChooser onPlayer={() => setView('join')} onCreate={() => setView('create')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} />
+      {/* "Start a fresh league" is super-admin-only while native leagues are in
+          closed testing (the create RPC enforces the same gate server-side). */}
+      <RoleChooser onPlayer={() => setView('join')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </>
@@ -434,7 +436,7 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
   if (enrollments.length === 0) return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={() => setView('create')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} />
+        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} />
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}

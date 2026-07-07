@@ -22,14 +22,23 @@ end $$;
 create or replace function assert_true(b boolean, msg text) returns void language plpgsql as $$
 begin if b is not true then raise exception 'PROBE FAIL %', msg; end if; end $$;
 
+-- Switch probe identity: sets BOTH the uid and the email claim. is_admin() reads
+-- the email — switching only the uid would leave the previous user's admin bit.
+create or replace function probe_as(u text) returns void language plpgsql as $$
+begin
+  perform set_config('app.uid', '00000000-0000-0000-0000-00000000000' || u, false);
+  perform set_config('app.email', u || '@test.dev', false);
+end $$;
+
 -- identity helpers
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000000a', 'a@test.dev'),
   ('00000000-0000-0000-0000-00000000000b', 'b@test.dev'),
   ('00000000-0000-0000-0000-00000000000c', 'c@test.dev'),
   ('00000000-0000-0000-0000-00000000000d', 'd@test.dev');
-select set_config('app.uid', '00000000-0000-0000-0000-00000000000a', false);
-select set_config('app.email', 'a@test.dev', false);
+select probe_as('a');
+-- A is a super admin: league creation is gated to admins while in closed testing.
+insert into app_admin (email, note) values ('a@test.dev', 'probe admin') on conflict (email) do nothing;
 
 -- 2026 slate row so week-1 lock_at resolves
 insert into nfl_slate (season, week, home, away, win, kickoff)
@@ -39,6 +48,10 @@ values ('2026', 1, 'SEA', 'KC', 'snf', '2026-09-09T20:20:00-04:00') on conflict 
 do $$
 declare r jsonb; lid uuid;
 begin
+  -- closed-testing gate: a non-admin may not create a native league
+  perform probe_as('b');
+  perform assert_err(create_native_league('X', '2026', 4), 'closed testing', '1a0 non-admin create gated');
+  perform probe_as('a');
   perform assert_err(create_native_league('X', '2026', 1), 'team count', '1a team-count gate');
   perform assert_err(create_native_league('X', '2026', 4, 3), 'roster size', '1b rounds gate');
   perform assert_err(create_native_league('  ', '2026', 4), 'name', '1c name gate');
@@ -59,15 +72,13 @@ do $$
 declare lid uuid := current_setting('probe.lid')::uuid; code text; r jsonb;
 begin
   select invite_code into code from league where id = lid;
-  perform set_config('app.uid', '00000000-0000-0000-0000-00000000000b', false);
-  perform set_config('app.email', 'b@test.dev', false);
+  perform probe_as('b');
   r := native_join(code, 'Bravo Squad');
   perform assert_ok(r, '2a B joins');
   perform assert_true((r ->> 'roster_id')::int = 2, '2b B gets seat 2');
   r := native_join(code);
   perform assert_true((r ->> 'roster_id')::int = 2 and (r ->> 'status') = 'enrolled', '2c idempotent rejoin');
-  perform set_config('app.uid', '00000000-0000-0000-0000-00000000000c', false);
-  perform set_config('app.email', 'c@test.dev', false);
+  perform probe_as('c');
   r := native_join(code);
   perform assert_true((r ->> 'roster_id')::int = 3, '2d C gets seat 3');
   perform assert_err(native_join('ZZZZZZZZ'), 'invalid', '2e bad code');
@@ -81,8 +92,7 @@ begin
   -- as B (not commish) → forbidden
   r := seed_league_pool(lid, '[]'::jsonb);
   perform assert_err(r, 'forbidden', '3a non-commish seed');
-  perform set_config('app.uid', '00000000-0000-0000-0000-00000000000a', false);
-  perform set_config('app.email', 'a@test.dev', false);
+  perform probe_as('a');
   -- ranked pool: qb1 rb1 wr1 te1 qb2 rb2 wr2 te2 … then K/DEF at the bottom
   for i in 1..6 loop
     pool := pool || jsonb_build_object('slug', 'qb' || i, 'full', 'QB ' || i, 'pos', 'QB', 'team', 'T' || i);
@@ -131,9 +141,9 @@ end $$;
 do $$
 declare lid uuid := current_setting('probe.lid')::uuid; r jsonb;
 begin
-  perform set_config('app.uid', '00000000-0000-0000-0000-00000000000b', false);
+  perform probe_as('b');
   perform assert_err(start_draft(lid), 'forbidden', '5a non-commish start');
-  perform set_config('app.uid', '00000000-0000-0000-0000-00000000000a', false);
+  perform probe_as('a');
   perform assert_err(start_draft(lid, '[3,1,4]'::jsonb), 'every roster', '5b short order');
   perform assert_err(start_draft(lid, '[3,1,4,4]'::jsonb), 'every roster', '5c dup order');
   r := start_draft(lid, '[3,1,4,2]'::jsonb);
@@ -150,15 +160,15 @@ do $$
 declare lid uuid := current_setting('probe.lid')::uuid; r jsonb;
 begin
   -- on the clock: roster 3 (C). B may not pick.
-  perform set_config('app.uid', '00000000-0000-0000-0000-00000000000b', false);
+  perform probe_as('b');
   perform assert_err(make_draft_pick(lid, 'qb1'), 'not your pick', '6a turn gate');
-  perform set_config('app.uid', '00000000-0000-0000-0000-00000000000c', false);
+  perform probe_as('c');
   perform assert_err(make_draft_pick(lid, 'nope'), 'not in pool', '6b unknown slug');
   r := make_draft_pick(lid, 'qb1');
   perform assert_ok(r, '6c C picks qb1');
   -- next: roster 1 (A) — commish; C may not proxy
   perform assert_err(make_draft_pick(lid, 'rb1'), 'not your pick', '6d no proxy for player');
-  perform set_config('app.uid', '00000000-0000-0000-0000-00000000000a', false);
+  perform probe_as('a');
   perform assert_err(make_draft_pick(lid, 'qb1'), 'already rostered', '6e dup player');
   r := make_draft_pick(lid, 'rb1');
   perform assert_ok(r, '6f A picks rb1');
@@ -172,7 +182,7 @@ begin
   -- next: roster 2 (B, human, clock in future) → tick must NOT pick
   r := draft_tick(lid);
   perform assert_true((r ->> 'autopicks')::int = 0, '6j human clock respected');
-  perform set_config('app.uid', '00000000-0000-0000-0000-00000000000b', false);
+  perform probe_as('b');
   r := make_draft_pick(lid, 'te1');
   perform assert_ok(r, '6k B picks te1');
   -- round 2 snake: roster 2 again
@@ -226,7 +236,7 @@ begin
     order by lp.rank limit 1;
   select slug into dropb from native_roster where league_id = lid and roster_id = 2 order by added_at limit 1;
   -- B adds the best free agent, dropping someone (roster is at cap)
-  perform set_config('app.uid', '00000000-0000-0000-0000-00000000000b', false);
+  perform probe_as('b');
   r := add_free_agent(lid, 2, freeslug);
   perform assert_err(r, 'roster full', '8a cap enforced');
   r := add_free_agent(lid, 2, freeslug, dropb);
@@ -237,14 +247,14 @@ begin
   r := add_free_agent(lid, 2, dropb, freeslug);
   perform assert_err(r, 'waivers', '8e waived blocks FA add');
   -- C claims the waived player (with a drop)
-  perform set_config('app.uid', '00000000-0000-0000-0000-00000000000c', false);
+  perform probe_as('c');
   select slug into dropc from native_roster where league_id = lid and roster_id = 3 order by added_at limit 1;
   r := submit_waiver_claim(lid, 3, dropb, dropc);
   perform assert_ok(r, '8f claim by C');
   r := submit_waiver_claim(lid, 3, dropb, dropc);
   perform assert_err(r, 'already pending', '8g dup claim');
   -- B claims the same player too (priority 1 → should win at clear)
-  perform set_config('app.uid', '00000000-0000-0000-0000-00000000000b', false);
+  perform probe_as('b');
   r := submit_waiver_claim(lid, 2, dropb, freeslug);
   perform assert_ok(r, '8h claim by B');
   -- process before the window closes → nothing happens
@@ -272,7 +282,7 @@ declare lid uuid := current_setting('probe.lid')::uuid; r jsonb; before text; dr
 begin
   update matchup set status = 'live' where league_id = lid and week = 1;
   select starters_json::text into before from sleeper_lineup where league_id = lid and week = 1 and roster_id = 3;
-  perform set_config('app.uid', '00000000-0000-0000-0000-00000000000c', false);
+  perform probe_as('c');
   select slug into dropped from native_roster where league_id = lid and roster_id = 3 order by added_at desc limit 1;
   r := drop_player(lid, 3, dropped);
   perform assert_ok(r, '9a drop');
@@ -285,14 +295,14 @@ end $$;
 do $$
 declare lid uuid := current_setting('probe.lid')::uuid; r jsonb;
 begin
-  perform set_config('app.uid', '00000000-0000-0000-0000-00000000000b', false);
+  perform probe_as('b');
   r := draft_state(lid);
   perform assert_true((r ->> 'status') = 'complete' and jsonb_array_length(r -> 'picks') = 28, '10a draft_state');
   r := native_team_state(lid);
   perform assert_true((r ->> 'my_roster_id')::int = 2 and (r ->> 'roster_cap')::int = 7, '10b team_state');
   perform assert_true(jsonb_array_length(r -> 'waiver_order') = 4, '10c waiver order');
   -- non-member: RPCs refuse
-  perform set_config('app.uid', '00000000-0000-0000-0000-00000000000d', false);
+  perform probe_as('d');
   r := draft_state(lid);
   perform assert_true((r ->> 'error') = 'forbidden', '10d outsider draft_state');
   r := native_team_state(lid);
@@ -301,14 +311,14 @@ end $$;
 
 -- table-level RLS as the `authenticated` role
 set role authenticated;
-select set_config('app.uid', '00000000-0000-0000-0000-00000000000d', false);
+select probe_as('d');
 do $$
 begin
   perform assert_true((select count(*) from league_pool) = 0, '10f outsider sees no pool');
   perform assert_true((select count(*) from native_roster) = 0, '10g outsider sees no rosters');
   perform assert_true((select count(*) from draft_pick) = 0, '10h outsider sees no picks');
 end $$;
-select set_config('app.uid', '00000000-0000-0000-0000-00000000000b', false);
+select probe_as('b');
 do $$
 declare lid uuid := current_setting('probe.lid')::uuid;
 begin

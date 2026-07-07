@@ -259,6 +259,10 @@ grant execute on function league_by_invite(text) to authenticated;
 
 -- Create a native league: the caller becomes commissioner AND claims roster 1.
 -- Seats 2..N are open; share the invite code (native_join fills seats in order).
+-- GATED to super admins while the feature is tested — this is the single choke
+-- point (every other native RPC needs an existing native league), so lifting
+-- the gate later is deleting one check. Joining a native league by invite code
+-- stays open to anyone, so an admin can test with non-admin accounts.
 create or replace function create_native_league(
   p_name text, p_season text, p_teams int,
   p_rounds int default 12, p_pick_seconds int default 90
@@ -266,6 +270,7 @@ create or replace function create_native_league(
 declare lid uuid; e text; nm text; i int;
 begin
   if auth.uid() is null then return jsonb_build_object('ok', false, 'error', 'not signed in'); end if;
+  if not is_admin() then return jsonb_build_object('ok', false, 'error', 'native leagues are in closed testing'); end if;
   nm := nullif(btrim(coalesce(p_name, '')), '');
   if nm is null then return jsonb_build_object('ok', false, 'error', 'league needs a name'); end if;
   if p_teams is null or p_teams < 2 or p_teams > 14 then
