@@ -1,6 +1,27 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.104.0`_
+_Last updated: 2026-07-07 · Build `v0.105.0`_
+
+## Draft room v3 — Sleeper-style board-first layout (v0.105.0)
+Pure client restyle of `DraftRoom` (`src/screens/NativeLeague.tsx`); no SQL.
+- **THE BOARD IS ALWAYS ON SCREEN** (was a tab): a scrollable rounds × teams
+  grid right under the pick/nomination banner. Sticky team header (avatar +
+  name; auction adds remaining budget), cells fully colored by position
+  (`--pos-*-bg/fg`), POS top-left + pick number top-right (`3.4`, auction
+  `$23`, 🤖 for autopicks), first/last name stacked. Open cells show their
+  slot number + snake-direction arrow (→/←); the on-clock cell glows and the
+  container auto-scrolls to it on every pick (`scrollIntoView` keyed on
+  `current_overall`).
+- **Tabs** shrink to PLAYERS / TEAMS / QUEUE (board tab gone — it's the room).
+- **Position filter chips double as a roster-fill meter**: `ALL 3/12 · QB 0/3
+  · RB 1/∞ …` — my counts (auction includes lots I hold) against the 0071
+  pos_caps.
+- **Player rows, Sleeper-ordered**: DRAFT/NOM $1 button on the LEFT (LIMIT
+  when at cap), then headshot + bold name over a POS pill · team · pool-rank
+  sub-line, ADP/PROJ columns, queue star on the right.
+- Verified visually via a throwaway Vite harness (real `DraftRoom` + stubbed
+  `liveApi`, headless Chromium screenshots of snake AND auction mid-draft) —
+  harness deleted after; probes/typecheck/build green.
 
 ## Roster rules + league crests (v0.104.0)
 Configurable per-position roster limits (now binding HUMANS, not just the AI),

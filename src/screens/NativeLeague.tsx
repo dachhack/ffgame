@@ -385,7 +385,7 @@ function PlayerCard({ p, onClose, action, queued, onQueue }: {
 // ─────────────────────────────────────────────────────────────────────────────
 // Draft room
 // ─────────────────────────────────────────────────────────────────────────────
-type DraftTab = 'players' | 'board' | 'teams' | 'queue';
+type DraftTab = 'players' | 'teams' | 'queue';
 
 export function DraftRoom({ leagueId, onBack, onTeam }: {
   leagueId: string; onBack: () => void; onTeam: () => void;
@@ -405,6 +405,11 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
   const [now, setNow] = useState(Date.now());
   const skew = useRef(0); // serverNow − clientNow, for an honest countdown
   const ticking = useRef(false);
+  // The board follows the draft: the on-clock cell scrolls into view per pick.
+  const onClockCellRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    onClockCellRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [st?.current_overall]);
 
   const refresh = async () => {
     try {
@@ -551,11 +556,6 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
   );
 
   const pickRowsFor = (rid: number) => (st.picks ?? []).filter((p) => p.roster_id === rid);
-  const shortName = (slug: string) => {
-    const full = poolBySlug.get(slug)?.full_name ?? slug;
-    const parts = full.split(' ');
-    return parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(' ')}` : full;
-  };
 
   return (
     <div>
@@ -712,10 +712,69 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
         </div>
       )}
 
+      {/* THE BOARD — always on screen (Sleeper-style): one column per team,
+          cells colored by position, snake direction arrows on open cells, and
+          the view follows the on-clock pick. */}
+      {teams > 0 && (
+        <div style={{ ...card, padding: 8, marginBottom: 12, maxHeight: 320, overflow: 'auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${teams}, 88px)`, gap: 4, width: 'max-content' }}>
+            {(st.order ?? []).map((rid) => (
+              <div key={`bh-${rid}`} style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 5, padding: '2px 2px 6px' }}>
+                <Avatar name={teamName(rid) ?? `Team ${rid}`} src={byRoster[rid]?.avatar} size={20} />
+                <div style={{ minWidth: 0 }}>
+                  <div className="mono" style={{ fontSize: 8, fontWeight: 700, color: rid === myRoster ? 'var(--you)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 56 }}>{teamName(rid) ?? `Team ${rid}`}</div>
+                  {auction && st.budgets && <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)' }}>${st.budgets.find((b) => b.roster_id === rid)?.budget ?? ''}</div>}
+                </div>
+              </div>
+            ))}
+            {Array.from({ length: st.rounds }, (_, r) =>
+              (st.order ?? []).map((rid, c) => {
+                // snake: even rounds flow right→left; auction: order-of-award per team
+                const cell = auction
+                  ? pickRowsFor(rid)[r]
+                  : (st.picks ?? []).find((pk) => pk.round === r + 1 && pk.roster_id === rid);
+                const overallHere = !auction && st.status === 'live'
+                  && st.current_overall === r * teams + (r % 2 === 0 ? c + 1 : teams - c);
+                const pl = cell ? poolBySlug.get(cell.slug) : null;
+                const fg = `var(--pos-${pl?.pos ?? 'WR'}-fg)`;
+                const nm = (pl?.full_name ?? cell?.slug ?? '').split(' ');
+                const first = nm.length > 1 ? nm[0] : ' ';
+                const last = nm.length > 1 ? nm.slice(1).join(' ') : nm[0];
+                return (
+                  <div key={`b-${r}-${rid}`} ref={overallHere ? onClockCellRef : undefined} style={{
+                    height: 50, borderRadius: 6, padding: '4px 6px', boxSizing: 'border-box', overflow: 'hidden',
+                    background: cell ? `var(--pos-${pl?.pos ?? 'WR'}-bg)` : 'var(--bg)',
+                    border: `1px solid ${overallHere ? 'var(--you)' : 'var(--bd)'}`,
+                    boxShadow: overallHere ? '0 0 8px color-mix(in srgb, var(--you) 45%, transparent)' : 'none',
+                  }}>
+                    {cell ? (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                          <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.06em', color: fg }}>{posLabel(pl?.pos ?? '')}</span>
+                          <span className="mono" style={{ fontSize: 7.5, color: fg, opacity: 0.8 }}>
+                            {auction ? `$${cell.price ?? 1}` : `${cell.round}.${((cell.overall - 1) % teams) + 1}`}{cell.auto ? ' 🤖' : ''}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 8.5, color: fg, opacity: 0.85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>{first}</div>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, color: fg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{last}</div>
+                      </>
+                    ) : (
+                      <div className="mono" style={{ fontSize: 8, color: overallHere ? 'var(--you)' : 'var(--faint)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '100%' }}>
+                        <span>{overallHere ? '⏱ on clock' : auction ? '—' : `${r + 1}.${r % 2 === 0 ? c + 1 : teams - c}`}</span>
+                        {!auction && !overallHere && <span style={{ opacity: 0.5 }}>{r % 2 === 0 ? '→' : '←'}</span>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
       {/* tabs */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
         {tabChip('players', `PLAYERS (${avail.length})`)}
-        {tabChip('board', 'BOARD')}
         {tabChip('teams', 'TEAMS')}
         {tabChip('queue', `☆ QUEUE (${queue.length})`)}
       </div>
@@ -724,93 +783,48 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
       {tab === 'players' && (
         <div style={card}>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players or teams…" style={{ ...input, marginBottom: 10 }} />
+          {/* position filters double as my roster-fill meter: taken/limit */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-            {POS_FILTERS.map((p) => <Chip key={p} on={pos === p} onClick={() => setPos(p)}>{posLabel(p)}</Chip>)}
+            {POS_FILTERS.map((p) => {
+              const fill = myRoster == null ? '' : p === 'ALL'
+                ? ` ${Object.values(myPosCount).reduce((a, b) => a + b, 0)}/${st.rounds}`
+                : ` ${myPosCount[p] ?? 0}/${st.pos_caps?.[p as keyof PosCaps] ?? '∞'}`;
+              return <Chip key={p} on={pos === p} onClick={() => setPos(p)}>{posLabel(p)}{fill}</Chip>;
+            })}
           </div>
-          <div className="mono" style={{ display: 'flex', gap: 8, padding: '0 0 4px 38px', fontSize: 7.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>
-            <span style={{ flex: 1 }}>PLAYER</span><span style={{ width: 40, textAlign: 'right' }}>ADP</span><span style={{ width: 40, textAlign: 'right' }}>PROJ</span><span style={{ width: 84 }} />
+          <div className="mono" style={{ display: 'flex', gap: 8, padding: '0 0 4px 62px', fontSize: 7.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>
+            <span style={{ flex: 1 }}>PLAYER</span><span style={{ width: 38, textAlign: 'right' }}>ADP</span><span style={{ width: 38, textAlign: 'right' }}>PROJ</span><span style={{ width: 20 }} />
           </div>
           <div style={{ maxHeight: 420, overflowY: 'auto' }}>
             {avail.slice(0, 120).map((p) => {
               const adp = ADP_2026.get(p.slug); const proj = PROJ_2026.get(p.slug);
               const inQ = queue.includes(p.slug);
               return (
-                <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
-                  <button onClick={() => setCardFor(p)} style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
-                    <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
-                    <PosPill pos={p.pos as Pos} />
-                    <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
-                  </button>
-                  <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 40, textAlign: 'right' }}>{adp != null ? adp.toFixed(0) : '—'}</span>
-                  <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 40, textAlign: 'right' }}>{proj != null ? proj.toFixed(1) : '—'}</span>
-                  <button onClick={() => toggleQueue(p.slug)} title={inQ ? 'remove from queue' : 'add to queue'} className="mono"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: inQ ? 'var(--warn)' : 'var(--faint)', padding: '0 2px' }}>{inQ ? '★' : '☆'}</button>
+                <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)' }}>
                   <button onClick={() => act(p.slug)} disabled={!myTurn || busy || atCap(p.pos)} className="mono"
                     title={atCap(p.pos) ? `position limit reached (${posLabel(p.pos)})` : undefined}
-                    style={{ ...btn, padding: '6px 10px', fontSize: 10, opacity: myTurn && !busy && !atCap(p.pos) ? 1 : 0.35 }}>
-                    {atCap(p.pos) ? 'LIMIT' : auction ? 'NOM $1' : 'PICK'}
+                    style={{ ...btn, padding: '7px 8px', fontSize: 9, width: 54, flexShrink: 0, opacity: myTurn && !busy && !atCap(p.pos) ? 1 : 0.35 }}>
+                    {atCap(p.pos) ? 'LIMIT' : auction ? 'NOM $1' : 'DRAFT'}
                   </button>
+                  <button onClick={() => setCardFor(p)} style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+                    <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={28} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</div>
+                      <div style={{ display: 'flex', gap: 5, alignItems: 'center', marginTop: 2 }}>
+                        <PosPill pos={p.pos as Pos} />
+                        <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.team} · #{p.rank}</span>
+                      </div>
+                    </div>
+                  </button>
+                  <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 38, textAlign: 'right' }}>{adp != null ? adp.toFixed(0) : '—'}</span>
+                  <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 38, textAlign: 'right' }}>{proj != null ? proj.toFixed(1) : '—'}</span>
+                  <button onClick={() => toggleQueue(p.slug)} title={inQ ? 'remove from queue' : 'add to queue'} className="mono"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: inQ ? 'var(--warn)' : 'var(--faint)', padding: '0 2px', flexShrink: 0 }}>{inQ ? '★' : '☆'}</button>
                 </div>
               );
             })}
             {avail.length > 120 && <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', padding: '8px 0' }}>…{avail.length - 120} more — narrow the search.</div>}
           </div>
-        </div>
-      )}
-
-      {/* BOARD — the full rounds × teams grid */}
-      {tab === 'board' && (
-        <div style={{ ...card, overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', minWidth: teams * 92 + 34 }}>
-            <thead>
-              <tr>
-                <th className="mono" style={{ fontSize: 8, color: 'var(--faint)', padding: 4 }}>RD</th>
-                {(st.order ?? []).map((rid) => (
-                  <th key={rid} style={{ padding: 4 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                      <Avatar name={teamName(rid) ?? `Team ${rid}`} src={byRoster[rid]?.avatar} size={22} />
-                      <span className="mono" style={{ fontSize: 8, color: rid === myRoster ? 'var(--you)' : 'var(--dim)', maxWidth: 84, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{teamName(rid) ?? `Team ${rid}`}</span>
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {Array.from({ length: st.rounds }, (_, r) => (
-                <tr key={r}>
-                  <td className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', padding: 4, textAlign: 'center' }}>{r + 1}</td>
-                  {(st.order ?? []).map((rid, c) => {
-                    // snake: even rounds flow right→left; auction: order-of-award per team
-                    const cell = auction
-                      ? pickRowsFor(rid)[r]
-                      : (st.picks ?? []).find((pk) => pk.round === r + 1 && pk.roster_id === rid);
-                    const overallHere = !auction && st.status === 'live'
-                      && st.current_overall === r * teams + (r % 2 === 0 ? c + 1 : teams - c);
-                    const pl = cell ? poolBySlug.get(cell.slug) : null;
-                    return (
-                      <td key={rid} style={{ padding: 3 }}>
-                        <div style={{
-                          width: 86, minHeight: 34, borderRadius: 5, padding: '4px 6px', boxSizing: 'border-box',
-                          background: cell ? `var(--pos-${pl?.pos ?? 'WR'}-bg)` : 'var(--bg)',
-                          border: `1px solid ${overallHere ? 'var(--you)' : 'var(--bd)'}`,
-                          boxShadow: overallHere ? '0 0 8px color-mix(in srgb, var(--you) 45%, transparent)' : 'none',
-                        }}>
-                          {cell ? (
-                            <>
-                              <div style={{ fontSize: 9.5, fontWeight: 700, color: `var(--pos-${pl?.pos ?? 'WR'}-fg)`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shortName(cell.slug)}</div>
-                              <div className="mono" style={{ fontSize: 7.5, color: `var(--pos-${pl?.pos ?? 'WR'}-fg)`, opacity: 0.75 }}>
-                                {pl?.pos ?? ''} {pl?.team ?? ''}{cell.price != null ? ` · $${cell.price}` : ''}{cell.auto ? ' 🤖' : ''}
-                              </div>
-                            </>
-                          ) : <div className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{overallHere ? '⏱ on clock' : '—'}</div>}
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       )}
 
