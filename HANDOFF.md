@@ -1,6 +1,63 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.98.0`_
+_Last updated: 2026-07-07 · Build `v0.99.1`_
+
+## Native leagues gated to super admin for closed testing (v0.99.1)
+Owner call: test before opening up. `create_native_league` now requires
+`is_admin()` ('native leagues are in closed testing'); the RoleChooser "Start a
+fresh league →" option renders only for admins (both mounts — the add-league
+view and the fresh-sign-in fork). Creation is the single choke point — every
+other native RPC needs an existing native league — so un-gating later is
+deleting one check + one prop condition. `native_join` stays open: the admin
+can invite non-admin test accounts. Probes updated (93 assertions): non-admin
+create is refused; probe identity switching got a `probe_as()` helper that sets
+BOTH uid and email claims (is_admin() reads the email — the old uid-only
+switches would have leaked A's admin bit into B's probes).
+
+## Native leagues: in-app draft, waivers, team management (v0.99.0)
+Kills the game's biggest structural liability — needing a league that already
+exists in another product. A league can now be BORN in Drip: create → invite →
+snake draft → waivers/free agency → the existing live H2H pipeline, unchanged.
+Full design + decisions in `docs/native-league-plan.md`.
+- **Why it was cheap**: lock/resolve/live-board only ever read four row-sets
+  (league / league_membership / matchup / sleeper_lineup starters_json) keyed by
+  opaque ids + slugs — the ESPN `provider` pattern (0041) extends to
+  `provider='native'` with key `native-<uuid>`. Live scoring is the ESPN feed for
+  every league anyway.
+- **DB (`0064_native_leagues.sql`)**: `league_pool` (ranked draftable universe,
+  `waived_until`), `native_roster` (first persistent rosters in the codebase,
+  one owner per player), `draft` + `draft_pick` (snake, pick clock,
+  `draft_order`), `waiver_claim`, `league_membership.waiver_priority` (rolling).
+  RPCs: `create_native_league` (creator = commish + seat 1), `native_join`
+  (invite code claims lowest open seat — no identity matching),
+  `seed_league_pool`, `native_generate_schedule` (round-robin, `lock_at` from
+  the 0051 nfl_slate), `start_draft`, `make_draft_pick` (turn-gated; commish may
+  proxy), `draft_tick` (autopicks overdue/vacant/AI seats — ANY member's poll
+  advances the draft; per-league advisory locks serialize races),
+  `draft_state` (+`on_clock_auto`, `server_now`), `drop_player` (24h waivers),
+  `add_free_agent`, `submit_waiver_claim`/`cancel_waiver_claim`,
+  `process_waivers` (priority order, winner rotates to back, idempotent),
+  `native_team_state`, `native_materialize` (rewrites sleeper_lineup for
+  all-scheduled weeks only — locked weeks frozen; called by every roster
+  mutation, so no sweep needed). `league_by_invite` now returns `provider`.
+- **Autopick**: best-rank free player under caps (QB≤3, TE≤3, K≤1, DEF≤1),
+  forced K/DEF once remaining picks require them.
+- **Client**: `src/data/nativeLeague.ts buildDraftPool()` — the pool is the
+  BAKED-PBP set (~440 skill + 32 K + 32 DST) ranked by real 2025 ppr, so every
+  draftable player actually scores. `src/screens/NativeLeague.tsx` — NativeCreate
+  wizard / DraftRoom (4s poll, skew-corrected clock, search + pos filters) /
+  TeamManage (drops, ADD vs CLAIM with waiver countdowns, roster-full drop
+  picker, claims, waiver order; runs `process_waivers` on refresh so it works
+  worker-less). LiveOnboard: RoleChooser "Start a fresh league →", native cards
+  get `⛏ draft`/`⇄ team`, RedeemForm routes native codes to claim-a-seat.
+- **Worker**: `server/src/native.js sweepNative()` on each tick — safety net for
+  unattended leagues (drafts + waiver clears); not required for correctness.
+- **Testing — NEW committed harness**: `scripts/db/run-scratch-probes.sh` spins
+  a throwaway PG16, applies the Supabase shim + all 64 migrations, runs
+  `scripts/db/native-league-probes.sql` (92 assertions: gates, snake order,
+  autopick caps/forced K-DEF, completion+materialization, waiver
+  priority/rotation, locked-week freeze, RLS leaks). All pass; `npm run build`
+  green. Deferred (documented): trades, FAAB, realtime draft push, keepers.
 
 ## Saver probe + amp-bundle instruments — capacity pricing validated (tools only)
 Findings §14. Playtester-only change (no engine/app code): aggregate.mjs

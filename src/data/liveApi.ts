@@ -131,7 +131,7 @@ export async function myLinkedSleeper(userId: string): Promise<{ userId: string;
     : null;
 }
 
-export interface LeaguePreview { league_id: string; name: string; season: string; }
+export interface LeaguePreview { league_id: string; name: string; season: string; provider?: string; }
 
 /** Preview a league by invite code (so we can show "You're joining <name>"). */
 export async function previewLeague(code: string): Promise<LeaguePreview | null> {
@@ -177,13 +177,13 @@ export async function requestCode(input: { email?: string; sleeper?: string; lea
   return data as { ok: boolean; error?: string };
 }
 
-export interface Enrollment { league_id: string; team_name: string; sleeper_roster_id: number; avatar_url: string | null; league: { name: string; season: string; preseason_at?: string | null } | null; }
+export interface Enrollment { league_id: string; team_name: string; sleeper_roster_id: number; avatar_url: string | null; league: { name: string; season: string; preseason_at?: string | null; provider?: string } | null; }
 
 /** The caller's enrolled memberships (RLS scopes to their own rows). */
 export async function myEnrollments(userId: string): Promise<Enrollment[]> {
   const { data, error } = await client()
     .from('league_membership')
-    .select('league_id, team_name, sleeper_roster_id, avatar_url, league:league_id(name, season, preseason_at)')
+    .select('league_id, team_name, sleeper_roster_id, avatar_url, league:league_id(name, season, preseason_at, provider)')
     .eq('app_user_id', userId)
     .eq('enrolled', true);
   if (error) throw error;
@@ -678,6 +678,74 @@ export const adminSetCoin = (matchupId: string, home: number, away: number) =>
   rpc<{ ok: boolean; error?: string }>('admin_set_coin', { p_matchup_id: matchupId, p_home_coin: home, p_away_coin: away });
 export const adminRegenCode = (leagueId: string, which: 'invite' | 'commish') =>
   rpc<{ ok: boolean; code?: string; error?: string }>('admin_regen_code', { p_league_id: leagueId, p_which: which });
+
+// ── Native leagues (migration 0064): created in-app, rosters built by draft ─────
+export interface NativeCreateResult { ok: boolean; error?: string; league_id?: string; roster_id?: number; invite_code?: string; }
+export const createNativeLeague = (name: string, season: string, teams: number, rounds: number, pickSeconds: number) =>
+  rpc<NativeCreateResult>('create_native_league', { p_name: name, p_season: season, p_teams: teams, p_rounds: rounds, p_pick_seconds: pickSeconds });
+/** Claim the lowest open seat in a native league by invite code. */
+export const nativeJoin = (code: string, teamName?: string) =>
+  rpc<{ ok: boolean; error?: string; league_id?: string; roster_id?: number; status?: string; league?: string }>(
+    'native_join', { p_code: code.trim(), p_team_name: teamName?.trim() || null });
+export const setTeamName = (leagueId: string, rosterId: number, name: string) =>
+  rpc<{ ok: boolean; error?: string; team_name?: string }>('set_team_name', { p_league_id: leagueId, p_roster_id: rosterId, p_name: name });
+/** Seed the draftable player universe (commissioner, pre-draft only). */
+export const seedLeaguePool = (leagueId: string, players: { slug: string; full: string; pos: string; team: string }[]) =>
+  rpc<{ ok: boolean; error?: string; players?: number }>('seed_league_pool', { p_league_id: leagueId, p_players: players });
+export const nativeGenerateSchedule = (leagueId: string, weeks = 14) =>
+  rpc<{ ok: boolean; error?: string; weeks?: number; matchups?: number }>('native_generate_schedule', { p_league_id: leagueId, p_weeks: weeks });
+
+export const startDraft = (leagueId: string, order?: number[]) =>
+  rpc<{ ok: boolean; error?: string; order?: number[] }>('start_draft', { p_league_id: leagueId, p_order: order ?? null });
+export interface DraftPickRow { overall: number; round: number; roster_id: number; slug: string; auto: boolean; }
+export interface DraftState {
+  error?: string; status: 'pending' | 'live' | 'complete'; rounds: number; pick_seconds: number;
+  order: number[] | null; current_overall: number; on_clock: number | null;
+  /** True ⇒ the on-clock seat is vacant/AI — a draft_tick will autopick it now. */
+  on_clock_auto: boolean | null;
+  deadline_at: string | null; server_now: string; picks: DraftPickRow[];
+}
+export const draftState = (leagueId: string) => rpc<DraftState>('draft_state', { p_league_id: leagueId });
+export const makeDraftPick = (leagueId: string, slug: string) =>
+  rpc<{ ok: boolean; error?: string; overall?: number; roster_id?: number; slug?: string; complete?: boolean }>(
+    'make_draft_pick', { p_league_id: leagueId, p_slug: slug });
+/** Advance the draft clock (expired/vacant/AI seats autopick). Idempotent — any member may call. */
+export const draftTick = (leagueId: string) => rpc<{ ok: boolean; error?: string; autopicks?: number }>('draft_tick', { p_league_id: leagueId });
+
+export interface LeaguePoolPlayer { slug: string; full_name: string; pos: string; team: string; rank: number; waived_until: string | null; }
+export async function leaguePool(leagueId: string): Promise<LeaguePoolPlayer[]> {
+  const { data, error } = await client().from('league_pool')
+    .select('slug, full_name, pos, team, rank, waived_until')
+    .eq('league_id', leagueId).order('rank').range(0, 1999);
+  if (error) throw error;
+  return (data ?? []) as LeaguePoolPlayer[];
+}
+export interface NativeRosterRow { roster_id: number; slug: string; acquired: string; }
+export async function nativeRosters(leagueId: string): Promise<NativeRosterRow[]> {
+  const { data, error } = await client().from('native_roster')
+    .select('roster_id, slug, acquired').eq('league_id', leagueId).range(0, 1999);
+  if (error) throw error;
+  return (data ?? []) as NativeRosterRow[];
+}
+
+export const dropPlayer = (leagueId: string, rosterId: number, slug: string) =>
+  rpc<{ ok: boolean; error?: string }>('drop_player', { p_league_id: leagueId, p_roster_id: rosterId, p_slug: slug });
+export const addFreeAgent = (leagueId: string, rosterId: number, addSlug: string, dropSlug?: string) =>
+  rpc<{ ok: boolean; error?: string }>('add_free_agent', { p_league_id: leagueId, p_roster_id: rosterId, p_add_slug: addSlug, p_drop_slug: dropSlug ?? null });
+export const submitWaiverClaim = (leagueId: string, rosterId: number, addSlug: string, dropSlug?: string) =>
+  rpc<{ ok: boolean; error?: string; claim_id?: string; clears_at?: string }>('submit_waiver_claim', { p_league_id: leagueId, p_roster_id: rosterId, p_add_slug: addSlug, p_drop_slug: dropSlug ?? null });
+export const cancelWaiverClaim = (claimId: string) =>
+  rpc<{ ok: boolean; error?: string }>('cancel_waiver_claim', { p_claim_id: claimId });
+/** Resolve every due claim in waiver-priority order. Idempotent — safe to call on load. */
+export const processWaivers = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; won?: number; lost?: number }>('process_waivers', { p_league_id: leagueId });
+export interface WaiverClaimRow { id: string; add_slug: string; drop_slug: string | null; status: string; note: string | null; created_at: string; }
+export interface NativeTeamState {
+  error?: string; my_roster_id: number | null; draft_status: string; roster_cap: number | null; server_now: string;
+  waiver_order: { roster_id: number; team: string | null; priority: number | null }[];
+  my_claims: WaiverClaimRow[];
+}
+export const nativeTeamState = (leagueId: string) => rpc<NativeTeamState>('native_team_state', { p_league_id: leagueId });
 
 /** Subscribe to live score changes for a matchup. Returns an unsubscribe fn. */
 export function subscribeMatchup(matchupId: string, onChange: () => void): () => void {

@@ -5,7 +5,7 @@ import { liveConfigured } from '../data/supabaseClient';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   getSession, onAuth, signOut, ensureAppUser,
-  previewLeague, redeemPreview, redeemInvite, joinLeague, myEnrollments, myLinkedSleeper, claimMyRosters,
+  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, myEnrollments, myLinkedSleeper, claimMyRosters,
   redeemCommish, isAdmin, commishOverview, friendlyError,
   myMatchup, matchupTeams, leagueResults, defaultOpenWeek,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
@@ -17,6 +17,7 @@ import { LiveBoard } from './LiveBoard';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { AdminPage } from './AdminPage';
 import { CommishDash } from './CommishDash';
+import { NativeCreate, DraftRoom, TeamManage } from './NativeLeague';
 import { RequestCodeModal } from './RequestCode';
 import { markBootSessionChecked } from './DemoBoard';
 import type { Session } from '@supabase/supabase-js';
@@ -45,7 +46,7 @@ function GoogleG() {
   );
 }
 
-type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin' | 'add' | 'join' | 'results';
+type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin' | 'add' | 'join' | 'results' | 'create' | 'draft' | 'team';
 
 export function LiveOnboard() {
   const { navigate, route } = useStore();
@@ -120,7 +121,7 @@ export function LiveOnboard() {
             : recovery ? <SetPassword onDone={() => setRecovery(false)} />
             : !session ? <AuthForm />
             : claiming ? <Muted text="Setting up your league…" />
-            : <Enroll session={session} view={view} setView={setView} commishCode={pendingCommish} />}
+            : <Enroll session={session} view={view} setView={setView} commishCode={pendingCommish} admin={admin} />}
         </div>
       </main>
     </div>
@@ -332,7 +333,7 @@ function SetPassword({ onDone }: { onDone: () => void }) {
 // Per-league matchup snapshot for the home cards: the next matchup + both teams' identity.
 interface MatchupCard { matchup: LiveMatchup; teams: Record<number, TeamInfo>; }
 
-function Enroll({ session, view, setView, commishCode }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void; commishCode?: string | null }) {
+function Enroll({ session, view, setView, commishCode, admin }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void; commishCode?: string | null; admin?: boolean }) {
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
   const [loadErr, setLoadErr] = useState(false);
   const [commishLeagues, setCommishLeagues] = useState<AdminLeague[]>([]);
@@ -389,10 +390,24 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
   // claim with a commish code), then return home refreshed.
   if (view === 'add') return (
     <>
-      <RoleChooser onPlayer={() => setView('join')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} />
+      {/* "Start a fresh league" is super-admin-only while native leagues are in
+          closed testing (the create RPC enforces the same gate server-side). */}
+      <RoleChooser onPlayer={() => setView('join')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </>
+  );
+  // Native leagues: create in-app → draft room → team management.
+  if (view === 'create') return (
+    <NativeCreate
+      onDone={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); refresh(); setView('draft'); }}
+      onBack={() => setView('home')} />
+  );
+  if (view === 'draft' && target) return (
+    <DraftRoom leagueId={target.leagueId} onBack={() => { setView('home'); refresh(); }} onTeam={() => setView('team')} />
+  );
+  if (view === 'team' && target) return (
+    <TeamManage leagueId={target.leagueId} onBack={() => { setView('home'); refresh(); }} onDraft={() => setView('draft')} />
   );
   if (view === 'join') return (
     <>
@@ -421,7 +436,7 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
   if (enrollments.length === 0) return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} />
+        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} />
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
@@ -440,6 +455,8 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
       onBoard={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('board'); }}
       onResults={(leagueId) => { setTarget({ leagueId, rosterId: 0 }); setView('results'); }}
       onManage={(id) => { setManageId(id); setView('commishdash'); }}
+      onDraft={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('draft'); }}
+      onTeam={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('team'); }}
       onAdd={() => setView('add')}
       isCommish={isCommish}
     />
@@ -448,9 +465,10 @@ function Enroll({ session, view, setView, commishCode }: { session: Session; vie
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onBoard, onResults, onManage, onAdd, isCommish }: {
+function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onBoard, onResults, onManage, onDraft, onTeam, onAdd, isCommish }: {
   enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
-  onBoard: (leagueId: string, rosterId: number) => void; onResults: (leagueId: string) => void; onManage: (leagueId: string) => void; onAdd: () => void; isCommish: boolean;
+  onBoard: (leagueId: string, rosterId: number) => void; onResults: (leagueId: string) => void; onManage: (leagueId: string) => void;
+  onDraft: (leagueId: string, rosterId: number) => void; onTeam: (leagueId: string, rosterId: number) => void; onAdd: () => void; isCommish: boolean;
 }) {
   const [filter, setFilter] = useState<'all' | 'commish'>('all');
   const enrolledIds = new Set(enrollments.map((e) => e.league_id));
@@ -487,10 +505,10 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12, alignItems: 'start' }}>
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} onResults={() => onResults(l.league_id)} />)}
         {enrolledCommish.map((e) => (
-          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} />
+          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} />
         ))}
         {filter === 'all' && enrolledPlayer.map((e) => (
-          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} />
+          <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} />
         ))}
       </div>
       <div style={{ textAlign: 'center', marginTop: 18 }}>
@@ -580,9 +598,9 @@ function CommishOnlyCard({ l, onManage, onResults }: { l: AdminLeague; onManage:
   );
 }
 
-function LeagueCard({ e, card, commish, userId, onBoard, onResults, onManage }: {
+function LeagueCard({ e, card, commish, userId, onBoard, onResults, onManage, onDraft, onTeam }: {
   e: Enrollment; card?: MatchupCard; commish: boolean; userId: string;
-  onBoard: () => void; onResults: () => void; onManage: () => void;
+  onBoard: () => void; onResults: () => void; onManage: () => void; onDraft: () => void; onTeam: () => void;
 }) {
   const { loadSimLeague, navigate, setDemoWeek } = useStore();
   const [building, setBuilding] = useState(false);
@@ -684,6 +702,8 @@ function LeagueCard({ e, card, commish, userId, onBoard, onResults, onManage }: 
       {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{buildErr}</div>}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>
         <button onClick={onBoard} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board</button>
+        {e.league?.provider === 'native' && <button onClick={onDraft} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>⛏ draft</button>}
+        {e.league?.provider === 'native' && <button onClick={onTeam} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>⇄ team</button>}
         <button onClick={onResults} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>▦ scores</button>
         <button onClick={playFullBoard} disabled={building} className="mono" title="try the full board on last year's data" style={{ ...linkBtn, color: 'var(--dim)', opacity: building ? 0.6 : 1 }}>{building ? (buildNote || 'loading…') : '▷ demo (2025)'}</button>
         {commish && <button onClick={onManage} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚑ manage league</button>}
@@ -777,7 +797,7 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
   );
 }
 
-function RoleChooser({ onPlayer, onCommish, onRequest }: { onPlayer: () => void; onCommish: () => void; onRequest?: () => void }) {
+function RoleChooser({ onPlayer, onCreate, onCommish, onRequest }: { onPlayer: () => void; onCreate?: () => void; onCommish: () => void; onRequest?: () => void }) {
   const choice: React.CSSProperties = { width: '100%', textAlign: 'left', fontFamily: 'inherit', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, cursor: 'pointer' };
   return (
     <>
@@ -790,6 +810,12 @@ function RoleChooser({ onPlayer, onCommish, onRequest }: { onPlayer: () => void;
           <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>I’m a player →</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>I have a league invite code. Link my Sleeper team and set my lineup.</div>
         </button>
+        {onCreate && (
+          <button onClick={onCreate} style={{ ...choice, borderLeft: '3px solid var(--you)' }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>Start a fresh league →</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No existing league needed — create one here, invite friends, and draft your teams right in the app.</div>
+          </button>
+        )}
         <button onClick={onCommish} style={choice}>
           <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>I run this league →</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Verify as commissioner with the code you were given, then share a player invite code with your league.</div>
@@ -871,6 +897,7 @@ function CommishVerify({ onBack, initialCode }: { onBack: () => void; initialCod
 function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void }) {
   const [code, setCode] = useState('');
   const [preview, setPreview] = useState<LeaguePreview | null>(null);
+  const [teamName, setTeamName] = useState(''); // native leagues: name your seat
   const [username, setUsername] = useState('');
   const [linked, setLinked] = useState(false); // username came from a prior link
   const [team, setTeam] = useState<PreviewRedeem | null>(null); // confirm step
@@ -932,6 +959,19 @@ function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void
     } catch (x) { setErr(friendlyError(x)); setBusy(false); }
   };
 
+  // Native league: the code IS the seat — claim the lowest open roster directly
+  // (no external identity to match, no commissioner mapping step).
+  const claimSeat = async () => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await nativeJoin(code, teamName || undefined);
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not join.')); setBusy(false); return; }
+      try { localStorage.removeItem('dripInviteCode'); } catch { /* ignore */ }
+      onJoined();
+    } catch (x) { setErr(friendlyError(x)); setBusy(false); }
+  };
+
   // Join the pool without picking a team (ESPN/Yahoo/etc., or anyone) — the
   // commissioner assigns you a roster from the joined list. No Sleeper handle.
   const joinPool = async () => {
@@ -961,7 +1001,20 @@ function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void
           {!preview && <button onClick={() => find()} disabled={busy || !code.trim()} className="mono" style={{ ...btn, opacity: busy || !code.trim() ? 0.6 : 1 }}>{busy ? '…' : 'FIND'}</button>}
         </div>
 
-        {preview && !team && (
+        {preview && !team && preview.provider === 'native' && (
+          <div style={{ marginTop: 14 }}>
+            <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginBottom: 10 }}>
+              Joining <span style={{ color: 'var(--text)', fontWeight: 700 }}>{preview.name}</span> · {preview.season} — a Drip-native league. Grab an open seat; no other fantasy app needed.
+            </div>
+            <label className="mono" style={label}>TEAM NAME (OPTIONAL)</label>
+            <input value={teamName} autoFocus maxLength={40} onChange={(e) => { setTeamName(e.target.value); setErr(null); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') claimSeat(); }}
+              placeholder="e.g. Hot Streak Heroes" style={{ ...input, width: '100%', boxSizing: 'border-box', marginTop: 7 }} />
+            <button onClick={claimSeat} disabled={busy} className="mono" style={{ ...btn, width: '100%', padding: '11px 0', marginTop: 12, opacity: busy ? 0.6 : 1 }}>{busy ? 'JOINING…' : 'CLAIM MY SEAT →'}</button>
+          </div>
+        )}
+
+        {preview && !team && preview.provider !== 'native' && (
           <div style={{ marginTop: 14 }}>
             <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginBottom: 10 }}>
               Joining <span style={{ color: 'var(--text)', fontWeight: 700 }}>{preview.name}</span> · {preview.season}

@@ -15,6 +15,7 @@ import { pollInjuries } from './poll/injuries.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt } from './lock.js';
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues } from './sync.js';
+import { sweepNative } from './native.js';
 import { db } from './supabase.js';
 import { setRuntimeSlate } from '../../src/data/nflSlate.ts';
 
@@ -106,6 +107,16 @@ async function tick() {
     if (Number.isFinite(ms)) winKicks[g.win] = Math.min(winKicks[g.win] ?? Infinity, ms);
   }
   const wk = Object.keys(winKicks).length ? winKicks : null;
+
+  // Native leagues: advance live draft clocks (autopick overdue/vacant seats)
+  // and clear due waiver claims. Client polls do this too; the sweep covers
+  // leagues nobody has open.
+  try {
+    const nat = await sweepNative(log);
+    if (nat.autopicks || nat.claimsWon || nat.claimsLost) {
+      log('native sweep:', nat.autopicks, 'autopicks,', nat.claimsWon, 'claims won,', nat.claimsLost, 'lost');
+    }
+  } catch (e) { log('native sweep error', e.message); }
 
   // Lock any matchups whose first kickoff has passed (status → live; seals the
   // windows already underway), then sweep this week's later windows — each one's
