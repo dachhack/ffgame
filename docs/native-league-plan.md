@@ -214,8 +214,14 @@ through the same `draft_tick` poll/worker path as snake.
    and missed nomination turns auto-nominate from the manager's queue — which
    together make **slow auctions fair**: being offline costs nothing. Slow
    pacing (hour-scale pick/bid windows up to 48h) ships in the create wizard.
-   Still deferred: auction undo, pre-lot watchlist maxes, overnight clock
-   pauses, on-the-clock notifications.
+   Still deferred: auction undo, pre-lot watchlist maxes, on-the-clock
+   notifications.
+8. ~~Overnight clock pauses~~ **Landed in v0.102.0 (0069)** — night-aware
+   deadline arithmetic (`awake_deadline`, ET): clocks skip configured quiet
+   hours, so nothing expires overnight and mornings start with the remaining
+   clock intact. Same migration adds **parallel auction lots** (`max_lots`
+   1–4) with committed-money budget rules so simultaneous bidding can't
+   overdraw a budget or overfill a roster.
 
 ## 5. Deploy checklist
 
