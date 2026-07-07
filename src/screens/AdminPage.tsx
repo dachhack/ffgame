@@ -7,6 +7,9 @@ import {
   setTeamController, setLineupPolicy,
   leagueKdst, setKdstMode, setTeamKdst,
   rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
+  setTransactionRules, commishMovePlayer, commishRemovePlayer, commishRuleTrade,
+  leagueTrades, nativeTeamState, nativeRosters, leaguePool,
+  type WaiverMode, type TradeReview, type TradeRow, type LeaguePoolPlayer, type NativeRosterRow,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
   type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy, type LeagueKdst, type KdstMode,
 } from '../data/liveApi';
@@ -216,7 +219,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 // One league's management card — the whole commissioner/admin toolset for a
 // league, organized under a tab strip (Setup / Members / Picks / Matchups /
 // K-DST / Audit). Used by both the super-admin Leagues tab and CommishDash.
-export type LeagueTab = 'overview' | 'draft' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst';
+export type LeagueTab = 'overview' | 'draft' | 'rosters' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst';
 
 // ── Roster rules editor (native leagues, 0071): per-position limits any time,
 // roster size while the draft is still pending. ∞ = uncapped (stored null).
@@ -278,6 +281,242 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
         Limits cap how many of a position a roster may hold (∞ = no limit, 0 bans it) — enforced at the draft, free agency, waivers, and auction bids; the AI drafts to them too. Roster size {pending ? 'can change until the draft starts' : 'is locked once the draft starts'}. Rosters already over a lowered limit keep their players — the limit blocks new adds.
       </div>
       {msg && <div className="mono" style={{ ...mono, fontSize: 9.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{msg}</div>}
+    </div>
+  );
+}
+
+// ── Waivers & trades rules (0072). Mode/budget saves only send CHANGED fields
+// — the server resets every seat's FAAB balance when either changes. The
+// schedule knobs send -1 to CLEAR (daily clear → rolling; window → always).
+interface TxnRules {
+  mode: WaiverMode; budget: number; review: TradeReview;
+  clearMin: number | null; holdDays: number; faStart: number | null; faEnd: number | null;
+}
+function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
+  const [init, setInit] = useState<TxnRules | null>(null);
+  const [mode, setMode] = useState<WaiverMode>('rolling');
+  const [budget, setBudget] = useState(100);
+  const [review, setReview] = useState<TradeReview>('none');
+  const [clearMin, setClearMin] = useState<number | null>(null);   // null = rolling 24h
+  const [holdDays, setHoldDays] = useState(1);
+  const [faStart, setFaStart] = useState<number | null>(null);     // null = always open
+  const [faEnd, setFaEnd] = useState<number | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    rosterRules(leagueId).then((r) => {
+      if (r.error || !r.ok) { setMsg(r.error ?? 'could not load rules'); return; }
+      const cur: TxnRules = {
+        mode: r.waiver_mode ?? 'rolling', budget: r.faab_budget ?? 100, review: r.trade_review ?? 'none',
+        clearMin: r.waiver_clear_min ?? null, holdDays: r.waiver_hold_days ?? 1,
+        faStart: r.fa_start_min ?? null, faEnd: r.fa_end_min ?? null,
+      };
+      setInit(cur); setMode(cur.mode); setBudget(cur.budget); setReview(cur.review);
+      setClearMin(cur.clearMin); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd);
+    }).catch((e) => setMsg(errMsg(e, 'could not load rules')));
+  }, [leagueId]);
+  if (!init) return <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>{msg ?? 'loading rules…'}</div>;
+  const save = async () => {
+    if (saving) return;
+    setSaving(true); setMsg(null);
+    try {
+      const clearChanged = clearMin !== init.clearMin;
+      const faChanged = faStart !== init.faStart || faEnd !== init.faEnd;
+      const r = await setTransactionRules(leagueId,
+        mode !== init.mode ? mode : null,
+        mode === 'faab' && budget !== init.budget ? budget : null,
+        review !== init.review ? review : null,
+        clearChanged ? (clearMin ?? -1) : null,
+        holdDays !== init.holdDays ? holdDays : null,
+        faChanged ? (faStart ?? -1) : null,
+        faChanged ? (faEnd ?? -1) : null);
+      if (r.ok) { setInit({ mode, budget, review, clearMin, holdDays, faStart, faEnd }); setMsg('✓ saved'); }
+      else setMsg(r.error ?? 'save failed');
+    } catch (e) { setMsg(errMsg(e, 'save failed')); }
+    finally { setSaving(false); }
+  };
+  const hour12 = (m: number) => { const h = Math.floor(m / 60) % 24; return `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? 'AM' : 'PM'}`; };
+  const hourStep = (v: number, set: (m: number) => void, keyLabel: string) => (
+    <div style={{ textAlign: 'center' }}>
+      <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{keyLabel} ({hour12(v)})</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
+        <button onClick={() => set((v + 1380) % 1440)} className="mono" style={stepBtnStyle}>−</button>
+        <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', minWidth: 26, textAlign: 'center' }}>{Math.floor(v / 60)}</span>
+        <button onClick={() => set((v + 60) % 1440)} className="mono" style={stepBtnStyle}>＋</button>
+      </div>
+    </div>
+  );
+  const toggle = (on: boolean, label: string, onClick: () => void) => (
+    <button onClick={onClick} className="mono" style={{ ...mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 999, padding: '4px 10px' }}>{label}</button>
+  );
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div>
+          <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>WAIVERS</div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
+            {toggle(mode === 'rolling', 'ROLLING PRIORITY', () => setMode('rolling'))}
+            {toggle(mode === 'faab', '💰 FAAB BIDS', () => setMode('faab'))}
+          </div>
+        </div>
+        {mode === 'faab' && (
+          <div style={{ textAlign: 'center' }}>
+            <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>SEASON BUDGET ($)</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
+              <button onClick={() => setBudget(Math.max(10, budget - 10))} className="mono" style={stepBtnStyle}>−</button>
+              <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', minWidth: 34, textAlign: 'center' }}>{budget}</span>
+              <button onClick={() => setBudget(Math.min(1000, budget + 10))} className="mono" style={stepBtnStyle}>＋</button>
+            </div>
+          </div>
+        )}
+        <div>
+          <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>TRADE REVIEW</div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
+            {toggle(review === 'none', 'AUTO-ACCEPT', () => setReview('none'))}
+            {toggle(review === 'commish', '⚑ COMMISH APPROVES', () => setReview('commish'))}
+          </div>
+        </div>
+      </div>
+      {/* waiver clear schedule + free-agency window (daily, ET) */}
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 12 }}>
+        <div>
+          <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>WAIVERS CLEAR</div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
+            {toggle(clearMin == null, '24H AFTER DROP', () => setClearMin(null))}
+            {toggle(clearMin != null, '🕒 DAILY AT A SET TIME', () => setClearMin(clearMin ?? 180))}
+          </div>
+        </div>
+        {clearMin != null && hourStep(clearMin, setClearMin, 'CLEAR TIME')}
+        {clearMin != null && (
+          <div style={{ textAlign: 'center' }}>
+            <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>HOLD (DAYS)</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
+              <button onClick={() => setHoldDays(Math.max(1, holdDays - 1))} className="mono" style={stepBtnStyle}>−</button>
+              <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{holdDays}</span>
+              <button onClick={() => setHoldDays(Math.min(7, holdDays + 1))} className="mono" style={stepBtnStyle}>＋</button>
+            </div>
+          </div>
+        )}
+        <div>
+          <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>FREE AGENCY</div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
+            {toggle(faStart == null, 'ALWAYS OPEN', () => { setFaStart(null); setFaEnd(null); })}
+            {toggle(faStart != null, '🕒 DAILY WINDOW', () => { setFaStart(faStart ?? 600); setFaEnd(faEnd ?? 1320); })}
+          </div>
+        </div>
+        {faStart != null && hourStep(faStart, setFaStart, 'OPENS')}
+        {faStart != null && hourStep(faEnd ?? 1320, (m) => setFaEnd(m), 'CLOSES')}
+        <button onClick={save} disabled={saving} className="mono" style={btn(true)}>{saving ? 'saving…' : '✓ save'}</button>
+      </div>
+      <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+        FAAB: claims carry blind bids against a season budget — highest bid wins, winner pays, losers keep their money. Changing the mode or budget resets every team's balance. Trade review parks accepted trades until you approve or veto them. A daily clear time holds dropped players until that ET time (× hold days); the free-agency window gates instant pickups only — claims can be submitted around the clock.
+      </div>
+      {msg && <div className="mono" style={{ ...mono, fontSize: 9.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{msg}</div>}
+    </div>
+  );
+}
+const stepBtnStyle: React.CSSProperties = { ...mono, fontSize: 11, fontWeight: 700, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 8px', cursor: 'pointer' };
+
+// ── ROSTERS tab (native leagues): move any player anywhere + rule on trades.
+function NativeRosterTools({ leagueId }: { leagueId: string }) {
+  const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
+  const [rosters, setRosters] = useState<NativeRosterRow[]>([]);
+  const [teams, setTeams] = useState<{ roster_id: number; team: string | null }[]>([]);
+  const [trades, setTrades] = useState<TradeRow[]>([]);
+  const [q, setQ] = useState('');
+  const [dest, setDest] = useState<Record<string, string>>({});   // slug → target roster id
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = async () => {
+    const [t, r, p, tr] = await Promise.all([
+      nativeTeamState(leagueId), nativeRosters(leagueId), leaguePool(leagueId), leagueTrades(leagueId),
+    ]);
+    setTeams(t.waiver_order ?? []); setRosters(r); setPool(p);
+    setTrades(Array.isArray(tr) ? tr : []);
+  };
+  useEffect(() => { load().catch((e) => setMsg(errMsg(e, 'load failed'))); /* eslint-disable-next-line */ }, [leagueId]);
+  const bySlugRoster = new Map(rosters.map((r) => [r.slug, r.roster_id]));
+  const poolBySlug = new Map(pool.map((p) => [p.slug, p]));
+  const teamName = (rid: number) => teams.find((t) => t.roster_id === rid)?.team ?? `Team ${rid}`;
+  const playerName = (slug: string) => poolBySlug.get(slug)?.full_name ?? slug;
+  const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try { const r = await fn(); setMsg(r.ok ? '✓ done' : (r.error ?? 'that didn’t work')); await load(); }
+    catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); }
+  };
+  const needle = q.trim().toLowerCase();
+  // default view = everyone rostered (the move tool's main use); searching
+  // reaches the whole pool, so free agents can be placed onto rosters too.
+  const rows = (needle
+    ? pool.filter((p) => p.full_name.toLowerCase().includes(needle))
+    : pool.filter((p) => bySlugRoster.has(p.slug))
+  ).slice(0, 60);
+  const reviewQueue = trades.filter((t) => t.status === 'accepted' || t.status === 'pending');
+  const statusColor: Record<string, string> = { executed: 'var(--you)', accepted: 'var(--warn)', pending: 'var(--dim)', vetoed: 'var(--opp)', rejected: 'var(--faint)', cancelled: 'var(--faint)' };
+  return (
+    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {msg && <div className="mono" style={{ ...mono, fontSize: 9.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</div>}
+
+      {/* trade rulings */}
+      <div>
+        <div style={subhead}>TRADES</div>
+        {reviewQueue.length === 0 && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>Nothing waiting on you.</div>}
+        {reviewQueue.map((t) => (
+          <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, minWidth: 220, lineHeight: 1.5 }}>
+              <b>{teamName(t.from_roster)}</b> sends {t.give.map(playerName).join(', ') || '—'} ·{' '}
+              <b>{teamName(t.to_roster)}</b> sends {t.get.map(playerName).join(', ') || '—'}
+              {t.note && <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}> “{t.note}”</span>}
+            </span>
+            <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, color: statusColor[t.status] ?? 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 6px' }}>{t.status === 'accepted' ? 'AWAITING RULING' : 'OFFERED'}</span>
+            {t.status === 'accepted' && (
+              <button onClick={() => run(() => commishRuleTrade(t.id, true))} disabled={busy} className="mono" style={btn(true)}>✓ approve</button>
+            )}
+            <button onClick={() => run(() => commishRuleTrade(t.id, false))} disabled={busy} className="mono" style={{ ...btn(false), color: 'var(--opp)' }}>✕ veto</button>
+          </div>
+        ))}
+      </div>
+
+      {/* player mover */}
+      <div>
+        <div style={subhead}>MOVE PLAYERS</div>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search the whole pool (free agents too)…" style={{ ...inp, marginBottom: 8 }} />
+        <div style={{ maxHeight: 380, overflowY: 'auto' }}>
+          {rows.map((p) => {
+            const rid = bySlugRoster.get(p.slug);
+            const to = dest[p.slug] ?? '';
+            return (
+              <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, minWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {p.full_name} <span className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
+                </span>
+                <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, color: rid != null ? 'var(--you)' : 'var(--faint)', minWidth: 76, textAlign: 'right' }}>
+                  {rid != null ? teamName(rid) : 'FREE AGENT'}
+                </span>
+                <select value={to} onChange={(e) => setDest({ ...dest, [p.slug]: e.target.value })}
+                  className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 6px' }}>
+                  <option value="">move to…</option>
+                  {teams.filter((t) => t.roster_id !== rid).map((t) => (
+                    <option key={t.roster_id} value={t.roster_id}>{t.team ?? `Team ${t.roster_id}`}</option>
+                  ))}
+                </select>
+                <button onClick={() => to && run(() => commishMovePlayer(leagueId, p.slug, parseInt(to, 10)))}
+                  disabled={busy || !to} className="mono" style={{ ...btn(true), opacity: to ? 1 : 0.4 }}>→ move</button>
+                {rid != null && <>
+                  <button onClick={() => run(() => commishRemovePlayer(leagueId, p.slug, true))} disabled={busy} className="mono" style={btn(false)} title="off the roster, 24h waiver hold">⏳ waive</button>
+                  <button onClick={() => run(() => commishRemovePlayer(leagueId, p.slug, false))} disabled={busy} className="mono" style={{ ...btn(false), color: 'var(--opp)' }} title="off the roster, instant free agent">✕ cut</button>
+                </>}
+              </div>
+            );
+          })}
+          {rows.length === 0 && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', padding: '6px 0' }}>No matches.</div>}
+        </div>
+        <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+          Moves clear waiver holds and bypass position limits (roster size still applies). WAIVE starts a 24h claim window; CUT frees the player immediately.
+        </div>
+      </div>
     </div>
   );
 }
@@ -424,8 +663,11 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
   const statusChip = (color: string): React.CSSProperties => ({ ...mono, fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color, border: `1px solid ${color}`, borderRadius: 4, padding: '2px 5px', whiteSpace: 'nowrap' });
   const leagueTabs: TabDef<LeagueTab>[] = [
     { id: 'overview', label: 'SETUP' },
-    // Native leagues draft in-app — the room lives right in the dashboard.
-    ...(l.provider === 'native' ? [{ id: 'draft', label: '⛏ DRAFT' } as TabDef<LeagueTab>] : []),
+    // Native leagues draft + manage rosters in-app — both live in the dashboard.
+    ...(l.provider === 'native' ? [
+      { id: 'draft', label: '⛏ DRAFT' } as TabDef<LeagueTab>,
+      { id: 'rosters', label: 'ROSTERS' } as TabDef<LeagueTab>,
+    ] : []),
     { id: 'members', label: 'MEMBERS' },
     { id: 'ready', label: 'PICKS' },
     { id: 'matchups', label: 'MATCHUPS' },
@@ -472,6 +714,9 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
         </div>
       )}
 
+      {/* commissioner roster tools + trade rulings (native leagues only) */}
+      {tab === 'rosters' && l.provider === 'native' && <NativeRosterTools leagueId={l.league_id} />}
+
       {tab === 'overview' && (
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
@@ -488,11 +733,17 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
             </div>
             <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>Players join with the invite link (button above) or by typing the invite code. The commish code claims league management.</div>
           </div>
-          {/* roster rules — native leagues only (imported rosters live on their platform) */}
+          {/* roster + transaction rules — native leagues only (imported rosters live on their platform) */}
           {l.provider === 'native' && (
             <div>
               <div style={subhead}>ROSTER RULES</div>
               <RosterRulesEditor leagueId={l.league_id} />
+            </div>
+          )}
+          {l.provider === 'native' && (
+            <div>
+              <div style={subhead}>WAIVERS &amp; TRADES</div>
+              <TransactionRulesEditor leagueId={l.league_id} />
             </div>
           )}
           {l.provider !== 'native' && (

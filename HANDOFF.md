@@ -1,6 +1,68 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.105.2`_
+_Last updated: 2026-07-07 · Build `v0.106.0`_
+
+## Transactions: commish roster tools, FAAB, trades (v0.106.0)
+`0072_transactions.sql` + dashboard/team-management UI.
+- **COMMISH ROSTER TOOLS**: `commish_move_player` (any pool player onto any
+  roster — clears waiver holds; MAY overfill/bust limits on purpose) and
+  `commish_remove_player` (off the roster → scheduled waivers or straight to
+  FA). Dashboard gains a **ROSTERS tab** (native): searchable pool with
+  current-team labels, move-to select, WAIVE/CUT — plus the trade-ruling
+  queue.
+- **ILLEGAL-ROSTER LOCKOUT (deliberate design)**: a roster over its size or
+  position limits (commish lowered a limit, or overfilled via the override)
+  is LOCKED OUT — no FA adds, no waiver claims (submit AND resolution), and
+  no weekly lineup picks (`enforce_legal_roster` trigger on sealed_pick;
+  service-role/admin writers exempt so game ops never jam) — until the
+  manager drops back to legal. Drops always work; a trade that lands the
+  roster fully legal works too (trade validation demands full legality on
+  both sides). `roster_illegal_reason` is the predicate;
+  `native_team_state.roster_issue` surfaces it and TeamManage shows a red
+  lockout banner + disables ADD/CLAIM.
+- **WAIVER TIMING + FA PERIODS (commish-set)**: `waiver_clear_min` +
+  `waiver_hold_days` — waiver holds end at a fixed daily ET time (Nth next
+  occurrence) instead of rolling 24h; every waiver-hold writer
+  (drop/FA-drop/claim-drop/commish remove) goes through `waiver_hold_until`.
+  `fa_start_min`/`fa_end_min` — free agency open only inside a daily ET
+  window (wrap-around ok; claims submit around the clock; `fa_window_open`).
+  Configured in the SETUP → WAIVERS & TRADES editor (24H-after-drop vs daily
+  clear time + hold days; always-open vs daily FA window); TeamManage shows
+  “FA opens 10 AM ET” and the clear schedule in the waiver card.
+- **FAAB WAIVERS**: `settings_json.waiver_mode` 'rolling' (default) | 'faab'
+  with `faab_budget` (default $100). Claims carry blind bids
+  (`waiver_claim.bid`, `submit_waiver_claim` v3 validates against the seat's
+  balance); `process_waivers` v3 resolves highest-bid-first (priority breaks
+  ties; winner pays, rotates to the back; losers keep their money; balance
+  re-checked at resolution → 'insufficient FAAB'; losses noted 'outbid').
+  Balance storage: `league_membership.faab_budget` where NULL = the league
+  default — so changing mode/budget resets balances by nulling, and
+  late-joining seats are auto-funded. TeamManage shows the balance in the
+  pool header + per-team in the waiver-order card, collects bids in a modal
+  (with the same drop-picker flow), and shows bids on pending claims.
+- **TRADES** (`trade_proposal` give/get slug lists): propose (own seat) →
+  counterparty accepts/rejects → executes immediately UNLESS
+  `settings_json.trade_review` = 'commish' (accepted trades park for
+  `commish_rule_trade` approve/veto; a veto can also kill a pending offer;
+  proposer can withdraw). Execution re-validates at swap time — pieces still
+  in place, both rosters legal after (size + position limits net of what
+  leaves); failures surface loudly and leave the offer up. TeamManage gains a
+  TRADE CENTER card (league trade log + accept/decline/withdraw + a propose
+  modal with partner chips and two checkbox roster lists).
+- **Rules editor**: SETUP gains WAIVERS & TRADES (mode/budget/review chips —
+  saves send only CHANGED fields since mode/budget changes reset balances);
+  `set_transaction_rules` + `roster_rules` v2 carry the config;
+  `native_team_state` v4 surfaces waiver_mode/trade_review/my_faab/per-team
+  faab/claim bids. `native_roster.acquired` gains 'trade'.
+- Probes → **401 assertions** (22: move/remove permissions, deliberate
+  overfill + illegality reporting, FA vs waiver holds, hold-clearing moves;
+  23: FAAB gates, blind-bid resolution, winner-pays/loser-keeps, 'outbid'
+  notes; 24: trade lifecycle — wrong-seat/foreign-piece/dup gates,
+  auto-execute, commish park→approve, veto, 2-for-1 overfill rejection with
+  the offer surviving, trade log; 25: lockout — claims/FA blocked while
+  illegal, drops allowed, weekly sealed_pick rejected then accepted once
+  legal; 26: daily clear time ~48h hold math, rolling restore, FA window
+  gates instant adds but not claims).
 
 ## Create → commish dashboard, with the draft as a dashboard tab (v0.105.2)
 - Creating a REAL league no longer shows the interstitial "League created"
