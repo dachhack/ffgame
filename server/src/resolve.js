@@ -19,7 +19,7 @@
 // cross-window TE-TD nukes, and the K banker bonus remain simplified there.
 import { db } from './supabase.js';
 import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY } from './engine.js';
-import { matchupPremium, premiumTier, hasPremiumContent, gateSide } from './premium.js';
+import { matchupPremium, premiumTier, hasPremiumContent, gateSide, hasPremiumTargeted, gateTargeted } from './premium.js';
 import { slugMeta } from '../../src/data/slugMeta.ts';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
@@ -109,11 +109,6 @@ async function loadout(matchupId, appUserId, ctx) {
     .eq('matchup_id', matchupId).eq('app_user_id', appUserId).maybeSingle();
   return data?.payload_json ?? {};
 }
-async function humanBuffs(matchupId, appUserId, ctx) {
-  const b = (await loadout(matchupId, appUserId, ctx)).buffs;
-  return Array.isArray(b) ? b : [];
-}
-
 /** The league's missed-pick policy: 'best_lineup' (default) | 'ai' | 'empty'. */
 async function lineupPolicy(leagueId, ctx) {
   if (ctx) return ctx.policy.get(leagueId) ?? 'best_lineup';
@@ -206,7 +201,12 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     const mem = byRoster.get(rosterId);
     if (mem?.controller === 'ai') return aiSide(rosterId, mem);
     const picks = await enrolledPicks(matchup, mem, ctx);
-    if (picks) return { picks, buffs: await humanBuffs(matchup.id, mem.app_user_id, ctx) };
+    if (picks) {
+      // Buffs + targeted power-ups (swaps / EMP / DoN / Bye Steal) come from the
+      // same applied_state payload the arm/apply RPCs write.
+      const load = await loadout(matchup.id, mem.app_user_id, ctx);
+      return { picks, buffs: Array.isArray(load.buffs) ? load.buffs : [], targeted: load.targeted };
+    }
     if (!mem?.enrolled || !mem?.app_user_id) return aiSide(rosterId, mem);
     if (policy === 'empty') return { picks: null, buffs: [] };
     return aiSide(rosterId, mem);
@@ -215,6 +215,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   const away = override ? { picks: override.away, buffs: [] } : await sideLineup(matchup.away_roster_id);
   let homePicks = home.picks, awayPicks = away.picks;
   let homeBuffs = home.buffs, awayBuffs = away.buffs;
+  let homeTargeted = home.targeted, awayTargeted = away.targeted;
 
   // Premium enforcement (docs/premium-model.md): a NON-premium matchup can't field premium
   // positions (K/DST/IDP), premium-unlock metrics, or premium power-ups. Stripped here at the
@@ -223,10 +224,13 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   {
     const tier = await premiumTier();
     const posOf = (slug) => slugMeta(slug).pos;
-    if (hasPremiumContent(homePicks, homeBuffs, tier, posOf) || hasPremiumContent(awayPicks, awayBuffs, tier, posOf)) {
+    if (hasPremiumContent(homePicks, homeBuffs, tier, posOf) || hasPremiumContent(awayPicks, awayBuffs, tier, posOf)
+      || hasPremiumTargeted(homeTargeted, tier) || hasPremiumTargeted(awayTargeted, tier)) {
       if (!(await matchupPremium(matchup.id))) {
         if (homePicks) { const g = gateSide(homePicks, homeBuffs, tier, posOf); homePicks = g.picks; homeBuffs = g.buffs; }
         if (awayPicks) { const g = gateSide(awayPicks, awayBuffs, tier, posOf); awayPicks = g.picks; awayBuffs = g.buffs; }
+        homeTargeted = gateTargeted(homeTargeted, tier);
+        awayTargeted = gateTargeted(awayTargeted, tier);
       }
     }
   }
@@ -236,10 +240,37 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   let coin = null; // weekly drip-coin per side (only the real-engine H2H path earns it)
   const toLive = (p) => ({ win: p.win, slot: p.slot, player: player(p.slug), metricId: p.metric || 'rush' });
 
+  // Targeted payloads (validated + clamped by the apply RPCs, migration 0060)
+  // → engine extras. Slugs become engine Players; numbers re-clamped defensively.
+  const toExtras = (t) => {
+    if (!t) return undefined;
+    const ex = {};
+    if (t.don?.win != null && t.don?.slot != null) ex.don = { win: String(t.don.win), slot: String(t.don.slot) };
+    if (t.byeSteal?.slug) ex.byeSteal = {
+      win: String(t.byeSteal.win), slot: String(t.byeSteal.slot),
+      player: player(t.byeSteal.slug), pts: Math.max(0, Math.min(25, Number(t.byeSteal.pts) || 0)),
+    };
+    if (t.emp && Object.keys(t.emp).length) {
+      ex.emp = {};
+      for (const [w, c] of Object.entries(t.emp)) ex.emp[w] = Math.max(0, Math.min(3900, Number(c) || 0));
+    }
+    if (t.swaps && Object.keys(t.swaps).length) {
+      ex.swaps = {};
+      for (const [k, s] of Object.entries(t.swaps)) ex.swaps[k] = {
+        toMetricId: s.toMetric ?? undefined,
+        toPlayer: s.toPlayer ? player(s.toPlayer) : undefined,
+        atClock: Math.max(0, Math.min(3900, Number(s.atClock) || 0)),
+        atRt: s.atRt != null ? Number(s.atRt) : undefined,
+      };
+    }
+    return Object.keys(ex).length ? ex : undefined;
+  };
+
   if (homePicks && awayPicks) {
     // ── Both sides have a lineup (human, AI, or auto-backup): real H2H engine ──
     const r = resolveLiveMatchup(homePicks.map(toLive), awayPicks.map(toLive), matchup.week,
-      { homeBuffs: new Set(homeBuffs), awayBuffs: new Set(awayBuffs) });
+      { homeBuffs: new Set(homeBuffs), awayBuffs: new Set(awayBuffs) },
+      { home: toExtras(homeTargeted), away: toExtras(awayTargeted) });
     for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
     homeTotal = r.home; awayTotal = r.away; coin = r.coin;
   } else {
