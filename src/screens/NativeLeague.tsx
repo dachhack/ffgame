@@ -63,8 +63,8 @@ export function NativeCreate({ onDone, onBack }: {
       setNote('Creating your league…');
       const r = await createNativeLeague(name, '2026', teams, rounds, clock);
       if (!r.ok || !r.league_id) { setErr(friendlyError(r.error ?? 'Could not create the league.')); setBusy(false); return; }
-      setNote('Building the player pool…');
-      const pool = await seedLeaguePool(r.league_id, buildDraftPool());
+      setNote('Building the 2026 player pool…');
+      const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
       if (!pool.ok) { setErr(friendlyError(pool.error ?? 'Could not seed the player pool.')); setBusy(false); return; }
       setNote('Generating the season schedule…');
       const sched = await nativeGenerateSchedule(r.league_id, 14);
@@ -220,6 +220,22 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
     finally { setBusy(false); }
   };
 
+  // Pre-draft pool refresh: rebuilds from the live Sleeper directory + baked
+  // 2026 ADP, picking up rookie signings / ADP moves since the league was
+  // created. Commissioner-only (the RPC enforces it).
+  const [reseedNote, setReseedNote] = useState<string | null>(null);
+  const reseed = async () => {
+    if (busy) return;
+    setBusy(true); setErr(null); setReseedNote(null);
+    try {
+      const players = await buildDraftPool(setReseedNote);
+      const r = await seedLeaguePool(leagueId, players);
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not refresh the pool.')); }
+      else { setReseedNote(`Pool refreshed — ${r.players} players.`); setPool(await leaguePool(leagueId)); }
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+
   if (!st) return (
     <div>
       <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>
@@ -244,7 +260,9 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
             {st.rounds} rounds · {st.pick_seconds}s per pick · snake order (randomized at start). Invite your league from the league card first — seats still empty when you start are drafted by the AI.
           </div>
           <button onClick={begin} disabled={busy} className="mono" style={{ ...btn, width: '100%', marginTop: 12, opacity: busy ? 0.6 : 1 }}>▶ START THE DRAFT</button>
-          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8 }}>Commissioner only — everyone else sees the board light up.</div>
+          <button onClick={reseed} disabled={busy} className="mono" style={{ ...ghostBtn, width: '100%', marginTop: 8, opacity: busy ? 0.6 : 1 }}>↻ REFRESH PLAYER POOL (2026 ADP)</button>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8 }}>Commissioner only — everyone else sees the board light up. Refresh picks up ADP moves and free-agent signings since the league was created.</div>
+          {reseedNote && <div className="mono" style={{ fontSize: 10, color: 'var(--you)', marginTop: 8 }}>{reseedNote}</div>}
           {err && <div className="mono" style={errStyle}>{err}</div>}
         </div>
       )}
