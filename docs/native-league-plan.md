@@ -104,8 +104,14 @@ in-app), rosters (drafted in-app), weekly pools (materialized from rosters).
 
 ### Client
 
-- `src/data/nativeLeague.ts` — `buildDraftPool()`: BAKED_SLUGS ∪ K/DST, ranked
-  by real `fantasy_points_ppr` (K/DST deflated into late-round territory).
+- `src/data/nativeLeague.ts` — `buildDraftPool()` (async, v0.99.2): the full
+  Sleeper player directory — 2026 rookies included, with post-draft NFL teams —
+  ranked in four tiers: baked 2026 consensus ADP (`src/data/adp2026.ts`, from
+  the Stathead MCP `get_adp` blend; rebake weekly through August) → team K/DST
+  at late-round cost → post-ADP veterans by 2025 ppr → deep bench by Sleeper
+  `search_rank`. Any directory player scores live in 2026 (the worker's index
+  is directory-driven); rookies are genuine DNPs on 2025 replay boards. Falls
+  back to the 2025 baked-PBP pool if the directory fetch fails.
 - `src/screens/NativeLeague.tsx` — three LiveOnboard views (no new global routes):
   - **NativeCreate** — name/teams/roster-size/pick-clock wizard → creates league,
     seeds pool, generates schedule → invite link card → draft room.

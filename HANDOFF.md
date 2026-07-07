@@ -1,6 +1,32 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.99.2`_
+_Last updated: 2026-07-07 · Build `v0.99.3`_
+
+## 2026 draft pool: rookies + consensus ADP (v0.99.3)
+The native-league draft pool is now built for the CURRENT season, rookies
+included, instead of the 2025 baked-PBP set (which was the right guarantee for
+the replay demo but a 2025-ism for a real draft — the worker's live-scoring
+index is directory-driven, so any Sleeper-directory player scores live in 2026).
+- **Data**: `src/data/adp2026.ts` — GENERATED 2026 consensus ADP (200 rows,
+  Stathead MCP `get_adp` season 2026: FantasyPros + Sleeper + FFC blend,
+  as-of 2026-07-07, rookies priced — Jeremiyah Love RB ADP 26.5). Refresh
+  instructions in the file header; REBAKE WEEKLY through August (ADP moves).
+- **Pool** (`nativeLeague.ts buildDraftPool()`, now async): full Sleeper
+  directory (has all 221 skill-position 2026 rookies with post-draft teams) in
+  four tiers — consensus ADP → team K/DST at late-round cost → post-ADP vets by
+  2025 ppr → deep bench by Sleeper `search_rank` (new optional `PlayerMeta.rank`,
+  parsed in sleeperPlayers.ts). Unsigned-but-priced FAs (Tyreek, Diggs) kept as
+  team 'FA'. Cap 1200; directory-fetch failure falls back to the 2025 baked
+  pool so creation never hard-fails. Verified live via tsx: 1034 players, 0
+  dupes, Love #24 @ARI, first DEF #168 / first K #208.
+- **Client**: NativeCreate awaits the directory build (progress notes); the
+  DraftRoom pending card gains "↻ REFRESH PLAYER POOL (2026 ADP)" — commish
+  re-seed via the existing `seed_league_pool` (pre-draft only), picking up ADP
+  moves + FA signings since creation. No DB changes.
+- Rookies show as genuine DNPs on baked-2025 replay boards; `projectedPoints`
+  gives them position-default baselines until 2026 games accumulate (auto-
+  lineup ranking only — could later carry Stathead 2026 projections in the same
+  baked file).
 
 ## Air Raid reprice ◎60 → ◎40 (v0.99.2, migration 0065 — NOT yet applied)
 Findings §16. Price-only change (scoring untouched): powerups.ts + 0065
