@@ -53,6 +53,15 @@ const LEVERS = [
   { id: 'te-nuke-all', cost: 0, build: () => ({ metricOverride: overridePos('TE', 'td') }) },
   { id: 'rb-nuke-all', cost: 0, build: () => ({ metricOverride: overridePos('RB', 'td') }) },
   { id: 'wr-nuke-all', cost: 0, build: () => ({ metricOverride: overridePos('WR', 'td') }) },
+  // Single-flip nukes — the situational use a real (trailing) manager makes.
+  // The -all levers above are torture tests; THESE carry the fair-discount target.
+  { id: 'rb-nuke-1', cost: 0, build: (r, c) => ({ metricOverride: overrideSlug(topOf(r, 'RB', c), 'td') }) },
+  { id: 'wr-nuke-1', cost: 0, build: (r, c) => ({ metricOverride: overrideSlug(topOf(r, 'WR', c), 'td') }) },
+  // Denial levers — "does denial pay its opportunity cost?" (§10's protect
+  // policy said no; the steal retune aims these at ~48-52%).
+  { id: 'wr-erase-all', cost: 0, build: () => ({ metricOverride: overridePos('WR', 'rec') }) },
+  { id: 'wr-stop-all', cost: 0, build: () => ({ metricOverride: overridePos('WR', 'tgt') }) },
+  { id: 'rb-reset-all', cost: 0, build: () => ({ metricOverride: overridePos('RB', 'rec') }) },
   { id: 'def-suppress', cost: 0, build: () => ({ metricOverride: overridePos('DEF', 'suppress') }) },
   { id: 'k-banker', cost: 0, build: () => ({ metricOverride: overridePos('K', 'banker') }) }, // already the default; sanity peer
 

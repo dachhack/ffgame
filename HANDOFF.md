@@ -1,6 +1,26 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.96.0`_
+_Last updated: 2026-07-07 · Build `v0.97.0`_
+
+## Mechanics retune #2 — fair-priced variance & denial, single-use Combo Drip (v0.97.0)
+Driven by findings §10 (late swap had nothing profitable to buy) — see §11 for
+the full before/after table.
+- **NUKE spike profile** (`sim.ts scorePlay`): `td` = 0.04/yd scrimmage +
+  10/TD (RB+WR) · 12/TD (TE), wipe+blackout unchanged, PLUS the nuke steals a
+  quarter of the bank it wipes (`nukeWipe(stealPct)`; carry-wipe passes 0).
+- **Denial steals** (`stealCut` in resolveSlot): erase/reset-cut/compression
+  credit the denier 25% of points removed; WR Targets 1.0/target.
+- **Combo Drip SINGLE-USE** (user directive): one combodrip slot per lineup —
+  engine caps in resolveLiveMatchup + buildMatchup (extras downgrade to the
+  standard drip; swaps into combodrip dropped when another slot runs it), the
+  AI keeps its best dual-threat only (`aiLineup`), and migration
+  **0061** adds a sealed_pick trigger + the apply_targeted combodrip check.
+- Measured: rb-nuke-1 45.8% (target band), protect-at-parity in lateswap,
+  gamble conversion ~doubled; invariants/season all hold; power-up opt-out cost
+  rose 2.9 → 5.0 pts (they matter now). Metric catalog + rulebook regenerated.
+- Client note: a second combodrip pick now fails at SEAL with the trigger's
+  message ('Combo Drip is single-use — one slot per lineup'); SetupRow doesn't
+  yet grey the option client-side — cosmetic follow-up.
 
 ## Targeted power-ups score in LIVE leagues (v0.96.0)
 0059 made everything buyable; this makes the targeted/reactive set actually

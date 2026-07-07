@@ -316,6 +316,26 @@ export function buildMatchup(
   const youPools = windowPools(youTeamId, week);
   const oppPools = windowPools(oppTeamId, week);
 
+  // COMBO DRIP is SINGLE-USE — one slot per lineup (mirrors resolveLiveMatchup
+  // and the DB trigger, migration 0061). Extra combodrip picks beyond the first
+  // downgrade to the position's standard drip.
+  const capCombo = (pools: Record<WindowId, Player[]>, picks: Record<string, Pick>): Record<string, Pick> => {
+    let seen = false;
+    const out = { ...picks };
+    for (const w of windowsForWeek(week)) {
+      for (let i = 0; i < slotsFor(w.id, week, extraSlots); i++) {
+        const k = slotKey(w.id, i);
+        if (out[k]?.metricId !== 'combodrip') continue;
+        if (!seen) { seen = true; continue; }
+        const pl = lookup(pools, out, k);
+        out[k] = { ...out[k], metricId: pl?.player.pos === 'RB' ? 'rush' : 'recyd' };
+      }
+    }
+    return out;
+  };
+  youPicks = capCombo(youPools, youPicks);
+  oppPicks = capCombo(oppPools, oppPicks);
+
   const windows: ResolvedWindow[] = [];
   let anyReal = false;
   let maxClock = 3300;

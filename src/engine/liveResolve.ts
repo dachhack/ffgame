@@ -166,6 +166,33 @@ function awardFor(buffs: Set<string>, picks: LivePick[], week: number): { pick: 
  *  `extras` carries each side's applied targeted power-ups (swaps / EMP /
  *  Double-or-Nothing / Bye Steal) — the live counterpart of buildMatchup's. */
 export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[], week: number, buffs: LiveBuffs = {}, extras: LiveExtrasBySide = {}): LiveResult {
+  // COMBO DRIP is SINGLE-USE — one slot per lineup ("unlock … for one player").
+  // Any pick beyond the first downgrades to the position's standard drip.
+  // Enforced here so every surface (worker, admin force-resolve, playtester,
+  // the hindsight adversary) agrees; the DB trigger (migration 0061) and the
+  // apply RPCs reject a second one at write time.
+  const capCombo = (picks: LivePick[]): LivePick[] => {
+    let seen = false;
+    return picks.map((p) => {
+      if (p.metricId !== 'combodrip') return p;
+      if (!seen) { seen = true; return p; }
+      return { ...p, metricId: p.player.pos === 'RB' ? 'rush' : 'recyd' };
+    });
+  };
+  homePicks = capCombo(homePicks);
+  awayPicks = capCombo(awayPicks);
+  // Same rule for a live swap INTO combodrip: only legal when the side has no
+  // other combodrip slot (swapping the combo slot itself is a no-op).
+  const capSwapCombo = (x: LiveExtras | undefined, picks: LivePick[]) => {
+    if (!x?.swaps) return;
+    for (const [k, s] of Object.entries(x.swaps)) {
+      if (s.toMetricId !== 'combodrip') continue;
+      const hasOther = picks.some((p) => p.metricId === 'combodrip' && `${p.win}|${p.slot}` !== k);
+      if (hasOther) delete x.swaps[k].toMetricId; // keep any player swap; drop the illegal metric change
+    }
+  };
+  capSwapCombo(extras.home, homePicks);
+  capSwapCombo(extras.away, awayPicks);
   const reg = REAL_WEEKS.has(week) ? 3600 : 3300;
   const homeBuffs = buffs.homeBuffs ?? new Set<string>();
   const awayBuffs = buffs.awayBuffs ?? new Set<string>();
