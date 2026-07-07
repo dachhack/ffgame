@@ -23,7 +23,7 @@ import {
   setTeamName, setTeamAvatar, setLeagueAvatar,
   setDraftQueue, myDraftQueue, setAutodraft,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick,
-  nominate, placeBid,
+  nominate, placeBid, setLotProxy,
   type DraftState, type LeaguePoolPlayer, type NativeTeamState,
 } from '../data/liveApi';
 
@@ -38,6 +38,13 @@ const hdr: React.CSSProperties = { fontSize: 10, letterSpacing: '0.12em', color:
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 const posLabel = (p: string) => (p === 'DEF' ? 'D/ST' : p);
+
+/** Countdown text at any scale: "2d 4h", "7h 12m", "3:07". */
+function fmtCountdown(secs: number): string {
+  if (secs >= 86400) return `${Math.floor(secs / 86400)}d ${Math.floor((secs % 86400) / 3600)}h`;
+  if (secs >= 3600) return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
+  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+}
 
 // ── Avatar picker: a preset gallery (no uploads to host) ─────────────────────
 // First-party Drip art (72 tiles cut from the owner's avatar sheets, served
@@ -98,6 +105,12 @@ export function NativeCreate({ onDone, onBack }: {
   const [clock, setClock] = useState(90);
   const [mode, setMode] = useState<'snake' | 'auction'>('snake');
   const [budget, setBudget] = useState(200);
+  // Pace: LIVE = everyone in the room (seconds); SLOW = days-long drafts
+  // (hour-scale clocks; queues + proxy bids keep turns fair while offline).
+  const [pace, setPace] = useState<'live' | 'slow'>('live');
+  const [clockHrs, setClockHrs] = useState(12);   // slow: pick/nomination window
+  const [bellSecs, setBellSecs] = useState(15);   // live auction bell
+  const [bellHrs, setBellHrs] = useState(8);      // slow auction bell
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [err, setErr] = useState<string | null>(null);
@@ -109,7 +122,9 @@ export function NativeCreate({ onDone, onBack }: {
     setBusy(true); setErr(null);
     try {
       setNote('Creating your league…');
-      const r = await createNativeLeague(name, '2026', teams, rounds, clock, mode, budget);
+      const pickSecs = pace === 'slow' ? clockHrs * 3600 : clock;
+      const lotSecs = pace === 'slow' ? bellHrs * 3600 : bellSecs;
+      const r = await createNativeLeague(name, '2026', teams, rounds, pickSecs, mode, budget, lotSecs);
       if (!r.ok || !r.league_id) { setErr(friendlyError(r.error ?? 'Could not create the league.')); setBusy(false); return; }
       setNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
@@ -161,7 +176,6 @@ export function NativeCreate({ onDone, onBack }: {
         <div style={{ display: 'flex', gap: 18, marginTop: 16, flexWrap: 'wrap' }}>
           <div><div className="mono" style={label}>TEAMS</div><div style={{ marginTop: 7 }}>{num(teams, setTeams, 2, 14, 1)}</div></div>
           <div><div className="mono" style={label}>ROSTER SIZE</div><div style={{ marginTop: 7 }}>{num(rounds, setRounds, 5, 25, 1)}</div></div>
-          <div><div className="mono" style={label}>PICK CLOCK (SEC)</div><div style={{ marginTop: 7 }}>{num(clock, setClock, 15, 600, 15)}</div></div>
         </div>
         <div style={{ display: 'flex', gap: 18, marginTop: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div>
@@ -171,8 +185,28 @@ export function NativeCreate({ onDone, onBack }: {
               <Chip on={mode === 'auction'} onClick={() => setMode('auction')}>AUCTION</Chip>
             </div>
           </div>
+          <div>
+            <div className="mono" style={label}>PACE</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+              <Chip on={pace === 'live'} onClick={() => setPace('live')}>⚡ LIVE</Chip>
+              <Chip on={pace === 'slow'} onClick={() => setPace('slow')}>🐢 SLOW</Chip>
+            </div>
+          </div>
           {mode === 'auction' && <div><div className="mono" style={label}>BUDGET ($ / TEAM)</div><div style={{ marginTop: 7 }}>{num(budget, setBudget, 50, 1000, 25)}</div></div>}
         </div>
+        <div style={{ display: 'flex', gap: 18, marginTop: 14, flexWrap: 'wrap' }}>
+          {pace === 'live'
+            ? <div><div className="mono" style={label}>{mode === 'auction' ? 'NOMINATION CLOCK (SEC)' : 'PICK CLOCK (SEC)'}</div><div style={{ marginTop: 7 }}>{num(clock, setClock, 15, 600, 15)}</div></div>
+            : <div><div className="mono" style={label}>{mode === 'auction' ? 'NOMINATION WINDOW (HRS)' : 'PICK CLOCK (HRS)'}</div><div style={{ marginTop: 7 }}>{num(clockHrs, setClockHrs, 1, 48, 1)}</div></div>}
+          {mode === 'auction' && (pace === 'live'
+            ? <div><div className="mono" style={label}>BID BELL (SEC)</div><div style={{ marginTop: 7 }}>{num(bellSecs, setBellSecs, 10, 60, 5)}</div></div>
+            : <div><div className="mono" style={label}>BID WINDOW (HRS)</div><div style={{ marginTop: 7 }}>{num(bellHrs, setBellHrs, 1, 48, 1)}</div></div>)}
+        </div>
+        {pace === 'slow' && (
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>
+            Slow drafts run for days. Fairness is built in: any bid restarts the full bid window (no sniping), hidden max bids answer for you while you're away, and a missed turn nominates from your own queue.
+          </div>
+        )}
         <button onClick={create} disabled={busy || !name.trim()} className="mono"
           style={{ ...btn, width: '100%', marginTop: 16, opacity: busy || !name.trim() ? 0.6 : 1 }}>
           {busy ? (note || 'CREATING…') : 'CREATE LEAGUE →'}
@@ -263,6 +297,7 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
   const [cardFor, setCardFor] = useState<LeaguePoolPlayer | null>(null);
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
+  const [proxyDraft, setProxyDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -421,7 +456,7 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
                 </div>
                 {secsLeft != null && (
                   <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: secsLeft <= 5 ? 'var(--opp)' : 'var(--you)' }}>
-                    0:{String(secsLeft).padStart(2, '0')}
+                    {fmtCountdown(secsLeft)}
                   </div>
                 )}
               </div>
@@ -433,6 +468,27 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
                 {!canBid && st.lot!.roster_id === myRoster && <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>You're the high bidder.</span>}
                 {myBudget && <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginLeft: 'auto' }}>my budget ${myBudget.budget} · max bid ${myBudget.max_bid}</span>}
               </div>
+              {/* hidden max (proxy): the fair way to win while you're away —
+                  answers rival bids second-price style, never shows your ceiling */}
+              {myRoster != null && (myBudget?.spots_left ?? 0) > 0 && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap', borderTop: '1px solid var(--bd)', paddingTop: 8 }}>
+                  <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>🕶 HIDDEN MAX</span>
+                  {st.my_proxy != null
+                    ? <>
+                        <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--you)' }}>${st.my_proxy}</span>
+                        <button onClick={() => run(() => setLotProxy(leagueId, myRoster, null))} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>clear</button>
+                      </>
+                    : <>
+                        <input value={proxyDraft} inputMode="numeric" placeholder="$"
+                          onChange={(e) => setProxyDraft(e.target.value.replace(/\D/g, ''))}
+                          onKeyDown={(e) => { if (e.key === 'Enter' && proxyDraft) { run(() => setLotProxy(leagueId, myRoster, parseInt(proxyDraft, 10))); setProxyDraft(''); } }}
+                          style={{ ...input, width: 74, padding: '6px 8px', fontSize: 12 }} />
+                        <button onClick={() => { if (proxyDraft) { run(() => setLotProxy(leagueId, myRoster, parseInt(proxyDraft, 10))); setProxyDraft(''); } }}
+                          disabled={busy || !proxyDraft} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5 }}>SET</button>
+                        <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>bids for you while you're away — nobody sees it</span>
+                      </>}
+                </div>
+              )}
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
@@ -452,7 +508,7 @@ export function DraftRoom({ leagueId, onBack, onTeam }: {
               </div>
               {secsLeft != null && (
                 <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: secsLeft <= 10 ? 'var(--opp)' : 'var(--you)' }}>
-                  {Math.floor(secsLeft / 60)}:{String(secsLeft % 60).padStart(2, '0')}
+                  {fmtCountdown(secsLeft)}
                 </div>
               )}
             </div>

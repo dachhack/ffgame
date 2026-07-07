@@ -681,8 +681,8 @@ export const adminRegenCode = (leagueId: string, which: 'invite' | 'commish') =>
 
 // ── Native leagues (migration 0064): created in-app, rosters built by draft ─────
 export interface NativeCreateResult { ok: boolean; error?: string; league_id?: string; roster_id?: number; invite_code?: string; }
-export const createNativeLeague = (name: string, season: string, teams: number, rounds: number, pickSeconds: number, mode: 'snake' | 'auction' = 'snake', budget = 200) =>
-  rpc<NativeCreateResult>('create_native_league', { p_name: name, p_season: season, p_teams: teams, p_rounds: rounds, p_pick_seconds: pickSeconds, p_mode: mode, p_budget: budget });
+export const createNativeLeague = (name: string, season: string, teams: number, rounds: number, pickSeconds: number, mode: 'snake' | 'auction' = 'snake', budget = 200, lotSeconds = 15) =>
+  rpc<NativeCreateResult>('create_native_league', { p_name: name, p_season: season, p_teams: teams, p_rounds: rounds, p_pick_seconds: pickSeconds, p_mode: mode, p_budget: budget, p_lot_seconds: lotSeconds });
 /** Claim the lowest open seat in a native league by invite code. */
 export const nativeJoin = (code: string, teamName?: string) =>
   rpc<{ ok: boolean; error?: string; league_id?: string; roster_id?: number; status?: string; league?: string }>(
@@ -711,7 +711,10 @@ export interface DraftState {
   on_clock_auto: boolean | null;
   deadline_at: string | null; server_now: string; picks: DraftPickRow[];
   budget: number | null;
+  lot_seconds: number;
   lot: { slug: string; bid: number; roster_id: number; deadline_at: string } | null;
+  /** The caller's own hidden max on the current lot (nobody else's is visible). */
+  my_proxy: number | null;
   budgets: { roster_id: number; budget: number; spots_left: number; max_bid: number }[] | null;
   my_autodraft: boolean;
 }
@@ -741,7 +744,11 @@ export const commishUndoPick = (leagueId: string) =>
 export const nominate = (leagueId: string, slug: string, bid = 1) =>
   rpc<{ ok: boolean; error?: string; lot?: string; bid?: number }>('nominate', { p_league_id: leagueId, p_slug: slug, p_bid: bid });
 export const placeBid = (leagueId: string, rosterId: number, amount: number) =>
-  rpc<{ ok: boolean; error?: string; bid?: number }>('place_bid', { p_league_id: leagueId, p_roster_id: rosterId, p_amount: amount });
+  rpc<{ ok: boolean; error?: string; bid?: number; roster_id?: number; outbid?: boolean }>('place_bid', { p_league_id: leagueId, p_roster_id: rosterId, p_amount: amount });
+/** Hidden max bid on the CURRENT lot (proxy — the fair way to win a slow
+ *  auction while asleep). Null clears it. Resolves second-price immediately. */
+export const setLotProxy = (leagueId: string, rosterId: number, max: number | null) =>
+  rpc<{ ok: boolean; error?: string; max?: number | null }>('set_lot_proxy', { p_league_id: leagueId, p_roster_id: rosterId, p_max: max });
 export const makeDraftPick = (leagueId: string, slug: string) =>
   rpc<{ ok: boolean; error?: string; overall?: number; roster_id?: number; slug?: string; complete?: boolean }>(
     'make_draft_pick', { p_league_id: leagueId, p_slug: slug });

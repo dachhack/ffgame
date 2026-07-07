@@ -517,4 +517,111 @@ begin
   perform assert_true(not exists (select 1 from league_membership where league_id = lid and draft_budget < 0), '13zz no negative budgets');
 end $$;
 
+-- ── 14. AI counter-bidding + slow clocks (0068) ──────────────────────────────
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text;
+  ai_bid int; ai_holder int;
+begin
+  -- 3 seats: A (human), B (human), seat 3 VACANT → AI-driven bidder.
+  -- Slow clocks accepted: 12h nomination window, 8h bell.
+  perform probe_as('a');
+  r := create_native_league('Proxy Wars', '2026', 3, 5, 43200, 'auction', 20, 28800);
+  perform assert_ok(r, '14a create slow auction');
+  lid := (r ->> 'league_id')::uuid;
+  perform assert_true((select lot_seconds from draft where league_id = lid) = 28800, '14b slow bell stored');
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Bids'), '14c B joins seat 2');
+  perform probe_as('a');
+  for i in 1..18 loop pool := pool || jsonb_build_object('slug', 'p-rb' || i, 'full', 'P RB ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  perform assert_ok(seed_league_pool(lid, pool), '14d seed');
+  perform assert_ok(start_draft(lid, '[1,2,3]'::jsonb), '14e start');
+
+  -- A nominates the RANK-1 player at $1 → the vacant AI seat counters at once
+  -- (its model values rank 1 at ~$6-8 on a $20 budget; nominator max was $1).
+  perform assert_ok(nominate(lid, 'p-rb1', 1), '14f nominate rank 1 at $1');
+  select lot_bid, lot_roster into ai_bid, ai_holder from draft where league_id = lid;
+  perform assert_true(ai_holder = 3, '14g AI seat counter-bid and holds');
+  perform assert_true(ai_bid > 1 and ai_bid <= auction_max_bid(lid, 3, 5), '14h AI price sane');
+  -- the AI bid reset the bell to the FULL slow window (no sniping)
+  perform assert_true((select lot_deadline from draft where league_id = lid) > now() + interval '7 hours', '14i full-window reset');
+
+  -- a human beating the AI's whole valuation takes it and keeps it
+  perform probe_as('b');
+  perform assert_ok(place_bid(lid, 2, 9), '14j B bids $9 over AI max');
+  perform assert_true((select lot_roster from draft where league_id = lid) = 2, '14k B holds');
+  update draft set lot_deadline = now() - interval '1 second' where league_id = lid;
+  perform draft_tick(lid);
+  perform assert_true((select price from draft_pick where league_id = lid and overall = 1) = 9, '14l B paid $9');
+  perform assert_true((select draft_budget from league_membership where league_id = lid and sleeper_roster_id = 2) = 11, '14m budget 20-9');
+
+  -- nominator seat 2 (human) misses the window → auto-nominates; lot opens
+  update draft set deadline_at = now() - interval '1 second' where league_id = lid;
+  perform draft_tick(lid);
+  perform assert_true((select lot_slug from draft where league_id = lid) is not null, '14n missed turn auto-nominates');
+
+  -- run the slow auction out: AI keeps bidding by value, nothing goes negative
+  -- slow clocks are 8h/12h — leap 2 days per iteration so every window expires
+  for i in 1..80 loop
+    update draft set lot_deadline = coalesce(lot_deadline, now()) - interval '2 days',
+                     deadline_at = coalesce(deadline_at, now()) - interval '2 days'
+      where league_id = lid and status = 'live';
+    perform draft_tick(lid);
+    exit when (select status from draft where league_id = lid) = 'complete';
+  end loop;
+  perform assert_true((select status from draft where league_id = lid) = 'complete', '14o auction completes');
+  perform assert_true((select count(*) from native_roster where league_id = lid) = 15, '14p all 15 spots filled');
+  perform assert_true(not exists (select 1 from league_membership where league_id = lid and draft_budget < 0), '14q no negative budgets');
+  perform assert_true(not exists (select 1 from draft_pick where league_id = lid and (price is null or price < 1)), '14r every award priced');
+end $$;
+
+-- ── 15. hidden proxy maxes: a fair human-vs-human slow-auction duel ──────────
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text;
+begin
+  perform probe_as('a');
+  r := create_native_league('Proxy Duel', '2026', 2, 5, 43200, 'auction', 20, 28800);
+  perform assert_ok(r, '15a create');
+  lid := (r ->> 'league_id')::uuid;
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Duels'), '15b B joins');
+  perform probe_as('a');
+  for i in 1..12 loop pool := pool || jsonb_build_object('slug', 'd-rb' || i, 'full', 'D RB ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  perform assert_ok(seed_league_pool(lid, pool), '15c seed');
+  perform assert_ok(start_draft(lid, '[1,2]'::jsonb), '15d start');
+
+  perform assert_ok(nominate(lid, 'd-rb1', 1), '15e A nominates at $1');
+  -- B sets a hidden max of $10 → proxy takes the lot at holder_max+1 = $2
+  perform probe_as('b');
+  perform assert_ok(set_lot_proxy(lid, 2, 10), '15f B sets hidden max $10');
+  perform assert_true((select lot_roster from draft where league_id = lid) = 2, '15g proxy holds the lot');
+  perform assert_true((select lot_bid from draft where league_id = lid) = 2, '15h at $2, not $10');
+  r := draft_state(lid);
+  perform assert_true((r ->> 'my_proxy')::int = 10, '15i B sees own proxy');
+  perform probe_as('a');
+  r := draft_state(lid);
+  perform assert_true(r ->> 'my_proxy' is null, '15j A cannot see B''s max');
+  perform assert_true((select count(*) from pg_policies where tablename = 'lot_proxy') = 0, '15k proxy table unreadable');
+
+  -- A bids $5 manually → B's proxy answers instantly at $6, A told "outbid"
+  r := place_bid(lid, 1, 5);
+  perform assert_ok(r, '15l A bids $5');
+  perform assert_true(coalesce((r ->> 'outbid')::boolean, false), '15m A told outbid');
+  perform assert_true((select lot_roster from draft where league_id = lid) = 2 and (select lot_bid from draft where league_id = lid) = 6, '15n proxy defends at $6');
+
+  -- A sets a BIGGER hidden max ($12) → beats B's $10 at second+1 = $11
+  r := set_lot_proxy(lid, 1, 12);
+  perform assert_ok(r, '15o A sets max $12');
+  perform assert_true((select lot_roster from draft where league_id = lid) = 1 and (select lot_bid from draft where league_id = lid) = 11, '15p A wins the duel at $11');
+  perform assert_err(set_lot_proxy(lid, 1, 17), 'max bid', '15q proxy respects budget floor');
+
+  -- bell → A pays $11; proxies cleared for the next lot
+  update draft set lot_deadline = now() - interval '1 second' where league_id = lid;
+  perform draft_tick(lid);
+  perform assert_true((select price from draft_pick where league_id = lid and overall = 1) = 11, '15r paid $11');
+  perform assert_true((select draft_budget from league_membership where league_id = lid and sleeper_roster_id = 1) = 9, '15s budget 20-11');
+  perform assert_true((select count(*) from lot_proxy where league_id = lid) = 0, '15t proxies cleared');
+end $$;
+
 select 'ALL PROBES PASSED' as result;
