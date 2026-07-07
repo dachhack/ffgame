@@ -10,7 +10,7 @@ import { powerupById } from '../data/powerups';
 import { DEMO_WEEK } from '../config';
 import { type ProviderUser, type ProviderId } from '../data/providers';
 import { track, identify, Ev } from './analytics';
-import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied } from '../data/liveApi';
+import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, type TargetedState } from '../data/liveApi';
 
 import type { SlotSwap } from '../engine/matchup';
 export type { SlotSwap };
@@ -22,7 +22,7 @@ export interface AppliedWeek {
   backups: Record<string, string>;               // backup slotKey -> target starter slotKey (manual best-ball)
   buffs?: Record<string, true>;                  // armed pre-match team buffs, keyed by powerup id
   doubleOrNothing?: string;                      // your slotKey staked (×2 if it wins, 0 if it loses)
-  spy?: { slotKey: string; reveal: 'player' | 'metric' }; // a slate slot peeked pre-kickoff (player OR metric)
+  spy?: { slotKey: string; reveal: 'player' | 'metric'; value?: string | null }; // a slate slot peeked pre-kickoff; `value` = the server's live reveal (use_spy)
   byeSteal?: { slotKey: string; playerId: string }; // a bye player fielded for a flat projected score
   emp?: Partial<Record<WindowId, number>>;       // window -> clock at which opponent drips froze (10 min)
   lineup?: Record<string, Pick>;                 // your lineup edits (deltas over the default) — so FINAL replays your actual lineup
@@ -164,6 +164,7 @@ interface Store {
   remapDoubleOrNothing: (week: number, slotKey: string) => void;
   /** Peek one slate slot's player OR metric via Spy (consumes one). */
   setSpy: (week: number, slotKey: string, reveal: 'player' | 'metric') => boolean;
+  setSpyRevealed: (week: number, slotKey: string, reveal: 'player' | 'metric', value: string | null) => void;
   /** Field a bye player in a slot via Bye Steal (consumes one). */
   applyByeSteal: (week: number, slotKey: string, playerId: string) => boolean;
   /** Free mid-game metric re-roll via Mulligan — writes a swap, spends a Mulligan. */
@@ -348,12 +349,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Restore the full working applied-state: armed buffs (scored, from
       // applied_state) + the working blob (extra slots, swaps, backups, targeted).
       const wk = liveCtx.week;
-      Promise.all([myBuffs(liveCtx.matchupId).catch(() => [] as string[]), myHeroApplied(liveCtx.matchupId).catch(() => ({}))])
-        .then(([buffs, blob]) => {
+      Promise.all([
+        myBuffs(liveCtx.matchupId).catch(() => [] as string[]),
+        myHeroApplied(liveCtx.matchupId).catch(() => ({})),
+        myTargeted(liveCtx.matchupId, liveCtx.userId).catch(() => ({} as TargetedState)),
+      ])
+        .then(([buffs, blob, tgt]) => {
           const b = (blob ?? {}) as Partial<AppliedWeek>;
+          // The server's targeted record (applied_state, what the worker scores)
+          // wins over the pre-lock working blob — it's the only store live-phase
+          // applications (EMP, swaps) can reach after hero_applied freezes.
+          const sk = (e: { win: string; slot: string }) => `${e.win}#${e.slot}`;
+          const swaps = { ...(b.swaps ?? {}) };
+          for (const [k, s] of Object.entries(tgt.swaps ?? {})) {
+            const [w, i] = k.split('|');
+            swaps[`${w}#${i}`] = { atClock: s.atClock, atRt: s.atRt, toMetricId: s.toMetric, toPlayerId: s.toPlayer };
+          }
+          const lastSpy = tgt.spy?.length ? tgt.spy[tgt.spy.length - 1] : undefined;
           setApplied({ [wk]: {
-            extraSlots: b.extraSlots ?? {}, swaps: b.swaps ?? {}, backups: b.backups ?? {},
-            doubleOrNothing: b.doubleOrNothing, spy: b.spy, byeSteal: b.byeSteal, emp: b.emp,
+            extraSlots: b.extraSlots ?? {}, swaps, backups: b.backups ?? {},
+            doubleOrNothing: tgt.don ? sk(tgt.don) : b.doubleOrNothing,
+            spy: lastSpy ? { slotKey: sk(lastSpy), reveal: lastSpy.reveal } : b.spy,
+            byeSteal: tgt.byeSteal ? { slotKey: sk(tgt.byeSteal), playerId: tgt.byeSteal.slug } : b.byeSteal,
+            emp: (tgt.emp && Object.keys(tgt.emp).length ? tgt.emp : b.emp) as AppliedWeek['emp'],
             buffs: Object.fromEntries((buffs ?? []).map((x) => [x, true as const])),
           } });
         })
@@ -470,6 +488,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
   const setSpy = (week: number, slotKey: string, reveal: 'player' | 'metric'): boolean =>
     consumeAndApply('spy', week, (cur) => ({ ...cur, spy: { slotKey, reveal } }));
+  // Live pilot: record a Spy the SERVER already consumed (use_spy, migration
+  // 0060) with its revealed value — local inventory mirrors the decrement but
+  // no consume/refund RPC fires (that would double-spend the item).
+  const setSpyRevealed = (week: number, slotKey: string, reveal: 'player' | 'metric', value: string | null): void => {
+    setInventory((prev) => ({ ...prev, spy: Math.max(0, (prev.spy ?? 0) - 1) }));
+    setApplied((prev) => {
+      const cur = prev[week] ?? { extraSlots: {}, swaps: {}, backups: {} };
+      return { ...prev, [week]: { ...cur, spy: { slotKey, reveal, value } } };
+    });
+  };
   const applyByeSteal = (week: number, slotKey: string, playerId: string): boolean =>
     consumeAndApply('bye-steal', week, (cur) => ({ ...cur, byeSteal: { slotKey, playerId } }));
   const applyMulligan = (week: number, slotKey: string, atClock: number, atRt: number, toMetricId: string): boolean =>
@@ -525,7 +553,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, iconSet, setIconSet, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    () => ({ theme, setTheme, iconSet, setIconSet, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
     [theme, iconSet, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, liveCtx, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

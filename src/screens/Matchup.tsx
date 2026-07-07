@@ -13,11 +13,11 @@ import { buildLiveLeague } from '../data/liveBoard';
 import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
 } from '../engine/matchup';
-import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type StatLine } from '../engine/sim';
+import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
-import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, leagueWeeklyBudget, leagueTestLiveAt, myMatchup, type PickRow } from '../data/liveApi';
+import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, myMatchup, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import { Rulebook } from './Rulebook';
 import { PuIcon, GameIcon, Emoji, DripCoin, UI_ART } from '../app/gameIcons';
@@ -94,7 +94,7 @@ const DEMO_POWERUPS = [
 const EMPTY_REC: Record<string, never> = {};
 
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
-  const { youTeamId: YOU, navigate, liveCtx, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
+  const { youTeamId: YOU, navigate, liveCtx, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const [demoBuff, setDemoBuff] = useState('garbage-time'); // the power-up the demo viewer armed
   const buffs = useMemo(() => (demo ? { [demoBuff]: true } : (applied[week]?.buffs ?? EMPTY_REC)), [demo, demoBuff, applied, week]);
   const buffsKey = JSON.stringify(buffs);
@@ -175,8 +175,24 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const [byeStealSlot, setByeStealSlot] = useState<string | null>(null); // empty slot chosen for Bye Steal, awaiting a player
   const [spySlot, setSpySlot] = useState<string | null>(null); // slate slot tapped for Spy, awaiting reveal choice
   const [mulliganSlot, setMulliganSlot] = useState<string | null>(null); // your slot tapped for Mulligan, awaiting metric
+  // Live pilot: mirror targeted power-ups into the server scoring record
+  // (apply_targeted / clear_targeted / use_spy, migration 0060) — the worker
+  // resolves from applied_state.targeted; the local store stays the board's
+  // display source. Rejections are logged, not blocking (the board already
+  // shows the local application; the server is authoritative at FINAL).
+  const keyParts = (k: string) => ({ win: k.split('#')[0], slot: k.split('#')[1] });
+  const liveTargeted = (id: string, payload: Record<string, unknown>) => {
+    if (!liveCtx) return;
+    applyTargeted(liveCtx.matchupId, id, payload)
+      .then((r) => { if (!r.ok) console.warn('[live] apply_targeted', id, r.error); })
+      .catch((e) => console.warn('[live] apply_targeted', id, e));
+  };
+  const liveClearTargeted = (id: string) => {
+    if (!liveCtx) return;
+    clearTargeted(liveCtx.matchupId, id).catch((e) => console.warn('[live] clear_targeted', id, e));
+  };
   function applyToSpot(key: string) {
-    if (pendingApply === 'double-or-nothing') { setDoubleOrNothing(week, key); setPendingApply(null); }
+    if (pendingApply === 'double-or-nothing') { if (setDoubleOrNothing(week, key)) liveTargeted('double-or-nothing', keyParts(key)); setPendingApply(null); }
     else if (pendingApply === 'bye-steal') setByeStealSlot(key); // keep pending until a bye player is chosen
     else if (pendingApply === 'spy') setSpySlot(key); // keep pending until a reveal is chosen
     else if (pendingApply === 'mulligan') setMulliganSlot(key); // keep pending until a metric is chosen
@@ -186,7 +202,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     // On the live board a live window's "now" is its latest ingested play (winMax
     // via effWinClock); the sim board uses the manual playback clock. Either way
     // EMP freezes forward from the current position, never retroactively.
-    if (pendingApply === 'emp') { applyEmp(week, win, effWinClock(win)); setPendingApply(null); }
+    if (pendingApply === 'emp') { const clock = effWinClock(win); if (applyEmp(week, win, clock)) liveTargeted('emp', { win, clock }); setPendingApply(null); }
   }
   // Rosters expand in setup (you need them to set lineups), collapse otherwise.
   const [rosterOpen, setRosterOpen] = useState<{ you: boolean; their: boolean }>(() => ({ you: initialPhase === 'setup', their: initialPhase === 'setup' }));
@@ -691,9 +707,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // Everything currently in effect, with a back-out where the store supports it.
   const activeEffects: { key: string; id?: string; icon: string; name: string; detail: string; onRemove?: () => void }[] = [];
   for (const id of Object.keys(buffs)) if (buffs[id]) { const p = powerupById(id); if (p) activeEffects.push({ key: 'b-' + id, id, icon: p.icon, name: p.name, detail: 'Armed · whole field', onRemove: phase === 'setup' ? () => disarmBuff(week, id) : undefined }); }
-  if (aw?.doubleOrNothing) { const s = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === aw.doubleOrNothing); activeEffects.push({ key: 'don', id: 'double-or-nothing', icon: '⚖️', name: 'Double or Nothing', detail: 'Staked ' + (s?.you?.player.name ?? '—'), onRemove: phase === 'setup' ? () => clearDoubleOrNothing(week) : undefined }); }
-  if (aw?.byeSteal) activeEffects.push({ key: 'bye', id: 'bye-steal', icon: '🪂', name: 'Bye Steal', detail: 'Fielded ' + (getPlayer(aw.byeSteal.playerId)?.name ?? '—'), onRemove: phase === 'setup' ? () => clearByeSteal(week) : undefined });
-  if (aw?.spy) { const sp = aw.spy; activeEffects.push({ key: 'spy', id: 'spy', icon: '👁️', name: 'Spy', detail: `Revealed a slot’s ${sp.reveal}`, onRemove: preKickPhase ? () => clearSpy(week) : undefined }); }
+  if (aw?.doubleOrNothing) { const s = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === aw.doubleOrNothing); activeEffects.push({ key: 'don', id: 'double-or-nothing', icon: '⚖️', name: 'Double or Nothing', detail: 'Staked ' + (s?.you?.player.name ?? '—'), onRemove: phase === 'setup' ? () => { clearDoubleOrNothing(week); liveClearTargeted('double-or-nothing'); } : undefined }); }
+  if (aw?.byeSteal) activeEffects.push({ key: 'bye', id: 'bye-steal', icon: '🪂', name: 'Bye Steal', detail: 'Fielded ' + (getPlayer(aw.byeSteal.playerId)?.name ?? '—'), onRemove: phase === 'setup' ? () => { clearByeSteal(week); liveClearTargeted('bye-steal'); } : undefined });
+  if (aw?.spy) { const sp = aw.spy; activeEffects.push({ key: 'spy', id: 'spy', icon: '👁️', name: 'Spy', detail: `Revealed a slot’s ${sp.reveal}`, onRemove: preKickPhase && !liveCtx ? () => clearSpy(week) : undefined }); } // live: use_spy already consumed the item — no undo
   for (const [win, n] of Object.entries(aw?.extraSlots ?? {})) if ((n ?? 0) > 0) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'x-' + win, id: 'extra-slot', icon: '➕', name: 'Extra Slot', detail: `+${n} on ${wl}`, onRemove: phase === 'setup' ? () => removeExtraSlot(week, win as WindowId) : undefined }); }
   for (const [win, c] of Object.entries(aw?.emp ?? {})) if (c != null) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'emp-' + win, id: 'emp', icon: '💥', name: 'EMP', detail: `Fired on ${wl}` }); }
 
@@ -739,8 +755,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     const stakedId = prev[key]?.playerId;
     if (!stakedId) return; // unknown / already orphaned
     const newKey = Object.keys(next).find((k) => next[k].playerId === stakedId);
-    if (!newKey) clearDoubleOrNothing(week);                 // staked player removed → refund
-    else if (newKey !== key) remapDoubleOrNothing(week, newKey); // shifted by compaction → follow
+    if (!newKey) { clearDoubleOrNothing(week); liveClearTargeted('double-or-nothing'); } // staked player removed → refund
+    else if (newKey !== key) { remapDoubleOrNothing(week, newKey); liveTargeted('double-or-nothing', keyParts(newKey)); } // shifted by compaction → follow
   }
 
   // Position-based armed buffs (Hail Mary→QB, Pick Six→DST, WR/TE Carries→WR/TE,
@@ -1311,7 +1327,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 <span>· {clockMode === 'real' ? 'log order & effects resolve by real time' : clockMode === 'feed' ? 'reveals live; order & effects on game clock' : 'all games lockstep on game time'}</span>
               </div>
             )}
-            <TargetPanel aw={aw} oppPicks={oppPicks} preKick={preKickPhase} onClearSpy={() => clearSpy(week)} />
+            <TargetPanel aw={aw} oppPicks={oppPicks} preKick={preKickPhase && !liveCtx} onClearSpy={() => clearSpy(week)} />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -1389,8 +1405,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             bench={bench}
             metricQty={inventory['metric-swap'] ?? 0}
             playerQty={inventory['player-swap'] ?? 0}
-            onMetric={(m) => { applyMetricSwap(week, swapTarget.key, atClock, atRt, m); setSwapTarget(null); }}
-            onPlayer={(pid) => { applyPlayerSwap(week, swapTarget.key, atClock, atRt, pid); setSwapTarget(null); }}
+            onMetric={(m) => { if (applyMetricSwap(week, swapTarget.key, atClock, atRt, m)) liveTargeted('metric-swap', { ...keyParts(swapTarget.key), toMetric: m, atClock, atRt }); setSwapTarget(null); }}
+            onPlayer={(pid) => { if (applyPlayerSwap(week, swapTarget.key, atClock, atRt, pid)) liveTargeted('player-swap', { ...keyParts(swapTarget.key), toPlayer: pid, atClock, atRt }); setSwapTarget(null); }}
             onClose={() => setSwapTarget(null)}
           />
         );
@@ -1441,7 +1457,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         <PlayerPicker
           win={byeStealSlot.split('#')[0] as WindowId} week={week} players={byeYou}
           title="Field a bye player" subtitle="ON BYE — FIELD ONE FOR A FLAT PROJECTED SCORE"
-          onPick={(pid) => { applyByeSteal(week, byeStealSlot, pid); setByeStealSlot(null); setPendingApply(null); }}
+          onPick={(pid) => {
+            if (applyByeSteal(week, byeStealSlot, pid)) {
+              const bp = getPlayer(pid);
+              liveTargeted('bye-steal', { ...keyParts(byeStealSlot), slug: pid, pts: bp ? Math.round(projectedPoints(bp, week) * 10) / 10 : 0 });
+            }
+            setByeStealSlot(null); setPendingApply(null);
+          }}
           onRemove={() => {}}
           onClose={() => { setByeStealSlot(null); setPendingApply(null); }}
         />
@@ -1449,7 +1471,18 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
       {spySlot && (
         <SpyRevealModal
-          onPick={(reveal) => { setSpy(week, spySlot, reveal); setSpySlot(null); setPendingApply(null); }}
+          onPick={(reveal) => {
+            const key = spySlot;
+            if (liveCtx) {
+              // Live: the server reads the REAL sealed pick (RLS hides it from
+              // the client) and consumes the Spy itself — see use_spy (0060).
+              const { win, slot } = keyParts(key);
+              spyRevealRpc(liveCtx.matchupId, win, slot, reveal)
+                .then((r) => { if (r.ok) setSpyRevealed(week, key, reveal, (r.reveal as string | null) ?? null); else console.warn('[live] use_spy', r.error); })
+                .catch((e) => console.warn('[live] use_spy', e));
+            } else setSpy(week, key, reveal);
+            setSpySlot(null); setPendingApply(null);
+          }}
           onClose={() => { setSpySlot(null); setPendingApply(null); }}
         />
       )}
@@ -1463,7 +1496,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         return (
           <MulliganModal
             player={p} curMetric={slot!.you!.metricId} inventory={inventory}
-            onPick={(m) => { applyMulligan(week, mulliganSlot, atClock, atRt, m); setMulliganSlot(null); setPendingApply(null); }}
+            onPick={(m) => { if (applyMulligan(week, mulliganSlot, atClock, atRt, m)) liveTargeted('mulligan', { ...keyParts(mulliganSlot), toMetric: m, atClock, atRt }); setMulliganSlot(null); setPendingApply(null); }}
             onClose={() => { setMulliganSlot(null); setPendingApply(null); }}
           />
         );
@@ -1947,7 +1980,7 @@ function MulliganModal({ player, curMetric, inventory, onPick, onClose }: {
 // player or chosen metric in that slot). Applying Spy now happens by tapping a
 // slot in apply-mode; this panel is just the payoff readout.
 function TargetPanel({ aw, oppPicks, preKick, onClearSpy }: {
-  aw?: { spy?: { slotKey: string; reveal: 'player' | 'metric' } };
+  aw?: { spy?: { slotKey: string; reveal: 'player' | 'metric'; value?: string | null } };
   oppPicks: Record<string, Pick>; preKick: boolean; onClearSpy: () => void;
 }) {
   if (!aw?.spy) return null;
@@ -1956,9 +1989,16 @@ function TargetPanel({ aw, oppPicks, preKick, onClearSpy }: {
   const oppPlayer = op ? getPlayer(op.playerId) : null;
   const [win, idx] = sp.slotKey.split('#');
   const label = `${win.toUpperCase()} #${Number(idx) + 1}`;
-  const val = sp.reveal === 'player'
-    ? (oppPlayer ? `${oppPlayer.name} (${oppPlayer.pos} · ${oppPlayer.team})` : '— no player —')
-    : (oppPlayer ? (metricById(oppPlayer.pos, op!.metricId)?.name ?? '—') : '— no player —');
+  // Live pilot: `value` is the SERVER's reveal of the real sealed pick (use_spy,
+  // a player slug or metric id) — the local oppPicks are only the AI's guess
+  // there, so the server value always wins when present.
+  const pretty = (s: string) => s.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
+  const metricName = (id: string) => { for (const list of Object.values(METRICS)) { const m = list.find((x) => x.id === id); if (m) return m.name; } return id; };
+  const val = sp.value !== undefined
+    ? (sp.value === null ? '— no pick sealed yet —' : sp.reveal === 'player' ? pretty(sp.value) : metricName(sp.value))
+    : sp.reveal === 'player'
+      ? (oppPlayer ? `${oppPlayer.name} (${oppPlayer.pos} · ${oppPlayer.team})` : '— no player —')
+      : (oppPlayer ? (metricById(oppPlayer.pos, op!.metricId)?.name ?? '—') : '— no player —');
   return (
     <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '9px 11px' }}>
       <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)' }}>👁️ SPY INTEL</span>

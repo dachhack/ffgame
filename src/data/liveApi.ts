@@ -612,6 +612,30 @@ export const heroSetApplied = (matchupId: string, payload: unknown) =>
   rpc<{ ok: boolean; error?: string }>('hero_set_applied', { p_matchup_id: matchupId, p_payload: payload });
 export const myHeroApplied = (matchupId: string) => rpc<Record<string, unknown>>('my_hero_applied', { p_matchup_id: matchupId });
 
+// Targeted power-ups (migration 0060): the SCORING record for Double or Nothing /
+// Bye Steal / EMP / swaps — validated + timing-gated server-side, read by the
+// worker's resolver. Uncharged (the shop flow already charged + consumed
+// inventory), except use_spy which consumes a purchased Spy itself.
+export const applyTargeted = (matchupId: string, powerupId: string, payload: Record<string, unknown>) =>
+  rpc<{ ok: boolean; error?: string }>('apply_targeted', { p_matchup_id: matchupId, p_powerup_id: powerupId, p_payload: payload });
+export const clearTargeted = (matchupId: string, powerupId: string) =>
+  rpc<{ ok: boolean; error?: string }>('clear_targeted', { p_matchup_id: matchupId, p_powerup_id: powerupId });
+export const useSpy = (matchupId: string, win: string, slot: string, reveal: 'player' | 'metric') =>
+  rpc<{ ok: boolean; error?: string; reveal?: string | null; present?: boolean }>('use_spy', { p_matchup_id: matchupId, p_win: win, p_slot: slot, p_reveal: reveal });
+export interface TargetedState {
+  don?: { win: string; slot: string };
+  byeSteal?: { win: string; slot: string; slug: string; pts: number };
+  emp?: Record<string, number>;
+  swaps?: Record<string, { kind: string; toMetric?: string; toPlayer?: string; atClock: number; atRt?: number }>;
+  spy?: { win: string; slot: string; reveal: 'player' | 'metric' }[];
+}
+/** The caller's recorded targeted power-ups (own applied_state row, readable under RLS). */
+export async function myTargeted(matchupId: string, userId: string): Promise<TargetedState> {
+  const { data } = await client().from('applied_state').select('payload_json')
+    .eq('matchup_id', matchupId).eq('app_user_id', userId).maybeSingle();
+  return ((data?.payload_json as { targeted?: TargetedState } | null)?.targeted) ?? {};
+}
+
 // Metric unlocks (M2): arm before a locked metric (Combo Drip / Return / Air Raid)
 // can be picked. Same applied_state store, free this season.
 export const armUnlock = (matchupId: string, unlock: string) => rpc<{ ok: boolean; error?: string; unlocks?: string[] }>('arm_unlock', { p_matchup_id: matchupId, p_unlock: unlock });

@@ -1,6 +1,47 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-06 · Build `v0.95.1`_
+_Last updated: 2026-07-07 · Build `v0.96.0`_
+
+## Targeted power-ups score in LIVE leagues (v0.96.0)
+0059 made everything buyable; this makes the targeted/reactive set actually
+WORK in live H2H — previously the client applied them locally and the worker
+never scored them (pay-for-nothing).
+- **Engine** (`liveResolve.ts`): `resolveLiveMatchup` gains per-side
+  `extras` — Double or Nothing (post-suppress ×2/0, baked into the slot so
+  window sums still equal totals), Bye Steal (flat score, clamped ≤25;
+  unopposed target follows the normal backup rule), EMP (10-min opponent drip
+  freeze per window), real-time Metric/Player Swaps + Mulligan (buildMatchup's
+  pre/post-cut split, per side), and the Trick Play / Pick Six / Hail Mary
+  flat awards (credited to the triggering slot). Backward compatible — the
+  playtester/forceResolve callers are untouched.
+- **DB** (`0060_targeted_powerups.sql`): `apply_targeted` / `clear_targeted` /
+  `use_spy` write `applied_state.payload_json.targeted`. UNCHARGED state-
+  setters (the shop flow already charges + consumes inventory — same pattern
+  as hero_set_buffs); their value is validation: pre-vs-live timing gates via
+  matchup status + `window_kickoff()` (0058), roster-membership checks on
+  player targets (`caller_pool_has`), one-swap-per-slot / one-EMP-per-window,
+  locked-metric unlock enforcement, clamps. `use_spy` consumes a purchased Spy
+  from team_inventory itself and returns the opponent's REAL current pick
+  (player or metric) pre-kickoff; a bought peek re-reads free (late swap means
+  the pick can change — that's the gamble; blurb updated + rulebook regen).
+- **Worker** (`resolve.js` / `premium.js`): `sideLineup` carries the targeted
+  payload; premium gating strips premium targeted items in non-premium
+  matchups (`gateTargeted`, alongside gateSide); payloads convert to engine
+  extras with defensive re-clamps.
+- **Client** (`Matchup.tsx` / `store.tsx` / `liveApi.ts`): every targeted
+  apply/clear on the liveCtx board write-throughs to the RPCs; Spy in live
+  goes through `use_spy` (real reveal shown in the SPY INTEL panel via
+  `spy.value`; no undo — the item is consumed); store hydration merges the
+  server's targeted record over the hero blob so live-phase applies (EMP,
+  swaps) survive reload.
+- **Verified**: 19-check engine harness on baked week 1 (DoN win math exact,
+  EMP cuts only the opponent, swap@0 ≈ full new config / swap@end ≈ original,
+  bye-steal clamp + backup rule, Hail Mary +15, window-sums invariant
+  everywhere) + 17 RPC gating probes on a scratch Postgres (timing gates,
+  pool membership, dup rejection, spy consume/re-read-free/qty-0).
+- **Still unmodeled**: Ball Hawk (turnover feed dormant everywhere), manual
+  backup assignment in live (auto-only), K-neg/suppress edge parity between
+  buildMatchup and liveResolve unchanged.
 
 ## All 24 power-ups priced server-side + late-swap copy/ops (v0.95.1)
 - **`0059_powerup_prices.sql`**: `powerup_price()` now lists every catalog item.
