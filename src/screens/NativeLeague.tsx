@@ -11,6 +11,7 @@ import { PosPill, PlayerImg, Avatar, Img } from '../app/ui';
 import type { Pos } from '../types';
 import { buildDraftPool } from '../data/nativeLeague';
 import { NFL_CODES } from '../data/kdst';
+import { DRIP_AVATARS, dripAvatarUrl } from '../data/dripAvatars';
 import {
   createNativeLeague, seedLeaguePool, nativeGenerateSchedule,
   startDraft, draftState, makeDraftPick, draftTick,
@@ -33,23 +34,20 @@ const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 const posLabel = (p: string) => (p === 'DEF' ? 'D/ST' : p);
 
 // ── Avatar picker: a preset gallery (no uploads to host) ─────────────────────
-// Generated crests via DiceBear (a free avatar CDN — plain <img> URLs, seeded so
-// the same pick renders forever) + the 32 NFL team logos.
-function avatarOptions(seedBase: string): string[] {
-  const out: string[] = [];
-  for (const style of ['bottts-neutral', 'fun-emoji', 'shapes', 'rings']) {
-    for (let i = 1; i <= 8; i++) {
-      out.push(`https://api.dicebear.com/9.x/${style}/png?seed=${encodeURIComponent(`${seedBase}-${i}`)}&size=96`);
-    }
-  }
-  for (const code of NFL_CODES) out.push(`https://a.espncdn.com/i/teamlogos/nfl/500/${code}.png`);
-  return out;
+// First-party Drip art (72 tiles cut from the owner's avatar sheets, served
+// from public/avatars/ on our own domain — no third-party avatar CDN) + the
+// 32 NFL team logos.
+function avatarOptions(): string[] {
+  return [
+    ...DRIP_AVATARS.map(dripAvatarUrl),
+    ...NFL_CODES.map((code) => `https://a.espncdn.com/i/teamlogos/nfl/500/${code}.png`),
+  ];
 }
 
-function AvatarPicker({ title, seed, onPick, onClose }: {
-  title: string; seed: string; onPick: (url: string | null) => void; onClose: () => void;
+function AvatarPicker({ title, onPick, onClose }: {
+  title: string; onPick: (url: string | null) => void; onClose: () => void;
 }) {
-  const options = useMemo(() => avatarOptions(seed), [seed]);
+  const options = useMemo(() => avatarOptions(), []);
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 420, maxHeight: '75vh', overflowY: 'auto' }}>
@@ -524,12 +522,12 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
   const pickers = (
     <>
       {picking === 'team' && myRoster != null && (
-        <AvatarPicker title="Pick your team avatar" seed={`${leagueId}-${myRoster}`}
+        <AvatarPicker title="Pick your team avatar"
           onPick={(url) => { setPicking(null); run(() => setTeamAvatar(leagueId, myRoster, url)); }}
           onClose={() => setPicking(null)} />
       )}
       {picking === 'league' && (
-        <AvatarPicker title="Pick the league crest" seed={leagueId}
+        <AvatarPicker title="Pick the league crest"
           onPick={(url) => { setPicking(null); run(() => setLeagueAvatar(leagueId, url)); }}
           onClose={() => setPicking(null)} />
       )}
