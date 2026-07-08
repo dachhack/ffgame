@@ -9,6 +9,7 @@ import { SLEEPER_HANDLE } from '../config';
 import { weekLockLabel } from '../data/nflSlate';
 import { APP_VERSION, DATA_SOURCE } from '../app/version';
 import { PuIcon, GameIcon, Emoji, COIN_GOLD } from '../app/gameIcons';
+import { PowerupCard } from '../app/cardTable';
 import type { FantasyTeam } from '../types';
 
 type ModalState =
@@ -173,7 +174,7 @@ export function LeagueOverview() {
   );
 }
 
-export function ShopModal({ onClose, coinsOverride, onBuy }: { onClose: () => void; coinsOverride?: number; onBuy?: (id: string) => Promise<boolean> }) {
+export function ShopModal({ onClose, coinsOverride, onBuy, cards = false }: { onClose: () => void; coinsOverride?: number; onBuy?: (id: string) => Promise<boolean>; cards?: boolean }) {
   const { coins, inventory, buyPowerup } = useStore();
   const [flash, setFlash] = useState<string | null>(null);
   // Hero board passes the real wallet balance + a wallet-charged buy; otherwise
@@ -182,6 +183,32 @@ export function ShopModal({ onClose, coinsOverride, onBuy }: { onClose: () => vo
   async function buy(id: string) {
     const ok = onBuy ? await onBuy(id) : buyPowerup(id);
     if (ok) { setFlash(id); setTimeout(() => setFlash((f) => (f === id ? null : f)), 600); }
+  }
+  if (cards) {
+    // Card-table leagues: the shop is a deck spread on the felt — tap a card to
+    // buy it into your hand. Same buy/afford/flash semantics as the classic list.
+    return (
+      <Modal title="Power-Up Shop" sub={<><GameIcon name={COIN_GOLD} emoji="◈" size="1.4em" /> {bal} DRIP COIN · +5 per signature play</>} onClose={onClose} maxWidth={560}>
+        <div className="ctable" style={{ maxHeight: 480, overflow: 'auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(118px, 1fr))', gap: 12, justifyItems: 'center', padding: '4px 2px' }}>
+            {POWERUPS.map((p, i) => {
+              const have = inventory[p.id] ?? 0;
+              const afford = bal >= p.price;
+              return (
+                <PowerupCard key={p.id} id={p.id} name={p.name} icon={p.icon} blurb={p.blurb} idx={i}
+                  timingLabel={p.kind === 'metric' ? 'METRIC · 1 WK' : p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME'} live={p.timing !== 'pre'}
+                  cost={p.price} owned={have} disabled={!afford} flashed={flash === p.id}
+                  note={afford ? undefined : `need ◈${p.price}`}
+                  onClick={() => buy(p.id)} />
+              );
+            })}
+          </div>
+          <div className="mono" style={{ fontSize: 9, color: '#93A594', letterSpacing: '0.06em', marginTop: 12, lineHeight: 1.5 }}>
+            PRE-MATCH cards apply during setup and lock once a window starts. REAL-TIME cards can be played during live games. METRIC unlocks last the current week only. Bought cards land in your hand.
+          </div>
+        </div>
+      </Modal>
+    );
   }
   return (
     <Modal title="Power-Up Shop" sub={<><GameIcon name={COIN_GOLD} emoji="◈" size="1.4em" /> {bal} DRIP COIN · +5 per signature play</>} onClose={onClose} maxWidth={560}>

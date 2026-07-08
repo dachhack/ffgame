@@ -147,13 +147,47 @@ const CSS = `
   border:2px solid #000 !important;border-left:2px solid #000 !important;border-top:4px solid var(--you) !important;
   border-radius:10px !important;box-shadow:0 4px 0 rgba(0,0,0,.55);
   animation:mx-wob 6.2s ease-in-out infinite alternate;}
-/* Card-face layout inside a filled spot: headshot stacked over a centered name,
-   metric line centered — the setup box reads as a portrait player card. */
+/* Card-face layout inside a filled spot: cream card stock (same as PlayerCard),
+   headshot stacked over a centered Lilita name, metric as the dark gold chip —
+   the setup box reads as a portrait player card in every app theme. */
+.ctable .mx-spot:not(.mx-state){background:linear-gradient(168deg,#FBF5E4,#F4EDDA 46%,#E7DCC0) !important;}
 .ctable .mx-spot:not(.mx-state) .mx-id{flex-direction:column;align-items:stretch;padding-right:0 !important;}
 .ctable .mx-spot:not(.mx-state) .mx-idbtn{flex-direction:column;text-align:center;gap:6px !important;}
 .ctable .mx-spot:not(.mx-state) .mx-idbtn>div{text-align:center;}
+.ctable .mx-spot:not(.mx-state) .mx-idbtn .grotesk{color:#2A2312 !important;font-family:'Lilita One',ui-rounded,system-ui,sans-serif;
+  font-weight:400 !important;letter-spacing:.04em;text-transform:uppercase;font-size:12px !important;white-space:normal !important;text-wrap:balance;}
+.ctable .mx-spot:not(.mx-state) .mx-idbtn .mono{color:#6E6650 !important;}
 .ctable .mx-spot:not(.mx-state) .mx-met{justify-content:center;text-align:center;}
+.ctable .mx-spot:not(.mx-state) .mx-met .grotesk{background:#241C10;color:#E9B959 !important;padding:2.5px 8px;border-radius:4px;
+  font-size:10px !important;letter-spacing:.06em;}
+.ctable .mx-spot:not(.mx-state) .mx-met .mono{color:#6E6650 !important;}
 @media (prefers-reduced-motion:reduce){.ctable .mx-sealed,.ctable .mx-spot:not(.mx-state){animation:none;}}
+
+/* ── power-up cards (shop + apply modals) — the hand's leather stock, dealt
+   as a tappable grid on the felt ─────────────────────────────────────────── */
+.ctable .ct-puwrap{width:100%;max-width:132px;position:relative;animation:ct-deal .5s cubic-bezier(.3,1.5,.5,1) backwards;}
+.ctable .ct-pucard{display:flex;flex-direction:column;width:100%;min-height:176px;border-radius:10px;border:2px solid #000;
+  box-shadow:0 4px 0 rgba(0,0,0,.7);background:linear-gradient(165deg,#2E2418,#221A0F);padding:8px 7px;color:#EFE4C8;
+  cursor:pointer;transition:translate .2s;text-align:center;}
+.ctable .ct-puwrap:not(.ct-pudis):hover .ct-pucard{translate:0 -3px;}
+.ctable .ct-pudis .ct-pucard{filter:grayscale(.6) brightness(.65);cursor:default;}
+.ctable .ct-putime{align-self:center;font-size:6.6px;font-weight:800;letter-spacing:.14em;padding:2px 6px;border-radius:999px;
+  border:1.5px solid #000;box-shadow:0 1.5px 0 #000;background:#2A2216;color:#CDB77F;}
+.ctable .ct-putime.live{background:#E9B959;color:#241A08;}
+.ctable .ct-puico{font-size:26px;line-height:1;margin:8px 0 2px;}
+.ctable .ct-puname{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;
+  line-height:1.2;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;text-wrap:balance;}
+.ctable .ct-publurb{font-size:7.4px;line-height:1.45;color:#BFB396;margin-top:4px;display:-webkit-box;-webkit-line-clamp:4;
+  -webkit-box-orient:vertical;overflow:hidden;}
+.ctable .ct-punote{font-size:7px;color:#E0A96B;margin-top:3px;line-height:1.4;}
+.ctable .ct-pucost{margin-top:auto;padding-top:6px;}
+.ctable .ct-pucost b{display:inline-block;font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;font-size:10px;
+  letter-spacing:.06em;text-transform:uppercase;color:#241A08;background:linear-gradient(#F0C367,#DFA83F);
+  border:2px solid #000;border-radius:7px;box-shadow:0 2.5px 0 #000;padding:4px 10px;}
+.ctable .ct-pudis .ct-pucost b{background:#3A3226;color:#8C8270;}
+.ctable .ct-puown{position:absolute;top:-7px;right:-6px;z-index:5;background:#E9B959;color:#241A08;border:2px solid #000;
+  border-radius:999px;font-size:8px;font-weight:800;padding:2px 6px;box-shadow:0 2px 0 #000;}
+.ctable .ct-puflash .ct-pucard{outline:3px solid #E9B959;outline-offset:2px;}
 
 /* ── the power-up hand (standalone — renders outside .ctable too) ─────────── */
 .ct-hand{position:fixed;left:50%;transform:translateX(-50%);bottom:-6px;z-index:40;width:min(500px,100vw);height:128px;pointer-events:none;}
@@ -270,6 +304,31 @@ export function PlayerCard({ slug, name, pos, slot, metric, bank, opp = false, h
       </div>
       {hot && !nuked && <div className="ct-hotchip">🔥 HOT</div>}
       {selected && <div className="ct-curchip">CURRENT ✓</div>}
+    </div>
+  );
+}
+
+/** A power-up as a tappable card — the shop and apply modals deal these in a
+ *  grid on the felt. `cost` renders the gold buy chip; `footLabel` replaces it
+ *  (ARM / APPLY / READY in the apply modal). `disabled` dims and mutes the tap. */
+export function PowerupCard({ id, name, icon, blurb, timingLabel, live = false, cost, footLabel, owned = 0, disabled = false, note, flashed = false, onClick, idx = 0 }: {
+  id: string; name: string; icon?: string; blurb?: string; timingLabel?: string; live?: boolean;
+  cost?: number; footLabel?: string; owned?: number; disabled?: boolean; note?: string; flashed?: boolean;
+  onClick?: () => void; idx?: number;
+}) {
+  return (
+    <div className={`ct-puwrap${disabled ? ' ct-pudis' : ''}${flashed ? ' ct-puflash' : ''}`}
+      style={{ animationDelay: `${idx * 70}ms` }} title={blurb}
+      onClick={disabled ? undefined : onClick}>
+      <div className="ct-pucard">
+        {timingLabel && <span className={`ct-putime${live ? ' live' : ''}`}>{timingLabel}</span>}
+        <span className="ct-puico"><PuIcon id={id} emoji={icon} size="1.25em" /></span>
+        <span className="ct-puname">{name}</span>
+        {blurb && <span className="ct-publurb">{blurb}</span>}
+        {note && <span className="ct-punote">↳ {note}</span>}
+        <span className="ct-pucost"><b>{footLabel ?? <>◈ {cost}</>}</b></span>
+      </div>
+      {owned > 0 && <span className="ct-puown">×{owned}</span>}
     </div>
   );
 }
