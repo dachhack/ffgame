@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
-import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile } from '../app/ui';
+import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile, ModalBackdrop } from '../app/ui';
 import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed } from '../data/gameFeed';
 import { avatarUrl, teamLogo } from '../data/media';
@@ -1570,7 +1570,7 @@ function EarningsModal({ earnings, weeklyBudget, onReset, onClose }: { earnings:
   const stipendVal = budgetMode ? weeklyBudget! : earnings.stipend;
   const shownTotal = budgetMode ? (earnings.total - earnings.stipend + weeklyBudget!) : earnings.total;
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '50px 16px', overflow: 'auto' }}>
+    <ModalBackdrop onClick={onClose} padTop={50}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
@@ -1639,7 +1639,7 @@ function EarningsModal({ earnings, weeklyBudget, onReset, onClose }: { earnings:
           </button>}
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 
@@ -1651,7 +1651,7 @@ function BackupMenu({ backupName, backupScore, live, required, current, starters
 }) {
   const scoreTag = live ? 'so far' : 'final';
   return (
-    <div onClick={required ? undefined : onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '60px 16px', overflow: 'auto' }}>
+    <ModalBackdrop onClick={required ? undefined : onClose} padTop={60}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
@@ -1681,7 +1681,7 @@ function BackupMenu({ backupName, backupScore, live, required, current, starters
           })}
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 
@@ -1691,7 +1691,7 @@ function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMe
   metricQty: number; playerQty: number; onMetric: (m: string) => void; onPlayer: (pid: string) => void; onClose: () => void;
 }) {
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '60px 16px', overflow: 'auto' }}>
+    <ModalBackdrop onClick={onClose} padTop={60}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
@@ -1727,7 +1727,7 @@ function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMe
           </div>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 
@@ -1871,7 +1871,7 @@ const SPOT_APPLY = new Set(['double-or-nothing', 'bye-steal', 'spy', 'mulligan',
 // Shared modal shell for the two power-up cards.
 function PuShell({ title, subtitle, accent, onClose, children }: { title: ReactNode; subtitle: string; accent: string; onClose: () => void; children: ReactNode }) {
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '44px 16px', overflow: 'auto' }}>
+    <ModalBackdrop onClick={onClose} padTop={44}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)', borderTop: `3px solid ${accent}`, borderTopLeftRadius: 8, borderTopRightRadius: 8 }}>
           <div>
@@ -1882,7 +1882,7 @@ function PuShell({ title, subtitle, accent, onClose, children }: { title: ReactN
         </div>
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '70vh', overflow: 'auto' }}>{children}</div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 
@@ -2208,7 +2208,7 @@ function WindowSectionInner(props: {
       </div>
 
       {slateOpen && (
-        <div onClick={() => setSlateOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '60px 16px', overflow: 'auto' }}>
+        <ModalBackdrop onClick={() => setSlateOpen(false)} padTop={60}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
               <div>
@@ -2244,7 +2244,7 @@ function WindowSectionInner(props: {
               })}
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -2478,7 +2478,7 @@ export function SetupRow(props: {
 function MetricInfo({ metric, onClose }: { metric: Metric; onClose: () => void }) {
   const c = FX_COLOR[metric.fx] ?? 'var(--you)';
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 75, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '50px 16px', overflow: 'auto' }}>
+    <ModalBackdrop onClick={onClose} zIndex={75} padTop={50}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div style={{ minWidth: 0 }}>
@@ -2499,7 +2499,7 @@ function MetricInfo({ metric, onClose }: { metric: Metric; onClose: () => void }
           {metric.lock && <div className="mono" style={{ fontSize: 9.5, color: 'var(--warn)', fontWeight: 700 }}>◈ Unlock metric — requires the matching power-up.</div>}
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 
@@ -2511,7 +2511,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
 }) {
   const label = windowsForWeek(week).find((w) => w.id === win)?.label ?? win.toUpperCase();
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflow: 'auto' }}>
+    <ModalBackdrop onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
@@ -2547,7 +2547,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
           </div>
         )}
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 
@@ -2562,7 +2562,7 @@ export function ScoutModal({ win, week, pool, oppName, onClose }: {
   const posOrder: Pos[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
   const sorted = [...pool].sort((a, b) => (posOrder.indexOf(a.pos) - posOrder.indexOf(b.pos)) || a.name.localeCompare(b.name));
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflow: 'auto' }}>
+    <ModalBackdrop onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, borderTop: '3px solid var(--opp)', boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
@@ -2592,7 +2592,7 @@ export function ScoutModal({ win, week, pool, oppName, onClose }: {
           </div>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 
@@ -3191,7 +3191,7 @@ function PlayDetailModal({ ev, player, week, realStamp, onClose }: { ev: PbpEven
     </div>
   );
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 80, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '60px 16px', overflow: 'auto' }}>
+    <ModalBackdrop onClick={onClose} zIndex={80} padTop={60}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, background: 'var(--surface)', border: '1px solid var(--bdh)', borderTop: `3px solid ${accent}`, borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
@@ -3219,6 +3219,6 @@ function PlayDetailModal({ ev, player, week, realStamp, onClose }: { ev: PbpEven
           {ev.buffNote && <Row k="POWER-UP" v={<span style={{ color: 'var(--warn)' }}>{ev.buffNote}</span>} />}
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

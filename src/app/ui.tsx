@@ -27,6 +27,48 @@ export function useIsMobile(maxWidth = 760): boolean {
   return m;
 }
 
+/** Dimmed full-screen backdrop for modal cards, anchored to the VISUAL viewport.
+ *
+ *  `position: fixed; inset: 0` pins to the *layout* viewport. On phones the two
+ *  diverge whenever the page is zoomed — e.g. iOS auto-zooms into a small text
+ *  field and stays zoomed — and a plain fixed overlay then opens wherever the
+ *  layout origin happens to be: hanging off the right edge, or above the fold
+ *  entirely once you've scrolled down to a late window. Tracking
+ *  window.visualViewport keeps the backdrop (and the card in it) over what's
+ *  actually on screen.
+ */
+export function ModalBackdrop({ onClick, zIndex = 70, padTop = 40, children }: {
+  onClick?: () => void; zIndex?: number; padTop?: number; children: ReactNode;
+}) {
+  // null → the viewports agree; plain inset:0 is exact (and never re-renders).
+  const [vv, setVv] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  useEffect(() => {
+    const v = window.visualViewport;
+    if (!v) return;
+    const update = () => {
+      const zoomed = v.scale !== 1 || v.offsetTop !== 0 || v.offsetLeft !== 0;
+      setVv(zoomed ? { top: v.offsetTop, left: v.offsetLeft, width: v.width, height: v.height } : null);
+    };
+    update();
+    v.addEventListener('resize', update);
+    v.addEventListener('scroll', update);
+    return () => { v.removeEventListener('resize', update); v.removeEventListener('scroll', update); };
+  }, []);
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        position: 'fixed',
+        ...(vv ? { top: vv.top, left: vv.left, width: vv.width, height: vv.height } : { inset: 0 }),
+        background: 'rgba(0,0,0,0.6)', zIndex, display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+        padding: `${padTop}px 16px`, overflow: 'auto',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 const INJURY_COLOR: Record<string, string> = { O: '#FF4F62', IR: '#C2304A', D: '#FF8A3D', Q: '#E8B23A' };
 const INJURY_LABEL: Record<string, string> = { O: 'Out', IR: 'Injured Reserve', D: 'Doubtful', Q: 'Questionable' };
 /** Info-only weekly injury / IR badge for a player slug, or nothing. */
