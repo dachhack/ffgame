@@ -450,6 +450,11 @@ export const leagueCardTheme = (leagueId: string) => rpc<boolean>('league_card_t
 /** The card-table flag by a league's Sleeper id — for the vs-AI demo, which
  *  loads a Sleeper league client-side and has no DB league uuid to key on. */
 export const leagueCardThemeBySleeper = (sleeperId: string) => rpc<boolean>('league_card_theme_by_sleeper', { p_sleeper: sleeperId });
+/** Global card-theme flag for the generic front-door demo (baked demo league).
+ *  Default on; super admins can flip it back to the simple view. */
+export const demoCardTheme = () => rpc<boolean>('demo_card_theme');
+export const adminSetDemoCardTheme = (on: boolean) =>
+  rpc<{ ok: boolean; error?: string; card_theme?: boolean }>('admin_set_demo_card_theme', { p_on: on });
 export const adminSetCardTheme = (leagueId: string, on: boolean) =>
   rpc<{ ok: boolean; error?: string; card_theme?: boolean }>('admin_set_card_theme', { p_league: leagueId, p_on: on });
 

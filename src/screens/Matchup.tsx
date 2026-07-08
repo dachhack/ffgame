@@ -17,7 +17,7 @@ import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, GAM
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
-import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, myMatchup, type PickRow } from '../data/liveApi';
+import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, type PickRow } from '../data/liveApi';
 import { CardTableCss, PowerupHand, PlayerCard, PowerupCard } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import { Rulebook } from './Rulebook';
@@ -412,15 +412,17 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     if (liveCtx) {
       leagueCardTheme(liveCtx.leagueId).then((v) => set(!!v)).catch(() => set(false));
     } else {
-      // vs-AI demo: honor the same flag when the demo'd league is a card-table
-      // pilot league. The sim's League.id is either the DB league uuid (live /
-      // native leagues, via buildLiveLeague) or the Sleeper league id (imported
-      // sims, via buildLeague) — look up by whichever shape it is. Baked demo
-      // slugs match neither → false → classic board.
+      // vs-AI demo. Cards default ON everywhere now; the flag only carries a
+      // super-admin opt-out. The sim's League.id says which lookup to use:
+      //   • DB league uuid   (live / native leagues)   → per-league flag
+      //   • Sleeper league id (numeric, imported sims)  → per-league by-sleeper
+      //   • baked demo slug   (e.g. DRIPTEST-DEMO)      → the global demo lever
       const id = getActiveLeague().id;
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-      if (id) (isUuid ? leagueCardTheme(id) : leagueCardThemeBySleeper(id)).then((v) => set(!!v)).catch(() => set(false));
-      else set(false);
+      const lookup = isUuid ? leagueCardTheme(id)
+        : /^\d+$/.test(id) ? leagueCardThemeBySleeper(id)
+        : demoCardTheme();
+      lookup.then((v) => set(!!v)).catch(() => set(true)); // default on if the read fails
     }
     return () => { alive = false; };
   }, [liveCtx, activeLeague]); // eslint-disable-line react-hooks/exhaustive-deps
