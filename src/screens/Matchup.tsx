@@ -17,7 +17,7 @@ import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, GAM
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
-import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, myMatchup, type PickRow } from '../data/liveApi';
+import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, myMatchup, type PickRow } from '../data/liveApi';
 import { CardTableCss, PowerupHand, PlayerCard, PowerupCard } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import { Rulebook } from './Rulebook';
@@ -95,7 +95,7 @@ const DEMO_POWERUPS = [
 const EMPTY_REC: Record<string, never> = {};
 
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
-  const { youTeamId: YOU, navigate, liveCtx, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
+  const { youTeamId: YOU, navigate, liveCtx, activeLeague, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const [demoBuff, setDemoBuff] = useState('garbage-time'); // the power-up the demo viewer armed
   const buffs = useMemo(() => (demo ? { [demoBuff]: true } : (applied[week]?.buffs ?? EMPTY_REC)), [demo, demoBuff, applied, week]);
   const buffsKey = JSON.stringify(buffs);
@@ -407,9 +407,20 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // power-ups also render as a hand of cards pinned to the bottom of the board.
   const [cardHand, setCardHand] = useState(false);
   useEffect(() => {
-    if (!liveCtx) { setCardHand(false); return; }
-    leagueCardTheme(liveCtx.leagueId).then((v) => setCardHand(!!v)).catch(() => setCardHand(false));
-  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+    let alive = true;
+    const set = (v: boolean) => { if (alive) setCardHand(v); };
+    if (liveCtx) {
+      leagueCardTheme(liveCtx.leagueId).then((v) => set(!!v)).catch(() => set(false));
+    } else {
+      // vs-AI demo: the loaded league has no DB uuid, but a Sleeper-imported
+      // sim carries the Sleeper league id as League.id — honor the same flag
+      // if that league is a card-table pilot league. Unknown/demo ids → false.
+      const sid = getActiveLeague().id;
+      if (sid) leagueCardThemeBySleeper(sid).then((v) => set(!!v)).catch(() => set(false));
+      else set(false);
+    }
+    return () => { alive = false; };
+  }, [liveCtx, activeLeague]); // eslint-disable-line react-hooks/exhaustive-deps
   // Buy a power-up into inventory, charged against the real wallet (hero board).
   const buyFromWallet = async (id: string): Promise<boolean> => {
     if (!liveCtx) return false;
@@ -1528,7 +1539,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           enters the existing tap-a-target flow (pendingApply); tapping the
           pending card cancels. Shop purchases land here as new cards. */}
       {cardHand && <CardTableCss />}
-      {cardHand && liveCtx && appliable.length > 0 && (
+      {cardHand && appliable.length > 0 && (
         <>
           <div style={{ height: 104 }} />
           <PowerupHand
