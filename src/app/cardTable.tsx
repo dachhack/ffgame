@@ -81,6 +81,13 @@ const CSS = `
 
 .ctable .ct-coltag{font-size:8px;letter-spacing:.22em;opacity:.65;font-weight:700;}
 .ctable .ct-winlab{font-size:8px;letter-spacing:.16em;color:#93A594;font-weight:700;}
+.ctable .ct-state{font-size:8px;letter-spacing:.14em;font-weight:700;padding:3px 8px;border-radius:999px;border:1.5px solid #000;box-shadow:0 2px 0 #000;}
+.ctable .ct-state.sealed{background:#2A2216;color:#CDB77F;}
+.ctable .ct-state.live{background:#E9B959;color:#241A08;animation:ct-livepulse 1.6s infinite;}
+.ctable .ct-state.final{background:#1C2B22;color:#8FCDA4;}
+@keyframes ct-livepulse{0%,100%{box-shadow:0 2px 0 #000,0 0 0 0 rgba(233,185,89,.5)}50%{box-shadow:0 2px 0 #000,0 0 0 7px rgba(233,185,89,0)}}
+.ctable .ct-bigpts{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;font-variant-numeric:tabular-nums;
+  text-shadow:-1.5px -1.5px 0 #000,1.5px -1.5px 0 #000,-1.5px 1.5px 0 #000,1.5px 1.5px 0 #000,0 3px 0 #000;}
 .ctable .ct-score{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:15px;font-variant-numeric:tabular-nums;
   text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 2px 0 #000;}
 .ctable .ct-vs{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:12px;color:#71806F;

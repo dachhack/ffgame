@@ -132,9 +132,9 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 18, margin: '16px 0 4px' }}>
-          <Big label="YOU" value={round(totals.you)} color="var(--you)" team={teams[youAreHome ? matchup!.home_roster_id : matchup!.away_roster_id]} />
-          <span className="mono" style={{ fontSize: 11, color: 'var(--faint)', paddingTop: 14 }}>vs</span>
-          <Big label="OPP" value={round(totals.them)} color="var(--opp)" team={teams[youAreHome ? matchup!.away_roster_id : matchup!.home_roster_id]} />
+          <Big label="YOU" value={round(totals.you)} color="var(--you)" team={teams[youAreHome ? matchup!.home_roster_id : matchup!.away_roster_id]} plaque={cardTheme} />
+          <span className={cardTheme ? 'ct-vs' : 'mono'} style={{ fontSize: 11, color: 'var(--faint)', paddingTop: 14 }}>vs</span>
+          <Big label="OPP" value={round(totals.them)} color="var(--opp)" team={teams[youAreHome ? matchup!.away_roster_id : matchup!.home_roster_id]} plaque={cardTheme} />
         </div>
         {status === 'scheduled' && <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', marginTop: 8 }}>Scores start ticking after kickoff.</div>}
         {(myCoin != null || theirCoin != null) && (
@@ -251,11 +251,15 @@ function CardDuel({ mine, theirs, pool, scores, youAreHome, status }: {
         // No revealed opponent rows + matchup not final ⇒ that window is still
         // sealed for you; mirror your card count so their real count never leaks.
         const sealedBacks = !th.length && status !== 'final' ? Math.max(my.length, 1) : 0;
+        // Street state: FINAL when the week settles, SEALED while the opponent's
+        // cards are face-down, LIVE once the window has published slot scores.
+        const hasRows = !!s?.slot_scores?.length;
+        const st = status === 'final' ? 'final' : sealedBacks > 0 && !hasRows ? 'sealed' : status === 'live' ? 'live' : 'sealed';
         return (
           <div key={win} className="ct-pod">
             <div className="ct-podhead">
               <span className="ct-winlab">{winLabel(win)}</span>
-              <span className="ct-winlab" style={{ opacity: 0.6 }}>{status === 'final' ? 'FINAL' : ''}</span>
+              <span className={`ct-state ${st}`}>{st === 'live' ? '● LIVE' : st.toUpperCase()}</span>
             </div>
             <div className="ct-duel">
               <div className="ct-col">
@@ -280,11 +284,11 @@ function CardDuel({ mine, theirs, pool, scores, youAreHome, status }: {
   );
 }
 
-function Big({ label, value, color, team }: { label: string; value: number; color: string; team?: TeamInfo }) {
+function Big({ label, value, color, team, plaque = false }: { label: string; value: number; color: string; team?: TeamInfo; plaque?: boolean }) {
   return (
     <div style={{ textAlign: 'center', maxWidth: 120 }}>
       {team?.avatar && <img src={team.avatar} alt="" width={28} height={28} style={{ borderRadius: 6, marginBottom: 4 }} />}
-      <div className="grotesk" style={{ fontSize: 38, fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
+      <div className={plaque ? 'ct-bigpts' : 'grotesk'} style={{ fontSize: 38, fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
       <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 4 }}>{label}</div>
       {team?.team_name && <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.team_name}</div>}
     </div>
