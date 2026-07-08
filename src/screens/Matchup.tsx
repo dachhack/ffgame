@@ -2067,6 +2067,8 @@ function WindowSectionInner(props: {
     if (fgKeys.length >= 2) fgKeys.forEach((k) => twinLinked.add(k));
   }
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
+  const { bigText } = useStore();
+  const fs = (n: number) => bigText ? Math.round(n * 1.3 * 10) / 10 : n; // larger-text mode bumps the header's fine print
   // On the live board, "done" tracks the real-clock state (a LIVE window reveals
   // all ingested plays but isn't over); otherwise it's the playback position.
   const done = realtime ? realtime === 'final' : clock >= maxClock;
@@ -2120,13 +2122,13 @@ function WindowSectionInner(props: {
   const kickLabel = fmtTimeOfDay(winKickSod);
   // The state chip for this window's real-clock state.
   const stateChip = !realtime ? null : realtime === 'setup' ? (
-    <span className="mono" title="Open — edit this window until it locks 1h before kickoff." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 4, padding: '3px 8px' }}>SETUP</span>
+    <span className="mono" title="Open — edit this window until it locks 1h before kickoff." style={{ fontSize: fs(9), fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 4, padding: '3px 8px' }}>SETUP</span>
   ) : realtime === 'locked' ? (
-    <span className="mono" title="Lineups are locked for this window — kickoff is within the hour." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '3px 8px' }}><Emoji e="🔒" size="1.25em" /> LOCKED</span>
+    <span className="mono" title="Lineups are locked for this window — kickoff is within the hour." style={{ fontSize: fs(9), fontWeight: 700, letterSpacing: '0.12em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '3px 8px' }}><Emoji e="🔒" size="1.25em" /> LOCKED</span>
   ) : realtime === 'final' ? (
-    <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 4, padding: '3px 8px' }}>FINAL</span>
+    <span className="mono" style={{ fontSize: fs(9), fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 4, padding: '3px 8px' }}>FINAL</span>
   ) : (
-    <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: '#FF4F62', border: '1px solid #FF4F62', borderRadius: 4, padding: '3px 8px' }}>
+    <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: fs(9), fontWeight: 700, letterSpacing: '0.12em', color: '#FF4F62', border: '1px solid #FF4F62', borderRadius: 4, padding: '3px 8px' }}>
       <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#FF4F62', animation: 'lpulse 1.2s ease infinite' }} /> LIVE
     </span>
   );
@@ -2157,7 +2159,7 @@ function WindowSectionInner(props: {
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             {/* Live board: this window's own state + lock time, right in its header. */}
             {stateChip}
-            {timeHint && <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--warn)', letterSpacing: '0.04em' }}>{timeHint}</span>}
+            {timeHint && <span className="mono" style={{ fontSize: fs(9), fontWeight: 700, color: 'var(--warn)', letterSpacing: '0.04em' }}>{timeHint}</span>}
             {canApplyExtra && (
               <button
                 onClick={onApplyExtra}
@@ -2173,13 +2175,13 @@ function WindowSectionInner(props: {
                 ➖ REMOVE SLOT
               </button>
             )}
-            <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--dim)' }}>{setN}/{rw.slots.length} SET</span>
+            <span className="mono" style={{ fontSize: fs(9), fontWeight: 700, letterSpacing: '0.12em', color: 'var(--dim)' }}>{setN}/{rw.slots.length} SET</span>
           </div>
         ) : realtime ? (
           // Live board: the window's state comes from the real clock — no manual
           // playback. Show its state chip + the next milestone on its own clock.
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            {timeHint && <span className="mono" style={{ fontSize: 9, color: realtime === 'live' ? 'var(--faint)' : 'var(--warn)', fontWeight: 700, letterSpacing: '0.04em' }}>{timeHint}</span>}
+            {timeHint && <span className="mono" style={{ fontSize: fs(9), color: realtime === 'live' ? 'var(--faint)' : 'var(--warn)', fontWeight: 700, letterSpacing: '0.04em' }}>{timeHint}</span>}
             {stateChip}
           </div>
         ) : (
@@ -2417,7 +2419,7 @@ export function SetupRow(props: {
           {/* sealed: the chosen metric (kept hidden from the opponent) */}
           {!showPicker && (
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-              <span className="grotesk" style={{ fontSize: fs(12), fontWeight: 700, color: 'var(--you)' }}>{metric?.name}</span>
+              <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)' }}>{metric?.name}</span>
               <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(7), letterSpacing: '0.12em', color: 'var(--faint)' }}>
                 <span style={{ width: 5, height: 5, background: 'var(--you)', borderRadius: '50%', display: 'inline-block', animation: 'bpulse 2s ease infinite' }} /> HIDDEN
               </span>
@@ -2438,8 +2440,9 @@ export function SetupRow(props: {
                 const cur = m.id === pick?.metricId;
                 return (
                   <button key={m.id} onClick={() => { onPickMetric(m.id); setEditing(false); }} style={{ width: '100%', minHeight: 30, textAlign: 'left', background: cur ? 'color-mix(in srgb, var(--you) 14%, var(--bg))' : m.lock ? 'color-mix(in srgb, var(--warn) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${cur ? 'var(--you)' : m.lock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 3, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)' }}>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: fs(11.5), fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.lock ? '◈ ' : ''}{m.name}</span>
-                    <span role="button" title="What does this metric do?" onClick={(e) => { e.stopPropagation(); setInfoMetric(m); }} className="mono" style={{ flex: 'none', fontSize: fs(10), fontWeight: 700, color: 'var(--faint)', padding: '0 2px', cursor: 'help' }}>ⓘ info</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.lock ? '◈ ' : ''}{m.name}</span>
+                    {/* mobile: icon-only so the longest names ("Receiving Yards") never ellipsize */}
+                    <span role="button" title="What does this metric do?" onClick={(e) => { e.stopPropagation(); setInfoMetric(m); }} className="mono" style={{ flex: 'none', fontSize: isMobile ? 12 : 10, fontWeight: 700, color: 'var(--faint)', padding: '0 2px', cursor: 'help' }}>{isMobile ? 'ⓘ' : 'ⓘ info'}</span>
                   </button>
                 );
               })}
@@ -2462,7 +2465,7 @@ export function SetupRow(props: {
           style={{ minWidth: 0, minHeight: 78, background: emptyEligible ? 'color-mix(in srgb, var(--warn) 12%, transparent)' : selected ? 'var(--surface)' : 'transparent', border: `1px dashed ${emptyEligible ? 'var(--warn)' : selected ? 'var(--you)' : 'var(--bdh)'}`, borderLeft: `3px dashed ${emptyEligible ? 'var(--warn)' : selected ? 'var(--you)' : 'var(--bdh)'}`, borderRadius: 4, padding: '16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', opacity: applyDim ? 0.4 : 1 }}
         >
           <span className="grotesk" style={{ fontSize: 20, color: emptyEligible ? 'var(--warn)' : 'var(--faint)' }}>{emptyEligible ? <PuIcon id={applyPu?.id} emoji={applyPu?.icon} size={22} /> : '+'}</span>
-          <span className="mono" style={{ fontSize: fs(10), color: emptyEligible ? 'var(--warn)' : 'var(--faint)', letterSpacing: '0.12em', fontWeight: emptyEligible ? 700 : 400 }}>{emptyEligible ? 'TAP TO FIELD BYE' : 'TAP TO PICK PLAYER'}</span>
+          <span className="mono" style={{ fontSize: bigText ? 10.5 : 10, color: emptyEligible ? 'var(--warn)' : 'var(--faint)', letterSpacing: '0.08em', fontWeight: emptyEligible ? 700 : 400, whiteSpace: 'nowrap' }}>{emptyEligible ? 'TAP TO FIELD BYE' : 'TAP TO PICK PLAYER'}</span>
         </div>
       )}
       <div onClick={hideScout ? undefined : onScout} title={hideScout ? 'Your opponent’s lineup is sealed until kickoff' : "Scout the opponent's possible players for this window"} style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: hideScout ? 'default' : 'pointer' }}>
@@ -2512,18 +2515,20 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
   gated?: (p: Player) => boolean; onGated?: (p: Player) => void; // opt-in premium lock (default: none)
 }) {
   const label = windowsForWeek(week).find((w) => w.id === win)?.label ?? win.toUpperCase();
+  const { bigText } = useStore();
+  const fs = (n: number) => bigText ? Math.round(n * 1.3 * 10) / 10 : n; // larger-text mode bumps the list's fine print
   return (
     <ModalBackdrop onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{label} · {title}</div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{subtitle}</div>
+            <div className="mono" style={{ fontSize: fs(9), color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{subtitle}</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
         </div>
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 440, overflow: 'auto' }}>
-          {players.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', textAlign: 'center', padding: '16px 0' }}>— no eligible players in this window —</div>}
+          {players.length === 0 && <div className="mono" style={{ fontSize: fs(10), color: 'var(--faint)', textAlign: 'center', padding: '16px 0' }}>— no eligible players in this window —</div>}
           {players.map((p) => {
             const sel = p.id === currentId;
             const isGated = !sel && !!gated?.(p); // premium position → locked
@@ -2535,9 +2540,9 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
                     <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                     <InjuryBadge week={week} slug={p.id} />
                   </div>
-                  <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
+                  <span className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
                 </div>
-                {sel ? <span className="mono" style={{ fontSize: 8, color: 'var(--you)', flex: 'none' }}>CURRENT ✓</span>
+                {sel ? <span className="mono" style={{ fontSize: fs(8), color: 'var(--you)', flex: 'none' }}>CURRENT ✓</span>
                   : isGated ? <span title="Premium position — unlock premium" style={{ fontSize: 14, flex: 'none' }}>🔒</span> : null}
               </button>
             );
@@ -2545,7 +2550,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
         </div>
         {currentId && (
           <div style={{ padding: '0 12px 12px' }}>
-            <button onClick={onRemove} className="mono" style={{ width: '100%', background: 'var(--bg)', border: '1px dashed var(--opp)', borderRadius: 4, padding: '8px', color: 'var(--opp)', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em' }}>✕ REMOVE FROM SPOT</button>
+            <button onClick={onRemove} className="mono" style={{ width: '100%', background: 'var(--bg)', border: '1px dashed var(--opp)', borderRadius: 4, padding: '8px', color: 'var(--opp)', fontSize: fs(9), fontWeight: 700, letterSpacing: '0.08em' }}>✕ REMOVE FROM SPOT</button>
           </div>
         )}
       </div>
@@ -2563,18 +2568,20 @@ export function ScoutModal({ win, week, pool, oppName, onClose }: {
   const label = windowsForWeek(week).find((w) => w.id === win)?.label ?? win.toUpperCase();
   const posOrder: Pos[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
   const sorted = [...pool].sort((a, b) => (posOrder.indexOf(a.pos) - posOrder.indexOf(b.pos)) || a.name.localeCompare(b.name));
+  const { bigText } = useStore();
+  const fs = (n: number) => bigText ? Math.round(n * 1.3 * 10) / 10 : n; // larger-text mode bumps the list's fine print
   return (
     <ModalBackdrop onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, borderTop: '3px solid var(--opp)', boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}><GameIcon name={UI_ART.scout} emoji="🔍" size="1.2em" /> Scout · {label}</div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>WHO {oppName.toUpperCase()} COULD FIELD HERE — PICK STAYS SEALED</div>
+            <div className="mono" style={{ fontSize: fs(9), color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>WHO {oppName.toUpperCase()} COULD FIELD HERE — PICK STAYS SEALED</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
         </div>
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 440, overflow: 'auto' }}>
-          {sorted.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', textAlign: 'center', padding: '16px 0' }}>— no opponent players in this window —</div>}
+          {sorted.length === 0 && <div className="mono" style={{ fontSize: fs(10), color: 'var(--faint)', textAlign: 'center', padding: '16px 0' }}>— no opponent players in this window —</div>}
           {sorted.map((p) => (
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px' }}>
               <PlayerImg playerId={p.id} team={p.team} pos={p.pos} size={34} />
@@ -2583,13 +2590,13 @@ export function ScoutModal({ win, week, pool, oppName, onClose }: {
                   <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>{p.name}</span>
                   <InjuryBadge week={week} slug={p.id} />
                 </div>
-                <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
+                <span className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
               </div>
             </div>
           ))}
         </div>
         <div style={{ padding: '0 12px 12px' }}>
-          <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', textAlign: 'center', lineHeight: 1.5 }}>
+          <div className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)', textAlign: 'center', lineHeight: 1.5 }}>
             ◆ {sorted.length} candidate{sorted.length === 1 ? '' : 's'} · any could be in any of {oppName}'s {label} spots
           </div>
         </div>
