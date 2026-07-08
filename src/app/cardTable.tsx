@@ -5,6 +5,7 @@
 // the rest of the app; suit colors come from the active theme's --pos-* vars.
 import { useEffect, useMemo, useState } from 'react';
 import { headshot } from '../data/media';
+import { PuIcon } from './gameIcons';
 
 const FONT_URL = `${import.meta.env.BASE_URL}fonts/lilita-one.woff2`;
 
@@ -98,6 +99,33 @@ const CSS = `
   .ctable .ct-dealin{animation:none;}
 }
 @media (max-width:400px){ .ctable .ct-wrap{width:92px;height:136px} .ctable .ct-art{width:62px;height:45px} .ctable .ct-mid{min-width:40px} }
+
+/* ── the power-up hand (standalone — renders outside .ctable too) ─────────── */
+.ct-hand{position:fixed;left:50%;transform:translateX(-50%);bottom:-6px;z-index:40;width:min(500px,100vw);height:128px;pointer-events:none;}
+.ct-hand .ct-handtag{position:absolute;bottom:100px;left:50%;transform:translateX(-50%);font-size:8px;letter-spacing:.24em;
+  color:var(--dim);opacity:.9;pointer-events:none;font-weight:700;}
+.ct-hcard{position:absolute;bottom:0;left:50%;width:78px;height:106px;pointer-events:auto;cursor:pointer;
+  transform:translateX(calc(-50% + var(--hx))) rotate(var(--hr)) translateY(46px);
+  transition:transform .3s cubic-bezier(.3,1.6,.4,1),filter .3s;}
+.ct-hcard .ct-hinner{width:100%;height:100%;border-radius:9px;border:2px solid #000;box-shadow:0 5px 0 rgba(0,0,0,.7);
+  background:linear-gradient(165deg,#2E2418,#221A0F);padding:6px 6px 7px;display:flex;flex-direction:column;color:#EFE4C8;}
+.ct-hcard:hover,.ct-hcard.raised{transform:translateX(calc(-50% + var(--hx))) rotate(0deg) translateY(-12px) scale(1.07);z-index:52;}
+.ct-hcard.dim{filter:grayscale(.7) brightness(.6);}
+.ct-hcard .ct-hico{font-size:19px;text-align:center;margin-top:2px;line-height:1;}
+.ct-hcard .ct-httl{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:8.6px;text-align:center;margin-top:5px;line-height:1.2;
+  letter-spacing:.04em;text-transform:uppercase;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;}
+.ct-hcard .ct-hqty{position:absolute;top:-7px;right:-6px;background:#E9B959;color:#241A08;border:2px solid #000;border-radius:999px;
+  font-size:8px;font-weight:800;padding:2px 5px;box-shadow:0 2px 0 #000;}
+.ct-hcard .ct-hdl{margin-top:auto;text-align:center;font-size:6.6px;letter-spacing:.08em;color:#CDB77F;line-height:1.3;}
+.ct-htip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);width:158px;
+  background:#100C06;border:2px solid #000;border-radius:8px;box-shadow:0 3px 0 #000;padding:7px 8px;
+  font-size:8.6px;line-height:1.45;color:#CFC4A6;text-align:center;}
+.ct-htip .ct-hact{display:block;width:100%;margin-top:6px;font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:10px;
+  letter-spacing:.06em;text-transform:uppercase;color:#241A08;background:linear-gradient(#F0C367,#DFA83F);
+  border:2px solid #000;border-radius:7px;box-shadow:0 3px 0 #000;padding:6px 0;cursor:pointer;}
+.ct-htip .ct-hact:active{transform:translateY(2px);box-shadow:0 1px 0 #000;}
+.ct-htip .ct-hnote{display:block;margin-top:4px;color:#E0A96B;font-size:8px;}
+@media (prefers-reduced-motion: reduce){ .ct-hcard{transition:none;} }
 `;
 
 /** Inject the card-table stylesheet once per document. */
@@ -182,6 +210,67 @@ export function PlayerCard({ slug, name, pos, slot, metric, bank, opp = false, h
         </div>
       </div>
       {hot && !nuked && <div className="ct-hotchip">🔥 HOT</div>}
+    </div>
+  );
+}
+
+/** One power-up in the hand. `action` mirrors the Apply modal's semantics:
+ *  'arm' fires immediately (whole-field buff), 'apply' enters tap-a-target
+ *  mode, 'hint' is informational (usable in place, e.g. metric unlocks). */
+export interface HandCard {
+  id: string; name: string; icon?: string; qty: number;
+  action: 'arm' | 'apply' | 'hint';
+  deadline: string; blurb?: string; note?: string;
+}
+
+/** The fanned power-up hand, pinned to the bottom of the screen. Cards you own
+ *  (inventory > 0, usable now) peek up from the edge; tapping one raises it
+ *  with its tip, and the tip's button ARMs it or enters APPLY target mode.
+ *  While a card is pending a target (`pendingId`) it stays raised; tapping it
+ *  again cancels. Renders nothing when the hand is empty. */
+export function PowerupHand({ cards, pendingId, onArm, onApply, onCancel }: {
+  cards: HandCard[]; pendingId: string | null;
+  onArm: (id: string) => void; onApply: (id: string) => void; onCancel: () => void;
+}) {
+  const [raised, setRaised] = useState<string | null>(null);
+  useEffect(() => { if (pendingId) setRaised(null); }, [pendingId]);
+  if (!cards.length) return null;
+  const n = cards.length;
+  const spread = Math.min(60, 320 / Math.max(1, n - 1));
+  return (
+    <div className="ct-hand">
+      <div className="ct-handtag">YOUR HAND</div>
+      {cards.map((c, i) => {
+        const hx = (i - (n - 1) / 2) * spread;
+        const hr = (i - (n - 1) / 2) * 4;
+        const isPending = pendingId === c.id;
+        const isRaised = isPending || raised === c.id;
+        const blocked = !!c.note && c.action === 'arm';
+        return (
+          <div key={c.id}
+            className={`ct-hcard${isRaised ? ' raised' : ''}${blocked ? ' dim' : ''}`}
+            style={{ ['--hx' as string]: `${hx}px`, ['--hr' as string]: `${hr}deg` }}
+            onClick={() => {
+              if (isPending) { onCancel(); return; }
+              setRaised((r) => (r === c.id ? null : c.id));
+            }}>
+            <div className="ct-hinner">
+              <div className="ct-hico"><PuIcon id={c.id} emoji={c.icon} size="1.2em" /></div>
+              <div className="ct-httl">{c.name}</div>
+              <div className="ct-hdl">{isPending ? 'TAP TARGET · tap card to cancel' : c.deadline}</div>
+            </div>
+            {c.qty > 1 && <span className="ct-hqty">×{c.qty}</span>}
+            {isRaised && !isPending && (
+              <div className="ct-htip" onClick={(e) => e.stopPropagation()}>
+                {c.blurb}
+                {c.note && <span className="ct-hnote">↳ {c.note}</span>}
+                {c.action === 'arm' && !blocked && <button className="ct-hact" onClick={() => { setRaised(null); onArm(c.id); }}>ARM</button>}
+                {c.action === 'apply' && <button className="ct-hact" onClick={() => { setRaised(null); onApply(c.id); }}>APPLY → PICK TARGET</button>}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
