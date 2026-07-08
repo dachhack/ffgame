@@ -151,8 +151,8 @@ const CSS = `
    headshot stacked over a centered Lilita name, metric as the dark gold chip —
    the setup box reads as a portrait player card in every app theme. */
 .ctable .mx-spot:not(.mx-state){background:linear-gradient(168deg,#FBF5E4,#F4EDDA 46%,#E7DCC0) !important;}
-.ctable .mx-spot:not(.mx-state) .mx-id{flex-direction:column;align-items:stretch;padding-right:0 !important;}
-.ctable .mx-spot:not(.mx-state) .mx-idbtn{flex-direction:column;text-align:center;gap:6px !important;}
+.ctable .mx-spot:not(.mx-state) .mx-id{flex-direction:column;align-items:center;padding-right:0 !important;margin-top:auto;}
+.ctable .mx-spot:not(.mx-state) .mx-idbtn{flex-direction:column;align-items:center;text-align:center;gap:6px !important;flex:none !important;}
 .ctable .mx-spot:not(.mx-state) .mx-idbtn>div{text-align:center;}
 .ctable .mx-spot:not(.mx-state) .mx-idbtn .grotesk{color:#2A2312 !important;font-family:'Lilita One',ui-rounded,system-ui,sans-serif;
   font-weight:400 !important;letter-spacing:.04em;text-transform:uppercase;font-size:12px !important;white-space:normal !important;text-wrap:balance;}
