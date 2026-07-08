@@ -168,6 +168,26 @@ const CSS = `
 .ctable .mx-spot:not(.mx-state) .mx-met .mono{color:#6E6650 !important;}
 @media (prefers-reduced-motion:reduce){.ctable .mx-sealed,.ctable .mx-spot:not(.mx-state){animation:none;}}
 
+/* ── live ScoreCards (Matchup live/final phase) — dark card stock so the
+   dense light-on-dark live info + you/opp accents stay readable, plus a
+   compact size so the log + field get more room. CSS-only over ScoreCard's
+   mx-sc-* hooks; inert off the felt. Accent spine (inline borderLeft/Right)
+   is preserved. ─────────────────────────────────────────────────────────── */
+.ctable .mx-scorecard{
+  background-image:radial-gradient(rgba(233,185,89,.08) 1px,transparent 1.2px),radial-gradient(circle at 50% 34%,#2C2417 0%,#241C11 55%,#1C150C 100%) !important;
+  background-size:11px 11px,100% 100% !important;
+  border-radius:10px !important;box-shadow:0 4px 0 rgba(0,0,0,.5) !important;
+  padding:6px 9px !important;}
+/* Compact: shrink the headshot + big number so a live row is tighter. */
+.ctable .mx-sc-img,.ctable .mx-sc-img>*{width:36px !important;height:36px !important;}
+.ctable .mx-sc-img img,.ctable .mx-sc-img>*>*{width:36px !important;height:36px !important;object-fit:cover;}
+.ctable .mx-sc-big{font-size:20px !important;}
+@media (min-width:760px){
+  .ctable .mx-sc-img,.ctable .mx-sc-img>*{width:46px !important;height:46px !important;}
+  .ctable .mx-sc-img img,.ctable .mx-sc-img>*>*{width:46px !important;height:46px !important;}
+  .ctable .mx-sc-big{font-size:22px !important;}
+}
+
 /* ── power-up cards (shop + apply modals) — the hand's leather stock, dealt
    as a tappable grid on the felt ─────────────────────────────────────────── */
 .ctable .ct-puwrap{width:100%;max-width:158px;position:relative;animation:ct-deal .5s cubic-bezier(.3,1.5,.5,1) backwards;}
