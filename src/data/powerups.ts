@@ -57,6 +57,33 @@ export function powerupById(id: string): Powerup | undefined {
   return POWERUPS.find((p) => p.id === id);
 }
 
+// ── THE VAULT: designed, NOT LIVE ────────────────────────────────────────────
+// A bench of future power-ups, specced and priced but deliberately off. They
+// are NOT in POWERUPS, so the shop doesn't list them, the AI doesn't buy them,
+// and scripts/check-powerup-prices.mjs doesn't demand SQL prices — server-side
+// they resolve to powerup_price() = 9999 ('unknown powerup'), which is the off
+// switch even against a dishonest client. To ship one: move it into POWERUPS,
+// add its price to a new powerup_price() migration, build the engine hook
+// noted on its line, and measure it with the study tools before locking price.
+export const POWERUP_VAULT: Powerup[] = [
+  // Counter-intel — no engine work; reveal via a pre-lock RPC like Spy's.
+  { id: 'wiretap', name: 'Wiretap', blurb: 'Before kickoff: reveal every buff your opponent has armed this week. They can still change them until lock — so can you.', kind: 'action', timing: 'pre', price: 35, icon: '🎙️' },
+  // Anti-FG denial — engine: clamp the OPPONENT's windowFgMult at 2.0×.
+  { id: 'jammer', name: 'Jammer', blurb: 'Arm before kickoff: the opponent’s Field General multiplier is capped at 2× all week — Twin Generals and Dual Threat push against the same ceiling.', kind: 'action', timing: 'pre', price: 45, icon: '📡' },
+  // Symmetric FG blackout — engine: disable windowFgMult both sides in one window.
+  { id: 'blackout', name: 'Blackout', blurb: 'Before kickoff, pick a window: NO Field General multipliers fire there — yours or theirs. Scorched earth for the QB duel.', kind: 'action', timing: 'pre', price: 55, icon: '🕶️', target: 'window' },
+  // Targeted defense — engine: per-slot immunity to pauses, erases AND nukes.
+  { id: 'bodyguard', name: 'Bodyguard', blurb: 'Assign to one of your slots before kickoff: it cannot be paused, erased, or nuked this week. One player, untouchable.', kind: 'action', timing: 'pre', price: 55, icon: '🕴️', target: 'slot-you' },
+  // Risk/reward drip — engine: per-slot rate 1.5×, but erases against it hit 2×.
+  { id: 'overclock', name: 'Overclock', blurb: 'Assign to one drip slot before kickoff: its rate runs 1.5× all week — but any erase against it wipes double. Loud and fragile.', kind: 'action', timing: 'pre', price: 45, icon: '⚡', target: 'slot-you' },
+  // Wipe-theft — engine: bank 25% of points your erases/nukes remove.
+  { id: 'scavenger', name: 'Scavenger', blurb: 'Arm before kickoff: when your erases or nukes wipe opponent points this week, you bank 25% of what they lost.', kind: 'action', timing: 'pre', price: 60, icon: '🦴' },
+  // Comeback mechanic — engine: 1.25× your final window if trailing at its kickoff.
+  { id: 'two-minute-drill', name: 'Two-Minute Drill', blurb: 'Arm before kickoff: if you trail the matchup when your last window kicks off, everything you score in it counts 1.25×.', kind: 'action', timing: 'pre', price: 50, icon: '🕑' },
+  // Bench shadow — engine: resolve slot as max(starter, shadow) at FINAL.
+  { id: 'sixth-man', name: 'Sixth Man', blurb: 'Before kickoff, shadow one of your slots with a bench player: at FINAL the slot keeps whichever of the two scored more.', kind: 'action', timing: 'pre', price: 90, icon: '🧢', target: 'slot-you' },
+];
+
 // ── Drip AMPLIFIERS are capacity-limited ─────────────────────────────────────
 // Momentum / Overtime / Garbage Time all multiply the same drip accrual, and
 // the measured meta (findings §2/§12) is "everyone stacks all three". Capacity

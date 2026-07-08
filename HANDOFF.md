@@ -1,6 +1,27 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-08 · Build `v0.108.0`_
+_Last updated: 2026-07-08 · Build `v0.108.1`_
+
+## The Vault — eight specced power-ups, deliberately off (v0.108.1)
+- **`POWERUP_VAULT` in src/data/powerups.ts**: designed + priced but NOT in
+  `POWERUPS`, so the shop, the AI buyer, and the price parity checker ignore
+  them; server-side they hit `powerup_price() = 9999` ('unknown powerup') —
+  unbuyable even against a dishonest client. Ship path is documented on the
+  const: move to POWERUPS, price in a new migration, build the engine hook
+  noted per entry, measure with the study tools first.
+- **The set** (counters to the FG line we just shipped, plus new textures):
+  Wiretap ◎35 (reveal opponent's armed buffs pre-lock — counter-intel, no
+  engine work), Jammer ◎45 (cap opponent FG mult at 2×), Blackout ◎55 (pick
+  a window, NO FG mults either side), Bodyguard ◎55 (one slot immune to
+  pause/erase/nuke), Overclock ◎45 (one drip 1.5× rate but erases hit it
+  2×), Scavenger ◎60 (bank 25% of points your erases/nukes wipe),
+  Two-Minute Drill ◎50 (trailing at your last window's kickoff → it scores
+  1.25×), Sixth Man ◎90 (bench shadow; slot keeps max(starter, shadow) at
+  FINAL).
+- Also measured this session: Dual Threat × Twin Generals interaction (left
+  as designed — side-wide arms compose; scrambler twin-QB windows get +23.4
+  from adding fg-dual on top of fg-stack, gated behind ◎125 + two
+  same-window scramblers, still dies to denial).
 
 ## Dual Threat — rushing yards feed the Field General (v0.108.0)
 - **New power-up `fg-dual` "Dual Threat" (◎40, pre-kickoff arm)**: your Field
