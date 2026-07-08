@@ -1188,7 +1188,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           </div>
           <div style={{ height: 30, width: 1, background: 'var(--bd)' }} />
           {phase === 'setup' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', rowGap: 8, justifyContent: 'flex-end' }}>
               {/* Seed the ranked default lineup so a new user isn't forced to fill
                   all eight slots by hand before they can lock in. */}
               <button onClick={() => { setPicks(youDefault); setSelSlot(null); }} title="Fill every slot with your best available lineup" className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
@@ -1967,7 +1967,7 @@ function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose, cards =
       <PuShell title="✦ Play a Card" subtitle="YOUR HAND — PLAY EACH BEFORE ITS WINDOW CLOSES" accent="var(--warn)" onClose={onClose}>
         <div className="ctable" style={{ maxHeight: 440, overflowY: 'auto', overflowX: 'hidden' }}>
           {items.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: '#93A594', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— no cards to play right now —<br />bought cards appear here while their window is open</div>}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(142px, 1fr))', gap: 12, justifyItems: 'center', padding: '4px 2px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, 150px)', gap: 12, justifyContent: 'center', justifyItems: 'center', padding: '4px 2px' }}>
             {items.map(({ p, deadline, action, blocked }, i) => (
               <PowerupCard key={p.id} id={p.id} name={p.name} icon={p.icon} blurb={p.blurb} idx={i}
                 timingLabel={deadline} live={action !== 'hint'}
