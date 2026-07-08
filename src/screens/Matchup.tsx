@@ -17,7 +17,8 @@ import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, GAM
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
-import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, myMatchup, type PickRow } from '../data/liveApi';
+import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, myMatchup, type PickRow } from '../data/liveApi';
+import { CardTableCss, PowerupHand } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import { Rulebook } from './Rulebook';
 import { PuIcon, GameIcon, Emoji, DripCoin, UI_ART } from '../app/gameIcons';
@@ -402,6 +403,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     ensureWallet(liveCtx.matchupId).then((b) => setLiveWallet(Number(b ?? 0))).catch(() => setLiveWallet(0));
   }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
   const coinBal = liveCtx ? (liveWallet ?? 0) : coins;
+  // Card-table theme (league_pref.card_theme): on flagged leagues the owned
+  // power-ups also render as a hand of cards pinned to the bottom of the board.
+  const [cardHand, setCardHand] = useState(false);
+  useEffect(() => {
+    if (!liveCtx) { setCardHand(false); return; }
+    leagueCardTheme(liveCtx.leagueId).then((v) => setCardHand(!!v)).catch(() => setCardHand(false));
+  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
   // Buy a power-up into inventory, charged against the real wallet (hero board).
   const buyFromWallet = async (id: string): Promise<boolean> => {
     if (!liveCtx) return false;
@@ -1514,6 +1522,26 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       {puView === 'active' && <ActivePowerupsModal effects={activeEffects} onClose={() => setPuView(null)} />}
       {puView === 'apply' && <ApplyPowerupsModal items={appliable} inventory={inventory} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); setPuView(null); }} onClose={() => setPuView(null)} />}
       {shopOpen && <ShopModal onClose={() => setShopOpen(false)} coinsOverride={liveCtx ? Math.round(coinBal) : undefined} onBuy={liveCtx ? buyFromWallet : undefined} />}
+      {/* Card-table hand: the same owned/usable power-ups as the Apply modal,
+          fanned at the bottom. Tap a card → tip → ARM fires the buff, APPLY
+          enters the existing tap-a-target flow (pendingApply); tapping the
+          pending card cancels. Shop purchases land here as new cards. */}
+      {cardHand && liveCtx && appliable.length > 0 && (
+        <>
+          <CardTableCss />
+          <div style={{ height: 104 }} />
+          <PowerupHand
+            cards={appliable.map(({ p, deadline, action, blocked }) => ({
+              id: p.id, name: p.name, icon: p.icon, qty: inventory[p.id] ?? 0,
+              action, deadline, blurb: p.blurb, note: blocked ?? (action === 'hint' ? POWERUP_HINT[p.id] : undefined),
+            }))}
+            pendingId={pendingApply}
+            onArm={(id) => armBuff(week, id)}
+            onApply={(id) => { setPendingApply(id); setPuView(null); }}
+            onCancel={() => setPendingApply(null)}
+          />
+        </>
+      )}
       {showRules && <Rulebook onClose={() => setShowRules(false)} />}
       {fieldsOpen && (
         <FieldBoard week={week} onClose={() => setFieldsOpen(false)} entries={(() => {

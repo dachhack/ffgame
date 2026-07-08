@@ -240,6 +240,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   }
 
   const states = []; // { game_window, home_score, away_score }
+  let slotRows = []; // per-slot detail: { win, side, slot, slug, metric, score }
   let homeTotal = 0, awayTotal = 0;
   let coin = null; // weekly drip-coin per side (only the real-engine H2H path earns it)
   const toLive = (p) => ({ win: p.win, slot: p.slot, player: player(p.slug), metricId: p.metric || 'rush' });
@@ -277,28 +278,45 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
         homeComboQty: home.comboQty, awayComboQty: away.comboQty },
       { home: toExtras(homeTargeted), away: toExtras(awayTargeted) });
     for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
+    slotRows = r.slots ?? [];
     homeTotal = r.home; awayTotal = r.away; coin = r.coin;
   } else {
     // ── 'empty' policy: a missed side scores 0; the other scores its lineup solo
     //    (each slot vs an empty opponent) so the present side isn't corrupted. ──
-    const solo = (picks) => {
+    const solo = (picks, side) => {
       const byWin = {}; let total = 0;
       for (const p of picks ?? []) {
         const r = resolveWindow({ player: player(p.slug), metricId: p.metric || 'rush' }, { player: EMPTY, metricId: 'none' }, matchup.week, '', {});
         byWin[p.win] = round((byWin[p.win] ?? 0) + r.youFinal); total += r.youFinal;
+        slotRows.push({ win: p.win, side, slot: p.slot, slug: p.slug, metric: p.metric || null, score: round(r.youFinal) });
       }
       return { byWin, total: round(total) };
     };
-    const h = solo(homePicks), a = solo(awayPicks);
+    const h = solo(homePicks, 'home'), a = solo(awayPicks, 'away');
     const wins = new Set([...Object.keys(h.byWin), ...Object.keys(a.byWin)]);
     for (const w of wins) states.push({ game_window: w, home_score: h.byWin[w] ?? 0, away_score: a.byWin[w] ?? 0 });
     if (!states.length) states.push({ game_window: 'ALL', home_score: 0, away_score: 0 });
     homeTotal = h.total; awayTotal = a.total;
   }
 
+  // Per-slot detail → matchup_state.slot_scores (the card-table board's banks).
+  // LEAK GUARD: enrolled sides only ever resolve with locked (revealed) picks, but
+  // the AI / Sleeper-lineup fallback covers the whole week — so keep slot rows to
+  // windows that have kicked off (opts.startedWins, from the tick's slate). A null
+  // set means the slate has no kickoffs; then everything seals at lock_at anyway
+  // (lock.js falls back the same way) and all rows are safe to write.
+  const visSlots = opts.startedWins ? slotRows.filter((s) => opts.startedWins.has(s.win)) : slotRows;
+  const slotsFor = (win) => visSlots
+    .filter((s) => s.win === win)
+    .sort((x, y) => String(x.slot).localeCompare(String(y.slot)))
+    .map(({ side, slot, slug, metric, score, hot, nuked }) => ({
+      side, slot, slug, metric: metric ?? null, score: round(Number(score) || 0),
+      ...(hot ? { hot: true } : {}), ...(nuked ? { nuked: true } : {}),
+    }));
+
   const now = new Date().toISOString();
   await db().from('matchup_state').upsert(
-    states.map((s) => ({ matchup_id: matchup.id, ...s, events_json: [], updated_at: now })),
+    states.map((s) => ({ matchup_id: matchup.id, ...s, slot_scores: slotsFor(s.game_window), events_json: [], updated_at: now })),
     { onConflict: 'matchup_id,game_window' },
   );
   const patch = {};

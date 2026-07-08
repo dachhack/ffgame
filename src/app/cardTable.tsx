@@ -1,0 +1,291 @@
+// Card-table theme kit — the card-game presentation of the live board, gated
+// per league by league_pref.card_theme (super-admin toggle, migration 0074).
+// Purely presentational: cards render from the same picks/pool/scores the
+// classic board uses. All CSS is scoped under .ctable so nothing leaks into
+// the rest of the app; suit colors come from the active theme's --pos-* vars.
+import { useEffect, useMemo, useState } from 'react';
+import { headshot } from '../data/media';
+import { PuIcon } from './gameIcons';
+
+const FONT_URL = `${import.meta.env.BASE_URL}fonts/lilita-one.woff2`;
+
+const CSS = `
+@font-face{font-family:'Lilita One';font-style:normal;font-weight:400;font-display:swap;src:url('${FONT_URL}') format('woff2');}
+.ctable{position:relative;border-radius:12px;overflow:hidden;padding:12px 10px 16px;background:#0B1F1A;}
+.ctable .ct-blobs{position:absolute;inset:-30%;pointer-events:none;}
+.ctable .ct-blob{position:absolute;width:60%;height:60%;border-radius:50%;filter:blur(60px);opacity:.5;mix-blend-mode:screen;}
+.ctable .ct-b1{background:radial-gradient(circle,#1B4A37 0%,transparent 62%);top:0;left:-5%;animation:ct-drift 39s linear infinite;}
+.ctable .ct-b2{background:radial-gradient(circle,#58202B 0%,transparent 60%);bottom:-8%;right:-5%;animation:ct-drift 51s linear infinite reverse;}
+@keyframes ct-drift{from{transform:rotate(0) translateX(8%) rotate(0)}to{transform:rotate(360deg) translateX(8%) rotate(-360deg)}}
+.ctable .ct-vig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 90% at 50% 40%,transparent 55%,rgba(0,0,0,.55) 100%);}
+.ctable .ct-body{position:relative;}
+.ctable .ct-disp{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;text-transform:uppercase;letter-spacing:.05em;
+  text-shadow:-1.2px -1.2px 0 #14100A,1.2px -1.2px 0 #14100A,-1.2px 1.2px 0 #14100A,1.2px 1.2px 0 #14100A,0 3px 0 #14100A;}
+
+.ctable .ct-pod{border:2px solid rgba(0,0,0,.75);border-radius:12px;padding:9px 8px 11px;margin-bottom:12px;
+  background:linear-gradient(rgba(10,26,21,.55),rgba(8,20,16,.72));
+  box-shadow:inset 0 0 0 1px rgba(233,185,89,.09),inset 0 12px 20px rgba(0,0,0,.35),0 3px 0 rgba(0,0,0,.55);}
+.ctable .ct-podhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
+.ctable .ct-duel{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:start;}
+.ctable .ct-col{display:flex;flex-direction:column;gap:9px;align-items:center;min-width:0;}
+.ctable .ct-mid{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding-top:34px;min-width:46px;}
+
+.ctable .ct-wrap{width:104px;height:150px;perspective:700px;position:relative;}
+.ctable .ct-card{position:relative;width:100%;height:100%;transform-style:preserve-3d;
+  animation:ct-wob var(--wobdur,4.8s) ease-in-out var(--wobdel,0s) infinite alternate;}
+@keyframes ct-wob{from{transform:rotateZ(-.9deg) translateY(0)}to{transform:rotateZ(.9deg) translateY(-2px)}}
+.ctable .ct-dealin{animation:ct-deal .5s cubic-bezier(.3,1.5,.5,1) backwards;}
+@keyframes ct-deal{from{transform:translateY(-40px) rotateZ(8deg);opacity:0}to{transform:translateY(0) rotateZ(0);opacity:1}}
+.ctable .ct-flip .ct-card{animation:ct-flipin .55s cubic-bezier(.3,1.4,.5,1) backwards,
+  ct-wob var(--wobdur,4.8s) ease-in-out var(--wobdel,0s) infinite alternate;}
+@keyframes ct-flipin{from{transform:rotateY(180deg)}to{transform:rotateY(0)}}
+.ctable .ct-side{position:absolute;inset:0;border-radius:10px;border:2px solid #000;overflow:hidden;box-shadow:0 4px 0 rgba(0,0,0,.7);}
+.ctable .ct-face{background:linear-gradient(168deg,#FBF5E4,#F4EDDA 46%,#E7DCC0);color:#201C12;display:flex;flex-direction:column;padding:6px;isolation:isolate;}
+.ctable .ct-face>*{position:relative;z-index:1;}
+.ctable .ct-fill{position:absolute;left:0;right:0;bottom:0;height:0%;z-index:0;pointer-events:none;
+  background:linear-gradient(rgba(233,185,89,0),rgba(233,185,89,.38) 18%,rgba(222,160,50,.5));
+  border-top:2px solid rgba(184,134,59,.85);transition:height .7s cubic-bezier(.3,1.4,.5,1);}
+.ctable .ct-opp .ct-fill{background:linear-gradient(rgba(255,90,95,0),rgba(255,90,95,.30) 18%,rgba(210,70,80,.42));border-top-color:rgba(178,58,68,.85);}
+.ctable .ct-bank{display:flex;justify-content:center;align-items:baseline;gap:3px;padding:2px 0 0;font-variant-numeric:tabular-nums;}
+.ctable .ct-bank b{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;font-size:15px;color:#1E1809;line-height:1;}
+.ctable .ct-bank span{font-size:7px;color:#9A8E6E;letter-spacing:.1em;}
+.ctable .ct-hot .ct-face{box-shadow:inset 0 0 14px 1px rgba(233,185,89,.45);}
+.ctable .ct-hot .ct-side{box-shadow:0 4px 0 rgba(0,0,0,.7),0 0 14px 2px rgba(233,185,89,.5);}
+.ctable .ct-hotchip{position:absolute;top:-8px;right:-7px;z-index:5;background:#FF7B3B;border:2px solid #000;border-radius:999px;
+  font-size:8px;font-weight:800;color:#2A1204;padding:3px 6px;box-shadow:0 2px 0 #000;}
+.ctable .ct-nuked .ct-card{animation:none;filter:saturate(.55);}
+.ctable .ct-scorch{position:absolute;inset:0;z-index:4;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  background:radial-gradient(circle at 52% 44%,rgba(20,10,4,.92) 0%,rgba(24,12,5,.85) 52%,rgba(30,14,6,.45) 78%,transparent 100%);}
+.ctable .ct-scorch .ct-skull{font-size:18px;}
+.ctable .ct-scorch .ct-sup{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:10px;color:#FF9B76;letter-spacing:.06em;
+  text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;}
+.ctable .ct-scorch .ct-wiped{font-size:8px;color:#D8C9BD;font-variant-numeric:tabular-nums;}
+.ctable .ct-facehead{display:flex;justify-content:space-between;align-items:center;}
+.ctable .ct-suit{font-size:8px;font-weight:800;letter-spacing:.06em;padding:2.5px 5px;border-radius:4px;border:1.5px solid;}
+.ctable .ct-slot{font-size:7px;color:#6E6650;letter-spacing:.1em;}
+.ctable .ct-art{align-self:center;margin-top:4px;width:72px;height:52px;border-radius:7px;border:2px solid;overflow:hidden;position:relative;
+  background:radial-gradient(circle at 50% 20%,#FFF 0%,#E8E0C8 100%);display:flex;align-items:center;justify-content:center;}
+.ctable .ct-art img{width:100%;height:100%;object-fit:cover;object-position:top;display:block;}
+.ctable .ct-mono{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:17px;}
+.ctable .ct-name{text-align:center;font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:9.4px;letter-spacing:.04em;line-height:1.18;
+  margin-top:5px;color:#2A2312;text-transform:uppercase;text-wrap:balance;}
+.ctable .ct-metric{margin-top:auto;text-align:center;font-size:6.6px;letter-spacing:.1em;color:#6E6650;padding-bottom:2px;}
+.ctable .ct-metric b{display:inline-block;padding:2px 5px;border-radius:4px;background:#241C10;color:#E9B959;font-size:7px;letter-spacing:.1em;max-width:88px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;}
+
+.ctable .ct-back{background:radial-gradient(circle at 50% 46%,#7E2430 0%,#571C26 62%,#40151E 100%);}
+.ctable .ct-lattice{position:absolute;inset:6px;border:1.5px solid rgba(233,185,89,.5);border-radius:6px;
+  background-image:radial-gradient(rgba(233,185,89,.34) 1.1px,transparent 1.3px);background-size:11px 11px;}
+.ctable .ct-gem{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:26px;color:#E9B959;text-shadow:0 2px 0 #000;}
+.ctable .ct-sealtag{position:absolute;left:50%;bottom:9px;transform:translateX(-50%) rotate(-3deg);font-size:6.4px;letter-spacing:.16em;
+  background:#2A0E13;color:#D9A0A6;border:1px solid rgba(233,185,89,.4);padding:2.5px 6px;border-radius:3px;white-space:nowrap;}
+
+.ctable .ct-coltag{font-size:8px;letter-spacing:.22em;opacity:.65;font-weight:700;}
+.ctable .ct-winlab{font-size:8px;letter-spacing:.16em;color:#93A594;font-weight:700;}
+.ctable .ct-state{font-size:8px;letter-spacing:.14em;font-weight:700;padding:3px 8px;border-radius:999px;border:1.5px solid #000;box-shadow:0 2px 0 #000;}
+.ctable .ct-state.sealed{background:#2A2216;color:#CDB77F;}
+.ctable .ct-state.live{background:#E9B959;color:#241A08;animation:ct-livepulse 1.6s infinite;}
+.ctable .ct-state.final{background:#1C2B22;color:#8FCDA4;}
+@keyframes ct-livepulse{0%,100%{box-shadow:0 2px 0 #000,0 0 0 0 rgba(233,185,89,.5)}50%{box-shadow:0 2px 0 #000,0 0 0 7px rgba(233,185,89,0)}}
+.ctable .ct-bigpts{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;font-variant-numeric:tabular-nums;
+  text-shadow:-1.5px -1.5px 0 #000,1.5px -1.5px 0 #000,-1.5px 1.5px 0 #000,1.5px 1.5px 0 #000,0 3px 0 #000;}
+.ctable .ct-score{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:15px;font-variant-numeric:tabular-nums;
+  text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 2px 0 #000;}
+.ctable .ct-vs{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:12px;color:#71806F;
+  text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;}
+
+@media (prefers-reduced-motion: reduce){
+  .ctable .ct-card,.ctable .ct-blob{animation:none;}
+  .ctable .ct-dealin{animation:none;}
+}
+@media (max-width:400px){ .ctable .ct-wrap{width:92px;height:136px} .ctable .ct-art{width:62px;height:45px} .ctable .ct-mid{min-width:40px} }
+
+/* ── the power-up hand (standalone — renders outside .ctable too) ─────────── */
+.ct-hand{position:fixed;left:50%;transform:translateX(-50%);bottom:-6px;z-index:40;width:min(500px,100vw);height:128px;pointer-events:none;}
+.ct-hand .ct-handtag{position:absolute;bottom:100px;left:50%;transform:translateX(-50%);font-size:8px;letter-spacing:.24em;
+  color:var(--dim);opacity:.9;pointer-events:none;font-weight:700;}
+.ct-hcard{position:absolute;bottom:0;left:50%;width:78px;height:106px;pointer-events:auto;cursor:pointer;
+  transform:translateX(calc(-50% + var(--hx))) rotate(var(--hr)) translateY(46px);
+  transition:transform .3s cubic-bezier(.3,1.6,.4,1),filter .3s;}
+.ct-hcard .ct-hinner{width:100%;height:100%;border-radius:9px;border:2px solid #000;box-shadow:0 5px 0 rgba(0,0,0,.7);
+  background:linear-gradient(165deg,#2E2418,#221A0F);padding:6px 6px 7px;display:flex;flex-direction:column;color:#EFE4C8;}
+.ct-hcard:hover,.ct-hcard.raised{transform:translateX(calc(-50% + var(--hx))) rotate(0deg) translateY(-12px) scale(1.07);z-index:52;}
+.ct-hcard.dim{filter:grayscale(.7) brightness(.6);}
+.ct-hcard .ct-hico{font-size:19px;text-align:center;margin-top:2px;line-height:1;}
+.ct-hcard .ct-httl{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:8.6px;text-align:center;margin-top:5px;line-height:1.2;
+  letter-spacing:.04em;text-transform:uppercase;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;}
+.ct-hcard .ct-hqty{position:absolute;top:-7px;right:-6px;background:#E9B959;color:#241A08;border:2px solid #000;border-radius:999px;
+  font-size:8px;font-weight:800;padding:2px 5px;box-shadow:0 2px 0 #000;}
+.ct-hcard .ct-hdl{margin-top:auto;text-align:center;font-size:6.6px;letter-spacing:.08em;color:#CDB77F;line-height:1.3;}
+.ct-htip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);width:158px;
+  background:#100C06;border:2px solid #000;border-radius:8px;box-shadow:0 3px 0 #000;padding:7px 8px;
+  font-size:8.6px;line-height:1.45;color:#CFC4A6;text-align:center;}
+.ct-htip .ct-hact{display:block;width:100%;margin-top:6px;font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:10px;
+  letter-spacing:.06em;text-transform:uppercase;color:#241A08;background:linear-gradient(#F0C367,#DFA83F);
+  border:2px solid #000;border-radius:7px;box-shadow:0 3px 0 #000;padding:6px 0;cursor:pointer;}
+.ct-htip .ct-hact:active{transform:translateY(2px);box-shadow:0 1px 0 #000;}
+.ct-htip .ct-hnote{display:block;margin-top:4px;color:#E0A96B;font-size:8px;}
+@media (prefers-reduced-motion: reduce){ .ct-hcard{transition:none;} }
+`;
+
+/** Inject the card-table stylesheet once per document. */
+export function CardTableCss() {
+  useEffect(() => {
+    if (document.getElementById('ctable-css')) return;
+    const s = document.createElement('style');
+    s.id = 'ctable-css';
+    s.textContent = CSS;
+    document.head.appendChild(s);
+  }, []);
+  return null;
+}
+
+/** The felt table surface: swirling backdrop + vignette around any content. */
+export function Felt({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="ctable">
+      <div className="ct-blobs"><div className="ct-blob ct-b1" /><div className="ct-blob ct-b2" /></div>
+      <div className="ct-vig" />
+      <div className="ct-body">{children}</div>
+    </div>
+  );
+}
+
+// Stable per-card wobble timing so the table doesn't sway in lockstep.
+function wobbleVars(seed: string): React.CSSProperties {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return {
+    ['--wobdur' as string]: `${(4 + (h % 240) / 100).toFixed(2)}s`,
+    ['--wobdel' as string]: `${(-((h >> 8) % 400) / 100).toFixed(2)}s`,
+  };
+}
+
+const posVars = (pos: string) => {
+  const p = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'].includes(pos) ? pos : 'DEF';
+  return { background: `var(--pos-${p}-bg)`, color: `var(--pos-${p}-fg)`, borderColor: `var(--pos-${p}-bd)` };
+};
+
+const initials = (name: string) => name.split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+
+/** A face-up player card: headshot art (monogram when mark-free), suit chip,
+ *  slot tag, the hidden-metric chip once revealed, and — when the worker has
+ *  published per-slot scores — the drip bank with its liquid fill. Opponent
+ *  cards (`opp`) tint red and enter with a reveal flip instead of the deal-in.
+ *  `hot` adds the 🔥 glow; `nuked` scorches the card (its bank shows the
+ *  post-wipe score). */
+export function PlayerCard({ slug, name, pos, slot, metric, bank, opp = false, hot = false, nuked = false, idx = 0 }: {
+  slug: string; name: string; pos: string; slot?: string; metric?: string | null;
+  bank?: number | null; opp?: boolean; hot?: boolean; nuked?: boolean; idx?: number;
+}) {
+  const [imgOk, setImgOk] = useState(true);
+  const url = useMemo(() => headshot(slug), [slug]);
+  const suit = posVars(pos);
+  const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
+  return (
+    <div className={`ct-wrap ${opp ? 'ct-flip ct-opp' : 'ct-dealin'}${hot && !nuked ? ' ct-hot' : ''}${nuked ? ' ct-nuked' : ''}`}
+      style={{ animationDelay: `${idx * 90}ms` }}>
+      <div className="ct-card" style={wobbleVars(slug)}>
+        <div className="ct-side ct-face">
+          <div className="ct-fill" style={{ height: `${fillPct}%` }} />
+          <div className="ct-facehead">
+            <span className="ct-suit" style={suit}>{pos === 'DEF' ? 'DST' : pos}</span>
+            {slot && <span className="ct-slot">{slot.toUpperCase()}</span>}
+          </div>
+          <div className="ct-art" style={{ borderColor: suit.color as string }}>
+            {url && imgOk
+              ? <img src={url} alt="" draggable={false} onError={() => setImgOk(false)} />
+              : <span className="ct-mono" style={{ color: suit.color as string }}>{initials(name)}</span>}
+          </div>
+          <div className="ct-name">{name}</div>
+          <div className="ct-metric">METRIC <b>{metric ?? '—'}</b></div>
+          {bank != null && <div className="ct-bank"><b>{(Math.round(bank * 10) / 10).toFixed(1)}</b><span>PTS</span></div>}
+          {nuked && (
+            <div className="ct-scorch">
+              <span className="ct-skull">☠</span>
+              <span className="ct-sup">NUKED</span>
+              {bank != null && <span className="ct-wiped">bank {(Math.round(bank * 10) / 10).toFixed(1)}</span>}
+            </div>
+          )}
+        </div>
+      </div>
+      {hot && !nuked && <div className="ct-hotchip">🔥 HOT</div>}
+    </div>
+  );
+}
+
+/** One power-up in the hand. `action` mirrors the Apply modal's semantics:
+ *  'arm' fires immediately (whole-field buff), 'apply' enters tap-a-target
+ *  mode, 'hint' is informational (usable in place, e.g. metric unlocks). */
+export interface HandCard {
+  id: string; name: string; icon?: string; qty: number;
+  action: 'arm' | 'apply' | 'hint';
+  deadline: string; blurb?: string; note?: string;
+}
+
+/** The fanned power-up hand, pinned to the bottom of the screen. Cards you own
+ *  (inventory > 0, usable now) peek up from the edge; tapping one raises it
+ *  with its tip, and the tip's button ARMs it or enters APPLY target mode.
+ *  While a card is pending a target (`pendingId`) it stays raised; tapping it
+ *  again cancels. Renders nothing when the hand is empty. */
+export function PowerupHand({ cards, pendingId, onArm, onApply, onCancel }: {
+  cards: HandCard[]; pendingId: string | null;
+  onArm: (id: string) => void; onApply: (id: string) => void; onCancel: () => void;
+}) {
+  const [raised, setRaised] = useState<string | null>(null);
+  useEffect(() => { if (pendingId) setRaised(null); }, [pendingId]);
+  if (!cards.length) return null;
+  const n = cards.length;
+  const spread = Math.min(60, 320 / Math.max(1, n - 1));
+  return (
+    <div className="ct-hand">
+      <div className="ct-handtag">YOUR HAND</div>
+      {cards.map((c, i) => {
+        const hx = (i - (n - 1) / 2) * spread;
+        const hr = (i - (n - 1) / 2) * 4;
+        const isPending = pendingId === c.id;
+        const isRaised = isPending || raised === c.id;
+        const blocked = !!c.note && c.action === 'arm';
+        return (
+          <div key={c.id}
+            className={`ct-hcard${isRaised ? ' raised' : ''}${blocked ? ' dim' : ''}`}
+            style={{ ['--hx' as string]: `${hx}px`, ['--hr' as string]: `${hr}deg` }}
+            onClick={() => {
+              if (isPending) { onCancel(); return; }
+              setRaised((r) => (r === c.id ? null : c.id));
+            }}>
+            <div className="ct-hinner">
+              <div className="ct-hico"><PuIcon id={c.id} emoji={c.icon} size="1.2em" /></div>
+              <div className="ct-httl">{c.name}</div>
+              <div className="ct-hdl">{isPending ? 'TAP TARGET · tap card to cancel' : c.deadline}</div>
+            </div>
+            {c.qty > 1 && <span className="ct-hqty">×{c.qty}</span>}
+            {isRaised && !isPending && (
+              <div className="ct-htip" onClick={(e) => e.stopPropagation()}>
+                {c.blurb}
+                {c.note && <span className="ct-hnote">↳ {c.note}</span>}
+                {c.action === 'arm' && !blocked && <button className="ct-hact" onClick={() => { setRaised(null); onArm(c.id); }}>ARM</button>}
+                {c.action === 'apply' && <button className="ct-hact" onClick={() => { setRaised(null); onApply(c.id); }}>APPLY → PICK TARGET</button>}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** A face-down sealed pick — the opponent's card before its window kicks off. */
+export function SealedCard({ seed, idx = 0 }: { seed: string; idx?: number }) {
+  return (
+    <div className="ct-wrap ct-dealin" style={{ animationDelay: `${idx * 90}ms` }}>
+      <div className="ct-card" style={wobbleVars(seed)}>
+        <div className="ct-side ct-back">
+          <div className="ct-lattice" />
+          <div className="ct-gem">◈</div>
+          <div className="ct-sealtag">SEALED ◈ PICK</div>
+        </div>
+      </div>
+    </div>
+  );
+}

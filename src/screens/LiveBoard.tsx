@@ -3,9 +3,10 @@ import { WINDOWS, metricById } from '../data/metrics';
 import { GameIcon, COIN_GOLD } from '../app/gameIcons';
 import type { Pos } from '../types';
 import {
-  myRoster, myMatchup, getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, myPool, matchupWallets, matchupTeams, weekGameFeeds,
+  myRoster, myMatchup, getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, myPool, matchupWallets, matchupTeams, weekGameFeeds, leagueCardTheme,
   type LiveMatchup, type WindowScore, type RevealedPick, type PoolPlayer, type TeamInfo, type GameFeedRow,
 } from '../data/liveApi';
+import { CardTableCss, Felt, PlayerCard, SealedCard } from '../app/cardTable';
 import { setLiveGameFeed, feedRowsToWeek } from '../data/gameFeed';
 import { FieldView } from '../app/FieldView';
 import { REG_SEASON_WEEKS } from '../data/league';
@@ -27,6 +28,7 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
   const [weekSel, setWeekSel] = useState<number | null>(null); // null = default (earliest) week
   const [gameFeeds, setGameFeeds] = useState<GameFeedRow[]>([]); // field visuals (game_feed)
   const [fieldsOpen, setFieldsOpen] = useState(true);
+  const [cardTheme, setCardTheme] = useState(false); // league_pref.card_theme (super-admin flag)
 
   useEffect(() => {
     let unsub = () => {};
@@ -37,6 +39,7 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
         const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
         if (!alive) return;
         if (!r) { setState('none'); return; }
+        leagueCardTheme(r.leagueId).then((v) => alive && setCardTheme(!!v)).catch(() => {});
         const m = await myMatchup(r.leagueId, r.rosterId, weekSel ?? undefined);
         if (!alive) return;
         if (!m) { setMatchup(null); setState('none'); return; }
@@ -118,8 +121,8 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
   const myBank = youAreHome ? wallets?.home : wallets?.away;
   const theirBank = youAreHome ? wallets?.away : wallets?.home;
 
-  return (
-    <div>
+  const boardBody = (
+    <>
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Week {matchup!.week} · live board</div>
@@ -129,9 +132,9 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 18, margin: '16px 0 4px' }}>
-          <Big label="YOU" value={round(totals.you)} color="var(--you)" team={teams[youAreHome ? matchup!.home_roster_id : matchup!.away_roster_id]} />
-          <span className="mono" style={{ fontSize: 11, color: 'var(--faint)', paddingTop: 14 }}>vs</span>
-          <Big label="OPP" value={round(totals.them)} color="var(--opp)" team={teams[youAreHome ? matchup!.away_roster_id : matchup!.home_roster_id]} />
+          <Big label="YOU" value={round(totals.you)} color="var(--you)" team={teams[youAreHome ? matchup!.home_roster_id : matchup!.away_roster_id]} plaque={cardTheme} />
+          <span className={cardTheme ? 'ct-vs' : 'mono'} style={{ fontSize: 11, color: 'var(--faint)', paddingTop: 14 }}>vs</span>
+          <Big label="OPP" value={round(totals.them)} color="var(--opp)" team={teams[youAreHome ? matchup!.away_roster_id : matchup!.home_roster_id]} plaque={cardTheme} />
         </div>
         {status === 'scheduled' && <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', marginTop: 8 }}>Scores start ticking after kickoff.</div>}
         {(myCoin != null || theirCoin != null) && (
@@ -148,7 +151,7 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
         )}
       </div>
 
-      {scores.length > 0 && (
+      {!cardTheme && scores.length > 0 && (
         <div style={{ ...card, marginBottom: 12 }}>
           <div className="mono" style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginBottom: 8 }}>BY WINDOW</div>
           {scores.sort((a, b) => a.game_window.localeCompare(b.game_window)).map((s) => {
@@ -185,19 +188,107 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
         );
       })()}
 
-      <Lineup title="Your lineup" picks={mine} pool={pool} reveal />
-      <Lineup title={locked ? 'Opponent lineup' : 'Opponent — sealed'} picks={theirs} pool={pool} reveal={locked} />
+      {cardTheme ? (
+        <CardDuel mine={mine} theirs={theirs} pool={pool} scores={scores} youAreHome={youAreHome} status={status} />
+      ) : (
+        <>
+          <Lineup title="Your lineup" picks={mine} pool={pool} reveal />
+          <Lineup title={locked ? 'Opponent lineup' : 'Opponent — sealed'} picks={theirs} pool={pool} reveal={locked} />
+        </>
+      )}
 
       <div style={{ textAlign: 'center', marginTop: 14 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
-    </div>
+    </>
+  );
+
+  return cardTheme ? <><CardTableCss /><Felt>{boardBody}</Felt></> : <div>{boardBody}</div>;
+}
+
+// ── Card-table presentation (league_pref.card_theme) ─────────────────────────
+// The same picks/pool/scores as the classic board, dealt as a heads-up card
+// table: your cards left, the opponent's right, one pod per game window with
+// the window score in the middle. Unrevealed opponent windows show face-down
+// sealed backs (mirroring your card count — never their real one, so nothing
+// leaks pre-kick).
+function CardDuel({ mine, theirs, pool, scores, youAreHome, status }: {
+  mine: RevealedPick[]; theirs: RevealedPick[]; pool: Record<string, PoolPlayer>;
+  scores: WindowScore[]; youAreHome: boolean; status: string;
+}) {
+  const order = WINDOWS.map((w) => w.id as string);
+  const wins = [...new Set([...mine, ...theirs].map((p) => p.game_window).concat(scores.map((s) => s.game_window)))]
+    .sort((a, b) => {
+      const ia = order.indexOf(a), ib = order.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.localeCompare(b);
+    });
+  const round = (n: number) => Math.round(n * 10) / 10;
+  const youSide = youAreHome ? 'home' : 'away';
+  const metricName = (p: RevealedPick, fallbackId?: string | null) => {
+    const player = p.player_slug ? pool[p.player_slug] : null;
+    const id = p.metric_id ?? fallbackId ?? null;
+    return player && id ? (metricById(player.pos as Pos, id)?.name ?? id) : id;
+  };
+  const cardOf = (p: RevealedPick, i: number, opp: boolean) => {
+    const player = p.player_slug ? pool[p.player_slug] : null;
+    if (!player) return <SealedCard key={`${p.game_window}-${p.roster_slot}-${i}`} seed={p.roster_slot + p.game_window} idx={i} />;
+    // The worker's per-slot detail (matchup_state.slot_scores) → this card's bank.
+    // Only kicked-off windows carry rows, so a missing row just means "no points yet".
+    const side = opp ? (youSide === 'home' ? 'away' : 'home') : youSide;
+    const row = scores.find((x) => x.game_window === p.game_window)?.slot_scores
+      ?.find((r) => r.side === side && (r.slot === p.roster_slot || (!!p.player_slug && r.slug === p.player_slug)));
+    return <PlayerCard key={`${p.game_window}-${p.roster_slot}-${i}`} slug={player.slug} name={player.full} pos={player.pos}
+      slot={p.roster_slot} metric={metricName(p, row?.metric)} bank={row ? round(Number(row.score)) : null}
+      hot={!!row?.hot} nuked={!!row?.nuked} opp={opp} idx={i} />;
+  };
+  return (
+    <>
+      {wins.map((win) => {
+        const my = mine.filter((p) => p.game_window === win);
+        const th = theirs.filter((p) => p.game_window === win);
+        const s = scores.find((x) => x.game_window === win);
+        if (!my.length && !th.length && !s) return null;
+        const you = s ? round(Number(youAreHome ? s.home_score : s.away_score)) : null;
+        const them = s ? round(Number(youAreHome ? s.away_score : s.home_score)) : null;
+        // No revealed opponent rows + matchup not final ⇒ that window is still
+        // sealed for you; mirror your card count so their real count never leaks.
+        const sealedBacks = !th.length && status !== 'final' ? Math.max(my.length, 1) : 0;
+        // Street state: FINAL when the week settles, SEALED while the opponent's
+        // cards are face-down, LIVE once the window has published slot scores.
+        const hasRows = !!s?.slot_scores?.length;
+        const st = status === 'final' ? 'final' : sealedBacks > 0 && !hasRows ? 'sealed' : status === 'live' ? 'live' : 'sealed';
+        return (
+          <div key={win} className="ct-pod">
+            <div className="ct-podhead">
+              <span className="ct-winlab">{winLabel(win)}</span>
+              <span className={`ct-state ${st}`}>{st === 'live' ? '● LIVE' : st.toUpperCase()}</span>
+            </div>
+            <div className="ct-duel">
+              <div className="ct-col">
+                <span className="ct-coltag" style={{ color: 'var(--you)' }}>YOU</span>
+                {my.map((p, i) => cardOf(p, i, false))}
+              </div>
+              <div className="ct-mid">
+                {you != null && <span className="ct-score" style={{ color: 'var(--you)' }}>{you}</span>}
+                <span className="ct-vs">VS</span>
+                {them != null && <span className="ct-score" style={{ color: 'var(--opp)' }}>{them}</span>}
+              </div>
+              <div className="ct-col">
+                <span className="ct-coltag" style={{ color: 'var(--opp)' }}>OPP</span>
+                {th.map((p, i) => cardOf(p, i, true))}
+                {Array.from({ length: sealedBacks }, (_, i) => <SealedCard key={`sealed-${i}`} seed={win + i} idx={i} />)}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </>
   );
 }
 
-function Big({ label, value, color, team }: { label: string; value: number; color: string; team?: TeamInfo }) {
+function Big({ label, value, color, team, plaque = false }: { label: string; value: number; color: string; team?: TeamInfo; plaque?: boolean }) {
   return (
     <div style={{ textAlign: 'center', maxWidth: 120 }}>
       {team?.avatar && <img src={team.avatar} alt="" width={28} height={28} style={{ borderRadius: 6, marginBottom: 4 }} />}
-      <div className="grotesk" style={{ fontSize: 38, fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
+      <div className={plaque ? 'ct-bigpts' : 'grotesk'} style={{ fontSize: 38, fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
       <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 4 }}>{label}</div>
       {team?.team_name && <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.team_name}</div>}
     </div>

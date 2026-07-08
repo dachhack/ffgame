@@ -4,7 +4,7 @@ import {
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
   adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminSetPreseason, type LeagueJoiner,
-  setTeamController, setLineupPolicy,
+  setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme,
   leagueKdst, setKdstMode, setTeamKdst,
   rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
   setTransactionRules, commishMovePlayer, commishRemovePlayer, commishRuleTrade,
@@ -767,6 +767,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <PreseasonToggle on={!!l.preseason_at} leagueId={l.league_id} reload={reload} />
                 <TestLiveToggle on={!!l.test_live_at} leagueId={l.league_id} reload={reload} />
+                <CardThemeToggle leagueId={l.league_id} />
                 <span style={{ flex: 1 }} />
                 <DeleteLeague name={l.name} onDelete={async () => { const r = await adminDeleteLeague(l.league_id); if (r.ok) reload(); return r; }} />
               </div>
@@ -1326,6 +1327,26 @@ function PreseasonToggle({ on, leagueId, reload }: { on: boolean; leagueId: stri
     <button onClick={go} disabled={busy} title={on ? 'Preseason mode is ON — this league has real 2026 preseason matchups (weeks 101-103). Click to turn off and remove them.' : 'Turn on preseason mode: seed this league with real 2026 preseason matchups so it can play live on real PBP before the season starts.'}
       className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--you)', background: on ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--you)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
       {busy ? '…' : on ? '🏈 PRESEASON: ON' : '🏈 preseason'}
+    </button>
+  );
+}
+
+// Per-league card-table theme (league_pref.card_theme, migration 0074): flips the
+// live board between the classic list and the card-table presentation for every
+// member of this league. Loads its own state; optimistic flip, reverts on error.
+function CardThemeToggle({ leagueId }: { leagueId: string }) {
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => { leagueCardTheme(leagueId).then((v) => setOn(!!v)).catch(() => setOn(false)); }, [leagueId]);
+  const flip = async () => {
+    if (on == null) return;
+    const next = !on;
+    setOn(next);
+    try { const r = await adminSetCardTheme(leagueId, next); if (!r.ok) setOn(!next); } catch { setOn(!next); }
+  };
+  return (
+    <button onClick={flip} disabled={on == null} title={on ? 'Card-table board is ON for this league — every member sees lineups as a heads-up card table (you left, opponent right, sealed picks face-down). Click to switch back to the classic board.' : 'Turn on the card-table board for this league: lineups render as player cards dealt heads-up, with sealed picks as face-down card backs. Cosmetic only — scoring is unchanged.'}
+      className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--you)', background: on ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--you)', borderRadius: 4, padding: '4px 8px', cursor: on == null ? 'default' : 'pointer', opacity: on == null ? 0.6 : 1 }}>
+      {on == null ? '…' : on ? '🃏 CARD TABLE: ON' : '🃏 card table'}
     </button>
   );
 }

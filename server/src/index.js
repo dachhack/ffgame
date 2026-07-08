@@ -140,10 +140,15 @@ async function tick() {
   if (live?.length) {
     await injectWeekPlays(week);
     const ctx = await prefetchTick(live, week); // ~5 bulk reads instead of ~6/matchup
+    // Windows already kicked off — resolve only publishes slot_scores for these,
+    // mirroring the per-window pick sealing above (null = no slate → publish all,
+    // matching lockDueMatchups' seal-everything fallback).
+    const nowMs = Date.now();
+    const startedWins = wk ? new Set(Object.keys(wk).filter((w) => wk[w] <= nowMs)) : null;
     let done = 0;
     for (let i = 0; i < live.length; i += 20) {
       await Promise.all(live.slice(i, i + 20).map((m) =>
-        resolveMatchup(m, playerIndex, undefined, { playsInjected: true, ctx }).then(() => { done++; }).catch((e) => log('resolve', m.id, e.message))));
+        resolveMatchup(m, playerIndex, undefined, { playsInjected: true, ctx, startedWins }).then(() => { done++; }).catch((e) => log('resolve', m.id, e.message))));
     }
     log('resolved', done, '/', live.length, 'matchups');
   }

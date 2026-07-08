@@ -305,7 +305,11 @@ export async function savePicks(matchupId: string, userId: string, rows: PickRow
 }
 
 // ── Live board (Realtime) ───────────────────────────────────────────────────────
-export interface WindowScore { game_window: string; home_score: number; away_score: number; }
+/** One slot's engine score inside a window (matchup_state.slot_scores, migration
+ *  0020) — the worker only publishes rows for windows that have kicked off, so
+ *  sealed picks never appear here. */
+export interface SlotScoreRow { side: 'home' | 'away'; slot: string; slug: string | null; metric: string | null; score: number; hot?: boolean; nuked?: boolean; }
+export interface WindowScore { game_window: string; home_score: number; away_score: number; slot_scores?: SlotScoreRow[]; }
 export interface RevealedPick { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null; locked: boolean; }
 
 /** Re-read a matchup's row (status / lock_at / finals may have changed). */
@@ -314,9 +318,10 @@ export async function getMatchup(matchupId: string): Promise<LiveMatchup | null>
   return (data as LiveMatchup) ?? null;
 }
 
-/** Per-window engine scores for a matchup (written by the worker's resolver). */
+/** Per-window engine scores for a matchup (written by the worker's resolver),
+ *  including per-slot detail for the card-table board. */
 export async function getMatchupState(matchupId: string): Promise<WindowScore[]> {
-  const { data } = await client().from('matchup_state').select('game_window, home_score, away_score').eq('matchup_id', matchupId);
+  const { data } = await client().from('matchup_state').select('game_window, home_score, away_score, slot_scores').eq('matchup_id', matchupId);
   return (data ?? []) as WindowScore[];
 }
 
@@ -438,6 +443,12 @@ export async function startCheckout(kind: 'personal' | 'league' | 'split', leagu
 }
 export const adminSetPremiumTier = (freePositions: string[], freePowerups: string[]) =>
   rpc<{ ok: boolean; error?: string }>('admin_set_premium_tier', { p_free_positions: freePositions, p_free_powerups: freePowerups });
+
+// Card-table theme flag (migration 0074): per-league presentation switch for the
+// live board. Members read it; only super admins flip it.
+export const leagueCardTheme = (leagueId: string) => rpc<boolean>('league_card_theme', { p_league: leagueId });
+export const adminSetCardTheme = (leagueId: string, on: boolean) =>
+  rpc<{ ok: boolean; error?: string; card_theme?: boolean }>('admin_set_card_theme', { p_league: leagueId, p_on: on });
 
 export const adminOverview = () => rpc<AdminLeague[]>('admin_overview');
 export const adminMatchups = (leagueId: string) => rpc<AdminMatchup[]>('admin_matchups', { p_league_id: leagueId });
