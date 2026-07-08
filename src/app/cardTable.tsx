@@ -100,6 +100,45 @@ const CSS = `
 }
 @media (max-width:400px){ .ctable .ct-wrap{width:92px;height:136px} .ctable .ct-art{width:62px;height:45px} .ctable .ct-mid{min-width:40px} }
 
+/* ── hero-board skin (Matchup.tsx) — felt + card-ified slot boxes. The mx-*
+   hooks are inert outside a .ctable ancestor, so DemoBoard/LivePicks reuse of
+   SetupRow is untouched. !important is required to beat the board's inline
+   styles; state variants (apply-mode / selected → .mx-state) opt out so the
+   warn/target highlights keep winning. ───────────────────────────────────── */
+.mx-felt{position:relative;}
+.mx-felt>*{position:relative;z-index:1;}
+.mx-felt .ct-feltlayers{position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(70% 60% at 18% 8%, rgba(27,74,55,.65), transparent 62%),
+    radial-gradient(60% 55% at 85% 92%, rgba(88,32,43,.55), transparent 60%),
+    radial-gradient(55% 60% at 55% 45%, rgba(20,66,74,.5), transparent 65%),
+    #0B1F1A;}
+.mx-felt .ct-feltlayers::before{content:"";position:absolute;inset:0;opacity:.5;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");}
+.mx-felt .ct-feltlayers::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 40%,transparent 55%,rgba(0,0,0,.5) 100%);}
+
+@keyframes mx-wob{from{transform:rotate(.7deg)}to{transform:rotate(-.8deg) translateY(-2px)}}
+.ctable .mx-winsec{border:2px solid rgba(0,0,0,.75);border-radius:12px;padding:10px 10px 12px;
+  background:linear-gradient(rgba(10,26,21,.5),rgba(8,20,16,.65));
+  box-shadow:inset 0 0 0 1px rgba(233,185,89,.08),inset 0 12px 20px rgba(0,0,0,.3),0 3px 0 rgba(0,0,0,.5);}
+.ctable .mx-sealed{
+  background-image:radial-gradient(rgba(233,185,89,.32) 1.1px,transparent 1.3px),radial-gradient(circle at 50% 46%,#7E2430 0%,#571C26 62%,#40151E 100%) !important;
+  background-size:11px 11px,100% 100% !important;
+  border:2px solid #000 !important;border-right:2px solid #000 !important;
+  border-radius:10px !important;box-shadow:0 4px 0 rgba(0,0,0,.6);
+  animation:mx-wob 5.4s ease-in-out infinite alternate;}
+.ctable .mx-sealed .grotesk{color:#E9B959 !important;text-shadow:0 2px 0 #000;}
+.ctable .mx-sealed .mono{color:#E3B7BC !important;}
+.ctable .mx-empty:not(.mx-state){
+  background:rgba(233,185,89,.05) !important;
+  border:2px dashed rgba(233,185,89,.55) !important;border-left:2px dashed rgba(233,185,89,.55) !important;
+  border-radius:10px !important;}
+.ctable .mx-spot:not(.mx-state){
+  border:2px solid #000 !important;border-left:4px solid var(--you) !important;
+  border-radius:10px !important;box-shadow:0 4px 0 rgba(0,0,0,.55);
+  animation:mx-wob 6.2s ease-in-out infinite alternate;}
+@media (prefers-reduced-motion:reduce){.ctable .mx-sealed,.ctable .mx-spot:not(.mx-state){animation:none;}}
+
 /* ── the power-up hand (standalone — renders outside .ctable too) ─────────── */
 .ct-hand{position:fixed;left:50%;transform:translateX(-50%);bottom:-6px;z-index:40;width:min(500px,100vw);height:128px;pointer-events:none;}
 .ct-hand .ct-handtag{position:absolute;bottom:100px;left:50%;transform:translateX(-50%);font-size:8px;letter-spacing:.24em;
