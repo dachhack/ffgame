@@ -2406,7 +2406,7 @@ export function SetupRow(props: {
 
   return (
     <>
-    <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: rowGap }}>
+    <div className="mx-setpair" style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: rowGap }}>
       {player ? (
         <div
           onDragOver={(e) => e.preventDefault()}
