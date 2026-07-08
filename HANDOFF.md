@@ -1,6 +1,19 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-08 · Build `v0.108.3`_
+_Last updated: 2026-07-08 · Build `v0.108.4`_
+
+## Vault wing 4 — longshot bonuses, measured (v0.108.4)
+- Six Trick-Play-family entries in `POWERUP_VAULT` (still off), payouts
+  calibrated by SCANNING the 14 baked weeks (4585 player-weeks) for real
+  event rates: Hat Trick ◎20 (3+ TD starter → +50; 0.44% raw), Moonshot ◎15
+  (55+yd FG → +25; ~12%/kicker-week), Safety Dance ◎10 (DST safety → +75;
+  7 all season), Breakaway ◎10 (60+yd run → +40; 0.37%), Free Football ◎15
+  (a starter's game hits OT → +20; 2.5%), Two-Way Threat ◎15 (same starter
+  rush+rec TD → +40; 0.35%).
+- Return-TD longshot deliberately EXCLUDED: zero return TDs exist in the
+  baked pbp, so the engine couldn't detect one — revisit if the bake ever
+  carries them. Hooks are post-window lineup scans (trick-play/pick-six
+  pattern); statlineAt already carries every stat these need.
 
 ## Vault wing 3 — live-window plays (v0.108.3)
 - Eight `timing: 'live'` entries added to `POWERUP_VAULT` (still off) — the

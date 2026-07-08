@@ -112,6 +112,21 @@ export const POWERUP_VAULT: Powerup[] = [
   { id: 'all-out-blitz', name: 'All-Out Blitz', blurb: 'Fire during a live window: your NEXT erase there hits every opponent drip in the window, not just its matched slot.', kind: 'action', timing: 'live', price: 40, icon: '🚨', target: 'window' },
   { id: 'pile-on', name: 'Pile-On', blurb: 'Fire within 5 game-minutes of an opponent slot getting erased or nuked: it can’t bank anything for the next 5. Kick ’em while they’re down.', kind: 'action', timing: 'live', price: 35, icon: '💢', target: 'slot-opp' },
   { id: 'send-the-house', name: 'Send the House', blurb: 'Fire on one of your live slots: its next scoring play counts TRIPLE. If nothing scores there in the next 5 game-minutes, the bet is simply gone.', kind: 'action', timing: 'live', price: 30, icon: '🎰', target: 'slot-you' },
+
+  // ── longshots: flat bonuses for rare game events (Trick Play's family) ──────
+  // Frequencies measured on the 14 baked 2025 weeks (4585 player-weeks):
+  // 3+ TDs 0.44% · 55+yd FG ~12% per KICKER-week · safety 7 all season ·
+  // 60+yd rush 0.37% · game reaching OT 2.5% · rush+rec TD same player 0.35%.
+  // Return TDs measured ZERO in the bake — that longshot is unbuildable until
+  // the pbp carries them. Payouts sized near the ~◎4-5-per-expected-point norm
+  // with a fun-tax margin, same as Hail Mary. Hooks: post-window lineup scans
+  // like trick-play/pick-six — statlineAt already carries every stat needed.
+  { id: 'hat-trick', name: 'Hat Trick', blurb: 'Arm before kickoff: if any starter scores THREE or more touchdowns this week, bank a flat +50.', kind: 'action', timing: 'pre', price: 20, icon: '🎩' },
+  { id: 'moonshot', name: 'Moonshot', blurb: 'Arm before kickoff: if your kicker drills a 55+ yard field goal this week, bank a flat +25.', kind: 'action', timing: 'pre', price: 15, icon: '🌙' },
+  { id: 'safety-dance', name: 'Safety Dance', blurb: 'Arm before kickoff: if your DST records a SAFETY this week, bank a flat +75. Seven happened all season — but when it hits, it hits.', kind: 'action', timing: 'pre', price: 10, icon: '🕺' },
+  { id: 'breakaway', name: 'Breakaway', blurb: 'Arm before kickoff: if any starter rips a 60+ yard run this week, bank a flat +40.', kind: 'action', timing: 'pre', price: 10, icon: '💨' },
+  { id: 'free-football', name: 'Free Football', blurb: 'Arm before kickoff: if any of your starters’ games reaches overtime this week, bank a flat +20. Pairs nicely with your Overtime arms.', kind: 'action', timing: 'pre', price: 15, icon: '🆓' },
+  { id: 'two-way-threat', name: 'Two-Way Threat', blurb: 'Arm before kickoff: if one starter scores BOTH a rushing and a receiving touchdown this week, bank a flat +40.', kind: 'action', timing: 'pre', price: 15, icon: '⚔️' },
 ];
 
 // ── Drip AMPLIFIERS are capacity-limited ─────────────────────────────────────
