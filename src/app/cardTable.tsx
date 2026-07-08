@@ -35,8 +35,19 @@ const CSS = `
 @keyframes ct-wob{from{transform:rotateZ(-.9deg) translateY(0)}to{transform:rotateZ(.9deg) translateY(-2px)}}
 .ctable .ct-dealin{animation:ct-deal .5s cubic-bezier(.3,1.5,.5,1) backwards;}
 @keyframes ct-deal{from{transform:translateY(-40px) rotateZ(8deg);opacity:0}to{transform:translateY(0) rotateZ(0);opacity:1}}
+.ctable .ct-flip .ct-card{animation:ct-flipin .55s cubic-bezier(.3,1.4,.5,1) backwards,
+  ct-wob var(--wobdur,4.8s) ease-in-out var(--wobdel,0s) infinite alternate;}
+@keyframes ct-flipin{from{transform:rotateY(180deg)}to{transform:rotateY(0)}}
 .ctable .ct-side{position:absolute;inset:0;border-radius:10px;border:2px solid #000;overflow:hidden;box-shadow:0 4px 0 rgba(0,0,0,.7);}
-.ctable .ct-face{background:linear-gradient(168deg,#FBF5E4,#F4EDDA 46%,#E7DCC0);color:#201C12;display:flex;flex-direction:column;padding:6px;}
+.ctable .ct-face{background:linear-gradient(168deg,#FBF5E4,#F4EDDA 46%,#E7DCC0);color:#201C12;display:flex;flex-direction:column;padding:6px;isolation:isolate;}
+.ctable .ct-face>*{position:relative;z-index:1;}
+.ctable .ct-fill{position:absolute;left:0;right:0;bottom:0;height:0%;z-index:0;pointer-events:none;
+  background:linear-gradient(rgba(233,185,89,0),rgba(233,185,89,.38) 18%,rgba(222,160,50,.5));
+  border-top:2px solid rgba(184,134,59,.85);transition:height .7s cubic-bezier(.3,1.4,.5,1);}
+.ctable .ct-opp .ct-fill{background:linear-gradient(rgba(255,90,95,0),rgba(255,90,95,.30) 18%,rgba(210,70,80,.42));border-top-color:rgba(178,58,68,.85);}
+.ctable .ct-bank{display:flex;justify-content:center;align-items:baseline;gap:3px;padding:2px 0 0;font-variant-numeric:tabular-nums;}
+.ctable .ct-bank b{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;font-size:15px;color:#1E1809;line-height:1;}
+.ctable .ct-bank span{font-size:7px;color:#9A8E6E;letter-spacing:.1em;}
 .ctable .ct-facehead{display:flex;justify-content:space-between;align-items:center;}
 .ctable .ct-suit{font-size:8px;font-weight:800;letter-spacing:.06em;padding:2.5px 5px;border-radius:4px;border:1.5px solid;}
 .ctable .ct-slot{font-size:7px;color:#6E6650;letter-spacing:.1em;}
@@ -112,17 +123,22 @@ const posVars = (pos: string) => {
 const initials = (name: string) => name.split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
 
 /** A face-up player card: headshot art (monogram when mark-free), suit chip,
- *  slot tag, and the hidden-metric chip once revealed. */
-export function PlayerCard({ slug, name, pos, slot, metric, idx = 0 }: {
-  slug: string; name: string; pos: string; slot?: string; metric?: string | null; idx?: number;
+ *  slot tag, the hidden-metric chip once revealed, and — when the worker has
+ *  published per-slot scores — the drip bank with its liquid fill. Opponent
+ *  cards (`opp`) tint red and enter with a reveal flip instead of the deal-in. */
+export function PlayerCard({ slug, name, pos, slot, metric, bank, opp = false, idx = 0 }: {
+  slug: string; name: string; pos: string; slot?: string; metric?: string | null;
+  bank?: number | null; opp?: boolean; idx?: number;
 }) {
   const [imgOk, setImgOk] = useState(true);
   const url = useMemo(() => headshot(slug), [slug]);
   const suit = posVars(pos);
+  const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
   return (
-    <div className="ct-wrap ct-dealin" style={{ animationDelay: `${idx * 90}ms` }}>
+    <div className={`ct-wrap ${opp ? 'ct-flip ct-opp' : 'ct-dealin'}`} style={{ animationDelay: `${idx * 90}ms` }}>
       <div className="ct-card" style={wobbleVars(slug)}>
         <div className="ct-side ct-face">
+          <div className="ct-fill" style={{ height: `${fillPct}%` }} />
           <div className="ct-facehead">
             <span className="ct-suit" style={suit}>{pos === 'DEF' ? 'DST' : pos}</span>
             {slot && <span className="ct-slot">{slot.toUpperCase()}</span>}
@@ -134,6 +150,7 @@ export function PlayerCard({ slug, name, pos, slot, metric, idx = 0 }: {
           </div>
           <div className="ct-name">{name}</div>
           <div className="ct-metric">METRIC <b>{metric ?? '—'}</b></div>
+          {bank != null && <div className="ct-bank"><b>{(Math.round(bank * 10) / 10).toFixed(1)}</b><span>PTS</span></div>}
         </div>
       </div>
     </div>

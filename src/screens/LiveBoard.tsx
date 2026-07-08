@@ -221,15 +221,22 @@ function CardDuel({ mine, theirs, pool, scores, youAreHome, status }: {
       return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.localeCompare(b);
     });
   const round = (n: number) => Math.round(n * 10) / 10;
-  const metricName = (p: RevealedPick) => {
+  const youSide = youAreHome ? 'home' : 'away';
+  const metricName = (p: RevealedPick, fallbackId?: string | null) => {
     const player = p.player_slug ? pool[p.player_slug] : null;
-    return player && p.metric_id ? (metricById(player.pos as Pos, p.metric_id)?.name ?? p.metric_id) : p.metric_id;
+    const id = p.metric_id ?? fallbackId ?? null;
+    return player && id ? (metricById(player.pos as Pos, id)?.name ?? id) : id;
   };
-  const cardOf = (p: RevealedPick, i: number) => {
+  const cardOf = (p: RevealedPick, i: number, opp: boolean) => {
     const player = p.player_slug ? pool[p.player_slug] : null;
     if (!player) return <SealedCard key={`${p.game_window}-${p.roster_slot}-${i}`} seed={p.roster_slot + p.game_window} idx={i} />;
+    // The worker's per-slot detail (matchup_state.slot_scores) → this card's bank.
+    // Only kicked-off windows carry rows, so a missing row just means "no points yet".
+    const side = opp ? (youSide === 'home' ? 'away' : 'home') : youSide;
+    const row = scores.find((x) => x.game_window === p.game_window)?.slot_scores
+      ?.find((r) => r.side === side && (r.slot === p.roster_slot || (!!p.player_slug && r.slug === p.player_slug)));
     return <PlayerCard key={`${p.game_window}-${p.roster_slot}-${i}`} slug={player.slug} name={player.full} pos={player.pos}
-      slot={p.roster_slot} metric={metricName(p)} idx={i} />;
+      slot={p.roster_slot} metric={metricName(p, row?.metric)} bank={row ? round(Number(row.score)) : null} opp={opp} idx={i} />;
   };
   return (
     <>
@@ -252,7 +259,7 @@ function CardDuel({ mine, theirs, pool, scores, youAreHome, status }: {
             <div className="ct-duel">
               <div className="ct-col">
                 <span className="ct-coltag" style={{ color: 'var(--you)' }}>YOU</span>
-                {my.map(cardOf)}
+                {my.map((p, i) => cardOf(p, i, false))}
               </div>
               <div className="ct-mid">
                 {you != null && <span className="ct-score" style={{ color: 'var(--you)' }}>{you}</span>}
@@ -261,7 +268,7 @@ function CardDuel({ mine, theirs, pool, scores, youAreHome, status }: {
               </div>
               <div className="ct-col">
                 <span className="ct-coltag" style={{ color: 'var(--opp)' }}>OPP</span>
-                {th.map(cardOf)}
+                {th.map((p, i) => cardOf(p, i, true))}
                 {Array.from({ length: sealedBacks }, (_, i) => <SealedCard key={`sealed-${i}`} seed={win + i} idx={i} />)}
               </div>
             </div>
