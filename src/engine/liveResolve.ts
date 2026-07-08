@@ -234,8 +234,8 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     const awayIns: SlotInput[] = awayPicks.filter((p) => p.win === wid).map((p) => ({ player: p.player, metricId: p.metricId }));
     // Field General builds its multiplier from every filled slot on its side.
     // Overtime carries the multiplier past regulation; fg-stack stacks twin Generals.
-    const homeMult = windowFgMult(homeIns, week, { reg, carryOT: homeBuffs.has('overtime'), stack: homeBuffs.has('fg-stack') });
-    const awayMult = windowFgMult(awayIns, week, { reg, carryOT: awayBuffs.has('overtime'), stack: awayBuffs.has('fg-stack') });
+    const homeMult = windowFgMult(homeIns, week, { reg, carryOT: homeBuffs.has('overtime'), stack: homeBuffs.has('fg-stack'), combo: homeBuffs.has('fg-dual') });
+    const awayMult = windowFgMult(awayIns, week, { reg, carryOT: awayBuffs.has('overtime'), stack: awayBuffs.has('fg-stack'), combo: awayBuffs.has('fg-dual') });
     // TE-TD 8-PT NUKE clocks: a side's TE TDs knock the OPPONENT's drips.
     const homeTeTd = teTdNukeClocks(homeIns, week).map((n) => n.c);
     const awayTeTd = teTdNukeClocks(awayIns, week).map((n) => n.c);

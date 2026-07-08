@@ -370,14 +370,16 @@ const FG_RATE = 0.003;
 export function windowFgMult(
   players: SlotInput[],
   week: number,
-  opts: { reg?: number; carryOT?: boolean; stack?: boolean; projection?: boolean } = {},
+  opts: { reg?: number; carryOT?: boolean; stack?: boolean; combo?: boolean; projection?: boolean } = {},
 ): ((clock: number) => number) | undefined {
-  const { reg = 3300, carryOT = false, stack = false, projection = false } = opts;
+  const { reg = 3300, carryOT = false, stack = false, combo = false, projection = false } = opts;
   const timelines: RawPlay[][] = [];
   for (const p of players) {
     if (p.player.pos === 'QB' && p.metricId === 'fg') {
       const plays = projection ? projectedPlays(p.player) : (realRawPlays(p.player.id, week) ?? []);
-      const passes = plays.filter((x) => x.kind === 'pass').sort((a, b) => a.clock - b.clock);
+      // Dual Threat (fg-dual) counts the QB's own rushing yards toward the
+      // multiplier alongside passing yards — scramblers build it on the ground.
+      const passes = plays.filter((x) => x.kind === 'pass' || (combo && x.kind === 'rush')).sort((a, b) => a.clock - b.clock);
       if (passes.length) timelines.push(passes);
     }
   }

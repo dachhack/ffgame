@@ -176,7 +176,7 @@ export function aiLineup(aiTeamId: string, humanTeamId: string, week: number, ex
     // every other slot. Taken only if its total net edge beats Plan A.
     const qbIdx = aiPlayers.findIndex((p) => p.pos === 'QB');
     if (qbIdx >= 0 && aiPlayers.length >= 2) {
-      const fgMult = windowFgMult([{ player: aiPlayers[qbIdx], metricId: 'fg' }], week, { reg, stack: aiBuffSet.has('fg-stack'), projection: true });
+      const fgMult = windowFgMult([{ player: aiPlayers[qbIdx], metricId: 'fg' }], week, { reg, stack: aiBuffSet.has('fg-stack'), combo: aiBuffSet.has('fg-dual'), projection: true });
       if (fgMult) {
         const planB = aiPlayers.map((p, i) => i === qbIdx
           ? { metricId: 'fg', edge: edgeVsThreats(p, 'fg', threats, week, aiBuffSet) } // scores 0; pays off via the boost
@@ -360,8 +360,8 @@ export function buildMatchup(
       if (t) theirIns.push({ player: t.player, metricId: t.metricId });
     }
     const reg = REAL_WEEKS.has(week) ? 3600 : 3300;
-    const youMult = windowFgMult(youIns, week, { reg, carryOT: youBuffSet.has('overtime'), stack: youBuffSet.has('fg-stack') });
-    const theirMult = windowFgMult(theirIns, week, { reg, carryOT: theirBuffSet.has('overtime'), stack: theirBuffSet.has('fg-stack') });
+    const youMult = windowFgMult(youIns, week, { reg, carryOT: youBuffSet.has('overtime'), stack: youBuffSet.has('fg-stack'), combo: youBuffSet.has('fg-dual') });
+    const theirMult = windowFgMult(theirIns, week, { reg, carryOT: theirBuffSet.has('overtime'), stack: theirBuffSet.has('fg-stack'), combo: theirBuffSet.has('fg-dual') });
     // TE TD nukes reach across the window: your TEs' TD clocks knock down the
     // opponents' drips, and vice-versa.
     const youTeTd = teTdNukeClocks(youIns, week);

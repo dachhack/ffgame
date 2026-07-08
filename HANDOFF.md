@@ -1,6 +1,29 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.107.1`_
+_Last updated: 2026-07-08 · Build `v0.108.0`_
+
+## Dual Threat — rushing yards feed the Field General (v0.108.0)
+- **New power-up `fg-dual` "Dual Threat" (◎40, pre-kickoff arm)**: your Field
+  General QB's RUSHING yards count toward the window multiplier alongside
+  passing yards — a scrambler builds it on the ground.
+- **Engine**: `windowFgMult` grew a `combo` option (sim.ts) that admits
+  `kind === 'rush'` plays into the yardage timeline; wired as
+  `combo: buffs.has('fg-dual')` in both resolvers (liveResolve.ts,
+  matchup.ts — player sides + the AI's FG projection). No special-case UI:
+  the armed-buff plumbing is generic, so the catalog entry is enough.
+- **Priced empirically** (fg-study grew a third arm + a ground-game split,
+  plus the QB-rush bucket read now handles the raw pbp's compact k/y keys):
+  lift is +0.3 pts under a pocket passer (<15 rush yds), +2.0 mid (15-39),
+  +4.8 at 40+, and +9.3 avg at the ceiling (true scrambler, 3 drip
+  teammates, passive opponent — range +2 to +22, Allen w2 topping it).
+  At ◎40 a genuine scrambler week pays ~2.3 pts/◎10 — in line with the
+  amplifiers' 2.0-2.5 and the Air Raid precedent — while a statue makes it
+  a dead buy. A conditional read, not an auto-buy; H2H swing is modest.
+- **SQL mirror**: migration `0074_fg_dual.sql` re-creates `is_live_buff`
+  (+fg-dual) and `powerup_price` (+40); probes §29 pin the price/armability;
+  `check-powerup-prices.mjs` green both directions. Catalog + `LIVE_BUFFS`
+  (liveApi.ts) + playtester adversary pool updated. Probes 450/450, smoke,
+  typecheck, build, parity all green.
 
 ## Metric balance: measured, tuned, and a tool to keep it honest (v0.107.1)
 - **`server/scripts/metric-study.mjs`** (`cd server && npm run study`): runs

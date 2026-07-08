@@ -1393,4 +1393,15 @@ begin
   perform assert_true((r ->> 'champion_team') is not null, '28v champ named');
 end $$;
 
+-- ══ SECTION 29: Dual Threat power-up (0074) ═══════════════════════════════
+-- The new fg-dual buff must be armable and priced -- an omission here means the
+-- shop lists it but wallet_buy_powerup rejects it as 'unknown powerup'.
+do $$
+begin
+  perform assert_true(is_live_buff('fg-dual'), '29a fg-dual is an armable live buff');
+  perform assert_true(powerup_price('fg-dual') = 40, '29b fg-dual priced at 40');
+  perform assert_true(powerup_price('fg-stack') = 85, '29c existing prices untouched');
+  perform assert_true(powerup_price('no-such-powerup') = 9999, '29d unknown ids still rejected');
+end $$;
+
 select 'ALL PROBES PASSED' as result;

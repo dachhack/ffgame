@@ -36,7 +36,7 @@ const FREE = {
 const UNLOCK_METRIC = { combodrip: 'unlock-combo-drip', retyd: 'unlock-return', passbig: 'unlock-pass-td10' };
 const UNLOCK_FOR = { QB: ['passbig'], RB: ['combodrip', 'retyd'], WR: ['combodrip', 'retyd'], TE: ['combodrip', 'retyd'], K: [], DEF: [] };
 // Engine-modeled buffs the adversary may arm, with coin price.
-const BUFFS = ['overtime', 'garbage-time', 'momentum', 'floodgates', 'ot-shield', 'fg-stack', 'counter-nuke', 'insurance', 'unlock-carries-wipe'];
+const BUFFS = ['overtime', 'garbage-time', 'momentum', 'floodgates', 'ot-shield', 'fg-stack', 'fg-dual', 'counter-nuke', 'insurance', 'unlock-carries-wipe'];
 const price = (id) => powerupById(id)?.price ?? 0;
 
 // Amp capacity (0063): a trial arming 2-3 amplifiers must bundle the Second/
