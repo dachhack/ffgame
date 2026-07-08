@@ -40,7 +40,9 @@ const CSS = `
   ct-wob var(--wobdur,4.8s) ease-in-out var(--wobdel,0s) infinite alternate;}
 @keyframes ct-flipin{from{transform:rotateY(180deg)}to{transform:rotateY(0)}}
 .ctable .ct-side{position:absolute;inset:0;border-radius:10px;border:2px solid #000;overflow:hidden;box-shadow:0 4px 0 rgba(0,0,0,.7);}
-.ctable .ct-face{background:linear-gradient(168deg,#FBF5E4,#F4EDDA 46%,#E7DCC0);color:#201C12;display:flex;flex-direction:column;padding:6px;isolation:isolate;}
+.ctable .ct-face{color:#201C12;display:flex;flex-direction:column;padding:6px;isolation:isolate;
+  background-image:radial-gradient(rgba(184,134,59,.12) 1px,transparent 1.2px),radial-gradient(circle at 50% 36%,#FDF8E9 0%,#F4EDDA 55%,#E2D5B6 100%);
+  background-size:11px 11px,100% 100%;}
 .ctable .ct-face>*{position:relative;z-index:1;}
 .ctable .ct-fill{position:absolute;left:0;right:0;bottom:0;height:0%;z-index:0;pointer-events:none;
   background:linear-gradient(rgba(233,185,89,0),rgba(233,185,89,.38) 18%,rgba(222,160,50,.5));
@@ -150,7 +152,10 @@ const CSS = `
 /* Card-face layout inside a filled spot: cream card stock (same as PlayerCard),
    headshot stacked over a centered Lilita name, metric as the dark gold chip —
    the setup box reads as a portrait player card in every app theme. */
-.ctable .mx-spot:not(.mx-state){background:linear-gradient(168deg,#FBF5E4,#F4EDDA 46%,#E7DCC0) !important;}
+.ctable .mx-spot:not(.mx-state){
+  background-image:radial-gradient(rgba(184,134,59,.12) 1px,transparent 1.2px),radial-gradient(circle at 50% 36%,#FDF8E9 0%,#F4EDDA 55%,#E2D5B6 100%) !important;
+  background-size:11px 11px,100% 100% !important;}
+.ctable .mx-hidden{display:none !important;}
 .ctable .mx-spot:not(.mx-state) .mx-id{flex-direction:column;align-items:center;padding-right:0 !important;margin-top:auto;}
 .ctable .mx-spot:not(.mx-state) .mx-idbtn{flex-direction:column;align-items:center;text-align:center;gap:6px !important;flex:none !important;}
 .ctable .mx-spot:not(.mx-state) .mx-idbtn>div{text-align:center;}
@@ -165,25 +170,27 @@ const CSS = `
 
 /* ── power-up cards (shop + apply modals) — the hand's leather stock, dealt
    as a tappable grid on the felt ─────────────────────────────────────────── */
-.ctable .ct-puwrap{width:100%;max-width:132px;position:relative;animation:ct-deal .5s cubic-bezier(.3,1.5,.5,1) backwards;}
-.ctable .ct-pucard{display:flex;flex-direction:column;width:100%;min-height:176px;border-radius:10px;border:2px solid #000;
-  box-shadow:0 4px 0 rgba(0,0,0,.7);background:linear-gradient(165deg,#2E2418,#221A0F);padding:8px 7px;color:#EFE4C8;
-  cursor:pointer;transition:translate .2s;text-align:center;}
+.ctable .ct-puwrap{width:100%;max-width:158px;position:relative;animation:ct-deal .5s cubic-bezier(.3,1.5,.5,1) backwards;}
+.ctable .ct-pucard{display:flex;flex-direction:column;width:100%;min-height:196px;border-radius:10px;border:2px solid #000;
+  box-shadow:0 4px 0 rgba(0,0,0,.7);
+  background-image:radial-gradient(rgba(233,185,89,.09) 1px,transparent 1.2px),radial-gradient(circle at 50% 38%,#332919 0%,#2A2115 55%,#201810 100%);
+  background-size:11px 11px,100% 100%;
+  padding:9px 8px;color:#EFE4C8;cursor:pointer;transition:translate .2s;text-align:center;}
 .ctable .ct-puwrap:not(.ct-pudis):hover .ct-pucard{translate:0 -3px;}
 .ctable .ct-pudis .ct-pucard{filter:grayscale(.6) brightness(.65);cursor:default;}
-.ctable .ct-putime{align-self:center;font-size:6.6px;font-weight:800;letter-spacing:.14em;padding:2px 6px;border-radius:999px;
+.ctable .ct-putime{align-self:center;font-size:8px;font-weight:800;letter-spacing:.12em;padding:2.5px 7px;border-radius:999px;
   border:1.5px solid #000;box-shadow:0 1.5px 0 #000;background:#2A2216;color:#CDB77F;}
 .ctable .ct-putime.live{background:#E9B959;color:#241A08;}
-.ctable .ct-puico{font-size:26px;line-height:1;margin:8px 0 2px;}
-.ctable .ct-puname{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;
+.ctable .ct-puico{font-size:28px;line-height:1;margin:8px 0 3px;}
+.ctable .ct-puname{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:12px;letter-spacing:.05em;text-transform:uppercase;
   line-height:1.2;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;text-wrap:balance;}
-.ctable .ct-publurb{font-size:7.4px;line-height:1.45;color:#BFB396;margin-top:4px;display:-webkit-box;-webkit-line-clamp:4;
+.ctable .ct-publurb{font-size:9.2px;line-height:1.5;color:#CFC4A6;margin-top:5px;display:-webkit-box;-webkit-line-clamp:4;
   -webkit-box-orient:vertical;overflow:hidden;}
-.ctable .ct-punote{font-size:7px;color:#E0A96B;margin-top:3px;line-height:1.4;}
-.ctable .ct-pucost{margin-top:auto;padding-top:6px;}
-.ctable .ct-pucost b{display:inline-block;font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;font-size:10px;
+.ctable .ct-punote{font-size:8.6px;color:#E0A96B;margin-top:4px;line-height:1.4;}
+.ctable .ct-pucost{margin-top:auto;padding-top:7px;}
+.ctable .ct-pucost b{display:inline-block;font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;font-size:11px;
   letter-spacing:.06em;text-transform:uppercase;color:#241A08;background:linear-gradient(#F0C367,#DFA83F);
-  border:2px solid #000;border-radius:7px;box-shadow:0 2.5px 0 #000;padding:4px 10px;}
+  border:2px solid #000;border-radius:7px;box-shadow:0 2.5px 0 #000;padding:5px 12px;}
 .ctable .ct-pudis .ct-pucost b{background:#3A3226;color:#8C8270;}
 .ctable .ct-puown{position:absolute;top:-7px;right:-6px;z-index:5;background:#E9B959;color:#241A08;border:2px solid #000;
   border-radius:999px;font-size:8px;font-weight:800;padding:2px 6px;box-shadow:0 2px 0 #000;}
@@ -197,7 +204,9 @@ const CSS = `
   transform:translateX(calc(-50% + var(--hx))) rotate(var(--hr)) translateY(46px);
   transition:transform .3s cubic-bezier(.3,1.6,.4,1),filter .3s;}
 .ct-hcard .ct-hinner{width:100%;height:100%;border-radius:9px;border:2px solid #000;box-shadow:0 5px 0 rgba(0,0,0,.7);
-  background:linear-gradient(165deg,#2E2418,#221A0F);padding:6px 6px 7px;display:flex;flex-direction:column;color:#EFE4C8;}
+  background-image:radial-gradient(rgba(233,185,89,.09) 1px,transparent 1.2px),radial-gradient(circle at 50% 38%,#332919 0%,#2A2115 55%,#201810 100%);
+  background-size:11px 11px,100% 100%;
+  padding:6px 6px 7px;display:flex;flex-direction:column;color:#EFE4C8;}
 .ct-hcard:hover,.ct-hcard.raised{transform:translateX(calc(-50% + var(--hx))) rotate(0deg) translateY(-12px) scale(1.07);z-index:52;}
 .ct-hcard.dim{filter:grayscale(.7) brightness(.6);}
 .ct-hcard .ct-hico{font-size:19px;text-align:center;margin-top:2px;line-height:1;}

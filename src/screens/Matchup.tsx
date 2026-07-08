@@ -1953,7 +1953,7 @@ function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose, cards =
       <PuShell title="✦ Play a Card" subtitle="YOUR HAND — PLAY EACH BEFORE ITS WINDOW CLOSES" accent="var(--warn)" onClose={onClose}>
         <div className="ctable" style={{ maxHeight: 440, overflow: 'auto' }}>
           {items.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: '#93A594', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— no cards to play right now —<br />bought cards appear here while their window is open</div>}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(118px, 1fr))', gap: 12, justifyItems: 'center', padding: '4px 2px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(142px, 1fr))', gap: 12, justifyItems: 'center', padding: '4px 2px' }}>
             {items.map(({ p, deadline, action, blocked }, i) => (
               <PowerupCard key={p.id} id={p.id} name={p.name} icon={p.icon} blurb={p.blurb} idx={i}
                 timingLabel={deadline} live={action !== 'hint'}
@@ -2471,7 +2471,7 @@ export function SetupRow(props: {
           {!showPicker && (
             <div className="mx-met" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)' }}>{metric?.name}</span>
-              <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(7), letterSpacing: '0.12em', color: 'var(--faint)' }}>
+              <span className="mono mx-hidden" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(7), letterSpacing: '0.12em', color: 'var(--faint)' }}>
                 <span style={{ width: 5, height: 5, background: 'var(--you)', borderRadius: '50%', display: 'inline-block', animation: 'bpulse 2s ease infinite' }} /> HIDDEN
               </span>
               {twinLink && <TwinChip />}
