@@ -22,6 +22,13 @@ import type { Pick, Player, WindowId } from '../types';
 
 const actionText = (play: string) => play.replace(/^[A-Z]{2,3}( D| TD)?:\s*/, '');
 
+// Larger-text mode (default ON for mobile) bumps this screen's fine print,
+// mirroring the board cards' own bigText scaling.
+function useFinePrint() {
+  const { bigText } = useStore();
+  return (n: number) => (bigText ? Math.round(n * 1.3 * 10) / 10 : n);
+}
+
 // A signed-in player who lands here (first OAuth redirect, a magic link opened
 // in a fresh tab — anything that beats the dripLive flag) belongs on their
 // leagues screen. Checked ONCE per app load, so an intentional later visit to
@@ -56,6 +63,7 @@ export function DemoBoard() {
   const { navigate, sleeperUser, setSleeperUser, isSimLeague, exitSimLeague } = useStore();
   // Rails need ~900px; below that the rosters render as fluid panels instead.
   const narrow = useIsMobile(920);
+  const fs = useFinePrint();
   // Coming back from a Sleeper sim: restore the baked Drip Test League so the
   // board always builds from the demo rosters.
   useEffect(() => { if (isSimLeague) exitSimLeague(); }, [isSimLeague, exitSimLeague]);
@@ -403,10 +411,10 @@ export function DemoBoard() {
   // ── Board pieces ───────────────────────────────────────────────────────────
   const scoreHdr = (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: '14px 14px 12px' }}>
-      <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.16em', color: 'var(--faint)', textAlign: 'center' }}>DRIP TEST LEAGUE · WEEK {DEMO_WEEK} · REAL 2025 PLAYS</div>
+      <div className="mono" style={{ fontSize: fs(8.5), letterSpacing: '0.16em', color: 'var(--faint)', textAlign: 'center' }}>DRIP TEST LEAGUE · WEEK {DEMO_WEEK} · REAL 2025 PLAYS</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
         <TeamSide team={youTeam.name} owner={youTeam.owner} ownerId={youTeam.ownerId} score={youTot} accent="var(--you)" you />
-        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.12em', flex: 'none' }}>
+        <div className="mono" style={{ fontSize: fs(9), color: 'var(--faint)', letterSpacing: '0.12em', flex: 'none' }}>
           {phase === 'watch' && !ended && liveWin ? <span style={{ color: 'var(--you)' }}>{liveWin.window.label} · {fmtClock(wClock)}</span> : ended ? <span style={{ color: 'var(--you)' }}>FINAL</span> : 'VS'}
         </div>
         <TeamSide team={oppTeam.name} owner={oppTeam.owner} ownerId={oppTeam.ownerId} score={theirTot} accent="var(--opp)" />
@@ -423,12 +431,12 @@ export function DemoBoard() {
     return (
       <div key={w.id} style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, marginTop: 10, overflow: 'hidden', opacity: phase === 'watch' && st === 'upcoming' ? 0.65 : 1, transition: 'opacity .3s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--bd)', background: 'var(--bg)' }}>
-          <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>{w.label}</span>
-          <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{w.time}{games > 0 ? ` · ${games} game${games > 1 ? 's' : ''}` : ''}</span>
+          <span className="mono" style={{ fontSize: fs(10), fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>{w.label}</span>
+          <span className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)' }}>{w.time}{games > 0 ? ` · ${games} game${games > 1 ? 's' : ''}` : ''}</span>
           <span style={{ flex: 1 }} />
-          {st === 'upcoming' && <span className="mono" style={{ ...stateChip, color: 'var(--dim)', borderColor: 'var(--bd)' }}><Emoji e="🔒" size="1.25em" /> SEALED</span>}
-          {st === 'live' && <span className="mono" style={{ ...stateChip, color: 'var(--you)', borderColor: 'color-mix(in srgb, var(--you) 45%, transparent)' }}><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 3, background: 'var(--you)', marginRight: 5, animation: 'bpulse 1.2s infinite' }} />LIVE</span>}
-          {st === 'final' && <span className="mono" style={{ ...stateChip, color: 'var(--dim)', borderColor: 'var(--bd)' }}>FINAL</span>}
+          {st === 'upcoming' && <span className="mono" style={{ ...stateChip, fontSize: fs(8), color: 'var(--dim)', borderColor: 'var(--bd)' }}><Emoji e="🔒" size="1.25em" /> SEALED</span>}
+          {st === 'live' && <span className="mono" style={{ ...stateChip, fontSize: fs(8), color: 'var(--you)', borderColor: 'color-mix(in srgb, var(--you) 45%, transparent)' }}><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 3, background: 'var(--you)', marginRight: 5, animation: 'bpulse 1.2s infinite' }} />LIVE</span>}
+          {st === 'final' && <span className="mono" style={{ ...stateChip, fontSize: fs(8), color: 'var(--dim)', borderColor: 'var(--bd)' }}>FINAL</span>}
         </div>
         {phase === 'setup' ? (
           <div style={{ padding: '10px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -470,7 +478,7 @@ export function DemoBoard() {
                 {canOpen && (
                   <div style={{ padding: '0 12px 8px' }}>
                     <div style={{ textAlign: 'center' }}>
-                      <button onClick={() => setOpenSlots((o) => ({ ...o, [key]: !open }))} className="mono" style={{ background: 'none', border: 'none', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: open ? 'var(--you)' : 'var(--faint)', cursor: 'pointer', padding: '2px 8px' }}>
+                      <button onClick={() => setOpenSlots((o) => ({ ...o, [key]: !open }))} className="mono" style={{ background: 'none', border: 'none', fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.12em', color: open ? 'var(--you)' : 'var(--faint)', cursor: 'pointer', padding: '2px 8px' }}>
                         {open ? '▴ HIDE LOG & FIELD' : '▾ LOG & FIELD'}
                       </button>
                     </div>
@@ -516,10 +524,10 @@ export function DemoBoard() {
                 {prompts.map((_, i) => (
                   <span key={i} style={{ width: i === promptIdx ? 20 : 7, height: 7, borderRadius: 4, background: i <= promptIdx ? 'var(--you)' : 'var(--bd)', transition: 'all .2s' }} />
                 ))}
-                <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginLeft: 4 }}>STEP {promptIdx + 1} OF 3</span>
+                <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginLeft: 4 }}>STEP {promptIdx + 1} OF 3</span>
               </div>
               <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginTop: 8 }}>{prompts[promptIdx].title}</div>
-              <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4, lineHeight: 1.45 }}>{prompts[promptIdx].sub}</div>
+              <div style={{ fontSize: fs(11.5), color: 'var(--dim)', marginTop: 4, lineHeight: 1.45 }}>{prompts[promptIdx].sub}</div>
 
               {/* power-ups appear once the first pick is sealed */}
               {promptIdx === 2 && (
@@ -530,31 +538,33 @@ export function DemoBoard() {
                       <button key={pu.id} onClick={() => setChosenBuff(pu.id)} title={pu.blurb} style={{ ...optCard(on), flex: 1, flexDirection: 'column', gap: 4, padding: '9px 6px', alignItems: 'center', textAlign: 'center' }}>
                         <span style={{ fontSize: 24, lineHeight: 1 }}><PuIcon id={pu.id} emoji={pu.icon} size={30} /></span>
                         <span className="grotesk" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>{pu.name}</span>
-                        <span style={{ fontSize: 8.5, color: 'var(--dim)', lineHeight: 1.35 }}>{pu.blurb}</span>
+                        <span style={{ fontSize: fs(8.5), color: 'var(--dim)', lineHeight: 1.35 }}>{pu.blurb}</span>
                       </button>
                     );
                   })}
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+              {/* wrap the BUTTONS, never the label: on phones the run CTA takes
+                  its own full-width line instead of wrapping its text */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
                 <button onClick={() => setPicks(autoFill(picks))} className="mono" style={{ ...ctlBtn, flex: 'none' }}>✦ AUTO-FILL</button>
                 <button
                   onClick={() => (canRun ? run() : setNudged(Date.now()))}
                   aria-disabled={!canRun}
                   className="mono"
                   style={{
-                    ...cta, flex: 1, width: 'auto',
+                    ...cta, flex: '1 1 240px', width: 'auto', whiteSpace: 'nowrap',
                     ...(canRun
                       ? { boxShadow: '0 0 18px color-mix(in srgb, var(--you) 25%, transparent)' }
                       : { background: 'var(--surface)', color: 'var(--faint)', border: '1px dashed var(--bd)', cursor: 'default' }),
                   }}
                 >
-                  {canRun ? `▶ RUN WEEK ${DEMO_WEEK}` : `FILL ALL YOUR PICKS TO RUN WEEK ${DEMO_WEEK}`}
+                  {canRun ? `▶ RUN WEEK ${DEMO_WEEK}` : 'FILL THE PICKS TO RUN THE WEEK'}
                 </button>
               </div>
               {!canRun && (
-                <div className="mono" style={{ fontSize: 8.5, fontWeight: nudged ? 700 : 400, color: nudged ? 'var(--warn)' : 'var(--faint)', marginTop: 7, textAlign: 'center', transition: 'color .2s' }}>
+                <div className="mono" style={{ fontSize: fs(8.5), fontWeight: nudged ? 700 : 400, color: nudged ? 'var(--warn)' : 'var(--faint)', marginTop: 7, textAlign: 'center', transition: 'color .2s' }}>
                   {!allFilled ? `↑ fill every spot to run — ${placedN}/${totalSlots} set (✦ AUTO-FILL does the rest)` : '↑ seal a metric on every glowing spot first'}
                 </div>
               )}
@@ -565,8 +575,9 @@ export function DemoBoard() {
           {phase === 'setup' && narrow && (
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setRosterOpen((o) => ({ ...o, you: !o.you }))} className={promptIdx === 0 && !rosterOpen.you ? 'mono guide-ring' : 'mono'} style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.you ? 'var(--you)' : 'var(--bd)'}`, color: rosterOpen.you ? 'var(--you)' : 'var(--dim)', cursor: 'pointer' }}>{rosterOpen.you ? '▾' : '▸'} YOUR ROSTER</button>
-                <button onClick={() => setRosterOpen((o) => ({ ...o, their: !o.their }))} className="mono" style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.their ? 'var(--opp)' : 'var(--bd)'}`, color: rosterOpen.their ? 'var(--opp)' : 'var(--dim)', cursor: 'pointer' }}>{rosterOpen.their ? '▾' : '▸'} OPPONENT ROSTER</button>
+                {/* one panel at a time on mobile — opening a roster closes the other */}
+                <button onClick={() => setRosterOpen((o) => (o.you ? { ...o, you: false } : { you: true, their: false }))} className={promptIdx === 0 && !rosterOpen.you ? 'mono guide-ring' : 'mono'} style={{ flex: 1, fontSize: fs(9.5), fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.you ? 'var(--you)' : 'var(--bd)'}`, color: rosterOpen.you ? 'var(--you)' : 'var(--dim)', cursor: 'pointer' }}>{rosterOpen.you ? '▾' : '▸'} YOUR ROSTER</button>
+                <button onClick={() => setRosterOpen((o) => (o.their ? { ...o, their: false } : { you: false, their: true }))} className="mono" style={{ flex: 1, fontSize: fs(9.5), fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.their ? 'var(--opp)' : 'var(--bd)'}`, color: rosterOpen.their ? 'var(--opp)' : 'var(--dim)', cursor: 'pointer' }}>{rosterOpen.their ? '▾' : '▸'} OPPONENT ROSTER</button>
               </div>
               {rosterOpen.you && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase="setup" collapsed={false} onToggle={() => setRosterOpen((o) => ({ ...o, you: !o.you }))} bye={byeYou} week={DEMO_WEEK} fluid />}
               {rosterOpen.their && <RosterAside side="their" pools={oppPools} picks={{}} phase="setup" sealed collapsed={false} onToggle={() => setRosterOpen((o) => ({ ...o, their: !o.their }))} bye={byeTheir} week={DEMO_WEEK} fluid />}
@@ -577,7 +588,7 @@ export function DemoBoard() {
             <div style={{ minHeight: 78, marginTop: 10, background: 'var(--bg)', border: '1px solid var(--bd)', borderLeft: `3px solid ${activeBeat && FX_COLOR[activeBeat.key] ? FX_COLOR[activeBeat.key] : 'var(--you)'}`, borderRadius: 8, padding: '11px 13px', display: 'flex', gap: 11, alignItems: 'flex-start' }}>
               <span style={{ fontSize: 21, lineHeight: 1 }}><FxIcon k={activeBeat?.key} emoji={activeBeat?.icon} size={24} /></span>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: activeBeat && FX_COLOR[activeBeat.key] ? FX_COLOR[activeBeat.key] : 'var(--you)' }}>{activeBeat?.title}</div>
+                <div className="mono" style={{ fontSize: fs(9.5), fontWeight: 700, letterSpacing: '0.1em', color: activeBeat && FX_COLOR[activeBeat.key] ? FX_COLOR[activeBeat.key] : 'var(--you)' }}>{activeBeat?.title}</div>
                 <div style={{ fontSize: 11.5, color: 'var(--text)', marginTop: 3, lineHeight: 1.45 }}>{activeBeat?.body}</div>
               </div>
               <div style={{ display: 'flex', gap: 6, flex: 'none' }}>
@@ -593,14 +604,14 @@ export function DemoBoard() {
                 {youTot >= theirTot ? `You took Week ${DEMO_WEEK}, ` : `They edged you, `}{Math.max(youTot, theirTot).toFixed(1)}–{Math.min(youTot, theirTot).toFixed(1)}.
               </div>
               {resolved.bonuses?.map((b) => (
-                <div key={b.id} className="mono" style={{ fontSize: 9.5, color: 'var(--you)', marginTop: 5 }}><GameIcon name={COIN_GOLD} emoji="◇" size="1.2em" /> {b.label} ({b.points > 0 ? '+' : ''}{b.points})</div>
+                <div key={b.id} className="mono" style={{ fontSize: fs(9.5), color: 'var(--you)', marginTop: 5 }}><GameIcon name={COIN_GOLD} emoji="◇" size="1.2em" /> {b.label} ({b.points > 0 ? '+' : ''}{b.points})</div>
               ))}
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 7, lineHeight: 1.5 }}>
                 Every duel you just watched was sealed picks, hidden metrics, and live effects on real NFL plays. Now picture it with your own roster.
               </div>
               {/* More demo — the actual input, right here at the conversion moment */}
               <div style={{ marginTop: 12, textAlign: 'left' }}>
-                <label className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--you)' }}>MORE DEMO — RUN IT WITH YOUR LEAGUE</label>
+                <label className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.14em', color: 'var(--you)' }}>MORE DEMO — RUN IT WITH YOUR LEAGUE</label>
                 <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                   <input
                     value={name}
@@ -615,7 +626,7 @@ export function DemoBoard() {
                   </button>
                 </div>
                 {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', marginTop: 6 }}>{err}</div>}
-                <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 6 }}>Sleeper public API — username only, never a password.</div>
+                <div className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)', marginTop: 6 }}>Sleeper public API — username only, never a password.</div>
               </div>
               <button onClick={() => setRequesting(true)} className="mono" style={{ ...cta, marginTop: 12, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--bd)' }}>
                 ◈ Request a code for your league
@@ -636,7 +647,7 @@ export function DemoBoard() {
           {phase === 'watch' && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', justifyContent: 'center', marginTop: 12 }}>
               {([['drip', '💧', 'DRIP'], ['nuke', '💥', 'NUKE'], ['erase', '🩸', 'ERASE'], ['power', '🗑️', 'POWER-UP'], ['freeze', '❄️', 'EMP'], ['coin', '◇', 'COIN']] as const).map(([k, icon, label]) => (
-                <span key={label} className="mono" style={{ fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--faint)' }}><FxIcon k={k} emoji={icon} size="1.4em" /> {label}</span>
+                <span key={label} className="mono" style={{ fontSize: fs(8.5), letterSpacing: '0.06em', color: 'var(--faint)' }}><FxIcon k={k} emoji={icon} size="1.4em" /> {label}</span>
               ))}
             </div>
           )}
@@ -665,7 +676,7 @@ export function DemoBoard() {
       <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50, background: 'color-mix(in srgb, var(--bg) 90%, transparent)', backdropFilter: 'blur(8px)', borderTop: '1px solid var(--bd)', padding: '9px 14px' }}>
         <div style={{ maxWidth: 520, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', flex: 'none' }}>MORE DEMO?</span>
+            <span className="mono" style={{ fontSize: fs(9), fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', flex: 'none' }}>MORE DEMO?</span>
             <input
               value={name}
               onChange={(e) => { setName(e.target.value); setErr(null); }}
@@ -701,6 +712,7 @@ export function DemoBoard() {
 // ── Presentational bits ───────────────────────────────────────────────────────
 
 function TeamSide({ team, owner, ownerId, score, accent, you }: { team: string; owner: string; ownerId: string; score: number; accent: string; you?: boolean }) {
+  const fs = useFinePrint();
   const right = !you;
   return (
     <div style={{ flex: 1, minWidth: 0, textAlign: right ? 'right' : 'left' }}>
@@ -708,7 +720,7 @@ function TeamSide({ team, owner, ownerId, score, accent, you }: { team: string; 
         <Avatar name={team} accent={accent} size={26} src={avatarUrl(ownerId)} />
         <div style={{ minWidth: 0 }}>
           <div className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team}</div>
-          <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', marginTop: 1 }}>{you ? 'YOU · ' : ''}@{owner}</div>
+          <div className="mono" style={{ fontSize: fs(8), color: 'var(--faint)', marginTop: 1 }}>{you ? 'YOU · ' : ''}@{owner}</div>
         </div>
       </div>
       <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, color: accent, marginTop: 6, lineHeight: 1 }}>{score.toFixed(1)}</div>
@@ -717,11 +729,12 @@ function TeamSide({ team, owner, ownerId, score, accent, you }: { team: string; 
 }
 
 function MetricChip({ pos, metricId }: { pos: Player['pos']; metricId: string | null }) {
+  const fs = useFinePrint();
   const m = (METRICS[pos] ?? []).find((x) => x.id === metricId);
   if (!m) return null;
   const color = FX_COLOR[m.fx] ?? 'var(--you)';
   return (
-    <span className="mono" title={m.ef} style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.06em', color, border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`, background: `color-mix(in srgb, ${color} 10%, transparent)`, borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>
+    <span className="mono" title={m.ef} style={{ fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.06em', color, border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`, background: `color-mix(in srgb, ${color} 10%, transparent)`, borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>
       {m.name} · {m.tag}
     </span>
   );
@@ -730,18 +743,19 @@ function MetricChip({ pos, metricId }: { pos: Player['pos']; metricId: string | 
 // Two-sided play log for one duel — scoring plays, effects, power-up notes and
 // coin, revealed up to the window's clock (the GuidedDemo log, per slot).
 function DuelLog({ slot, clock, live, armedPu }: { slot: ResolvedSlot; clock: number; live: boolean; armedPu?: { id: string; icon: string } }) {
+  const fs = useFinePrint();
   const logRef = useRef<HTMLDivElement>(null);
   const rows = slot.events.filter((e) => e.clock <= clock && (e.delta > 0 || e.effect || e.coin || e.sig || e.buffNote));
   useEffect(() => { if (live) logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' }); }, [rows.length, live]);
   return (
     <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 7, padding: '8px 10px', marginTop: 4 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
-        <span className="mono" style={{ flex: 1, fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.you?.player.name.toUpperCase() ?? ''}</span>
-        <span className="mono" style={{ minWidth: 34, textAlign: 'center', fontSize: 7.5, color: 'var(--faint)' }}>CLOCK</span>
-        <span className="mono" style={{ flex: 1, fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--opp)', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.their?.player.name.toUpperCase() ?? ''}</span>
+        <span className="mono" style={{ flex: 1, fontSize: fs(8), fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.you?.player.name.toUpperCase() ?? ''}</span>
+        <span className="mono" style={{ minWidth: 34, textAlign: 'center', fontSize: fs(7.5), color: 'var(--faint)' }}>CLOCK</span>
+        <span className="mono" style={{ flex: 1, fontSize: fs(8), fontWeight: 700, letterSpacing: '0.06em', color: 'var(--opp)', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.their?.player.name.toUpperCase() ?? ''}</span>
       </div>
       <div ref={logRef} style={{ maxHeight: 140, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 5 }}>
-        {rows.length === 0 && <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', textAlign: 'center', padding: '4px 0' }}>scoring plays appear here…</div>}
+        {rows.length === 0 && <div className="mono" style={{ fontSize: fs(9), color: 'var(--faint)', textAlign: 'center', padding: '4px 0' }}>scoring plays appear here…</div>}
         {rows.map((e, ri) => {
           const mine = e.side === 'you';
           const cell = (
@@ -754,7 +768,7 @@ function DuelLog({ slot, clock, live, armedPu }: { slot: ResolvedSlot; clock: nu
             </span>
           );
           return (
-            <div key={ri} className="mono" style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 9 }}>
+            <div key={ri} className="mono" style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: fs(9) }}>
               <span style={{ flex: 1, minWidth: 0, textAlign: 'right' }}>{mine ? cell : ''}</span>
               <span style={{ minWidth: 34, textAlign: 'center', color: 'var(--faint)' }}>{fmtClock(e.clock)}</span>
               <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>{!mine ? cell : ''}</span>
@@ -770,6 +784,7 @@ function SlotRow({ slot, state, you, their, frozen, armedPu, noBorder }: {
   slot: ResolvedSlot; state: 'upcoming' | 'live' | 'final'; you: number; their: number;
   frozen?: boolean; armedPu?: { id?: string; icon: string; name: string }; noBorder?: boolean;
 }) {
+  const fs = useFinePrint();
   const sealed = state === 'upcoming'; // opponent picks + metrics unseal at kickoff
   // Unused-at-final backup: its accrued points are struck (they banked 0 —
   // a backup only counts by subbing into a starter spot, which applyBackups
@@ -787,12 +802,12 @@ function SlotRow({ slot, state, you, their, frozen, armedPu, noBorder }: {
             ? (slot.backupUsed ? '✓ BACKUP · subbed into a starter spot' : '✕ BACKUP · didn’t beat a starter — banks 0')
             : 'UNOPPOSED · you bank a backup')
           : '—';
-      return <div className="mono" style={{ flex: 1, minWidth: 0, fontSize: 8.5, color: 'var(--faint)', textAlign: right ? 'right' : 'left' }}>{label}</div>;
+      return <div className="mono" style={{ flex: 1, minWidth: 0, fontSize: fs(8.5), color: 'var(--faint)', textAlign: right ? 'right' : 'left' }}>{label}</div>;
     }
     if (who === 'their' && sealed) {
       return (
         <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'flex-end' }}>
-          <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', border: '1px dashed var(--bd)', borderRadius: 5, padding: '7px 10px' }}><Emoji e="🔒" size="1.25em" /> SEALED PICK</span>
+          <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', border: '1px dashed var(--bd)', borderRadius: 5, padding: '7px 10px' }}><Emoji e="🔒" size="1.25em" /> SEALED PICK</span>
         </div>
       );
     }
@@ -805,10 +820,10 @@ function SlotRow({ slot, state, you, their, frozen, armedPu, noBorder }: {
         <div style={{ minWidth: 0, textAlign: right ? 'right' : 'left' }}>
           <div className="grotesk" style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pick.player.name}</div>
           <div style={{ display: 'flex', flexDirection: right ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: 3, marginTop: 2, alignItems: 'center' }}>
-            <span className="mono" style={{ fontSize: 7.5, color: 'var(--faint)' }}>{pick.player.pos} · {pick.player.team}</span>
+            <span className="mono" style={{ fontSize: fs(7.5), color: 'var(--faint)' }}>{pick.player.pos} · {pick.player.team}</span>
             {(who === 'you' || !sealed) && <MetricChip pos={pick.player.pos} metricId={pick.metricId} />}
-            {who === 'you' && armedPu && <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, color: 'var(--fx-streak, #36D399)' }}><PuIcon id={armedPu.id} emoji={armedPu.icon} size="1.4em" /> {armedPu.name.toUpperCase()}</span>}
-            {state === 'final' && sub && <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, color: 'var(--warn)' }}>🛟 {sub.name} subbed in</span>}
+            {who === 'you' && armedPu && <span className="mono" style={{ fontSize: fs(7.5), fontWeight: 700, color: 'var(--fx-streak, #36D399)' }}><PuIcon id={armedPu.id} emoji={armedPu.icon} size="1.4em" /> {armedPu.name.toUpperCase()}</span>}
+            {state === 'final' && sub && <span className="mono" style={{ fontSize: fs(7.5), fontWeight: 700, color: 'var(--warn)' }}>🛟 {sub.name} subbed in</span>}
           </div>
         </div>
       </div>
