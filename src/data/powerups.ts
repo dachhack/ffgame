@@ -82,6 +82,21 @@ export const POWERUP_VAULT: Powerup[] = [
   { id: 'two-minute-drill', name: 'Two-Minute Drill', blurb: 'Arm before kickoff: if you trail the matchup when your last window kicks off, everything you score in it counts 1.25×.', kind: 'action', timing: 'pre', price: 50, icon: '🕑' },
   // Bench shadow — engine: resolve slot as max(starter, shadow) at FINAL.
   { id: 'sixth-man', name: 'Sixth Man', blurb: 'Before kickoff, shadow one of your slots with a bench player: at FINAL the slot keeps whichever of the two scored more.', kind: 'action', timing: 'pre', price: 90, icon: '🧢', target: 'slot-you' },
+
+  // ── income: invest coin to earn more coin ──────────────────────────────────
+  // Today's earn side is fixed (◎50 stipend + ◎15/unopposed + per-event drips
+  // ◎5 / nukes ◎10 / suppress ◎10 / turnover ±10 — coinFor in liveResolve.ts,
+  // mirrored in matchup.ts). These give it a decision layer. Hooks live in
+  // coinFor()/the worker credit pass, not resolveSlot — scores never change.
+  // Next-week effects need a small deferred-credit table (arm week N, worker
+  // pays at week N+1 settle).
+  { id: 'booster-club', name: 'Booster Club', blurb: 'Arm this week: NEXT week’s stipend is doubled — ◎100 instead of ◎50. Patience pays.', kind: 'action', timing: 'pre', price: 30, icon: '📣' },
+  { id: 'gate-receipts', name: 'Gate Receipts', blurb: 'Arm before kickoff: win this week’s matchup and the box office pays out ◎60 on top of your normal earnings.', kind: 'action', timing: 'pre', price: 25, icon: '🎟️' },
+  { id: 'rebuild-fund', name: 'Rebuild Fund', blurb: 'Arm before kickoff: lose this week’s matchup and the league office cuts you a ◎50 check. Losing hurts less.', kind: 'action', timing: 'pre', price: 20, icon: '🧱' },
+  { id: 'highlight-reel', name: 'Highlight Reel', blurb: 'Arm before kickoff: every touchdown your starters score this week also pays ◎8 to your wallet.', kind: 'action', timing: 'pre', price: 40, icon: '📸' },
+  { id: 'double-coupons', name: 'Double Coupons', blurb: 'Arm before kickoff: all your per-event coin this week — drips, nukes, suppress, unopposed — pays out 2×.', kind: 'action', timing: 'pre', price: 35, icon: '🏷️' },
+  { id: 'salvage-rights', name: 'Salvage Rights', blurb: 'Arm before kickoff: every time YOUR points get erased or nuked this week, you bank ◎10 from the wreckage.', kind: 'action', timing: 'pre', price: 30, icon: '🛒' },
+  { id: 'payday-loan', name: 'Payday Loan', blurb: 'Free to arm: take ◎100 into your wallet right now — ◎125 comes out of next week’s earnings. The vig is real.', kind: 'action', timing: 'pre', price: 0, icon: '🏦' },
 ];
 
 // ── Drip AMPLIFIERS are capacity-limited ─────────────────────────────────────

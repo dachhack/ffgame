@@ -1,6 +1,19 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-08 · Build `v0.108.1`_
+_Last updated: 2026-07-08 · Build `v0.108.2`_
+
+## Vault wing 2 — income power-ups (v0.108.2)
+- Seven earn-side entries added to `POWERUP_VAULT` (still off): the earn side
+  is currently FIXED (◎50 stipend + ◎15/unopposed + per-event coin in
+  `coinFor()`, liveResolve.ts ↔ matchup.ts), so these add an invest-to-earn
+  decision layer. Booster Club ◎30 (next week's stipend doubles),
+  Gate Receipts ◎25 (win → +◎60) / Rebuild Fund ◎20 (lose → +◎50, the
+  catch-up twin), Highlight Reel ◎40 (◎8 per starter TD), Double Coupons ◎35
+  (per-event coin 2×), Salvage Rights ◎30 (◎10 each time your points get
+  erased/nuked), Payday Loan free (◎100 now, ◎125 out of next week).
+- Hooks noted in the const: coinFor()/worker credit pass only — scores never
+  change; next-week effects (Booster Club, Payday Loan) need a small
+  deferred-credit table the worker settles at week N+1.
 
 ## The Vault — eight specced power-ups, deliberately off (v0.108.1)
 - **`POWERUP_VAULT` in src/data/powerups.ts**: designed + priced but NOT in
