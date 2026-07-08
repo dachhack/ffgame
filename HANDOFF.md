@@ -1,6 +1,21 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-08 · Build `v0.108.2`_
+_Last updated: 2026-07-08 · Build `v0.108.3`_
+
+## Vault wing 3 — live-window plays (v0.108.3)
+- Eight `timing: 'live'` entries added to `POWERUP_VAULT` (still off) — the
+  live roster was all utility (swap/mulligan/EMP); these add reactive drama:
+  Cash Out ◎45 (bank a drip now; banked = untouchable, accrual stops),
+  Challenge Flag ◎55 (within 5 game-min, overturn an erase/nuke on you),
+  Fair Catch ◎30 (5-min burst pause/erase shield on a window), Hurry-Up ◎50
+  (force your drips HOT for 10 min — stacks with Momentum), Kneel Down ◎35
+  (window's final 5 min score nothing, both sides — lead protection),
+  All-Out Blitz ◎40 (your next erase hits window-wide), Pile-On ◎35 (a just
+  wiped opponent slot banks nothing for 5 more min), Send the House ◎30
+  (one slot's next scoring play ×3, or the bet dies in 5 min).
+- All hooks are event-time in resolveSlot/liveResolve via a fired-at clock in
+  extras (EMP's emp[win] pattern) — nothing retroactive, so demo, worker,
+  and playtester replay identically.
 
 ## Vault wing 2 — income power-ups (v0.108.2)
 - Seven earn-side entries added to `POWERUP_VAULT` (still off): the earn side

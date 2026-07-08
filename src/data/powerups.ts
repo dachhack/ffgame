@@ -97,6 +97,21 @@ export const POWERUP_VAULT: Powerup[] = [
   { id: 'double-coupons', name: 'Double Coupons', blurb: 'Arm before kickoff: all your per-event coin this week — drips, nukes, suppress, unopposed — pays out 2×.', kind: 'action', timing: 'pre', price: 35, icon: '🏷️' },
   { id: 'salvage-rights', name: 'Salvage Rights', blurb: 'Arm before kickoff: every time YOUR points get erased or nuked this week, you bank ◎10 from the wreckage.', kind: 'action', timing: 'pre', price: 30, icon: '🛒' },
   { id: 'payday-loan', name: 'Payday Loan', blurb: 'Free to arm: take ◎100 into your wallet right now — ◎125 comes out of next week’s earnings. The vig is real.', kind: 'action', timing: 'pre', price: 0, icon: '🏦' },
+
+  // ── live plays: fired DURING a live window ─────────────────────────────────
+  // The live roster is thin (swap/mulligan/EMP are all utility). These add
+  // reactive drama: lock in gains, answer an erase, kill the clock. All hooks
+  // are event-time in resolveSlot/liveResolve (a fired-at clock arrives via
+  // extras, like EMP's emp[win] clock — nothing retroactive), so the demo,
+  // worker, and playtester replay them identically.
+  { id: 'cash-out', name: 'Cash Out', blurb: 'Fire on one of your live drip slots: bank its points as they stand — it stops accruing, but what’s banked can’t be paused, erased, or nuked.', kind: 'action', timing: 'live', price: 45, icon: '💰', target: 'slot-you' },
+  { id: 'challenge-flag', name: 'Challenge Flag', blurb: 'Throw within 5 game-minutes of an erase or nuke landing on one of your slots: the booth overturns it and the points come back.', kind: 'action', timing: 'live', price: 55, icon: '🚩', target: 'slot-you' },
+  { id: 'fair-catch', name: 'Fair Catch', blurb: 'Fire during a live window: for the next 5 game-minutes your drips there can’t be paused or erased. A burst shield when their eraser is heating up.', kind: 'action', timing: 'live', price: 30, icon: '🙌', target: 'window' },
+  { id: 'hurry-up', name: 'Hurry-Up', blurb: 'Fire during a live window: your drips there run HOT for the next 10 game-minutes, no scoring event required. Stacks with Momentum’s 3×.', kind: 'action', timing: 'live', price: 50, icon: '⏩', target: 'window' },
+  { id: 'kneel-down', name: 'Kneel Down', blurb: 'Fire during a live window: its final 5 game-minutes score NOTHING — for either side. Protect a lead by killing the clock.', kind: 'action', timing: 'live', price: 35, icon: '🧎', target: 'window' },
+  { id: 'all-out-blitz', name: 'All-Out Blitz', blurb: 'Fire during a live window: your NEXT erase there hits every opponent drip in the window, not just its matched slot.', kind: 'action', timing: 'live', price: 40, icon: '🚨', target: 'window' },
+  { id: 'pile-on', name: 'Pile-On', blurb: 'Fire within 5 game-minutes of an opponent slot getting erased or nuked: it can’t bank anything for the next 5. Kick ’em while they’re down.', kind: 'action', timing: 'live', price: 35, icon: '💢', target: 'slot-opp' },
+  { id: 'send-the-house', name: 'Send the House', blurb: 'Fire on one of your live slots: its next scoring play counts TRIPLE. If nothing scores there in the next 5 game-minutes, the bet is simply gone.', kind: 'action', timing: 'live', price: 30, icon: '🎰', target: 'slot-you' },
 ];
 
 // ── Drip AMPLIFIERS are capacity-limited ─────────────────────────────────────
