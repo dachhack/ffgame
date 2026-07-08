@@ -1,0 +1,156 @@
+// Card-table theme kit — the card-game presentation of the live board, gated
+// per league by league_pref.card_theme (super-admin toggle, migration 0074).
+// Purely presentational: cards render from the same picks/pool/scores the
+// classic board uses. All CSS is scoped under .ctable so nothing leaks into
+// the rest of the app; suit colors come from the active theme's --pos-* vars.
+import { useEffect, useMemo, useState } from 'react';
+import { headshot } from '../data/media';
+
+const FONT_URL = `${import.meta.env.BASE_URL}fonts/lilita-one.woff2`;
+
+const CSS = `
+@font-face{font-family:'Lilita One';font-style:normal;font-weight:400;font-display:swap;src:url('${FONT_URL}') format('woff2');}
+.ctable{position:relative;border-radius:12px;overflow:hidden;padding:12px 10px 16px;background:#0B1F1A;}
+.ctable .ct-blobs{position:absolute;inset:-30%;pointer-events:none;}
+.ctable .ct-blob{position:absolute;width:60%;height:60%;border-radius:50%;filter:blur(60px);opacity:.5;mix-blend-mode:screen;}
+.ctable .ct-b1{background:radial-gradient(circle,#1B4A37 0%,transparent 62%);top:0;left:-5%;animation:ct-drift 39s linear infinite;}
+.ctable .ct-b2{background:radial-gradient(circle,#58202B 0%,transparent 60%);bottom:-8%;right:-5%;animation:ct-drift 51s linear infinite reverse;}
+@keyframes ct-drift{from{transform:rotate(0) translateX(8%) rotate(0)}to{transform:rotate(360deg) translateX(8%) rotate(-360deg)}}
+.ctable .ct-vig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 90% at 50% 40%,transparent 55%,rgba(0,0,0,.55) 100%);}
+.ctable .ct-body{position:relative;}
+.ctable .ct-disp{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;text-transform:uppercase;letter-spacing:.05em;
+  text-shadow:-1.2px -1.2px 0 #14100A,1.2px -1.2px 0 #14100A,-1.2px 1.2px 0 #14100A,1.2px 1.2px 0 #14100A,0 3px 0 #14100A;}
+
+.ctable .ct-pod{border:2px solid rgba(0,0,0,.75);border-radius:12px;padding:9px 8px 11px;margin-bottom:12px;
+  background:linear-gradient(rgba(10,26,21,.55),rgba(8,20,16,.72));
+  box-shadow:inset 0 0 0 1px rgba(233,185,89,.09),inset 0 12px 20px rgba(0,0,0,.35),0 3px 0 rgba(0,0,0,.55);}
+.ctable .ct-podhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
+.ctable .ct-duel{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:start;}
+.ctable .ct-col{display:flex;flex-direction:column;gap:9px;align-items:center;min-width:0;}
+.ctable .ct-mid{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding-top:34px;min-width:46px;}
+
+.ctable .ct-wrap{width:104px;height:150px;perspective:700px;position:relative;}
+.ctable .ct-card{position:relative;width:100%;height:100%;transform-style:preserve-3d;
+  animation:ct-wob var(--wobdur,4.8s) ease-in-out var(--wobdel,0s) infinite alternate;}
+@keyframes ct-wob{from{transform:rotateZ(-.9deg) translateY(0)}to{transform:rotateZ(.9deg) translateY(-2px)}}
+.ctable .ct-dealin{animation:ct-deal .5s cubic-bezier(.3,1.5,.5,1) backwards;}
+@keyframes ct-deal{from{transform:translateY(-40px) rotateZ(8deg);opacity:0}to{transform:translateY(0) rotateZ(0);opacity:1}}
+.ctable .ct-side{position:absolute;inset:0;border-radius:10px;border:2px solid #000;overflow:hidden;box-shadow:0 4px 0 rgba(0,0,0,.7);}
+.ctable .ct-face{background:linear-gradient(168deg,#FBF5E4,#F4EDDA 46%,#E7DCC0);color:#201C12;display:flex;flex-direction:column;padding:6px;}
+.ctable .ct-facehead{display:flex;justify-content:space-between;align-items:center;}
+.ctable .ct-suit{font-size:8px;font-weight:800;letter-spacing:.06em;padding:2.5px 5px;border-radius:4px;border:1.5px solid;}
+.ctable .ct-slot{font-size:7px;color:#6E6650;letter-spacing:.1em;}
+.ctable .ct-art{align-self:center;margin-top:4px;width:72px;height:52px;border-radius:7px;border:2px solid;overflow:hidden;position:relative;
+  background:radial-gradient(circle at 50% 20%,#FFF 0%,#E8E0C8 100%);display:flex;align-items:center;justify-content:center;}
+.ctable .ct-art img{width:100%;height:100%;object-fit:cover;object-position:top;display:block;}
+.ctable .ct-mono{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:17px;}
+.ctable .ct-name{text-align:center;font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:9.4px;letter-spacing:.04em;line-height:1.18;
+  margin-top:5px;color:#2A2312;text-transform:uppercase;text-wrap:balance;}
+.ctable .ct-metric{margin-top:auto;text-align:center;font-size:6.6px;letter-spacing:.1em;color:#6E6650;padding-bottom:2px;}
+.ctable .ct-metric b{display:inline-block;padding:2px 5px;border-radius:4px;background:#241C10;color:#E9B959;font-size:7px;letter-spacing:.1em;max-width:88px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;}
+
+.ctable .ct-back{background:radial-gradient(circle at 50% 46%,#7E2430 0%,#571C26 62%,#40151E 100%);}
+.ctable .ct-lattice{position:absolute;inset:6px;border:1.5px solid rgba(233,185,89,.5);border-radius:6px;
+  background-image:radial-gradient(rgba(233,185,89,.34) 1.1px,transparent 1.3px);background-size:11px 11px;}
+.ctable .ct-gem{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:26px;color:#E9B959;text-shadow:0 2px 0 #000;}
+.ctable .ct-sealtag{position:absolute;left:50%;bottom:9px;transform:translateX(-50%) rotate(-3deg);font-size:6.4px;letter-spacing:.16em;
+  background:#2A0E13;color:#D9A0A6;border:1px solid rgba(233,185,89,.4);padding:2.5px 6px;border-radius:3px;white-space:nowrap;}
+
+.ctable .ct-coltag{font-size:8px;letter-spacing:.22em;opacity:.65;font-weight:700;}
+.ctable .ct-winlab{font-size:8px;letter-spacing:.16em;color:#93A594;font-weight:700;}
+.ctable .ct-score{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:15px;font-variant-numeric:tabular-nums;
+  text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 2px 0 #000;}
+.ctable .ct-vs{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:12px;color:#71806F;
+  text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;}
+
+@media (prefers-reduced-motion: reduce){
+  .ctable .ct-card,.ctable .ct-blob{animation:none;}
+  .ctable .ct-dealin{animation:none;}
+}
+@media (max-width:400px){ .ctable .ct-wrap{width:92px;height:136px} .ctable .ct-art{width:62px;height:45px} .ctable .ct-mid{min-width:40px} }
+`;
+
+/** Inject the card-table stylesheet once per document. */
+export function CardTableCss() {
+  useEffect(() => {
+    if (document.getElementById('ctable-css')) return;
+    const s = document.createElement('style');
+    s.id = 'ctable-css';
+    s.textContent = CSS;
+    document.head.appendChild(s);
+  }, []);
+  return null;
+}
+
+/** The felt table surface: swirling backdrop + vignette around any content. */
+export function Felt({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="ctable">
+      <div className="ct-blobs"><div className="ct-blob ct-b1" /><div className="ct-blob ct-b2" /></div>
+      <div className="ct-vig" />
+      <div className="ct-body">{children}</div>
+    </div>
+  );
+}
+
+// Stable per-card wobble timing so the table doesn't sway in lockstep.
+function wobbleVars(seed: string): React.CSSProperties {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return {
+    ['--wobdur' as string]: `${(4 + (h % 240) / 100).toFixed(2)}s`,
+    ['--wobdel' as string]: `${(-((h >> 8) % 400) / 100).toFixed(2)}s`,
+  };
+}
+
+const posVars = (pos: string) => {
+  const p = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'].includes(pos) ? pos : 'DEF';
+  return { background: `var(--pos-${p}-bg)`, color: `var(--pos-${p}-fg)`, borderColor: `var(--pos-${p}-bd)` };
+};
+
+const initials = (name: string) => name.split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+
+/** A face-up player card: headshot art (monogram when mark-free), suit chip,
+ *  slot tag, and the hidden-metric chip once revealed. */
+export function PlayerCard({ slug, name, pos, slot, metric, idx = 0 }: {
+  slug: string; name: string; pos: string; slot?: string; metric?: string | null; idx?: number;
+}) {
+  const [imgOk, setImgOk] = useState(true);
+  const url = useMemo(() => headshot(slug), [slug]);
+  const suit = posVars(pos);
+  return (
+    <div className="ct-wrap ct-dealin" style={{ animationDelay: `${idx * 90}ms` }}>
+      <div className="ct-card" style={wobbleVars(slug)}>
+        <div className="ct-side ct-face">
+          <div className="ct-facehead">
+            <span className="ct-suit" style={suit}>{pos === 'DEF' ? 'DST' : pos}</span>
+            {slot && <span className="ct-slot">{slot.toUpperCase()}</span>}
+          </div>
+          <div className="ct-art" style={{ borderColor: suit.color as string }}>
+            {url && imgOk
+              ? <img src={url} alt="" draggable={false} onError={() => setImgOk(false)} />
+              : <span className="ct-mono" style={{ color: suit.color as string }}>{initials(name)}</span>}
+          </div>
+          <div className="ct-name">{name}</div>
+          <div className="ct-metric">METRIC <b>{metric ?? '—'}</b></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A face-down sealed pick — the opponent's card before its window kicks off. */
+export function SealedCard({ seed, idx = 0 }: { seed: string; idx?: number }) {
+  return (
+    <div className="ct-wrap ct-dealin" style={{ animationDelay: `${idx * 90}ms` }}>
+      <div className="ct-card" style={wobbleVars(seed)}>
+        <div className="ct-side ct-back">
+          <div className="ct-lattice" />
+          <div className="ct-gem">◈</div>
+          <div className="ct-sealtag">SEALED ◈ PICK</div>
+        </div>
+      </div>
+    </div>
+  );
+}

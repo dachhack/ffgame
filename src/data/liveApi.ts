@@ -439,6 +439,12 @@ export async function startCheckout(kind: 'personal' | 'league' | 'split', leagu
 export const adminSetPremiumTier = (freePositions: string[], freePowerups: string[]) =>
   rpc<{ ok: boolean; error?: string }>('admin_set_premium_tier', { p_free_positions: freePositions, p_free_powerups: freePowerups });
 
+// Card-table theme flag (migration 0074): per-league presentation switch for the
+// live board. Members read it; only super admins flip it.
+export const leagueCardTheme = (leagueId: string) => rpc<boolean>('league_card_theme', { p_league: leagueId });
+export const adminSetCardTheme = (leagueId: string, on: boolean) =>
+  rpc<{ ok: boolean; error?: string; card_theme?: boolean }>('admin_set_card_theme', { p_league: leagueId, p_on: on });
+
 export const adminOverview = () => rpc<AdminLeague[]>('admin_overview');
 export const adminMatchups = (leagueId: string) => rpc<AdminMatchup[]>('admin_matchups', { p_league_id: leagueId });
 export const adminSetMatchup = (matchupId: string, status: string, lockNow = false) =>
