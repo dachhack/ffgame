@@ -741,7 +741,7 @@ function MetricChip({ pos, metricId }: { pos: Player['pos']; metricId: string | 
   if (!m) return null;
   const color = FX_COLOR[m.fx] ?? 'var(--you)';
   return (
-    <span className="mono" title={m.ef} style={{ fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.06em', color, border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`, background: `color-mix(in srgb, ${color} 10%, transparent)`, borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>
+    <span className="mono" title={m.ef} style={{ display: 'inline-block', maxWidth: '100%', fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.06em', lineHeight: 1.3, color, border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`, background: `color-mix(in srgb, ${color} 10%, transparent)`, borderRadius: 3, padding: '1px 5px', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
       {m.name} · {m.tag}
     </span>
   );
