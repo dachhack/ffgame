@@ -176,6 +176,11 @@ const CSS = `
   font-size:10px !important;letter-spacing:.06em;}
 .ctable .mx-spot:not(.mx-state) .mx-met .mono{color:#6E6650 !important;}
 @media (prefers-reduced-motion:reduce){.ctable .mx-sealed,.ctable .mx-spot:not(.mx-state){animation:none;}}
+/* Demo/replay board: slightly shorter setup cards (mostly empty slots, so the
+   full 300px reads as a tall void). The real live board keeps the taller card. */
+.ctable.mx-demo .mx-sealed,
+.ctable.mx-demo .mx-empty:not(.mx-state),
+.ctable.mx-demo .mx-spot:not(.mx-state){min-height:250px !important;}
 
 /* ── live ScoreCards (Matchup live/final phase) — dark card stock so the
    dense light-on-dark live info + you/opp accents stay readable, plus a

@@ -1223,7 +1223,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         </div>
       )}
 
-      <div className={cardHand ? 'ctable mx-felt' : undefined} style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? undefined : 'flex-start', gap: isMobile ? 10 : 14, padding: isMobile ? 10 : 14, overflow: isMobile ? 'auto' : 'visible', minHeight: 0 }}>
+      <div className={cardHand ? `ctable mx-felt${liveCtx ? '' : ' mx-demo'}` : undefined} style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? undefined : 'flex-start', gap: isMobile ? 10 : 14, padding: isMobile ? 10 : 14, overflow: isMobile ? 'auto' : 'visible', minHeight: 0 }}>
         {cardHand && <div className="ct-feltlayers" aria-hidden />}
         {!isMobile && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={!rosterOpen.you} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} />}
 
