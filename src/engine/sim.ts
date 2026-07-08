@@ -64,7 +64,7 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
   const scrimmage = (play.kind === 'rush' || play.kind === 'rec') ? play.yards * 0.04 : 0;
   if (pos === 'RB') {
     if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 : 0; // drip, no TD
-    if (metricId === 'carries') return play.kind === 'rush' ? 0.5 : 0; // COMPRESSION
+    if (metricId === 'carries') return play.kind === 'rush' ? 0.85 : 0; // COMPRESSION (0.5 → 0.85: measured dead at 0.5 — 0% best-pick share)
     if (metricId === 'rec') return play.catch ? 1 : 0;
     if (metricId === 'td') return scrimmage + (play.td ? 10 : 0); // NUKE
   }
@@ -483,9 +483,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
           : (s.player.pos === 'RB' && s.metricId === 'rush') ? ['rush']
             : (s.player.pos === 'TE' && s.metricId === 'recyd') ? ['rec']
               : null;
-  // TE drip builds at half the rate (0.005/yd vs 0.01) but is immune to the
+  // TE drip builds at 0.0065/yd vs a WR's 0.01 — up from 0.005 (2% best-pick
+  // share) but shy of 0.0075 (which dominated once immunity covered TE
+  // erasers too). Immune to the
   // pauses and erases that WR/RB opponents lay on a drip (see oppIsDrip below).
-  const dripRateOf = (s: SlotInput): number => (s.player.pos === 'TE' ? 0.005 : 0.01);
+  const dripRateOf = (s: SlotInput): number => (s.player.pos === 'TE' ? 0.0065 : 0.01);
   const youDripRate = dripRateOf(you);
   const theirDripRate = dripRateOf(their);
   const youDripKind = dripKindOf(you);
@@ -689,10 +691,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const myDripKind = play.side === 'you' ? youDripKind : theirDripKind;
     const myDripRate = play.side === 'you' ? youDripRate : theirDripRate;
     // TE Targets (WIDE ERASE) fires on every target — incompletions included —
-    // unlike the catch-gated WR/TE Receptions erase.
+    // unlike the catch-gated WR/TE Receptions erase. Its width matches the
+    // other erases now (15 min → 10: measured winning 97% of TE mirrors).
     const eraseOnTarget = myPlayer.player.pos === 'TE' && myPlayer.metricId === 'tgt';
     const eraseTrigger = myFam === 'erase' && (eraseOnTarget ? play.target : play.catch);
-    const eraseWindow = eraseOnTarget ? 900 : 600;
+    const eraseWindow = 600;
 
     // Scoring. Drip: a catch/carry raises the rate and resumes the drip but
     // scores nothing directly; 3 straight (no opponent score) goes hot → 2×
@@ -794,10 +797,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       // pauses. A plain accumulation metric (Receiving/Rush Yards) does NOT
       // deny — the opponent's drip runs right through its catches. Any TD wipes
       // the entire drip bank (handled below).
-      // A TE drip is immune to the pause/erase/reset that a WR or RB lays on it
-      // (its rate and bank shrug off their catches/targets). TDs still wipe it.
-      const teDripImmune = oppPlayer.player.pos === 'TE'
-        && (myPlayer.player.pos === 'WR' || myPlayer.player.pos === 'RB');
+      // A TE drip is immune to ANY pause/erase/reset (its rate and bank shrug
+      // off catches and targets from every position — the catalog's "only a TD
+      // or K shutdown stops it", which the old WR/RB-only gate under-delivered:
+      // TE erasers won 97% of TE mirrors). TDs still wipe it below.
+      const teDripImmune = oppPlayer.player.pos === 'TE';
       // Floodgates: the drip owner (the non-acting side) shrugs off all opponent
       // pauses/erases this week. The owner is `opp` here; its buffs gate immunity.
       const ownerFloodgates = (play.side === 'you' ? theirBuffs : youBuffs).has('floodgates');
@@ -856,10 +860,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
 
     // COMPRESSION grind: fires regardless of the opponent's family (including a
     // drip opponent). A 3+ carry streak with no opponent score trims their
-    // most-recent banked score by 25% per carry.
+    // most-recent banked score by 35% per carry (25% → 35% in the same
+    // rebalance that took carries to 0.75 — the grind has to bite).
     if (myFam === 'compression' && play.kind === 'rush' && mine.streak >= 3 && opp.hist.length) {
       const last = opp.hist[opp.hist.length - 1];
-      const cut = Math.round(last.pts * 0.25 * 10) / 10;
+      const cut = Math.round(last.pts * 0.35 * 10) / 10;
       if (cut > 0) {
         opp.bank = Math.max(0, opp.bank - cut);
         last.pts -= cut;

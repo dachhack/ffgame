@@ -1,6 +1,34 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.107.0`_
+_Last updated: 2026-07-07 · Build `v0.107.1`_
+
+## Metric balance: measured, tuned, and a tool to keep it honest (v0.107.1)
+- **`server/scripts/metric-study.mjs`** (`cd server && npm run study`): runs
+  the REAL engine over baked 2025 weeks — same-position duels across every
+  metric pairing for the top players per position (WEEKS/POOL env to resize).
+  Prints unopposed value, the win-rate matrix, best-response mix, best-pick
+  share, and a health verdict per menu (⚠ near-dead <5% best share, ⚠
+  dominant ≥60% win vs every rival).
+- **Measured (pre-tune)**: WR was a real rock-paper-scissors wheel; RB
+  `carries` was DEAD (0% best-pick share); TE `tgt` won 97% of TE mirrors
+  and the TE drip sat at 2% — partly a BUG: the engine's TE-drip immunity
+  gate only covered WR/RB attackers while the catalog promises "only a TD
+  (or K shutdown) stops it". QB pass-vs-rush is ~deterministic (pass 92%) —
+  fine, since Field General (cross-slot multiplier) is the real QB decision.
+- **Tuned (sim.ts + catalog text in lockstep)**: RB carries 0.5 → 0.85/carry
+  and compression trim 25% → 35%; TE drip immunity now covers ALL erasers
+  (the catalog's rule), TE tgt wide-erase window 15 → 10 min, TE drip rate
+  0.005 → 0.0065/yd (0.0075 overshot and dominated).
+- **Post-tune shares** — RB: rush 42 / td 41 / rec 11 / carries 6 ✓; TE:
+  recyd 41 / td 35 / rec 13 / tgt 11 ✓; WR untouched (38/30/20/11 — its
+  `rec` erase wins often but small; margin-vs-consistency texture kept).
+  Engine smoke, typecheck, parity, build all green.
+- **`server/scripts/fg-study.mjs`** (`npm run study:fg`): the cross-slot
+  question the duel tool can't see — QB Field General vs flat passing, A/B'd
+  as FULL WINDOWS (resolveLiveMatchup) over cast sizes × opponent styles.
+  Measured: FG beats pass 59/88/100% with 1/2/3 healthy drip teammates vs
+  passive opponents (+29 avg pts at 3), but collapses to 3-22% vs
+  erasers/resets. A real pre-game read — no tuning needed.
 
 ## Playoffs — the endgame (v0.107.0)
 `0073_playoffs.sql` + a 🏆 PLAYOFFS dashboard tab. Playoff matchups are
