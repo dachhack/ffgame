@@ -2332,6 +2332,8 @@ export function SetupRow(props: {
 }) {
   const { winId, week, pick, selected, inventory, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout, lockPlayer, resolve, hideScout } = props;
   const isMobile = useIsMobile();
+  const { bigText } = useStore();
+  const fs = (n: number) => bigText ? Math.round(n * 1.3 * 10) / 10 : n; // larger-text mode bumps the card's fine print
   const gridCols = '1fr 1fr'; // no center gutter — your spot vs the sealed opponent
   const rowGap = isMobile ? 5 : 8;
   const player = pick ? ((resolve ?? getPlayer)(pick.playerId) ?? null) : null;
@@ -2343,7 +2345,7 @@ export function SetupRow(props: {
     ...appliedPu,
   ];
   const buffChips = spotBuffs.map((id) => { const pu = powerupById(id); return (
-    <span key={id} title={pu?.blurb} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 8, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 40%, transparent)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>{pu?.icon} {pu?.name}</span>
+    <span key={id} title={pu?.blurb} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(8), fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 40%, transparent)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>{pu?.icon} {pu?.name}</span>
   ); });
   // Apply mode: a targeted powerup is awaiting a spot. Double or Nothing → a
   // filled spot; Bye Steal → an empty spot.
@@ -2359,7 +2361,7 @@ export function SetupRow(props: {
   const [infoMetric, setInfoMetric] = useState<Metric | null>(null);
   useEffect(() => { setEditing(false); }, [pick?.playerId]);
   const showPicker = !!player && (!pick?.metricId || editing);
-  const link: React.CSSProperties = { background: 'none', border: 'none', padding: 0, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em' };
+  const link: React.CSSProperties = { background: 'none', border: 'none', padding: 0, fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.1em' };
 
   return (
     <>
@@ -2372,7 +2374,7 @@ export function SetupRow(props: {
         >
           {applyHi && (
             <div onClick={onApplyToSpot} style={{ position: 'absolute', inset: 0, zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--warn) 14%, transparent)', borderRadius: 4, cursor: 'pointer' }}>
-              <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 9px' }}>{applyPu?.icon} TAP TO APPLY</span>
+              <span className="mono" style={{ fontSize: fs(9.5), fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 9px' }}>{applyPu?.icon} TAP TO APPLY</span>
             </div>
           )}
           {/* Remove the player from this spot — compact red ✕ pinned top-right,
@@ -2395,7 +2397,7 @@ export function SetupRow(props: {
                   <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>
                   <InjuryBadge week={week} slug={player.id} />
                 </div>
-                <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{player.pos} · {player.team}</span>
+                <span className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)' }}>{player.pos} · {player.team}</span>
               </div>
             </div>
             {!isMobile && spotBuffs.length > 0 && (
@@ -2415,8 +2417,8 @@ export function SetupRow(props: {
           {/* sealed: the chosen metric (kept hidden from the opponent) */}
           {!showPicker && (
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-              <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)' }}>{metric?.name}</span>
-              <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 7, letterSpacing: '0.12em', color: 'var(--faint)' }}>
+              <span className="grotesk" style={{ fontSize: fs(12), fontWeight: 700, color: 'var(--you)' }}>{metric?.name}</span>
+              <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(7), letterSpacing: '0.12em', color: 'var(--faint)' }}>
                 <span style={{ width: 5, height: 5, background: 'var(--you)', borderRadius: '50%', display: 'inline-block', animation: 'bpulse 2s ease infinite' }} /> HIDDEN
               </span>
               {twinLink && <TwinChip />}
@@ -2427,17 +2429,17 @@ export function SetupRow(props: {
           {showPicker && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {!pick?.metricId && !editing && (
-                <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--warn)' }}>② PICK A METRIC ↓</div>
+                <div className="mono" style={{ fontSize: fs(8), fontWeight: 700, letterSpacing: '0.14em', color: 'var(--warn)' }}>② PICK A METRIC ↓</div>
               )}
               {editing && (
-                <button onClick={() => setEditing(false)} className="mono" style={{ width: '100%', textAlign: 'center', background: 'none', border: '1px dashed var(--bd)', borderRadius: 3, padding: '3px', fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)' }}>✕ KEEP {metric?.name?.toUpperCase()}</button>
+                <button onClick={() => setEditing(false)} className="mono" style={{ width: '100%', textAlign: 'center', background: 'none', border: '1px dashed var(--bd)', borderRadius: 3, padding: '3px', fontSize: fs(8), letterSpacing: '0.1em', color: 'var(--faint)' }}>✕ KEEP {metric?.name?.toUpperCase()}</button>
               )}
               {METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === pick?.metricId).map((m) => {
                 const cur = m.id === pick?.metricId;
                 return (
                   <button key={m.id} onClick={() => { onPickMetric(m.id); setEditing(false); }} style={{ width: '100%', minHeight: 30, textAlign: 'left', background: cur ? 'color-mix(in srgb, var(--you) 14%, var(--bg))' : m.lock ? 'color-mix(in srgb, var(--warn) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${cur ? 'var(--you)' : m.lock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 3, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)' }}>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.lock ? '◈ ' : ''}{m.name}</span>
-                    <span role="button" title="What does this metric do?" onClick={(e) => { e.stopPropagation(); setInfoMetric(m); }} className="mono" style={{ flex: 'none', fontSize: 10, fontWeight: 700, color: 'var(--faint)', padding: '0 2px', cursor: 'help' }}>ⓘ info</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: fs(11.5), fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.lock ? '◈ ' : ''}{m.name}</span>
+                    <span role="button" title="What does this metric do?" onClick={(e) => { e.stopPropagation(); setInfoMetric(m); }} className="mono" style={{ flex: 'none', fontSize: fs(10), fontWeight: 700, color: 'var(--faint)', padding: '0 2px', cursor: 'help' }}>ⓘ info</span>
                   </button>
                 );
               })}
@@ -2460,13 +2462,13 @@ export function SetupRow(props: {
           style={{ minWidth: 0, minHeight: 78, background: emptyEligible ? 'color-mix(in srgb, var(--warn) 12%, transparent)' : selected ? 'var(--surface)' : 'transparent', border: `1px dashed ${emptyEligible ? 'var(--warn)' : selected ? 'var(--you)' : 'var(--bdh)'}`, borderLeft: `3px dashed ${emptyEligible ? 'var(--warn)' : selected ? 'var(--you)' : 'var(--bdh)'}`, borderRadius: 4, padding: '16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', opacity: applyDim ? 0.4 : 1 }}
         >
           <span className="grotesk" style={{ fontSize: 20, color: emptyEligible ? 'var(--warn)' : 'var(--faint)' }}>{emptyEligible ? <PuIcon id={applyPu?.id} emoji={applyPu?.icon} size={22} /> : '+'}</span>
-          <span className="mono" style={{ fontSize: 10, color: emptyEligible ? 'var(--warn)' : 'var(--faint)', letterSpacing: '0.12em', fontWeight: emptyEligible ? 700 : 400 }}>{emptyEligible ? 'TAP TO FIELD BYE' : 'TAP TO PICK PLAYER'}</span>
+          <span className="mono" style={{ fontSize: fs(10), color: emptyEligible ? 'var(--warn)' : 'var(--faint)', letterSpacing: '0.12em', fontWeight: emptyEligible ? 700 : 400 }}>{emptyEligible ? 'TAP TO FIELD BYE' : 'TAP TO PICK PLAYER'}</span>
         </div>
       )}
       <div onClick={hideScout ? undefined : onScout} title={hideScout ? 'Your opponent’s lineup is sealed until kickoff' : "Scout the opponent's possible players for this window"} style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: hideScout ? 'default' : 'pointer' }}>
         <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--dim)' }}>◆</span>
-        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.16em', color: 'var(--faint)', fontWeight: 700 }}>SEALED · {winId.toUpperCase()}</span>
-        {!hideScout && <span className="mono" style={{ fontSize: 7.5, letterSpacing: '0.12em', color: 'var(--opp)', fontWeight: 700 }}><GameIcon name={UI_ART.scout} emoji="🔍" size="1.6em" /> SCOUT</span>}
+        <span className="mono" style={{ fontSize: fs(9), letterSpacing: '0.16em', color: 'var(--faint)', fontWeight: 700 }}>SEALED · {winId.toUpperCase()}</span>
+        {!hideScout && <span className="mono" style={{ fontSize: fs(7.5), letterSpacing: '0.12em', color: 'var(--opp)', fontWeight: 700 }}><GameIcon name={UI_ART.scout} emoji="🔍" size="1.6em" /> SCOUT</span>}
       </div>
     </div>
     {infoMetric && <MetricInfo metric={infoMetric} onClose={() => setInfoMetric(null)} />}
