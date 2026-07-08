@@ -11,7 +11,8 @@ import { FX_COLOR, fmtClock, buildBeats, type Beat } from '../data/demoNarration
 import { avatarUrl } from '../data/media';
 import { getProvider } from '../data/providers';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
-import { getSession } from '../data/liveApi';
+import { getSession, demoCardTheme } from '../data/liveApi';
+import { CardTableCss } from '../app/cardTable';
 import { SlotFieldViews } from '../app/FieldView';
 import { SetupRow, PlayerPicker, RosterAside, ScoutModal } from './Matchup';
 import { RequestCodeModal } from './RequestCode';
@@ -64,6 +65,9 @@ export function DemoBoard() {
   // Rails need ~900px; below that the rosters render as fluid panels instead.
   const narrow = useIsMobile(920);
   const fs = useFinePrint();
+  // Front-door demo card theme — the global super-admin lever (default on).
+  const [cardHand, setCardHand] = useState(false);
+  useEffect(() => { let a = true; demoCardTheme().then((v) => a && setCardHand(!!v)).catch(() => a && setCardHand(true)); return () => { a = false; }; }, []);
   // Coming back from a Sleeper sim: restore the baked Drip Test League so the
   // board always builds from the demo rosters.
   useEffect(() => { if (isSimLeague) exitSimLeague(); }, [isSimLeague, exitSimLeague]);
@@ -429,8 +433,10 @@ export function DemoBoard() {
     const rslots = phase === 'watch' && resolved ? resolved.windows[i]?.slots ?? [] : [];
     const isFeatWin = featuredSlot?.winId === w.id;
     return (
-      <div key={w.id} style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, marginTop: 10, overflow: 'hidden', opacity: phase === 'watch' && st === 'upcoming' ? 0.65 : 1, transition: 'opacity .3s' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--bd)', background: 'var(--bg)' }}>
+      <div key={w.id} className={cardHand ? 'mx-winsec' : undefined} style={cardHand
+        ? { marginTop: 12, opacity: phase === 'watch' && st === 'upcoming' ? 0.65 : 1, transition: 'opacity .3s' }
+        : { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, marginTop: 10, overflow: 'hidden', opacity: phase === 'watch' && st === 'upcoming' ? 0.65 : 1, transition: 'opacity .3s' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: cardHand ? '2px 2px 8px' : '8px 12px', borderBottom: '1px solid var(--bd)', background: cardHand ? 'transparent' : 'var(--bg)' }}>
           <span className="mono" style={{ fontSize: fs(10), fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>{w.label}</span>
           <span className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)' }}>{w.time}{games > 0 ? ` · ${games} game${games > 1 ? 's' : ''}` : ''}</span>
           <span style={{ flex: 1 }} />
@@ -507,7 +513,8 @@ export function DemoBoard() {
           <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase="setup" collapsed={!rosterOpen.you} onToggle={() => setRosterOpen((o) => ({ ...o, you: !o.you }))} bye={byeYou} week={DEMO_WEEK} />
         )}
 
-        <div style={{ width: '100%', maxWidth: 520 }}>
+        <div className={cardHand ? 'ctable mx-felt mx-demo' : undefined} style={{ width: '100%', maxWidth: 520, ...(cardHand ? { padding: '10px 10px 16px' } : {}) }}>
+          {cardHand && <><CardTableCss /><div className="ct-feltlayers" aria-hidden /></>}
           {/* hero one-liner */}
           <div style={{ textAlign: 'center', margin: '6px 0 14px' }}>
             <div className="grotesk" style={{ fontSize: 'clamp(19px, 5.5vw, 26px)', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1.15 }}>
@@ -696,7 +703,7 @@ export function DemoBoard() {
       {/* hero-board modals: tap-a-spot player picker + opponent-pool scout */}
       {pickerSlot && (
         <PlayerPicker
-          win={pickerSlot.win} week={DEMO_WEEK} players={youPools[pickerSlot.win] ?? []} currentId={picks[pickerSlot.key]?.playerId}
+          win={pickerSlot.win} week={DEMO_WEEK} players={youPools[pickerSlot.win] ?? []} currentId={picks[pickerSlot.key]?.playerId} cards={cardHand}
           onPick={(id) => assignToSlot(pickerSlot.key, id)}
           onRemove={() => { clearSlot(pickerSlot.key); setPickerSlot(null); }}
           onClose={() => { setPickerSlot(null); setSelSlot(null); }}
