@@ -1198,19 +1198,24 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               <button onClick={() => setShowRules(true)} title="How scoring works" className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 📖 Rules
               </button>
-              <div style={{ textAlign: 'right' }}>
-                <div className="mono" style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--faint)' }}>LOCKS IN</div>
-                <div className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--warn)' }}>{weekLockLabel(week)}</div>
+              {/* Keep the "LOCKS IN <date>" hint and the LOCK IN button together as
+                  one cluster so they wrap as a unit — they used to split, dropping
+                  LOCK IN awkwardly onto its own line on a phone. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'nowrap' }}>
+                <div style={{ textAlign: 'right' }}>
+                  <div className="mono" style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--faint)' }}>LOCKS IN</div>
+                  <div className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--warn)' }}>{weekLockLabel(week)}</div>
+                </div>
+                {/* Live board: no LOCK IN button — each window locks on the real clock
+                    and the lineup auto-saves. Sim/demo keeps the manual lock. */}
+                {liveCtx ? (
+                  <span className="mono" title="Your lineup saves automatically and locks 1h before each window's kickoff." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 40%, var(--bd))', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', borderRadius: 4, padding: '6px 10px' }}>✓ AUTO-SAVES</span>
+                ) : (
+                  <button onClick={lockIn} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4, boxShadow: '0 0 20px color-mix(in srgb, var(--you) 30%, transparent)' }}>
+                    LOCK IN →
+                  </button>
+                )}
               </div>
-              {/* Live board: no LOCK IN button — each window locks on the real clock
-                  and the lineup auto-saves. Sim/demo keeps the manual lock. */}
-              {liveCtx ? (
-                <span className="mono" title="Your lineup saves automatically and locks 1h before each window's kickoff." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 40%, var(--bd))', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', borderRadius: 4, padding: '6px 10px' }}>✓ AUTO-SAVES</span>
-              ) : (
-                <button onClick={lockIn} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4, boxShadow: '0 0 20px color-mix(in srgb, var(--you) 30%, transparent)' }}>
-                  LOCK IN →
-                </button>
-              )}
             </div>
           )}
           {phase === 'live' && (
