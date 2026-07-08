@@ -18,7 +18,7 @@ import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndCloc
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
 import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, myMatchup, type PickRow } from '../data/liveApi';
-import { CardTableCss, PowerupHand, PlayerCard } from '../app/cardTable';
+import { CardTableCss, PowerupHand, PlayerCard, PowerupCard } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import { Rulebook } from './Rulebook';
 import { PuIcon, GameIcon, Emoji, DripCoin, UI_ART } from '../app/gameIcons';
@@ -1521,8 +1521,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       {scoutWin && <ScoutModal win={scoutWin} week={week} pool={oppPools[scoutWin] ?? []} oppName={opp.name} onClose={() => setScoutWin(null)} />}
 
       {puView === 'active' && <ActivePowerupsModal effects={activeEffects} onClose={() => setPuView(null)} />}
-      {puView === 'apply' && <ApplyPowerupsModal items={appliable} inventory={inventory} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); setPuView(null); }} onClose={() => setPuView(null)} />}
-      {shopOpen && <ShopModal onClose={() => setShopOpen(false)} coinsOverride={liveCtx ? Math.round(coinBal) : undefined} onBuy={liveCtx ? buyFromWallet : undefined} />}
+      {puView === 'apply' && <ApplyPowerupsModal items={appliable} inventory={inventory} cards={cardHand} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); setPuView(null); }} onClose={() => setPuView(null)} />}
+      {shopOpen && <ShopModal onClose={() => setShopOpen(false)} coinsOverride={liveCtx ? Math.round(coinBal) : undefined} onBuy={liveCtx ? buyFromWallet : undefined} cards={cardHand} />}
       {/* Card-table hand: the same owned/usable power-ups as the Apply modal,
           fanned at the bottom. Tap a card → tip → ARM fires the buff, APPLY
           enters the existing tap-a-target flow (pendingApply); tapping the
@@ -1942,10 +1942,31 @@ function ActivePowerupsModal({ effects, onClose }: {
 }
 
 // APPLY: only the power-ups you can still use right now, per the open windows.
-function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose }: {
+function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose, cards = false }: {
   items: { p: Powerup; deadline: string; action: 'arm' | 'apply' | 'hint'; blocked?: string }[]; inventory: Record<string, number>;
-  onArm: (id: string) => void; onApply: (id: string) => void; onClose: () => void;
+  onArm: (id: string) => void; onApply: (id: string) => void; onClose: () => void; cards?: boolean;
 }) {
+  if (cards) {
+    // Card-table leagues: your usable power-ups dealt on the felt. Tap to ARM a
+    // buff in place or enter APPLY target mode; hint cards carry their how-to.
+    return (
+      <PuShell title="✦ Play a Card" subtitle="YOUR HAND — PLAY EACH BEFORE ITS WINDOW CLOSES" accent="var(--warn)" onClose={onClose}>
+        <div className="ctable" style={{ maxHeight: 440, overflow: 'auto' }}>
+          {items.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: '#93A594', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— no cards to play right now —<br />bought cards appear here while their window is open</div>}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(118px, 1fr))', gap: 12, justifyItems: 'center', padding: '4px 2px' }}>
+            {items.map(({ p, deadline, action, blocked }, i) => (
+              <PowerupCard key={p.id} id={p.id} name={p.name} icon={p.icon} blurb={p.blurb} idx={i}
+                timingLabel={deadline} live={action !== 'hint'}
+                footLabel={action === 'arm' ? 'ARM' : action === 'apply' ? 'PLAY → TARGET' : 'READY'}
+                owned={inventory[p.id] ?? 0} disabled={!!blocked}
+                note={blocked ?? (action === 'hint' ? POWERUP_HINT[p.id] : undefined)}
+                onClick={() => { if (action === 'arm') onArm(p.id); else if (action === 'apply') onApply(p.id); }} />
+            ))}
+          </div>
+        </div>
+      </PuShell>
+    );
+  }
   return (
     <PuShell title="✦ Apply Power-Ups" subtitle="USABLE NOW — APPLY EACH BEFORE ITS WINDOW CLOSES" accent="var(--warn)" onClose={onClose}>
       {items.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— nothing to apply right now —<br />power-ups appear here while their window is open</div>}
