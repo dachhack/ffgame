@@ -18,7 +18,7 @@ import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndCloc
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
 import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, myMatchup, type PickRow } from '../data/liveApi';
-import { CardTableCss, PowerupHand } from '../app/cardTable';
+import { CardTableCss, PowerupHand, PlayerCard } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import { Rulebook } from './Rulebook';
 import { PuIcon, GameIcon, Emoji, DripCoin, UI_ART } from '../app/gameIcons';
@@ -1461,7 +1461,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         const avail = (youPools[win] || []).filter((p) => !slotted.has(p.id) || p.id === current);
         return (
           <PlayerPicker
-            win={win} week={week} players={avail} currentId={current}
+            win={win} week={week} players={avail} currentId={current} cards={cardHand}
             onPick={(pid) => { assignToSlot(key, pid); setPickerSlot(null); }}
             onRemove={() => { clearSlot(key); setPickerSlot(null); }}
             onClose={() => setPickerSlot(null)}
@@ -1471,7 +1471,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
       {byeStealSlot && (
         <PlayerPicker
-          win={byeStealSlot.split('#')[0] as WindowId} week={week} players={byeYou}
+          win={byeStealSlot.split('#')[0] as WindowId} week={week} players={byeYou} cards={cardHand}
           title="Field a bye player" subtitle="ON BYE — FIELD ONE FOR A FLAT PROJECTED SCORE"
           onPick={(pid) => {
             if (applyByeSteal(week, byeStealSlot, pid)) {
@@ -2421,8 +2421,8 @@ export function SetupRow(props: {
           )}
           {/* identity row — tap to swap the player; on desktop the spot's
               power-ups sit to the right of the headshot (below it on mobile). */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0, paddingRight: 22 }}>
-            <div onClick={cardTap} style={{ cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center', minWidth: 0, flex: 1 }}>
+          <div className="mx-id" style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0, paddingRight: 22 }}>
+            <div className="mx-idbtn" onClick={cardTap} style={{ cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center', minWidth: 0, flex: 1 }}>
               <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={isMobile ? 40 : 48} />
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
@@ -2448,7 +2448,7 @@ export function SetupRow(props: {
 
           {/* sealed: the chosen metric (kept hidden from the opponent) */}
           {!showPicker && (
-            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <div className="mx-met" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)' }}>{metric?.name}</span>
               <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(7), letterSpacing: '0.12em', color: 'var(--faint)' }}>
                 <span style={{ width: 5, height: 5, background: 'var(--you)', borderRadius: '50%', display: 'inline-block', animation: 'bpulse 2s ease infinite' }} /> HIDDEN
@@ -2540,17 +2540,18 @@ function MetricInfo({ metric, onClose }: { metric: Metric; onClose: () => void }
 }
 
 // ── Player picker (tap a spot in setup) — choose from this window's roster ──
-export function PlayerPicker({ win, week, players, currentId, title = 'Pick a player', subtitle = 'YOUR PLAYERS WHOSE GAME FALLS IN THIS WINDOW', onPick, onRemove, onClose, gated, onGated }: {
+export function PlayerPicker({ win, week, players, currentId, title = 'Pick a player', subtitle = 'YOUR PLAYERS WHOSE GAME FALLS IN THIS WINDOW', onPick, onRemove, onClose, gated, onGated, cards = false }: {
   win: WindowId; week: number; players: Player[]; currentId?: string; title?: string; subtitle?: string;
   onPick: (id: string) => void; onRemove: () => void; onClose: () => void;
   gated?: (p: Player) => boolean; onGated?: (p: Player) => void; // opt-in premium lock (default: none)
+  cards?: boolean; // card-table leagues: deal the candidates as player cards on a mini felt
 }) {
   const label = windowsForWeek(week).find((w) => w.id === win)?.label ?? win.toUpperCase();
   const { bigText } = useStore();
   const fs = (n: number) => bigText ? Math.round(n * 1.3 * 10) / 10 : n; // larger-text mode bumps the list's fine print
   return (
     <ModalBackdrop onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{label} · {title}</div>
@@ -2558,6 +2559,24 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
         </div>
+        {cards ? (
+          // The felt spread: candidates dealt as tappable player cards.
+          <div className="ctable" style={{ maxHeight: 440, overflow: 'auto', borderRadius: 0 }}>
+            {players.length === 0 && <div className="mono" style={{ fontSize: fs(10), color: '#93A594', textAlign: 'center', padding: '16px 0' }}>— no eligible players in this window —</div>}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 12, justifyItems: 'center', padding: '6px 2px' }}>
+              {players.map((p, i) => {
+                const sel = p.id === currentId;
+                const isGated = !sel && !!gated?.(p);
+                return (
+                  <PlayerCard key={p.id} slug={p.id} name={p.name} pos={p.pos} slot={p.team ?? undefined} idx={i}
+                    selected={sel} locked={isGated}
+                    badge={<InjuryBadge week={week} slug={p.id} />}
+                    onClick={() => (isGated ? onGated?.(p) : onPick(p.id))} />
+                );
+              })}
+            </div>
+          </div>
+        ) : (
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 440, overflow: 'auto' }}>
           {players.length === 0 && <div className="mono" style={{ fontSize: fs(10), color: 'var(--faint)', textAlign: 'center', padding: '16px 0' }}>— no eligible players in this window —</div>}
           {players.map((p) => {
@@ -2579,6 +2598,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
             );
           })}
         </div>
+        )}
         {currentId && (
           <div style={{ padding: '0 12px 12px' }}>
             <button onClick={onRemove} className="mono" style={{ width: '100%', background: 'var(--bg)', border: '1px dashed var(--opp)', borderRadius: 4, padding: '8px', color: 'var(--opp)', fontSize: fs(9), fontWeight: 700, letterSpacing: '0.08em' }}>✕ REMOVE FROM SPOT</button>

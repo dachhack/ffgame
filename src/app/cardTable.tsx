@@ -49,6 +49,13 @@ const CSS = `
 .ctable .ct-bank{display:flex;justify-content:center;align-items:baseline;gap:3px;padding:2px 0 0;font-variant-numeric:tabular-nums;}
 .ctable .ct-bank b{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;font-size:15px;color:#1E1809;line-height:1;}
 .ctable .ct-bank span{font-size:7px;color:#9A8E6E;letter-spacing:.1em;}
+.ctable .ct-tap{cursor:pointer;}
+.ctable .ct-tap:hover .ct-card{translate:0 -3px;}
+.ctable .ct-sel .ct-side{outline:3px solid #E9B959;outline-offset:2px;}
+.ctable .ct-curchip{position:absolute;top:-8px;left:50%;transform:translateX(-50%);z-index:6;background:#E9B959;color:#241A08;
+  border:2px solid #000;border-radius:999px;font-size:7.5px;font-weight:800;letter-spacing:.06em;padding:2.5px 7px;box-shadow:0 2px 0 #000;white-space:nowrap;}
+.ctable .ct-lockovl{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;font-size:22px;
+  background:rgba(20,14,6,.35);border-radius:8px;}
 .ctable .ct-hot .ct-face{box-shadow:inset 0 0 14px 1px rgba(233,185,89,.45);}
 .ctable .ct-hot .ct-side{box-shadow:0 4px 0 rgba(0,0,0,.7),0 0 14px 2px rgba(233,185,89,.5);}
 .ctable .ct-hotchip{position:absolute;top:-8px;right:-7px;z-index:5;background:#FF7B3B;border:2px solid #000;border-radius:999px;
@@ -122,21 +129,30 @@ const CSS = `
   background:linear-gradient(rgba(10,26,21,.5),rgba(8,20,16,.65));
   box-shadow:inset 0 0 0 1px rgba(233,185,89,.08),inset 0 12px 20px rgba(0,0,0,.3),0 3px 0 rgba(0,0,0,.5);}
 .ctable .mx-sealed{
+  aspect-ratio:5/7;width:100%;max-width:172px;justify-self:center;
   background-image:radial-gradient(rgba(233,185,89,.32) 1.1px,transparent 1.3px),radial-gradient(circle at 50% 46%,#7E2430 0%,#571C26 62%,#40151E 100%) !important;
   background-size:11px 11px,100% 100% !important;
   border:2px solid #000 !important;border-right:2px solid #000 !important;
   border-radius:10px !important;box-shadow:0 4px 0 rgba(0,0,0,.6);
   animation:mx-wob 5.4s ease-in-out infinite alternate;}
-.ctable .mx-sealed .grotesk{color:#E9B959 !important;text-shadow:0 2px 0 #000;}
+.ctable .mx-sealed .grotesk{color:#E9B959 !important;text-shadow:0 2px 0 #000;font-size:26px !important;}
 .ctable .mx-sealed .mono{color:#E3B7BC !important;}
 .ctable .mx-empty:not(.mx-state){
+  aspect-ratio:5/7;width:100%;max-width:172px;justify-self:center;
   background:rgba(233,185,89,.05) !important;
   border:2px dashed rgba(233,185,89,.55) !important;border-left:2px dashed rgba(233,185,89,.55) !important;
   border-radius:10px !important;}
 .ctable .mx-spot:not(.mx-state){
-  border:2px solid #000 !important;border-left:4px solid var(--you) !important;
+  width:100%;max-width:172px;justify-self:center;min-height:240px;
+  border:2px solid #000 !important;border-left:2px solid #000 !important;border-top:4px solid var(--you) !important;
   border-radius:10px !important;box-shadow:0 4px 0 rgba(0,0,0,.55);
   animation:mx-wob 6.2s ease-in-out infinite alternate;}
+/* Card-face layout inside a filled spot: headshot stacked over a centered name,
+   metric line centered — the setup box reads as a portrait player card. */
+.ctable .mx-spot:not(.mx-state) .mx-id{flex-direction:column;align-items:stretch;padding-right:0 !important;}
+.ctable .mx-spot:not(.mx-state) .mx-idbtn{flex-direction:column;text-align:center;gap:6px !important;}
+.ctable .mx-spot:not(.mx-state) .mx-idbtn>div{text-align:center;}
+.ctable .mx-spot:not(.mx-state) .mx-met{justify-content:center;text-align:center;}
 @media (prefers-reduced-motion:reduce){.ctable .mx-sealed,.ctable .mx-spot:not(.mx-state){animation:none;}}
 
 /* ── the power-up hand (standalone — renders outside .ctable too) ─────────── */
@@ -212,20 +228,23 @@ const initials = (name: string) => name.split(/\s+/).map((w) => w[0]).filter(Boo
  *  published per-slot scores — the drip bank with its liquid fill. Opponent
  *  cards (`opp`) tint red and enter with a reveal flip instead of the deal-in.
  *  `hot` adds the 🔥 glow; `nuked` scorches the card (its bank shows the
- *  post-wipe score). */
-export function PlayerCard({ slug, name, pos, slot, metric, bank, opp = false, hot = false, nuked = false, idx = 0 }: {
+ *  post-wipe score). Picker use: pass `onClick` (+ `selected` for the current
+ *  pick, `locked` for premium-gated), leave `metric` undefined to hide the
+ *  metric row, and pass `badge` (e.g. an injury chip) to sit by the name. */
+export function PlayerCard({ slug, name, pos, slot, metric, bank, opp = false, hot = false, nuked = false, idx = 0, onClick, selected = false, locked = false, badge }: {
   slug: string; name: string; pos: string; slot?: string; metric?: string | null;
   bank?: number | null; opp?: boolean; hot?: boolean; nuked?: boolean; idx?: number;
+  onClick?: () => void; selected?: boolean; locked?: boolean; badge?: React.ReactNode;
 }) {
   const [imgOk, setImgOk] = useState(true);
   const url = useMemo(() => headshot(slug), [slug]);
   const suit = posVars(pos);
   const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
   return (
-    <div className={`ct-wrap ${opp ? 'ct-flip ct-opp' : 'ct-dealin'}${hot && !nuked ? ' ct-hot' : ''}${nuked ? ' ct-nuked' : ''}`}
-      style={{ animationDelay: `${idx * 90}ms` }}>
+    <div className={`ct-wrap ${opp ? 'ct-flip ct-opp' : 'ct-dealin'}${hot && !nuked ? ' ct-hot' : ''}${nuked ? ' ct-nuked' : ''}${selected ? ' ct-sel' : ''}${onClick ? ' ct-tap' : ''}`}
+      style={{ animationDelay: `${idx * 90}ms` }} onClick={onClick}>
       <div className="ct-card" style={wobbleVars(slug)}>
-        <div className="ct-side ct-face">
+        <div className="ct-side ct-face" style={locked ? { filter: 'grayscale(.55) brightness(.75)' } : undefined}>
           <div className="ct-fill" style={{ height: `${fillPct}%` }} />
           <div className="ct-facehead">
             <span className="ct-suit" style={suit}>{pos === 'DEF' ? 'DST' : pos}</span>
@@ -236,8 +255,8 @@ export function PlayerCard({ slug, name, pos, slot, metric, bank, opp = false, h
               ? <img src={url} alt="" draggable={false} onError={() => setImgOk(false)} />
               : <span className="ct-mono" style={{ color: suit.color as string }}>{initials(name)}</span>}
           </div>
-          <div className="ct-name">{name}</div>
-          <div className="ct-metric">METRIC <b>{metric ?? '—'}</b></div>
+          <div className="ct-name">{name}{badge && <span style={{ marginLeft: 3 }}>{badge}</span>}</div>
+          {metric !== undefined && <div className="ct-metric">METRIC <b>{metric ?? '—'}</b></div>}
           {bank != null && <div className="ct-bank"><b>{(Math.round(bank * 10) / 10).toFixed(1)}</b><span>PTS</span></div>}
           {nuked && (
             <div className="ct-scorch">
@@ -246,9 +265,11 @@ export function PlayerCard({ slug, name, pos, slot, metric, bank, opp = false, h
               {bank != null && <span className="ct-wiped">bank {(Math.round(bank * 10) / 10).toFixed(1)}</span>}
             </div>
           )}
+          {locked && <div className="ct-lockovl">🔒</div>}
         </div>
       </div>
       {hot && !nuked && <div className="ct-hotchip">🔥 HOT</div>}
+      {selected && <div className="ct-curchip">CURRENT ✓</div>}
     </div>
   );
 }
