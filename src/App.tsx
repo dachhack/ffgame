@@ -31,6 +31,9 @@ export function App() {
   useEffect(() => {
     document.body.style.background = THEMES[theme].bg;
     document.documentElement.style.colorScheme = light ? 'light' : 'dark';
+    // CSS-reachable light/dark signal for the card-table theme (cardTable.tsx):
+    // its felt + dark-stock cards get a light variant on the light app themes.
+    document.documentElement.dataset.cardLight = light ? '1' : '0';
   }, [theme, light]);
 
   // Deep link: ?live=1 enters Live mode; ?code=XXXX (a commissioner's share link)
