@@ -11,11 +11,15 @@ const FONT_URL = `${import.meta.env.BASE_URL}fonts/lilita-one.woff2`;
 
 const CSS = `
 @font-face{font-family:'Lilita One';font-style:normal;font-weight:400;font-display:swap;src:url('${FONT_URL}') format('woff2');}
-.ctable{position:relative;border-radius:12px;overflow:hidden;padding:12px 10px 16px;background:#0B1F1A;}
+/* Dark felt: a green baize whose base + ambient glow lean slightly toward the
+   active theme (base nudged toward --bg, blobs tinted --you / --opp) so neon
+   reads teal, prime warm, slate cool — without losing the felt-green heart. */
+.ctable{position:relative;border-radius:12px;overflow:hidden;padding:12px 10px 16px;
+  background:color-mix(in srgb, #0B1F1A 80%, var(--bg, #0B1F1A));}
 .ctable .ct-blobs{position:absolute;inset:-30%;pointer-events:none;}
 .ctable .ct-blob{position:absolute;width:60%;height:60%;border-radius:50%;filter:blur(60px);opacity:.5;mix-blend-mode:screen;}
-.ctable .ct-b1{background:radial-gradient(circle,#1B4A37 0%,transparent 62%);top:0;left:-5%;animation:ct-drift 39s linear infinite;}
-.ctable .ct-b2{background:radial-gradient(circle,#58202B 0%,transparent 60%);bottom:-8%;right:-5%;animation:ct-drift 51s linear infinite reverse;}
+.ctable .ct-b1{background:radial-gradient(circle,color-mix(in srgb, var(--you, #36E59B) 40%, #0B1F1A) 0%,transparent 62%);top:0;left:-5%;animation:ct-drift 39s linear infinite;}
+.ctable .ct-b2{background:radial-gradient(circle,color-mix(in srgb, var(--opp, #FF5266) 38%, #0B1F1A) 0%,transparent 60%);bottom:-8%;right:-5%;animation:ct-drift 51s linear infinite reverse;}
 @keyframes ct-drift{from{transform:rotate(0) translateX(8%) rotate(0)}to{transform:rotate(360deg) translateX(8%) rotate(-360deg)}}
 .ctable .ct-vig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 90% at 50% 40%,transparent 55%,rgba(0,0,0,.55) 100%);}
 .ctable .ct-body{position:relative;}
@@ -118,10 +122,10 @@ const CSS = `
 .mx-felt>*{position:relative;z-index:1;}
 .mx-felt .ct-feltlayers{position:absolute;inset:0;z-index:0;pointer-events:none;
   background:
-    radial-gradient(70% 60% at 18% 8%, rgba(27,74,55,.65), transparent 62%),
-    radial-gradient(60% 55% at 85% 92%, rgba(88,32,43,.55), transparent 60%),
-    radial-gradient(55% 60% at 55% 45%, rgba(20,66,74,.5), transparent 65%),
-    #0B1F1A;}
+    radial-gradient(70% 60% at 18% 8%, color-mix(in srgb, var(--you, #36E59B) 34%, transparent), transparent 62%),
+    radial-gradient(60% 55% at 85% 92%, color-mix(in srgb, var(--opp, #FF5266) 30%, transparent), transparent 60%),
+    radial-gradient(55% 60% at 55% 45%, color-mix(in srgb, var(--warn, #14424A) 26%, transparent), transparent 65%),
+    color-mix(in srgb, #0B1F1A 80%, var(--bg, #0B1F1A));}
 .mx-felt .ct-feltlayers::before{content:"";position:absolute;inset:0;opacity:.5;mix-blend-mode:overlay;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");}
 .mx-felt .ct-feltlayers::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 40%,transparent 55%,rgba(0,0,0,.5) 100%);}
