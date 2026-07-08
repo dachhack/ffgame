@@ -83,8 +83,9 @@ const CSS = `
 .ctable .ct-name{text-align:center;font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:9.4px;letter-spacing:.04em;line-height:1.18;
   margin-top:5px;color:#2A2312;text-transform:uppercase;text-wrap:balance;}
 .ctable .ct-metric{margin-top:auto;text-align:center;font-size:6.6px;letter-spacing:.1em;color:#6E6650;padding-bottom:2px;}
-.ctable .ct-metric b{display:inline-block;padding:2px 5px;border-radius:4px;background:#241C10;color:#E9B959;font-size:7px;letter-spacing:.1em;max-width:88px;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;}
+.ctable .ct-metric b{display:inline-block;padding:2.5px 7px;border-radius:5px;background:linear-gradient(#3A2E15,#241C10);color:#FFD86B;font-size:8px;
+  font-weight:800;letter-spacing:.06em;max-width:88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;
+  border:1.5px solid #000;box-shadow:0 2px 0 #000,inset 0 0 6px rgba(255,216,107,.28);text-shadow:0 1px 0 #000;}
 
 .ctable .ct-back{background:radial-gradient(circle at 50% 46%,#7E2430 0%,#571C26 62%,#40151E 100%);}
 .ctable .ct-lattice{position:absolute;inset:6px;border:1.5px solid rgba(233,185,89,.5);border-radius:6px;
@@ -172,8 +173,8 @@ const CSS = `
   font-weight:400 !important;letter-spacing:.04em;text-transform:uppercase;font-size:12px !important;white-space:normal !important;text-wrap:balance;}
 .ctable .mx-spot:not(.mx-state) .mx-idbtn .mono{color:#6E6650 !important;}
 .ctable .mx-spot:not(.mx-state) .mx-met{justify-content:center;text-align:center;}
-.ctable .mx-spot:not(.mx-state) .mx-met .grotesk{background:#241C10;color:#E9B959 !important;padding:2.5px 8px;border-radius:4px;
-  font-size:10px !important;letter-spacing:.06em;}
+.ctable .mx-spot:not(.mx-state) .mx-met .grotesk{background:linear-gradient(#3A2E15,#241C10);color:#FFD86B !important;padding:3px 9px;border-radius:5px;
+  font-size:10px !important;font-weight:800 !important;letter-spacing:.06em;border:1.5px solid #000;box-shadow:0 2px 0 #000,inset 0 0 6px rgba(255,216,107,.28);text-shadow:0 1px 0 #000;}
 .ctable .mx-spot:not(.mx-state) .mx-met .mono{color:#6E6650 !important;}
 @media (prefers-reduced-motion:reduce){.ctable .mx-sealed,.ctable .mx-spot:not(.mx-state){animation:none;}}
 
@@ -226,11 +227,12 @@ const CSS = `
 .ctable .ct-puflash .ct-pucard{outline:3px solid #E9B959;outline-offset:2px;}
 
 /* ── the power-up hand (standalone — renders outside .ctable too) ─────────── */
-.ct-hand{position:fixed;left:50%;transform:translateX(-50%);bottom:-6px;z-index:40;width:min(500px,100vw);height:128px;pointer-events:none;}
+.ct-hand{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom, 0px) + 8px);z-index:40;
+  width:min(500px,100vw);height:128px;pointer-events:none;}
 .ct-hand .ct-handtag{position:absolute;bottom:100px;left:50%;transform:translateX(-50%);font-size:8px;letter-spacing:.24em;
   color:var(--dim);opacity:.9;pointer-events:none;font-weight:700;}
 .ct-hcard{position:absolute;bottom:0;left:50%;width:78px;height:106px;pointer-events:auto;cursor:pointer;
-  transform:translateX(calc(-50% + var(--hx))) rotate(var(--hr)) translateY(46px);
+  transform:translateX(calc(-50% + var(--hx))) rotate(var(--hr)) translateY(38px);
   transition:transform .3s cubic-bezier(.3,1.6,.4,1),filter .3s;}
 .ct-hcard .ct-hinner{width:100%;height:100%;border-radius:9px;border:2px solid #000;box-shadow:0 5px 0 rgba(0,0,0,.7);
   background-image:radial-gradient(rgba(233,185,89,.09) 1px,transparent 1.2px),radial-gradient(circle at 50% 38%,#332919 0%,#2A2115 55%,#201810 100%);
