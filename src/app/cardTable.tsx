@@ -244,6 +244,49 @@ const CSS = `
 .ct-htip .ct-hact:active{transform:translateY(2px);box-shadow:0 1px 0 #000;}
 .ct-htip .ct-hnote{display:block;margin-top:4px;color:#E0A96B;font-size:8px;}
 @media (prefers-reduced-motion: reduce){ .ct-hcard{transition:none;} }
+
+/* ═══ LIGHT APP THEMES (daylight / arctic) ═══════════════════════════════════
+   The felt becomes a light baize tinted from the active theme's own accents,
+   and the dark-stock cards (power-ups, the hand, live ScoreCards) flip to a
+   light tan stock with ink text. The physical cards keep their identity —
+   cream player faces and the maroon sealed backs read on both grounds. */
+:root[data-card-light="1"] .ctable{
+  background:
+    radial-gradient(70% 60% at 18% 8%, color-mix(in srgb, var(--you) 20%, transparent), transparent 62%),
+    radial-gradient(60% 55% at 85% 92%, color-mix(in srgb, var(--opp) 18%, transparent), transparent 60%),
+    radial-gradient(55% 60% at 55% 45%, color-mix(in srgb, var(--warn) 14%, transparent), transparent 65%),
+    color-mix(in srgb, var(--bg) 72%, #FFFFFF);}
+/* Felt-component blobs: darken the light ground (multiply) instead of glowing. */
+:root[data-card-light="1"] .ctable .ct-blob{mix-blend-mode:multiply;opacity:.28;}
+:root[data-card-light="1"] .ctable .ct-vig{background:radial-gradient(120% 90% at 50% 40%,transparent 60%,rgba(60,40,20,.16) 100%);}
+/* mx-felt (hero board) layered ground + softer vignette. */
+:root[data-card-light="1"] .mx-felt .ct-feltlayers{
+  background:
+    radial-gradient(70% 60% at 18% 8%, color-mix(in srgb, var(--you) 20%, transparent), transparent 62%),
+    radial-gradient(60% 55% at 85% 92%, color-mix(in srgb, var(--opp) 18%, transparent), transparent 60%),
+    radial-gradient(55% 60% at 55% 45%, color-mix(in srgb, var(--warn) 14%, transparent), transparent 65%),
+    color-mix(in srgb, var(--bg) 72%, #FFFFFF);}
+:root[data-card-light="1"] .mx-felt .ct-feltlayers::after{background:radial-gradient(120% 90% at 50% 40%,transparent 60%,rgba(60,40,20,.14) 100%);}
+:root[data-card-light="1"] .mx-felt .ct-feltlayers::before{opacity:.28;}
+/* Window pods: lighter frame on the light table. */
+:root[data-card-light="1"] .ctable .mx-winsec,
+:root[data-card-light="1"] .ctable .ct-pod{background:linear-gradient(rgba(255,255,255,.5),rgba(255,255,255,.28));
+  box-shadow:inset 0 0 0 1px rgba(184,134,59,.22),inset 0 12px 20px rgba(120,90,40,.08),0 3px 0 rgba(120,90,40,.18);}
+
+/* Light tan stock (power-up cards, hand, live ScoreCards) + ink text. */
+:root[data-card-light="1"] .ctable .ct-pucard,
+:root[data-card-light="1"] .ct-hcard .ct-hinner{
+  background-image:radial-gradient(rgba(120,90,40,.13) 1px,transparent 1.2px),radial-gradient(circle at 50% 38%,#F3ECD7 0%,#E9DFC4 55%,#DCCFAC 100%);
+  background-size:11px 11px,100% 100%;color:#2A2312;}
+:root[data-card-light="1"] .ctable .ct-puname,
+:root[data-card-light="1"] .ct-hcard .ct-httl{color:#2A2312;text-shadow:none;}
+:root[data-card-light="1"] .ctable .ct-publurb{color:#6E6650;}
+:root[data-card-light="1"] .ct-hcard .ct-hdl{color:#7A6E50;}
+:root[data-card-light="1"] .ctable .ct-putime{background:#EFE6CF;color:#7A5A1E;}
+:root[data-card-light="1"] .ctable .ct-putime.live{background:#E9B959;color:#241A08;}
+:root[data-card-light="1"] .mx-scorecard{
+  background-image:radial-gradient(rgba(120,90,40,.12) 1px,transparent 1.2px),radial-gradient(circle at 50% 34%,#F3ECD7 0%,#E9DFC4 55%,#DCCFAC 100%) !important;
+  box-shadow:0 4px 0 rgba(120,90,40,.2) !important;}
 `;
 
 /** Inject the card-table stylesheet once per document. */
