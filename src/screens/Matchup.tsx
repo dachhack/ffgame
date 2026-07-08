@@ -5,7 +5,7 @@ import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile, 
 import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed } from '../data/gameFeed';
 import { avatarUrl, teamLogo } from '../data/media';
-import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, weekLockLabel, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, preseasonWeekNum } from '../data/nflSlate';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, preseasonWeekNum } from '../data/nflSlate';
 import { METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '../data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '../data/league';
@@ -1200,13 +1200,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             <>
               <button onClick={() => { setPicks(youDefault); setSelSlot(null); }} title="Fill every slot with your best available lineup" className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '7px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}>✨ Auto-fill</button>
               <button onClick={() => setShowRules(true)} title="How scoring works" className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '7px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}>📖 Rules</button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap' }}>
-                <div style={{ textAlign: 'right' }}>
-                  <div className="mono" style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--faint)' }}>LOCKS IN</div>
-                  <div className="mono" style={{ fontSize: 11, fontWeight: 600, color: 'var(--warn)' }}>{weekLockLabel(week)}</div>
-                </div>
-                <button onClick={lockIn} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4, boxShadow: '0 0 20px color-mix(in srgb, var(--you) 30%, transparent)', whiteSpace: 'nowrap' }}>LOCK IN →</button>
-              </div>
+              {/* The lock time is shown per-window now (each window header carries its
+                  own "locks <time> ET"); this button just commits the whole lineup. */}
+              <button onClick={lockIn} title="Lock every window and watch the week play out" className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4, boxShadow: '0 0 20px color-mix(in srgb, var(--you) 30%, transparent)', whiteSpace: 'nowrap' }}>LOCK IN →</button>
             </>
           )}
           {phase === 'live' && (
@@ -2157,12 +2153,17 @@ function WindowSectionInner(props: {
   const winKickSod = windowKickoffSod(week, w.id);
   const lockLabel = fmtTimeOfDay(winKickSod - (testTimelineOn() ? TEST_LOCK_LEAD_MS / 1000 : 3600));
   const kickLabel = fmtTimeOfDay(winKickSod);
-  // The state chip for this window's real-clock state.
-  const stateChip = !realtime ? null : realtime === 'setup' ? (
+  // Per-window state + lock time, shown in the window's OWN header. On the live
+  // board these come from the real clock (`realtime`); on the demo/replay we
+  // derive a display state from the global phase so each window still shows its
+  // own "SETUP · 🔒 locks <its kickoff> ET" — the lock/state info is per-window,
+  // so it lives here rather than in a single board-level control.
+  const dispRt = realtime ?? (phase === 'setup' ? 'setup' : done ? 'final' : 'live');
+  const stateChip = dispRt === 'setup' ? (
     <span className="mono" title="Open — edit this window until it locks 1h before kickoff." style={{ fontSize: fs(9), fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 4, padding: '3px 8px' }}>SETUP</span>
-  ) : realtime === 'locked' ? (
+  ) : dispRt === 'locked' ? (
     <span className="mono" title="Lineups are locked for this window — kickoff is within the hour." style={{ fontSize: fs(9), fontWeight: 700, letterSpacing: '0.12em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '3px 8px' }}><Emoji e="🔒" size="1.25em" /> LOCKED</span>
-  ) : realtime === 'final' ? (
+  ) : dispRt === 'final' ? (
     <span className="mono" style={{ fontSize: fs(9), fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 4, padding: '3px 8px' }}>FINAL</span>
   ) : (
     <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: fs(9), fontWeight: 700, letterSpacing: '0.12em', color: '#FF4F62', border: '1px solid #FF4F62', borderRadius: 4, padding: '3px 8px' }}>
@@ -2170,10 +2171,9 @@ function WindowSectionInner(props: {
     </span>
   );
   // The time hint that pairs with the state: what's next on this window's clock.
-  const timeHint = !realtime ? null
-    : realtime === 'setup' ? `🔒 locks ${lockLabel} ET`
-    : realtime === 'locked' ? `▶ kicks ${kickLabel} ET`
-    : realtime === 'live' ? `kicked ${kickLabel} ET`
+  const timeHint = dispRt === 'setup' ? `🔒 locks ${lockLabel} ET`
+    : dispRt === 'locked' ? `▶ kicks ${kickLabel} ET`
+    : dispRt === 'live' ? `kicked ${kickLabel} ET`
     : null;
 
   return (
