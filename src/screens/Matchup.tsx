@@ -3079,19 +3079,19 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
             ? { fontSize: fs(9.5), lineHeight: 1.3, color: 'var(--dimstrong)', whiteSpace: 'normal', textAlign: edge } // full: wrap, never truncate
             : { fontSize: fs(9.5), color: 'var(--dimstrong)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>{stat}</div>;
   const bigNum = suppressSpent != null ? (
-    <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--dim)', lineHeight: 1, textDecoration: 'line-through' }}>{suppressSpent.toFixed(1)}</div>
+    <div className="grotesk mx-sc-big" style={{ fontSize: 22, fontWeight: 700, color: 'var(--dim)', lineHeight: 1, textDecoration: 'line-through' }}>{suppressSpent.toFixed(1)}</div>
   ) : halvedFrom != null ? (
     // Crossed-out original + ÷2 SUPPRESSED sit BESIDE the final number (toward
     // the card's center) so the chip stays the same height as a normal score.
     <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row-reverse' : 'row', alignItems: 'center', gap: 6 }}>
-      <div className="grotesk" style={{ fontSize: isMobile ? 24 : 26, fontWeight: 700, color: 'var(--fx-stop)', lineHeight: 1, letterSpacing: '-0.02em' }}>{bank.toFixed(1)}</div>
+      <div className="grotesk mx-sc-big" style={{ fontSize: isMobile ? 24 : 26, fontWeight: 700, color: 'var(--fx-stop)', lineHeight: 1, letterSpacing: '-0.02em' }}>{bank.toFixed(1)}</div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: side === 'you' ? 'flex-end' : 'flex-start', lineHeight: 1.15 }}>
         <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--faint)', textDecoration: 'line-through' }}>{halvedFrom.toFixed(1)}</span>
         <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-stop)' }}>÷2 SUPPRESSED</span>
       </div>
     </div>
   ) : (
-    <div className="grotesk" style={{ fontSize: isMobile ? 24 : 26, fontWeight: 700, color: negated ? 'var(--fx-nuke)' : accent, lineHeight: 1, letterSpacing: '-0.02em', textDecoration: negated ? 'line-through' : undefined, animation: nuked ? 'shake .5s' : undefined }}>{bank.toFixed(1)}</div>
+    <div className="grotesk mx-sc-big" style={{ fontSize: isMobile ? 24 : 26, fontWeight: 700, color: negated ? 'var(--fx-nuke)' : accent, lineHeight: 1, letterSpacing: '-0.02em', textDecoration: negated ? 'line-through' : undefined, animation: nuked ? 'shake .5s' : undefined }}>{bank.toFixed(1)}</div>
   );
   const coinEl = coin == null ? null : (
     <div className="mono" title="drip coin earned so far this window" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(9), fontWeight: 700, color: coin < 0 ? 'var(--opp)' : '#F2C14E' }}>
@@ -3112,11 +3112,11 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
     // metric area reserves two lines so the coin/score and statline rows line up
     // across both cards regardless of how the metric label wraps.
     return (
-      <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 3, cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
+      <div onClick={onClick} className={`mx-scorecard mx-sc-${side}`} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 3, cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
         {nameRow}
         {gameLine}
         <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'center', gap: 8 }}>
-          <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={46} />
+          <span className="mx-sc-img" style={{ flex: 'none', display: 'inline-flex' }}><PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={46} /></span>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2, alignItems: side === 'you' ? 'flex-end' : 'flex-start' }}>
             <div style={{ minHeight: 18, display: 'flex', alignItems: 'center', width: '100%', justifyContent: side === 'you' ? 'flex-end' : 'flex-start' }}>{metricChip}</div>
             {fgEl}
@@ -3132,8 +3132,8 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   }
 
   return (
-    <div onClick={onClick} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 11, alignItems: 'center', cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
-      <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={64} />
+    <div onClick={onClick} className={`mx-scorecard mx-sc-${side}`} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 11, alignItems: 'center', cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
+      <span className="mx-sc-img" style={{ flex: 'none', display: 'inline-flex' }}><PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={64} /></span>
       <div style={{ flex: 1, minWidth: 0, textAlign: edge }}>
         {nameRow}
         {gameLine}
