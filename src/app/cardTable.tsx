@@ -140,7 +140,7 @@ const CSS = `
    the min-height. (aspect-ratio fought stretch and content-sized each side,
    which is what made the empty box tower over the sealed card.) */
 .ctable .mx-sealed{
-  width:100%;max-width:172px;min-height:238px;justify-self:center;box-sizing:border-box;
+  width:100%;max-width:172px;min-height:300px;justify-self:center;box-sizing:border-box;
   background-image:radial-gradient(rgba(233,185,89,.32) 1.1px,transparent 1.3px),radial-gradient(circle at 50% 46%,#7E2430 0%,#571C26 62%,#40151E 100%) !important;
   background-size:11px 11px,100% 100% !important;
   border:2px solid #000 !important;border-right:2px solid #000 !important;
@@ -149,12 +149,12 @@ const CSS = `
 .ctable .mx-sealed .grotesk{color:#E9B959 !important;text-shadow:0 2px 0 #000;font-size:26px !important;}
 .ctable .mx-sealed .mono{color:#E3B7BC !important;}
 .ctable .mx-empty:not(.mx-state){
-  width:100%;max-width:172px;min-height:238px;justify-self:center;box-sizing:border-box;
+  width:100%;max-width:172px;min-height:300px;justify-self:center;box-sizing:border-box;
   background:rgba(233,185,89,.05) !important;
   border:2px dashed rgba(233,185,89,.55) !important;border-left:2px dashed rgba(233,185,89,.55) !important;
   border-radius:10px !important;}
 .ctable .mx-spot:not(.mx-state){
-  width:100%;max-width:172px;min-height:238px;justify-self:center;box-sizing:border-box;
+  width:100%;max-width:172px;min-height:300px;justify-self:center;box-sizing:border-box;
   border:2px solid #000 !important;border-left:2px solid #000 !important;border-top:4px solid var(--you) !important;
   border-radius:10px !important;box-shadow:0 4px 0 rgba(0,0,0,.55);
   animation:mx-wob 6.2s ease-in-out infinite alternate;}
@@ -199,7 +199,7 @@ const CSS = `
 
 /* ── power-up cards (shop + apply modals) — the hand's leather stock, dealt
    as a tappable grid on the felt ─────────────────────────────────────────── */
-.ctable .ct-puwrap{width:100%;max-width:158px;position:relative;animation:ct-deal .5s cubic-bezier(.3,1.5,.5,1) backwards;}
+.ctable .ct-puwrap{width:150px;position:relative;animation:ct-deal .5s cubic-bezier(.3,1.5,.5,1) backwards;}
 .ctable .ct-pucard{display:flex;flex-direction:column;width:100%;min-height:196px;border-radius:10px;border:2px solid #000;
   box-shadow:0 4px 0 rgba(0,0,0,.7);
   background-image:radial-gradient(rgba(233,185,89,.09) 1px,transparent 1.2px),radial-gradient(circle at 50% 38%,#332919 0%,#2A2115 55%,#201810 100%);

@@ -158,6 +158,10 @@ export function Avatar({ name, accent = 'var(--you)', size = 30, src }: { name: 
 export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
   const { theme, setTheme, iconSet, setIconSet, bigText, setBigText, fullStats, setFullStats, setSleeperUser, navigate } = useStore();
   const [open, setOpen] = useState(false);
+  // Which side the dropdown opens toward — chosen on open so it never flies off
+  // screen when the gear sits near an edge (e.g. wrapped to the far left on the
+  // demo board header). Left-half gear → open rightward; right-half → leftward.
+  const [menuAlign, setMenuAlign] = useState<'left' | 'right'>('right');
   const [rules, setRules] = useState(false);
   const [faq, setFaq] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
@@ -179,6 +183,7 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
   }, [session]);
   useEffect(() => {
     if (!open) return;
+    if (ref.current) setMenuAlign(ref.current.getBoundingClientRect().left < window.innerWidth / 2 ? 'left' : 'right');
     const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', onDoc);
@@ -218,7 +223,7 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
       {open && (
         <div
           style={{
-            position: 'absolute', top: 40, right: 0, zIndex: 60, width: 208,
+            position: 'absolute', top: 40, [menuAlign]: 0, zIndex: 60, width: 208, maxWidth: 'calc(100vw - 16px)',
             background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 12,
             boxShadow: '0 10px 28px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column', gap: 14,
           }}

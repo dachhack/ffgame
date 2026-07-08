@@ -190,7 +190,7 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false }: { on
     return (
       <Modal title="Power-Up Shop" sub={<><GameIcon name={COIN_GOLD} emoji="◈" size="1.4em" /> {bal} DRIP COIN · +5 per signature play</>} onClose={onClose} maxWidth={560}>
         <div className="ctable" style={{ maxHeight: 480, overflowY: 'auto', overflowX: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(142px, 1fr))', gap: 12, justifyItems: 'center', padding: '4px 2px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, 150px)', gap: 12, justifyContent: 'center', justifyItems: 'center', padding: '4px 2px' }}>
             {POWERUPS.map((p, i) => {
               const have = inventory[p.id] ?? 0;
               const afford = bal >= p.price;
