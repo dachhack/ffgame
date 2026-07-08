@@ -140,7 +140,7 @@ const CSS = `
    the min-height. (aspect-ratio fought stretch and content-sized each side,
    which is what made the empty box tower over the sealed card.) */
 .ctable .mx-sealed{
-  width:100%;max-width:172px;min-height:300px !important;justify-self:center;box-sizing:border-box;
+  width:100%;max-width:172px;min-height:250px !important;justify-self:center;box-sizing:border-box;
   background-image:radial-gradient(rgba(233,185,89,.32) 1.1px,transparent 1.3px),radial-gradient(circle at 50% 46%,#7E2430 0%,#571C26 62%,#40151E 100%) !important;
   background-size:11px 11px,100% 100% !important;
   border:2px solid #000 !important;border-right:2px solid #000 !important;
@@ -149,12 +149,12 @@ const CSS = `
 .ctable .mx-sealed .grotesk{color:#E9B959 !important;text-shadow:0 2px 0 #000;font-size:26px !important;}
 .ctable .mx-sealed .mono{color:#E3B7BC !important;}
 .ctable .mx-empty:not(.mx-state){
-  width:100%;max-width:172px;min-height:300px !important;justify-self:center;box-sizing:border-box;
+  width:100%;max-width:172px;min-height:250px !important;justify-self:center;box-sizing:border-box;
   background:rgba(233,185,89,.05) !important;
   border:2px dashed rgba(233,185,89,.55) !important;border-left:2px dashed rgba(233,185,89,.55) !important;
   border-radius:10px !important;}
 .ctable .mx-spot:not(.mx-state){
-  width:100%;max-width:172px;min-height:300px !important;justify-self:center;box-sizing:border-box;
+  width:100%;max-width:172px;min-height:250px !important;justify-self:center;box-sizing:border-box;
   border:2px solid #000 !important;border-left:2px solid #000 !important;border-top:4px solid var(--you) !important;
   border-radius:10px !important;box-shadow:0 4px 0 rgba(0,0,0,.55);
   animation:mx-wob 6.2s ease-in-out infinite alternate;}
@@ -176,11 +176,6 @@ const CSS = `
   font-size:10px !important;letter-spacing:.06em;}
 .ctable .mx-spot:not(.mx-state) .mx-met .mono{color:#6E6650 !important;}
 @media (prefers-reduced-motion:reduce){.ctable .mx-sealed,.ctable .mx-spot:not(.mx-state){animation:none;}}
-/* Demo/replay board: slightly shorter setup cards (mostly empty slots, so the
-   full 300px reads as a tall void). The real live board keeps the taller card. */
-.ctable.mx-demo .mx-sealed,
-.ctable.mx-demo .mx-empty:not(.mx-state),
-.ctable.mx-demo .mx-spot:not(.mx-state){min-height:250px !important;}
 
 /* ── live ScoreCards (Matchup live/final phase) — dark card stock so the
    dense light-on-dark live info + you/opp accents stay readable, plus a
