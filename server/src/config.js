@@ -20,6 +20,13 @@ export const config = {
   // regular-season slate/matchups. ESPN API calls still use the real (1-3) week.
   weekOffset: Number(process.env.PILOT_SEASON_TYPE || 2) === 1 ? 100 : 0,
   leagueIds: (process.env.PILOT_LEAGUE_IDS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  // Premium paywall enforcement at resolve (docs/premium-model.md). OFF for the
+  // 2026 pilot — the tier is built but deliberately not turned on until 2027.
+  // Without this flag the gating fails CLOSED when the premium schema/RPCs are
+  // absent (matchup_premium() errors → "not premium" → K/DST picks and premium
+  // power-ups silently stripped from live scoring). Flip with PREMIUM_ENFORCEMENT=1
+  // once the 0036/0037 migrations are applied and Stripe is live.
+  premiumEnforcement: process.env.PREMIUM_ENFORCEMENT === '1',
   playsPollMs: Number(process.env.PLAYS_POLL_MS || 25000),
   scoreboardPollMs: Number(process.env.SCOREBOARD_POLL_MS || 60000),
   injuryPollDailyMs: Number(process.env.INJURY_POLL_MS_DAILY || 86400000),

@@ -18,6 +18,7 @@
 // General + best-ball backups on top of per-slot resolveSlot. DEF suppress,
 // cross-window TE-TD nukes, and the K banker bonus remain simplified there.
 import { db } from './supabase.js';
+import { config } from './config.js';
 import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY } from './engine.js';
 import { matchupPremium, premiumTier, hasPremiumContent, gateSide, hasPremiumTargeted, gateTargeted } from './premium.js';
 import { slugMeta } from '../../src/data/slugMeta.ts';
@@ -225,7 +226,10 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   // positions (K/DST/IDP), premium-unlock metrics, or premium power-ups. Stripped here at the
   // authoritative resolve regardless of how the rows were written. The cheap pre-check skips
   // the matchup_premium() RPC unless a side actually holds premium content.
-  {
+  // GATED OFF for the 2026 pilot (config.premiumEnforcement): the premium schema
+  // isn't provisioned, so matchup_premium() fails closed and this block would
+  // strip every K/DST pick from live scoring while the client shows them unlocked.
+  if (config.premiumEnforcement) {
     const tier = await premiumTier();
     const posOf = (slug) => slugMeta(slug).pos;
     if (hasPremiumContent(homePicks, homeBuffs, tier, posOf) || hasPremiumContent(awayPicks, awayBuffs, tier, posOf)
