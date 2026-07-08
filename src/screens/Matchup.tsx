@@ -1154,110 +1154,78 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           </>
           )
         ) : (
-          <>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
-          <Brand onClick={() => navigate({ name: 'league' })} hideDataSource={!!liveCtx} />
-          {loggedIn && !liveCtx && liveLeaguesChip}
-          <div style={{ display: 'flex', gap: 2, padding: 3, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4 }}>
-            {/* On the live board the phase follows the real clock — the tabs are a
-                read-only progress indicator, not a switcher. */}
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <Brand onClick={() => navigate({ name: 'league' })} />
+                {loggedIn && liveLeaguesChip}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <button onClick={() => setEarnOpen(true)} title="Drip Coin — tap for earning opportunities" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 9px', cursor: 'pointer' }}>
+                  <CoinIcon size={13} />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{Math.round(coinBal)}</span>
+                  {phase === 'final' && weekCoins > 0 && <span style={{ fontSize: 8.5, color: 'var(--fx-streak)' }}>+{weekCoins}</span>}
+                </button>
+                <SiteSettings />
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <span className="mono" title="A deterministic replay of real 2025 games — Setup builds a lineup, Live watches it play, Final jumps to the result." style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 7px', flexShrink: 0 }}>⟳ REPLAY · 2025</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <Avatar name={you.name} accent="var(--you)" size={20} src={avatarUrl(you.ownerId)} />
+                <span className="mono" style={{ color: 'var(--text)', fontSize: 17, fontWeight: 700 }}>{youTotal.toFixed(1)}</span>
+                <span className="mono" style={{ color: 'var(--faint)', fontSize: 9 }}>VS</span>
+                <span className="mono" style={{ color: 'var(--text)', fontSize: 17, fontWeight: 700 }}>{themTotal.toFixed(1)}</span>
+                <Avatar name={opp.name} accent="var(--opp)" size={20} src={avatarUrl(opp.ownerId)} />
+              </div>
+            </div>
+          </div>
+        )}
+      </header>
+      {/* Demo-controls ribbon — the replay-only controls (phase tabs, auto-fill,
+          rules, lock-in, playback) live here so the header above can stay as clean
+          as the real live board's. Only the sim/demo board renders it. */}
+      {!liveCtx && (
+        <div style={{ flex: 'none', background: 'var(--surface)', borderBottom: '1px solid var(--bd)', padding: isMobile ? '7px 10px' : '8px 16px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', rowGap: 8 }}>
+          <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.18em', color: 'var(--faint)', flexShrink: 0 }}>DEMO</span>
+          <div style={{ display: 'flex', gap: 2, padding: 3, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, flexShrink: 0 }}>
             {(['setup', 'live', 'final'] as Phase[]).map((p) => (
-              <button key={p} onClick={() => { if (!liveCtx) changePhase(p); }} className="mono" title={liveCtx ? 'The live board advances on real time' : undefined} style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', padding: '9px 11px', borderRadius: 3, border: 'none', cursor: liveCtx ? 'default' : 'pointer', background: phase === p ? 'var(--sh)' : 'transparent', color: phase === p ? 'var(--you)' : 'var(--dim)' }}>
+              <button key={p} onClick={() => changePhase(p)} className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', padding: '7px 10px', borderRadius: 3, border: 'none', cursor: 'pointer', background: phase === p ? 'var(--sh)' : 'transparent', color: phase === p ? 'var(--you)' : 'var(--dim)' }}>
                 {p.toUpperCase()}
               </button>
             ))}
           </div>
-          {!liveCtx && (
-            <span className="mono" title="A deterministic replay of real 2025 games — Setup builds a lineup, Live watches it play, Final jumps to the result. Switch freely; nothing here is a live game in progress." style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 6px' }}>
-              ⟳ REPLAY
-            </span>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 10, whiteSpace: 'nowrap', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
-          <button onClick={() => setEarnOpen(true)} title="Drip Coin — tap for earning opportunities" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 9px', cursor: 'pointer' }}>
-            <CoinIcon size={13} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{Math.round(coinBal)}</span>
-            {phase === 'final' && weekCoins > 0 && <span style={{ fontSize: 8.5, color: 'var(--fx-streak)' }}>+{weekCoins}</span>}
-          </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <Avatar name={you.name} accent="var(--you)" size={20} src={avatarUrl(you.ownerId)} />
-            <span className="mono" style={{ color: 'var(--text)', fontSize: 14, fontWeight: 700 }}>{youTotal.toFixed(1)}</span>
-            <span className="mono" style={{ color: 'var(--faint)', fontSize: 9 }}>VS</span>
-            <span className="mono" style={{ color: 'var(--text)', fontSize: 14, fontWeight: 700 }}>{themTotal.toFixed(1)}</span>
-            <Avatar name={opp.name} accent="var(--opp)" size={20} src={avatarUrl(opp.ownerId)} />
-          </div>
-          <div style={{ height: 30, width: 1, background: 'var(--bd)' }} />
+          <span style={{ flex: 1, minWidth: 8 }} />
           {phase === 'setup' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', rowGap: 8, justifyContent: 'flex-end' }}>
-              {/* Seed the ranked default lineup so a new user isn't forced to fill
-                  all eight slots by hand before they can lock in. */}
-              <button onClick={() => { setPicks(youDefault); setSelSlot(null); }} title="Fill every slot with your best available lineup" className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                ✨ Auto-fill
-              </button>
-              {/* Teach the hidden-metric mechanic right where the user commits it. */}
-              <button onClick={() => setShowRules(true)} title="How scoring works" className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                📖 Rules
-              </button>
-              {/* Keep the "LOCKS IN <date>" hint and the LOCK IN button together as
-                  one cluster so they wrap as a unit — they used to split, dropping
-                  LOCK IN awkwardly onto its own line on a phone. */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'nowrap' }}>
+            <>
+              <button onClick={() => { setPicks(youDefault); setSelSlot(null); }} title="Fill every slot with your best available lineup" className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '7px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}>✨ Auto-fill</button>
+              <button onClick={() => setShowRules(true)} title="How scoring works" className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '7px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}>📖 Rules</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap' }}>
                 <div style={{ textAlign: 'right' }}>
                   <div className="mono" style={{ fontSize: 8, letterSpacing: '0.2em', color: 'var(--faint)' }}>LOCKS IN</div>
-                  <div className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--warn)' }}>{weekLockLabel(week)}</div>
+                  <div className="mono" style={{ fontSize: 11, fontWeight: 600, color: 'var(--warn)' }}>{weekLockLabel(week)}</div>
                 </div>
-                {/* Live board: no LOCK IN button — each window locks on the real clock
-                    and the lineup auto-saves. Sim/demo keeps the manual lock. */}
-                {liveCtx ? (
-                  <span className="mono" title="Your lineup saves automatically and locks 1h before each window's kickoff." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid color-mix(in srgb, var(--you) 40%, var(--bd))', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', borderRadius: 4, padding: '6px 10px' }}>✓ AUTO-SAVES</span>
-                ) : (
-                  <button onClick={lockIn} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4, boxShadow: '0 0 20px color-mix(in srgb, var(--you) 30%, transparent)' }}>
-                    LOCK IN →
-                  </button>
-                )}
+                <button onClick={lockIn} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4, boxShadow: '0 0 20px color-mix(in srgb, var(--you) 30%, transparent)', whiteSpace: 'nowrap' }}>LOCK IN →</button>
               </div>
-            </div>
+            </>
           )}
           {phase === 'live' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <>
               <span style={{ display: 'inline-block', width: 8, height: 8, background: '#FF4F62', borderRadius: '50%', animation: 'lpulse 1.2s ease infinite' }} />
               <span className="mono" style={{ color: '#FF4F62', fontWeight: 700, letterSpacing: '0.14em', fontSize: 11 }}>LIVE</span>
-              {/* Live board plays on the real clock — no manual RUN ALL / clock-mode
-                  / speed controls. Those stay on the sim/demo replay only. */}
-              {!liveCtx && <>
-              <button onClick={toggleAll} title="Play — or pause — every game window at once" className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px' }}>
-                {anyPlaying ? '❚❚ PAUSE ALL' : '▶ RUN ALL'}
-              </button>
-              <button
-                onClick={() => setClockMode((m) => (m === 'game' ? 'feed' : m === 'feed' ? 'real' : 'game'))}
-                title={'Playback clock (tap to cycle):\n• GAME CLOCK — every game in a window moves in lockstep on game time\n• REAL FEED — plays reveal on the real wall clock (games desync), but the log orders/interleaves and effects resolve on the game clock\n• REAL CLOCK — plays order/interleave and effects resolve on the real clock (cross-game effects land in real-time order)'}
-                className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: wallClock ? 'var(--on-accent)' : 'var(--dim)', background: clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--surface)', border: `1px solid ${clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '6px 10px' }}>
-                ⏱ {clockMode === 'real' ? 'REAL CLOCK' : clockMode === 'feed' ? 'REAL FEED' : 'GAME CLOCK'}
-              </button>
-              <button
-                onClick={() => setSpeed((s) => (s >= 8 ? 1 : s * 2))}
-                title="Playback speed — tap to cycle 1× / 2× / 4× / 8× (speeds up the whole season run)"
-                className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: speed > 1 ? 'var(--on-accent)' : 'var(--dim)', background: speed > 1 ? 'var(--you)' : 'var(--surface)', border: `1px solid ${speed > 1 ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '6px 10px' }}>
-                ⏩ {speed}×
-              </button>
-              </>}
+              <button onClick={toggleAll} title="Play — or pause — every game window at once" className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px' }}>{anyPlaying ? '❚❚ PAUSE ALL' : '▶ RUN ALL'}</button>
+              <button onClick={() => setClockMode((m) => (m === 'game' ? 'feed' : m === 'feed' ? 'real' : 'game'))} title={'Playback clock (tap to cycle):\n• GAME CLOCK — every game in a window moves in lockstep on game time\n• REAL FEED — plays reveal on the real wall clock (games desync), but the log orders/interleaves and effects resolve on the game clock\n• REAL CLOCK — plays order/interleave and effects resolve on the real clock (cross-game effects land in real-time order)'} className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: wallClock ? 'var(--on-accent)' : 'var(--dim)', background: clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--bg)', border: `1px solid ${clockMode === 'real' ? 'var(--warn)' : clockMode === 'feed' ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '6px 10px' }}>⏱ {clockMode === 'real' ? 'REAL CLOCK' : clockMode === 'feed' ? 'REAL FEED' : 'GAME CLOCK'}</button>
+              <button onClick={() => setSpeed((s) => (s >= 8 ? 1 : s * 2))} title="Playback speed — tap to cycle 1× / 2× / 4× / 8×" className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: speed > 1 ? 'var(--on-accent)' : 'var(--dim)', background: speed > 1 ? 'var(--you)' : 'var(--bg)', border: `1px solid ${speed > 1 ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '6px 10px' }}>⏩ {speed}×</button>
               {hasGameFeed(week) && (
-                <button onClick={() => setFieldsOpen(true)} title="Every game with a slotted player, as live field visuals — your plays vs your opponent's" className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px' }}>
-                  ▦ FIELDS
-                </button>
+                <button onClick={() => setFieldsOpen(true)} title="Every game with a slotted player, as live field visuals" className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px' }}>▦ FIELDS</button>
               )}
-            </div>
+            </>
           )}
           {phase === 'final' && (
-            <button onClick={() => navigate({ name: 'final', week })} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4 }}>
-              WEEK RESULT →
-            </button>
+            <button onClick={() => navigate({ name: 'final', week })} className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', padding: '9px 14px', borderRadius: 4 }}>WEEK RESULT →</button>
           )}
-          <SiteSettings />
         </div>
-          </>
-        )}
-      </header>
+      )}
 
       <div className={cardHand ? 'ctable mx-felt' : undefined} style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? undefined : 'flex-start', gap: isMobile ? 10 : 14, padding: isMobile ? 10 : 14, overflow: isMobile ? 'auto' : 'visible', minHeight: 0 }}>
         {cardHand && <div className="ct-feltlayers" aria-hidden />}
