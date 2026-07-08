@@ -4,7 +4,7 @@ import {
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
   adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminSetPreseason, type LeagueJoiner,
-  setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme,
+  setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   leagueKdst, setKdstMode, setTeamKdst,
   rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
   setTransactionRules, commishMovePlayer, commishRemovePlayer, commishRuleTrade,
@@ -197,6 +197,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
         <>
           <HealthPanel />
           <MarkFreeToggle />
+          <DemoCardThemePanel />
           <PremiumTierPanel />
         </>
       )}
@@ -1334,9 +1335,11 @@ function PreseasonToggle({ on, leagueId, reload }: { on: boolean; leagueId: stri
 // Per-league card-table theme (league_pref.card_theme, migration 0074): flips the
 // live board between the classic list and the card-table presentation for every
 // member of this league. Loads its own state; optimistic flip, reverts on error.
+// Cards are the default board for every league now; this toggle is the per-league
+// opt-out to the classic "simple view". ON = 🃏 cards (default), OFF = ▤ simple.
 function CardThemeToggle({ leagueId }: { leagueId: string }) {
   const [on, setOn] = useState<boolean | null>(null);
-  useEffect(() => { leagueCardTheme(leagueId).then((v) => setOn(!!v)).catch(() => setOn(false)); }, [leagueId]);
+  useEffect(() => { leagueCardTheme(leagueId).then((v) => setOn(!!v)).catch(() => setOn(true)); }, [leagueId]);
   const flip = async () => {
     if (on == null) return;
     const next = !on;
@@ -1344,10 +1347,37 @@ function CardThemeToggle({ leagueId }: { leagueId: string }) {
     try { const r = await adminSetCardTheme(leagueId, next); if (!r.ok) setOn(!next); } catch { setOn(!next); }
   };
   return (
-    <button onClick={flip} disabled={on == null} title={on ? 'Card-table board is ON for this league — every member sees lineups as a heads-up card table (you left, opponent right, sealed picks face-down). Click to switch back to the classic board.' : 'Turn on the card-table board for this league: lineups render as player cards dealt heads-up, with sealed picks as face-down card backs. Cosmetic only — scoring is unchanged.'}
-      className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--you)', background: on ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--you)', borderRadius: 4, padding: '4px 8px', cursor: on == null ? 'default' : 'pointer', opacity: on == null ? 0.6 : 1 }}>
-      {on == null ? '…' : on ? '🃏 CARD TABLE: ON' : '🃏 card table'}
+    <button onClick={flip} disabled={on == null} title={on ? 'This league uses the card-table board (the default) — lineups as a heads-up card table. Click to switch this league to the classic simple view.' : 'This league is on the classic simple view. Click to restore the card-table board (the default).'}
+      className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '4px 8px', cursor: on == null ? 'default' : 'pointer', opacity: on == null ? 0.6 : 1 }}>
+      {on == null ? '…' : on ? '🃏 CARDS' : '▤ SIMPLE VIEW'}
     </button>
+  );
+}
+
+// Global super-admin lever for the generic front-door demo board (baked demo
+// league). Cards default; flip to the simple view for everyone.
+function DemoCardThemePanel() {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { demoCardTheme().then((v) => setOn(!!v)).catch(() => setOn(true)); }, []);
+  const flip = async () => {
+    if (on == null || busy) return;
+    const next = !on; setOn(next); setBusy(true);
+    try { const r = await adminSetDemoCardTheme(next); if (!r.ok) setOn(!next); } catch { setOn(!next); } finally { setBusy(false); }
+  };
+  return (
+    <div style={card}>
+      <div style={h}>DEMO BOARD</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <span className="mono" style={{ fontSize: 11, color: 'var(--text)' }}>
+          Front-door demo · <b>{on == null ? '…' : on ? 'CARDS' : 'SIMPLE VIEW'}</b>
+          <span style={{ display: 'block', fontSize: 9.5, color: 'var(--dim)', marginTop: 3, maxWidth: 360 }}>
+            The generic vs-AI demo everyone lands on. Cards is the default; switch to the classic simple view for all visitors.
+          </span>
+        </span>
+        <button onClick={flip} disabled={on == null || busy} style={btn(!!on)}>{on == null ? '…' : on ? 'use simple' : 'use cards'}</button>
+      </div>
+    </div>
   );
 }
 
