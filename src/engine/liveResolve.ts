@@ -32,7 +32,13 @@ import { banksAtClock, threwTrickTd } from './matchup';
 
 export interface LivePick { win: string; slot: string; player: Player; metricId: string; }
 export interface LiveWindowScore { window: string; home: number; away: number; }
-export interface SlotScore { win: string; slot: string; side: 'home' | 'away'; slug: string; metric: string | null; score: number; }
+export interface SlotScore {
+  win: string; slot: string; side: 'home' | 'away'; slug: string; metric: string | null; score: number;
+  /** This side's drip went HOT at some point in the window (🔥 badge). */
+  hot?: boolean;
+  /** This side SUFFERED a nuke (TD-nuke bank wipe or TE-TD drip nuke) — the card scorches. */
+  nuked?: boolean;
+}
 export interface LiveResult {
   states: LiveWindowScore[];          // per-window scores, post-backup (sum to the totals)
   slots: SlotScore[];                 // per-player scores after all adjustments
@@ -377,6 +383,23 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     if (s) s.away = round(s.away + a.pts);
   }
 
+  // Per-side event flags for the card board. Event `side` is 'you' = home /
+  // 'their' = away (the resolveSlot pairing above). Attribution differs by shape:
+  //   • hot — the engine stamps 🔥 HOT into the achieving side's own streak/drip
+  //     badge text, so the event side IS the hot side.
+  //   • nuked — TE-TD drip nukes are standalone events attributed to the VICTIM
+  //     (delta 0, not sig); TD/erasure nukes ride the ATTACKER's play event
+  //     (sig: true), so the victim is the opposite side.
+  const flagsFor = (s: SlotRes, side: 'home' | 'away') => {
+    const me = side === 'home' ? 'you' : 'their';
+    let hot = false, nuked = false;
+    for (const e of s.events) {
+      if (e.side === me && (e.effect?.type === 'streak' || e.drip) && (e.effect?.text ?? e.play).includes('HOT')) hot = true;
+      if (e.effect?.type === 'nuke' && (e.sig ? e.side !== me : e.side === me)) nuked = true;
+    }
+    return { hot: hot || undefined, nuked: nuked || undefined };
+  };
+
   const byWin: Record<string, { home: number; away: number }> = {};
   let home = 0, away = 0;
   const slotScores: SlotScore[] = [];
@@ -384,8 +407,8 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     const b = (byWin[s.win] ||= { home: 0, away: 0 });
     b.home += s.home; b.away += s.away;
     home += s.home; away += s.away;
-    if (s.homeP) slotScores.push({ win: s.win, slot: s.slot, side: 'home', slug: s.homeP.id, metric: s.homeMetric, score: s.home });
-    if (s.awayP) slotScores.push({ win: s.win, slot: s.slot, side: 'away', slug: s.awayP.id, metric: s.awayMetric, score: s.away });
+    if (s.homeP) slotScores.push({ win: s.win, slot: s.slot, side: 'home', slug: s.homeP.id, metric: s.homeMetric, score: s.home, ...flagsFor(s, 'home') });
+    if (s.awayP) slotScores.push({ win: s.win, slot: s.slot, side: 'away', slug: s.awayP.id, metric: s.awayMetric, score: s.away, ...flagsFor(s, 'away') });
   }
   const states = Object.entries(byWin).map(([window, v]) => ({ window, home: round(v.home), away: round(v.away) }));
   return { states, slots: slotScores, home: round(home), away: round(away), coin: { home: coinFor(slots, 'home'), away: coinFor(slots, 'away') } };

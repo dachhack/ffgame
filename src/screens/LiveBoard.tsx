@@ -236,7 +236,8 @@ function CardDuel({ mine, theirs, pool, scores, youAreHome, status }: {
     const row = scores.find((x) => x.game_window === p.game_window)?.slot_scores
       ?.find((r) => r.side === side && (r.slot === p.roster_slot || (!!p.player_slug && r.slug === p.player_slug)));
     return <PlayerCard key={`${p.game_window}-${p.roster_slot}-${i}`} slug={player.slug} name={player.full} pos={player.pos}
-      slot={p.roster_slot} metric={metricName(p, row?.metric)} bank={row ? round(Number(row.score)) : null} opp={opp} idx={i} />;
+      slot={p.roster_slot} metric={metricName(p, row?.metric)} bank={row ? round(Number(row.score)) : null}
+      hot={!!row?.hot} nuked={!!row?.nuked} opp={opp} idx={i} />;
   };
   return (
     <>

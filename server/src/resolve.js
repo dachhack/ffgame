@@ -309,7 +309,10 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   const slotsFor = (win) => visSlots
     .filter((s) => s.win === win)
     .sort((x, y) => String(x.slot).localeCompare(String(y.slot)))
-    .map(({ side, slot, slug, metric, score }) => ({ side, slot, slug, metric: metric ?? null, score: round(Number(score) || 0) }));
+    .map(({ side, slot, slug, metric, score, hot, nuked }) => ({
+      side, slot, slug, metric: metric ?? null, score: round(Number(score) || 0),
+      ...(hot ? { hot: true } : {}), ...(nuked ? { nuked: true } : {}),
+    }));
 
   const now = new Date().toISOString();
   await db().from('matchup_state').upsert(

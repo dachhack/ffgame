@@ -48,6 +48,17 @@ const CSS = `
 .ctable .ct-bank{display:flex;justify-content:center;align-items:baseline;gap:3px;padding:2px 0 0;font-variant-numeric:tabular-nums;}
 .ctable .ct-bank b{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;font-size:15px;color:#1E1809;line-height:1;}
 .ctable .ct-bank span{font-size:7px;color:#9A8E6E;letter-spacing:.1em;}
+.ctable .ct-hot .ct-face{box-shadow:inset 0 0 14px 1px rgba(233,185,89,.45);}
+.ctable .ct-hot .ct-side{box-shadow:0 4px 0 rgba(0,0,0,.7),0 0 14px 2px rgba(233,185,89,.5);}
+.ctable .ct-hotchip{position:absolute;top:-8px;right:-7px;z-index:5;background:#FF7B3B;border:2px solid #000;border-radius:999px;
+  font-size:8px;font-weight:800;color:#2A1204;padding:3px 6px;box-shadow:0 2px 0 #000;}
+.ctable .ct-nuked .ct-card{animation:none;filter:saturate(.55);}
+.ctable .ct-scorch{position:absolute;inset:0;z-index:4;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  background:radial-gradient(circle at 52% 44%,rgba(20,10,4,.92) 0%,rgba(24,12,5,.85) 52%,rgba(30,14,6,.45) 78%,transparent 100%);}
+.ctable .ct-scorch .ct-skull{font-size:18px;}
+.ctable .ct-scorch .ct-sup{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:10px;color:#FF9B76;letter-spacing:.06em;
+  text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;}
+.ctable .ct-scorch .ct-wiped{font-size:8px;color:#D8C9BD;font-variant-numeric:tabular-nums;}
 .ctable .ct-facehead{display:flex;justify-content:space-between;align-items:center;}
 .ctable .ct-suit{font-size:8px;font-weight:800;letter-spacing:.06em;padding:2.5px 5px;border-radius:4px;border:1.5px solid;}
 .ctable .ct-slot{font-size:7px;color:#6E6650;letter-spacing:.1em;}
@@ -125,17 +136,20 @@ const initials = (name: string) => name.split(/\s+/).map((w) => w[0]).filter(Boo
 /** A face-up player card: headshot art (monogram when mark-free), suit chip,
  *  slot tag, the hidden-metric chip once revealed, and — when the worker has
  *  published per-slot scores — the drip bank with its liquid fill. Opponent
- *  cards (`opp`) tint red and enter with a reveal flip instead of the deal-in. */
-export function PlayerCard({ slug, name, pos, slot, metric, bank, opp = false, idx = 0 }: {
+ *  cards (`opp`) tint red and enter with a reveal flip instead of the deal-in.
+ *  `hot` adds the 🔥 glow; `nuked` scorches the card (its bank shows the
+ *  post-wipe score). */
+export function PlayerCard({ slug, name, pos, slot, metric, bank, opp = false, hot = false, nuked = false, idx = 0 }: {
   slug: string; name: string; pos: string; slot?: string; metric?: string | null;
-  bank?: number | null; opp?: boolean; idx?: number;
+  bank?: number | null; opp?: boolean; hot?: boolean; nuked?: boolean; idx?: number;
 }) {
   const [imgOk, setImgOk] = useState(true);
   const url = useMemo(() => headshot(slug), [slug]);
   const suit = posVars(pos);
   const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
   return (
-    <div className={`ct-wrap ${opp ? 'ct-flip ct-opp' : 'ct-dealin'}`} style={{ animationDelay: `${idx * 90}ms` }}>
+    <div className={`ct-wrap ${opp ? 'ct-flip ct-opp' : 'ct-dealin'}${hot && !nuked ? ' ct-hot' : ''}${nuked ? ' ct-nuked' : ''}`}
+      style={{ animationDelay: `${idx * 90}ms` }}>
       <div className="ct-card" style={wobbleVars(slug)}>
         <div className="ct-side ct-face">
           <div className="ct-fill" style={{ height: `${fillPct}%` }} />
@@ -151,8 +165,16 @@ export function PlayerCard({ slug, name, pos, slot, metric, bank, opp = false, i
           <div className="ct-name">{name}</div>
           <div className="ct-metric">METRIC <b>{metric ?? '—'}</b></div>
           {bank != null && <div className="ct-bank"><b>{(Math.round(bank * 10) / 10).toFixed(1)}</b><span>PTS</span></div>}
+          {nuked && (
+            <div className="ct-scorch">
+              <span className="ct-skull">☠</span>
+              <span className="ct-sup">NUKED</span>
+              {bank != null && <span className="ct-wiped">bank {(Math.round(bank * 10) / 10).toFixed(1)}</span>}
+            </div>
+          )}
         </div>
       </div>
+      {hot && !nuked && <div className="ct-hotchip">🔥 HOT</div>}
     </div>
   );
 }

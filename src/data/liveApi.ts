@@ -308,7 +308,7 @@ export async function savePicks(matchupId: string, userId: string, rows: PickRow
 /** One slot's engine score inside a window (matchup_state.slot_scores, migration
  *  0020) — the worker only publishes rows for windows that have kicked off, so
  *  sealed picks never appear here. */
-export interface SlotScoreRow { side: 'home' | 'away'; slot: string; slug: string | null; metric: string | null; score: number; }
+export interface SlotScoreRow { side: 'home' | 'away'; slot: string; slug: string | null; metric: string | null; score: number; hot?: boolean; nuked?: boolean; }
 export interface WindowScore { game_window: string; home_score: number; away_score: number; slot_scores?: SlotScoreRow[]; }
 export interface RevealedPick { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null; locked: boolean; }
 
