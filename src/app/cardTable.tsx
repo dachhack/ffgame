@@ -134,8 +134,13 @@ const CSS = `
 .ctable .mx-winsec{border:2px solid rgba(0,0,0,.75);border-radius:12px;padding:10px 10px 12px;
   background:linear-gradient(rgba(10,26,21,.5),rgba(8,20,16,.65));
   box-shadow:inset 0 0 0 1px rgba(233,185,89,.08),inset 0 12px 20px rgba(0,0,0,.3),0 3px 0 rgba(0,0,0,.5);}
+/* Paired setup cards share one width + one min-height; the SetupRow's grid is
+   align-items:stretch, so a filled spot (taller content) pulls its sealed /
+   empty partner to the SAME height — and a plain empty↔sealed pair matches at
+   the min-height. (aspect-ratio fought stretch and content-sized each side,
+   which is what made the empty box tower over the sealed card.) */
 .ctable .mx-sealed{
-  aspect-ratio:5/7;width:100%;max-width:172px;justify-self:center;
+  width:100%;max-width:172px;min-height:238px;justify-self:center;box-sizing:border-box;
   background-image:radial-gradient(rgba(233,185,89,.32) 1.1px,transparent 1.3px),radial-gradient(circle at 50% 46%,#7E2430 0%,#571C26 62%,#40151E 100%) !important;
   background-size:11px 11px,100% 100% !important;
   border:2px solid #000 !important;border-right:2px solid #000 !important;
@@ -144,12 +149,12 @@ const CSS = `
 .ctable .mx-sealed .grotesk{color:#E9B959 !important;text-shadow:0 2px 0 #000;font-size:26px !important;}
 .ctable .mx-sealed .mono{color:#E3B7BC !important;}
 .ctable .mx-empty:not(.mx-state){
-  aspect-ratio:5/7;width:100%;max-width:172px;justify-self:center;
+  width:100%;max-width:172px;min-height:238px;justify-self:center;box-sizing:border-box;
   background:rgba(233,185,89,.05) !important;
   border:2px dashed rgba(233,185,89,.55) !important;border-left:2px dashed rgba(233,185,89,.55) !important;
   border-radius:10px !important;}
 .ctable .mx-spot:not(.mx-state){
-  width:100%;max-width:172px;justify-self:center;min-height:240px;
+  width:100%;max-width:172px;min-height:238px;justify-self:center;box-sizing:border-box;
   border:2px solid #000 !important;border-left:2px solid #000 !important;border-top:4px solid var(--you) !important;
   border-radius:10px !important;box-shadow:0 4px 0 rgba(0,0,0,.55);
   animation:mx-wob 6.2s ease-in-out infinite alternate;}

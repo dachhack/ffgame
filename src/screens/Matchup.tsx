@@ -1965,7 +1965,7 @@ function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose, cards =
     // buff in place or enter APPLY target mode; hint cards carry their how-to.
     return (
       <PuShell title="✦ Play a Card" subtitle="YOUR HAND — PLAY EACH BEFORE ITS WINDOW CLOSES" accent="var(--warn)" onClose={onClose}>
-        <div className="ctable" style={{ maxHeight: 440, overflow: 'auto' }}>
+        <div className="ctable" style={{ maxHeight: 440, overflowY: 'auto', overflowX: 'hidden' }}>
           {items.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: '#93A594', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— no cards to play right now —<br />bought cards appear here while their window is open</div>}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(142px, 1fr))', gap: 12, justifyItems: 'center', padding: '4px 2px' }}>
             {items.map(({ p, deadline, action, blocked }, i) => (
@@ -2596,9 +2596,9 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
         </div>
         {cards ? (
           // The felt spread: candidates dealt as tappable player cards.
-          <div className="ctable" style={{ maxHeight: 440, overflow: 'auto', borderRadius: 0 }}>
+          <div className="ctable" style={{ maxHeight: 440, overflowY: 'auto', overflowX: 'hidden', borderRadius: 0 }}>
             {players.length === 0 && <div className="mono" style={{ fontSize: fs(10), color: '#93A594', textAlign: 'center', padding: '16px 0' }}>— no eligible players in this window —</div>}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 12, justifyItems: 'center', padding: '6px 2px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 12, justifyContent: 'center', justifyItems: 'center', padding: '8px 4px' }}>
               {players.map((p, i) => {
                 const sel = p.id === currentId;
                 const isGated = !sel && !!gated?.(p);
