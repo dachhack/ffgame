@@ -8,7 +8,9 @@
   "scripts": {
     "start": "tsx src/index.js",
     "cli": "tsx src/cli.js",
-    "smoke": "tsx test/engine-smoke.mjs"
+    "smoke": "tsx test/engine-smoke.mjs",
+    "study": "tsx scripts/metric-study.mjs",
+    "study:fg": "tsx scripts/fg-study.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
