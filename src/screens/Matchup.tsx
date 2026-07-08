@@ -412,11 +412,14 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     if (liveCtx) {
       leagueCardTheme(liveCtx.leagueId).then((v) => set(!!v)).catch(() => set(false));
     } else {
-      // vs-AI demo: the loaded league has no DB uuid, but a Sleeper-imported
-      // sim carries the Sleeper league id as League.id — honor the same flag
-      // if that league is a card-table pilot league. Unknown/demo ids → false.
-      const sid = getActiveLeague().id;
-      if (sid) leagueCardThemeBySleeper(sid).then((v) => set(!!v)).catch(() => set(false));
+      // vs-AI demo: honor the same flag when the demo'd league is a card-table
+      // pilot league. The sim's League.id is either the DB league uuid (live /
+      // native leagues, via buildLiveLeague) or the Sleeper league id (imported
+      // sims, via buildLeague) — look up by whichever shape it is. Baked demo
+      // slugs match neither → false → classic board.
+      const id = getActiveLeague().id;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      if (id) (isUuid ? leagueCardTheme(id) : leagueCardThemeBySleeper(id)).then((v) => set(!!v)).catch(() => set(false));
       else set(false);
     }
     return () => { alive = false; };
