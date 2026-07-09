@@ -43,7 +43,7 @@ const CSS = `
      --ct-back1/2/3 sealed card-back radial stops
      --ct-deck      rgb of the deck's metallic trim (lattice, gem, seal border)
      --ct-back-ink  text/label color that reads on the card back              */
-:root{ --ct-felt:#0B1F1A; --ct-back1:#7E2430; --ct-back2:#571C26; --ct-back3:#40151E; --ct-deck:233,185,89; --ct-back-ink:#D9A0A6; --ct-backart:${ART_EMERALD}; }
+:root{ --ct-felt:#0B1F1A; --ct-back1:#7E2430; --ct-back2:#571C26; --ct-back3:#40151E; --ct-deck:233,185,89; --ct-back-ink:#D9A0A6; --ct-backart:${ART_EMERALD}; --ct-aspect:0.714; }
 /* Photographic decks (public/cardbacks/*.jpg) — full-bleed card images at the
    true 2.5:3.5 card ratio, so no stretch/clip and both slot cards match size.
    Felt is tinted toward each card's dominant color. */
@@ -63,7 +63,10 @@ const CSS = `
    the left and right cards end up identical in size. */
 :root[data-card-photo="1"] .ctable .mx-sealed,
 :root[data-card-photo="1"] .ctable .mx-spot:not(.mx-state),
-:root[data-card-photo="1"] .ctable .mx-empty:not(.mx-state){aspect-ratio:var(--ct-aspect);height:auto !important;min-height:0 !important;align-self:start;}
+:root[data-card-photo="1"] .ctable .mx-empty:not(.mx-state),
+:root[data-card-skin="emerald"] .ctable .mx-sealed,
+:root[data-card-skin="emerald"] .ctable .mx-spot:not(.mx-state),
+:root[data-card-skin="emerald"] .ctable .mx-empty:not(.mx-state){aspect-ratio:var(--ct-aspect);height:auto !important;min-height:0 !important;align-self:start;}
 :root[data-card-photo="1"] .ctable .mx-sealed{background-size:100% 100%,100% 100% !important;background-position:center !important;}
 :root[data-card-photo="1"] .ctable .ct-back{background-size:cover !important;background-position:center !important;}
 /* (Photo decks hide the ◆ gem and move SEALED/SCOUT into a bottom ribbon — that
