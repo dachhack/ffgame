@@ -72,11 +72,14 @@ const CSS = `
 :root[data-card-skin="victory"]{ --ct-felt:#2C0D11; --ct-back1:#5A1620; --ct-back2:#3A0E16; --ct-back3:#24080C; --ct-deck:233,190,96; --ct-back-ink:#E7C58A; --ct-aspect:0.643; --ct-backart:url("${import.meta.env.BASE_URL}card-victory.jpg"); }
 :root[data-card-skin="dynasty"]{ --ct-felt:#0E2A1E; --ct-back1:#1C4A34; --ct-back2:#123522; --ct-back3:#0A2417; --ct-deck:206,178,120; --ct-back-ink:#D8C79E; --ct-aspect:0.766; --ct-backart:url("${import.meta.env.BASE_URL}card-dynasty.jpg"); }
 /* Photo decks: the back is a real card image. Instead of stretching (distorts)
-   or cover (clips), size the card to the image's OWN aspect ratio so it fills
-   exactly — no stretch, no clip. It then sits as a true-proportion card on the
-   felt (a touch shorter than its taller paired card, top-aligned). */
-:root[data-card-photo="1"] .ctable .mx-sealed{aspect-ratio:var(--ct-aspect);height:auto !important;min-height:0 !important;align-self:start;
-  background-size:100% 100%,100% 100% !important;background-position:center !important;}
+   or cover (clips), size the sealed card to the image's OWN aspect ratio so it
+   fills exactly — no stretch, no clip. Now that metric picking is a modal, the
+   player/empty slot is compact too, so give BOTH sides that same aspect ratio —
+   the left and right cards end up identical in size. */
+:root[data-card-photo="1"] .ctable .mx-sealed,
+:root[data-card-photo="1"] .ctable .mx-spot:not(.mx-state),
+:root[data-card-photo="1"] .ctable .mx-empty:not(.mx-state){aspect-ratio:var(--ct-aspect);height:auto !important;min-height:0 !important;align-self:start;}
+:root[data-card-photo="1"] .ctable .mx-sealed{background-size:100% 100%,100% 100% !important;background-position:center !important;}
 :root[data-card-photo="1"] .ctable .ct-back{background-size:cover !important;background-position:center !important;}
 /* (Photo decks hide the ◆ gem and move SEALED/SCOUT into a bottom ribbon — that
    lives in the SetupRow JSX, keyed off PHOTO_SKINS, so the art stays uncovered.) */
