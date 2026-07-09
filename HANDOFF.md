@@ -61,6 +61,20 @@ Everything lands in the SHARED engine (`src/engine/sim.ts` + `matchup.ts` +
   `bestMetric`/`bestVsThreats` (human-only, like `fg`) so the tuned wheel is
   preserved (scores flat solo — no trailing boost vs empty — so the study shares
   are unchanged). The head-to-head "Rivalry" idea moved to a power-up (below).
+- **RIVALRY power-up (`rivalry`, ◎70, window-targeted, blind).** Arm it on a window
+  pre-kickoff: for every slot where the opponent fields the SAME position as you,
+  siphon 50% of that opponent's slot score to you at window-end — whiffs entirely
+  if they don't mirror your position (that's the risk; a wary opponent can dodge by
+  playing a different position there). Engine: `extras.rivalry: WindowId[]` in
+  buildMatchup (applied after backups+suppress, before the window battle, sets
+  `ResolvedSlot.youRivalry`); mirrored in `resolveLiveMatchup` (`LiveExtras.rivalry`,
+  both sides). Store: `AppliedWeek.rivalry` + `applyRivalry`/`removeRivalry`. UI:
+  a per-window "⚔️ RIVALRY" arm/remove button in the setup header (mirrors Extra
+  Slot), an active-effects chip, and a MatchupFinal fx line. Price seeded in
+  `0079_rivalry_price.sql` (parity-checked). Verified: WR-vs-WR mirror siphons
+  18.4→9.2; WR-vs-RB non-mirror whiffs (26.1→26.1). NOTE: the live worker's
+  applied_state→extras wiring for rivalry is not yet plumbed server-side (demo +
+  forceResolve/preview path works); that's the remaining live-pilot task.
 - No DB migration needed: `metric_id` has no allowlist constraint (only the
   locked-metric trigger, which `duel`/`marshal` pass since they aren't locked).
 - Verify: `cd server && npx tsx test/h2h-verify.mjs` exercises all four on real

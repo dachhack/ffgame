@@ -154,6 +154,10 @@ export interface LiveExtras {
   emp?: Record<string, number>;
   /** Real-time swaps on this side's own slots. */
   swaps?: Record<string, LiveSwap>;
+  /** Rivalry: windows armed (blind, pre-kickoff) — at window-end, for every slot
+   *  where the opponent fields the SAME position as this side, siphon 50% of the
+   *  opponent's slot score to this side. */
+  rivalry?: string[];
 }
 export interface LiveExtrasBySide { home?: LiveExtras; away?: LiveExtras; }
 
@@ -406,6 +410,21 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     }
     return { hot: hot || undefined, nuked: nuked || undefined };
   };
+
+  // RIVALRY (parity with buildMatchup): for each armed window, siphon 50% of a
+  // same-position opponent's slot score to the arming side, at window-end. Home
+  // then away (each on the running scores).
+  const applyRivalry = (wins: string[] | undefined, side: 'home' | 'away') => {
+    if (!wins?.length) return;
+    const armed = new Set(wins);
+    for (const s of slots) {
+      if (!armed.has(s.win) || !s.homeP || !s.awayP || s.homeP.pos !== s.awayP.pos) continue;
+      if (side === 'home' && s.away > 0) { const take = round(s.away * 0.5); s.away = round(s.away - take); s.home = round(s.home + take); }
+      else if (side === 'away' && s.home > 0) { const take = round(s.home * 0.5); s.home = round(s.home - take); s.away = round(s.away + take); }
+    }
+  };
+  applyRivalry(hx.rivalry, 'home');
+  applyRivalry(ax.rivalry, 'away');
 
   const byWin: Record<string, { home: number; away: number }> = {};
   let home = 0, away = 0;

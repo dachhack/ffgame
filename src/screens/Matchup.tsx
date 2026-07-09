@@ -95,7 +95,7 @@ const DEMO_POWERUPS = [
 const EMPTY_REC: Record<string, never> = {};
 
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
-  const { youTeamId: YOU, navigate, liveCtx, activeLeague, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
+  const { youTeamId: YOU, navigate, liveCtx, activeLeague, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const [demoBuff, setDemoBuff] = useState('garbage-time'); // the power-up the demo viewer armed
   const buffs = useMemo(() => (demo ? { [demoBuff]: true } : (applied[week]?.buffs ?? EMPTY_REC)), [demo, demoBuff, applied, week]);
   const buffsKey = JSON.stringify(buffs);
@@ -103,7 +103,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const swaps = applied[week]?.swaps ?? {};
   const backupAssign = applied[week]?.backups ?? EMPTY_REC;
   const aw = applied[week];
-  const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, emp: aw?.emp };
+  const rivalryWins = aw?.rivalry ? (Object.keys(aw.rivalry).filter((w) => aw.rivalry![w as WindowId]) as WindowId[]) : undefined;
+  const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, emp: aw?.emp, rivalry: rivalryWins };
   const extrasKey = JSON.stringify(extras);
   const oppId = gameForTeam(YOU, week)?.oppId ?? 'rock-tunnel';
   const you = getTeam(YOU)!;
@@ -675,6 +676,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const totalSlots = totalSlotsWith(week, extraSlots);
   const anyPlaying = Object.values(winPlaying).some(Boolean);
   const extraSlotQty = inventory['extra-slot'] ?? 0;
+  const rivalryQty = inventory['rivalry'] ?? 0;
 
   // ── Power-up windows: every window has its own lock/live timeline. A 'pre'
   // power-up can be applied until the first window starts; a 'live' one only
@@ -736,6 +738,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   if (aw?.spy) { const sp = aw.spy; activeEffects.push({ key: 'spy', id: 'spy', icon: '👁️', name: 'Spy', detail: `Revealed a slot’s ${sp.reveal}`, onRemove: preKickPhase && !liveCtx ? () => clearSpy(week) : undefined }); } // live: use_spy already consumed the item — no undo
   for (const [win, n] of Object.entries(aw?.extraSlots ?? {})) if ((n ?? 0) > 0) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'x-' + win, id: 'extra-slot', icon: '➕', name: 'Extra Slot', detail: `+${n} on ${wl}`, onRemove: phase === 'setup' ? () => removeExtraSlot(week, win as WindowId) : undefined }); }
   for (const [win, c] of Object.entries(aw?.emp ?? {})) if (c != null) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'emp-' + win, id: 'emp', icon: '💥', name: 'EMP', detail: `Fired on ${wl}` }); }
+  for (const [win, on] of Object.entries(aw?.rivalry ?? {})) if (on) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'riv-' + win, id: 'rivalry', icon: '⚔️', name: 'Rivalry', detail: `Armed on ${wl}`, onRemove: phase === 'setup' ? () => removeRivalry(week, win as WindowId) : undefined }); }
 
   // Owned power-ups you can still apply right now, scoped to open windows. 'pre'
   // power-ups lock at the first kickoff; 'live' ones need a running window.
@@ -960,7 +963,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 rw={demoWin} week={week} phase="setup" clock={0} maxClock={winTarget[fid] ?? GAME_SECONDS}
                 wallClock={wallClock} realClock={realResolve} wallSeconds={0} playing={false}
                 onTogglePlay={() => {}} onReplay={() => {}}
-                canApplyExtra={false} extraSlotQty={0} onApplyExtra={() => {}} onRemoveExtra={() => {}} onAssignBackup={() => {}}
+                canApplyExtra={false} extraSlotQty={0} onApplyExtra={() => {}} onRemoveExtra={() => {}} rivalryQty={0} rivalryArmed={false} onApplyRivalry={() => {}} onRemoveRivalry={() => {}} onAssignBackup={() => {}}
                 picks={effYouPicks} selSlot={selSlot} pickMetricFor={pickMetricFor}
                 onClearSlot={() => {}} onOpenPicker={() => {}}
                 openPBP={openPBP} togglePBP={(k) => setOpenPBP((o) => ({ ...o, [k]: !o[k] }))}
@@ -1026,6 +1029,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               extraSlotQty={0}
               onApplyExtra={() => {}}
               onRemoveExtra={() => {}}
+              rivalryQty={0}
+              rivalryArmed={false}
+              onApplyRivalry={() => {}}
+              onRemoveRivalry={() => {}}
               onAssignBackup={() => {}}
               picks={effYouPicks}
               selSlot={null}
@@ -1357,6 +1364,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 extraSlotQty={extraSlotQty}
                 onApplyExtra={() => applyExtraSlot(week, rw.window.id)}
                 onRemoveExtra={() => removeExtraSlot(week, rw.window.id)}
+                rivalryQty={phase === 'setup' && !demo ? rivalryQty : 0}
+                rivalryArmed={!!aw?.rivalry?.[rw.window.id]}
+                onApplyRivalry={() => applyRivalry(week, rw.window.id)}
+                onRemoveRivalry={() => removeRivalry(week, rw.window.id)}
                 onAssignBackup={(key) => setBackupMenu({ key, required: true })}
                 picks={picks}
                 selSlot={selSlot}
@@ -2069,6 +2080,10 @@ function WindowSectionInner(props: {
   extraSlotQty: number;
   onApplyExtra: () => void;
   onRemoveExtra: () => void;
+  rivalryQty: number;
+  rivalryArmed: boolean;
+  onApplyRivalry: () => void;
+  onRemoveRivalry: () => void;
   armed: Record<string, boolean>;
   onAssignBackup: (key: string) => void;
   picks: Record<string, Pick>;
@@ -2091,7 +2106,7 @@ function WindowSectionInner(props: {
   onScout: (win: WindowId) => void;
   lockPlayer?: boolean; // demo setup: metric is editable, but the player is fixed
 }) {
-  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer } = props;
+  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, rivalryQty, rivalryArmed, onApplyRivalry, onRemoveRivalry, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer } = props;
   const w = rw.window;
   // Twin Generals: with the buff armed and ≥2 of your Field General QBs in this
   // window, the top two multipliers stack — link those QB spots so you can see
@@ -2212,6 +2227,15 @@ function WindowSectionInner(props: {
             {rw.slots.length > w.slots && (
               <button onClick={onRemoveExtra} title="Remove the added slot (refund)" className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--opp)', background: 'var(--surface)', border: '1px solid var(--opp)', borderRadius: 4, padding: '4px 8px' }}>
                 ➖ REMOVE SLOT
+              </button>
+            )}
+            {rivalryArmed ? (
+              <button onClick={onRemoveRivalry} title="Rivalry armed on this window — siphons 50% of any same-position opponent at window-end. Tap to remove (refund)." className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--fx-reset)', border: '1px solid var(--fx-reset)', borderRadius: 4, padding: '4px 8px' }}>
+                ⚔️ RIVALRY ✕
+              </button>
+            ) : rivalryQty > 0 && (
+              <button onClick={onApplyRivalry} title="Arm Rivalry on this window (blind): siphon 50% of any opponent who plays the same position as you here, at window-end. Whiffs if they don't mirror you." className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--fx-reset)', background: 'var(--surface)', border: '1px dashed var(--fx-reset)', borderRadius: 4, padding: '4px 8px' }}>
+                ⚔️ RIVALRY (◈ ×{rivalryQty})
               </button>
             )}
             <span className="mono" style={{ fontSize: fs(9), fontWeight: 700, letterSpacing: '0.12em', color: 'var(--dim)' }}>{setN}/{rw.slots.length} SET</span>

@@ -74,6 +74,24 @@ console.log(`\nDEF: ${dstSlug} earn ${earnDst.youFinal} (drip) vs marshal ${mars
 ok('earn DST out-scores marshal DST (the drip is the ceiling)', earnDst.youFinal > marshalDst.youFinal);
 ok('earn DST surfaced DEF DRIP tick events', defDripEvents.length > 0);
 
+// ── 6. RIVALRY power-up — blind same-position siphon at window-end ────────────
+// Home & away both field a WR in the same slot (a positional mirror). Home arms
+// Rivalry on the window → siphons 50% of away's slot score. A non-mirror (WR vs
+// RB) should whiff.
+const rHome = [{ win: 'early', slot: '0', player: P('puka-nacua', 'WR', 'LA'), metricId: 'recyd' }];
+const rAwayMirror = [{ win: 'early', slot: '0', player: P('marquise-brown', 'WR', 'KC'), metricId: 'recyd' }];
+const rAwayNoMirror = [{ win: 'early', slot: '0', player: P('chase-brown', 'RB', 'CIN'), metricId: 'rush' }];
+const noRiv = resolveLiveMatchup(rHome, rAwayMirror, WEEK);
+const withRiv = resolveLiveMatchup(rHome, rAwayMirror, WEEK, {}, { home: { rivalry: ['early'] } });
+const whiff = resolveLiveMatchup(rHome, rAwayNoMirror, WEEK, {}, { home: { rivalry: ['early'] } });
+const awayNo = noRiv.slots.find((s) => s.side === 'away').score;
+const awayRiv = withRiv.slots.find((s) => s.side === 'away').score;
+const whiffAway = whiff.slots.find((s) => s.side === 'away').score;
+const whiffNo = resolveLiveMatchup(rHome, rAwayNoMirror, WEEK).slots.find((s) => s.side === 'away').score;
+console.log(`\nRIVALRY: mirror away ${awayNo} → ${awayRiv} (siphoned) · non-mirror away ${whiffNo} → ${whiffAway} (whiff)`);
+ok('rivalry siphons ~50% of a same-position rival', Math.abs(awayRiv - awayNo * 0.5) < 0.2);
+ok('rivalry whiffs when the opponent plays a different position', Math.abs(whiffAway - whiffNo) < 0.05);
+
 // ── 5. SUPPRESS drips into a bigger kill-bar (still banks 0) ──────────────────
 const flatBar = defEarnScore(P(dstSlug, 'DEF', 'DEN'), WEEK);
 const dripBar = defSuppressScore(P(dstSlug, 'DEF', 'DEN'), WEEK);

@@ -161,6 +161,7 @@ export function MatchupFinal({ week }: { week: number }) {
               const fx: string[] = [];
               if (s.youSub) fx.push(`⤴ ${s.youSub.name} subbed in (${s.youSub.from.toFixed(1)} → ${s.youSub.score.toFixed(1)})`);
               if (s.youStake) fx.push(s.youStake === 'won' ? '⚖️ Double or Nothing — won ×2' : '⚖️ Double or Nothing — lost → 0');
+              if (s.youRivalry) fx.push(`⚔️ Rivalry — siphoned +${s.youRivalry.toFixed(1)} from a same-position rival`);
               if (s.byeStolen) fx.push('🪂 Bye steal');
               if (s.youNegated) fx.push('✕ Negated by opponent K shutdown');
               if (s.youHalvedFrom != null) fx.push(`÷2 Suppressed (from ${s.youHalvedFrom.toFixed(1)})`);

@@ -214,6 +214,7 @@ during a live window (never retroactive).
 | ↩️ **Counter-Nuke** | ◎ 95 | action | Arm before kickoff: the first time an opponent nukes one of your slots, it is reflected back — their player is wiped instead. |
 | 🛟 **Insurance** | ◎ 80 | action | Arm before kickoff: the first time one of your slots is nuked, half its banked score is refunded instead of zeroed. |
 | ⚖️ **Double or Nothing** | ◎ 80 | action | Stake one of your slots before kickoff: at FINAL it scores double if it wins its head-to-head, or zero if it loses. |
+| ⚔️ **Rivalry** | ◎ 70 | action | Arm on a window before kickoff (blind): for every slot where your opponent fields the SAME position as you, siphon 50% of that opponent’s slot score to you at the window’s end. Whiffs entirely if they don’t mirror your position — a bet on how they build the window. |
 | 👁️ **Spy** | ◎ 40 | action | Before a window kicks off: pick any slate slot (blind) and reveal the opponent’s current sealed pick there — their player OR their chosen metric. They can still change it until kickoff; re-checking your peek is free. |
 | 🪂 **Bye Steal** | ◎ 55 | action | Before kickoff, field one of your players who is on bye in an open slot for a flat projected score. |
 | 🦅 **Ball Hawk** | ◎ 55 | action | Arm before kickoff: raise the turnover coin swing from 10 to 25 this week, across all windows — your giveaways cost more, their giveaways pay more. |

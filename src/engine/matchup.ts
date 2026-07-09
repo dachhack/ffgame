@@ -265,6 +265,8 @@ export interface ResolvedSlot {
   theirNegated?: boolean;
   byeStolen?: boolean;          // a bye player fielded here for a flat projection
   youStake?: 'won' | 'lost';    // Double or Nothing result on this slot (at FINAL)
+  youRivalry?: number;          // points siphoned TO you via the Rivalry power-up (same-position mirror)
+  theirRivalry?: number;        // points siphoned to THEM via their Rivalry (live H2H)
   // Powerup-driven scoring changes on this slot, per side — shown in the spot at FINAL.
   youBuffFx?: BuffFx[];
   theirBuffFx?: BuffFx[];
@@ -375,7 +377,7 @@ export function buildMatchup(
   swaps: SlotSwaps = {},
   backupAssign: Record<string, string> = {},
   buffs: Record<string, boolean> = {},
-  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>>; autoBackups?: boolean } = {},
+  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; autoBackups?: boolean } = {},
   realResolve = false, // resolve cross-game effects (TE-TD drip nuke) in real-time order
   oppBuffs?: string[], // live H2H: the opponent's REAL armed buffs (revealed at lock); AI default when omitted
 ): ResolvedMatchup {
@@ -532,6 +534,26 @@ export function buildMatchup(
     for (const w of windows) for (const s of w.slots) {
       if (theirSuppress > 0 && s.youFinal > 0 && s.youFinal <= theirSuppress) { s.youHalvedFrom = s.youFinal; s.youFinal = Math.round(s.youFinal * 0.5 * 10) / 10; }
       if (youSuppress > 0 && s.theirFinal > 0 && s.theirFinal <= youSuppress) { s.theirHalvedFrom = s.theirFinal; s.theirFinal = Math.round(s.theirFinal * 0.5 * 10) / 10; }
+    }
+  }
+
+  // RIVALRY power-up (blind, window-targeted): for every slot in an armed window
+  // where the opponent fielded the SAME position as you, siphon 50% of their slot
+  // score to you at window's end — whiffs entirely if they didn't mirror your
+  // position (the risk). Only the human side arms it in the demo. Applied after
+  // backups + suppress (on final scores), before the window battle settles.
+  if (extras.rivalry?.length) {
+    const armed = new Set(extras.rivalry);
+    for (const w of windows) {
+      if (!armed.has(w.window.id)) continue;
+      for (const s of w.slots) {
+        if (!s.you || !s.their || s.theirFinal <= 0) continue;
+        if (s.you.player.pos !== s.their.player.pos) continue; // needs a same-position mirror
+        const take = Math.round(s.theirFinal * 0.5 * 10) / 10;
+        s.theirFinal = Math.round((s.theirFinal - take) * 10) / 10;
+        s.youFinal = Math.round((s.youFinal + take) * 10) / 10;
+        s.youRivalry = Math.round(((s.youRivalry ?? 0) + take) * 10) / 10;
+      }
     }
   }
 
