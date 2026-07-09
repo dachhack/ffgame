@@ -228,6 +228,10 @@ const CSS = `
 .ctable .mx-spot:not(.mx-state) .mx-met{justify-content:center;text-align:center;}
 .ctable .mx-spot:not(.mx-state) .mx-met .grotesk{background:linear-gradient(#3A2E15,#241C10);color:#FFD86B !important;padding:3px 9px;border-radius:5px;
   font-size:10px !important;font-weight:800 !important;letter-spacing:.06em;border:1.5px solid #000;box-shadow:0 2px 0 #000,inset 0 0 6px rgba(255,216,107,.28);text-shadow:0 1px 0 #000;}
+/* Edit links sit on the cream card FACE, so the theme's --warn (yellow) reads
+   poorly there — recolor to dark ink that holds on cream on every skin. */
+.ctable .mx-spot:not(.mx-state) .mx-editmet{color:#8A6A1E !important;}
+.ctable .mx-spot:not(.mx-state) .mx-editplr{color:#A23A44 !important;}
 .ctable .mx-spot:not(.mx-state) .mx-met .mono{color:#6E6650 !important;}
 /* Demo boards sit in a narrower, more-nested column than the live hero board,
    so their setup pair's columns collapse to the card width and only the tiny

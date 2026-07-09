@@ -2492,8 +2492,8 @@ export function SetupRow(props: {
           {/* change controls — pinned to the bottom of the spot */}
           {!showPicker && (
             <div style={{ display: 'flex', gap: 14, marginTop: 'auto', paddingTop: 4 }}>
-              <button onClick={() => setEditing(true)} className="mono" style={{ ...link, color: 'var(--warn)' }}>↻ METRIC</button>
-              {!lockPlayer && <button onClick={onOpenPicker} className="mono" style={{ ...link, color: 'var(--opp)' }}>⇄ PLAYER</button>}
+              <button onClick={() => setEditing(true)} className="mono mx-editmet" style={{ ...link, color: 'var(--warn)' }}>↻ METRIC</button>
+              {!lockPlayer && <button onClick={onOpenPicker} className="mono mx-editplr" style={{ ...link, color: 'var(--opp)' }}>⇄ PLAYER</button>}
             </div>
           )}
         </div>
