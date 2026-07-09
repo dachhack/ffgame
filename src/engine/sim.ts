@@ -67,14 +67,14 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
     if (metricId === 'carries') return play.kind === 'rush' ? 0.85 : 0; // COMPRESSION (0.5 → 0.85: measured dead at 0.5 — 0% best-pick share)
     if (metricId === 'rec') return play.catch ? 1 : 0;
     if (metricId === 'td') return scrimmage + (play.td ? 10 : 0); // NUKE
-    if (metricId === 'duel') return play.kind === 'rush' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0; // RIVALRY: flat rushing base; the duel siphon layers on top (resolveSlot)
+    if (metricId === 'underdog') return play.kind === 'rush' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0; // UNDERDOG: flat rushing base; the trailing-side ×1.5 layers on top (resolveSlot)
   }
   if (pos === 'WR') {
     if (metricId === 'recyd') return play.catch ? play.yards * 0.1 * (hot ? 2 : 1) : 0;
     if (metricId === 'rec') return play.catch ? 1 : 0;
     if (metricId === 'tgt') return play.target ? 1 : 0;
     if (metricId === 'td') return scrimmage + (play.td ? 10 : 0);
-    if (metricId === 'duel') return play.catch ? play.yards * 0.1 + (play.td ? 6 : 0) : 0; // RIVALRY: flat receiving base; the duel siphon layers on top (resolveSlot)
+    if (metricId === 'underdog') return play.catch ? play.yards * 0.1 + (play.td ? 6 : 0) : 0; // UNDERDOG: flat receiving base; the trailing-side ×1.5 layers on top (resolveSlot)
   }
   if (pos === 'TE') {
     if (metricId === 'tgt') return play.target ? 1 : 0;
@@ -126,11 +126,11 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
   return 0;
 }
 
-type Family = 'nuke' | 'erase' | 'streak' | 'mult' | 'compression' | 'reset' | 'stop' | 'duel' | 'flat';
+type Family = 'nuke' | 'erase' | 'streak' | 'mult' | 'compression' | 'reset' | 'stop' | 'underdog' | 'flat';
 function familyOf(pos: Pos, metricId: string): Family {
-  // Rivalry (WR/RB) is its own family — a same-slot head-to-head duel that
-  // siphons the trailing side's quarter gains — regardless of its catalog fx key.
-  if (metricId === 'duel') return 'duel';
+  // Underdog (WR/RB) is its own family — a flat scorer with a trailing-side
+  // comeback boost — regardless of its catalog fx key.
+  if (metricId === 'underdog') return 'underdog';
   const m = metricById(pos, metricId);
   if (!m) return 'flat';
   if (m.fx === 'nuke') return 'nuke';
@@ -552,40 +552,14 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const youFam = familyOf(you.player.pos, you.metricId);
   const theirFam = familyOf(their.player.pos, their.metricId);
 
-  // ── RIVALRY / DUEL ─────────────────────────────────────────────────────────
-  // A `duel` slot locks this head-to-head into a battle: at the top of each
-  // quarter we snapshot who leads, and for the rest of that quarter the leader
-  // SIPHONS a quarter (DUEL_SIPHON) of the trailing side's gains — but only the
-  // side that actually fielded the duel metric siphons. It's your weapon: pick it
-  // when you back yourself to lead, and pulling ahead snowballs; fall behind and
-  // it does nothing for you. Symmetric only when BOTH sides duel.
-  const DUEL_SIPHON = 0.25;
-  const duelYou = you.metricId === 'duel';
-  const duelTheir = their.metricId === 'duel';
-  const duelActive = duelYou || duelTheir;
-  const QUARTER_LEN = REG / 4;
-  let duelQ = -1;
-  let duelLeader: 'you' | 'their' | null = null;
-  let duelSiphonThis = 0; // cut moved by the most recent gain, for event annotation
-  const duelStep = (clock: number) => {
-    const q = clock >= REG ? 3 : Math.max(0, Math.floor(clock / QUARTER_LEN));
-    if (q !== duelQ) { duelQ = q; duelLeader = Y.bank > T.bank ? 'you' : T.bank > Y.bank ? 'their' : null; }
-  };
-  // Move the quarter leader's siphon cut off a scoring side's gain; return the net
-  // the scorer keeps. Only a duel-OWNING leader siphons (leaderSide !== scorer).
-  const duelTake = (side: 'you' | 'their', amt: number, clock: number): number => {
-    duelSiphonThis = 0;
-    if (!duelActive || !(amt > 0)) return amt;
-    duelStep(clock);
-    const L = duelLeader;
-    if (!L || L === side || !(L === 'you' ? duelYou : duelTheir)) return amt;
-    const cut = Math.round(amt * DUEL_SIPHON * 10) / 10;
-    if (!(cut > 0)) return amt;
-    const lead = L === 'you' ? Y : T;
-    lead.bank += cut; lead.hist.push({ clock, pts: cut });
-    duelSiphonThis = cut;
-    return Math.round((amt - cut) * 10) / 10;
-  };
+  // ── UNDERDOG ───────────────────────────────────────────────────────────────
+  // The anti-snowball metric: flat yardage base, but while you're TRAILING in the
+  // slot every scoring play banks ×UNDERDOG_MULT. Fall behind → you punch above
+  // your weight and claw back; pull ahead → the boost switches off (you can't run
+  // up the score). It rewards comebacks, not a rich-get-richer lead.
+  const UNDERDOG_MULT = 1.5;
+  const underdogYou = you.metricId === 'underdog';
+  const underdogTheir = their.metricId === 'underdog';
 
   // Drip metrics: WR Receiving Yards (built by catches) and RB Rush Yards
   // (built by carries). A drip play raises a permanent rate (yds × 0.01
@@ -730,11 +704,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       const next = Math.min(to, Math.floor(t / 60) * 60 + 60);
       const yg = accrueYou ? minuteGain('you', t, next) : ZERO_GAIN;
       const tg = accrueTheir ? minuteGain('their', t, next) : ZERO_GAIN;
-      // A duel leader siphons a cut of the trailing side's drip gains too (the
-      // cut moves to the leader inside duelTake), so a rivalry bites drips as
-      // well as per-play scoring. Net values feed the banks + the tick's delta.
-      let ya = yg.total, ta = tg.total;
-      if (duelActive) { if (ya > 0) ya = duelTake('you', ya, next); if (ta > 0) ta = duelTake('their', ta, next); }
+      const ya = yg.total, ta = tg.total;
       if (ya > 0) { Y.bank += ya; Y.hist.push({ clock: next, pts: ya }); if (next >= REG) youOtPts += ya; recBuff('you', 'overtime', yg.ot); recBuff('you', 'momentum', yg.momentum); recBuff('you', 'garbage-time', yg.garbage); }
       if (ta > 0) { T.bank += ta; T.hist.push({ clock: next, pts: ta }); if (next >= REG) theirOtPts += ta; recBuff('their', 'overtime', tg.ot); recBuff('their', 'momentum', tg.momentum); recBuff('their', 'garbage-time', tg.garbage); }
       // Only surface a drip tick once it rounds to ≥0.1 — sub-0.1 still banks
@@ -905,10 +875,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const isFG = myPlayer.player.pos === 'QB' && myPlayer.metricId === 'fg';
     if (isFG && play.kind === 'pass') evMult = sideMult;
 
-    // RIVALRY: if a duel-owning quarter leader is on the OTHER side, it siphons a
-    // cut of this play's production. `duelCut` (>0) is what was moved off it.
-    let duelCut = 0;
-    if (duelActive && pts > 0) { const net = duelTake(play.side, pts, play.clock); duelCut = duelSiphonThis; pts = net; }
+    // UNDERDOG: while this side is TRAILING in the slot, its scoring plays bank
+    // ×UNDERDOG_MULT — a comeback boost that switches off the moment it leads.
+    const iAmUnderdog = play.side === 'you' ? underdogYou : underdogTheir;
+    let underdogBoost = false;
+    if (iAmUnderdog && pts > 0 && mine.bank < opp.bank) { pts = Math.round(pts * UNDERDOG_MULT * 10) / 10; underdogBoost = true; }
 
     mine.bank += pts;
     if (pts > 0) mine.hist.push({ clock: play.clock, pts });
@@ -1057,13 +1028,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       effect = { type: 'cold', text: 'STREAK COLD' };
     }
     if (!effect && isFG && play.kind === 'pass') effect = { type: 'mult', text: `FIELD GEN ×${sideMult.toFixed(2)}` }; // mult lives in the label; inline ×mult is suppressed
-    // RIVALRY badges: a siphon off this play, else the duel player's own lead state.
-    if (!effect && duelActive) {
-      if (duelCut > 0) effect = { type: 'reset', text: `⚔ SIPHONED −${duelCut.toFixed(1)}` };
-      else if ((play.side === 'you' ? duelYou : duelTheir) && myFam === 'duel' && pts > 0) {
-        effect = { type: 'streak', text: duelLeader === play.side ? '⚔ DUEL · LEADING' : '⚔ DUEL' };
-      }
-    }
+    // UNDERDOG badge: a comeback-boosted play (trailing → ×1.5).
+    if (!effect && underdogBoost) effect = { type: 'streak', text: `⚔ UNDERDOG ×${UNDERDOG_MULT}` };
     if (play.turnover) effect = { type: 'nuke', text: '✕ TURNOVER → opp' }; // giveaway: coin to the opponent
 
     events.push({

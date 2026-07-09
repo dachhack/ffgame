@@ -52,16 +52,15 @@ Everything lands in the SHARED engine (`src/engine/sim.ts` + `matchup.ts` +
   score. Measured: den-dst bar 10 → 13.9 (= Earn's full production, so the trio shares
   one production model: Earn banks it, Marshal trades it for a shield, Suppress spends
   it as the bar). `DST_DRIP_RATE` is now module-level in sim.ts (one knob for all three).
-- **RIVALRY (WR/RB metric `duel`) — a same-slot grudge match.** Flat yardage base
-  (0.1/yd + 6/TD); at the top of each quarter the side LEADING siphons a quarter
-  (`DUEL_SIPHON` 0.25) of the trailing side's gains for that whole quarter — but
-  only the side that FIELDED the duel siphons, so it snowballs a lead and does
-  nothing when behind (pick it when you back the slot). Own family in
-  `familyOf`; siphon hooks both per-play scoring and drip accrual. EXCLUDED from
-  `bestMetric`/`bestVsThreats` (human-only, like `fg`), so default/AI lineups
-  never auto-field it and the tuned wheel is preserved. Measured: middling
-  win-rates, beats denial metrics, loses to high-ceiling drips — a real
-  specialist, not dominant.
+- **UNDERDOG (WR/RB metric `underdog`) — the anti-snowball comeback pick.**
+  (Replaced the earlier `duel` metric, which was rich-get-richer: a lead just
+  siphoned more.) Flat yardage base (0.1/yd + 6/TD), but while the slot is
+  TRAILING every score banks ×`UNDERDOG_MULT` (1.5); pull ahead and the boost
+  switches off (no running up the score). Own family in `familyOf`; the boost
+  hooks per-play scoring only (`mine.bank < opp.bank` gate). EXCLUDED from
+  `bestMetric`/`bestVsThreats` (human-only, like `fg`) so the tuned wheel is
+  preserved (scores flat solo — no trailing boost vs empty — so the study shares
+  are unchanged). The head-to-head "Rivalry" idea moved to a power-up (below).
 - No DB migration needed: `metric_id` has no allowlist constraint (only the
   locked-metric trigger, which `duel`/`marshal` pass since they aren't locked).
 - Verify: `cd server && npx tsx test/h2h-verify.mjs` exercises all four on real

@@ -14,17 +14,15 @@ injectWeek(WEEK, w.pbp, w.points);
 const P = (slug, pos, team) => makePlayer(slug, pos, team);
 const ok = (label, cond) => console.log(`${cond ? '✓' : '✗ FAIL'}  ${label}`);
 
-// ── 1. RIVALRY / DUEL ────────────────────────────────────────────────────────
-// Two productive WRs; give one the `duel` metric and the other a flat scorer.
-// The duel side should end higher than its own no-duel baseline (it siphons),
-// and its rival should end lower than the rival's no-duel baseline.
-const A = P('puka-nacua', 'WR', 'LA'), B = P('marquise-brown', 'WR', 'KC');
-const base = resolveSlot({ player: A, metricId: 'recyd' }, { player: B, metricId: 'recyd' }, WEEK, 'base');
-const duel = resolveSlot({ player: A, metricId: 'duel' }, { player: B, metricId: 'recyd' }, WEEK, 'duel');
-const siphonEvents = duel.events.filter((e) => e.effect && /SIPHON|DUEL/.test(e.effect.text));
-console.log(`\nDUEL: A recyd baseline ${base.youFinal} vs A duel ${duel.youFinal} · rival ${base.theirFinal}→${duel.theirFinal}`);
-ok('duel produced siphon/duel effect events', siphonEvents.length > 0);
-ok('duel side banks a non-zero score', duel.youFinal > 0);
+// ── 1. UNDERDOG ──────────────────────────────────────────────────────────────
+// An underdog trailing a strong opponent should surface ×1.5 comeback-boosted
+// plays (fired while behind) and bank a non-zero score.
+const A = P('marquise-brown', 'WR', 'KC'), B = P('puka-nacua', 'WR', 'LA');
+const under = resolveSlot({ player: A, metricId: 'underdog' }, { player: B, metricId: 'recyd' }, WEEK, 'underdog');
+const boostEvents = under.events.filter((e) => e.effect && /UNDERDOG/.test(e.effect.text));
+console.log(`\nUNDERDOG: A underdog ${under.youFinal} vs B recyd ${under.theirFinal} · ${boostEvents.length} boosted plays`);
+ok('underdog surfaced ×1.5 comeback-boosted plays while trailing', boostEvents.length > 0);
+ok('underdog side banks a non-zero score', under.youFinal > 0);
 
 // ── 2. FIELD MARSHAL SHIELD ──────────────────────────────────────────────────
 // A TD-nuke attacker vs a drip victim. With a maxed shield the victim keeps a
