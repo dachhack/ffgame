@@ -29,45 +29,55 @@
 <body>
 <a class="home" href="/">← Play Drip Fantasy</a>
 <h1>Drip Fantasy — Scoring Rulebook</h1>
-<p>Drip Fantasy is head-to-head fantasy where <strong>what</strong> you start matters less than <strong>how</strong> you score it. Every slot is a hidden bet: a player <em>and</em> a secret <strong>metric</strong> that decides how that player's real NFL game converts to points — and how it attacks or defends against your opponent. Picks stay sealed until kickoff — <strong>each window's kickoff</strong>: your Sunday and Monday picks stay editable (and hidden) after Thursday's game reveals, so what you learn can change what you play.</p>
-<blockquote><strong>The §4 catalog and §6 power-up tables below are auto-generated</strong> from</blockquote>
+<p>Drip Fantasy is head-to-head fantasy where <strong>what</strong> you start matters less than <strong>how</strong> you score it. Every slot is a hidden bet: a player <em>and</em> a secret <strong>metric</strong> that decides how that player's real NFL game converts to points — and how it attacks or defends against the opponent across from it. Picks stay sealed until <strong>each window's kickoff</strong>, so what you learn early can change what you play.</p>
+<blockquote><strong>The §5 catalog and §8 power-up tables below are auto-generated</strong> from</blockquote>
 <blockquote><code>src/data/metrics.ts</code> and <code>src/data/powerups.ts</code> (run <code>npm run gen:rulebook</code>),</blockquote>
 <blockquote>so they can never drift from the live engine. The same data drives the in-app</blockquote>
-<blockquote>Rulebook (Settings gear → Rulebook). Edit prose by hand; never edit between the</blockquote>
-<blockquote><code>AUTO-*</code> markers.</blockquote>
+<blockquote>Rulebook (Settings gear → Rulebook) and the companion <strong>[Power-Up Handbook](./powerups.md)</strong>.</blockquote>
+<blockquote>Edit prose by hand; never edit between the <code>AUTO-*</code> markers.</blockquote>
 <hr />
 <h2>1. The shape of a week</h2>
 <p>Your lineup is <strong>8 slots</strong> spread across the five game windows:</p>
 <table><thead><tr><th>Window</th><th>When</th><th>Slots</th></tr></thead><tbody><tr><td>TNF</td><td>Thursday night</td><td>1</td></tr><tr><td>SUN 1PM</td><td>Sunday early</td><td>3</td></tr><tr><td>SUN 4PM</td><td>Sunday late</td><td>2</td></tr><tr><td>SNF</td><td>Sunday night</td><td>1</td></tr><tr><td>MNF</td><td>Monday night</td><td>1</td></tr></tbody></table>
 <ul>
 <li>Each slot = <strong>one player + one hidden metric</strong>. A player is only eligible in the window their real NFL team plays.</li>
-<li>Head-to-head, your slots are paired against your opponent's <strong>by window and slot position</strong>. Slot 1 fights slot 1, etc.</li>
-<li>Your score is the sum of every slot's banked points. Most metrics also <em>attack</em> the slot they're matched against — so a slot can win by scoring big <strong>or</strong> by zeroing out the player across from it.</li>
-<li>Picks are <strong>sealed</strong>: neither side sees the other's players or metrics until the window locks at kickoff.</li>
-<li>Windows lock <strong>one at a time, each at its own first kickoff</strong> — a TNF pick is final Thursday night, but your SUN/SNF/MNF picks stay editable until those windows kick off. Thursday's reveal is intel: you can counter-pick the rest of your week against what your opponent already showed. (Pre-match power-ups are the exception — they arm only before the week's FIRST kickoff.)</li>
+<li>Head-to-head, your slots are paired against your opponent's <strong>by window and slot position</strong> — slot 1 fights slot 1, etc. Each pairing is its own little battle.</li>
+<li>Picks are <strong>sealed</strong>: neither side sees the other's players or metrics until the window locks at its own first kickoff.</li>
+<li>Windows lock <strong>one at a time</strong> — a TNF pick is final Thursday night, but your SUN/SNF/MNF picks stay editable until those windows kick off. Thursday's reveal is intel you can counter-pick against. (Pre-match power-ups are the exception — they arm only before the week's <strong>first</strong> kickoff.)</li>
 </ul>
+<p><strong>How you win.</strong> Your score is the sum of every slot's banked points, plus two extra layers: <strong>window battles</strong> (§4) and a lineup-wide <strong>power-up</strong> economy (§8). A slot can win its fight by scoring big <strong>or</strong> by zeroing out the player across from it — most metrics attack as well as score.</p>
 <hr />
 <h2>2. Two kinds of metric</h2>
 <p>Every metric does one or both of:</p>
 <ul>
 <li><strong>Scores</strong> — banks points for you (flat points, or a <em>drip</em> that accrues over time).</li>
-<li><strong>Effects</strong> — does something to the opponent slot (wipe, erase, halve, multiply…).</li>
+<li><strong>Effects</strong> — does something to the opponent slot (wipe, erase, halve, multiply, siphon…).</li>
 </ul>
-<p>The big idea: <strong>flat metrics are predictable, drips are explosive but fragile, and effect metrics win by denial.</strong> It's rock-paper-scissors — see §5.</p>
+<p>The big idea: <strong>flat metrics are predictable, drips are explosive but fragile, and effect metrics win by denial.</strong> It's rock-paper-scissors — see §6.</p>
 <hr />
 <h2>3. The Drip system (the heart of the game)</h2>
-<p>Drip metrics (<strong>Rush Yards</strong>, <strong>Receiving Yards</strong>, and the Combo/Return unlocks) don't score yards directly. Each productive touch raises a <strong>rate</strong> (points per minute), and that rate <strong>accrues over time while your team has the ball.</strong></p>
+<p>Drip metrics (<strong>Rush Yards</strong>, <strong>Receiving Yards</strong>, the Combo/Return unlocks, and the DST <strong>Earn Points</strong> drip) don't score yards directly. Each productive play raises a <strong>rate</strong> (points per minute), and that rate <strong>accrues over time.</strong></p>
 <ul>
-<li><strong>Rate</strong> = yards × <strong>0.01</strong>/min for a WR or RB · <strong>0.005</strong>/min for a TE (half). Rate <strong>builds gradually</strong> — yards early in the game accrue over far more time than yards late.</li>
-<li><strong>Accrues only on offense</strong>, on the real game clock (it pauses at quarter &amp; half).</li>
+<li><strong>Rate</strong> = yards × <strong>0.01</strong>/min for a WR or RB · <strong>0.0065</strong>/min for a TE (two-thirds). Rate <strong>builds gradually</strong> — production early in the game accrues over far more time than production late.</li>
+<li><strong>Accrues on offense</strong>, on the real game clock (it pauses at quarter &amp; half).</li>
 <li><strong>HOT</strong> — <strong>3 straight productive touches with no opponent score in between</strong> doubles your drip (<strong>×2</strong>). A stuffed run (&lt;3 yds), short return (&lt;10 yds), or incompletion breaks the streak. (Combo/Return drips need <strong>4</strong>.)</li>
-<li><strong>A touchdown wipes the bank</strong> — drips reward <em>sustained production</em>, not boom plays. The rate survives; the bank doesn't.</li>
+<li><strong>A touchdown wipes the bank</strong> — drips reward <em>sustained production</em>, not boom plays. The rate survives; the banked points don't.</li>
 </ul>
 <h3>WR vs TE drip — the key difference</h3>
-<table><thead><tr><th></th><th>WR / RB drip</th><th>TE drip</th></tr></thead><tbody><tr><td>Rate</td><td><strong>0.01</strong>/yd per min</td><td><strong>0.005</strong>/yd per min (half)</td></tr><tr><td>Erase/pause immunity</td><td><strong>Fragile</strong> — opponent catches erase + pause it</td><td><strong>Bulletproof</strong> vs WR/RB erases &amp; pauses</td></tr><tr><td>Cooled by per-play scorers?</td><td>Yes</td><td><strong>Yes</strong> (immunity does <em>not</em> cover this)</td></tr></tbody></table>
-<p>A TE drip can't be erased by an opposing receiver — but it builds at half rate, and its hot streak can still be <strong>cooled</strong> by an opponent who banks points every play (a passing QB). See the worked example in §7.</p>
+<table><thead><tr><th></th><th>WR / RB drip</th><th>TE drip</th></tr></thead><tbody><tr><td>Rate</td><td><strong>0.01</strong>/yd per min</td><td><strong>0.0065</strong>/yd per min (two-thirds)</td></tr><tr><td>Erase/pause immunity</td><td><strong>Fragile</strong> — opponent catches erase + pause it</td><td><strong>Bulletproof</strong> vs WR/RB erases &amp; pauses</td></tr><tr><td>Cooled by per-play scorers?</td><td>Yes</td><td><strong>Yes</strong> (immunity does <em>not</em> cover this)</td></tr></tbody></table>
+<p>A TE drip can't be erased by an opposing receiver — but it builds slower, and its hot streak can still be <strong>cooled</strong> by an opponent who banks points every play (a passing QB). See the worked example in §9.</p>
+<h3>The defense drip</h3>
+<p><strong>Earn Points</strong> (DST) works the same way, driven by splash plays: each sack/INT/ fumble/TD raises the rate (splash-weight × <strong>0.02</strong>/min), so an early splash snowballs. It can't be paused or erased — only a TD nuke wipes its bank. The other two DST metrics spend that same production differently: <strong>Field Marshal</strong> trades the drip for a window-wide shield, and <strong>Suppress</strong> spends it as a bigger halving bar (§5, §6).</p>
 <hr />
-<h2>4. Metric catalog</h2>
+<h2>4. Window battles &amp; the MVP</h2>
+<p>Beyond the raw point total, <strong>each of the five windows is its own head-to-head:</strong></p>
+<ul>
+<li>Whoever posts the <strong>higher window total wins the window</strong> and banks a flat <strong>+5 bonus</strong>. A live battle meter shows who's ahead in each window; at final you'll see a <code>⚔ windows won 3–2</code> tally.</li>
+<li>The <strong>single highest-scoring slot</strong> in a window earns its side the <strong>Window MVP bounty</strong> — drip-coin only (5 × the window's slot count), no points.</li>
+</ul>
+<p>This means you can sacrifice raw points to <strong>win more windows</strong>, and spiking one slot can steal a window's marquee bounty — every window is a fight worth winning on its own.</p>
+<hr />
+<h2>5. Metric catalog</h2>
 <p>&lt;!-- AUTO-CATALOG:START --&gt;</p>
 <h3>Quarterback</h3>
 <table><thead><tr><th>Metric</th><th>Tag</th><th>Scores</th><th>Effect</th></tr></thead><tbody><tr><td><strong>Field General</strong></td><td>×</td><td>0 direct pts</td><td>Passing yards set a window-wide drip multiplier on all your skill players. 300 yds = 2.8×. The QB scores nothing himself.</td></tr><tr><td><strong>Passing Yards</strong></td><td>FLAT</td><td>0.04 pts / yd + 4 / TD</td><td>Flat points on passing yards and TDs. No drip, no nuke, no interaction. Predictable.</td></tr><tr><td><strong>Rush Yards</strong></td><td>FLAT</td><td>0.1 pts / yd + 6 / TD</td><td>Flat points on your scrambles and rushing TDs. Purely additive — no nuke, no erase, no interaction.</td></tr><tr><td><strong>Air Raid</strong></td><td>TD HEAVY</td><td>0.04 / yd + 10 / TD</td><td>Unlock (1 wk): passing yards at 0.04/yd plus a huge 10 pts per passing TD. Flat — no nuke or erase.</td></tr></tbody></table>
@@ -85,17 +95,27 @@
 <table><thead><tr><th>Metric</th><th>Tag</th><th>Scores</th><th>Effect</th></tr></thead><tbody><tr><td><strong>Tackles</strong></td><td>FLAT</td><td>tkl 1 · sk 2 · int 3 · FR 2</td><td>Flat defensive scoring: 1 per tackle, 2 per sack, 3 per interception, 2 per fumble recovery, 6 per defensive/ST TD, 2 per safety. Volume-driven and steady.</td></tr><tr><td><strong>Splash Plays</strong></td><td>BIG PLAY</td><td>sk 4 · int 6 · FR 4 · TD 6</td><td>Rewards game-wreckers: 4 per sack, 6 per interception, 4 per fumble recovery, 6 per defensive/ST TD, 2 per safety, 0.5 per tackle. Boom-or-bust.</td></tr></tbody></table>
 <p>&lt;!-- AUTO-CATALOG:END --&gt;</p>
 <hr />
-<h2>5. Effects &amp; counterplay</h2>
+<h2>6. Effects &amp; counterplay</h2>
 <p>The hidden-metric layer is a counter game:</p>
 <ul>
 <li><strong>Drips</strong> have the highest ceilings — but they're <strong>fragile</strong>: erasers (Receptions / Targets), RB rate-reset, and TD nukes all gut them, and a <strong>per-play scorer cools the HOT streak</strong> (a flat passing QB that banks points every completion keeps your drip from ever doubling — TE drips shrug off WR/RB scoring, but <strong>not</strong> a QB).</li>
 <li><strong>Effect metrics</strong> (erase / nuke / suppress / shutdown) win by <strong>denial</strong> — they score little, so they lose to <strong>flat scorers</strong> that just pile up points.</li>
-<li><strong>Flat scorers</strong> are steady but capless — they lose the big-points race to a drip that goes hot.</li>
+<li><strong>Flat scorers</strong> are steady but capless — they lose the big-points race to a drip that goes hot. <strong>Underdog</strong> is the exception: a flat scorer that runs <strong>×1.5 while trailing</strong>, built to claw back rather than run up a lead.</li>
 </ul>
-<p>Cross-window reach: <strong>Field General</strong> multiplies your whole window, <strong>TE 8-PT NUKE</strong> hits every drip in the window, <strong>DEF Suppress</strong> halves matching slots in <em>any</em> window, and <strong>K Banker</strong> boosts <em>all</em> your TDs.</p>
+<p><strong>Cross-slot &amp; window-wide reach</strong> — the plays that make a whole window feel like a battle:</p>
+<ul>
+<li><strong>Field General</strong> (QB) — passing yards build a <strong>window-wide multiplier</strong> on all your other skill players; the QB scores nothing himself.</li>
+<li><strong>Field Marshal</strong> (DST) — the defensive mirror: builds a <strong>window-wide shield</strong> that blunts every opposing nuke and erase against your slots (up to 50%).</li>
+<li><strong>TE 12-PT NUKE</strong> — every TE TD wipes the matched opponent <strong>and</strong> knocks every opposing drip in the window down 1.0/min.</li>
+<li><strong>DEF Suppress</strong> — its drip-fed kill-bar <strong>halves every matching opponent slot in any window</strong>.</li>
+<li><strong>K Banker</strong> — every XP made boosts <strong>all</strong> your touchdowns for the week.</li>
+</ul>
 <hr />
-<h2>6. Power-ups (the drip-coin economy)</h2>
-<p>You earn <strong>drip-coin</strong> each week and spend it on consumables — bought into your inventory and spent when applied. Two kinds: <strong>action</strong> (a one-time tactical effect) and <strong>metric</strong> (unlocks an extra metric for the current week only). <strong>Timing</strong> gates when a power-up can be applied: <em>pre</em> locks once a window starts; <em>live</em> fires only during a live window (never retroactive).</p>
+<h2>7. The drip-coin economy</h2>
+<p>You earn <strong>drip-coin</strong> each week — a flat weekly stipend, an unopposed-slot bounty, the window MVP bounties (§4), a swing on turnovers, and coin for signature "events of note" (nukes, shutdowns, a drip going hot). You spend it on <strong>power-ups</strong>: consumables bought into your inventory and applied when you want them. See §8 for the catalog and the <strong>[Power-Up Handbook](./powerups.md)</strong> for the full breakdown by class and strategy.</p>
+<hr />
+<h2>8. Power-ups</h2>
+<p>Two kinds: <strong>action</strong> (a one-time tactical effect) and <strong>metric</strong> (unlocks an extra metric for the current week only). <strong>Timing</strong> gates when a power-up applies: <em>pre</em> arms during setup and locks once the week's first window starts; <em>live</em> fires only during a live window (never retroactive). Some <em>live</em> plays are <strong>clutch</strong> — they only unlock from a live game-state trigger and are arm-able for a short window.</p>
 <p>&lt;!-- AUTO-POWERUPS:START --&gt;</p>
 <h3>Pre-kickoff</h3>
 <p><em>arm during setup; locks once a window starts</em></p>
@@ -105,16 +125,17 @@
 <table><thead><tr><th>Power-up</th><th>Cost</th><th>Kind</th><th>What it does</th></tr></thead><tbody><tr><td>🔀 <strong>Metric Swap</strong></td><td>◎ 30</td><td>action</td><td>Change a slot’s effective metric. Real-time — applies going forward, not retroactive.</td></tr><tr><td>🔁 <strong>Player Swap</strong></td><td>◎ 50</td><td>action</td><td>Swap a slotted player for one on your bench — anytime, even mid-game.</td></tr><tr><td>🎲 <strong>Mulligan</strong></td><td>◎ 30</td><td>action</td><td>Re-roll one slot’s metric mid-game for free — does not spend a Metric Swap.</td></tr><tr><td>💥 <strong>EMP</strong></td><td>◎ 65</td><td>action</td><td>Fire during a live window to freeze every opponent drip in that window for 10 minutes.</td></tr><tr><td>⚡ <strong>Surge</strong></td><td>◎ 55</td><td>action</td><td>Fire on one of YOUR live slots: everything it scores for the next 10 game-minutes counts double. Fire when your player is heating up.</td></tr><tr><td>🧊 <strong>Cold Snap</strong></td><td>◎ 60</td><td>action</td><td>Fire on a live OPPONENT slot: freeze ALL of that player’s scoring — points and drip — for the next 10 game-minutes. Shut a hot rival down cold.</td></tr><tr><td>🔥 <strong>Napalm</strong></td><td>◎ 60</td><td>action</td><td>Fire on a live OPPONENT slot: for the next 10 game-minutes, any time their drip runs HOT it BURNS — the hot accrual goes negative and bleeds their bank down instead of doubling it. Punishes a rival for running too hot (does nothing while they stay cool).</td></tr><tr><td>🛡️ <strong>Bunker</strong></td><td>◎ 65</td><td>action</td><td>Fire on one of YOUR live slots: it goes immune to every nuke and erase for the rest of the game from the moment you fire. Lock in a lead before they can wipe it.</td></tr><tr><td>🎰 <strong>Halftime Gamble</strong></td><td>◎ 50</td><td>action</td><td>A CLUTCH play — only offered when one of your slots leads by 10+ at halftime, and only until the third quarter gets going. Arm it and that slot scores DOUBLE if it wins its head-to-head, ZERO if it loses.</td></tr><tr><td>🎬 <strong>Encore</strong></td><td>◎ 45</td><td>action</td><td>A CLUTCH play — only offered when one of your players scores a touchdown in the first half. Arm it any time before the game ends and his NEXT touchdown banks a bonus +12.</td></tr><tr><td>🪃 <strong>Counter-Wipe</strong></td><td>◎ 55</td><td>action</td><td>A CLUTCH play — only offered right after an opponent nukes one of your slots, and only for a short window. Arm it in time and the wipe is negated — your bank is restored as if it never landed.</td></tr></tbody></table>
 <p>&lt;!-- AUTO-POWERUPS:END --&gt;</p>
 <hr />
-<h2>7. Worked example — why 127 yards scored 4 points</h2>
+<h2>9. Worked example — why 127 yards scored 4 points</h2>
 <p>A TE posts <strong>127 receiving yards, 0 TD</strong> and banks just <strong>4.0</strong>, while a WR with <strong>60 yards + 2 TD</strong> banks 16.0. Not a bug — a clean counter:</p>
-<p>1. The TE drip builds at <strong>half rate</strong> (0.005), so 127 TE yards ≈ a 0.64/min rate —    about the same as 60 WR yards. 2. The opponent slotted a <strong>passing QB</strong> — in fact <em>the TE's own QB</em>. Every catch    was also a completion that <strong>banked points for the opponent</strong>, which <strong>cools the    TE's hot streak</strong> every single time. 3. The TE is immune to <em>erases</em>, so the bank was never wiped — but he could never    string 3 unanswered catches, so the drip <strong>never went hot (×2)</strong>. Half rate, no    doubling → 4.0.</p>
+<p>1. The TE drip builds at a lower rate (0.0065), so 127 TE yards makes roughly the    same rate as ~80 WR yards — decent, but not a runaway. 2. The opponent slotted a <strong>passing QB</strong> — in fact <em>the TE's own QB</em>. Every catch    was also a completion that <strong>banked points for the opponent</strong>, which <strong>cools the    TE's hot streak</strong> every single time. 3. The TE is immune to <em>erases</em>, so the bank was never wiped — but he could never    string 3 unanswered catches, so the drip <strong>never went hot (×2)</strong>. Lower rate, no    doubling → 4.0.</p>
 <p>The counter to a drip isn't always an eraser — sometimes it's just a player who <strong>scores on every snap.</strong> Pairing a catcher against his own QB is the sharpest version of that read.</p>
 <hr />
-<h2>8. Banks, backups &amp; edge cases</h2>
+<h2>10. Banks, backups &amp; edge cases</h2>
 <ul>
 <li><strong>Missed picks</strong> — your league policy decides: best available lineup auto-filled (default), an AI fills it, or it scores 0.</li>
 <li><strong>Backups</strong> — depth behind a beatable starter can sub in for full value if it outscores them; otherwise it scores 0 (all-or-nothing — no partial credit).</li>
-<li><strong>Overtime / Garbage Time / Momentum / EMP</strong> — power-ups (above) can keep drips ticking past regulation, double late points, push a hot drip to ×3, or freeze an opponent's drip.</li>
+<li><strong>Overtime / Garbage Time / Momentum</strong> — amplifier power-ups can keep drips ticking past regulation, double late points, or push a hot drip to ×3 (capacity- limited — see the handbook).</li>
+<li><strong>Live &amp; clutch plays</strong> — freezes, burns, shields, and the reactive clutch offers (§8) apply going forward from the moment you fire them, never retroactively.</li>
 </ul>
 <hr />
 <p><em>This rulebook mirrors the live scoring engine. If a number here disagrees with the game, the game wins — tell us and we'll fix the doc.</em></p>
