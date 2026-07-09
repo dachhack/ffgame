@@ -99,12 +99,12 @@ export type IconSetName = 'emoji' | 'factory' | 'pixel';
 /** Card-table deck skins — the table felt + sealed card backs. Personal choice,
  *  saved per browser. Player card faces stay cream across all skins (a deck
  *  swaps its table + backs, not its faces). */
-export type CardSkin = 'emerald';
-export const CARD_SKINS: CardSkin[] = ['emerald'];
+export type CardSkin = 'emerald' | 'playbook' | 'blitz' | 'rivalry' | 'allstar' | 'heritage' | 'gilded' | 'cosmic' | 'fireworks' | 'battalion';
+export const CARD_SKINS: CardSkin[] = ['emerald', 'playbook', 'blitz', 'rivalry', 'allstar', 'heritage', 'gilded', 'cosmic', 'fireworks', 'battalion'];
 /** Skins whose back is a full photographic card image (vs a generated pattern).
  *  These hide the ◆ gem and show only a small SCOUT chip (see PHOTO_SKINS use in
- *  Matchup SetupRow). Empty for now — new photo decks get added here. */
-export const PHOTO_SKINS: CardSkin[] = [];
+ *  Matchup SetupRow). All the image decks under public/cardbacks/. */
+export const PHOTO_SKINS: CardSkin[] = ['playbook', 'blitz', 'rivalry', 'allstar', 'heritage', 'gilded', 'cosmic', 'fireworks', 'battalion'];
 
 interface Store {
   theme: ThemeName;
