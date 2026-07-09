@@ -523,7 +523,7 @@ function offSecs(intervals: number[][], t0: number, t1: number): number {
  * `opts.youMult` / `opts.theirMult` apply a per-clock multiplier to that
  * side's scoring (used by the QB Field General window multiplier).
  */
-export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youShield?: (clock: number) => number; theirShield?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; youJinx?: boolean; theirJinx?: boolean; realResolve?: boolean; projection?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
+export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youShield?: (clock: number) => number; theirShield?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; youJinx?: boolean; theirJinx?: boolean; youSurge?: [number, number]; theirSurge?: [number, number]; youFreeze?: [number, number]; theirFreeze?: [number, number]; youBunkerFrom?: number; theirBunkerFrom?: number; realResolve?: boolean; projection?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
   // Pre-match team buffs active on each side (Momentum / Garbage Time /
   // Floodgates / Overtime). Only the human side carries buffs in the demo.
   const youBuffs = opts.youBuffs ?? new Set<string>();
@@ -599,6 +599,15 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const dstEarnTheir = their.player.pos === 'DEF' && their.metricId === 'earn';
   const accrueYou = dripYou || dstEarnYou;
   const accrueTheir = dripTheir || dstEarnTheir;
+
+  // Live tactical power-ups (fired mid-window, effective from the fire clock):
+  //   • Surge — this side's scoring ×2 for a 10-min window from the fire clock.
+  //   • Cold Snap (freeze) — this side's scoring (points AND drip) zeroed for 10 min.
+  //   • Bunker — this side immune to nukes/erases from a clock onward.
+  const inWin = (w: [number, number] | undefined, c: number) => !!w && c >= w[0] && c < w[1];
+  const surgeAt = (side: 'you' | 'their', c: number) => inWin(side === 'you' ? opts.youSurge : opts.theirSurge, c);
+  const frozenAt = (side: 'you' | 'their', c: number) => inWin(side === 'you' ? opts.youFreeze : opts.theirFreeze, c);
+  const SURGE_MULT = 2;
   const events: PbpEvent[] = [];
 
   // REAL CLOCK: drip accrues per real wall-clock minute of ACTIVE play instead
@@ -661,6 +670,9 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     // EMP: this side's drip is frozen for a 10-minute window.
     const emp = side === 'you' ? opts.youEmpFreeze : opts.theirEmpFreeze;
     if (emp && t0 < emp[1] && t1 > emp[0]) return ZERO_GAIN;
+    // COLD SNAP: this side's scoring (incl. drip) is frozen for a 10-min window.
+    const frz = side === 'you' ? opts.youFreeze : opts.theirFreeze;
+    if (frz && t0 < frz[1] && t1 > frz[0]) return ZERO_GAIN;
     // Overtime: minutes past regulation count as full possession (no game clock
     // to gate them), so the drip keeps ticking for the bonus window.
     const isOT = t0 >= REG;
@@ -678,6 +690,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const garbagePre = garbageOn ? add : 0;
     if (garbageOn) add *= 2;
     const m = mult?.(t1); const fgm = m && m !== 1 ? m : 1; if (fgm !== 1) add *= fgm;
+    if (surgeAt(side, t1)) add *= SURGE_MULT; // SURGE: live ×2 on this side's drip
     // Everything accrued past regulation only exists because of Overtime, so credit
     // it wholly to OT; within regulation, split out Momentum's 3×-vs-2× and Garbage.
     if (isOT) return { total: add, ot: add, momentum: 0, garbage: 0 };
@@ -767,7 +780,10 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     // FIELD MARSHAL SHIELD: the VICTIM's side (opp) may have a window-wide shield
     // up. It blunts the bank damage of the attacker's nuke/erase this play — the
     // victim keeps `victimShield` of what would be wiped/erased (0 with no Marshal).
-    const victimShield = Math.max(0, Math.min(SHIELD_CAP, (oppSide === 'you' ? opts.youShield : opts.theirShield)?.(play.clock) ?? 0));
+    // BUNKER (live power-up): full immunity (shield = 1) from its fire clock onward.
+    const oppBunkerFrom = oppSide === 'you' ? opts.youBunkerFrom : opts.theirBunkerFrom;
+    const victimBunkered = oppBunkerFrom != null && play.clock >= oppBunkerFrom;
+    const victimShield = victimBunkered ? 1 : Math.max(0, Math.min(SHIELD_CAP, (oppSide === 'you' ? opts.youShield : opts.theirShield)?.(play.clock) ?? 0));
     // A nuke-suppressed slot is INERT until its 10-minute blackout lifts: this play
     // builds no drip rate, banks no points, and triggers no effects. The opponent's
     // drip accrual over [lastClock, play.clock] already ran in accrue() above, and the
@@ -798,6 +814,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         const ins = stealPct > 0 ? stealCut(wiped * 0.5) : 0; // steal from what was actually removed (the un-insured half)
         return ` · 🛟 INSURED ${opp.bank.toFixed(1)}${ins > 0 ? ` · steal +${ins.toFixed(1)}` : ''}`;
       }
+      // BUNKER: full immunity — the bank AND the drip are untouched by the nuke.
+      if (victimBunkered) return ' · 🛡 BUNKER — nuke blocked';
       // A Field Marshal shield lets the victim keep a fraction of the wiped bank;
       // the rate is still disrupted (blackout stands), and the steal only credits
       // the attacker for what actually left the victim's bank.
@@ -891,6 +909,13 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const iAmUnderdog = play.side === 'you' ? underdogYou : underdogTheir;
     let underdogBoost = false;
     if (iAmUnderdog && pts > 0 && mine.bank < opp.bank) { pts = Math.round(pts * UNDERDOG_MULT * 10) / 10; underdogBoost = true; }
+
+    // COLD SNAP freezes this play's scoring; SURGE doubles it (live power-ups).
+    let surgeBoost = false, frozenThis = false;
+    if (pts > 0) {
+      if (frozenAt(play.side, play.clock)) { pts = 0; frozenThis = true; }
+      else if (surgeAt(play.side, play.clock)) { pts = Math.round(pts * SURGE_MULT * 10) / 10; surgeBoost = true; }
+    }
 
     mine.bank += pts;
     if (pts > 0) mine.hist.push({ clock: play.clock, pts });
@@ -1041,6 +1066,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     if (!effect && isFG && play.kind === 'pass') effect = { type: 'mult', text: `FIELD GEN ×${sideMult.toFixed(2)}` }; // mult lives in the label; inline ×mult is suppressed
     // UNDERDOG badge: a comeback-boosted play (trailing → ×1.5).
     if (!effect && underdogBoost) effect = { type: 'streak', text: `⚔ UNDERDOG ×${UNDERDOG_MULT}` };
+    if (!effect && surgeBoost) effect = { type: 'streak', text: `⚡ SURGE ×${SURGE_MULT}` };
+    if (!effect && frozenThis) effect = { type: 'stop', text: '🧊 COLD SNAP — frozen' };
     if (play.turnover) effect = { type: 'nuke', text: '✕ TURNOVER → opp' }; // giveaway: coin to the opponent
 
     events.push({

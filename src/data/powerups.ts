@@ -54,6 +54,9 @@ export const POWERUPS: Powerup[] = [
   { id: 'bye-steal', name: 'Bye Steal', blurb: 'Before kickoff, field one of your players who is on bye in an open slot for a flat projected score.', kind: 'action', timing: 'pre', price: 55, icon: '🪂', target: 'bye' },
   { id: 'mulligan', name: 'Mulligan', blurb: 'Re-roll one slot’s metric mid-game for free — does not spend a Metric Swap.', kind: 'action', timing: 'live', price: 30, icon: '🎲', target: 'slot-you' },
   { id: 'emp', name: 'EMP', blurb: 'Fire during a live window to freeze every opponent drip in that window for 10 minutes.', kind: 'action', timing: 'live', price: 65, icon: '💥', target: 'window' },
+  { id: 'surge', name: 'Surge', blurb: 'Fire on one of YOUR live slots: everything it scores for the next 10 game-minutes counts double. Fire when your player is heating up.', kind: 'action', timing: 'live', price: 55, icon: '⚡', target: 'slot-you' },
+  { id: 'cold-snap', name: 'Cold Snap', blurb: 'Fire on a live OPPONENT slot: freeze ALL of that player’s scoring — points and drip — for the next 10 game-minutes. Shut a hot rival down cold.', kind: 'action', timing: 'live', price: 60, icon: '🧊', target: 'slot-opp' },
+  { id: 'bunker', name: 'Bunker', blurb: 'Fire on one of YOUR live slots: it goes immune to every nuke and erase for the rest of the game from the moment you fire. Lock in a lead before they can wipe it.', kind: 'action', timing: 'live', price: 65, icon: '🛡️', target: 'slot-you' },
   { id: 'turnover-boost', name: 'Ball Hawk', blurb: 'Arm before kickoff: raise the turnover coin swing from 10 to 25 this week, across all windows — your giveaways cost more, their giveaways pay more.', kind: 'action', timing: 'pre', price: 55, icon: '🦅' },
 ];
 

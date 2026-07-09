@@ -387,7 +387,7 @@ export function buildMatchup(
   swaps: SlotSwaps = {},
   backupAssign: Record<string, string> = {},
   buffs: Record<string, boolean> = {},
-  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; autoBackups?: boolean } = {},
+  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; surge?: Record<string, number>; coldSnap?: Record<string, number>; bunker?: Record<string, number>; autoBackups?: boolean } = {},
   realResolve = false, // resolve cross-game effects (TE-TD drip nuke) in real-time order
   oppBuffs?: string[], // live H2H: the opponent's REAL armed buffs (revealed at lock); AI default when omitted
 ): ResolvedMatchup {
@@ -482,7 +482,14 @@ export function buildMatchup(
         // JINX: you armed it blind on this slot → the opponent ('their') here
         // has their first TD negated.
         const theirJinx = extras.jinx?.includes(key);
-        const opts = { youMult, theirMult, youShield, theirShield, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined, theirJinx, realResolve };
+        // Live tactical power-ups on this slot (10-min windows from the fire clock;
+        // Bunker is from the fire clock onward). Surge/Bunker boost/protect YOUR
+        // side; Cold Snap freezes the OPPONENT ('their') here.
+        const win10 = (c: number | undefined): [number, number] | undefined => (c != null ? [c, c + 600] : undefined);
+        const youSurge = win10(extras.surge?.[key]);
+        const theirFreeze = win10(extras.coldSnap?.[key]);
+        const youBunkerFrom = extras.bunker?.[key];
+        const opts = { youMult, theirMult, youShield, theirShield, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined, theirJinx, youSurge, theirFreeze, youBunkerFrom, realResolve };
         let res = resolveSlot(yIn, tIn, week, gameLabel, opts);
         if (theirJinx && their) theirJinxed = res.events.some((e) => e.effect?.text.includes('JINXED'));
 

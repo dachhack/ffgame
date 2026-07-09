@@ -232,6 +232,9 @@ during a live window (never retroactive).
 | 🔁 **Player Swap** | ◎ 50 | action | Swap a slotted player for one on your bench — anytime, even mid-game. |
 | 🎲 **Mulligan** | ◎ 30 | action | Re-roll one slot’s metric mid-game for free — does not spend a Metric Swap. |
 | 💥 **EMP** | ◎ 65 | action | Fire during a live window to freeze every opponent drip in that window for 10 minutes. |
+| ⚡ **Surge** | ◎ 55 | action | Fire on one of YOUR live slots: everything it scores for the next 10 game-minutes counts double. Fire when your player is heating up. |
+| 🧊 **Cold Snap** | ◎ 60 | action | Fire on a live OPPONENT slot: freeze ALL of that player’s scoring — points and drip — for the next 10 game-minutes. Shut a hot rival down cold. |
+| 🛡️ **Bunker** | ◎ 65 | action | Fire on one of YOUR live slots: it goes immune to every nuke and erase for the rest of the game from the moment you fire. Lock in a lead before they can wipe it. |
 
 <!-- AUTO-POWERUPS:END -->
 

@@ -166,6 +166,11 @@ export interface LiveExtras {
   jinx?: string[];
   /** Red Herring: this side's decoy slots (`win|slot`) — cap opposing same-position players in that window to the decoy's total. */
   redHerring?: string[];
+  /** Live tactical power-ups: slot (`win|slot`) → fire game-clock. Surge/Bunker on
+   *  your own slot; Cold Snap on an opponent slot (freezes them). */
+  surge?: Record<string, number>;
+  coldSnap?: Record<string, number>;
+  bunker?: Record<string, number>;
 }
 export interface LiveExtrasBySide { home?: LiveExtras; away?: LiveExtras; }
 
@@ -294,7 +299,14 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
       // JINX: home pointing at this slot negates AWAY's ('their') first TD; away
       // pointing at it negates HOME's ('you') first TD.
       const jinxKey = `${wid}|${slot}`;
-      const res = resolveSlot(you, them, week, label, { ...slotOpts, theirJinx: hx.jinx?.includes(jinxKey), youJinx: ax.jinx?.includes(jinxKey) });
+      // Live tactical power-ups (home = 'you', away = 'their'): Surge/Bunker on the
+      // owner's slot; Cold Snap freezes the opponent's slot.
+      const win10 = (c: number | undefined): [number, number] | undefined => (c != null ? [c, c + EMP_SECONDS] : undefined);
+      const res = resolveSlot(you, them, week, label, { ...slotOpts,
+        theirJinx: hx.jinx?.includes(jinxKey), youJinx: ax.jinx?.includes(jinxKey),
+        youSurge: win10(hx.surge?.[jinxKey]), theirSurge: win10(ax.surge?.[jinxKey]),
+        theirFreeze: win10(hx.coldSnap?.[jinxKey]), youFreeze: win10(ax.coldSnap?.[jinxKey]),
+        youBunkerFrom: hx.bunker?.[jinxKey], theirBunkerFrom: ax.bunker?.[jinxKey] });
       let homeF = res.youFinal, awayF = res.theirFinal;
       let events = res.events;
       let homeTd = res.youTds, awayTd = res.theirTds, homeXp = res.youBankerXp, awayXp = res.theirBankerXp;

@@ -139,4 +139,25 @@ const lcYes = resolveLiveMatchup(lcPicks, lcAway, WEEK, {}, { home: { leadChange
 console.log(`\nLEAD CHANGE: home ${lcNo} → with lead-change ${lcYes} (+2 per seize)`);
 ok('lead change never lowers the score (bonus ≥ 0, multiple of 2)', lcYes >= lcNo && Math.abs((lcYes - lcNo) % 2) < 0.001);
 
+// ── 11. LIVE POWER-UPS: Surge / Cold Snap / Bunker ───────────────────────────
+// SURGE: a flat QB scoring ×2 over the whole game (window [0, REG]) ≈ doubles.
+const sqb = { player: P('josh-allen', 'QB', 'BUF'), metricId: 'pass' };
+const sBase = resolveSlot(sqb, { player: EMPTY, metricId: 'none' }, WEEK, 'base').youFinal;
+const sSurge = resolveSlot(sqb, { player: EMPTY, metricId: 'none' }, WEEK, 'surge', { youSurge: [0, 3600] }).youFinal;
+console.log(`\nSURGE: base ${sBase} → surged ${sSurge} (≈2×)`);
+ok('surge roughly doubled the score', sSurge > sBase * 1.8);
+
+// COLD SNAP: freeze the same QB the whole game → scores ~0.
+const sFroze = resolveSlot(sqb, { player: EMPTY, metricId: 'none' }, WEEK, 'freeze', { youFreeze: [0, 3600] }).youFinal;
+console.log(`COLD SNAP: base ${sBase} → frozen ${sFroze}`);
+ok('cold snap froze all scoring to ~0', sFroze < 0.1);
+
+// BUNKER: a nuked victim keeps its bank when bunkered from kickoff.
+const bVictim = { player: P('puka-nacua', 'WR', 'LA'), metricId: 'rec' };
+const bAtk = { player: P('saquon-barkley', 'RB', 'PHI'), metricId: 'td' };
+const bNo = resolveSlot(bVictim, bAtk, WEEK, 'nobunker').youFinal;
+const bYes = resolveSlot(bVictim, bAtk, WEEK, 'bunker', { youBunkerFrom: 0 }).youFinal;
+console.log(`BUNKER: nuked ${bNo} → bunkered ${bYes} (nuke blocked)`);
+ok('bunker preserved the bank through the nuke', bYes > bNo);
+
 console.log('\nDONE.');

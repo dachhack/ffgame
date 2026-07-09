@@ -1,6 +1,25 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-09 · Build `v0.117.0`_
+_Last updated: 2026-07-09 · Build `v0.118.0`_
+
+## Live tactical power-ups: Surge / Cold Snap / Bunker (v0.118.0)
+Three reactive `timing:'live'` power-ups fired mid-window (the live layer was just
+swaps + EMP). Time-windowed opts on `resolveSlot`, mirroring the EMP pattern; the
+fire game-clock is captured via `effWinClock` and stored per slot. Priced in
+`0081_live_tactical_prices.sql`. Verified in `h2h-verify.mjs` (18/18 green).
+- **SURGE (`surge`, ◎55, slot-you).** Your slot scores ×`SURGE_MULT` (2) for 10
+  game-minutes from the fire clock — plays AND drip (`opts.youSurge:[c,c+600]`).
+- **COLD SNAP (`cold-snap`, ◎60, slot-opp).** Freezes ALL of an opponent slot's
+  scoring (points + drip) for 10 min (`opts.theirFreeze`). Harder than EMP, which
+  only freezes drips and only window-wide.
+- **BUNKER (`bunker`, ◎65, slot-you).** Your slot goes nuke/erase-immune from the
+  fire clock onward (`opts.youBunkerFrom` → `victimShield = 1`; nukeWipe early-returns
+  so the bank AND drip survive). Lock in a lead before they can wipe it.
+- Wiring: `AppliedWeek.{surge,coldSnap,bunker}` (slotKey→fire clock) + generic
+  `applyLiveSlotPu`; the live apply panel surfaces them via `SPOT_APPLY` when a
+  window is live; `spotEligible` gates your-slot (surge/bunker) vs opponent-slot
+  (cold-snap); active-effect chips. buildMatchup + resolveLiveMatchup both wired.
+
 
 ## Four "battle" power-ups: Lead Change / Grudge / Jinx / Red Herring (v0.117.0)
 All slot-targeted, armed pre-kickoff, priced in `0080_battle_powerups_price.sql`
