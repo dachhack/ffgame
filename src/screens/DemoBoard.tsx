@@ -723,11 +723,11 @@ function TeamSide({ team, owner, ownerId, score, accent, you }: { team: string; 
   const right = !you;
   return (
     <div style={{ flex: 1, minWidth: 0, textAlign: right ? 'right' : 'left' }}>
-      <div style={{ display: 'flex', flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 7 }}>
-        <Avatar name={team} accent={accent} size={26} src={avatarUrl(ownerId)} />
-        <div style={{ minWidth: 0 }}>
-          <div className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team}</div>
-          <div className="mono" style={{ fontSize: fs(8), color: 'var(--faint)', marginTop: 1 }}>{you ? 'YOU · ' : ''}@{owner}</div>
+      <div style={{ display: 'flex', flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 6 }}>
+        <Avatar name={team} accent={accent} size={24} src={avatarUrl(ownerId)} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', lineHeight: 1.15, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }}>{team}</div>
+          <div className="mono" style={{ fontSize: fs(8), color: 'var(--faint)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{owner}</div>
         </div>
       </div>
       <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, color: accent, marginTop: 6, lineHeight: 1 }}>{score.toFixed(1)}</div>
@@ -856,9 +856,9 @@ function SlotRow({ slot, state, you, their, frozen, armedPu, noBorder }: {
         {side('their')}
       </div>
       {showMetrics && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, padding: '0 12px 8px' }}>
-          <span style={{ minWidth: 0, display: 'inline-flex' }}>{slot.you?.metricId && <MetricChip pos={slot.you.player.pos} metricId={slot.you.metricId} />}</span>
-          <span style={{ minWidth: 0, display: 'inline-flex', justifyContent: 'flex-end' }}>{!sealed && slot.their?.metricId && <MetricChip pos={slot.their.player.pos} metricId={slot.their.metricId} />}</span>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0 12px 8px' }}>
+          <span style={{ flex: 1, minWidth: 0, display: 'inline-flex', justifyContent: 'flex-start', overflow: 'hidden' }}>{slot.you?.metricId && <MetricChip pos={slot.you.player.pos} metricId={slot.you.metricId} />}</span>
+          <span style={{ flex: 1, minWidth: 0, display: 'inline-flex', justifyContent: 'flex-end', overflow: 'hidden' }}>{!sealed && slot.their?.metricId && <MetricChip pos={slot.their.player.pos} metricId={slot.their.metricId} />}</span>
         </div>
       )}
     </div>
