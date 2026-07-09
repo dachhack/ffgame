@@ -1782,7 +1782,7 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, sealed, colla
       // Desktop: pin the rail below the sticky header so you can grab a player from
       // anywhere on the board without scrolling back up; the rail scrolls on its own
       // when the roster is long.
-      : { width: side === 'you' ? 170 : 196, flex: 'none', position: 'sticky', top: 68, alignSelf: 'flex-start', maxHeight: 'calc(100vh - 80px)', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} className={fluid ? undefined : 'hide-narrow'}>
+      : { width: 188, flex: 'none', position: 'sticky', top: 68, alignSelf: 'flex-start', maxHeight: 'calc(100vh - 80px)', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} className={fluid ? undefined : 'hide-narrow'}>
       <button onClick={onToggle} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.2em', color: accent, fontWeight: 700 }}>{side === 'you' ? '◂' : '▸'} {side === 'you' ? 'YOUR' : 'OPPONENT'} ROSTER</span>
         <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{total}</span>
