@@ -741,7 +741,7 @@ function MetricChip({ pos, metricId }: { pos: Player['pos']; metricId: string | 
   if (!m) return null;
   const color = FX_COLOR[m.fx] ?? 'var(--you)';
   return (
-    <span className="mono" title={m.ef} style={{ display: 'inline-block', maxWidth: '100%', fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.06em', lineHeight: 1.3, color, border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`, background: `color-mix(in srgb, ${color} 10%, transparent)`, borderRadius: 3, padding: '1px 5px', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+    <span className="mono" title={m.ef} style={{ display: 'inline-block', fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.06em', color, border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`, background: `color-mix(in srgb, ${color} 10%, transparent)`, borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>
       {m.name} · {m.tag}
     </span>
   );
@@ -803,18 +803,18 @@ function SlotRow({ slot, state, you, their, frozen, armedPu, noBorder }: {
     const right = who === 'their';
     if (!pick) {
       const label = who === 'you'
-        ? (slot.their ? 'UNOPPOSED · their backup' : '— empty —')
+        ? (slot.their ? 'UNOPPOSED · backup' : '— empty —')
         : slot.you
           ? (state === 'final'
-            ? (slot.backupUsed ? '✓ BACKUP · subbed into a starter spot' : '✕ BACKUP · didn’t beat a starter — banks 0')
-            : 'UNOPPOSED · you bank a backup')
+            ? (slot.backupUsed ? '✓ BACKUP · subbed in' : '✕ BACKUP · banks 0')
+            : 'UNOPPOSED · banks backup')
           : '—';
-      return <div className="mono" style={{ flex: 1, minWidth: 0, fontSize: fs(8.5), color: 'var(--faint)', textAlign: right ? 'right' : 'left' }}>{label}</div>;
+      return <div className="mono" style={{ flex: 1, minWidth: 0, fontSize: fs(8.5), color: 'var(--faint)', textAlign: right ? 'right' : 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>;
     }
     if (who === 'their' && sealed) {
       return (
         <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'flex-end' }}>
-          <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', border: '1px dashed var(--bd)', borderRadius: 5, padding: '7px 10px' }}><Emoji e="🔒" size="1.25em" /> SEALED PICK</span>
+          <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', border: '1px dashed var(--bd)', borderRadius: 5, padding: '7px 10px', whiteSpace: 'nowrap' }}><Emoji e="🔒" size="1.25em" /> SEALED PICK</span>
         </div>
       );
     }
@@ -828,7 +828,6 @@ function SlotRow({ slot, state, you, their, frozen, armedPu, noBorder }: {
           <div className="grotesk" style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pick.player.name}</div>
           <div style={{ display: 'flex', flexDirection: right ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: 3, marginTop: 2, alignItems: 'center' }}>
             <span className="mono" style={{ fontSize: fs(7.5), color: 'var(--faint)' }}>{pick.player.pos} · {pick.player.team}</span>
-            {(who === 'you' || !sealed) && <MetricChip pos={pick.player.pos} metricId={pick.metricId} />}
             {who === 'you' && armedPu && <span className="mono" style={{ fontSize: fs(7.5), fontWeight: 700, color: 'var(--fx-streak, #36D399)' }}><PuIcon id={armedPu.id} emoji={armedPu.icon} size="1.4em" /> {armedPu.name.toUpperCase()}</span>}
             {state === 'final' && sub && <span className="mono" style={{ fontSize: fs(7.5), fontWeight: 700, color: 'var(--warn)' }}>🛟 {sub.name} subbed in</span>}
           </div>
@@ -836,19 +835,32 @@ function SlotRow({ slot, state, you, their, frozen, armedPu, noBorder }: {
       </div>
     );
   };
+  // Metric chips live on their own full-width line beneath the matchup row —
+  // the 3-column [you · score · their] row is too narrow to hold a chip like
+  // "Field General · MULTIPLIER" without wrapping. Here each chip has half the
+  // row and stays on one line (your metric left, opponent's right once unsealed).
+  const showMetrics = !!slot.you?.metricId || (!sealed && !!slot.their?.metricId);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: noBorder ? 'none' : '1px solid var(--bd)' }}>
-      {side('you')}
-      <div className="mono" style={{ flex: 'none', minWidth: 68, textAlign: 'center' }}>
-        {state === 'upcoming'
-          ? <span style={{ fontSize: 9, color: 'var(--faint)' }}>–&nbsp;·&nbsp;–</span>
-          : <span style={{ fontSize: 11.5, fontWeight: 700 }}>
-              <span style={{ color: 'var(--you)', textDecoration: backupStruck && slot.you ? 'line-through' : undefined, opacity: backupStruck && slot.you ? 0.55 : 1 }}>{you.toFixed(1)}</span>
-              <span style={{ color: 'var(--faint)' }}> · </span>
-              <span style={{ color: 'var(--opp)', textDecoration: backupStruck && slot.their ? 'line-through' : undefined, opacity: backupStruck && slot.their ? 0.55 : 1 }}>{their.toFixed(1)}</span>
-            </span>}
+    <div style={{ borderBottom: noBorder ? 'none' : '1px solid var(--bd)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: showMetrics ? '8px 12px 3px' : '8px 12px' }}>
+        {side('you')}
+        <div className="mono" style={{ flex: 'none', minWidth: 60, textAlign: 'center' }}>
+          {state === 'upcoming'
+            ? <span style={{ fontSize: 9, color: 'var(--faint)' }}>–&nbsp;·&nbsp;–</span>
+            : <span style={{ fontSize: 11.5, fontWeight: 700 }}>
+                <span style={{ color: 'var(--you)', textDecoration: backupStruck && slot.you ? 'line-through' : undefined, opacity: backupStruck && slot.you ? 0.55 : 1 }}>{you.toFixed(1)}</span>
+                <span style={{ color: 'var(--faint)' }}> · </span>
+                <span style={{ color: 'var(--opp)', textDecoration: backupStruck && slot.their ? 'line-through' : undefined, opacity: backupStruck && slot.their ? 0.55 : 1 }}>{their.toFixed(1)}</span>
+              </span>}
+        </div>
+        {side('their')}
       </div>
-      {side('their')}
+      {showMetrics && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, padding: '0 12px 8px' }}>
+          <span style={{ minWidth: 0, display: 'inline-flex' }}>{slot.you?.metricId && <MetricChip pos={slot.you.player.pos} metricId={slot.you.metricId} />}</span>
+          <span style={{ minWidth: 0, display: 'inline-flex', justifyContent: 'flex-end' }}>{!sealed && slot.their?.metricId && <MetricChip pos={slot.their.player.pos} metricId={slot.their.metricId} />}</span>
+        </div>
+      )}
     </div>
   );
 }
