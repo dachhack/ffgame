@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
 import { Brand, SiteSettings, PosPill, useIsMobile } from '../app/ui';
 import { getTeam, gameForTeam } from '../data/league';
-import { buildMatchup, defaultLineup, aiLineup, slotKey } from '../engine/matchup';
+import { buildMatchup, defaultLineup, aiLineup, slotKey, WINDOW_WIN_BONUS } from '../engine/matchup';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
 import { metricById } from '../data/metrics';
 import { powerupById } from '../data/powerups';
@@ -82,6 +82,10 @@ export function MatchupFinal({ week }: { week: number }) {
               <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6, maxWidth: 520, lineHeight: 1.5 }}>
                 {slotsW} slots won · {slotsL} lost · {effects} nukes &amp; erasures fired across the windows.
               </div>
+              <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 4, letterSpacing: '0.04em' }}>
+                ⚔ WINDOW BATTLES <span style={{ color: 'var(--you)' }}>{m.youWindowsWon}</span>–<span style={{ color: 'var(--opp)' }}>{m.theirWindowsWon}</span>
+                {(m.youWindowsWon > 0 || m.theirWindowsWon > 0) && <span> · +{WINDOW_WIN_BONUS} pts per window won</span>}
+              </div>
               {armedList.length > 0 && (
                 <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 9, flexWrap: 'wrap' }}>
                   <span style={{ letterSpacing: '0.1em', color: 'var(--faint)', fontWeight: 700 }}>YOU ARMED</span>
@@ -109,22 +113,34 @@ export function MatchupFinal({ week }: { week: number }) {
             </div>
           </div>
 
-          {/* window strip */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 16 }}>
+          {/* window strip — each window is its own battle */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginTop: 16 }}>
             {m.windows.map((w) => {
-              let y = 0, t = 0;
-              for (const s of w.slots) { y += s.youFinal; t += s.theirFinal; }
-              const wWon = y > t, even = Math.abs(y - t) < 0.1;
+              const b = w.battle;
+              const y = b?.youTotal ?? 0, t = b?.theirTotal ?? 0;
+              const wWon = b?.winner === 'you', even = !b || b.winner === 'push';
               const c = even ? 'var(--dim)' : wWon ? 'var(--you)' : 'var(--opp)';
+              const mvp = b?.mvp;
               return (
                 <div key={w.window.id} style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderTop: `3px solid ${c}`, borderRadius: 5, padding: 14 }}>
-                  <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{w.window.label}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{w.window.label}</div>
+                    {b && b.bonus > 0 && <span className="mono" title={`Window won — +${b.bonus} bonus points`} style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: c }}>+{b.bonus}</span>}
+                  </div>
                   <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>
                     <span style={{ color: 'var(--you)' }}>{y.toFixed(1)}</span>
                     <span style={{ color: 'var(--faint)', fontSize: 12 }}> · </span>
                     <span style={{ color: 'var(--opp)' }}>{t.toFixed(1)}</span>
                   </div>
-                  <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: c, marginTop: 6 }}>{even ? 'EVEN' : wWon ? 'WON' : 'LOST'} · {w.window.slots} SLOT{w.window.slots > 1 ? 'S' : ''}</div>
+                  <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: c, marginTop: 6 }}>
+                    {even ? 'EVEN' : wWon ? '★ WON' : 'LOST'}
+                    {b && (b.youSlotsWon > 0 || b.theirSlotsWon > 0) && <span style={{ color: 'var(--faint)' }}> · SLOTS {b.youSlotsWon}–{b.theirSlotsWon}</span>}
+                  </div>
+                  {mvp && (
+                    <div className="mono" title={`Window MVP — top slot score earns +${mvp.coin} drip coin`} style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: mvp.side === 'you' ? 'var(--you)' : 'var(--opp)', marginTop: 5, display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                      ⭐ MVP {mvp.name} · {mvp.score.toFixed(1)} <span style={{ color: 'var(--warn)' }}>◈{mvp.coin}</span>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -145,6 +161,15 @@ export function MatchupFinal({ week }: { week: number }) {
               const fx: string[] = [];
               if (s.youSub) fx.push(`⤴ ${s.youSub.name} subbed in (${s.youSub.from.toFixed(1)} → ${s.youSub.score.toFixed(1)})`);
               if (s.youStake) fx.push(s.youStake === 'won' ? '⚖️ Double or Nothing — won ×2' : '⚖️ Double or Nothing — lost → 0');
+              if (s.youRivalry) fx.push(`⚔️ Rivalry — siphoned +${s.youRivalry.toFixed(1)} from a same-position rival`);
+              if (s.youLeadChange) fx.push(`🔀 Lead Change — seized the lead → +${s.youLeadChange.toFixed(0)}`);
+              if (s.youGrudge === 'won') fx.push(`🥊 Grudge Match — won by 10+ → +${(s.youGrudgePts ?? 0).toFixed(0)}`);
+              if (s.youGrudge === 'lost') fx.push(`🥊 Grudge Match — lost → ${(s.youGrudgePts ?? 0).toFixed(0)}`);
+              if (s.theirJinxed) fx.push('🧿 Jinx — negated their first TD');
+              if (s.youClutchStake) fx.push(s.youClutchStake === 'won' ? '🎰 Halftime Gamble — won ×2' : '🎰 Halftime Gamble — lost → 0');
+              if (s.youEncore) fx.push('🎬 Encore — a TD banked +12');
+              if (s.youCounterWiped) fx.push('🪃 Counter-Wipe — negated a nuke');
+              if (s.theirRedHerringFrom != null) fx.push(`🎣 Red Herring — capped rival ${s.theirRedHerringFrom.toFixed(1)} → ${s.theirFinal.toFixed(1)}`);
               if (s.byeStolen) fx.push('🪂 Bye steal');
               if (s.youNegated) fx.push('✕ Negated by opponent K shutdown');
               if (s.youHalvedFrom != null) fx.push(`÷2 Suppressed (from ${s.youHalvedFrom.toFixed(1)})`);

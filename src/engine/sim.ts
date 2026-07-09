@@ -67,12 +67,14 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
     if (metricId === 'carries') return play.kind === 'rush' ? 0.85 : 0; // COMPRESSION (0.5 → 0.85: measured dead at 0.5 — 0% best-pick share)
     if (metricId === 'rec') return play.catch ? 1 : 0;
     if (metricId === 'td') return scrimmage + (play.td ? 10 : 0); // NUKE
+    if (metricId === 'underdog') return play.kind === 'rush' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0; // UNDERDOG: flat rushing base; the trailing-side ×1.5 layers on top (resolveSlot)
   }
   if (pos === 'WR') {
     if (metricId === 'recyd') return play.catch ? play.yards * 0.1 * (hot ? 2 : 1) : 0;
     if (metricId === 'rec') return play.catch ? 1 : 0;
     if (metricId === 'tgt') return play.target ? 1 : 0;
     if (metricId === 'td') return scrimmage + (play.td ? 10 : 0);
+    if (metricId === 'underdog') return play.catch ? play.yards * 0.1 + (play.td ? 6 : 0) : 0; // UNDERDOG: flat receiving base; the trailing-side ×1.5 layers on top (resolveSlot)
   }
   if (pos === 'TE') {
     if (metricId === 'tgt') return play.target ? 1 : 0;
@@ -124,8 +126,11 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
   return 0;
 }
 
-type Family = 'nuke' | 'erase' | 'streak' | 'mult' | 'compression' | 'reset' | 'stop' | 'flat';
+type Family = 'nuke' | 'erase' | 'streak' | 'mult' | 'compression' | 'reset' | 'stop' | 'underdog' | 'flat';
 function familyOf(pos: Pos, metricId: string): Family {
+  // Underdog (WR/RB) is its own family — a flat scorer with a trailing-side
+  // comeback boost — regardless of its catalog fx key.
+  if (metricId === 'underdog') return 'underdog';
   const m = metricById(pos, metricId);
   if (!m) return 'flat';
   if (m.fx === 'nuke') return 'nuke';
@@ -396,6 +401,54 @@ export function windowFgMult(
   };
 }
 
+// Field Marshal (DEF): the defensive mirror of Field General. A DST on the
+// `marshal` metric builds a live, window-wide SHIELD on its OWN side — its
+// cumulative defensive production (sk1 / int3 / fr2 / def-TD6 / safety2) ramps a
+// damage-reduction fraction (SHIELD_RATE per point, capped at SHIELD_CAP) that
+// BLUNTS every opposing nuke and erase against every slot in that window. The
+// Marshal still banks its own flat defensive points — it's a coordination play,
+// not a sacrifice. Given a window's slot inputs for one side, returns a
+// clock→fraction function (or undefined if no Marshal is fielded). Mirrors
+// windowFgMult's shape so buildMatchup / resolveLiveMatchup wire it identically.
+export const SHIELD_RATE = 0.04;
+export const SHIELD_CAP = 0.5;
+// DEF drip: each splash play raises the rate by its weight × this (Earn Points
+// banks it as a drip; Suppress converts it into a bigger halving bar).
+export const DST_DRIP_RATE = 0.02;
+const SPLASH_KINDS: RealPlayKind[] = ['sack', 'int', 'fumrec', 'dst_td', 'safety'];
+const splashWeight = (k: RealPlayKind): number => (k === 'dst_td' ? 6 : k === 'int' ? 3 : k === 'fumrec' || k === 'safety' ? 2 : 1);
+export function windowShield(
+  players: SlotInput[],
+  week: number,
+  opts: { reg?: number; carryOT?: boolean; projection?: boolean } = {},
+): ((clock: number) => number) | undefined {
+  const { reg = 3300, carryOT = false, projection = false } = opts;
+  const timelines: RawPlay[][] = [];
+  for (const p of players) {
+    if (p.player.pos === 'DEF' && p.metricId === 'marshal') {
+      // projectedPlays models only offensive lines, so a projected Marshal has no
+      // splash plays → 0 shield. That's intended: the AI can't plan on a shield
+      // it can't foresee, so a Marshal reads as plain `earn` in projection mode.
+      const plays = projection ? projectedPlays(p.player) : (realRawPlays(p.player.id, week) ?? []);
+      const splash = plays.filter((x) => SPLASH_KINDS.includes(x.kind)).sort((a, b) => a.clock - b.clock);
+      if (splash.length) timelines.push(splash);
+    }
+  }
+  if (!timelines.length) return undefined;
+  return (clock: number) => {
+    // Field Marshal resets when regulation ends — unless Overtime carries it over.
+    if (clock >= reg && !carryOT) return 0;
+    let best = 0;
+    for (const tl of timelines) {
+      let cum = 0;
+      for (const x of tl) { if (x.clock <= clock) cum += splashWeight(x.kind); else break; }
+      const s = Math.min(SHIELD_CAP, SHIELD_RATE * cum);
+      if (s > best) best = s; // multiple Marshals don't stack — the strongest shield holds
+    }
+    return best;
+  };
+}
+
 // A DST's own defensive score for the week (sk1 / int3 / fr2 / def-TD6 /
 // safety2) — used as the SUPPRESS kill-threshold. A suppress DST forgoes these
 // points (it banks 0) and spends them as the bar every opponent slot must clear.
@@ -410,6 +463,32 @@ export function defEarnScore(player: Player, week: number): number {
     else if (p.kind === 'safety') s += 2;
   }
   return s;
+}
+
+// The DEF drip a DST accrues over the week from its splash plays — the same
+// rate-ramp Earn Points banks (weight × DST_DRIP_RATE, ramping at each splash,
+// accruing over the whole game so an early sack/pick snowballs). Integrated on
+// the game clock (matches the full-game, possession-ungated Earn accrual).
+export function dstDripTotal(player: Player, week: number): number {
+  const splash = (realRawPlays(player.id, week) ?? []).filter((p) => SPLASH_KINDS.includes(p.kind)).sort((a, b) => a.clock - b.clock);
+  if (!splash.length) return 0;
+  const REG = REAL_WEEKS.has(week) ? 3600 : GAME_SECONDS;
+  let rate = 0, total = 0, last = 0;
+  for (const p of splash) {
+    total += rate * ((p.clock - last) / 60); // accrue at the current rate up to this splash
+    last = p.clock;
+    rate += splashWeight(p.kind) * DST_DRIP_RATE; // then the splash bumps the rate
+  }
+  total += rate * (Math.max(0, REG - last) / 60); // and on to the end of the game
+  return Math.round(total * 10) / 10;
+}
+
+// The SUPPRESS kill-threshold: a suppress DST's flat splash score PLUS the drip
+// it accrues — it still banks 0 (the whole lot is spent as the bar every
+// opponent slot must clear). Earn banks this same production as points; Suppress
+// converts it into a bigger, still-growing halving bar (early splash → higher bar).
+export function defSuppressScore(player: Player, week: number): number {
+  return Math.round((defEarnScore(player, week) + dstDripTotal(player, week)) * 10) / 10;
 }
 
 // Clocks at which a side's TE Touchdown (8-PT NUKE) players score a TD. Each
@@ -444,7 +523,7 @@ function offSecs(intervals: number[][], t0: number, t1: number): number {
  * `opts.youMult` / `opts.theirMult` apply a per-clock multiplier to that
  * side's scoring (used by the QB Field General window multiplier).
  */
-export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; realResolve?: boolean; projection?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
+export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youShield?: (clock: number) => number; theirShield?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; youJinx?: boolean; theirJinx?: boolean; youSurge?: [number, number]; theirSurge?: [number, number]; youFreeze?: [number, number]; theirFreeze?: [number, number]; youBunkerFrom?: number; theirBunkerFrom?: number; youDoubleTd?: number; theirDoubleTd?: number; youCounterWipe?: number; theirCounterWipe?: number; realResolve?: boolean; projection?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
   // Pre-match team buffs active on each side (Momentum / Garbage Time /
   // Floodgates / Overtime). Only the human side carries buffs in the demo.
   const youBuffs = opts.youBuffs ?? new Set<string>();
@@ -473,6 +552,15 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const youFam = familyOf(you.player.pos, you.metricId);
   const theirFam = familyOf(their.player.pos, their.metricId);
 
+  // ── UNDERDOG ───────────────────────────────────────────────────────────────
+  // The anti-snowball metric: flat yardage base, but while you're TRAILING in the
+  // slot every scoring play banks ×UNDERDOG_MULT. Fall behind → you punch above
+  // your weight and claw back; pull ahead → the boost switches off (you can't run
+  // up the score). It rewards comebacks, not a rich-get-richer lead.
+  const UNDERDOG_MULT = 1.5;
+  const underdogYou = you.metricId === 'underdog';
+  const underdogTheir = their.metricId === 'underdog';
+
   // Drip metrics: WR Receiving Yards (built by catches) and RB Rush Yards
   // (built by carries). A drip play raises a permanent rate (yds × 0.01
   // pts/min) that accrues over the player's team offensive time.
@@ -497,6 +585,29 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   // Projection mode has no real possession data — accrue drips over full game time.
   const youPoss = dripYou && !proj ? realPossFor(week, you.player.team) : [];
   const theirPoss = dripTheir && !proj ? realPossFor(week, their.player.team) : [];
+
+  // FIELD DEFENSE drip: a DST on `earn` scores its flat splash points AND its
+  // splash production feeds a drip rate (splash weight × DST_DRIP_RATE per play)
+  // that accrues over the whole game — so an early sack/INT snowballs (that's
+  // what distinguishes the scoring DST from Field Marshal, which keeps flat
+  // points + a shield but does NOT drip). Unlike an offensive drip it is never a
+  // pause/erase victim (it's not an oppIsDrip) — only a TD nuke wipes its bank —
+  // and it never goes HOT (splash plays are too sparse to streak). It accrues
+  // over full game time (youPoss/theirPoss stay [] since dripYou/dripTheir are
+  // false for it), only in real resolution (projected DSTs have no splash plays).
+  const dstEarnYou = you.player.pos === 'DEF' && you.metricId === 'earn';
+  const dstEarnTheir = their.player.pos === 'DEF' && their.metricId === 'earn';
+  const accrueYou = dripYou || dstEarnYou;
+  const accrueTheir = dripTheir || dstEarnTheir;
+
+  // Live tactical power-ups (fired mid-window, effective from the fire clock):
+  //   • Surge — this side's scoring ×2 for a 10-min window from the fire clock.
+  //   • Cold Snap (freeze) — this side's scoring (points AND drip) zeroed for 10 min.
+  //   • Bunker — this side immune to nukes/erases from a clock onward.
+  const inWin = (w: [number, number] | undefined, c: number) => !!w && c >= w[0] && c < w[1];
+  const surgeAt = (side: 'you' | 'their', c: number) => inWin(side === 'you' ? opts.youSurge : opts.theirSurge, c);
+  const frozenAt = (side: 'you' | 'their', c: number) => inWin(side === 'you' ? opts.youFreeze : opts.theirFreeze, c);
+  const SURGE_MULT = 2;
   const events: PbpEvent[] = [];
 
   // REAL CLOCK: drip accrues per real wall-clock minute of ACTIVE play instead
@@ -551,11 +662,17 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const s = side === 'you' ? Y : T;
     if (s.paused || s.dead || s.rate <= 0 || t1 <= t0) return ZERO_GAIN;
     const poss = side === 'you' ? youPoss : theirPoss;
-    const mult = side === 'you' ? opts.youMult : opts.theirMult;
+    // A DST earn drip is defensive — Field General (a skill-player multiplier)
+    // does not boost it, so skip the mult for that side.
+    const isDstDrip = side === 'you' ? dstEarnYou : dstEarnTheir;
+    const mult = isDstDrip ? undefined : (side === 'you' ? opts.youMult : opts.theirMult);
     const buffs = side === 'you' ? youBuffs : theirBuffs;
     // EMP: this side's drip is frozen for a 10-minute window.
     const emp = side === 'you' ? opts.youEmpFreeze : opts.theirEmpFreeze;
     if (emp && t0 < emp[1] && t1 > emp[0]) return ZERO_GAIN;
+    // COLD SNAP: this side's scoring (incl. drip) is frozen for a 10-min window.
+    const frz = side === 'you' ? opts.youFreeze : opts.theirFreeze;
+    if (frz && t0 < frz[1] && t1 > frz[0]) return ZERO_GAIN;
     // Overtime: minutes past regulation count as full possession (no game clock
     // to gate them), so the drip keeps ticking for the bonus window.
     const isOT = t0 >= REG;
@@ -573,6 +690,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const garbagePre = garbageOn ? add : 0;
     if (garbageOn) add *= 2;
     const m = mult?.(t1); const fgm = m && m !== 1 ? m : 1; if (fgm !== 1) add *= fgm;
+    if (surgeAt(side, t1)) add *= SURGE_MULT; // SURGE: live ×2 on this side's drip
     // Everything accrued past regulation only exists because of Overtime, so credit
     // it wholly to OT; within regulation, split out Momentum's 3×-vs-2× and Garbage.
     if (isOT) return { total: add, ot: add, momentum: 0, garbage: 0 };
@@ -597,8 +715,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     let t = from;
     while (t < to) {
       const next = Math.min(to, Math.floor(t / 60) * 60 + 60);
-      const yg = dripYou ? minuteGain('you', t, next) : ZERO_GAIN;
-      const tg = dripTheir ? minuteGain('their', t, next) : ZERO_GAIN;
+      const yg = accrueYou ? minuteGain('you', t, next) : ZERO_GAIN;
+      const tg = accrueTheir ? minuteGain('their', t, next) : ZERO_GAIN;
       const ya = yg.total, ta = tg.total;
       if (ya > 0) { Y.bank += ya; Y.hist.push({ clock: next, pts: ya }); if (next >= REG) youOtPts += ya; recBuff('you', 'overtime', yg.ot); recBuff('you', 'momentum', yg.momentum); recBuff('you', 'garbage-time', yg.garbage); }
       if (ta > 0) { T.bank += ta; T.hist.push({ clock: next, pts: ta }); if (next >= REG) theirOtPts += ta; recBuff('their', 'overtime', tg.ot); recBuff('their', 'momentum', tg.momentum); recBuff('their', 'garbage-time', tg.garbage); }
@@ -642,6 +760,15 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   let youOtPts = 0, theirOtPts = 0;
   // Counter-Nuke / Insurance fire once per slot, on the human side only.
   let cnUsed = false, insUsed = false;
+  // JINX (power-up): the FIRST touchdown by the jinxed side is negated — no
+  // points and no effect (a nuke TD doesn't fire). One use per side.
+  let youJinxUsed = false, theirJinxUsed = false;
+  // ENCORE (clutch): the first TD by the armed side AFTER its arm clock banks a
+  // +DOUBLE_TD_BONUS bonus. COUNTER-WIPE (clutch): a nuke against the armed side
+  // at its recorded wipe clock is negated (bank preserved). One use each per side.
+  const DOUBLE_TD_BONUS = 12;
+  let youEncoreUsed = false, theirEncoreUsed = false;
+  let cwYouUsed = false, cwTheirUsed = false;
   // A TD nuke RESETS the victim's drip AND suppresses ALL scoring in that slot for the
   // next 10 game-minutes. A bare rate-reset is rebuilt within a few catches (the reason
   // NUKE was dead), so the 10-minute blackout is what makes the wipe stick — the slot
@@ -656,17 +783,40 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const mine = play.side === 'you' ? Y : T;
     const opp = play.side === 'you' ? T : Y;
     const oppSide: 'you' | 'their' = play.side === 'you' ? 'their' : 'you';
+    // FIELD MARSHAL SHIELD: the VICTIM's side (opp) may have a window-wide shield
+    // up. It blunts the bank damage of the attacker's nuke/erase this play — the
+    // victim keeps `victimShield` of what would be wiped/erased (0 with no Marshal).
+    // BUNKER (live power-up): full immunity (shield = 1) from its fire clock onward.
+    const oppBunkerFrom = oppSide === 'you' ? opts.youBunkerFrom : opts.theirBunkerFrom;
+    const victimBunkered = oppBunkerFrom != null && play.clock >= oppBunkerFrom;
+    const victimShield = victimBunkered ? 1 : Math.max(0, Math.min(SHIELD_CAP, (oppSide === 'you' ? opts.youShield : opts.theirShield)?.(play.clock) ?? 0));
     // A nuke-suppressed slot is INERT until its 10-minute blackout lifts: this play
     // builds no drip rate, banks no points, and triggers no effects. The opponent's
     // drip accrual over [lastClock, play.clock] already ran in accrue() above, and the
     // slot's rate was zeroed at the nuke, so nothing accrues here either.
     if (play.clock < mine.nukedUntil) continue;
+    // JINX: negate this side's first TD entirely (no points, no nuke/effect).
+    const jinxThisSide = play.side === 'you' ? opts.youJinx : opts.theirJinx;
+    const jinxUsed = play.side === 'you' ? youJinxUsed : theirJinxUsed;
+    if (jinxThisSide && !jinxUsed && play.td) {
+      if (play.side === 'you') youJinxUsed = true; else theirJinxUsed = true;
+      events.push({ clock: play.clock, side: play.side, play: playText(play.side === 'you' ? you.player : their.player, play), delta: 0, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, effect: { type: 'nuke', text: '🧿 JINXED — TD negated' }, sig: true });
+      continue; // the TD play is a no-op: banks nothing, triggers no effect
+    }
     // A big bank wipe of the victim (`opp`). Counter-Nuke (reflect onto the
     // attacker) and Insurance (keep half) protect YOUR slot the first time.
     // `stealPct` > 0 (the td-metric NUKE) credits the attacker a quarter of
     // what was removed — the WR/TE carry-wipe buff passes 0 (it already pays
     // its own coin bounty) and a reflected nuke steals nothing.
     const nukeWipe = (wiped: number, stealPct = 0.25): string => {
+      // COUNTER-WIPE (clutch): the victim armed a counter for a wipe at this clock
+      // → the nuke is fully negated (bank + drip preserved), like Bunker.
+      const cwAt = oppSide === 'you' ? opts.youCounterWipe : opts.theirCounterWipe;
+      const cwUsed = oppSide === 'you' ? cwYouUsed : cwTheirUsed;
+      if (cwAt != null && !cwUsed && Math.abs(play.clock - cwAt) < 1) {
+        if (oppSide === 'you') cwYouUsed = true; else cwTheirUsed = true;
+        return ' · ↩ COUNTER-WIPE — nuke negated';
+      }
       if (oppSide === 'you' && youBuffs.has('counter-nuke') && !cnUsed) {
         cnUsed = true; const back = mine.bank; mine.bank = 0; mine.hist = []; nukeDrip(mine, play.clock); // reflected: the attacker is wiped + drip-suppressed instead
         recBuff('you', 'counter-nuke', back, true); // reflected the nuke back onto the attacker
@@ -678,9 +828,15 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         const ins = stealPct > 0 ? stealCut(wiped * 0.5) : 0; // steal from what was actually removed (the un-insured half)
         return ` · 🛟 INSURED ${opp.bank.toFixed(1)}${ins > 0 ? ` · steal +${ins.toFixed(1)}` : ''}`;
       }
-      opp.bank = 0; opp.hist = []; nukeDrip(opp, play.clock);
-      const stolen = stealPct > 0 ? stealCut(wiped) : 0; // a TD nuke KEEPS a quarter of the bank it wipes (see stealCut)
-      return stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : '';
+      // BUNKER: full immunity — the bank AND the drip are untouched by the nuke.
+      if (victimBunkered) return ' · 🛡 BUNKER — nuke blocked';
+      // A Field Marshal shield lets the victim keep a fraction of the wiped bank;
+      // the rate is still disrupted (blackout stands), and the steal only credits
+      // the attacker for what actually left the victim's bank.
+      const kept = Math.round(wiped * victimShield * 10) / 10;
+      opp.bank = kept; opp.hist = kept > 0 ? [{ clock: play.clock, pts: kept }] : []; nukeDrip(opp, play.clock);
+      const stolen = stealPct > 0 ? stealCut(Math.max(0, wiped - kept)) : 0; // a TD nuke KEEPS a quarter of the bank it wipes (see stealCut)
+      return `${kept > 0 ? ` · 🛡 SHIELD kept ${kept.toFixed(1)}` : ''}${stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : ''}`;
     };
     const myFam = play.side === 'you' ? youFam : theirFam;
     const oppFam = play.side === 'you' ? theirFam : youFam;
@@ -750,11 +906,37 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       if (sideMult !== 1 && pts > 0) { pts *= sideMult; evMult = sideMult; }
       // Garbage Time: points scored in the final 5 game-minutes count double.
       if (pts > 0 && play.clock > GARBAGE_FROM && (play.side === 'you' ? youBuffs : theirBuffs).has('garbage-time')) { recBuff(play.side, 'garbage-time', pts); pts *= 2; buffNote = 'GARBAGE TIME ×2'; }
+      // FIELD DEFENSE drip: a DST on `earn` banks its flat splash points (above)
+      // AND each splash play raises a drip rate that accrues for the rest of the
+      // game (accrueYou/accrueTheir feed it through accrueRange). Marshal (the
+      // shield DST) does NOT drip — that's the distinction between the two.
+      const iAmDstEarn = play.side === 'you' ? dstEarnYou : dstEarnTheir;
+      if (iAmDstEarn && SPLASH_KINDS.includes(play.kind) && !mine.dead) mine.rate += splashWeight(play.kind) * DST_DRIP_RATE;
     }
     // Field General QB: scores nothing itself, but each pass grows the window
     // multiplier — surface it in the QB's own log so you can watch it build.
     const isFG = myPlayer.player.pos === 'QB' && myPlayer.metricId === 'fg';
     if (isFG && play.kind === 'pass') evMult = sideMult;
+
+    // UNDERDOG: while this side is TRAILING in the slot, its scoring plays bank
+    // ×UNDERDOG_MULT — a comeback boost that switches off the moment it leads.
+    const iAmUnderdog = play.side === 'you' ? underdogYou : underdogTheir;
+    let underdogBoost = false;
+    if (iAmUnderdog && pts > 0 && mine.bank < opp.bank) { pts = Math.round(pts * UNDERDOG_MULT * 10) / 10; underdogBoost = true; }
+
+    // COLD SNAP freezes this play's scoring; SURGE doubles it (live power-ups).
+    let surgeBoost = false, frozenThis = false;
+    if (pts > 0) {
+      if (frozenAt(play.side, play.clock)) { pts = 0; frozenThis = true; }
+      else if (surgeAt(play.side, play.clock)) { pts = Math.round(pts * SURGE_MULT * 10) / 10; surgeBoost = true; }
+    }
+    // ENCORE (clutch): the armed side's first TD after its arm clock banks +12.
+    let encoreThis = false;
+    const encoreAt = play.side === 'you' ? opts.youDoubleTd : opts.theirDoubleTd;
+    if (encoreAt != null && !(play.side === 'you' ? youEncoreUsed : theirEncoreUsed) && play.td && play.clock >= encoreAt && !frozenThis) {
+      if (play.side === 'you') youEncoreUsed = true; else theirEncoreUsed = true;
+      pts = Math.round((pts + DOUBLE_TD_BONUS) * 10) / 10; encoreThis = true;
+    }
 
     mine.bank += pts;
     if (pts > 0) mine.hist.push({ clock: play.clock, pts });
@@ -812,8 +994,10 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
           let erased = 0;
           opp.hist = opp.hist.filter((h) => { if (h.clock >= cutoff) { erased += h.pts; return false; } return true; });
           let stolen = 0;
-          if (erased > 0) { opp.bank = Math.max(0, opp.bank - erased); stolen = stealCut(erased); sig = true; }
-          effect = { type: 'erase', text: erased > 0 ? `ERASE −${erased.toFixed(1)}${stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : ''} · drip stop` : 'DRIP STOP' };
+          const eff = Math.round(erased * (1 - victimShield) * 10) / 10; // Field Marshal shield softens the erase
+          if (erased > 0) { opp.bank = Math.max(0, opp.bank - eff); stolen = stealCut(eff); sig = true; }
+          const shieldNote = erased > 0 && victimShield > 0 ? ` · 🛡 ${Math.round(victimShield * 100)}% blunted` : '';
+          effect = { type: 'erase', text: erased > 0 ? `ERASE −${eff.toFixed(1)}${stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : ''}${shieldNote} · drip stop` : 'DRIP STOP' };
         } else if (play.kind === 'rec' && myFam === 'reset') {
           opp.paused = true;
           const had = opp.rate; opp.rate = 0; opp.streak = 0; opp.hot = false;
@@ -843,9 +1027,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         return true;
       });
       if (erased > 0) {
-        opp.bank = Math.max(0, opp.bank - erased);
-        const stolen = stealCut(erased);
-        effect = { type: 'erase', text: `ERASE −${erased.toFixed(1)}${stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : ''}` }; sig = true;
+        const eff = Math.round(erased * (1 - victimShield) * 10) / 10; // Field Marshal shield softens the erase
+        opp.bank = Math.max(0, opp.bank - eff);
+        const stolen = stealCut(eff);
+        const shieldNote = victimShield > 0 ? ` · 🛡 ${Math.round(victimShield * 100)}% blunted` : '';
+        effect = { type: 'erase', text: `ERASE −${eff.toFixed(1)}${stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : ''}${shieldNote}` }; sig = true;
       }
     } else if (myFam === 'reset' && play.catch) {
       const last = opp.hist[opp.hist.length - 1];
@@ -890,6 +1076,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
 
     // streak / drip badges
     if (!effect && iAmDrip && myDripKind?.includes(play.kind)) effect = { type: 'streak', text: mine.hot ? `🔥 HOT 2× · ${mine.rate.toFixed(2)}/m` : `DRIP ↑ ${mine.rate.toFixed(2)}/m` };
+    if (!effect && (play.side === 'you' ? dstEarnYou : dstEarnTheir) && SPLASH_KINDS.includes(play.kind)) effect = { type: 'streak', text: `DEF DRIP ↑ ${mine.rate.toFixed(2)}/m` };
     if (!effect && myFam === 'streak') {
       if (play.td) effect = { type: 'streak', text: '🔥 TD → STREAK 2×' };
       else if (mine.hot && play.catch) effect = { type: 'streak', text: '🔥 HOT STREAK · 2×' };
@@ -898,6 +1085,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       effect = { type: 'cold', text: 'STREAK COLD' };
     }
     if (!effect && isFG && play.kind === 'pass') effect = { type: 'mult', text: `FIELD GEN ×${sideMult.toFixed(2)}` }; // mult lives in the label; inline ×mult is suppressed
+    // UNDERDOG badge: a comeback-boosted play (trailing → ×1.5).
+    if (!effect && underdogBoost) effect = { type: 'streak', text: `⚔ UNDERDOG ×${UNDERDOG_MULT}` };
+    if (!effect && surgeBoost) effect = { type: 'streak', text: `⚡ SURGE ×${SURGE_MULT}` };
+    if (!effect && frozenThis) effect = { type: 'stop', text: '🧊 COLD SNAP — frozen' };
+    if (encoreThis) { effect = { type: 'streak', text: `🎬 ENCORE +${DOUBLE_TD_BONUS}` }; sig = true; }
     if (play.turnover) effect = { type: 'nuke', text: '✕ TURNOVER → opp' }; // giveaway: coin to the opponent
 
     events.push({

@@ -1,6 +1,157 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.107.1`_
+_Last updated: 2026-07-09 · Build `v0.119.0`_
+
+## Clutch plays: conditional, transient-availability power-ups (v0.119.0)
+A NEW class — power-ups that only UNLOCK from a live game-state trigger on a slot
+and are arm-able only for a limited game-clock window. `clutchOffers(slot, week)`
+(matchup.ts) detects them from the slot's own resolved timeline so the live board
+can surface an offer chip while `armFrom ≤ clock < armUntil` (and you own it, and
+it's not already armed). Priced in `0082_clutch_prices.sql`. 21/21 in h2h-verify.
+- **Halftime Gamble (`clutch-don`, ◎50).** Unlocks when a slot leads by 10+ at
+  halftime (game clock 1800), open for 5 game-min. Arms a Double-or-Nothing on
+  that slot (×2 win / 0 lose) — resolved via `extras.clutchDon` like DoN.
+- **Encore (`clutch-encore`, ◎45).** Unlocks when your player scored a first-half
+  TD; open until late game. His next TD banks +`DOUBLE_TD_BONUS` (12) via
+  `resolveSlot` `opts.youDoubleTd` (arm clock) → first post-arm TD gets +12.
+- **Counter-Wipe (`clutch-counter`, ◎55).** Unlocks right after an opponent nuke
+  wipes the slot, open for 5 game-min from the wipe. `opts.youCounterWipe` (the
+  wipe clock) → that nuke is negated in `nukeWipe` (bank + drip preserved, Bunker-style).
+- Wiring: `AppliedWeek.{clutchDon,clutchEncore,clutchCounter}` + `armClutch`; the
+  offer chip renders per-slot in the live window (WindowSectionInner, `onArmClutch`);
+  buildMatchup resolves; display flags `youClutchStake`/`youEncore`/`youCounterWiped`
+  → MatchupFinal fx + active-effect chips. resolveLiveMatchup parity for the clutch
+  opts is still open (like the other targeted plays — demo path is complete).
+- Offer availability uses game-clock windows (the demo plays back on game clock);
+  a real-clock "5 real minutes" refinement is a later polish.
+
+
+## Live tactical power-ups: Surge / Cold Snap / Bunker (v0.118.0)
+Three reactive `timing:'live'` power-ups fired mid-window (the live layer was just
+swaps + EMP). Time-windowed opts on `resolveSlot`, mirroring the EMP pattern; the
+fire game-clock is captured via `effWinClock` and stored per slot. Priced in
+`0081_live_tactical_prices.sql`. Verified in `h2h-verify.mjs` (18/18 green).
+- **SURGE (`surge`, ◎55, slot-you).** Your slot scores ×`SURGE_MULT` (2) for 10
+  game-minutes from the fire clock — plays AND drip (`opts.youSurge:[c,c+600]`).
+- **COLD SNAP (`cold-snap`, ◎60, slot-opp).** Freezes ALL of an opponent slot's
+  scoring (points + drip) for 10 min (`opts.theirFreeze`). Harder than EMP, which
+  only freezes drips and only window-wide.
+- **BUNKER (`bunker`, ◎65, slot-you).** Your slot goes nuke/erase-immune from the
+  fire clock onward (`opts.youBunkerFrom` → `victimShield = 1`; nukeWipe early-returns
+  so the bank AND drip survive). Lock in a lead before they can wipe it.
+- Wiring: `AppliedWeek.{surge,coldSnap,bunker}` (slotKey→fire clock) + generic
+  `applyLiveSlotPu`; the live apply panel surfaces them via `SPOT_APPLY` when a
+  window is live; `spotEligible` gates your-slot (surge/bunker) vs opponent-slot
+  (cold-snap); active-effect chips. buildMatchup + resolveLiveMatchup both wired.
+
+
+## Four "battle" power-ups: Lead Change / Grudge / Jinx / Red Herring (v0.117.0)
+All slot-targeted, armed pre-kickoff, priced in `0080_battle_powerups_price.sql`
+(parity-checked). Engine in buildMatchup (demo) + resolveLiveMatchup (parity);
+store via `AppliedWeek.{leadChange,grudge,jinx,redHerring}` + generic
+`applySlotListPu`/`removeSlotListPu`; UI reuses the tap-a-spot apply-mode flow
+(SetupRow eligibility, active-effect chips, MatchupFinal fx lines). All verified
+end-to-end in `server/test/h2h-verify.mjs` (15/15 green).
+- **LEAD CHANGE (`lead-change`, ◎45, slot-you).** +`LEAD_CHANGE_BONUS` (2) every
+  time you SEIZE the lead in that slot (overtake after trailing). Post-hoc scan of
+  the slot's event `youBank`/`theirBank` timeline; a blowout you never trailed in
+  pays nothing. Rewards a dogfight.
+- **GRUDGE MATCH (`grudge`, ◎60, slot-you).** Stake a slot: win its H2H by
+  `GRUDGE_MARGIN` (10)+ → +`GRUDGE_SWING` (25); lose it → −25; win by <10 / tie →
+  0. Double-or-Nothing with real downside; applied as a bonus delta like DoN.
+- **JINX (`jinx`, ◎55, slot-opp, blind).** The opponent's FIRST TD in that slot is
+  negated — no points, no nuke. In `resolveSlot` via `opts.theirJinx`/`youJinx`
+  (skips the TD play entirely, emits a 🧿 JINXED event). Whiffs if they don't TD.
+- **RED HERRING (`red-herring`, ◎90, slot-you).** A decoy: every OPPOSING player of
+  the same position anywhere in the decoy's window is CAPPED to the decoy's total
+  (`min`, never raised). Field a low decoy to cap their studs at that position;
+  whiffs if they field nobody there, and you waste the slot (the risk). Sets
+  `ResolvedSlot.theirRedHerringFrom` on capped slots.
+- Design note: these answer the "rich-get-richer" critique — Lead Change &
+  Underdog reward comebacks, Grudge/Jinx/Red Herring/Rivalry are blind bets with
+  whiff risk. (Underdog metric replaced the old duel metric; Rivalry is a power-up.)
+  Live-worker applied_state→extras wiring for all targeted plays remains the open
+  live-pilot task (demo + forceResolve/preview paths work).
+
+## Head-to-head battle mechanics — cross-slot & within-window (v0.116.0)
+The ask: "more head-to-head across slot and within window mechanics like Field
+General — each window/slot should feel like a battle." Four additions, all
+opt-in like Field General so the measured per-slot meta is untouched
+(`cd server && npm run study` still prints the exact documented shares).
+Everything lands in the SHARED engine (`src/engine/sim.ts` + `matchup.ts` +
+`liveResolve.ts`), so the demo (`buildMatchup`) AND the live pilot
+(`resolveLiveMatchup`, which the Fly worker runs via tsx) both get it.
+
+- **WINDOW BATTLE (new scoring layer).** Each of the ~5 windows is now its own
+  head-to-head: the side with the higher window total WINS the window and banks
+  a flat `WINDOW_WIN_BONUS` (+5), on top of the raw point total. Surfaced live as
+  a **battle meter** under each window header (who's leading, "win for +5") and at
+  FINAL as WON/LOST + the bonus + slots-won. `ResolvedWindow.battle`
+  (`computeWindowBattle`) carries it; `ResolvedMatchup.youWindowsWon/theirWindowsWon`
+  tally it. `resolveLiveMatchup` bakes the bonus into the winning window's state so
+  per-window states still sum to the grand total. MatchupFinal's window strip +
+  hero show `⚔ WINDOW BATTLES 3–2`.
+- **WINDOW MVP (drip-coin only, no points — per the founder's call).** The single
+  highest-scoring slot in a window earns its side `WINDOW_MVP_COIN_PER_SLOT` (◈5)
+  × the window's slot count — so a 3-slot Sunday-early MVP = ◈15, a lone TNF MVP =
+  ◈5. Threaded through `weekEarnings` (new `mvp` line in the earnings sheet) and
+  `battle.mvp`; the live resolver adds it to `coin`.
+- **FIELD MARSHAL (DEF metric `marshal`) — the defensive Field General.** A DST on
+  `marshal` banks flat splash points (NO drip) AND builds a live, window-wide SHIELD
+  on its own side: cumulative splash production (sk1/int3/fr2/def-TD6/safety2) ramps a
+  damage-reduction fraction (`SHIELD_RATE` 0.04/pt, cap `SHIELD_CAP` 0.5) that
+  BLUNTS every opposing nuke and erase against all its window's slots. Built by
+  `windowShield()` (mirrors `windowFgMult`'s shape), wired at both resolve sites via
+  `resolveSlot` opts `youShield`/`theirShield`; the wipe/erase keep a shielded
+  fraction of the bank (log shows "🛡 SHIELD kept …" / "🛡 N% blunted").
+- **DEF EARN gains a DRIP (fixes Marshal dominating Earn).** Marshal was Earn + a
+  free shield → Earn was strictly dominated. Now the three DST metrics are distinct:
+  **Earn** = flat splash points + a DEFENSE DRIP (each splash raises a rate,
+  `DST_DRIP_RATE` 0.02 × splash weight, accruing over the whole game so an early
+  sack/pick snowballs) → the scoring ceiling; **Marshal** = flat points + shield, no
+  drip → the protector; **Suppress** = banks 0, field-wide halving → the denier. The
+  DST drip isn't pausable/erasable (never an `oppIsDrip` victim), never goes HOT, isn't
+  FG-boosted, and only shows in real resolution (projected DSTs have no splash plays,
+  so the AI still plans Earn as flat). Measured: den-dst earn 13.9 vs marshal 10 on
+  Week 1.
+- **SUPPRESS drips into a bigger kill-bar (still banks 0).** Suppress now drips like
+  Earn, but converts it into suppression power instead of points: the halving
+  threshold is `defSuppressScore` = flat splash score + `dstDripTotal` (the same
+  weight×0.02 ramp, integrated over the game), so an early sack/pick raises the bar
+  and halves more/higher opposing slots. It still banks 0 (the whole production is
+  spent as the bar); `suppressSpent` display + the kill-bar both use the drip-inclusive
+  score. Measured: den-dst bar 10 → 13.9 (= Earn's full production, so the trio shares
+  one production model: Earn banks it, Marshal trades it for a shield, Suppress spends
+  it as the bar). `DST_DRIP_RATE` is now module-level in sim.ts (one knob for all three).
+- **UNDERDOG (WR/RB metric `underdog`) — the anti-snowball comeback pick.**
+  (Replaced the earlier `duel` metric, which was rich-get-richer: a lead just
+  siphoned more.) Flat yardage base (0.1/yd + 6/TD), but while the slot is
+  TRAILING every score banks ×`UNDERDOG_MULT` (1.5); pull ahead and the boost
+  switches off (no running up the score). Own family in `familyOf`; the boost
+  hooks per-play scoring only (`mine.bank < opp.bank` gate). EXCLUDED from
+  `bestMetric`/`bestVsThreats` (human-only, like `fg`) so the tuned wheel is
+  preserved (scores flat solo — no trailing boost vs empty — so the study shares
+  are unchanged). The head-to-head "Rivalry" idea moved to a power-up (below).
+- **RIVALRY power-up (`rivalry`, ◎70, window-targeted, blind).** Arm it on a window
+  pre-kickoff: for every slot where the opponent fields the SAME position as you,
+  siphon 50% of that opponent's slot score to you at window-end — whiffs entirely
+  if they don't mirror your position (that's the risk; a wary opponent can dodge by
+  playing a different position there). Engine: `extras.rivalry: WindowId[]` in
+  buildMatchup (applied after backups+suppress, before the window battle, sets
+  `ResolvedSlot.youRivalry`); mirrored in `resolveLiveMatchup` (`LiveExtras.rivalry`,
+  both sides). Store: `AppliedWeek.rivalry` + `applyRivalry`/`removeRivalry`. UI:
+  a per-window "⚔️ RIVALRY" arm/remove button in the setup header (mirrors Extra
+  Slot), an active-effects chip, and a MatchupFinal fx line. Price seeded in
+  `0079_rivalry_price.sql` (parity-checked). Verified: WR-vs-WR mirror siphons
+  18.4→9.2; WR-vs-RB non-mirror whiffs (26.1→26.1). NOTE: the live worker's
+  applied_state→extras wiring for rivalry is not yet plumbed server-side (demo +
+  forceResolve/preview path works); that's the remaining live-pilot task.
+- No DB migration needed: `metric_id` has no allowlist constraint (only the
+  locked-metric trigger, which `duel`/`marshal` pass since they aren't locked).
+- Verify: `cd server && npx tsx test/h2h-verify.mjs` exercises all four on real
+  Week-1 PBP (siphon fires, shield blunts a landing nuke 4.2→6.9, window bonus +5
+  baked in, MVP coin present). `npm run build`, engine smoke, parity all green.
+
 
 ## Metric balance: measured, tuned, and a tool to keep it honest (v0.107.1)
 - **`server/scripts/metric-study.mjs`** (`cd server && npm run study`): runs

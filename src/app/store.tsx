@@ -25,6 +25,17 @@ export interface AppliedWeek {
   spy?: { slotKey: string; reveal: 'player' | 'metric'; value?: string | null }; // a slate slot peeked pre-kickoff; `value` = the server's live reveal (use_spy)
   byeSteal?: { slotKey: string; playerId: string }; // a bye player fielded for a flat projected score
   emp?: Partial<Record<WindowId, number>>;       // window -> clock at which opponent drips froze (10 min)
+  rivalry?: Partial<Record<WindowId, boolean>>;  // windows armed with Rivalry (siphon 50% of same-position opponents at window-end)
+  leadChange?: string[];                         // your slotKeys armed with Lead Change (+2 per lead you seize)
+  grudge?: string[];                             // your slotKeys staked with Grudge Match (win by 10+ → +25, lose → −25)
+  jinx?: string[];                               // slotKeys where you jinx the opponent's first TD
+  redHerring?: string[];                         // your decoy slotKeys (cap opposing same-position players in the window)
+  surge?: Record<string, number>;               // live: your slotKey -> fire game-clock (×2 for 10 min)
+  coldSnap?: Record<string, number>;            // live: opponent slotKey -> fire game-clock (freeze all scoring 10 min)
+  bunker?: Record<string, number>;              // live: your slotKey -> fire game-clock (nuke/erase immune onward)
+  clutchDon?: string[];                          // clutch: your slotKeys staked via Halftime Gamble (×2 win / 0 lose)
+  clutchEncore?: Record<string, number>;        // clutch: your slotKey -> arm clock (next TD +12)
+  clutchCounter?: Record<string, number>;       // clutch: your slotKey -> wipe clock to negate
   lineup?: Record<string, Pick>;                 // your lineup edits (deltas over the default) — so FINAL replays your actual lineup
 }
 
@@ -184,6 +195,18 @@ interface Store {
   applyMulligan: (week: number, slotKey: string, atClock: number, atRt: number, toMetricId: string) => boolean;
   /** Fire EMP on a live window: freeze opponent drips from `clock` for 10 min. */
   applyEmp: (week: number, win: WindowId, clock: number) => boolean;
+  /** Arm Rivalry on a window (blind, pre-kickoff): siphon 50% of same-position opponents at window-end. */
+  applyRivalry: (week: number, win: WindowId) => boolean;
+  /** Remove Rivalry from a window (refund). */
+  removeRivalry: (week: number, win: WindowId) => void;
+  /** Arm a slot-targeted list power-up (lead-change / grudge / jinx / red-herring) on a slotKey. */
+  applySlotListPu: (id: string, week: number, slotKey: string) => boolean;
+  /** Remove a slot-targeted list power-up from a slotKey (refund). */
+  removeSlotListPu: (id: string, week: number, slotKey: string) => void;
+  /** Fire a live slot-targeted tactical power-up (surge / cold-snap / bunker) on a slot at the given clock. */
+  applyLiveSlotPu: (id: string, week: number, slotKey: string, clock: number) => boolean;
+  /** Arm a clutch (conditional) power-up from a live offer: clutch-don / clutch-encore / clutch-counter. */
+  armClutch: (id: string, week: number, slotKey: string, clock: number) => boolean;
   /** Back-outs (refund the consumable) before lock-in / kickoff. */
   clearDoubleOrNothing: (week: number) => void;
   clearSpy: (week: number) => void;
@@ -396,6 +419,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             spy: lastSpy ? { slotKey: sk(lastSpy), reveal: lastSpy.reveal } : b.spy,
             byeSteal: tgt.byeSteal ? { slotKey: sk(tgt.byeSteal), playerId: tgt.byeSteal.slug } : b.byeSteal,
             emp: (tgt.emp && Object.keys(tgt.emp).length ? tgt.emp : b.emp) as AppliedWeek['emp'],
+            rivalry: b.rivalry, leadChange: b.leadChange, grudge: b.grudge, jinx: b.jinx, redHerring: b.redHerring,
+            surge: b.surge, coldSnap: b.coldSnap, bunker: b.bunker,
+            clutchDon: b.clutchDon, clutchEncore: b.clutchEncore, clutchCounter: b.clutchCounter,
             buffs: Object.fromEntries((buffs ?? []).map((x) => [x, true as const])),
           } });
         })
@@ -545,6 +571,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     consumeAndApply('mulligan', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, atRt, toMetricId } } }));
   const applyEmp = (week: number, win: WindowId, clock: number): boolean =>
     applied[week]?.emp?.[win] != null ? false : consumeAndApply('emp', week, (cur) => ({ ...cur, emp: { ...cur.emp, [win]: clock } }));
+  // Live slot-targeted tactical power-ups (Surge / Cold Snap / Bunker): fire on a
+  // slot during a live window, recording the fire game-clock. One per slot.
+  const LIVE_SLOT_PU: Record<string, 'surge' | 'coldSnap' | 'bunker'> = { 'surge': 'surge', 'cold-snap': 'coldSnap', 'bunker': 'bunker' };
+  const applyLiveSlotPu = (id: string, week: number, slotKey: string, clock: number): boolean => {
+    const key = LIVE_SLOT_PU[id];
+    if (applied[week]?.[key]?.[slotKey] != null) return false;
+    return consumeAndApply(id, week, (cur) => ({ ...cur, [key]: { ...cur[key], [slotKey]: clock } }));
+  };
+  // CLUTCH plays: conditional power-ups armed from a live offer on a slot. Encore/
+  // Counter record a clock (arm clock / wipe clock); Halftime Gamble is a list.
+  const armClutch = (id: string, week: number, slotKey: string, clock: number): boolean => {
+    const a = applied[week];
+    if (id === 'clutch-don') { if ((a?.clutchDon ?? []).includes(slotKey)) return false; return consumeAndApply(id, week, (cur) => ({ ...cur, clutchDon: [...(cur.clutchDon ?? []), slotKey] })); }
+    const rec: 'clutchEncore' | 'clutchCounter' = id === 'clutch-encore' ? 'clutchEncore' : 'clutchCounter';
+    if (a?.[rec]?.[slotKey] != null) return false;
+    return consumeAndApply(id, week, (cur) => ({ ...cur, [rec]: { ...cur[rec], [slotKey]: clock } }));
+  };
+  const applyRivalry = (week: number, win: WindowId): boolean =>
+    applied[week]?.rivalry?.[win] ? false : consumeAndApply('rivalry', week, (cur) => ({ ...cur, rivalry: { ...cur.rivalry, [win]: true } }));
+  // Slot-targeted list power-ups (Lead Change / Grudge / Jinx / Red Herring):
+  // arm toggles a slotKey into the week's list, spending one consumable.
+  const SLOT_LIST_PU: Record<string, keyof AppliedWeek> = { 'lead-change': 'leadChange', 'grudge': 'grudge', 'jinx': 'jinx', 'red-herring': 'redHerring' };
+  const applySlotListPu = (id: string, week: number, slotKey: string): boolean => {
+    const key = SLOT_LIST_PU[id];
+    if (((applied[week]?.[key] as string[] | undefined) ?? []).includes(slotKey)) return false;
+    return consumeAndApply(id, week, (cur) => ({ ...cur, [key]: [ ...((cur[key] as string[] | undefined) ?? []), slotKey ] }));
+  };
+  const removeSlotListPu = (id: string, week: number, slotKey: string): void => {
+    const key = SLOT_LIST_PU[id];
+    if (!((applied[week]?.[key] as string[] | undefined) ?? []).includes(slotKey)) return;
+    clearApplied(week, id, (c) => { const arr = ((c[key] as string[] | undefined) ?? []).filter((k) => k !== slotKey); (c as unknown as Record<string, unknown>)[key] = arr.length ? arr : undefined; });
+  };
 
   // ── Back-outs: clear an applied targeted powerup and refund the consumable. ──
   const clearApplied = (week: number, refundId: string, mutate: (cur: AppliedWeek) => void): void => {
@@ -563,6 +621,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const removeExtraSlot = (week: number, win: WindowId): void => {
     const n = applied[week]?.extraSlots?.[win] ?? 0; if (n <= 0) return;
     clearApplied(week, 'extra-slot', (c) => { if (n - 1 > 0) c.extraSlots[win] = n - 1; else delete c.extraSlots[win]; });
+  };
+  const removeRivalry = (week: number, win: WindowId): void => {
+    if (!applied[week]?.rivalry?.[win]) return;
+    clearApplied(week, 'rivalry', (c) => { const r = { ...c.rivalry }; delete r[win]; c.rivalry = Object.keys(r).length ? r : undefined; });
   };
   // Refund an unlock-metric powerup (when a player swaps off / clears that metric).
   const refundUnlock = (id: string): void => { setInventory((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 })); syncInv(id, 1); };
@@ -594,7 +656,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
     [theme, iconSet, cardSkin, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, liveCtx, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -27,7 +27,7 @@ import type { Player, PbpEvent, Pos } from '../types';
 import { metricById } from '../data/metrics';
 import { capAmplifiers } from '../data/powerups';
 import { REAL_WEEKS } from '../data/realPbp';
-import { resolveSlot, windowFgMult, teTdNukeClocks, defEarnScore, hadDefTd, hadLongPassTd, clockAtRealTime, EMPTY_PLAYER, type SlotInput } from './sim';
+import { resolveSlot, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, hadDefTd, hadLongPassTd, clockAtRealTime, EMPTY_PLAYER, type SlotInput } from './sim';
 import { banksAtClock, threwTrickTd } from './matchup';
 
 export interface LivePick { win: string; slot: string; player: Player; metricId: string; }
@@ -50,6 +50,8 @@ const round = (n: number) => Math.round(n * 10) / 10;
 
 // ── Drip-coin economy (mirrors src/engine/matchup.ts; kept in sync by hand) ──
 const WEEKLY_STIPEND = 50, UNOPPOSED_COIN = 15, SUPPRESS_COIN = 10;
+// Window Battle (mirrors matchup.ts WINDOW_WIN_BONUS / WINDOW_MVP_COIN_PER_SLOT).
+const WINDOW_WIN_BONUS = 5, WINDOW_MVP_COIN_PER_SLOT = 5;
 function metricCoin(pos: Pos, metricId: string | null | undefined): number {
   const m = metricById(pos, metricId);
   if (!m) return 0;
@@ -152,6 +154,23 @@ export interface LiveExtras {
   emp?: Record<string, number>;
   /** Real-time swaps on this side's own slots. */
   swaps?: Record<string, LiveSwap>;
+  /** Rivalry: windows armed (blind, pre-kickoff) — at window-end, for every slot
+   *  where the opponent fields the SAME position as this side, siphon 50% of the
+   *  opponent's slot score to this side. */
+  rivalry?: string[];
+  /** Lead Change: this side's slots (`win|slot`) armed — +2 each time it seizes the lead. */
+  leadChange?: string[];
+  /** Grudge Match: this side's slots (`win|slot`) staked — win by 10+ → +25, lose → −25. */
+  grudge?: string[];
+  /** Jinx: opponent slots (`win|slot`) this side pointed at — the opponent's first TD there is negated. */
+  jinx?: string[];
+  /** Red Herring: this side's decoy slots (`win|slot`) — cap opposing same-position players in that window to the decoy's total. */
+  redHerring?: string[];
+  /** Live tactical power-ups: slot (`win|slot`) → fire game-clock. Surge/Bunker on
+   *  your own slot; Cold Snap on an opponent slot (freezes them). */
+  surge?: Record<string, number>;
+  coldSnap?: Record<string, number>;
+  bunker?: Record<string, number>;
 }
 export interface LiveExtrasBySide { home?: LiveExtras; away?: LiveExtras; }
 
@@ -242,13 +261,17 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     // Overtime carries the multiplier past regulation; fg-stack stacks twin Generals.
     const homeMult = windowFgMult(homeIns, week, { reg, carryOT: homeBuffs.has('overtime'), stack: homeBuffs.has('fg-stack') });
     const awayMult = windowFgMult(awayIns, week, { reg, carryOT: awayBuffs.has('overtime'), stack: awayBuffs.has('fg-stack') });
+    // Field Marshal (DEF): a defensive general builds a window-wide shield that
+    // blunts opposing nukes/erases against its own side's slots in this window.
+    const homeShield = windowShield(homeIns, week, { reg, carryOT: homeBuffs.has('overtime') });
+    const awayShield = windowShield(awayIns, week, { reg, carryOT: awayBuffs.has('overtime') });
     // TE-TD 8-PT NUKE clocks: a side's TE TDs knock the OPPONENT's drips.
     const homeTeTd = teTdNukeClocks(homeIns, week).map((n) => n.c);
     const awayTeTd = teTdNukeClocks(awayIns, week).map((n) => n.c);
     // SUPPRESS threshold: a DEF/suppress DST forgoes its own earn score and
     // spends it as the kill-bar. With more than one per side, the highest wins.
-    for (const p of homeIns) if (p.player.pos === 'DEF' && p.metricId === 'suppress') homeSuppress = Math.max(homeSuppress, defEarnScore(p.player, week));
-    for (const p of awayIns) if (p.player.pos === 'DEF' && p.metricId === 'suppress') awaySuppress = Math.max(awaySuppress, defEarnScore(p.player, week));
+    for (const p of homeIns) if (p.player.pos === 'DEF' && p.metricId === 'suppress') homeSuppress = Math.max(homeSuppress, defSuppressScore(p.player, week));
+    for (const p of awayIns) if (p.player.pos === 'DEF' && p.metricId === 'suppress') awaySuppress = Math.max(awaySuppress, defSuppressScore(p.player, week));
 
     const idxs = new Set<string>();
     for (const p of homePicks) if (p.win === wid) idxs.add(p.slot);
@@ -261,6 +284,7 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     const awayEmpAt = ax.emp?.[wid];  // away froze HOME
     const slotOpts = {
       youMult: homeMult, theirMult: awayMult,
+      youShield: homeShield, theirShield: awayShield,
       youDripNukeClocks: awayTeTd, theirDripNukeClocks: homeTeTd,
       youBuffs: homeBuffs, theirBuffs: awayBuffs,
       youEmpFreeze: awayEmpAt != null ? [awayEmpAt, awayEmpAt + EMP_SECONDS] as [number, number] : undefined,
@@ -272,7 +296,17 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
       const you: SlotInput = hp ? { player: hp.player, metricId: hp.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
       const them: SlotInput = ap ? { player: ap.player, metricId: ap.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
       const label = `${hp?.player.team || 'BYE'} · ${ap?.player.team || 'BYE'}`;
-      const res = resolveSlot(you, them, week, label, slotOpts);
+      // JINX: home pointing at this slot negates AWAY's ('their') first TD; away
+      // pointing at it negates HOME's ('you') first TD.
+      const jinxKey = `${wid}|${slot}`;
+      // Live tactical power-ups (home = 'you', away = 'their'): Surge/Bunker on the
+      // owner's slot; Cold Snap freezes the opponent's slot.
+      const win10 = (c: number | undefined): [number, number] | undefined => (c != null ? [c, c + EMP_SECONDS] : undefined);
+      const res = resolveSlot(you, them, week, label, { ...slotOpts,
+        theirJinx: hx.jinx?.includes(jinxKey), youJinx: ax.jinx?.includes(jinxKey),
+        youSurge: win10(hx.surge?.[jinxKey]), theirSurge: win10(ax.surge?.[jinxKey]),
+        theirFreeze: win10(hx.coldSnap?.[jinxKey]), youFreeze: win10(ax.coldSnap?.[jinxKey]),
+        youBunkerFrom: hx.bunker?.[jinxKey], theirBunkerFrom: ax.bunker?.[jinxKey] });
       let homeF = res.youFinal, awayF = res.theirFinal;
       let events = res.events;
       let homeTd = res.youTds, awayTd = res.theirTds, homeXp = res.youBankerXp, awayXp = res.theirBankerXp;
@@ -400,6 +434,79 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     return { hot: hot || undefined, nuked: nuked || undefined };
   };
 
+  // RIVALRY (parity with buildMatchup): for each armed window, siphon 50% of a
+  // same-position opponent's slot score to the arming side, at window-end. Home
+  // then away (each on the running scores).
+  const applyRivalry = (wins: string[] | undefined, side: 'home' | 'away') => {
+    if (!wins?.length) return;
+    const armed = new Set(wins);
+    for (const s of slots) {
+      if (!armed.has(s.win) || !s.homeP || !s.awayP || s.homeP.pos !== s.awayP.pos) continue;
+      if (side === 'home' && s.away > 0) { const take = round(s.away * 0.5); s.away = round(s.away - take); s.home = round(s.home + take); }
+      else if (side === 'away' && s.home > 0) { const take = round(s.home * 0.5); s.home = round(s.home - take); s.away = round(s.away + take); }
+    }
+  };
+  applyRivalry(hx.rivalry, 'home');
+  applyRivalry(ax.rivalry, 'away');
+
+  // RED HERRING: for each armed decoy slot, cap every opposing same-position
+  // player in that decoy's window to the decoy's own total.
+  const applyRedHerring = (keys: string[] | undefined, side: 'home' | 'away') => {
+    if (!keys?.length) return;
+    const armed = new Set(keys);
+    const meP = (s: SlotRes) => (side === 'home' ? s.homeP : s.awayP);
+    const opP = (s: SlotRes) => (side === 'home' ? s.awayP : s.homeP);
+    const meF = (s: SlotRes) => (side === 'home' ? s.home : s.away);
+    for (const decoy of slots) {
+      const dp = meP(decoy);
+      if (!dp || !armed.has(`${decoy.win}|${decoy.slot}`)) continue;
+      const cap = meF(decoy);
+      for (const s of slots) {
+        if (s.win !== decoy.win) continue;
+        const op = opP(s);
+        if (!op || op.pos !== dp.pos) continue;
+        if (side === 'home' && s.away > cap) s.away = cap;
+        else if (side === 'away' && s.home > cap) s.home = cap;
+      }
+    }
+  };
+  applyRedHerring(hx.redHerring, 'home');
+  applyRedHerring(ax.redHerring, 'away');
+
+  // LEAD CHANGE: +2 each time this side seized the lead in an armed slot.
+  const applyLeadChange = (keys: string[] | undefined, side: 'home' | 'away') => {
+    if (!keys?.length) return;
+    const armed = new Set(keys);
+    for (const s of slots) {
+      if (!s.homeP || !s.awayP || !armed.has(`${s.win}|${s.slot}`)) continue;
+      const evs = [...s.events].sort((a, b) => a.clock - b.clock);
+      const me = side === 'home' ? 'you' : 'their';
+      let prev: 'you' | 'their' | 'tie' = 'tie', seizes = 0;
+      for (const e of evs) {
+        const lead: 'you' | 'their' | 'tie' = e.youBank > e.theirBank ? 'you' : e.theirBank > e.youBank ? 'their' : 'tie';
+        if (lead === me && prev !== 'tie' && prev !== me) seizes++;
+        if (lead !== 'tie') prev = lead;
+      }
+      if (seizes > 0) { if (side === 'home') s.home = round(s.home + seizes * 2); else s.away = round(s.away + seizes * 2); }
+    }
+  };
+  applyLeadChange(hx.leadChange, 'home');
+  applyLeadChange(ax.leadChange, 'away');
+
+  // GRUDGE MATCH: win a staked slot by 10+ → +25, lose it → −25.
+  const applyGrudge = (keys: string[] | undefined, side: 'home' | 'away') => {
+    if (!keys?.length) return;
+    const armed = new Set(keys);
+    for (const s of slots) {
+      if (!s.homeP || !s.awayP || !armed.has(`${s.win}|${s.slot}`)) continue;
+      const diff = side === 'home' ? s.home - s.away : s.away - s.home;
+      const delta = diff >= 10 ? 25 : diff < 0 ? -25 : 0;
+      if (side === 'home') s.home = round(s.home + delta); else s.away = round(s.away + delta);
+    }
+  };
+  applyGrudge(hx.grudge, 'home');
+  applyGrudge(ax.grudge, 'away');
+
   const byWin: Record<string, { home: number; away: number }> = {};
   let home = 0, away = 0;
   const slotScores: SlotScore[] = [];
@@ -410,6 +517,32 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     if (s.homeP) slotScores.push({ win: s.win, slot: s.slot, side: 'home', slug: s.homeP.id, metric: s.homeMetric, score: s.home, ...flagsFor(s, 'home') });
     if (s.awayP) slotScores.push({ win: s.win, slot: s.slot, side: 'away', slug: s.awayP.id, metric: s.awayMetric, score: s.away, ...flagsFor(s, 'away') });
   }
+
+  // WINDOW BATTLE (parity with buildMatchup): each contested window's higher
+  // total wins a flat bonus, baked into that window's state so the states still
+  // sum to the grand totals. The window MVP (single top-scoring slot) earns its
+  // side a coin bounty (coin only — no points).
+  let mvpHome = 0, mvpAway = 0;
+  for (const [wid, v] of Object.entries(byWin)) {
+    const anyHome = slots.some((s) => s.win === wid && s.homeP);
+    const anyAway = slots.some((s) => s.win === wid && s.awayP);
+    if (anyHome && anyAway && Math.abs(v.home - v.away) >= 0.1) {
+      if (v.home > v.away) { v.home += WINDOW_WIN_BONUS; home += WINDOW_WIN_BONUS; }
+      else { v.away += WINDOW_WIN_BONUS; away += WINDOW_WIN_BONUS; }
+    }
+    let mvpScore = 0, mvpSide: 'home' | 'away' | null = null;
+    let slotCount = 0;
+    for (const s of slots) {
+      if (s.win !== wid) continue;
+      slotCount++;
+      if (s.homeP && s.home > mvpScore) { mvpScore = s.home; mvpSide = 'home'; }
+      if (s.awayP && s.away > mvpScore) { mvpScore = s.away; mvpSide = 'away'; }
+    }
+    const mvpCoin = WINDOW_MVP_COIN_PER_SLOT * slotCount; // 5 coin per slot in the window
+    if (mvpScore > 0 && mvpSide === 'home') mvpHome += mvpCoin;
+    if (mvpScore > 0 && mvpSide === 'away') mvpAway += mvpCoin;
+  }
+
   const states = Object.entries(byWin).map(([window, v]) => ({ window, home: round(v.home), away: round(v.away) }));
-  return { states, slots: slotScores, home: round(home), away: round(away), coin: { home: coinFor(slots, 'home'), away: coinFor(slots, 'away') } };
+  return { states, slots: slotScores, home: round(home), away: round(away), coin: { home: coinFor(slots, 'home') + mvpHome, away: coinFor(slots, 'away') + mvpAway } };
 }

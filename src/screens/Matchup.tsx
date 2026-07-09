@@ -11,7 +11,7 @@ import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '.
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '../data/league';
 import { buildLiveLeague } from '../data/liveBoard';
 import {
-  windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
+  windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
 } from '../engine/matchup';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '../data/realPbp';
@@ -95,7 +95,7 @@ const DEMO_POWERUPS = [
 const EMPTY_REC: Record<string, never> = {};
 
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
-  const { youTeamId: YOU, navigate, liveCtx, activeLeague, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
+  const { youTeamId: YOU, navigate, liveCtx, activeLeague, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const [demoBuff, setDemoBuff] = useState('garbage-time'); // the power-up the demo viewer armed
   const buffs = useMemo(() => (demo ? { [demoBuff]: true } : (applied[week]?.buffs ?? EMPTY_REC)), [demo, demoBuff, applied, week]);
   const buffsKey = JSON.stringify(buffs);
@@ -103,7 +103,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const swaps = applied[week]?.swaps ?? {};
   const backupAssign = applied[week]?.backups ?? EMPTY_REC;
   const aw = applied[week];
-  const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, emp: aw?.emp };
+  const rivalryWins = aw?.rivalry ? (Object.keys(aw.rivalry).filter((w) => aw.rivalry![w as WindowId]) as WindowId[]) : undefined;
+  const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, emp: aw?.emp, rivalry: rivalryWins, leadChange: aw?.leadChange, grudge: aw?.grudge, jinx: aw?.jinx, redHerring: aw?.redHerring, surge: aw?.surge, coldSnap: aw?.coldSnap, bunker: aw?.bunker, clutchDon: aw?.clutchDon, clutchEncore: aw?.clutchEncore, clutchCounter: aw?.clutchCounter };
   const extrasKey = JSON.stringify(extras);
   const oppId = gameForTeam(YOU, week)?.oppId ?? 'rock-tunnel';
   const you = getTeam(YOU)!;
@@ -198,6 +199,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     else if (pendingApply === 'spy') setSpySlot(key); // keep pending until a reveal is chosen
     else if (pendingApply === 'mulligan') setMulliganSlot(key); // keep pending until a metric is chosen
     else if (pendingApply === 'metric-swap' || pendingApply === 'player-swap') { setSwapTarget({ key, win: key.split('#')[0] as WindowId }); setPendingApply(null); } // open the swap menu on the tapped live spot
+    else if (pendingApply === 'lead-change' || pendingApply === 'grudge' || pendingApply === 'jinx' || pendingApply === 'red-herring') { if (applySlotListPu(pendingApply, week, key)) liveTargeted(pendingApply, keyParts(key)); setPendingApply(null); }
+    else if (pendingApply === 'surge' || pendingApply === 'cold-snap' || pendingApply === 'bunker') { const clock = effWinClock(key.split('#')[0]); if (applyLiveSlotPu(pendingApply, week, key, clock)) liveTargeted(pendingApply, { ...keyParts(key), clock }); setPendingApply(null); } // live: fire from the slot's current clock
   }
   function applyToWindow(win: WindowId) {
     // On the live board a live window's "now" is its latest ingested play (winMax
@@ -205,6 +208,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     // EMP freezes forward from the current position, never retroactively.
     if (pendingApply === 'emp') { const clock = effWinClock(win); if (applyEmp(week, win, clock)) liveTargeted('emp', { win, clock }); setPendingApply(null); }
   }
+  // Arm a clutch offer: Counter-Wipe negates the nuke at its own clock; Encore/
+  // Halftime Gamble arm from the current live clock.
+  const onArmClutch = (o: ClutchOffer) => {
+    const clock = o.id === 'clutch-counter' ? o.armFrom : effWinClock(o.slotKey.split('#')[0]);
+    armClutch(o.id, week, o.slotKey, clock);
+  };
   // Rosters expand in setup (you need them to set lineups), collapse otherwise.
   const [rosterOpen, setRosterOpen] = useState<{ you: boolean; their: boolean }>(() => ({ you: initialPhase === 'setup', their: initialPhase === 'setup' }));
   const toggleRoster = (side: 'you' | 'their') => setRosterOpen((o) => ({ ...o, [side]: !o[side] }));
@@ -675,6 +684,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const totalSlots = totalSlotsWith(week, extraSlots);
   const anyPlaying = Object.values(winPlaying).some(Boolean);
   const extraSlotQty = inventory['extra-slot'] ?? 0;
+  const rivalryQty = inventory['rivalry'] ?? 0;
 
   // ── Power-up windows: every window has its own lock/live timeline. A 'pre'
   // power-up can be applied until the first window starts; a 'live' one only
@@ -736,6 +746,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   if (aw?.spy) { const sp = aw.spy; activeEffects.push({ key: 'spy', id: 'spy', icon: '👁️', name: 'Spy', detail: `Revealed a slot’s ${sp.reveal}`, onRemove: preKickPhase && !liveCtx ? () => clearSpy(week) : undefined }); } // live: use_spy already consumed the item — no undo
   for (const [win, n] of Object.entries(aw?.extraSlots ?? {})) if ((n ?? 0) > 0) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'x-' + win, id: 'extra-slot', icon: '➕', name: 'Extra Slot', detail: `+${n} on ${wl}`, onRemove: phase === 'setup' ? () => removeExtraSlot(week, win as WindowId) : undefined }); }
   for (const [win, c] of Object.entries(aw?.emp ?? {})) if (c != null) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'emp-' + win, id: 'emp', icon: '💥', name: 'EMP', detail: `Fired on ${wl}` }); }
+  for (const [win, on] of Object.entries(aw?.rivalry ?? {})) if (on) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'riv-' + win, id: 'rivalry', icon: '⚔️', name: 'Rivalry', detail: `Armed on ${wl}`, onRemove: phase === 'setup' ? () => removeRivalry(week, win as WindowId) : undefined }); }
+  const slotPuName = (key: string) => { const s = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === key); const wl = windowsForWeek(week).find((w) => w.id === key.split('#')[0])?.label ?? key.split('#')[0]; return s?.you?.player.name ? `${s.you.player.name} · ${wl}` : wl; };
+  const slotPuLists: [string, string[] | undefined][] = [['lead-change', aw?.leadChange], ['grudge', aw?.grudge], ['jinx', aw?.jinx], ['red-herring', aw?.redHerring]];
+  for (const [id, keys] of slotPuLists) for (const key of keys ?? []) activeEffects.push({ key: id + '-' + key, id, icon: powerupById(id)?.icon ?? '✦', name: powerupById(id)?.name ?? id, detail: (id === 'jinx' ? 'Hex opp at ' : 'On ') + slotPuName(key), onRemove: phase === 'setup' ? () => removeSlotListPu(id, week, key) : undefined });
+  const liveSlotPu: [string, Record<string, number> | undefined][] = [['surge', aw?.surge], ['cold-snap', aw?.coldSnap], ['bunker', aw?.bunker], ['clutch-encore', aw?.clutchEncore], ['clutch-counter', aw?.clutchCounter]];
+  for (const [id, rec] of liveSlotPu) for (const key of Object.keys(rec ?? {})) activeEffects.push({ key: id + '-' + key, id, icon: powerupById(id)?.icon ?? '✦', name: powerupById(id)?.name ?? id, detail: (id === 'cold-snap' ? 'Froze ' : 'On ') + slotPuName(key) });
+  for (const key of aw?.clutchDon ?? []) activeEffects.push({ key: 'cd-' + key, id: 'clutch-don', icon: powerupById('clutch-don')?.icon ?? '🎰', name: 'Halftime Gamble', detail: 'Staked ' + slotPuName(key) });
 
   // Owned power-ups you can still apply right now, scoped to open windows. 'pre'
   // power-ups lock at the first kickoff; 'live' ones need a running window.
@@ -960,7 +977,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 rw={demoWin} week={week} phase="setup" clock={0} maxClock={winTarget[fid] ?? GAME_SECONDS}
                 wallClock={wallClock} realClock={realResolve} wallSeconds={0} playing={false}
                 onTogglePlay={() => {}} onReplay={() => {}}
-                canApplyExtra={false} extraSlotQty={0} onApplyExtra={() => {}} onRemoveExtra={() => {}} onAssignBackup={() => {}}
+                canApplyExtra={false} extraSlotQty={0} onApplyExtra={() => {}} onRemoveExtra={() => {}} rivalryQty={0} rivalryArmed={false} onApplyRivalry={() => {}} onRemoveRivalry={() => {}} onArmClutch={onArmClutch} onAssignBackup={() => {}}
                 picks={effYouPicks} selSlot={selSlot} pickMetricFor={pickMetricFor}
                 onClearSlot={() => {}} onOpenPicker={() => {}}
                 openPBP={openPBP} togglePBP={(k) => setOpenPBP((o) => ({ ...o, [k]: !o[k] }))}
@@ -1026,6 +1043,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               extraSlotQty={0}
               onApplyExtra={() => {}}
               onRemoveExtra={() => {}}
+              rivalryQty={0}
+              rivalryArmed={false}
+              onApplyRivalry={() => {}}
+              onRemoveRivalry={() => {}}
+              onArmClutch={onArmClutch}
               onAssignBackup={() => {}}
               picks={effYouPicks}
               selSlot={null}
@@ -1357,6 +1379,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 extraSlotQty={extraSlotQty}
                 onApplyExtra={() => applyExtraSlot(week, rw.window.id)}
                 onRemoveExtra={() => removeExtraSlot(week, rw.window.id)}
+                rivalryQty={phase === 'setup' && !demo ? rivalryQty : 0}
+                rivalryArmed={!!aw?.rivalry?.[rw.window.id]}
+                onApplyRivalry={() => applyRivalry(week, rw.window.id)}
+                onRemoveRivalry={() => removeRivalry(week, rw.window.id)}
                 onAssignBackup={(key) => setBackupMenu({ key, required: true })}
                 picks={picks}
                 selSlot={selSlot}
@@ -1377,6 +1403,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 onApplyToSpot={applyToSpot}
                 onApplyToWindow={applyToWindow}
                 onScout={(win) => setScoutWin(win)}
+                onArmClutch={onArmClutch}
               />
             ))}
           </div>
@@ -1574,7 +1601,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 }
 
 // ── Drip-coin earning opportunities, by position (risk pays more) ──
-function EarningsModal({ earnings, weeklyBudget, onReset, onClose }: { earnings: { stipend: number; unopposed: number; signature: number; turnover: number; total: number }; weeklyBudget?: number | null; onReset?: () => void; onClose: () => void }) {
+function EarningsModal({ earnings, weeklyBudget, onReset, onClose }: { earnings: { stipend: number; unopposed: number; signature: number; mvp: number; turnover: number; total: number }; weeklyBudget?: number | null; onReset?: () => void; onClose: () => void }) {
   const order: Pos[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
   const riskColor = (r: string) => (r === 'HIGH' ? 'var(--fx-nuke)' : r === 'MED' ? 'var(--warn)' : 'var(--dim)');
   // A league with its own weekly budget replaces the flat sim stipend everywhere
@@ -1597,7 +1624,7 @@ function EarningsModal({ earnings, weeklyBudget, onReset, onClose }: { earnings:
           {/* this week's running tally */}
           <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px' }}>
             <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 6 }}>THIS WEEK</div>
-            {([[stipendLabel, stipendVal], ['Unopposed players', earnings.unopposed], ['Events of note', earnings.signature], ['Turnovers', earnings.turnover]] as [string, number][]).map(([k, v]) => (
+            {([[stipendLabel, stipendVal], ['Unopposed players', earnings.unopposed], ['Events of note', earnings.signature], ['Window MVP', earnings.mvp], ['Turnovers', earnings.turnover]] as [string, number][]).map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--dim)', padding: '2px 0' }}>
                 <span>{k}</span><span className="mono" style={{ color: v < 0 ? 'var(--opp)' : 'var(--fx-streak)', fontWeight: 700 }}>{v < 0 ? '' : '+'}{v}</span>
               </div>
@@ -1872,15 +1899,22 @@ const POWERUP_HINT: Record<string, string> = {
   'unlock-combo-drip': 'Pick the ◈ metric on a spot.',
   'unlock-pass-td10': 'Pick the ◈ metric on a spot.',
   'double-or-nothing': 'Stake a spot in the panel below.',
+  'lead-change': 'Arm on one of your spots below.',
+  'grudge': 'Stake one of your spots below.',
+  'jinx': 'Point at a spot below (blind) to hex the opponent there.',
+  'red-herring': 'Attach to a decoy player below.',
   'spy': 'Reveal a slot after lock-in, before kickoff.',
   'bye-steal': 'Field a bye player in the panel below.',
   'mulligan': 'Re-roll a spot’s metric during LIVE.',
   'emp': 'Fire on a window during LIVE.',
+  'surge': 'Fire on YOUR live spot to double it 10 min.',
+  'cold-snap': 'Fire on a live OPPONENT spot to freeze it.',
+  'bunker': 'Fire on YOUR live spot to make it nuke-proof.',
 };
 
 // Targeted power-ups applied by tapping a spot/window (vs. whole-field buffs
 // that just arm). Each enters apply-mode, then the tap finishes it.
-const SPOT_APPLY = new Set(['double-or-nothing', 'bye-steal', 'spy', 'mulligan', 'emp', 'metric-swap', 'player-swap']);
+const SPOT_APPLY = new Set(['double-or-nothing', 'lead-change', 'grudge', 'jinx', 'red-herring', 'bye-steal', 'spy', 'mulligan', 'emp', 'metric-swap', 'player-swap', 'surge', 'cold-snap', 'bunker']);
 
 // Shared modal shell for the two power-up cards.
 function PuShell({ title, subtitle, accent, onClose, children }: { title: ReactNode; subtitle: string; accent: string; onClose: () => void; children: ReactNode }) {
@@ -2069,6 +2103,10 @@ function WindowSectionInner(props: {
   extraSlotQty: number;
   onApplyExtra: () => void;
   onRemoveExtra: () => void;
+  rivalryQty: number;
+  rivalryArmed: boolean;
+  onApplyRivalry: () => void;
+  onRemoveRivalry: () => void;
   armed: Record<string, boolean>;
   onAssignBackup: (key: string) => void;
   picks: Record<string, Pick>;
@@ -2084,14 +2122,15 @@ function WindowSectionInner(props: {
   turnoverCoin: number;
   backups: Record<string, string>;
   slotName: Record<string, string>;
-  aw?: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>> };
+  aw?: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>>; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number> };
+  onArmClutch: (o: ClutchOffer) => void;
   applyMode: string | null;
   onApplyToSpot: (key: string) => void;
   onApplyToWindow: (win: WindowId) => void;
   onScout: (win: WindowId) => void;
   lockPlayer?: boolean; // demo setup: metric is editable, but the player is fixed
 }) {
-  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer } = props;
+  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, rivalryQty, rivalryArmed, onApplyRivalry, onRemoveRivalry, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch } = props;
   const w = rw.window;
   // Twin Generals: with the buff armed and ≥2 of your Field General QBs in this
   // window, the top two multipliers stack — link those QB spots so you can see
@@ -2120,9 +2159,11 @@ function WindowSectionInner(props: {
     if (applyMode === 'spy') return !!s.their;                          // reveal the opponent here (locked period)
     if (applyMode === 'mulligan') return liveNow && !!s.you && !done;   // re-roll your metric
     if (applyMode === 'metric-swap' || applyMode === 'player-swap') return liveNow && !!s.you && !done; // swap this live spot
+    if (applyMode === 'surge' || applyMode === 'bunker') return liveNow && !!s.you && !done; // live: boost/protect your slot
+    if (applyMode === 'cold-snap') return liveNow && !!s.their && !done; // live: freeze an opponent slot
     return false;
   };
-  const spotApplyMode = applyMode === 'spy' || applyMode === 'mulligan' || applyMode === 'metric-swap' || applyMode === 'player-swap';
+  const spotApplyMode = applyMode === 'spy' || applyMode === 'mulligan' || applyMode === 'metric-swap' || applyMode === 'player-swap' || applyMode === 'surge' || applyMode === 'cold-snap' || applyMode === 'bunker';
   const [slateOpen, setSlateOpen] = useState(false);
   // The real NFL games feeding this window: map each window player's team to its
   // actual away@home matchup that week, and list the players involved.
@@ -2214,6 +2255,15 @@ function WindowSectionInner(props: {
                 ➖ REMOVE SLOT
               </button>
             )}
+            {rivalryArmed ? (
+              <button onClick={onRemoveRivalry} title="Rivalry armed on this window — siphons 50% of any same-position opponent at window-end. Tap to remove (refund)." className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--fx-reset)', border: '1px solid var(--fx-reset)', borderRadius: 4, padding: '4px 8px' }}>
+                ⚔️ RIVALRY ✕
+              </button>
+            ) : rivalryQty > 0 && (
+              <button onClick={onApplyRivalry} title="Arm Rivalry on this window (blind): siphon 50% of any opponent who plays the same position as you here, at window-end. Whiffs if they don't mirror you." className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--fx-reset)', background: 'var(--surface)', border: '1px dashed var(--fx-reset)', borderRadius: 4, padding: '4px 8px' }}>
+                ⚔️ RIVALRY (◈ ×{rivalryQty})
+              </button>
+            )}
             <span className="mono" style={{ fontSize: fs(9), fontWeight: 700, letterSpacing: '0.12em', color: 'var(--dim)' }}>{setN}/{rw.slots.length} SET</span>
           </div>
         ) : realtime ? (
@@ -2288,6 +2338,8 @@ function WindowSectionInner(props: {
         </ModalBackdrop>
       )}
 
+      {phase !== 'setup' && <WindowBattleBar rw={rw} week={week} clock={clock} wallClock={wallClock} done={done} />}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {rw.slots.map((s) => {
           const key = slotKey(w.id, s.slotIndex);
@@ -2295,7 +2347,7 @@ function WindowSectionInner(props: {
             return (
               <SetupRow
                 key={key} slotKeyStr={key} winId={w.id} week={week} pick={picks[key]} selected={selSlot === key} inventory={inventory} armed={armed} twinLink={twinLinked.has(key)}
-                appliedPu={[...(aw?.doubleOrNothing === key ? ['double-or-nothing'] : []), ...(aw?.byeSteal?.slotKey === key ? ['bye-steal'] : [])]}
+                appliedPu={[...(aw?.doubleOrNothing === key ? ['double-or-nothing'] : []), ...(aw?.byeSteal?.slotKey === key ? ['bye-steal'] : []), ...(aw?.leadChange?.includes(key) ? ['lead-change'] : []), ...(aw?.grudge?.includes(key) ? ['grudge'] : []), ...(aw?.jinx?.includes(key) ? ['jinx'] : []), ...(aw?.redHerring?.includes(key) ? ['red-herring'] : [])]}
                 applyMode={applyMode} onApplyToSpot={() => onApplyToSpot(key)}
                 onOpenPicker={() => onOpenPicker(key, w.id)} onPickMetric={(m) => pickMetricFor(key, m)}
                 onClearSlot={() => onClearSlot(key)}
@@ -2309,16 +2361,36 @@ function WindowSectionInner(props: {
           const youClock = wallClock && s.you ? clockAtRealTime(s.you.player, week, clock, s.you.metricId ?? undefined) : clock;
           const theirClock = wallClock && s.their ? clockAtRealTime(s.their.player, week, clock, s.their.metricId ?? undefined) : clock;
           const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={windowKickoffSod(week, w.id)} youTwin={twinLinked.has(key)} />;
-          if (!spotApplyMode) return row;
+          // CLUTCH offers: a conditional power-up unlocked by this slot's live
+          // state (halftime lead / first-half TD / a nuke just landed), owned but
+          // not yet armed, with the current clock inside its transient window.
+          const offers = clutchOffers(s, week).filter((o) => {
+            const armedC = o.id === 'clutch-don' ? aw?.clutchDon?.includes(o.slotKey) : o.id === 'clutch-encore' ? aw?.clutchEncore?.[o.slotKey] != null : aw?.clutchCounter?.[o.slotKey] != null;
+            return !armedC && (inventory[o.id] ?? 0) > 0 && clock >= o.armFrom && clock < o.armUntil;
+          });
+          const offerStrip = offers.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 4 }}>
+              {offers.map((o) => (
+                <button key={o.id} onClick={() => onArmClutch(o)} className="mono" title={powerupById(o.id)?.blurb} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%', fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--on-accent)', background: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 9px', cursor: 'pointer', boxShadow: '0 0 12px color-mix(in srgb, var(--warn) 45%, transparent)', animation: 'bpulse 1.6s ease infinite' }}>
+                  <span>{powerupById(o.id)?.icon} CLUTCH · {powerupById(o.id)?.name} — {o.note}</span>
+                  <span>TAP TO ARM →</span>
+                </button>
+              ))}
+            </div>
+          );
+          if (!spotApplyMode) return offerStrip ? <div key={key}>{offerStrip}{row}</div> : row;
           const elig = spotEligible(s);
           return (
-            <div key={key} style={{ position: 'relative', opacity: elig ? 1 : 0.4, borderRadius: 4 }}>
-              {row}
-              {elig && (
-                <div onClick={() => onApplyToSpot(key)} style={{ position: 'absolute', inset: 0, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--warn) 14%, transparent)', border: '1px dashed var(--warn)', borderRadius: 4, cursor: 'pointer' }}>
-                  <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 9px' }}>{powerupById(applyMode!)?.icon} TAP TO {applyMode === 'spy' ? 'SPY' : applyMode === 'mulligan' ? 'MULLIGAN' : 'SWAP'}</span>
-                </div>
-              )}
+            <div key={key}>
+              {offerStrip}
+              <div style={{ position: 'relative', opacity: elig ? 1 : 0.4, borderRadius: 4 }}>
+                {row}
+                {elig && (
+                  <div onClick={() => onApplyToSpot(key)} style={{ position: 'absolute', inset: 0, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--warn) 14%, transparent)', border: '1px dashed var(--warn)', borderRadius: 4, cursor: 'pointer' }}>
+                    <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 9px' }}>{powerupById(applyMode!)?.icon} TAP TO {applyMode === 'spy' ? 'SPY' : applyMode === 'mulligan' ? 'MULLIGAN' : applyMode === 'surge' ? 'SURGE' : applyMode === 'cold-snap' ? 'FREEZE' : applyMode === 'bunker' ? 'BUNKER' : 'SWAP'}</span>
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}
@@ -2349,6 +2421,60 @@ const WindowSection = memo(WindowSectionInner, (a, b) => {
   }
   return true;
 });
+
+// ── Window Battle bar ──
+// Each window is its own head-to-head. During live play this shows the running
+// aggregate (who's winning the window) as a battle meter; at FINAL it locks to
+// the settled result — WON/LOST, the +bonus points, and the window MVP (the
+// single top-scoring slot, which earns a drip-coin bounty).
+function WindowBattleBar({ rw, week, clock, wallClock, done }: {
+  rw: ReturnType<typeof buildMatchup>['windows'][number]; week: number; clock: number; wallClock: boolean; done: boolean;
+}) {
+  const battle = rw.battle;
+  // Live aggregate at the current window clock — sum each slot's running bank.
+  let liveYou = 0, liveTheir = 0;
+  for (const s of rw.slots) {
+    const yc = wallClock && s.you ? clockAtRealTime(s.you.player, week, clock, s.you.metricId ?? undefined) : clock;
+    const tc = wallClock && s.their ? clockAtRealTime(s.their.player, week, clock, s.their.metricId ?? undefined) : clock;
+    if (s.you) liveYou += banksAtClock(s.events, yc).you;
+    if (s.their) liveTheir += banksAtClock(s.events, tc).their;
+  }
+  const yTot = done && battle ? battle.youTotal : Math.round(liveYou * 10) / 10;
+  const tTot = done && battle ? battle.theirTotal : Math.round(liveTheir * 10) / 10;
+  const total = yTot + tTot;
+  const yPct = total > 0 ? Math.max(4, Math.min(96, (yTot / total) * 100)) : 50;
+  const even = Math.abs(yTot - tTot) < 0.05;
+  const leadYou = yTot > tTot;
+  const leadColor = even ? 'var(--dim)' : leadYou ? 'var(--you)' : 'var(--opp)';
+  const mvp = battle?.mvp;
+  const bonus = done && battle ? battle.bonus : WINDOW_WIN_BONUS;
+  const status = done ? (even ? 'EVEN' : leadYou ? '★ WON' : 'LOST') : (even ? 'DEAD EVEN' : leadYou ? 'YOU LEAD' : 'THEY LEAD');
+  return (
+    <div style={{ margin: '2px 0 9px', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '7px 10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
+        <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', display: 'flex', alignItems: 'center', gap: 5 }}>
+          ⚔ WINDOW BATTLE
+          {!done && <span title="The higher window total wins the window + a bonus" style={{ color: 'var(--faint)' }}>· win for +{bonus}</span>}
+        </span>
+        <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: leadColor }}>
+          {status}{done && !even ? ` +${bonus}` : ''}
+        </span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--you)', minWidth: 38, textAlign: 'right' }}>{yTot.toFixed(1)}</span>
+        <div style={{ flex: 1, height: 6, borderRadius: 4, overflow: 'hidden', display: 'flex', background: 'var(--opp)' }}>
+          <div style={{ width: `${yPct}%`, background: 'var(--you)', transition: 'width .3s linear' }} />
+        </div>
+        <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--opp)', minWidth: 38 }}>{tTot.toFixed(1)}</span>
+      </div>
+      {done && mvp && (
+        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: mvp.side === 'you' ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>
+          ⭐ WINDOW MVP · {mvp.name} {mvp.score.toFixed(1)} <span style={{ color: 'var(--warn)' }}>◈{mvp.coin}</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Setup row ──
 // Marks the two Field General QBs that are paired under the Twin Generals power-up
@@ -2389,9 +2515,12 @@ export function SetupRow(props: {
   const buffChips = spotBuffs.map((id) => { const pu = powerupById(id); return (
     <span key={id} title={pu?.blurb} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(8), fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 40%, transparent)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>{pu?.icon} {pu?.name}</span>
   ); });
-  // Apply mode: a targeted powerup is awaiting a spot. Double or Nothing → a
-  // filled spot; Bye Steal → an empty spot.
-  const fillEligible = applyMode === 'double-or-nothing' && !!player;
+  // Apply mode: a targeted powerup is awaiting a spot. Double or Nothing / Lead
+  // Change / Grudge / Red Herring stake one of YOUR filled spots; Jinx points at
+  // the opponent in that window/slot (tap your spot at that index, blind); Bye
+  // Steal fills an empty spot.
+  const yourSpotPu = applyMode === 'double-or-nothing' || applyMode === 'lead-change' || applyMode === 'grudge' || applyMode === 'red-herring' || applyMode === 'jinx';
+  const fillEligible = yourSpotPu && !!player;
   const emptyEligible = applyMode === 'bye-steal' && !player;
   const applyHi = fillEligible;
   const applyDim = !!applyMode && !fillEligible && !emptyEligible;
