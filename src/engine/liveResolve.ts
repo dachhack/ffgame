@@ -170,6 +170,7 @@ export interface LiveExtras {
    *  your own slot; Cold Snap on an opponent slot (freezes them). */
   surge?: Record<string, number>;
   coldSnap?: Record<string, number>;
+  napalm?: Record<string, number>;
   bunker?: Record<string, number>;
 }
 export interface LiveExtrasBySide { home?: LiveExtras; away?: LiveExtras; }
@@ -306,6 +307,7 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
         theirJinx: hx.jinx?.includes(jinxKey), youJinx: ax.jinx?.includes(jinxKey),
         youSurge: win10(hx.surge?.[jinxKey]), theirSurge: win10(ax.surge?.[jinxKey]),
         theirFreeze: win10(hx.coldSnap?.[jinxKey]), youFreeze: win10(ax.coldSnap?.[jinxKey]),
+        theirNapalm: win10(hx.napalm?.[jinxKey]), youNapalm: win10(ax.napalm?.[jinxKey]),
         youBunkerFrom: hx.bunker?.[jinxKey], theirBunkerFrom: ax.bunker?.[jinxKey] });
       let homeF = res.youFinal, awayF = res.theirFinal;
       let events = res.events;

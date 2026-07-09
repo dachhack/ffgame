@@ -234,6 +234,7 @@ during a live window (never retroactive).
 | 💥 **EMP** | ◎ 65 | action | Fire during a live window to freeze every opponent drip in that window for 10 minutes. |
 | ⚡ **Surge** | ◎ 55 | action | Fire on one of YOUR live slots: everything it scores for the next 10 game-minutes counts double. Fire when your player is heating up. |
 | 🧊 **Cold Snap** | ◎ 60 | action | Fire on a live OPPONENT slot: freeze ALL of that player’s scoring — points and drip — for the next 10 game-minutes. Shut a hot rival down cold. |
+| 🔥 **Napalm** | ◎ 60 | action | Fire on a live OPPONENT slot: for the next 10 game-minutes, any time their drip runs HOT it BURNS — the hot accrual goes negative and bleeds their bank down instead of doubling it. Punishes a rival for running too hot (does nothing while they stay cool). |
 | 🛡️ **Bunker** | ◎ 65 | action | Fire on one of YOUR live slots: it goes immune to every nuke and erase for the rest of the game from the moment you fire. Lock in a lead before they can wipe it. |
 | 🎰 **Halftime Gamble** | ◎ 50 | action | A CLUTCH play — only offered when one of your slots leads by 10+ at halftime, and only until the third quarter gets going. Arm it and that slot scores DOUBLE if it wins its head-to-head, ZERO if it loses. |
 | 🎬 **Encore** | ◎ 45 | action | A CLUTCH play — only offered when one of your players scores a touchdown in the first half. Arm it any time before the game ends and his NEXT touchdown banks a bonus +12. |

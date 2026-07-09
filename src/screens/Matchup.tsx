@@ -104,7 +104,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const backupAssign = applied[week]?.backups ?? EMPTY_REC;
   const aw = applied[week];
   const rivalryWins = aw?.rivalry ? (Object.keys(aw.rivalry).filter((w) => aw.rivalry![w as WindowId]) as WindowId[]) : undefined;
-  const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, emp: aw?.emp, rivalry: rivalryWins, leadChange: aw?.leadChange, grudge: aw?.grudge, jinx: aw?.jinx, redHerring: aw?.redHerring, surge: aw?.surge, coldSnap: aw?.coldSnap, bunker: aw?.bunker, clutchDon: aw?.clutchDon, clutchEncore: aw?.clutchEncore, clutchCounter: aw?.clutchCounter };
+  const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, emp: aw?.emp, rivalry: rivalryWins, leadChange: aw?.leadChange, grudge: aw?.grudge, jinx: aw?.jinx, redHerring: aw?.redHerring, surge: aw?.surge, coldSnap: aw?.coldSnap, napalm: aw?.napalm, bunker: aw?.bunker, clutchDon: aw?.clutchDon, clutchEncore: aw?.clutchEncore, clutchCounter: aw?.clutchCounter };
   const extrasKey = JSON.stringify(extras);
   const oppId = gameForTeam(YOU, week)?.oppId ?? 'rock-tunnel';
   const you = getTeam(YOU)!;
@@ -200,7 +200,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     else if (pendingApply === 'mulligan') setMulliganSlot(key); // keep pending until a metric is chosen
     else if (pendingApply === 'metric-swap' || pendingApply === 'player-swap') { setSwapTarget({ key, win: key.split('#')[0] as WindowId }); setPendingApply(null); } // open the swap menu on the tapped live spot
     else if (pendingApply === 'lead-change' || pendingApply === 'grudge' || pendingApply === 'jinx' || pendingApply === 'red-herring') { if (applySlotListPu(pendingApply, week, key)) liveTargeted(pendingApply, keyParts(key)); setPendingApply(null); }
-    else if (pendingApply === 'surge' || pendingApply === 'cold-snap' || pendingApply === 'bunker') { const clock = effWinClock(key.split('#')[0]); if (applyLiveSlotPu(pendingApply, week, key, clock)) liveTargeted(pendingApply, { ...keyParts(key), clock }); setPendingApply(null); } // live: fire from the slot's current clock
+    else if (pendingApply === 'surge' || pendingApply === 'cold-snap' || pendingApply === 'napalm' || pendingApply === 'bunker') { const clock = effWinClock(key.split('#')[0]); if (applyLiveSlotPu(pendingApply, week, key, clock)) liveTargeted(pendingApply, { ...keyParts(key), clock }); setPendingApply(null); } // live: fire from the slot's current clock
   }
   function applyToWindow(win: WindowId) {
     // On the live board a live window's "now" is its latest ingested play (winMax
@@ -750,8 +750,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const slotPuName = (key: string) => { const s = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === key); const wl = windowsForWeek(week).find((w) => w.id === key.split('#')[0])?.label ?? key.split('#')[0]; return s?.you?.player.name ? `${s.you.player.name} · ${wl}` : wl; };
   const slotPuLists: [string, string[] | undefined][] = [['lead-change', aw?.leadChange], ['grudge', aw?.grudge], ['jinx', aw?.jinx], ['red-herring', aw?.redHerring]];
   for (const [id, keys] of slotPuLists) for (const key of keys ?? []) activeEffects.push({ key: id + '-' + key, id, icon: powerupById(id)?.icon ?? '✦', name: powerupById(id)?.name ?? id, detail: (id === 'jinx' ? 'Hex opp at ' : 'On ') + slotPuName(key), onRemove: phase === 'setup' ? () => removeSlotListPu(id, week, key) : undefined });
-  const liveSlotPu: [string, Record<string, number> | undefined][] = [['surge', aw?.surge], ['cold-snap', aw?.coldSnap], ['bunker', aw?.bunker], ['clutch-encore', aw?.clutchEncore], ['clutch-counter', aw?.clutchCounter]];
-  for (const [id, rec] of liveSlotPu) for (const key of Object.keys(rec ?? {})) activeEffects.push({ key: id + '-' + key, id, icon: powerupById(id)?.icon ?? '✦', name: powerupById(id)?.name ?? id, detail: (id === 'cold-snap' ? 'Froze ' : 'On ') + slotPuName(key) });
+  const liveSlotPu: [string, Record<string, number> | undefined][] = [['surge', aw?.surge], ['cold-snap', aw?.coldSnap], ['napalm', aw?.napalm], ['bunker', aw?.bunker], ['clutch-encore', aw?.clutchEncore], ['clutch-counter', aw?.clutchCounter]];
+  for (const [id, rec] of liveSlotPu) for (const key of Object.keys(rec ?? {})) activeEffects.push({ key: id + '-' + key, id, icon: powerupById(id)?.icon ?? '✦', name: powerupById(id)?.name ?? id, detail: (id === 'cold-snap' ? 'Froze ' : id === 'napalm' ? 'Napalmed ' : 'On ') + slotPuName(key) });
   for (const key of aw?.clutchDon ?? []) activeEffects.push({ key: 'cd-' + key, id: 'clutch-don', icon: powerupById('clutch-don')?.icon ?? '🎰', name: 'Halftime Gamble', detail: 'Staked ' + slotPuName(key) });
 
   // Owned power-ups you can still apply right now, scoped to open windows. 'pre'
@@ -1909,12 +1909,13 @@ const POWERUP_HINT: Record<string, string> = {
   'emp': 'Fire on a window during LIVE.',
   'surge': 'Fire on YOUR live spot to double it 10 min.',
   'cold-snap': 'Fire on a live OPPONENT spot to freeze it.',
+  'napalm': 'Fire on a live OPPONENT spot — a hot drip burns.',
   'bunker': 'Fire on YOUR live spot to make it nuke-proof.',
 };
 
 // Targeted power-ups applied by tapping a spot/window (vs. whole-field buffs
 // that just arm). Each enters apply-mode, then the tap finishes it.
-const SPOT_APPLY = new Set(['double-or-nothing', 'lead-change', 'grudge', 'jinx', 'red-herring', 'bye-steal', 'spy', 'mulligan', 'emp', 'metric-swap', 'player-swap', 'surge', 'cold-snap', 'bunker']);
+const SPOT_APPLY = new Set(['double-or-nothing', 'lead-change', 'grudge', 'jinx', 'red-herring', 'bye-steal', 'spy', 'mulligan', 'emp', 'metric-swap', 'player-swap', 'surge', 'cold-snap', 'napalm', 'bunker']);
 
 // Shared modal shell for the two power-up cards.
 function PuShell({ title, subtitle, accent, onClose, children }: { title: ReactNode; subtitle: string; accent: string; onClose: () => void; children: ReactNode }) {
@@ -2160,10 +2161,10 @@ function WindowSectionInner(props: {
     if (applyMode === 'mulligan') return liveNow && !!s.you && !done;   // re-roll your metric
     if (applyMode === 'metric-swap' || applyMode === 'player-swap') return liveNow && !!s.you && !done; // swap this live spot
     if (applyMode === 'surge' || applyMode === 'bunker') return liveNow && !!s.you && !done; // live: boost/protect your slot
-    if (applyMode === 'cold-snap') return liveNow && !!s.their && !done; // live: freeze an opponent slot
+    if (applyMode === 'cold-snap' || applyMode === 'napalm') return liveNow && !!s.their && !done; // live: freeze / napalm an opponent slot
     return false;
   };
-  const spotApplyMode = applyMode === 'spy' || applyMode === 'mulligan' || applyMode === 'metric-swap' || applyMode === 'player-swap' || applyMode === 'surge' || applyMode === 'cold-snap' || applyMode === 'bunker';
+  const spotApplyMode = applyMode === 'spy' || applyMode === 'mulligan' || applyMode === 'metric-swap' || applyMode === 'player-swap' || applyMode === 'surge' || applyMode === 'cold-snap' || applyMode === 'napalm' || applyMode === 'bunker';
   const [slateOpen, setSlateOpen] = useState(false);
   // The real NFL games feeding this window: map each window player's team to its
   // actual away@home matchup that week, and list the players involved.
@@ -2387,7 +2388,7 @@ function WindowSectionInner(props: {
                 {row}
                 {elig && (
                   <div onClick={() => onApplyToSpot(key)} style={{ position: 'absolute', inset: 0, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--warn) 14%, transparent)', border: '1px dashed var(--warn)', borderRadius: 4, cursor: 'pointer' }}>
-                    <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 9px' }}>{powerupById(applyMode!)?.icon} TAP TO {applyMode === 'spy' ? 'SPY' : applyMode === 'mulligan' ? 'MULLIGAN' : applyMode === 'surge' ? 'SURGE' : applyMode === 'cold-snap' ? 'FREEZE' : applyMode === 'bunker' ? 'BUNKER' : 'SWAP'}</span>
+                    <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 9px' }}>{powerupById(applyMode!)?.icon} TAP TO {applyMode === 'spy' ? 'SPY' : applyMode === 'mulligan' ? 'MULLIGAN' : applyMode === 'surge' ? 'SURGE' : applyMode === 'cold-snap' ? 'FREEZE' : applyMode === 'napalm' ? 'NAPALM' : applyMode === 'bunker' ? 'BUNKER' : 'SWAP'}</span>
                   </div>
                 )}
               </div>

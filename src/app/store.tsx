@@ -32,6 +32,7 @@ export interface AppliedWeek {
   redHerring?: string[];                         // your decoy slotKeys (cap opposing same-position players in the window)
   surge?: Record<string, number>;               // live: your slotKey -> fire game-clock (×2 for 10 min)
   coldSnap?: Record<string, number>;            // live: opponent slotKey -> fire game-clock (freeze all scoring 10 min)
+  napalm?: Record<string, number>;              // live: opponent slotKey -> fire game-clock (hot drip burns negative 10 min)
   bunker?: Record<string, number>;              // live: your slotKey -> fire game-clock (nuke/erase immune onward)
   clutchDon?: string[];                          // clutch: your slotKeys staked via Halftime Gamble (×2 win / 0 lose)
   clutchEncore?: Record<string, number>;        // clutch: your slotKey -> arm clock (next TD +12)
@@ -420,7 +421,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             byeSteal: tgt.byeSteal ? { slotKey: sk(tgt.byeSteal), playerId: tgt.byeSteal.slug } : b.byeSteal,
             emp: (tgt.emp && Object.keys(tgt.emp).length ? tgt.emp : b.emp) as AppliedWeek['emp'],
             rivalry: b.rivalry, leadChange: b.leadChange, grudge: b.grudge, jinx: b.jinx, redHerring: b.redHerring,
-            surge: b.surge, coldSnap: b.coldSnap, bunker: b.bunker,
+            surge: b.surge, coldSnap: b.coldSnap, napalm: b.napalm, bunker: b.bunker,
             clutchDon: b.clutchDon, clutchEncore: b.clutchEncore, clutchCounter: b.clutchCounter,
             buffs: Object.fromEntries((buffs ?? []).map((x) => [x, true as const])),
           } });
@@ -573,7 +574,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     applied[week]?.emp?.[win] != null ? false : consumeAndApply('emp', week, (cur) => ({ ...cur, emp: { ...cur.emp, [win]: clock } }));
   // Live slot-targeted tactical power-ups (Surge / Cold Snap / Bunker): fire on a
   // slot during a live window, recording the fire game-clock. One per slot.
-  const LIVE_SLOT_PU: Record<string, 'surge' | 'coldSnap' | 'bunker'> = { 'surge': 'surge', 'cold-snap': 'coldSnap', 'bunker': 'bunker' };
+  const LIVE_SLOT_PU: Record<string, 'surge' | 'coldSnap' | 'napalm' | 'bunker'> = { 'surge': 'surge', 'cold-snap': 'coldSnap', 'napalm': 'napalm', 'bunker': 'bunker' };
   const applyLiveSlotPu = (id: string, week: number, slotKey: string, clock: number): boolean => {
     const key = LIVE_SLOT_PU[id];
     if (applied[week]?.[key]?.[slotKey] != null) return false;
