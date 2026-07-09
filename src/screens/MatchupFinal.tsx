@@ -162,6 +162,11 @@ export function MatchupFinal({ week }: { week: number }) {
               if (s.youSub) fx.push(`⤴ ${s.youSub.name} subbed in (${s.youSub.from.toFixed(1)} → ${s.youSub.score.toFixed(1)})`);
               if (s.youStake) fx.push(s.youStake === 'won' ? '⚖️ Double or Nothing — won ×2' : '⚖️ Double or Nothing — lost → 0');
               if (s.youRivalry) fx.push(`⚔️ Rivalry — siphoned +${s.youRivalry.toFixed(1)} from a same-position rival`);
+              if (s.youLeadChange) fx.push(`🔀 Lead Change — seized the lead → +${s.youLeadChange.toFixed(0)}`);
+              if (s.youGrudge === 'won') fx.push(`🥊 Grudge Match — won by 10+ → +${(s.youGrudgePts ?? 0).toFixed(0)}`);
+              if (s.youGrudge === 'lost') fx.push(`🥊 Grudge Match — lost → ${(s.youGrudgePts ?? 0).toFixed(0)}`);
+              if (s.theirJinxed) fx.push('🧿 Jinx — negated their first TD');
+              if (s.theirRedHerringFrom != null) fx.push(`🎣 Red Herring — capped rival ${s.theirRedHerringFrom.toFixed(1)} → ${s.theirFinal.toFixed(1)}`);
               if (s.byeStolen) fx.push('🪂 Bye steal');
               if (s.youNegated) fx.push('✕ Negated by opponent K shutdown');
               if (s.youHalvedFrom != null) fx.push(`÷2 Suppressed (from ${s.youHalvedFrom.toFixed(1)})`);

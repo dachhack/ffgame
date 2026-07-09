@@ -158,6 +158,14 @@ export interface LiveExtras {
    *  where the opponent fields the SAME position as this side, siphon 50% of the
    *  opponent's slot score to this side. */
   rivalry?: string[];
+  /** Lead Change: this side's slots (`win|slot`) armed — +2 each time it seizes the lead. */
+  leadChange?: string[];
+  /** Grudge Match: this side's slots (`win|slot`) staked — win by 10+ → +25, lose → −25. */
+  grudge?: string[];
+  /** Jinx: opponent slots (`win|slot`) this side pointed at — the opponent's first TD there is negated. */
+  jinx?: string[];
+  /** Red Herring: this side's decoy slots (`win|slot`) — cap opposing same-position players in that window to the decoy's total. */
+  redHerring?: string[];
 }
 export interface LiveExtrasBySide { home?: LiveExtras; away?: LiveExtras; }
 
@@ -283,7 +291,10 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
       const you: SlotInput = hp ? { player: hp.player, metricId: hp.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
       const them: SlotInput = ap ? { player: ap.player, metricId: ap.metricId } : { player: EMPTY_PLAYER, metricId: 'none' };
       const label = `${hp?.player.team || 'BYE'} · ${ap?.player.team || 'BYE'}`;
-      const res = resolveSlot(you, them, week, label, slotOpts);
+      // JINX: home pointing at this slot negates AWAY's ('their') first TD; away
+      // pointing at it negates HOME's ('you') first TD.
+      const jinxKey = `${wid}|${slot}`;
+      const res = resolveSlot(you, them, week, label, { ...slotOpts, theirJinx: hx.jinx?.includes(jinxKey), youJinx: ax.jinx?.includes(jinxKey) });
       let homeF = res.youFinal, awayF = res.theirFinal;
       let events = res.events;
       let homeTd = res.youTds, awayTd = res.theirTds, homeXp = res.youBankerXp, awayXp = res.theirBankerXp;
@@ -425,6 +436,64 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
   };
   applyRivalry(hx.rivalry, 'home');
   applyRivalry(ax.rivalry, 'away');
+
+  // RED HERRING: for each armed decoy slot, cap every opposing same-position
+  // player in that decoy's window to the decoy's own total.
+  const applyRedHerring = (keys: string[] | undefined, side: 'home' | 'away') => {
+    if (!keys?.length) return;
+    const armed = new Set(keys);
+    const meP = (s: SlotRes) => (side === 'home' ? s.homeP : s.awayP);
+    const opP = (s: SlotRes) => (side === 'home' ? s.awayP : s.homeP);
+    const meF = (s: SlotRes) => (side === 'home' ? s.home : s.away);
+    for (const decoy of slots) {
+      const dp = meP(decoy);
+      if (!dp || !armed.has(`${decoy.win}|${decoy.slot}`)) continue;
+      const cap = meF(decoy);
+      for (const s of slots) {
+        if (s.win !== decoy.win) continue;
+        const op = opP(s);
+        if (!op || op.pos !== dp.pos) continue;
+        if (side === 'home' && s.away > cap) s.away = cap;
+        else if (side === 'away' && s.home > cap) s.home = cap;
+      }
+    }
+  };
+  applyRedHerring(hx.redHerring, 'home');
+  applyRedHerring(ax.redHerring, 'away');
+
+  // LEAD CHANGE: +2 each time this side seized the lead in an armed slot.
+  const applyLeadChange = (keys: string[] | undefined, side: 'home' | 'away') => {
+    if (!keys?.length) return;
+    const armed = new Set(keys);
+    for (const s of slots) {
+      if (!s.homeP || !s.awayP || !armed.has(`${s.win}|${s.slot}`)) continue;
+      const evs = [...s.events].sort((a, b) => a.clock - b.clock);
+      const me = side === 'home' ? 'you' : 'their';
+      let prev: 'you' | 'their' | 'tie' = 'tie', seizes = 0;
+      for (const e of evs) {
+        const lead: 'you' | 'their' | 'tie' = e.youBank > e.theirBank ? 'you' : e.theirBank > e.youBank ? 'their' : 'tie';
+        if (lead === me && prev !== 'tie' && prev !== me) seizes++;
+        if (lead !== 'tie') prev = lead;
+      }
+      if (seizes > 0) { if (side === 'home') s.home = round(s.home + seizes * 2); else s.away = round(s.away + seizes * 2); }
+    }
+  };
+  applyLeadChange(hx.leadChange, 'home');
+  applyLeadChange(ax.leadChange, 'away');
+
+  // GRUDGE MATCH: win a staked slot by 10+ → +25, lose it → −25.
+  const applyGrudge = (keys: string[] | undefined, side: 'home' | 'away') => {
+    if (!keys?.length) return;
+    const armed = new Set(keys);
+    for (const s of slots) {
+      if (!s.homeP || !s.awayP || !armed.has(`${s.win}|${s.slot}`)) continue;
+      const diff = side === 'home' ? s.home - s.away : s.away - s.home;
+      const delta = diff >= 10 ? 25 : diff < 0 ? -25 : 0;
+      if (side === 'home') s.home = round(s.home + delta); else s.away = round(s.away + delta);
+    }
+  };
+  applyGrudge(hx.grudge, 'home');
+  applyGrudge(ax.grudge, 'away');
 
   const byWin: Record<string, { home: number; away: number }> = {};
   let home = 0, away = 0;

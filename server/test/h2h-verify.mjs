@@ -98,4 +98,45 @@ const dripBar = defSuppressScore(P(dstSlug, 'DEF', 'DEN'), WEEK);
 console.log(`\nSUPPRESS: ${dstSlug} kill-bar flat ${flatBar} → with drip ${dripBar}`);
 ok('suppress kill-bar is raised by the DEF drip', dripBar > flatBar);
 
+// ── 7. JINX — negate the opponent's first TD ─────────────────────────────────
+// Away runs a TD-nuke RB (scores rush TDs). Home jinxes that slot → away's first
+// TD is negated, so away's score drops.
+const jHome = [{ win: 'early', slot: '0', player: P('puka-nacua', 'WR', 'LA'), metricId: 'recyd' }];
+const jAway = [{ win: 'early', slot: '0', player: P('saquon-barkley', 'RB', 'PHI'), metricId: 'td' }];
+const jNo = resolveLiveMatchup(jHome, jAway, WEEK).slots.find((s) => s.side === 'away').score;
+const jYes = resolveLiveMatchup(jHome, jAway, WEEK, {}, { home: { jinx: ['early|0'] } }).slots.find((s) => s.side === 'away').score;
+console.log(`\nJINX: away TD-scorer ${jNo} → jinxed ${jYes}`);
+ok('jinx lowered the opponent by negating their first TD', jYes < jNo);
+
+// ── 8. RED HERRING — cap opposing same-position players in the window ─────────
+// Home fields a low WR decoy + arms Red Herring on it; away's strong WR in the
+// same window is capped to the decoy's total.
+const rhHome = [{ win: 'early', slot: '0', player: P('keon-coleman', 'WR', 'BUF'), metricId: 'recyd' }];
+const rhAway = [{ win: 'early', slot: '0', player: P('puka-nacua', 'WR', 'LA'), metricId: 'recyd' }];
+const rhNo = resolveLiveMatchup(rhHome, rhAway, WEEK);
+const rhYes = resolveLiveMatchup(rhHome, rhAway, WEEK, {}, { home: { redHerring: ['early|0'] } });
+const decoy = rhYes.slots.find((s) => s.side === 'home').score;
+const capped = rhYes.slots.find((s) => s.side === 'away').score;
+const uncapped = rhNo.slots.find((s) => s.side === 'away').score;
+console.log(`\nRED HERRING: decoy ${decoy} · rival ${uncapped} → capped ${capped}`);
+ok('red herring capped the opposing WR to the decoy total', capped <= decoy + 0.05 && capped < uncapped);
+
+// ── 9. GRUDGE MATCH — win by 10+ → +25, lose → −25, else 0 ────────────────────
+const gHome = [{ win: 'early', slot: '0', player: P('puka-nacua', 'WR', 'LA'), metricId: 'recyd' }];
+const gAway = [{ win: 'early', slot: '0', player: P('chase-brown', 'RB', 'CIN'), metricId: 'rush' }];
+const gm = resolveLiveMatchup(gHome, gAway, WEEK);
+const gh = gm.slots.find((s) => s.side === 'home').score, ga = gm.slots.find((s) => s.side === 'away').score;
+const gYes = resolveLiveMatchup(gHome, gAway, WEEK, {}, { home: { grudge: ['early|0'] } }).slots.find((s) => s.side === 'home').score;
+const gExpected = gh - ga >= 10 ? gh + 25 : gh - ga < 0 ? gh - 25 : gh;
+console.log(`\nGRUDGE: home ${gh} vs away ${ga} (margin ${(gh - ga).toFixed(1)}) → with grudge ${gYes} (expected ${gExpected.toFixed(1)})`);
+ok('grudge applied the correct ±25 by margin', Math.abs(gYes - gExpected) < 0.05 && gh - ga >= 10);
+
+// ── 10. LEAD CHANGE — bonus is monotonic (never lowers) and ≥ 0 ───────────────
+const lcPicks = [{ win: 'early', slot: '0', player: P('puka-nacua', 'WR', 'LA'), metricId: 'recyd' }];
+const lcAway = [{ win: 'early', slot: '0', player: P('marquise-brown', 'WR', 'KC'), metricId: 'recyd' }];
+const lcNo = resolveLiveMatchup(lcPicks, lcAway, WEEK).slots.find((s) => s.side === 'home').score;
+const lcYes = resolveLiveMatchup(lcPicks, lcAway, WEEK, {}, { home: { leadChange: ['early|0'] } }).slots.find((s) => s.side === 'home').score;
+console.log(`\nLEAD CHANGE: home ${lcNo} → with lead-change ${lcYes} (+2 per seize)`);
+ok('lead change never lowers the score (bonus ≥ 0, multiple of 2)', lcYes >= lcNo && Math.abs((lcYes - lcNo) % 2) < 0.001);
+
 console.log('\nDONE.');

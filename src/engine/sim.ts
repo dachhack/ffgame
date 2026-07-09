@@ -523,7 +523,7 @@ function offSecs(intervals: number[][], t0: number, t1: number): number {
  * `opts.youMult` / `opts.theirMult` apply a per-clock multiplier to that
  * side's scoring (used by the QB Field General window multiplier).
  */
-export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youShield?: (clock: number) => number; theirShield?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; realResolve?: boolean; projection?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
+export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youShield?: (clock: number) => number; theirShield?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; youJinx?: boolean; theirJinx?: boolean; realResolve?: boolean; projection?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
   // Pre-match team buffs active on each side (Momentum / Garbage Time /
   // Floodgates / Overtime). Only the human side carries buffs in the demo.
   const youBuffs = opts.youBuffs ?? new Set<string>();
@@ -747,6 +747,9 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   let youOtPts = 0, theirOtPts = 0;
   // Counter-Nuke / Insurance fire once per slot, on the human side only.
   let cnUsed = false, insUsed = false;
+  // JINX (power-up): the FIRST touchdown by the jinxed side is negated — no
+  // points and no effect (a nuke TD doesn't fire). One use per side.
+  let youJinxUsed = false, theirJinxUsed = false;
   // A TD nuke RESETS the victim's drip AND suppresses ALL scoring in that slot for the
   // next 10 game-minutes. A bare rate-reset is rebuilt within a few catches (the reason
   // NUKE was dead), so the 10-minute blackout is what makes the wipe stick — the slot
@@ -770,6 +773,14 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     // drip accrual over [lastClock, play.clock] already ran in accrue() above, and the
     // slot's rate was zeroed at the nuke, so nothing accrues here either.
     if (play.clock < mine.nukedUntil) continue;
+    // JINX: negate this side's first TD entirely (no points, no nuke/effect).
+    const jinxThisSide = play.side === 'you' ? opts.youJinx : opts.theirJinx;
+    const jinxUsed = play.side === 'you' ? youJinxUsed : theirJinxUsed;
+    if (jinxThisSide && !jinxUsed && play.td) {
+      if (play.side === 'you') youJinxUsed = true; else theirJinxUsed = true;
+      events.push({ clock: play.clock, side: play.side, play: playText(play.side === 'you' ? you.player : their.player, play), delta: 0, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, effect: { type: 'nuke', text: '🧿 JINXED — TD negated' }, sig: true });
+      continue; // the TD play is a no-op: banks nothing, triggers no effect
+    }
     // A big bank wipe of the victim (`opp`). Counter-Nuke (reflect onto the
     // attacker) and Insurance (keep half) protect YOUR slot the first time.
     // `stealPct` > 0 (the td-metric NUKE) credits the attacker a quarter of

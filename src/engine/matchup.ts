@@ -267,6 +267,11 @@ export interface ResolvedSlot {
   youStake?: 'won' | 'lost';    // Double or Nothing result on this slot (at FINAL)
   youRivalry?: number;          // points siphoned TO you via the Rivalry power-up (same-position mirror)
   theirRivalry?: number;        // points siphoned to THEM via their Rivalry (live H2H)
+  youLeadChange?: number;       // Lead Change bonus banked (you seized the lead N times → +2 each)
+  youGrudge?: 'won' | 'lost' | 'push'; // Grudge Match stake outcome on this slot
+  youGrudgePts?: number;        // the ± points the grudge paid/cost
+  theirRedHerringFrom?: number; // this opponent slot was capped by your Red Herring — its score before
+  theirJinxed?: boolean;        // the opponent's first TD here was negated by your Jinx
   // Powerup-driven scoring changes on this slot, per side — shown in the spot at FINAL.
   youBuffFx?: BuffFx[];
   theirBuffFx?: BuffFx[];
@@ -311,6 +316,11 @@ export interface ResolvedMatchup {
 
 /** Points awarded to the winner of a window's head-to-head battle. */
 export const WINDOW_WIN_BONUS = 5;
+/** Lead Change: points banked each time you seize the lead in an armed slot. */
+export const LEAD_CHANGE_BONUS = 2;
+/** Grudge Match: win the staked slot by GRUDGE_MARGIN+ → +GRUDGE_SWING; lose it → −GRUDGE_SWING. */
+export const GRUDGE_MARGIN = 10;
+export const GRUDGE_SWING = 25;
 /** Drip coin the window MVP (single highest-scoring slot in a window) earns,
  *  PER SLOT in that window — so bigger windows carry a bigger bounty (a 3-slot
  *  Sunday-early MVP = 15, a lone TNF MVP = 5). */
@@ -377,7 +387,7 @@ export function buildMatchup(
   swaps: SlotSwaps = {},
   backupAssign: Record<string, string> = {},
   buffs: Record<string, boolean> = {},
-  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; autoBackups?: boolean } = {},
+  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; autoBackups?: boolean } = {},
   realResolve = false, // resolve cross-game effects (TE-TD drip nuke) in real-time order
   oppBuffs?: string[], // live H2H: the opponent's REAL armed buffs (revealed at lock); AI default when omitted
 ): ResolvedMatchup {
@@ -449,6 +459,7 @@ export function buildMatchup(
       let real = false;
       let displayYou = you; // may reflect a real-time swap
       let youNegated = false, theirNegated = false;
+      let theirJinxed = false;
       let youBuffFx: BuffFx[] | undefined, theirBuffFx: BuffFx[] | undefined;
       // A suppress DST forgoes its earn points (spent as the kill-threshold).
       const suppressSpentYou = (you?.player.pos === 'DEF' && you.metricId === 'suppress') ? defSuppressScore(you.player, week) : undefined;
@@ -468,8 +479,12 @@ export function buildMatchup(
         // that's real-time ahead/behind hits at the right wall-clock moment.
         const nukeClocks = (nukes: { c: number; rt: number }[], recv: SlotInput) =>
           realResolve ? nukes.map((n) => clockAtRealTime(recv.player, week, n.rt, recv.metricId)) : nukes.map((n) => n.c);
-        const opts = { youMult, theirMult, youShield, theirShield, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined, realResolve };
+        // JINX: you armed it blind on this slot → the opponent ('their') here
+        // has their first TD negated.
+        const theirJinx = extras.jinx?.includes(key);
+        const opts = { youMult, theirMult, youShield, theirShield, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined, theirJinx, realResolve };
         let res = resolveSlot(yIn, tIn, week, gameLabel, opts);
+        if (theirJinx && their) theirJinxed = res.events.some((e) => e.effect?.text.includes('JINXED'));
 
         // Real-time swap (Player/Metric Swap): keep your pre-swap banked points,
         // then add only the new config's gains after the swap clock. Both sides'
@@ -516,7 +531,7 @@ export function buildMatchup(
         if (bp) { displayYou = { player: bp, metricId: 'bye' }; yF = Math.round(projectedPoints(bp, week) * 10) / 10; byeStolen = true; }
       }
 
-      slots.push({ win: w.id, slotIndex: i, you: displayYou, their, events, youFinal: yF, theirFinal: tF, gameLabel, real, suppressSpentYou, suppressSpentTheir, youNegated: youNegated || undefined, theirNegated: theirNegated || undefined, byeStolen: byeStolen || undefined, youBuffFx, theirBuffFx, youFgMult: youMult, theirFgMult: theirMult });
+      slots.push({ win: w.id, slotIndex: i, you: displayYou, their, events, youFinal: yF, theirFinal: tF, gameLabel, real, suppressSpentYou, suppressSpentTheir, youNegated: youNegated || undefined, theirNegated: theirNegated || undefined, theirJinxed: theirJinxed || undefined, byeStolen: byeStolen || undefined, youBuffFx, theirBuffFx, youFgMult: youMult, theirFgMult: theirMult });
     }
     windows.push({ window: w, slots });
   }
@@ -554,6 +569,40 @@ export function buildMatchup(
         s.youFinal = Math.round((s.youFinal + take) * 10) / 10;
         s.youRivalry = Math.round(((s.youRivalry ?? 0) + take) * 10) / 10;
       }
+    }
+  }
+
+  // RED HERRING power-up: for each of your armed decoy slots, drag EVERY opposing
+  // player of the same position anywhere in that decoy's window down to the decoy's
+  // own total (capped — never raises them). A low decoy caps their studs at that
+  // position; whiffs if they field nobody there.
+  if (extras.redHerring?.length) {
+    const decoyKeys = new Set(extras.redHerring);
+    const flat = windows.flatMap((w) => w.slots);
+    for (const decoy of flat) {
+      if (!decoy.you || !decoyKeys.has(slotKey(decoy.win, decoy.slotIndex))) continue;
+      const pos = decoy.you.player.pos, cap = decoy.youFinal;
+      for (const s of windows.find((w) => w.window.id === decoy.win)!.slots) {
+        if (!s.their || s.their.player.pos !== pos) continue;
+        if (s.theirFinal > cap) { s.theirRedHerringFrom = s.theirFinal; s.theirFinal = cap; }
+      }
+    }
+  }
+
+  // LEAD CHANGE power-up: for each of your armed slots, +2 every time you SEIZED
+  // the lead (overtook the opponent after trailing) in that slot's timeline.
+  if (extras.leadChange?.length) {
+    const armed = new Set(extras.leadChange);
+    for (const w of windows) for (const s of w.slots) {
+      if (!s.you || !s.their || !armed.has(slotKey(s.win, s.slotIndex))) continue;
+      const evs = [...s.events].sort((a, b) => a.clock - b.clock);
+      let prev: 'you' | 'their' | 'tie' = 'tie', seizes = 0;
+      for (const e of evs) {
+        const lead: 'you' | 'their' | 'tie' = e.youBank > e.theirBank ? 'you' : e.theirBank > e.youBank ? 'their' : 'tie';
+        if (lead === 'you' && prev === 'their') seizes++; // a genuine flip: overtook from behind
+        if (lead !== 'tie') prev = lead;
+      }
+      if (seizes > 0) { const bonus = seizes * LEAD_CHANGE_BONUS; s.youLeadChange = bonus; s.youFinal = Math.round((s.youFinal + bonus) * 10) / 10; }
     }
   }
 
@@ -603,6 +652,20 @@ export function buildMatchup(
       bonuses.push({ id: 'double-or-nothing', points: won ? s.youFinal : -s.youFinal, label: won ? `Double or Nothing — ${s.you.player.name} WON ×2` : `Double or Nothing — ${s.you.player.name} LOST → 0` });
     }
   }
+  // Grudge Match: a staked slot pays +GRUDGE_SWING if you win its head-to-head by
+  // GRUDGE_MARGIN+, costs −GRUDGE_SWING if you lose it, nothing in between. A side
+  // wager on a decisive win — applied as a delta like Double or Nothing.
+  if (extras.grudge?.length) {
+    const staked = new Set(extras.grudge);
+    for (const w of windows) for (const s of w.slots) {
+      if (!s.you || !s.their || !staked.has(slotKey(s.win, s.slotIndex))) continue;
+      const diff = s.youFinal - s.theirFinal;
+      if (diff >= GRUDGE_MARGIN) { s.youGrudge = 'won'; s.youGrudgePts = GRUDGE_SWING; bonuses.push({ id: 'grudge', points: GRUDGE_SWING, label: `Grudge Match — ${s.you.player.name} WON by ${diff.toFixed(1)} → +${GRUDGE_SWING}` }); }
+      else if (diff < 0) { s.youGrudge = 'lost'; s.youGrudgePts = -GRUDGE_SWING; bonuses.push({ id: 'grudge', points: -GRUDGE_SWING, label: `Grudge Match — ${s.you.player.name} LOST → −${GRUDGE_SWING}` }); }
+      else { s.youGrudge = 'push'; s.youGrudgePts = 0; }
+    }
+  }
+
   for (const b of bonuses) youFinal += b.points;
 
   return {

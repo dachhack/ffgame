@@ -1,6 +1,34 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-09 · Build `v0.116.0`_
+_Last updated: 2026-07-09 · Build `v0.117.0`_
+
+## Four "battle" power-ups: Lead Change / Grudge / Jinx / Red Herring (v0.117.0)
+All slot-targeted, armed pre-kickoff, priced in `0080_battle_powerups_price.sql`
+(parity-checked). Engine in buildMatchup (demo) + resolveLiveMatchup (parity);
+store via `AppliedWeek.{leadChange,grudge,jinx,redHerring}` + generic
+`applySlotListPu`/`removeSlotListPu`; UI reuses the tap-a-spot apply-mode flow
+(SetupRow eligibility, active-effect chips, MatchupFinal fx lines). All verified
+end-to-end in `server/test/h2h-verify.mjs` (15/15 green).
+- **LEAD CHANGE (`lead-change`, ◎45, slot-you).** +`LEAD_CHANGE_BONUS` (2) every
+  time you SEIZE the lead in that slot (overtake after trailing). Post-hoc scan of
+  the slot's event `youBank`/`theirBank` timeline; a blowout you never trailed in
+  pays nothing. Rewards a dogfight.
+- **GRUDGE MATCH (`grudge`, ◎60, slot-you).** Stake a slot: win its H2H by
+  `GRUDGE_MARGIN` (10)+ → +`GRUDGE_SWING` (25); lose it → −25; win by <10 / tie →
+  0. Double-or-Nothing with real downside; applied as a bonus delta like DoN.
+- **JINX (`jinx`, ◎55, slot-opp, blind).** The opponent's FIRST TD in that slot is
+  negated — no points, no nuke. In `resolveSlot` via `opts.theirJinx`/`youJinx`
+  (skips the TD play entirely, emits a 🧿 JINXED event). Whiffs if they don't TD.
+- **RED HERRING (`red-herring`, ◎90, slot-you).** A decoy: every OPPOSING player of
+  the same position anywhere in the decoy's window is CAPPED to the decoy's total
+  (`min`, never raised). Field a low decoy to cap their studs at that position;
+  whiffs if they field nobody there, and you waste the slot (the risk). Sets
+  `ResolvedSlot.theirRedHerringFrom` on capped slots.
+- Design note: these answer the "rich-get-richer" critique — Lead Change &
+  Underdog reward comebacks, Grudge/Jinx/Red Herring/Rivalry are blind bets with
+  whiff risk. (Underdog metric replaced the old duel metric; Rivalry is a power-up.)
+  Live-worker applied_state→extras wiring for all targeted plays remains the open
+  live-pilot task (demo + forceResolve/preview paths work).
 
 ## Head-to-head battle mechanics — cross-slot & within-window (v0.116.0)
 The ask: "more head-to-head across slot and within window mechanics like Field

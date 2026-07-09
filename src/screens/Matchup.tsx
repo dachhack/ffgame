@@ -95,7 +95,7 @@ const DEMO_POWERUPS = [
 const EMPTY_REC: Record<string, never> = {};
 
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
-  const { youTeamId: YOU, navigate, liveCtx, activeLeague, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
+  const { youTeamId: YOU, navigate, liveCtx, activeLeague, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   const [demoBuff, setDemoBuff] = useState('garbage-time'); // the power-up the demo viewer armed
   const buffs = useMemo(() => (demo ? { [demoBuff]: true } : (applied[week]?.buffs ?? EMPTY_REC)), [demo, demoBuff, applied, week]);
   const buffsKey = JSON.stringify(buffs);
@@ -104,7 +104,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const backupAssign = applied[week]?.backups ?? EMPTY_REC;
   const aw = applied[week];
   const rivalryWins = aw?.rivalry ? (Object.keys(aw.rivalry).filter((w) => aw.rivalry![w as WindowId]) as WindowId[]) : undefined;
-  const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, emp: aw?.emp, rivalry: rivalryWins };
+  const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, emp: aw?.emp, rivalry: rivalryWins, leadChange: aw?.leadChange, grudge: aw?.grudge, jinx: aw?.jinx, redHerring: aw?.redHerring };
   const extrasKey = JSON.stringify(extras);
   const oppId = gameForTeam(YOU, week)?.oppId ?? 'rock-tunnel';
   const you = getTeam(YOU)!;
@@ -199,6 +199,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     else if (pendingApply === 'spy') setSpySlot(key); // keep pending until a reveal is chosen
     else if (pendingApply === 'mulligan') setMulliganSlot(key); // keep pending until a metric is chosen
     else if (pendingApply === 'metric-swap' || pendingApply === 'player-swap') { setSwapTarget({ key, win: key.split('#')[0] as WindowId }); setPendingApply(null); } // open the swap menu on the tapped live spot
+    else if (pendingApply === 'lead-change' || pendingApply === 'grudge' || pendingApply === 'jinx' || pendingApply === 'red-herring') { if (applySlotListPu(pendingApply, week, key)) liveTargeted(pendingApply, keyParts(key)); setPendingApply(null); }
   }
   function applyToWindow(win: WindowId) {
     // On the live board a live window's "now" is its latest ingested play (winMax
@@ -739,6 +740,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   for (const [win, n] of Object.entries(aw?.extraSlots ?? {})) if ((n ?? 0) > 0) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'x-' + win, id: 'extra-slot', icon: '➕', name: 'Extra Slot', detail: `+${n} on ${wl}`, onRemove: phase === 'setup' ? () => removeExtraSlot(week, win as WindowId) : undefined }); }
   for (const [win, c] of Object.entries(aw?.emp ?? {})) if (c != null) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'emp-' + win, id: 'emp', icon: '💥', name: 'EMP', detail: `Fired on ${wl}` }); }
   for (const [win, on] of Object.entries(aw?.rivalry ?? {})) if (on) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'riv-' + win, id: 'rivalry', icon: '⚔️', name: 'Rivalry', detail: `Armed on ${wl}`, onRemove: phase === 'setup' ? () => removeRivalry(week, win as WindowId) : undefined }); }
+  const slotPuName = (key: string) => { const s = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === key); const wl = windowsForWeek(week).find((w) => w.id === key.split('#')[0])?.label ?? key.split('#')[0]; return s?.you?.player.name ? `${s.you.player.name} · ${wl}` : wl; };
+  const slotPuLists: [string, string[] | undefined][] = [['lead-change', aw?.leadChange], ['grudge', aw?.grudge], ['jinx', aw?.jinx], ['red-herring', aw?.redHerring]];
+  for (const [id, keys] of slotPuLists) for (const key of keys ?? []) activeEffects.push({ key: id + '-' + key, id, icon: powerupById(id)?.icon ?? '✦', name: powerupById(id)?.name ?? id, detail: (id === 'jinx' ? 'Hex opp at ' : 'On ') + slotPuName(key), onRemove: phase === 'setup' ? () => removeSlotListPu(id, week, key) : undefined });
 
   // Owned power-ups you can still apply right now, scoped to open windows. 'pre'
   // power-ups lock at the first kickoff; 'live' ones need a running window.
@@ -1883,6 +1887,10 @@ const POWERUP_HINT: Record<string, string> = {
   'unlock-combo-drip': 'Pick the ◈ metric on a spot.',
   'unlock-pass-td10': 'Pick the ◈ metric on a spot.',
   'double-or-nothing': 'Stake a spot in the panel below.',
+  'lead-change': 'Arm on one of your spots below.',
+  'grudge': 'Stake one of your spots below.',
+  'jinx': 'Point at a spot below (blind) to hex the opponent there.',
+  'red-herring': 'Attach to a decoy player below.',
   'spy': 'Reveal a slot after lock-in, before kickoff.',
   'bye-steal': 'Field a bye player in the panel below.',
   'mulligan': 'Re-roll a spot’s metric during LIVE.',
@@ -1891,7 +1899,7 @@ const POWERUP_HINT: Record<string, string> = {
 
 // Targeted power-ups applied by tapping a spot/window (vs. whole-field buffs
 // that just arm). Each enters apply-mode, then the tap finishes it.
-const SPOT_APPLY = new Set(['double-or-nothing', 'bye-steal', 'spy', 'mulligan', 'emp', 'metric-swap', 'player-swap']);
+const SPOT_APPLY = new Set(['double-or-nothing', 'lead-change', 'grudge', 'jinx', 'red-herring', 'bye-steal', 'spy', 'mulligan', 'emp', 'metric-swap', 'player-swap']);
 
 // Shared modal shell for the two power-up cards.
 function PuShell({ title, subtitle, accent, onClose, children }: { title: ReactNode; subtitle: string; accent: string; onClose: () => void; children: ReactNode }) {
@@ -2099,7 +2107,7 @@ function WindowSectionInner(props: {
   turnoverCoin: number;
   backups: Record<string, string>;
   slotName: Record<string, string>;
-  aw?: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>> };
+  aw?: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>>; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[] };
   applyMode: string | null;
   onApplyToSpot: (key: string) => void;
   onApplyToWindow: (win: WindowId) => void;
@@ -2321,7 +2329,7 @@ function WindowSectionInner(props: {
             return (
               <SetupRow
                 key={key} slotKeyStr={key} winId={w.id} week={week} pick={picks[key]} selected={selSlot === key} inventory={inventory} armed={armed} twinLink={twinLinked.has(key)}
-                appliedPu={[...(aw?.doubleOrNothing === key ? ['double-or-nothing'] : []), ...(aw?.byeSteal?.slotKey === key ? ['bye-steal'] : [])]}
+                appliedPu={[...(aw?.doubleOrNothing === key ? ['double-or-nothing'] : []), ...(aw?.byeSteal?.slotKey === key ? ['bye-steal'] : []), ...(aw?.leadChange?.includes(key) ? ['lead-change'] : []), ...(aw?.grudge?.includes(key) ? ['grudge'] : []), ...(aw?.jinx?.includes(key) ? ['jinx'] : []), ...(aw?.redHerring?.includes(key) ? ['red-herring'] : [])]}
                 applyMode={applyMode} onApplyToSpot={() => onApplyToSpot(key)}
                 onOpenPicker={() => onOpenPicker(key, w.id)} onPickMetric={(m) => pickMetricFor(key, m)}
                 onClearSlot={() => onClearSlot(key)}
@@ -2469,9 +2477,12 @@ export function SetupRow(props: {
   const buffChips = spotBuffs.map((id) => { const pu = powerupById(id); return (
     <span key={id} title={pu?.blurb} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(8), fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 40%, transparent)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>{pu?.icon} {pu?.name}</span>
   ); });
-  // Apply mode: a targeted powerup is awaiting a spot. Double or Nothing → a
-  // filled spot; Bye Steal → an empty spot.
-  const fillEligible = applyMode === 'double-or-nothing' && !!player;
+  // Apply mode: a targeted powerup is awaiting a spot. Double or Nothing / Lead
+  // Change / Grudge / Red Herring stake one of YOUR filled spots; Jinx points at
+  // the opponent in that window/slot (tap your spot at that index, blind); Bye
+  // Steal fills an empty spot.
+  const yourSpotPu = applyMode === 'double-or-nothing' || applyMode === 'lead-change' || applyMode === 'grudge' || applyMode === 'red-herring' || applyMode === 'jinx';
+  const fillEligible = yourSpotPu && !!player;
   const emptyEligible = applyMode === 'bye-steal' && !player;
   const applyHi = fillEligible;
   const applyDim = !!applyMode && !fillEligible && !emptyEligible;

@@ -26,6 +26,10 @@ export interface AppliedWeek {
   byeSteal?: { slotKey: string; playerId: string }; // a bye player fielded for a flat projected score
   emp?: Partial<Record<WindowId, number>>;       // window -> clock at which opponent drips froze (10 min)
   rivalry?: Partial<Record<WindowId, boolean>>;  // windows armed with Rivalry (siphon 50% of same-position opponents at window-end)
+  leadChange?: string[];                         // your slotKeys armed with Lead Change (+2 per lead you seize)
+  grudge?: string[];                             // your slotKeys staked with Grudge Match (win by 10+ → +25, lose → −25)
+  jinx?: string[];                               // slotKeys where you jinx the opponent's first TD
+  redHerring?: string[];                         // your decoy slotKeys (cap opposing same-position players in the window)
   lineup?: Record<string, Pick>;                 // your lineup edits (deltas over the default) — so FINAL replays your actual lineup
 }
 
@@ -189,6 +193,10 @@ interface Store {
   applyRivalry: (week: number, win: WindowId) => boolean;
   /** Remove Rivalry from a window (refund). */
   removeRivalry: (week: number, win: WindowId) => void;
+  /** Arm a slot-targeted list power-up (lead-change / grudge / jinx / red-herring) on a slotKey. */
+  applySlotListPu: (id: string, week: number, slotKey: string) => boolean;
+  /** Remove a slot-targeted list power-up from a slotKey (refund). */
+  removeSlotListPu: (id: string, week: number, slotKey: string) => void;
   /** Back-outs (refund the consumable) before lock-in / kickoff. */
   clearDoubleOrNothing: (week: number) => void;
   clearSpy: (week: number) => void;
@@ -401,7 +409,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             spy: lastSpy ? { slotKey: sk(lastSpy), reveal: lastSpy.reveal } : b.spy,
             byeSteal: tgt.byeSteal ? { slotKey: sk(tgt.byeSteal), playerId: tgt.byeSteal.slug } : b.byeSteal,
             emp: (tgt.emp && Object.keys(tgt.emp).length ? tgt.emp : b.emp) as AppliedWeek['emp'],
-            rivalry: b.rivalry,
+            rivalry: b.rivalry, leadChange: b.leadChange, grudge: b.grudge, jinx: b.jinx, redHerring: b.redHerring,
             buffs: Object.fromEntries((buffs ?? []).map((x) => [x, true as const])),
           } });
         })
@@ -553,6 +561,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     applied[week]?.emp?.[win] != null ? false : consumeAndApply('emp', week, (cur) => ({ ...cur, emp: { ...cur.emp, [win]: clock } }));
   const applyRivalry = (week: number, win: WindowId): boolean =>
     applied[week]?.rivalry?.[win] ? false : consumeAndApply('rivalry', week, (cur) => ({ ...cur, rivalry: { ...cur.rivalry, [win]: true } }));
+  // Slot-targeted list power-ups (Lead Change / Grudge / Jinx / Red Herring):
+  // arm toggles a slotKey into the week's list, spending one consumable.
+  const SLOT_LIST_PU: Record<string, keyof AppliedWeek> = { 'lead-change': 'leadChange', 'grudge': 'grudge', 'jinx': 'jinx', 'red-herring': 'redHerring' };
+  const applySlotListPu = (id: string, week: number, slotKey: string): boolean => {
+    const key = SLOT_LIST_PU[id];
+    if (((applied[week]?.[key] as string[] | undefined) ?? []).includes(slotKey)) return false;
+    return consumeAndApply(id, week, (cur) => ({ ...cur, [key]: [ ...((cur[key] as string[] | undefined) ?? []), slotKey ] }));
+  };
+  const removeSlotListPu = (id: string, week: number, slotKey: string): void => {
+    const key = SLOT_LIST_PU[id];
+    if (!((applied[week]?.[key] as string[] | undefined) ?? []).includes(slotKey)) return;
+    clearApplied(week, id, (c) => { const arr = ((c[key] as string[] | undefined) ?? []).filter((k) => k !== slotKey); (c as unknown as Record<string, unknown>)[key] = arr.length ? arr : undefined; });
+  };
 
   // ── Back-outs: clear an applied targeted powerup and refund the consumable. ──
   const clearApplied = (week: number, refundId: string, mutate: (cur: AppliedWeek) => void): void => {
@@ -606,7 +627,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
     [theme, iconSet, cardSkin, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, liveCtx, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
