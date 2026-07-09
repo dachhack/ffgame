@@ -523,7 +523,7 @@ function offSecs(intervals: number[][], t0: number, t1: number): number {
  * `opts.youMult` / `opts.theirMult` apply a per-clock multiplier to that
  * side's scoring (used by the QB Field General window multiplier).
  */
-export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youShield?: (clock: number) => number; theirShield?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; youJinx?: boolean; theirJinx?: boolean; youSurge?: [number, number]; theirSurge?: [number, number]; youFreeze?: [number, number]; theirFreeze?: [number, number]; youBunkerFrom?: number; theirBunkerFrom?: number; youDoubleTd?: number; theirDoubleTd?: number; youCounterWipe?: number; theirCounterWipe?: number; realResolve?: boolean; projection?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
+export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youShield?: (clock: number) => number; theirShield?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; youJinx?: boolean; theirJinx?: boolean; youSurge?: [number, number]; theirSurge?: [number, number]; youFreeze?: [number, number]; theirFreeze?: [number, number]; youNapalm?: [number, number]; theirNapalm?: [number, number]; youBunkerFrom?: number; theirBunkerFrom?: number; youDoubleTd?: number; theirDoubleTd?: number; youCounterWipe?: number; theirCounterWipe?: number; realResolve?: boolean; projection?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
   // Pre-match team buffs active on each side (Momentum / Garbage Time /
   // Floodgates / Overtime). Only the human side carries buffs in the demo.
   const youBuffs = opts.youBuffs ?? new Set<string>();
@@ -691,6 +691,10 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     if (garbageOn) add *= 2;
     const m = mult?.(t1); const fgm = m && m !== 1 ? m : 1; if (fgm !== 1) add *= fgm;
     if (surgeAt(side, t1)) add *= SURGE_MULT; // SURGE: live ×2 on this side's drip
+    // NAPALM: while this drip is HOT under a napalm window, it BURNS — the hot
+    // accrual goes negative (the opponent bleeds points for running too hot).
+    const nap = side === 'you' ? opts.youNapalm : opts.theirNapalm;
+    if (s.hot && nap && t0 < nap[1] && t1 > nap[0]) return { total: -add, ot: 0, momentum: 0, garbage: 0 };
     // Everything accrued past regulation only exists because of Overtime, so credit
     // it wholly to OT; within regulation, split out Momentum's 3×-vs-2× and Garbage.
     if (isOT) return { total: add, ot: add, momentum: 0, garbage: 0 };
@@ -718,14 +722,19 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       const yg = accrueYou ? minuteGain('you', t, next) : ZERO_GAIN;
       const tg = accrueTheir ? minuteGain('their', t, next) : ZERO_GAIN;
       const ya = yg.total, ta = tg.total;
+      // A positive gain banks normally; a NAPALM burn (negative) subtracts from the
+      // bank, floored at 0 (a hot drip can be burned down but not below zero).
       if (ya > 0) { Y.bank += ya; Y.hist.push({ clock: next, pts: ya }); if (next >= REG) youOtPts += ya; recBuff('you', 'overtime', yg.ot); recBuff('you', 'momentum', yg.momentum); recBuff('you', 'garbage-time', yg.garbage); }
+      else if (ya < 0) Y.bank = Math.max(0, Math.round((Y.bank + ya) * 10) / 10);
       if (ta > 0) { T.bank += ta; T.hist.push({ clock: next, pts: ta }); if (next >= REG) theirOtPts += ta; recBuff('their', 'overtime', tg.ot); recBuff('their', 'momentum', tg.momentum); recBuff('their', 'garbage-time', tg.garbage); }
+      else if (ta < 0) T.bank = Math.max(0, Math.round((T.bank + ta) * 10) / 10);
       // Only surface a drip tick once it rounds to ≥0.1 — sub-0.1 still banks
-      // silently and shows up in the next tick's cumulative.
+      // silently and shows up in the next tick's cumulative. Napalm burns (negative)
+      // surface as their own tick so the log shows points bleeding away.
       const yd = Math.round(ya * 10) / 10, td = Math.round(ta * 10) / 10;
       const ym = opts.youMult?.(next), tm = opts.theirMult?.(next);
-      if (yd > 0) events.push({ clock: next, side: 'you', play: `${you.player.team || 'NFL'}: ${Y.hot ? '🔥 HOT drip' : 'drip'}`, delta: yd, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true, mult: ym && ym !== 1 ? ym : undefined, buffNote: dripBuffNote(yg) });
-      if (td > 0) events.push({ clock: next, side: 'their', play: `${their.player.team || 'NFL'}: ${T.hot ? '🔥 HOT drip' : 'drip'}`, delta: td, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true, mult: tm && tm !== 1 ? tm : undefined, buffNote: dripBuffNote(tg) });
+      if (yd !== 0) events.push({ clock: next, side: 'you', play: `${you.player.team || 'NFL'}: ${yd < 0 ? '🔥 NAPALM burn' : Y.hot ? '🔥 HOT drip' : 'drip'}`, delta: yd, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true, mult: yd > 0 && ym && ym !== 1 ? ym : undefined, buffNote: yd < 0 ? 'NAPALM 🔥' : dripBuffNote(yg) });
+      if (td !== 0) events.push({ clock: next, side: 'their', play: `${their.player.team || 'NFL'}: ${td < 0 ? '🔥 NAPALM burn' : T.hot ? '🔥 HOT drip' : 'drip'}`, delta: td, youBank: Math.round(Y.bank * 10) / 10, theirBank: Math.round(T.bank * 10) / 10, drip: true, mult: td > 0 && tm && tm !== 1 ? tm : undefined, buffNote: td < 0 ? 'NAPALM 🔥' : dripBuffNote(tg) });
       t = next;
     }
   };

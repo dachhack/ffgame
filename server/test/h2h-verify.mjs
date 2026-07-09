@@ -185,4 +185,15 @@ const offers = clutchOffers(rSlot, WEEK);
 console.log(`OFFERS: ${offers.map((o) => `${o.id}(${o.note})`).join(', ') || 'none'}`);
 ok('clutch offer detection surfaced an Encore for a first-half TD', offers.some((o) => o.id === 'clutch-encore'));
 
+// ── 13. NAPALM: a hot drip burns (accrual goes negative) ─────────────────────
+// A WR drip vs an empty opponent goes HOT (3 straight catches, nobody to cool it).
+// Napalm over the whole game should end far lower — the hot stretch bleeds points.
+const napWR = { player: P('puka-nacua', 'WR', 'LA'), metricId: 'recyd' };
+const napBase = resolveSlot(napWR, { player: EMPTY, metricId: 'none' }, WEEK, 'base').youFinal;
+const napRes = resolveSlot(napWR, { player: EMPTY, metricId: 'none' }, WEEK, 'napalm', { youNapalm: [0, 3600] });
+const burns = napRes.events.filter((e) => e.effect === undefined && /NAPALM/.test(e.buffNote ?? '')).length;
+console.log(`\nNAPALM: hot drip ${napBase} → napalmed ${napRes.youFinal} (${burns} burn ticks)`);
+ok('napalm drove a hot drip well below its normal total', napRes.youFinal < napBase);
+ok('napalm never pushed the bank below 0', napRes.youFinal >= 0 && burns > 0);
+
 console.log('\nDONE.');

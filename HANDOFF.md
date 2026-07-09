@@ -1,6 +1,20 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-09 · Build `v0.119.0`_
+_Last updated: 2026-07-09 · Build `v0.120.0`_
+
+## Napalm — a live power-up that punishes a hot drip (v0.120.0)
+`napalm` (◎60, live, slot-opp). Fire on a live opponent slot: for 10 game-minutes,
+any minute their drip is HOT the accrual INVERTS — `minuteGain` returns `-add`, so
+the hot drip bleeds their bank (floored at 0) instead of doubling it. Does nothing
+while they stay cool (it only bites HOT drips), so it's a punish/counter to a rival
+running too hot. Burn ticks surface as their own drip events ("🔥 NAPALM burn",
+negative delta). Wired like Cold Snap: `resolveSlot` `opts.{you,their}Napalm:[c,c+600]`,
+`extras.napalm` in buildMatchup + `LiveExtras.napalm` in resolveLiveMatchup,
+`AppliedWeek.napalm` via the shared `applyLiveSlotPu`, the live tap-a-spot flow +
+active-effect chip. Price in `0083_napalm_price.sql`. Verified: a permanently-hot
+drip (54.9 vs empty) napalmed to 0 over the whole game (37 burn ticks, floored ≥0);
+24/24 in h2h-verify.
+
 
 ## Clutch plays: conditional, transient-availability power-ups (v0.119.0)
 A NEW class — power-ups that only UNLOCK from a live game-state trigger on a slot

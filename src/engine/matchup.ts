@@ -390,7 +390,7 @@ export function buildMatchup(
   swaps: SlotSwaps = {},
   backupAssign: Record<string, string> = {},
   buffs: Record<string, boolean> = {},
-  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; surge?: Record<string, number>; coldSnap?: Record<string, number>; bunker?: Record<string, number>; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number>; autoBackups?: boolean } = {},
+  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; surge?: Record<string, number>; coldSnap?: Record<string, number>; napalm?: Record<string, number>; bunker?: Record<string, number>; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number>; autoBackups?: boolean } = {},
   realResolve = false, // resolve cross-game effects (TE-TD drip nuke) in real-time order
   oppBuffs?: string[], // live H2H: the opponent's REAL armed buffs (revealed at lock); AI default when omitted
 ): ResolvedMatchup {
@@ -491,12 +491,13 @@ export function buildMatchup(
         const win10 = (c: number | undefined): [number, number] | undefined => (c != null ? [c, c + 600] : undefined);
         const youSurge = win10(extras.surge?.[key]);
         const theirFreeze = win10(extras.coldSnap?.[key]);
+        const theirNapalm = win10(extras.napalm?.[key]); // burns the opponent's hot drip here
         const youBunkerFrom = extras.bunker?.[key];
         // Clutch (conditional) power-ups armed on this slot: Encore (+12 on a
         // post-arm TD) and Counter-Wipe (negate a nuke at its recorded clock).
         const youDoubleTd = extras.clutchEncore?.[key];
         const youCounterWipe = extras.clutchCounter?.[key];
-        const opts = { youMult, theirMult, youShield, theirShield, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined, theirJinx, youSurge, theirFreeze, youBunkerFrom, youDoubleTd, youCounterWipe, realResolve };
+        const opts = { youMult, theirMult, youShield, theirShield, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined, theirJinx, youSurge, theirFreeze, theirNapalm, youBunkerFrom, youDoubleTd, youCounterWipe, realResolve };
         let res = resolveSlot(yIn, tIn, week, gameLabel, opts);
         if (theirJinx && their) theirJinxed = res.events.some((e) => e.effect?.text.includes('JINXED'));
         if (youDoubleTd != null && you) youEncore = res.events.some((e) => e.effect?.text.includes('ENCORE'));
