@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import type { Session } from '@supabase/supabase-js';
 import type { Pos, ThemeName } from '../theme';
 import { useStore, type CardSkin } from './store';
@@ -54,7 +55,11 @@ export function ModalBackdrop({ onClick, zIndex = 70, padTop = 40, children }: {
     v.addEventListener('scroll', update);
     return () => { v.removeEventListener('resize', update); v.removeEventListener('scroll', update); };
   }, []);
-  return (
+  // Portal to <body> so the fixed overlay always resolves against the viewport —
+  // otherwise an ancestor with a transform/filter (a card animation, etc.) traps
+  // `position: fixed` inside its own stacking context and the modal can render
+  // *under* the sticky header regardless of z-index.
+  return createPortal(
     <div
       onClick={onClick}
       style={{
@@ -65,7 +70,8 @@ export function ModalBackdrop({ onClick, zIndex = 70, padTop = 40, children }: {
       }}
     >
       {children}
-    </div>
+    </div>,
+    document.body,
   );
 }
 

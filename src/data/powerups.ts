@@ -68,6 +68,26 @@ export function powerupById(id: string): Powerup | undefined {
   return POWERUPS.find((p) => p.id === id);
 }
 
+// ── Shop categories ──────────────────────────────────────────────────────────
+// Tabs for the Power-Up Shop, grouping the catalog by how you use each one.
+export type PowerupCategory = 'buff' | 'unlock' | 'bet' | 'live' | 'clutch';
+export const POWERUP_CATEGORIES: { id: PowerupCategory; label: string }[] = [
+  { id: 'buff', label: 'Buffs' },      // whole-lineup pre-match arms (amps, protection, flat-bonus, coordination)
+  { id: 'unlock', label: 'Unlocks' },  // metric unlocks + the WR/TE carry-wipe plus-up
+  { id: 'bet', label: 'Bets' },        // targeted pre-kickoff plays + board/info
+  { id: 'live', label: 'Live' },       // in-game tactical + swaps
+  { id: 'clutch', label: 'Clutch' },   // conditional, live-triggered plays
+];
+const CLUTCH_IDS = new Set(['clutch-don', 'clutch-encore', 'clutch-counter']);
+const BET_IDS = new Set(['double-or-nothing', 'grudge', 'lead-change', 'rivalry', 'jinx', 'red-herring', 'extra-slot', 'bye-steal', 'spy']);
+export function powerupCategory(p: Powerup): PowerupCategory {
+  if (CLUTCH_IDS.has(p.id)) return 'clutch';
+  if (p.kind === 'metric' || p.id === 'unlock-carries-wipe') return 'unlock';
+  if (p.timing === 'live') return 'live';
+  if (BET_IDS.has(p.id)) return 'bet';
+  return 'buff';
+}
+
 // ── Drip AMPLIFIERS are capacity-limited ─────────────────────────────────────
 // Momentum / Overtime / Garbage Time all multiply the same drip accrual, and
 // the measured meta (findings §2/§12) is "everyone stacks all three". Capacity

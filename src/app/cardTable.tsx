@@ -271,7 +271,7 @@ const CSS = `
 /* ── power-up cards (shop + apply modals) — the hand's leather stock, dealt
    as a tappable grid on the felt ─────────────────────────────────────────── */
 .ctable .ct-puwrap{width:150px;position:relative;animation:ct-deal .5s cubic-bezier(.3,1.5,.5,1) backwards;}
-.ctable .ct-pucard{display:flex;flex-direction:column;width:100%;min-height:196px;border-radius:10px;border:2px solid #000;
+.ctable .ct-pucard{display:flex;flex-direction:column;width:100%;height:236px;overflow:hidden;border-radius:10px;border:2px solid #000;
   box-shadow:0 4px 0 rgba(0,0,0,.7);
   background-image:radial-gradient(rgba(233,185,89,.09) 1px,transparent 1.2px),radial-gradient(circle at 50% 38%,#332919 0%,#2A2115 55%,#201810 100%);
   background-size:11px 11px,100% 100%;
@@ -286,7 +286,7 @@ const CSS = `
   line-height:1.2;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;text-wrap:balance;}
 .ctable .ct-publurb{font-size:9.2px;line-height:1.5;color:#CFC4A6;margin-top:5px;display:-webkit-box;-webkit-line-clamp:4;
   -webkit-box-orient:vertical;overflow:hidden;}
-.ctable .ct-punote{font-size:8.6px;color:#E0A96B;margin-top:4px;line-height:1.4;}
+.ctable .ct-punote{font-size:8.6px;color:#E0A96B;margin-top:4px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
 .ctable .ct-pucost{margin-top:auto;padding-top:7px;}
 .ctable .ct-pucost b{display:inline-block;font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;font-size:11px;
   letter-spacing:.06em;text-transform:uppercase;color:#241A08;background:linear-gradient(#F0C367,#DFA83F);
@@ -316,6 +316,8 @@ const CSS = `
 .ct-hcard .ct-hqty{position:absolute;top:-7px;right:-6px;background:#E9B959;color:#241A08;border:2px solid #000;border-radius:999px;
   font-size:8px;font-weight:800;padding:2px 5px;box-shadow:0 2px 0 #000;}
 .ct-hcard .ct-hdl{margin-top:auto;text-align:center;font-size:6.6px;letter-spacing:.08em;color:#CDB77F;line-height:1.3;}
+.ct-hcard.ct-hmore .ct-hinner{background:linear-gradient(#2A2216,#1C160C);border-style:dashed;}
+.ct-hcard.ct-hmore .ct-hico{margin-top:8px;}
 .ct-htip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);width:158px;
   background:#100C06;border:2px solid #000;border-radius:8px;box-shadow:0 3px 0 #000;padding:7px 8px;
   font-size:8.6px;line-height:1.45;color:#CFC4A6;text-align:center;}
@@ -500,19 +502,43 @@ export interface HandCard {
  *  with its tip, and the tip's button ARMs it or enters APPLY target mode.
  *  While a card is pending a target (`pendingId`) it stays raised; tapping it
  *  again cancels. Renders nothing when the hand is empty. */
-export function PowerupHand({ cards, pendingId, onArm, onApply, onCancel }: {
+export function PowerupHand({ cards, pendingId, onArm, onApply, onCancel, onOverflow }: {
   cards: HandCard[]; pendingId: string | null;
   onArm: (id: string) => void; onApply: (id: string) => void; onCancel: () => void;
+  /** Opens the full "Play a Card" grid — the hand fans at most MAX_HAND cards, the
+   *  rest live behind an overflow tile so a big hand never gets unwieldy. */
+  onOverflow?: () => void;
 }) {
   const [raised, setRaised] = useState<string | null>(null);
   useEffect(() => { if (pendingId) setRaised(null); }, [pendingId]);
   if (!cards.length) return null;
-  const n = cards.length;
+  const MAX_HAND = 6;
+  // If a pending card would be hidden in the overflow, keep it visible.
+  const overflow = cards.length > MAX_HAND;
+  let shown = overflow ? cards.slice(0, MAX_HAND - 1) : cards;
+  if (overflow && pendingId && !shown.some((c) => c.id === pendingId)) {
+    const pc = cards.find((c) => c.id === pendingId);
+    if (pc) shown = [...shown.slice(0, MAX_HAND - 2), pc];
+  }
+  const hidden = cards.length - shown.length;
+  // Total fanned tiles = shown cards + (one overflow tile when there's overflow).
+  const n = shown.length + (overflow ? 1 : 0);
   const spread = Math.min(60, 320 / Math.max(1, n - 1));
+  const overflowTile = overflow ? (
+    <div key="__overflow__" className="ct-hcard ct-hmore"
+      style={{ ['--hx' as string]: `${(shown.length - (n - 1) / 2) * spread}px`, ['--hr' as string]: `${(shown.length - (n - 1) / 2) * 4}deg` }}
+      onClick={() => onOverflow?.()}>
+      <div className="ct-hinner">
+        <div className="ct-hico">🃏</div>
+        <div className="ct-httl">+{hidden} MORE</div>
+        <div className="ct-hdl">TAP FOR FULL HAND</div>
+      </div>
+    </div>
+  ) : null;
   return (
     <div className="ct-hand">
       <div className="ct-handtag">YOUR HAND</div>
-      {cards.map((c, i) => {
+      {shown.map((c, i) => {
         const hx = (i - (n - 1) / 2) * spread;
         const hr = (i - (n - 1) / 2) * 4;
         const isPending = pendingId === c.id;
@@ -543,6 +569,7 @@ export function PowerupHand({ cards, pendingId, onArm, onApply, onCancel }: {
           </div>
         );
       })}
+      {overflowTile}
     </div>
   );
 }
