@@ -208,6 +208,9 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
     { id: 'fey', name: 'Fey Library', felt: '#0E2620', back: '#38305E' },
     { id: 'compass', name: 'Gridiron Navy', felt: '#101A2C', back: '#20344F', img: `${import.meta.env.BASE_URL}card-compass.jpg` },
     { id: 'gridiron', name: 'Gridiron Crimson', felt: '#2A0C10', back: '#5A1620', img: `${import.meta.env.BASE_URL}card-gridiron.jpg` },
+    { id: 'cathedral', name: 'Cathedral', felt: '#14120A', back: '#2A2410', img: `${import.meta.env.BASE_URL}card-cathedral.jpg` },
+    { id: 'victory', name: 'Victory', felt: '#2C0D11', back: '#5A1620', img: `${import.meta.env.BASE_URL}card-victory.jpg` },
+    { id: 'dynasty', name: 'Dynasty', felt: '#0E2A1E', back: '#1C4A34', img: `${import.meta.env.BASE_URL}card-dynasty.jpg` },
   ];
   const lbl: CSSProperties = { fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--faint)' };
   const toggle = (on: boolean): CSSProperties => ({

@@ -68,6 +68,9 @@ const CSS = `
    (helmets/shield). Felt is tinted to the card so the table matches. */
 :root[data-card-skin="compass"]{ --ct-felt:#101A2C; --ct-back1:#20344F; --ct-back2:#16243A; --ct-back3:#0C1522; --ct-deck:190,205,225; --ct-back-ink:#D6E0EF; --ct-backart:url("${import.meta.env.BASE_URL}card-compass.jpg"); }
 :root[data-card-skin="gridiron"]{ --ct-felt:#2A0C10; --ct-back1:#5A1620; --ct-back2:#3A0E16; --ct-back3:#24080C; --ct-deck:233,190,96; --ct-back-ink:#E7C58A; --ct-backart:url("${import.meta.env.BASE_URL}card-gridiron.jpg"); }
+:root[data-card-skin="cathedral"]{ --ct-felt:#14120A; --ct-back1:#2A2410; --ct-back2:#1A160A; --ct-back3:#0C0A05; --ct-deck:233,196,110; --ct-back-ink:#E8CE93; --ct-backart:url("${import.meta.env.BASE_URL}card-cathedral.jpg"); }
+:root[data-card-skin="victory"]{ --ct-felt:#2C0D11; --ct-back1:#5A1620; --ct-back2:#3A0E16; --ct-back3:#24080C; --ct-deck:233,190,96; --ct-back-ink:#E7C58A; --ct-backart:url("${import.meta.env.BASE_URL}card-victory.jpg"); }
+:root[data-card-skin="dynasty"]{ --ct-felt:#0E2A1E; --ct-back1:#1C4A34; --ct-back2:#123522; --ct-back3:#0A2417; --ct-deck:206,178,120; --ct-back-ink:#D8C79E; --ct-backart:url("${import.meta.env.BASE_URL}card-dynasty.jpg"); }
 /* (Photo decks hide the ◆ gem and move SEALED/SCOUT into a bottom ribbon — that
    lives in the SetupRow JSX, keyed off PHOTO_SKINS, so the art stays uncovered.) */
 /* Dark felt: a green baize whose base + ambient glow lean slightly toward the
