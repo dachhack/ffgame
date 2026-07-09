@@ -2136,7 +2136,7 @@ function WindowSectionInner(props: {
   onScout: (win: WindowId) => void;
   lockPlayer?: boolean; // demo setup: metric is editable, but the player is fixed
 }) {
-  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, rivalryQty, rivalryArmed, onApplyRivalry, onRemoveRivalry, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch } = props;
+  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch } = props;
   const w = rw.window;
   // Twin Generals: with the buff armed and ≥2 of your Field General QBs in this
   // window, the top two multipliers stack — link those QB spots so you can see
@@ -2251,28 +2251,11 @@ function WindowSectionInner(props: {
             {/* Live board: this window's own state + lock time, right in its header. */}
             {stateChip}
             {timeHint && <span className="mono" style={{ fontSize: fs(9), fontWeight: 700, color: 'var(--warn)', letterSpacing: '0.04em' }}>{timeHint}</span>}
-            {canApplyExtra && (
-              <button
-                onClick={onApplyExtra}
-                title="Add a slot to this window — for you AND your opponent. Locks once any window starts."
-                className="mono"
-                style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px dashed var(--warn)', borderRadius: 4, padding: '4px 8px' }}
-              >
-                ➕ ADD SLOT (◈ ×{extraSlotQty})
-              </button>
-            )}
+            {/* Window-targeted plays (Extra Slot / Rivalry) are applied from the
+                card: arm it → a TAP TO APPLY chip appears on each window below. */}
             {rw.slots.length > w.slots && (
               <button onClick={onRemoveExtra} title="Remove the added slot (refund)" className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--opp)', background: 'var(--surface)', border: '1px solid var(--opp)', borderRadius: 4, padding: '4px 8px' }}>
                 ➖ REMOVE SLOT
-              </button>
-            )}
-            {rivalryArmed ? (
-              <button onClick={onRemoveRivalry} title="Rivalry armed on this window — siphons 50% of any same-position opponent at window-end. Tap to remove (refund)." className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--fx-reset)', border: '1px solid var(--fx-reset)', borderRadius: 4, padding: '4px 8px' }}>
-                ⚔️ RIVALRY ✕
-              </button>
-            ) : rivalryQty > 0 && (
-              <button onClick={onApplyRivalry} title="Arm Rivalry on this window (blind): siphon 50% of any opponent who plays the same position as you here, at window-end. Whiffs if they don't mirror you." className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--fx-reset)', background: 'var(--surface)', border: '1px dashed var(--fx-reset)', borderRadius: 4, padding: '4px 8px' }}>
-                ⚔️ RIVALRY (◈ ×{rivalryQty})
               </button>
             )}
             <span className="mono" style={{ fontSize: fs(9), fontWeight: 700, letterSpacing: '0.12em', color: 'var(--dim)' }}>{setN}/{rw.slots.length} SET</span>
@@ -2371,19 +2354,6 @@ function WindowSectionInner(props: {
                 onDropPlayer={(id) => onAssign(id)} onScout={() => onScout(w.id)} lockPlayer={lockPlayer}
               />
             );
-            // Jinx points at the OPPONENT's (sealed) pick in this slot. Since the
-            // opponent is hidden in setup, render a face-down opponent target to tap.
-            if (applyMode === 'jinx') {
-              const jinxed = aw?.jinx?.includes(key);
-              return (
-                <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {setupRow}
-                  <button onClick={jinxed ? undefined : () => onApplyToSpot(key)} className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: jinxed ? 'var(--warn)' : 'var(--on-accent)', background: jinxed ? 'var(--surface)' : 'var(--warn)', border: `1px ${jinxed ? 'solid' : 'dashed'} var(--warn)`, borderRadius: 5, padding: '7px 10px', cursor: jinxed ? 'default' : 'pointer', ...(jinxed ? {} : { boxShadow: '0 0 12px color-mix(in srgb, var(--warn) 40%, transparent)', animation: 'bpulse 1.6s ease infinite' }) }}>
-                    🧿 {jinxed ? 'JINXED — opponent’s first TD here is negated' : `${w.label} · opponent’s sealed pick — TAP TO JINX`}
-                  </button>
-                </div>
-              );
-            }
             return setupRow;
           }
           // Per-side clocks: in wall-clock mode `clock` is the window's real
@@ -2537,6 +2507,9 @@ export function SetupRow(props: {
   const rowGap = isMobile ? 5 : 8;
   const player = pick ? ((resolve ?? getPlayer)(pick.playerId) ?? null) : null;
   const metric = player && pick?.metricId ? metricById(player.pos, pick.metricId) : null;
+  // Jinx targets the OPPONENT's sealed card in this slot — the chip lands on it.
+  const jinxMode = applyMode === 'jinx';
+  const jinxed = appliedPu.includes('jinx');
   // Power-ups acting on THIS spot: armed team buffs that apply here, plus any
   // spot-specific applied powerup (Double or Nothing / Bye Steal).
   const spotBuffs = [
@@ -2654,7 +2627,20 @@ export function SetupRow(props: {
           <span className="mono" style={{ fontSize: bigText ? 10.5 : 10, color: emptyEligible ? 'var(--warn)' : 'var(--faint)', letterSpacing: '0.08em', fontWeight: emptyEligible ? 700 : 400, whiteSpace: 'nowrap' }}>{emptyEligible ? 'TAP TO FIELD BYE' : 'TAP TO PICK PLAYER'}</span>
         </div>
       )}
-      <div className="mx-sealed" onClick={hideScout ? undefined : onScout} title={hideScout ? 'Your opponent’s lineup is sealed until kickoff' : "Scout the opponent's possible players for this window"} style={{ position: 'relative', minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: hideScout ? 'default' : 'pointer' }}>
+      <div
+        className="mx-sealed"
+        onClick={jinxMode ? (jinxed ? undefined : onApplyToSpot) : (hideScout ? undefined : onScout)}
+        title={jinxMode ? (jinxed ? 'Jinx armed on this opponent slot' : 'Point the Jinx at this opponent slot — the first TD their player scores here is negated') : hideScout ? 'Your opponent’s lineup is sealed until kickoff' : "Scout the opponent's possible players for this window"}
+        style={{ position: 'relative', minWidth: 0, minHeight: 78, background: jinxMode ? 'color-mix(in srgb, var(--warn) 12%, var(--surface))' : 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: `1px dashed ${jinxMode ? 'var(--warn)' : 'var(--bdh)'}`, borderRight: `3px dashed ${jinxMode ? 'var(--warn)' : 'var(--bdh)'}`, borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: jinxMode ? (jinxed ? 'default' : 'pointer') : hideScout ? 'default' : 'pointer' }}
+      >
+        {/* Jinx selector: a targeted opponent-slot bet lands its chip directly on
+            the sealed card — tap it to point the hex at that slot (or shows JINXED
+            once armed). */}
+        {jinxMode && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--warn) 14%, transparent)', borderRadius: 4, cursor: jinxed ? 'default' : 'pointer' }}>
+            <span className="mono" style={{ fontSize: fs(9.5), fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 9px', ...(jinxed ? {} : { animation: 'bpulse 1.6s ease infinite' }) }}>🧿 {jinxed ? 'JINXED' : 'TAP TO JINX'}</span>
+          </div>
+        )}
         {photoSkin ? (
           // Photo-backed decks: the image IS the card and a face-down back already
           // reads as "sealed", so we drop the SEALED label entirely and leave just
