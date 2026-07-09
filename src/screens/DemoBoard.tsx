@@ -415,8 +415,7 @@ export function DemoBoard() {
   // ── Board pieces ───────────────────────────────────────────────────────────
   const scoreHdr = (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: '14px 14px 12px' }}>
-      <div className="mono" style={{ fontSize: fs(8.5), letterSpacing: '0.16em', color: 'var(--faint)', textAlign: 'center' }}>DRIP TEST LEAGUE · WEEK {DEMO_WEEK} · REAL 2025 PLAYS</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <TeamSide team={youTeam.name} owner={youTeam.owner} ownerId={youTeam.ownerId} score={youTot} accent="var(--you)" you />
         <div className="mono" style={{ fontSize: fs(9), color: 'var(--faint)', letterSpacing: '0.12em', flex: 'none' }}>
           {phase === 'watch' && !ended && liveWin ? <span style={{ color: 'var(--you)' }}>{liveWin.window.label} · {fmtClock(wClock)}</span> : ended ? <span style={{ color: 'var(--you)' }}>FINAL</span> : 'VS'}
@@ -440,7 +439,6 @@ export function DemoBoard() {
           <span className="mono" style={{ fontSize: fs(10), fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>{w.label}</span>
           <span className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)' }}>{w.time}{games > 0 ? ` · ${games} game${games > 1 ? 's' : ''}` : ''}</span>
           <span style={{ flex: 1 }} />
-          {st === 'upcoming' && <span className="mono" style={{ ...stateChip, fontSize: fs(8), color: 'var(--dim)', borderColor: 'var(--bd)' }}><Emoji e="🔒" size="1.25em" /> SEALED</span>}
           {st === 'live' && <span className="mono" style={{ ...stateChip, fontSize: fs(8), color: 'var(--you)', borderColor: 'color-mix(in srgb, var(--you) 45%, transparent)' }}><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 3, background: 'var(--you)', marginRight: 5, animation: 'bpulse 1.2s infinite' }} />LIVE</span>}
           {st === 'final' && <span className="mono" style={{ ...stateChip, fontSize: fs(8), color: 'var(--dim)', borderColor: 'var(--bd)' }}>FINAL</span>}
         </div>
