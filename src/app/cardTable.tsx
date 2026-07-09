@@ -9,6 +9,43 @@ import { PuIcon } from './gameIcons';
 
 const FONT_URL = `${import.meta.env.BASE_URL}fonts/lilita-one.woff2`;
 
+// ── Card-back art ─────────────────────────────────────────────────────────────
+// Each skin gets its OWN vector card back (not the same pattern recolored): a
+// repeating field motif + a center medallion + an ornate double border + corner
+// pips, all in the skin's metallic trim. Rendered as a stretched SVG background
+// behind the ◈ gem, so it stays crisp at any card size. `c` is the trim color.
+const enc = (s: string) => `url("data:image/svg+xml,${encodeURIComponent(s)}")`;
+const backArt = (c: string, field: string, center: string) => enc(
+  `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 174' preserveAspectRatio='none'>`
+  + field + center
+  + `<rect x='6' y='6' width='108' height='162' rx='8' fill='none' stroke='${c}' stroke-width='1.6' opacity='.75'/>`
+  + `<rect x='10' y='10' width='100' height='154' rx='5' fill='none' stroke='${c}' stroke-width='.7' opacity='.4'/>`
+  + `<circle cx='13' cy='13' r='1.8' fill='${c}' opacity='.7'/><circle cx='107' cy='13' r='1.8' fill='${c}' opacity='.7'/>`
+  + `<circle cx='13' cy='161' r='1.8' fill='${c}' opacity='.7'/><circle cx='107' cy='161' r='1.8' fill='${c}' opacity='.7'/></svg>`);
+const fieldRect = (id: string, defs: string) =>
+  `<defs><pattern id='${id}' patternUnits='userSpaceOnUse' ${defs}</pattern></defs><rect x='6' y='6' width='108' height='162' rx='8' fill='url(#${id})'/>`;
+
+// Emerald — gold diamond lattice + a concentric-diamond medallion.
+const ART_EMERALD = backArt('#E9B959',
+  fieldRect('fe', `width='17' height='17'><path d='M8.5 1 L16 8.5 L8.5 16 L1 8.5 Z' fill='none' stroke='#E9B959' stroke-width='.55' opacity='.5'/><circle cx='8.5' cy='8.5' r='.9' fill='#E9B959' opacity='.55'/>`),
+  `<g fill='none' stroke='#E9B959'><path d='M60 62 L84 87 L60 112 L36 87 Z' stroke-width='1.2' opacity='.6'/><path d='M60 71 L75 87 L60 103 L45 87 Z' stroke-width='.7' opacity='.45'/></g>`);
+// Midnight Noir — silver argyle weave + a heraldic shield & crown.
+const ART_NOIR = backArt('#B0C6E8',
+  fieldRect('fn', `width='22' height='22'><path d='M0 22 L22 0 M-4 4 L4 -4 M18 26 L26 18' stroke='#B0C6E8' stroke-width='.5' opacity='.4'/><path d='M0 0 L22 22 M-4 18 L4 26 M18 -4 L26 4' stroke='#B0C6E8' stroke-width='.5' opacity='.24'/>`),
+  `<path d='M60 66 L82 73 V95 C82 110 71 118 60 123 C49 118 38 110 38 95 V73 Z' fill='none' stroke='#B0C6E8' stroke-width='1.2' opacity='.55'/><path d='M50 62 L54 55 L60 60 L66 55 L70 62 Z' fill='#B0C6E8' opacity='.55'/>`);
+// Crimson High-Roller — art-deco chevrons + a rising sunburst fan.
+const ART_CRIMSON = backArt('#E9BE60',
+  fieldRect('fc', `width='22' height='13'><path d='M0 13 L11 2 L22 13' fill='none' stroke='#E9BE60' stroke-width='.6' opacity='.38'/>`),
+  `<g stroke='#E9BE60' stroke-width='1' opacity='.5' fill='none'><path d='M60 104 V68 M60 104 L45 74 M60 104 L75 74 M60 104 L35 86 M60 104 L85 86'/></g><path d='M33 104 A27 27 0 0 1 87 104' fill='none' stroke='#E9BE60' stroke-width='1.2' opacity='.6'/>`);
+// Sunset Arcade — cream fish-scale scallops + a radiant sun.
+const ART_SUNSET = backArt('#F5DCBE',
+  fieldRect('fs', `width='20' height='11'><path d='M-10 11 A10 10 0 0 1 10 11 M10 11 A10 10 0 0 1 30 11' fill='none' stroke='#F5DCBE' stroke-width='.6' opacity='.4'/>`),
+  `<circle cx='60' cy='84' r='12' fill='none' stroke='#F5DCBE' stroke-width='1.2' opacity='.6'/><g stroke='#F5DCBE' stroke-width='1' opacity='.55' fill='none'><path d='M60 66 V60 M60 108 V102 M42 84 H36 M84 84 H78 M47 71 L43 67 M73 71 L77 67 M47 97 L43 101 M73 97 L77 101'/></g>`);
+// Fey Library — antique-gold leaf trellis + a tree of life in a ring.
+const ART_FEY = backArt('#D6B678',
+  fieldRect('ff', `width='24' height='24'><path d='M0 24 L24 0' stroke='#D6B678' stroke-width='.5' opacity='.32'/><ellipse cx='12' cy='12' rx='3' ry='1.3' fill='#D6B678' opacity='.4' transform='rotate(-45 12 12)'/>`),
+  `<circle cx='60' cy='87' r='24' fill='none' stroke='#D6B678' stroke-width='1' opacity='.5'/><path d='M60 108 V78' stroke='#D6B678' stroke-width='1.6' opacity='.6' fill='none'/><path d='M60 84 C52 78 49 73 47 66 M60 84 C68 78 71 73 73 66 M60 92 C54 88 51 84 49 79 M60 92 C66 88 69 84 71 79' fill='none' stroke='#D6B678' stroke-width='1' opacity='.55'/><path d='M60 108 C55 111 52 113 49 116 M60 108 C65 111 68 113 71 116' fill='none' stroke='#D6B678' stroke-width='1' opacity='.5'/>`);
+
 const CSS = `
 @font-face{font-family:'Lilita One';font-style:normal;font-weight:400;font-display:swap;src:url('${FONT_URL}') format('woff2');}
 
@@ -21,11 +58,11 @@ const CSS = `
      --ct-back1/2/3 sealed card-back radial stops
      --ct-deck      rgb of the deck's metallic trim (lattice, gem, seal border)
      --ct-back-ink  text/label color that reads on the card back              */
-:root{ --ct-felt:#0B1F1A; --ct-back1:#7E2430; --ct-back2:#571C26; --ct-back3:#40151E; --ct-deck:233,185,89; --ct-back-ink:#D9A0A6; }
-:root[data-card-skin="noir"]{ --ct-felt:#0E1622; --ct-back1:#2B426A; --ct-back2:#1B2C48; --ct-back3:#101A2E; --ct-deck:176,198,232; --ct-back-ink:#B9C7DF; }
-:root[data-card-skin="crimson"]{ --ct-felt:#2A0B0E; --ct-back1:#241012; --ct-back2:#170A0B; --ct-back3:#0C0607; --ct-deck:233,190,96; --ct-back-ink:#D8B679; }
-:root[data-card-skin="sunset"]{ --ct-felt:#281026; --ct-back1:#1F5A55; --ct-back2:#154240; --ct-back3:#0D2E2C; --ct-deck:245,220,190; --ct-back-ink:#BFEAE4; }
-:root[data-card-skin="fey"]{ --ct-felt:#0E2620; --ct-back1:#38305E; --ct-back2:#282247; --ct-back3:#191531; --ct-deck:214,182,120; --ct-back-ink:#C9BCE6; }
+:root{ --ct-felt:#0B1F1A; --ct-back1:#7E2430; --ct-back2:#571C26; --ct-back3:#40151E; --ct-deck:233,185,89; --ct-back-ink:#D9A0A6; --ct-backart:${ART_EMERALD}; }
+:root[data-card-skin="noir"]{ --ct-felt:#0E1622; --ct-back1:#2B426A; --ct-back2:#1B2C48; --ct-back3:#101A2E; --ct-deck:176,198,232; --ct-back-ink:#B9C7DF; --ct-backart:${ART_NOIR}; }
+:root[data-card-skin="crimson"]{ --ct-felt:#2A0B0E; --ct-back1:#241012; --ct-back2:#170A0B; --ct-back3:#0C0607; --ct-deck:233,190,96; --ct-back-ink:#D8B679; --ct-backart:${ART_CRIMSON}; }
+:root[data-card-skin="sunset"]{ --ct-felt:#281026; --ct-back1:#1F5A55; --ct-back2:#154240; --ct-back3:#0D2E2C; --ct-deck:245,220,190; --ct-back-ink:#BFEAE4; --ct-backart:${ART_SUNSET}; }
+:root[data-card-skin="fey"]{ --ct-felt:#0E2620; --ct-back1:#38305E; --ct-back2:#282247; --ct-back3:#191531; --ct-deck:214,182,120; --ct-back-ink:#C9BCE6; --ct-backart:${ART_FEY}; }
 /* Dark felt: a green baize whose base + ambient glow lean slightly toward the
    active theme (base nudged toward --bg, blobs tinted --you / --opp) so neon
    reads teal, prime warm, slate cool — without losing the felt-green heart. */
@@ -102,9 +139,10 @@ const CSS = `
   font-weight:800;letter-spacing:.06em;max-width:88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;
   border:1.5px solid #000;box-shadow:0 2px 0 #000,inset 0 0 6px rgba(255,216,107,.28);text-shadow:0 1px 0 #000;}
 
-.ctable .ct-back{background:radial-gradient(circle at 50% 46%,var(--ct-back1,#7E2430) 0%,var(--ct-back2,#571C26) 62%,var(--ct-back3,#40151E) 100%);}
-.ctable .ct-lattice{position:absolute;inset:6px;border:1.5px solid rgba(var(--ct-deck,233,185,89),.5);border-radius:6px;
-  background-image:radial-gradient(rgba(var(--ct-deck,233,185,89),.34) 1.1px,transparent 1.3px);background-size:11px 11px;}
+.ctable .ct-back{background:var(--ct-backart) center/100% 100% no-repeat,radial-gradient(circle at 50% 46%,var(--ct-back1,#7E2430) 0%,var(--ct-back2,#571C26) 62%,var(--ct-back3,#40151E) 100%);}
+/* The per-skin SVG back carries the frame + field now, so the old dotted
+   lattice is retired (kept in the DOM, hidden). */
+.ctable .ct-lattice{display:none;}
 .ctable .ct-gem{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:26px;color:rgb(var(--ct-deck,233,185,89));text-shadow:0 2px 0 #000;}
 .ctable .ct-sealtag{position:absolute;left:50%;bottom:9px;transform:translateX(-50%) rotate(-3deg);font-size:6.4px;letter-spacing:.16em;
   background:color-mix(in srgb, var(--ct-back3,#40151E) 78%, #000);color:var(--ct-back-ink,#D9A0A6);border:1px solid rgba(var(--ct-deck,233,185,89),.4);padding:2.5px 6px;border-radius:3px;white-space:nowrap;}
@@ -157,8 +195,8 @@ const CSS = `
    which is what made the empty box tower over the sealed card.) */
 .ctable .mx-sealed{
   width:100%;max-width:172px;min-height:250px !important;justify-self:center;box-sizing:border-box;
-  background-image:radial-gradient(rgba(var(--ct-deck,233,185,89),.32) 1.1px,transparent 1.3px),radial-gradient(circle at 50% 46%,var(--ct-back1,#7E2430) 0%,var(--ct-back2,#571C26) 62%,var(--ct-back3,#40151E) 100%) !important;
-  background-size:11px 11px,100% 100% !important;
+  background-image:var(--ct-backart),radial-gradient(circle at 50% 46%,var(--ct-back1,#7E2430) 0%,var(--ct-back2,#571C26) 62%,var(--ct-back3,#40151E) 100%) !important;
+  background-size:100% 100%,100% 100% !important;background-repeat:no-repeat,no-repeat !important;
   border:2px solid #000 !important;border-right:2px solid #000 !important;
   border-radius:10px !important;box-shadow:0 4px 0 rgba(0,0,0,.6);
   animation:mx-wob 5.4s ease-in-out infinite alternate;}
