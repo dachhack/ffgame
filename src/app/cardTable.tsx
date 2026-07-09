@@ -66,15 +66,17 @@ const CSS = `
 /* Photographic decks — the back IS a full card image (owned art), not a
    generated pattern. Gridiron Navy (compass/field) + Gridiron Crimson
    (helmets/shield). Felt is tinted to the card so the table matches. */
-:root[data-card-skin="compass"]{ --ct-felt:#101A2C; --ct-back1:#20344F; --ct-back2:#16243A; --ct-back3:#0C1522; --ct-deck:190,205,225; --ct-back-ink:#D6E0EF; --ct-backart:url("${import.meta.env.BASE_URL}card-compass.jpg"); }
-:root[data-card-skin="gridiron"]{ --ct-felt:#2A0C10; --ct-back1:#5A1620; --ct-back2:#3A0E16; --ct-back3:#24080C; --ct-deck:233,190,96; --ct-back-ink:#E7C58A; --ct-backart:url("${import.meta.env.BASE_URL}card-gridiron.jpg"); }
-:root[data-card-skin="cathedral"]{ --ct-felt:#14120A; --ct-back1:#2A2410; --ct-back2:#1A160A; --ct-back3:#0C0A05; --ct-deck:233,196,110; --ct-back-ink:#E8CE93; --ct-backart:url("${import.meta.env.BASE_URL}card-cathedral.jpg"); }
-:root[data-card-skin="victory"]{ --ct-felt:#2C0D11; --ct-back1:#5A1620; --ct-back2:#3A0E16; --ct-back3:#24080C; --ct-deck:233,190,96; --ct-back-ink:#E7C58A; --ct-backart:url("${import.meta.env.BASE_URL}card-victory.jpg"); }
-:root[data-card-skin="dynasty"]{ --ct-felt:#0E2A1E; --ct-back1:#1C4A34; --ct-back2:#123522; --ct-back3:#0A2417; --ct-deck:206,178,120; --ct-back-ink:#D8C79E; --ct-backart:url("${import.meta.env.BASE_URL}card-dynasty.jpg"); }
-/* Photo decks: the back is a real card image whose aspect ≠ the slot's box
-   (which stretches to match its paired card). Scale it with COVER so it keeps
-   its proportions and crops the overscan instead of stretching. */
-:root[data-card-photo="1"] .ctable .mx-sealed{background-size:cover,100% 100% !important;background-position:center !important;}
+:root[data-card-skin="compass"]{ --ct-felt:#101A2C; --ct-back1:#20344F; --ct-back2:#16243A; --ct-back3:#0C1522; --ct-deck:190,205,225; --ct-back-ink:#D6E0EF; --ct-aspect:0.785; --ct-backart:url("${import.meta.env.BASE_URL}card-compass.jpg"); }
+:root[data-card-skin="gridiron"]{ --ct-felt:#2A0C10; --ct-back1:#5A1620; --ct-back2:#3A0E16; --ct-back3:#24080C; --ct-deck:233,190,96; --ct-back-ink:#E7C58A; --ct-aspect:0.779; --ct-backart:url("${import.meta.env.BASE_URL}card-gridiron.jpg"); }
+:root[data-card-skin="cathedral"]{ --ct-felt:#14120A; --ct-back1:#2A2410; --ct-back2:#1A160A; --ct-back3:#0C0A05; --ct-deck:233,196,110; --ct-back-ink:#E8CE93; --ct-aspect:0.769; --ct-backart:url("${import.meta.env.BASE_URL}card-cathedral.jpg"); }
+:root[data-card-skin="victory"]{ --ct-felt:#2C0D11; --ct-back1:#5A1620; --ct-back2:#3A0E16; --ct-back3:#24080C; --ct-deck:233,190,96; --ct-back-ink:#E7C58A; --ct-aspect:0.643; --ct-backart:url("${import.meta.env.BASE_URL}card-victory.jpg"); }
+:root[data-card-skin="dynasty"]{ --ct-felt:#0E2A1E; --ct-back1:#1C4A34; --ct-back2:#123522; --ct-back3:#0A2417; --ct-deck:206,178,120; --ct-back-ink:#D8C79E; --ct-aspect:0.766; --ct-backart:url("${import.meta.env.BASE_URL}card-dynasty.jpg"); }
+/* Photo decks: the back is a real card image. Instead of stretching (distorts)
+   or cover (clips), size the card to the image's OWN aspect ratio so it fills
+   exactly — no stretch, no clip. It then sits as a true-proportion card on the
+   felt (a touch shorter than its taller paired card, top-aligned). */
+:root[data-card-photo="1"] .ctable .mx-sealed{aspect-ratio:var(--ct-aspect);height:auto !important;min-height:0 !important;align-self:start;
+  background-size:100% 100%,100% 100% !important;background-position:center !important;}
 :root[data-card-photo="1"] .ctable .ct-back{background-size:cover !important;background-position:center !important;}
 /* (Photo decks hide the ◆ gem and move SEALED/SCOUT into a bottom ribbon — that
    lives in the SetupRow JSX, keyed off PHOTO_SKINS, so the art stays uncovered.) */
