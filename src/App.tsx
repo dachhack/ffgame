@@ -1,5 +1,5 @@
 import { useEffect, lazy, Suspense } from 'react';
-import { useStore } from './app/store';
+import { useStore, PHOTO_SKINS } from './app/store';
 import { THEMES, themeVars } from './theme';
 import { DemoBoard } from './screens/DemoBoard';
 import { yahooExchange } from './data/providers/yahooClient';
@@ -37,6 +37,8 @@ export function App() {
     // Personal card-deck skin (cardTable.tsx reads [data-card-skin] for its felt
     // + sealed card-back colors). Default emerald.
     document.documentElement.dataset.cardSkin = cardSkin;
+    // Photo-backed skins get the ribbon/no-gem treatment (cardTable.tsx).
+    document.documentElement.dataset.cardPhoto = PHOTO_SKINS.includes(cardSkin) ? '1' : '0';
   }, [theme, light, cardSkin]);
 
   // Deep link: ?live=1 enters Live mode; ?code=XXXX (a commissioner's share link)

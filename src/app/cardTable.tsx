@@ -63,6 +63,13 @@ const CSS = `
 :root[data-card-skin="crimson"]{ --ct-felt:#2A0B0E; --ct-back1:#241012; --ct-back2:#170A0B; --ct-back3:#0C0607; --ct-deck:233,190,96; --ct-back-ink:#D8B679; --ct-backart:${ART_CRIMSON}; }
 :root[data-card-skin="sunset"]{ --ct-felt:#281026; --ct-back1:#1F5A55; --ct-back2:#154240; --ct-back3:#0D2E2C; --ct-deck:245,220,190; --ct-back-ink:#BFEAE4; --ct-backart:${ART_SUNSET}; }
 :root[data-card-skin="fey"]{ --ct-felt:#0E2620; --ct-back1:#38305E; --ct-back2:#282247; --ct-back3:#191531; --ct-deck:214,182,120; --ct-back-ink:#C9BCE6; --ct-backart:${ART_FEY}; }
+/* Photographic decks — the back IS a full card image (owned art), not a
+   generated pattern. Gridiron Navy (compass/field) + Gridiron Crimson
+   (helmets/shield). Felt is tinted to the card so the table matches. */
+:root[data-card-skin="compass"]{ --ct-felt:#101A2C; --ct-back1:#20344F; --ct-back2:#16243A; --ct-back3:#0C1522; --ct-deck:190,205,225; --ct-back-ink:#D6E0EF; --ct-backart:url("${import.meta.env.BASE_URL}card-compass.jpg"); }
+:root[data-card-skin="gridiron"]{ --ct-felt:#2A0C10; --ct-back1:#5A1620; --ct-back2:#3A0E16; --ct-back3:#24080C; --ct-deck:233,190,96; --ct-back-ink:#E7C58A; --ct-backart:url("${import.meta.env.BASE_URL}card-gridiron.jpg"); }
+/* (Photo decks hide the ◆ gem and move SEALED/SCOUT into a bottom ribbon — that
+   lives in the SetupRow JSX, keyed off PHOTO_SKINS, so the art stays uncovered.) */
 /* Dark felt: a green baize whose base + ambient glow lean slightly toward the
    active theme (base nudged toward --bg, blobs tinted --you / --opp) so neon
    reads teal, prime warm, slate cool — without losing the felt-green heart. */
