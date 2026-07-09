@@ -26,13 +26,23 @@ Everything lands in the SHARED engine (`src/engine/sim.ts` + `matchup.ts` +
   ◈5. Threaded through `weekEarnings` (new `mvp` line in the earnings sheet) and
   `battle.mvp`; the live resolver adds it to `coin`.
 - **FIELD MARSHAL (DEF metric `marshal`) — the defensive Field General.** A DST on
-  `marshal` banks its normal flat points AND builds a live, window-wide SHIELD on
-  its own side: cumulative splash production (sk1/int3/fr2/def-TD6/safety2) ramps a
+  `marshal` banks flat splash points (NO drip) AND builds a live, window-wide SHIELD
+  on its own side: cumulative splash production (sk1/int3/fr2/def-TD6/safety2) ramps a
   damage-reduction fraction (`SHIELD_RATE` 0.04/pt, cap `SHIELD_CAP` 0.5) that
   BLUNTS every opposing nuke and erase against all its window's slots. Built by
   `windowShield()` (mirrors `windowFgMult`'s shape), wired at both resolve sites via
   `resolveSlot` opts `youShield`/`theirShield`; the wipe/erase keep a shielded
   fraction of the bank (log shows "🛡 SHIELD kept …" / "🛡 N% blunted").
+- **DEF EARN gains a DRIP (fixes Marshal dominating Earn).** Marshal was Earn + a
+  free shield → Earn was strictly dominated. Now the three DST metrics are distinct:
+  **Earn** = flat splash points + a DEFENSE DRIP (each splash raises a rate,
+  `DST_DRIP_RATE` 0.02 × splash weight, accruing over the whole game so an early
+  sack/pick snowballs) → the scoring ceiling; **Marshal** = flat points + shield, no
+  drip → the protector; **Suppress** = banks 0, field-wide halving → the denier. The
+  DST drip isn't pausable/erasable (never an `oppIsDrip` victim), never goes HOT, isn't
+  FG-boosted, and only shows in real resolution (projected DSTs have no splash plays,
+  so the AI still plans Earn as flat). Measured: den-dst earn 13.9 vs marshal 10 on
+  Week 1.
 - **RIVALRY (WR/RB metric `duel`) — a same-slot grudge match.** Flat yardage base
   (0.1/yd + 6/TD); at the top of each quarter the side LEADING siphons a quarter
   (`DUEL_SIPHON` 0.25) of the trailing side's gains for that whole quarter — but

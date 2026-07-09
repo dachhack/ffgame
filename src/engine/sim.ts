@@ -582,6 +582,21 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   // Projection mode has no real possession data — accrue drips over full game time.
   const youPoss = dripYou && !proj ? realPossFor(week, you.player.team) : [];
   const theirPoss = dripTheir && !proj ? realPossFor(week, their.player.team) : [];
+
+  // FIELD DEFENSE drip: a DST on `earn` scores its flat splash points AND its
+  // splash production feeds a drip rate (splash weight × DST_DRIP_RATE per play)
+  // that accrues over the whole game — so an early sack/INT snowballs (that's
+  // what distinguishes the scoring DST from Field Marshal, which keeps flat
+  // points + a shield but does NOT drip). Unlike an offensive drip it is never a
+  // pause/erase victim (it's not an oppIsDrip) — only a TD nuke wipes its bank —
+  // and it never goes HOT (splash plays are too sparse to streak). It accrues
+  // over full game time (youPoss/theirPoss stay [] since dripYou/dripTheir are
+  // false for it), only in real resolution (projected DSTs have no splash plays).
+  const DST_DRIP_RATE = 0.02;
+  const dstEarnYou = you.player.pos === 'DEF' && you.metricId === 'earn';
+  const dstEarnTheir = their.player.pos === 'DEF' && their.metricId === 'earn';
+  const accrueYou = dripYou || dstEarnYou;
+  const accrueTheir = dripTheir || dstEarnTheir;
   const events: PbpEvent[] = [];
 
   // REAL CLOCK: drip accrues per real wall-clock minute of ACTIVE play instead
@@ -636,7 +651,10 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const s = side === 'you' ? Y : T;
     if (s.paused || s.dead || s.rate <= 0 || t1 <= t0) return ZERO_GAIN;
     const poss = side === 'you' ? youPoss : theirPoss;
-    const mult = side === 'you' ? opts.youMult : opts.theirMult;
+    // A DST earn drip is defensive — Field General (a skill-player multiplier)
+    // does not boost it, so skip the mult for that side.
+    const isDstDrip = side === 'you' ? dstEarnYou : dstEarnTheir;
+    const mult = isDstDrip ? undefined : (side === 'you' ? opts.youMult : opts.theirMult);
     const buffs = side === 'you' ? youBuffs : theirBuffs;
     // EMP: this side's drip is frozen for a 10-minute window.
     const emp = side === 'you' ? opts.youEmpFreeze : opts.theirEmpFreeze;
@@ -682,8 +700,8 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     let t = from;
     while (t < to) {
       const next = Math.min(to, Math.floor(t / 60) * 60 + 60);
-      const yg = dripYou ? minuteGain('you', t, next) : ZERO_GAIN;
-      const tg = dripTheir ? minuteGain('their', t, next) : ZERO_GAIN;
+      const yg = accrueYou ? minuteGain('you', t, next) : ZERO_GAIN;
+      const tg = accrueTheir ? minuteGain('their', t, next) : ZERO_GAIN;
       // A duel leader siphons a cut of the trailing side's drip gains too (the
       // cut moves to the leader inside duelTake), so a rivalry bites drips as
       // well as per-play scoring. Net values feed the banks + the tick's delta.
@@ -847,6 +865,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       if (sideMult !== 1 && pts > 0) { pts *= sideMult; evMult = sideMult; }
       // Garbage Time: points scored in the final 5 game-minutes count double.
       if (pts > 0 && play.clock > GARBAGE_FROM && (play.side === 'you' ? youBuffs : theirBuffs).has('garbage-time')) { recBuff(play.side, 'garbage-time', pts); pts *= 2; buffNote = 'GARBAGE TIME ×2'; }
+      // FIELD DEFENSE drip: a DST on `earn` banks its flat splash points (above)
+      // AND each splash play raises a drip rate that accrues for the rest of the
+      // game (accrueYou/accrueTheir feed it through accrueRange). Marshal (the
+      // shield DST) does NOT drip — that's the distinction between the two.
+      const iAmDstEarn = play.side === 'you' ? dstEarnYou : dstEarnTheir;
+      if (iAmDstEarn && SPLASH_KINDS.includes(play.kind) && !mine.dead) mine.rate += splashWeight(play.kind) * DST_DRIP_RATE;
     }
     // Field General QB: scores nothing itself, but each pass grows the window
     // multiplier — surface it in the QB's own log so you can watch it build.
@@ -996,6 +1020,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
 
     // streak / drip badges
     if (!effect && iAmDrip && myDripKind?.includes(play.kind)) effect = { type: 'streak', text: mine.hot ? `🔥 HOT 2× · ${mine.rate.toFixed(2)}/m` : `DRIP ↑ ${mine.rate.toFixed(2)}/m` };
+    if (!effect && (play.side === 'you' ? dstEarnYou : dstEarnTheir) && SPLASH_KINDS.includes(play.kind)) effect = { type: 'streak', text: `DEF DRIP ↑ ${mine.rate.toFixed(2)}/m` };
     if (!effect && myFam === 'streak') {
       if (play.td) effect = { type: 'streak', text: '🔥 TD → STREAK 2×' };
       else if (mine.hot && play.catch) effect = { type: 'streak', text: '🔥 HOT STREAK · 2×' };

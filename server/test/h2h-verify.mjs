@@ -65,4 +65,15 @@ ok('window-win bonus (+5) baked into the winning window state', bonusApplied);
 console.log(`coin: home ${raw.coin.home} / away ${raw.coin.away} (includes window MVP ◈5/slot + 50 stipend + unopposed/notes)`);
 ok('coin totals are positive (stipend + MVP + notes)', raw.coin.home > 50 && raw.coin.away > 50);
 
+// ── 4. DEF EARN DRIP vs MARSHAL (distinct identities) ────────────────────────
+// A splashy DST on `earn` should out-score the same DST on `marshal` (earn drips,
+// marshal doesn't) — and marshal's shield is what it trades the drip for.
+const dstSlug = 'den-dst';
+const earnDst = resolveSlot({ player: P(dstSlug, 'DEF', 'DEN'), metricId: 'earn' }, { player: EMPTY, metricId: 'none' }, WEEK, 'earn');
+const marshalDst = resolveSlot({ player: P(dstSlug, 'DEF', 'DEN'), metricId: 'marshal' }, { player: EMPTY, metricId: 'none' }, WEEK, 'marshal');
+const defDripEvents = earnDst.events.filter((e) => e.effect && /DEF DRIP/.test(e.effect.text));
+console.log(`\nDEF: ${dstSlug} earn ${earnDst.youFinal} (drip) vs marshal ${marshalDst.youFinal} (flat + shield)`);
+ok('earn DST out-scores marshal DST (the drip is the ceiling)', earnDst.youFinal > marshalDst.youFinal);
+ok('earn DST surfaced DEF DRIP tick events', defDripEvents.length > 0);
+
 console.log('\nDONE.');
