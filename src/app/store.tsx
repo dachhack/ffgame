@@ -305,8 +305,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [cardSkin, setCardSkinState] = useState<CardSkin>(() => {
     try {
       const saved = localStorage.getItem(CARDSKIN_KEY) as CardSkin | null;
-      return saved && CARD_SKINS.includes(saved) ? saved : 'emerald';
-    } catch { return 'emerald'; }
+      return saved && CARD_SKINS.includes(saved) ? saved : 'blitz';
+    } catch { return 'blitz'; }
   });
   const setCardSkin = (s: CardSkin) => {
     setCardSkinState(s);
