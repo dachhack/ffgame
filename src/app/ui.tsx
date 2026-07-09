@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import type { Pos, ThemeName } from '../theme';
-import { useStore } from './store';
+import { useStore, type CardSkin } from './store';
 import { headshot, espnHeadshot, teamLogo } from '../data/media';
 import { injuryFor } from '../data/injuries';
 import { REG_SEASON_WEEKS } from '../data/league';
@@ -156,7 +156,7 @@ export function Avatar({ name, accent = 'var(--you)', size = 30, src }: { name: 
  *  toggles (previously inline chips). `superAdmin`, when provided, adds a super-admin
  *  entry at the bottom (shown only for admins in the live app). */
 export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
-  const { theme, setTheme, iconSet, setIconSet, bigText, setBigText, fullStats, setFullStats, setSleeperUser, navigate } = useStore();
+  const { theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, fullStats, setFullStats, setSleeperUser, navigate } = useStore();
   const [open, setOpen] = useState(false);
   // Which side the dropdown opens toward — chosen on open so it never flies off
   // screen when the gear sits near an edge (e.g. wrapped to the far left on the
@@ -198,6 +198,14 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
     { id: 'prime', name: 'All Gold' },
     { id: 'daylight', name: 'Feeling Lucky' },
     { id: 'arctic', name: 'Arctic Journey' },
+  ];
+  // Card-deck skins: a swatch (felt ground + a peek of the sealed card back).
+  const skins: { id: CardSkin; name: string; felt: string; back: string }[] = [
+    { id: 'emerald', name: 'Emerald Table', felt: '#123A2F', back: '#7E2430' },
+    { id: 'noir', name: 'Midnight Noir', felt: '#16233A', back: '#2B426A' },
+    { id: 'crimson', name: 'Crimson High-Roller', felt: '#2A0B0E', back: '#3A1418' },
+    { id: 'sunset', name: 'Sunset Arcade', felt: '#281026', back: '#1F5A55' },
+    { id: 'fey', name: 'Fey Library', felt: '#0E2620', back: '#38305E' },
   ];
   const lbl: CSSProperties = { fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--faint)' };
   const toggle = (on: boolean): CSSProperties => ({
@@ -253,6 +261,24 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
                     style={{ display: 'flex', alignItems: 'center', gap: 7, textAlign: 'left', padding: '7px 10px', borderRadius: 5, fontFamily: MONO, fontSize: 11, fontWeight: 700, cursor: 'pointer',
                       background: active ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${active ? 'var(--you)' : 'var(--bd)'}`, color: active ? 'var(--you)' : 'var(--dim)' }}>
                     <GameIcon name="coin-gold" emoji="◈" size="1.4em" set={s.id} />
+                    <span style={{ flex: 1 }}>{s.name}</span>{active ? '✓' : ''}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <div style={lbl}>CARD DECK</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 7 }}>
+              {skins.map((s) => {
+                const active = cardSkin === s.id;
+                return (
+                  <button key={s.id} onClick={() => setCardSkin(s.id)} title={s.id}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', padding: '6px 9px', borderRadius: 5, fontFamily: MONO, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                      background: active ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${active ? 'var(--you)' : 'var(--bd)'}`, color: active ? 'var(--you)' : 'var(--dim)' }}>
+                    <span style={{ flex: 'none', width: 24, height: 16, borderRadius: 3, border: '1px solid rgba(0,0,0,0.5)', background: s.felt, position: 'relative', overflow: 'hidden' }}>
+                      <span style={{ position: 'absolute', top: 2, right: 2, bottom: 2, width: 8, borderRadius: 2, background: s.back, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.12)' }} />
+                    </span>
                     <span style={{ flex: 1 }}>{s.name}</span>{active ? '✓' : ''}
                   </button>
                 );

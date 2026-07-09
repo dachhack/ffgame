@@ -96,11 +96,20 @@ function bootRoute(): Route {
  *  set, and the retro Pixel Bowl sprites. */
 export type IconSetName = 'emoji' | 'factory' | 'pixel';
 
+/** Card-table deck skins — the table felt + sealed card backs. Personal choice,
+ *  saved per browser. Player card faces stay cream across all skins (a deck
+ *  swaps its table + backs, not its faces). */
+export type CardSkin = 'emerald' | 'noir' | 'crimson' | 'sunset' | 'fey';
+export const CARD_SKINS: CardSkin[] = ['emerald', 'noir', 'crimson', 'sunset', 'fey'];
+
 interface Store {
   theme: ThemeName;
   setTheme: (t: ThemeName) => void;
   iconSet: IconSetName;
   setIconSet: (s: IconSetName) => void;
+  /** The card-table deck/felt skin (personal, saved in localStorage). */
+  cardSkin: CardSkin;
+  setCardSkin: (s: CardSkin) => void;
   /** Larger-text mode (zooms the whole UI ~20% for readability). */
   bigText: boolean;
   setBigText: (v: boolean) => void;
@@ -187,6 +196,7 @@ const Ctx = createContext<Store | null>(null);
 
 const THEME_KEY = 'gc-theme';
 const ICONSET_KEY = 'gc-iconset';
+const CARDSKIN_KEY = 'gc-cardskin';
 const BIGTEXT_KEY = 'gc-bigtext';
 const FULLSTATS_KEY = 'gc-fullstats';
 const SLEEPER_KEY = 'gc-sleeper';
@@ -287,6 +297,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const setIconSet = (s: IconSetName) => {
     setIconSetState(s);
     try { localStorage.setItem(ICONSET_KEY, s); } catch { /* ignore */ }
+  };
+  const [cardSkin, setCardSkinState] = useState<CardSkin>(() => {
+    try {
+      const saved = localStorage.getItem(CARDSKIN_KEY) as CardSkin | null;
+      return saved && CARD_SKINS.includes(saved) ? saved : 'emerald';
+    } catch { return 'emerald'; }
+  });
+  const setCardSkin = (s: CardSkin) => {
+    setCardSkinState(s);
+    try { localStorage.setItem(CARDSKIN_KEY, s); } catch { /* ignore */ }
   };
   const [bigText, setBigTextState] = useState<boolean>(() => {
     try {
@@ -570,8 +590,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, iconSet, setIconSet, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
-    [theme, iconSet, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, liveCtx, youTeamId, demoWeek, coins, inventory, applied],
+    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    [theme, iconSet, cardSkin, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, liveCtx, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

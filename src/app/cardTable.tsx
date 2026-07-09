@@ -11,15 +11,30 @@ const FONT_URL = `${import.meta.env.BASE_URL}fonts/lilita-one.woff2`;
 
 const CSS = `
 @font-face{font-family:'Lilita One';font-style:normal;font-weight:400;font-display:swap;src:url('${FONT_URL}') format('woff2');}
+
+/* ── Card-deck skins ─────────────────────────────────────────────────────────
+   A personal per-user choice ([data-card-skin] on <html>, default emerald). A
+   skin swaps the table FELT + the sealed card BACKS (the deck) — player faces
+   stay cream so headshots + metrics read the same on every skin. Vars live on
+   :root so they inherit into every .ctable / .mx-felt.
+     --ct-felt      felt base hue (mixed with the theme --bg in dark mode)
+     --ct-back1/2/3 sealed card-back radial stops
+     --ct-deck      rgb of the deck's metallic trim (lattice, gem, seal border)
+     --ct-back-ink  text/label color that reads on the card back              */
+:root{ --ct-felt:#0B1F1A; --ct-back1:#7E2430; --ct-back2:#571C26; --ct-back3:#40151E; --ct-deck:233,185,89; --ct-back-ink:#D9A0A6; }
+:root[data-card-skin="noir"]{ --ct-felt:#0E1622; --ct-back1:#2B426A; --ct-back2:#1B2C48; --ct-back3:#101A2E; --ct-deck:176,198,232; --ct-back-ink:#B9C7DF; }
+:root[data-card-skin="crimson"]{ --ct-felt:#2A0B0E; --ct-back1:#241012; --ct-back2:#170A0B; --ct-back3:#0C0607; --ct-deck:233,190,96; --ct-back-ink:#D8B679; }
+:root[data-card-skin="sunset"]{ --ct-felt:#281026; --ct-back1:#1F5A55; --ct-back2:#154240; --ct-back3:#0D2E2C; --ct-deck:245,220,190; --ct-back-ink:#BFEAE4; }
+:root[data-card-skin="fey"]{ --ct-felt:#0E2620; --ct-back1:#38305E; --ct-back2:#282247; --ct-back3:#191531; --ct-deck:214,182,120; --ct-back-ink:#C9BCE6; }
 /* Dark felt: a green baize whose base + ambient glow lean slightly toward the
    active theme (base nudged toward --bg, blobs tinted --you / --opp) so neon
    reads teal, prime warm, slate cool — without losing the felt-green heart. */
 .ctable{position:relative;border-radius:12px;overflow:hidden;padding:12px 10px 16px;
-  background:color-mix(in srgb, #0B1F1A 80%, var(--bg, #0B1F1A));}
+  background:color-mix(in srgb, var(--ct-felt, #0B1F1A) 80%, var(--bg, #0B1F1A));}
 .ctable .ct-blobs{position:absolute;inset:-30%;pointer-events:none;}
 .ctable .ct-blob{position:absolute;width:60%;height:60%;border-radius:50%;filter:blur(60px);opacity:.5;mix-blend-mode:screen;}
-.ctable .ct-b1{background:radial-gradient(circle,color-mix(in srgb, var(--you, #36E59B) 40%, #0B1F1A) 0%,transparent 62%);top:0;left:-5%;animation:ct-drift 39s linear infinite;}
-.ctable .ct-b2{background:radial-gradient(circle,color-mix(in srgb, var(--opp, #FF5266) 38%, #0B1F1A) 0%,transparent 60%);bottom:-8%;right:-5%;animation:ct-drift 51s linear infinite reverse;}
+.ctable .ct-b1{background:radial-gradient(circle,color-mix(in srgb, var(--you, #36E59B) 40%, var(--ct-felt, #0B1F1A)) 0%,transparent 62%);top:0;left:-5%;animation:ct-drift 39s linear infinite;}
+.ctable .ct-b2{background:radial-gradient(circle,color-mix(in srgb, var(--opp, #FF5266) 38%, var(--ct-felt, #0B1F1A)) 0%,transparent 60%);bottom:-8%;right:-5%;animation:ct-drift 51s linear infinite reverse;}
 @keyframes ct-drift{from{transform:rotate(0) translateX(8%) rotate(0)}to{transform:rotate(360deg) translateX(8%) rotate(-360deg)}}
 .ctable .ct-vig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 90% at 50% 40%,transparent 55%,rgba(0,0,0,.55) 100%);}
 .ctable .ct-body{position:relative;}
@@ -87,12 +102,12 @@ const CSS = `
   font-weight:800;letter-spacing:.06em;max-width:88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;
   border:1.5px solid #000;box-shadow:0 2px 0 #000,inset 0 0 6px rgba(255,216,107,.28);text-shadow:0 1px 0 #000;}
 
-.ctable .ct-back{background:radial-gradient(circle at 50% 46%,#7E2430 0%,#571C26 62%,#40151E 100%);}
-.ctable .ct-lattice{position:absolute;inset:6px;border:1.5px solid rgba(233,185,89,.5);border-radius:6px;
-  background-image:radial-gradient(rgba(233,185,89,.34) 1.1px,transparent 1.3px);background-size:11px 11px;}
-.ctable .ct-gem{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:26px;color:#E9B959;text-shadow:0 2px 0 #000;}
+.ctable .ct-back{background:radial-gradient(circle at 50% 46%,var(--ct-back1,#7E2430) 0%,var(--ct-back2,#571C26) 62%,var(--ct-back3,#40151E) 100%);}
+.ctable .ct-lattice{position:absolute;inset:6px;border:1.5px solid rgba(var(--ct-deck,233,185,89),.5);border-radius:6px;
+  background-image:radial-gradient(rgba(var(--ct-deck,233,185,89),.34) 1.1px,transparent 1.3px);background-size:11px 11px;}
+.ctable .ct-gem{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:26px;color:rgb(var(--ct-deck,233,185,89));text-shadow:0 2px 0 #000;}
 .ctable .ct-sealtag{position:absolute;left:50%;bottom:9px;transform:translateX(-50%) rotate(-3deg);font-size:6.4px;letter-spacing:.16em;
-  background:#2A0E13;color:#D9A0A6;border:1px solid rgba(233,185,89,.4);padding:2.5px 6px;border-radius:3px;white-space:nowrap;}
+  background:color-mix(in srgb, var(--ct-back3,#40151E) 78%, #000);color:var(--ct-back-ink,#D9A0A6);border:1px solid rgba(var(--ct-deck,233,185,89),.4);padding:2.5px 6px;border-radius:3px;white-space:nowrap;}
 
 .ctable .ct-coltag{font-size:8px;letter-spacing:.22em;opacity:.65;font-weight:700;}
 .ctable .ct-winlab{font-size:8px;letter-spacing:.16em;color:#93A594;font-weight:700;}
@@ -126,7 +141,7 @@ const CSS = `
     radial-gradient(70% 60% at 18% 8%, color-mix(in srgb, var(--you, #36E59B) 34%, transparent), transparent 62%),
     radial-gradient(60% 55% at 85% 92%, color-mix(in srgb, var(--opp, #FF5266) 30%, transparent), transparent 60%),
     radial-gradient(55% 60% at 55% 45%, color-mix(in srgb, var(--warn, #14424A) 26%, transparent), transparent 65%),
-    color-mix(in srgb, #0B1F1A 80%, var(--bg, #0B1F1A));}
+    color-mix(in srgb, var(--ct-felt, #0B1F1A) 80%, var(--bg, #0B1F1A));}
 .mx-felt .ct-feltlayers::before{content:"";position:absolute;inset:0;opacity:.5;mix-blend-mode:overlay;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");}
 .mx-felt .ct-feltlayers::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 40%,transparent 55%,rgba(0,0,0,.5) 100%);}
@@ -142,13 +157,13 @@ const CSS = `
    which is what made the empty box tower over the sealed card.) */
 .ctable .mx-sealed{
   width:100%;max-width:172px;min-height:250px !important;justify-self:center;box-sizing:border-box;
-  background-image:radial-gradient(rgba(233,185,89,.32) 1.1px,transparent 1.3px),radial-gradient(circle at 50% 46%,#7E2430 0%,#571C26 62%,#40151E 100%) !important;
+  background-image:radial-gradient(rgba(var(--ct-deck,233,185,89),.32) 1.1px,transparent 1.3px),radial-gradient(circle at 50% 46%,var(--ct-back1,#7E2430) 0%,var(--ct-back2,#571C26) 62%,var(--ct-back3,#40151E) 100%) !important;
   background-size:11px 11px,100% 100% !important;
   border:2px solid #000 !important;border-right:2px solid #000 !important;
   border-radius:10px !important;box-shadow:0 4px 0 rgba(0,0,0,.6);
   animation:mx-wob 5.4s ease-in-out infinite alternate;}
-.ctable .mx-sealed .grotesk{color:#E9B959 !important;text-shadow:0 2px 0 #000;font-size:26px !important;}
-.ctable .mx-sealed .mono{color:#E3B7BC !important;}
+.ctable .mx-sealed .grotesk{color:rgb(var(--ct-deck,233,185,89)) !important;text-shadow:0 2px 0 #000;font-size:26px !important;}
+.ctable .mx-sealed .mono{color:var(--ct-back-ink,#E3B7BC) !important;}
 .ctable .mx-empty:not(.mx-state){
   width:100%;max-width:172px;min-height:250px !important;justify-self:center;box-sizing:border-box;
   background:rgba(233,185,89,.05) !important;
@@ -271,7 +286,7 @@ const CSS = `
     radial-gradient(70% 60% at 18% 8%, color-mix(in srgb, var(--you) 20%, transparent), transparent 62%),
     radial-gradient(60% 55% at 85% 92%, color-mix(in srgb, var(--opp) 18%, transparent), transparent 60%),
     radial-gradient(55% 60% at 55% 45%, color-mix(in srgb, var(--warn) 14%, transparent), transparent 65%),
-    color-mix(in srgb, var(--bg) 72%, #FFFFFF);}
+    color-mix(in srgb, color-mix(in srgb, var(--bg) 72%, #FFFFFF) 90%, var(--ct-felt, #0B1F1A));}
 /* Felt-component blobs: darken the light ground (multiply) instead of glowing. */
 :root[data-card-light="1"] .ctable .ct-blob{mix-blend-mode:multiply;opacity:.28;}
 :root[data-card-light="1"] .ctable .ct-vig{background:radial-gradient(120% 90% at 50% 40%,transparent 60%,rgba(60,40,20,.16) 100%);}
@@ -281,7 +296,7 @@ const CSS = `
     radial-gradient(70% 60% at 18% 8%, color-mix(in srgb, var(--you) 20%, transparent), transparent 62%),
     radial-gradient(60% 55% at 85% 92%, color-mix(in srgb, var(--opp) 18%, transparent), transparent 60%),
     radial-gradient(55% 60% at 55% 45%, color-mix(in srgb, var(--warn) 14%, transparent), transparent 65%),
-    color-mix(in srgb, var(--bg) 72%, #FFFFFF);}
+    color-mix(in srgb, color-mix(in srgb, var(--bg) 72%, #FFFFFF) 90%, var(--ct-felt, #0B1F1A));}
 :root[data-card-light="1"] .mx-felt .ct-feltlayers::after{background:radial-gradient(120% 90% at 50% 40%,transparent 60%,rgba(60,40,20,.14) 100%);}
 :root[data-card-light="1"] .mx-felt .ct-feltlayers::before{opacity:.28;}
 /* Window pods: lighter frame on the light table. */
