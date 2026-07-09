@@ -21,7 +21,7 @@ const ProviderConnect = lazy(() => import('./screens/ProviderConnect').then((m) 
 const YahooConnect = lazy(() => import('./screens/YahooConnect').then((m) => ({ default: m.YahooConnect })));
 
 export function App() {
-  const { theme, route, youTeamId, navigate, liveCtx } = useStore();
+  const { theme, cardSkin, route, youTeamId, navigate, liveCtx } = useStore();
   const vars = themeVars(THEMES[theme]) as Record<string, string>;
   const light = theme === 'daylight' || theme === 'arctic';
   // A signed-in live user already has a league — hide the "request a league code"
@@ -34,7 +34,10 @@ export function App() {
     // CSS-reachable light/dark signal for the card-table theme (cardTable.tsx):
     // its felt + dark-stock cards get a light variant on the light app themes.
     document.documentElement.dataset.cardLight = light ? '1' : '0';
-  }, [theme, light]);
+    // Personal card-deck skin (cardTable.tsx reads [data-card-skin] for its felt
+    // + sealed card-back colors). Default emerald.
+    document.documentElement.dataset.cardSkin = cardSkin;
+  }, [theme, light, cardSkin]);
 
   // Deep link: ?live=1 enters Live mode; ?code=XXXX (a commissioner's share link)
   // is stashed so it survives the magic-link round trip and pre-fills the join form.
