@@ -99,8 +99,12 @@ export type IconSetName = 'emoji' | 'factory' | 'pixel';
 /** Card-table deck skins — the table felt + sealed card backs. Personal choice,
  *  saved per browser. Player card faces stay cream across all skins (a deck
  *  swaps its table + backs, not its faces). */
-export type CardSkin = 'emerald' | 'noir' | 'crimson' | 'sunset' | 'fey';
-export const CARD_SKINS: CardSkin[] = ['emerald', 'noir', 'crimson', 'sunset', 'fey'];
+export type CardSkin = 'emerald' | 'noir' | 'crimson' | 'sunset' | 'fey' | 'compass' | 'gridiron';
+export const CARD_SKINS: CardSkin[] = ['emerald', 'noir', 'crimson', 'sunset', 'fey', 'compass', 'gridiron'];
+/** Skins whose back is a full photographic card image (vs a generated pattern).
+ *  These hide the ◆ gem and drop the SEALED/SCOUT labels into a bottom ribbon
+ *  (see [data-card-photo] in cardTable.tsx). */
+export const PHOTO_SKINS: CardSkin[] = ['compass', 'gridiron'];
 
 interface Store {
   theme: ThemeName;

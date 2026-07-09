@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useStore } from '../app/store';
+import { useStore, PHOTO_SKINS } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile, ModalBackdrop } from '../app/ui';
 import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
@@ -2373,7 +2373,8 @@ export function SetupRow(props: {
 }) {
   const { winId, week, pick, selected, inventory, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout, lockPlayer, resolve, hideScout } = props;
   const isMobile = useIsMobile();
-  const { bigText } = useStore();
+  const { bigText, cardSkin } = useStore();
+  const photoSkin = PHOTO_SKINS.includes(cardSkin); // a full-image card back → SEALED/SCOUT go in a bottom ribbon
   const fs = (n: number) => bigText ? Math.round(n * 1.3 * 10) / 10 : n; // larger-text mode bumps the card's fine print
   const gridCols = '1fr 1fr'; // no center gutter — your spot vs the sealed opponent
   const rowGap = isMobile ? 5 : 8;
@@ -2509,10 +2510,21 @@ export function SetupRow(props: {
           <span className="mono" style={{ fontSize: bigText ? 10.5 : 10, color: emptyEligible ? 'var(--warn)' : 'var(--faint)', letterSpacing: '0.08em', fontWeight: emptyEligible ? 700 : 400, whiteSpace: 'nowrap' }}>{emptyEligible ? 'TAP TO FIELD BYE' : 'TAP TO PICK PLAYER'}</span>
         </div>
       )}
-      <div className="mx-sealed" onClick={hideScout ? undefined : onScout} title={hideScout ? 'Your opponent’s lineup is sealed until kickoff' : "Scout the opponent's possible players for this window"} style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: hideScout ? 'default' : 'pointer' }}>
-        <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--dim)' }}>◆</span>
-        <span className="mono" style={{ fontSize: fs(9), letterSpacing: '0.16em', color: 'var(--faint)', fontWeight: 700 }}>SEALED · {winId.toUpperCase()}</span>
-        {!hideScout && <span className="mono" style={{ fontSize: fs(7.5), letterSpacing: '0.12em', color: 'var(--opp)', fontWeight: 700 }}><GameIcon name={UI_ART.scout} emoji="🔍" size="1.6em" /> SCOUT</span>}
+      <div className="mx-sealed" onClick={hideScout ? undefined : onScout} title={hideScout ? 'Your opponent’s lineup is sealed until kickoff' : "Scout the opponent's possible players for this window"} style={{ position: 'relative', minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: hideScout ? 'default' : 'pointer' }}>
+        {photoSkin ? (
+          // Photo-backed decks: the image IS the card, so drop the labels into a
+          // translucent bottom ribbon that leaves the artwork uncovered.
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, paddingTop: 14, paddingBottom: 6, background: 'linear-gradient(rgba(6,8,12,0), rgba(6,8,12,0.5) 45%, rgba(6,8,12,0.9))', borderBottomLeftRadius: 9, borderBottomRightRadius: 9, pointerEvents: 'none' }}>
+            <span className="mono" style={{ fontSize: fs(9), letterSpacing: '0.16em', color: '#F1E9D6', fontWeight: 700, textShadow: '0 1px 2px #000' }}>SEALED · {winId.toUpperCase()}</span>
+            {!hideScout && <span className="mono" style={{ fontSize: fs(7.5), letterSpacing: '0.12em', color: '#F1E9D6', fontWeight: 700, textShadow: '0 1px 2px #000' }}><GameIcon name={UI_ART.scout} emoji="🔍" size="1.6em" /> SCOUT</span>}
+          </div>
+        ) : (
+          <>
+            <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--dim)' }}>◆</span>
+            <span className="mono" style={{ fontSize: fs(9), letterSpacing: '0.16em', color: 'var(--faint)', fontWeight: 700 }}>SEALED · {winId.toUpperCase()}</span>
+            {!hideScout && <span className="mono" style={{ fontSize: fs(7.5), letterSpacing: '0.12em', color: 'var(--opp)', fontWeight: 700 }}><GameIcon name={UI_ART.scout} emoji="🔍" size="1.6em" /> SCOUT</span>}
+          </>
+        )}
       </div>
     </div>
     {infoMetric && <MetricInfo metric={infoMetric} onClose={() => setInfoMetric(null)} />}
