@@ -50,8 +50,8 @@ const round = (n: number) => Math.round(n * 10) / 10;
 
 // ── Drip-coin economy (mirrors src/engine/matchup.ts; kept in sync by hand) ──
 const WEEKLY_STIPEND = 50, UNOPPOSED_COIN = 15, SUPPRESS_COIN = 10;
-// Window Battle (mirrors matchup.ts WINDOW_WIN_BONUS / WINDOW_MVP_COIN).
-const WINDOW_WIN_BONUS = 5, WINDOW_MVP_COIN = 12;
+// Window Battle (mirrors matchup.ts WINDOW_WIN_BONUS / WINDOW_MVP_COIN_PER_SLOT).
+const WINDOW_WIN_BONUS = 5, WINDOW_MVP_COIN_PER_SLOT = 5;
 function metricCoin(pos: Pos, metricId: string | null | undefined): number {
   const m = metricById(pos, metricId);
   if (!m) return 0;
@@ -431,13 +431,16 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
       else { v.away += WINDOW_WIN_BONUS; away += WINDOW_WIN_BONUS; }
     }
     let mvpScore = 0, mvpSide: 'home' | 'away' | null = null;
+    let slotCount = 0;
     for (const s of slots) {
       if (s.win !== wid) continue;
+      slotCount++;
       if (s.homeP && s.home > mvpScore) { mvpScore = s.home; mvpSide = 'home'; }
       if (s.awayP && s.away > mvpScore) { mvpScore = s.away; mvpSide = 'away'; }
     }
-    if (mvpScore > 0 && mvpSide === 'home') mvpHome += WINDOW_MVP_COIN;
-    if (mvpScore > 0 && mvpSide === 'away') mvpAway += WINDOW_MVP_COIN;
+    const mvpCoin = WINDOW_MVP_COIN_PER_SLOT * slotCount; // 5 coin per slot in the window
+    if (mvpScore > 0 && mvpSide === 'home') mvpHome += mvpCoin;
+    if (mvpScore > 0 && mvpSide === 'away') mvpAway += mvpCoin;
   }
 
   const states = Object.entries(byWin).map(([window, v]) => ({ window, home: round(v.home), away: round(v.away) }));

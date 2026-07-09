@@ -62,7 +62,7 @@ for (const s of raw.slots) slotSum[s.side] += s.score;
 console.log(`\nWINDOW BATTLE: state home ${st.home} / away ${st.away} · slot-sum home ${slotSum.home.toFixed(1)} / away ${slotSum.away.toFixed(1)}`);
 const bonusApplied = Math.abs((st.home - slotSum.home)) >= 4.9 || Math.abs((st.away - slotSum.away)) >= 4.9;
 ok('window-win bonus (+5) baked into the winning window state', bonusApplied);
-console.log(`coin: home ${raw.coin.home} / away ${raw.coin.away} (includes +12 window MVP + 50 stipend + unopposed/notes)`);
+console.log(`coin: home ${raw.coin.home} / away ${raw.coin.away} (includes window MVP ◈5/slot + 50 stipend + unopposed/notes)`);
 ok('coin totals are positive (stipend + MVP + notes)', raw.coin.home > 50 && raw.coin.away > 50);
 
 console.log('\nDONE.');

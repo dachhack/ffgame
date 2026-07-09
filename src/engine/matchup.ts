@@ -308,8 +308,10 @@ export interface ResolvedMatchup {
 
 /** Points awarded to the winner of a window's head-to-head battle. */
 export const WINDOW_WIN_BONUS = 5;
-/** Drip coin the window MVP (single highest-scoring slot in a window) earns. */
-export const WINDOW_MVP_COIN = 12;
+/** Drip coin the window MVP (single highest-scoring slot in a window) earns,
+ *  PER SLOT in that window — so bigger windows carry a bigger bounty (a 3-slot
+ *  Sunday-early MVP = 15, a lone TNF MVP = 5). */
+export const WINDOW_MVP_COIN_PER_SLOT = 5;
 
 /** Compute the head-to-head battle for one resolved window from its slots'
  *  final scores (call after backups + suppress so the tested scores are final).
@@ -338,7 +340,7 @@ export function computeWindowBattle(w: ResolvedWindow): WindowBattle {
     youTotal: Math.round(youTotal * 10) / 10,
     theirTotal: Math.round(theirTotal * 10) / 10,
     youSlotsWon, theirSlotsWon, winner, bonus,
-    mvp: mvpSide && mvpScore > 0 ? { side: mvpSide, slotIndex: mvpIdx, score: Math.round(mvpScore * 10) / 10, name: mvpName, coin: WINDOW_MVP_COIN } : undefined,
+    mvp: mvpSide && mvpScore > 0 ? { side: mvpSide, slotIndex: mvpIdx, score: Math.round(mvpScore * 10) / 10, name: mvpName, coin: WINDOW_MVP_COIN_PER_SLOT * w.slots.length } : undefined,
   };
 }
 

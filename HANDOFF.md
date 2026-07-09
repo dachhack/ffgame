@@ -21,8 +21,9 @@ Everything lands in the SHARED engine (`src/engine/sim.ts` + `matchup.ts` +
   per-window states still sum to the grand total. MatchupFinal's window strip +
   hero show `⚔ WINDOW BATTLES 3–2`.
 - **WINDOW MVP (drip-coin only, no points — per the founder's call).** The single
-  highest-scoring slot in a window earns its side `WINDOW_MVP_COIN` (◈12).
-  Threaded through `weekEarnings` (new `mvp` line in the earnings sheet) and
+  highest-scoring slot in a window earns its side `WINDOW_MVP_COIN_PER_SLOT` (◈5)
+  × the window's slot count — so a 3-slot Sunday-early MVP = ◈15, a lone TNF MVP =
+  ◈5. Threaded through `weekEarnings` (new `mvp` line in the earnings sheet) and
   `battle.mvp`; the live resolver adds it to `coin`.
 - **FIELD MARSHAL (DEF metric `marshal`) — the defensive Field General.** A DST on
   `marshal` banks its normal flat points AND builds a live, window-wide SHIELD on
