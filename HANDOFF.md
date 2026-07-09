@@ -43,6 +43,15 @@ Everything lands in the SHARED engine (`src/engine/sim.ts` + `matchup.ts` +
   FG-boosted, and only shows in real resolution (projected DSTs have no splash plays,
   so the AI still plans Earn as flat). Measured: den-dst earn 13.9 vs marshal 10 on
   Week 1.
+- **SUPPRESS drips into a bigger kill-bar (still banks 0).** Suppress now drips like
+  Earn, but converts it into suppression power instead of points: the halving
+  threshold is `defSuppressScore` = flat splash score + `dstDripTotal` (the same
+  weight×0.02 ramp, integrated over the game), so an early sack/pick raises the bar
+  and halves more/higher opposing slots. It still banks 0 (the whole production is
+  spent as the bar); `suppressSpent` display + the kill-bar both use the drip-inclusive
+  score. Measured: den-dst bar 10 → 13.9 (= Earn's full production, so the trio shares
+  one production model: Earn banks it, Marshal trades it for a shield, Suppress spends
+  it as the bar). `DST_DRIP_RATE` is now module-level in sim.ts (one knob for all three).
 - **RIVALRY (WR/RB metric `duel`) — a same-slot grudge match.** Flat yardage base
   (0.1/yd + 6/TD); at the top of each quarter the side LEADING siphons a quarter
   (`DUEL_SIPHON` 0.25) of the trailing side's gains for that whole quarter — but

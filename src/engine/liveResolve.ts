@@ -27,7 +27,7 @@ import type { Player, PbpEvent, Pos } from '../types';
 import { metricById } from '../data/metrics';
 import { capAmplifiers } from '../data/powerups';
 import { REAL_WEEKS } from '../data/realPbp';
-import { resolveSlot, windowFgMult, windowShield, teTdNukeClocks, defEarnScore, hadDefTd, hadLongPassTd, clockAtRealTime, EMPTY_PLAYER, type SlotInput } from './sim';
+import { resolveSlot, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, hadDefTd, hadLongPassTd, clockAtRealTime, EMPTY_PLAYER, type SlotInput } from './sim';
 import { banksAtClock, threwTrickTd } from './matchup';
 
 export interface LivePick { win: string; slot: string; player: Player; metricId: string; }
@@ -253,8 +253,8 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     const awayTeTd = teTdNukeClocks(awayIns, week).map((n) => n.c);
     // SUPPRESS threshold: a DEF/suppress DST forgoes its own earn score and
     // spends it as the kill-bar. With more than one per side, the highest wins.
-    for (const p of homeIns) if (p.player.pos === 'DEF' && p.metricId === 'suppress') homeSuppress = Math.max(homeSuppress, defEarnScore(p.player, week));
-    for (const p of awayIns) if (p.player.pos === 'DEF' && p.metricId === 'suppress') awaySuppress = Math.max(awaySuppress, defEarnScore(p.player, week));
+    for (const p of homeIns) if (p.player.pos === 'DEF' && p.metricId === 'suppress') homeSuppress = Math.max(homeSuppress, defSuppressScore(p.player, week));
+    for (const p of awayIns) if (p.player.pos === 'DEF' && p.metricId === 'suppress') awaySuppress = Math.max(awaySuppress, defSuppressScore(p.player, week));
 
     const idxs = new Set<string>();
     for (const p of homePicks) if (p.win === wid) idxs.add(p.slot);

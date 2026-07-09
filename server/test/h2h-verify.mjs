@@ -4,7 +4,7 @@
 //   3. WINDOW BATTLE + MVP — resolveLiveMatchup awards the window bonus + MVP coin.
 import { readFileSync } from 'node:fs';
 import { makePlayer, injectWeek, EMPTY } from '../src/engine.js';
-import { resolveSlot, windowShield } from '../../src/engine/sim.ts';
+import { resolveSlot, windowShield, defEarnScore, defSuppressScore } from '../../src/engine/sim.ts';
 import { resolveLiveMatchup } from '../../src/engine/liveResolve.ts';
 
 const WEEK = 1;
@@ -75,5 +75,11 @@ const defDripEvents = earnDst.events.filter((e) => e.effect && /DEF DRIP/.test(e
 console.log(`\nDEF: ${dstSlug} earn ${earnDst.youFinal} (drip) vs marshal ${marshalDst.youFinal} (flat + shield)`);
 ok('earn DST out-scores marshal DST (the drip is the ceiling)', earnDst.youFinal > marshalDst.youFinal);
 ok('earn DST surfaced DEF DRIP tick events', defDripEvents.length > 0);
+
+// ── 5. SUPPRESS drips into a bigger kill-bar (still banks 0) ──────────────────
+const flatBar = defEarnScore(P(dstSlug, 'DEF', 'DEN'), WEEK);
+const dripBar = defSuppressScore(P(dstSlug, 'DEF', 'DEN'), WEEK);
+console.log(`\nSUPPRESS: ${dstSlug} kill-bar flat ${flatBar} → with drip ${dripBar}`);
+ok('suppress kill-bar is raised by the DEF drip', dripBar > flatBar);
 
 console.log('\nDONE.');

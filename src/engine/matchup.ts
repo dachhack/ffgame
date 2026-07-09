@@ -12,7 +12,7 @@ import { hashStr } from '../data/players';
  *  no real timestamps baked. */
 export interface SlotSwap { atClock: number; atRt?: number; toMetricId?: string; toPlayerId?: string; }
 export type SlotSwaps = Record<string, SlotSwap>; // slotKey -> swap
-import { resolveSlot, projectedPoints, windowFgMult, windowShield, teTdNukeClocks, defEarnScore, hadDefTd, hadLongPassTd, turnoversCommitted, clockAtRealTime, EMPTY_PLAYER, type SlotInput } from './sim';
+import { resolveSlot, projectedPoints, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, hadDefTd, hadLongPassTd, turnoversCommitted, clockAtRealTime, EMPTY_PLAYER, type SlotInput } from './sim';
 import { REAL_WEEKS } from '../data/realPbp';
 import { windowForTeam, windowsForWeek, gamesInWindow } from '../data/nflSlate';
 import { injuryFor } from '../data/injuries';
@@ -436,8 +436,8 @@ export function buildMatchup(
       const you = lookup(youPools, youPicks, key);
       const their = lookup(oppPools, oppPicks, key);
 
-      if (you && you.player.pos === 'DEF' && you.metricId === 'suppress') youSuppress = Math.max(youSuppress, defEarnScore(you.player, week));
-      if (their && their.player.pos === 'DEF' && their.metricId === 'suppress') theirSuppress = Math.max(theirSuppress, defEarnScore(their.player, week));
+      if (you && you.player.pos === 'DEF' && you.metricId === 'suppress') youSuppress = Math.max(youSuppress, defSuppressScore(you.player, week));
+      if (their && their.player.pos === 'DEF' && their.metricId === 'suppress') theirSuppress = Math.max(theirSuppress, defSuppressScore(their.player, week));
 
       let events: PbpEvent[] = [];
       let yF = 0;
@@ -448,8 +448,8 @@ export function buildMatchup(
       let youNegated = false, theirNegated = false;
       let youBuffFx: BuffFx[] | undefined, theirBuffFx: BuffFx[] | undefined;
       // A suppress DST forgoes its earn points (spent as the kill-threshold).
-      const suppressSpentYou = (you?.player.pos === 'DEF' && you.metricId === 'suppress') ? defEarnScore(you.player, week) : undefined;
-      const suppressSpentTheir = (their?.player.pos === 'DEF' && their.metricId === 'suppress') ? defEarnScore(their.player, week) : undefined;
+      const suppressSpentYou = (you?.player.pos === 'DEF' && you.metricId === 'suppress') ? defSuppressScore(you.player, week) : undefined;
+      const suppressSpentTheir = (their?.player.pos === 'DEF' && their.metricId === 'suppress') ? defSuppressScore(their.player, week) : undefined;
 
       // Resolve whenever at least one side is filled. An unopposed slot plays
       // against the empty sentinel — the present player banks points with no

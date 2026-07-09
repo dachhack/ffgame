@@ -412,6 +412,9 @@ export function windowFgMult(
 // windowFgMult's shape so buildMatchup / resolveLiveMatchup wire it identically.
 export const SHIELD_RATE = 0.04;
 export const SHIELD_CAP = 0.5;
+// DEF drip: each splash play raises the rate by its weight × this (Earn Points
+// banks it as a drip; Suppress converts it into a bigger halving bar).
+export const DST_DRIP_RATE = 0.02;
 const SPLASH_KINDS: RealPlayKind[] = ['sack', 'int', 'fumrec', 'dst_td', 'safety'];
 const splashWeight = (k: RealPlayKind): number => (k === 'dst_td' ? 6 : k === 'int' ? 3 : k === 'fumrec' || k === 'safety' ? 2 : 1);
 export function windowShield(
@@ -460,6 +463,32 @@ export function defEarnScore(player: Player, week: number): number {
     else if (p.kind === 'safety') s += 2;
   }
   return s;
+}
+
+// The DEF drip a DST accrues over the week from its splash plays — the same
+// rate-ramp Earn Points banks (weight × DST_DRIP_RATE, ramping at each splash,
+// accruing over the whole game so an early sack/pick snowballs). Integrated on
+// the game clock (matches the full-game, possession-ungated Earn accrual).
+export function dstDripTotal(player: Player, week: number): number {
+  const splash = (realRawPlays(player.id, week) ?? []).filter((p) => SPLASH_KINDS.includes(p.kind)).sort((a, b) => a.clock - b.clock);
+  if (!splash.length) return 0;
+  const REG = REAL_WEEKS.has(week) ? 3600 : GAME_SECONDS;
+  let rate = 0, total = 0, last = 0;
+  for (const p of splash) {
+    total += rate * ((p.clock - last) / 60); // accrue at the current rate up to this splash
+    last = p.clock;
+    rate += splashWeight(p.kind) * DST_DRIP_RATE; // then the splash bumps the rate
+  }
+  total += rate * (Math.max(0, REG - last) / 60); // and on to the end of the game
+  return Math.round(total * 10) / 10;
+}
+
+// The SUPPRESS kill-threshold: a suppress DST's flat splash score PLUS the drip
+// it accrues — it still banks 0 (the whole lot is spent as the bar every
+// opponent slot must clear). Earn banks this same production as points; Suppress
+// converts it into a bigger, still-growing halving bar (early splash → higher bar).
+export function defSuppressScore(player: Player, week: number): number {
+  return Math.round((defEarnScore(player, week) + dstDripTotal(player, week)) * 10) / 10;
 }
 
 // Clocks at which a side's TE Touchdown (8-PT NUKE) players score a TD. Each
@@ -592,7 +621,6 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   // and it never goes HOT (splash plays are too sparse to streak). It accrues
   // over full game time (youPoss/theirPoss stay [] since dripYou/dripTheir are
   // false for it), only in real resolution (projected DSTs have no splash plays).
-  const DST_DRIP_RATE = 0.02;
   const dstEarnYou = you.player.pos === 'DEF' && you.metricId === 'earn';
   const dstEarnTheir = their.player.pos === 'DEF' && their.metricId === 'earn';
   const accrueYou = dripYou || dstEarnYou;

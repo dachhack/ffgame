@@ -145,7 +145,7 @@ its hot streak can still be **cooled** by an opponent who banks points every pla
 
 | Metric | Tag | Scores | Effect |
 |---|---|---|---|
-| **Suppress** | HALVING | 0 pts | Banks 0 itself — instead its own defensive week score (sk/int/fr/TD) becomes a kill-bar: EVERY opponent slot, in ANY window, that scores at or below it is halved. |
+| **Suppress** | HALVING | 0 pts | Banks 0 itself — instead its full defensive production becomes a kill-bar: EVERY opponent slot, in ANY window, that scores at or below it is halved. It DRIPS like Earn Points (each splash play raises the bar over the game — an early sack/pick makes it bite harder) but banks nothing, spending the whole lot as the threshold. |
 | **Earn Points** | DRIP | sk1 / int3 / fr2 + drip | The scoring DST. Banks flat splash points (sk1 / int3 / fr2 / def-TD6 / safety2) AND each splash play raises a DEFENSE DRIP rate (splash weight × 0.02 pts/min) that accrues for the rest of the game — an early sack or pick snowballs. The drip can’t be paused or erased; only a TD nuke wipes the bank. Higher scoring ceiling than Field Marshal, but no shield. |
 | **Field Marshal** | SHIELD | sk1 / int3 / fr2 | The defensive Field General. Banks flat splash points (no drip) AND builds a window-wide SHIELD on your side — every splash play (sack/INT/fumble/TD) ramps damage reduction (up to 50%) that BLUNTS every opposing nuke and erase against all your slots in that window. Trades Earn Points’ scoring drip for protection: a lower ceiling, but it shields the whole window. |
 
