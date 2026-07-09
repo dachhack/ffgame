@@ -2494,12 +2494,14 @@ export function SetupRow(props: {
       )}
       <div className="mx-sealed" onClick={hideScout ? undefined : onScout} title={hideScout ? 'Your opponent’s lineup is sealed until kickoff' : "Scout the opponent's possible players for this window"} style={{ position: 'relative', minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bdh)', borderRight: '3px dashed var(--bdh)', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: hideScout ? 'default' : 'pointer' }}>
         {photoSkin ? (
-          // Photo-backed decks: the image IS the card, so drop the labels into a
-          // translucent bottom ribbon that leaves the artwork uncovered.
-          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, paddingTop: 14, paddingBottom: 6, background: 'linear-gradient(rgba(6,8,12,0), rgba(6,8,12,0.5) 45%, rgba(6,8,12,0.9))', borderBottomLeftRadius: 9, borderBottomRightRadius: 9, pointerEvents: 'none' }}>
-            <span className="mono" style={{ fontSize: fs(9), letterSpacing: '0.16em', color: '#F1E9D6', fontWeight: 700, textShadow: '0 1px 2px #000' }}>SEALED · {winId.toUpperCase()}</span>
-            {!hideScout && <span className="mono" style={{ fontSize: fs(7.5), letterSpacing: '0.12em', color: '#F1E9D6', fontWeight: 700, textShadow: '0 1px 2px #000' }}><GameIcon name={UI_ART.scout} emoji="🔍" size="1.6em" /> SCOUT</span>}
-          </div>
+          // Photo-backed decks: the image IS the card and a face-down back already
+          // reads as "sealed", so we drop the SEALED label entirely and leave just
+          // a small SCOUT chip pinned to the bottom — minimal cover over the art.
+          !hideScout && (
+            <div style={{ position: 'absolute', left: 0, right: 0, bottom: 7, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+              <span className="mono" style={{ fontSize: fs(7.5), letterSpacing: '0.12em', color: '#F1E9D6', fontWeight: 700, background: 'rgba(6,8,12,0.78)', border: '1px solid rgba(255,255,255,0.16)', borderRadius: 999, padding: '3px 11px', textShadow: '0 1px 2px #000' }}><GameIcon name={UI_ART.scout} emoji="🔍" size="1.4em" /> SCOUT</span>
+            </div>
+          )
         ) : (
           <>
             <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--dim)' }}>◆</span>
