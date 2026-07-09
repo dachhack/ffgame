@@ -523,7 +523,7 @@ function offSecs(intervals: number[][], t0: number, t1: number): number {
  * `opts.youMult` / `opts.theirMult` apply a per-clock multiplier to that
  * side's scoring (used by the QB Field General window multiplier).
  */
-export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youShield?: (clock: number) => number; theirShield?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; youJinx?: boolean; theirJinx?: boolean; youSurge?: [number, number]; theirSurge?: [number, number]; youFreeze?: [number, number]; theirFreeze?: [number, number]; youBunkerFrom?: number; theirBunkerFrom?: number; realResolve?: boolean; projection?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
+export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youShield?: (clock: number) => number; theirShield?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; youJinx?: boolean; theirJinx?: boolean; youSurge?: [number, number]; theirSurge?: [number, number]; youFreeze?: [number, number]; theirFreeze?: [number, number]; youBunkerFrom?: number; theirBunkerFrom?: number; youDoubleTd?: number; theirDoubleTd?: number; youCounterWipe?: number; theirCounterWipe?: number; realResolve?: boolean; projection?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
   // Pre-match team buffs active on each side (Momentum / Garbage Time /
   // Floodgates / Overtime). Only the human side carries buffs in the demo.
   const youBuffs = opts.youBuffs ?? new Set<string>();
@@ -763,6 +763,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   // JINX (power-up): the FIRST touchdown by the jinxed side is negated — no
   // points and no effect (a nuke TD doesn't fire). One use per side.
   let youJinxUsed = false, theirJinxUsed = false;
+  // ENCORE (clutch): the first TD by the armed side AFTER its arm clock banks a
+  // +DOUBLE_TD_BONUS bonus. COUNTER-WIPE (clutch): a nuke against the armed side
+  // at its recorded wipe clock is negated (bank preserved). One use each per side.
+  const DOUBLE_TD_BONUS = 12;
+  let youEncoreUsed = false, theirEncoreUsed = false;
+  let cwYouUsed = false, cwTheirUsed = false;
   // A TD nuke RESETS the victim's drip AND suppresses ALL scoring in that slot for the
   // next 10 game-minutes. A bare rate-reset is rebuilt within a few catches (the reason
   // NUKE was dead), so the 10-minute blackout is what makes the wipe stick — the slot
@@ -803,6 +809,14 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     // what was removed — the WR/TE carry-wipe buff passes 0 (it already pays
     // its own coin bounty) and a reflected nuke steals nothing.
     const nukeWipe = (wiped: number, stealPct = 0.25): string => {
+      // COUNTER-WIPE (clutch): the victim armed a counter for a wipe at this clock
+      // → the nuke is fully negated (bank + drip preserved), like Bunker.
+      const cwAt = oppSide === 'you' ? opts.youCounterWipe : opts.theirCounterWipe;
+      const cwUsed = oppSide === 'you' ? cwYouUsed : cwTheirUsed;
+      if (cwAt != null && !cwUsed && Math.abs(play.clock - cwAt) < 1) {
+        if (oppSide === 'you') cwYouUsed = true; else cwTheirUsed = true;
+        return ' · ↩ COUNTER-WIPE — nuke negated';
+      }
       if (oppSide === 'you' && youBuffs.has('counter-nuke') && !cnUsed) {
         cnUsed = true; const back = mine.bank; mine.bank = 0; mine.hist = []; nukeDrip(mine, play.clock); // reflected: the attacker is wiped + drip-suppressed instead
         recBuff('you', 'counter-nuke', back, true); // reflected the nuke back onto the attacker
@@ -915,6 +929,13 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     if (pts > 0) {
       if (frozenAt(play.side, play.clock)) { pts = 0; frozenThis = true; }
       else if (surgeAt(play.side, play.clock)) { pts = Math.round(pts * SURGE_MULT * 10) / 10; surgeBoost = true; }
+    }
+    // ENCORE (clutch): the armed side's first TD after its arm clock banks +12.
+    let encoreThis = false;
+    const encoreAt = play.side === 'you' ? opts.youDoubleTd : opts.theirDoubleTd;
+    if (encoreAt != null && !(play.side === 'you' ? youEncoreUsed : theirEncoreUsed) && play.td && play.clock >= encoreAt && !frozenThis) {
+      if (play.side === 'you') youEncoreUsed = true; else theirEncoreUsed = true;
+      pts = Math.round((pts + DOUBLE_TD_BONUS) * 10) / 10; encoreThis = true;
     }
 
     mine.bank += pts;
@@ -1068,6 +1089,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     if (!effect && underdogBoost) effect = { type: 'streak', text: `⚔ UNDERDOG ×${UNDERDOG_MULT}` };
     if (!effect && surgeBoost) effect = { type: 'streak', text: `⚡ SURGE ×${SURGE_MULT}` };
     if (!effect && frozenThis) effect = { type: 'stop', text: '🧊 COLD SNAP — frozen' };
+    if (encoreThis) { effect = { type: 'streak', text: `🎬 ENCORE +${DOUBLE_TD_BONUS}` }; sig = true; }
     if (play.turnover) effect = { type: 'nuke', text: '✕ TURNOVER → opp' }; // giveaway: coin to the opponent
 
     events.push({

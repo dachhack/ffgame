@@ -12,7 +12,7 @@ import { hashStr } from '../data/players';
  *  no real timestamps baked. */
 export interface SlotSwap { atClock: number; atRt?: number; toMetricId?: string; toPlayerId?: string; }
 export type SlotSwaps = Record<string, SlotSwap>; // slotKey -> swap
-import { resolveSlot, projectedPoints, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, hadDefTd, hadLongPassTd, turnoversCommitted, clockAtRealTime, EMPTY_PLAYER, type SlotInput } from './sim';
+import { resolveSlot, projectedPoints, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, hadDefTd, hadLongPassTd, turnoversCommitted, clockAtRealTime, statlineAt, fmtClock, EMPTY_PLAYER, type SlotInput } from './sim';
 import { REAL_WEEKS } from '../data/realPbp';
 import { windowForTeam, windowsForWeek, gamesInWindow } from '../data/nflSlate';
 import { injuryFor } from '../data/injuries';
@@ -272,6 +272,9 @@ export interface ResolvedSlot {
   youGrudgePts?: number;        // the ± points the grudge paid/cost
   theirRedHerringFrom?: number; // this opponent slot was capped by your Red Herring — its score before
   theirJinxed?: boolean;        // the opponent's first TD here was negated by your Jinx
+  youEncore?: boolean;          // your Encore fired (a post-arm TD banked the +12 bonus)
+  youCounterWiped?: boolean;    // your Counter-Wipe negated an opponent nuke here
+  youClutchStake?: 'won' | 'lost'; // Clutch (halftime) Double-or-Nothing outcome
   // Powerup-driven scoring changes on this slot, per side — shown in the spot at FINAL.
   youBuffFx?: BuffFx[];
   theirBuffFx?: BuffFx[];
@@ -387,7 +390,7 @@ export function buildMatchup(
   swaps: SlotSwaps = {},
   backupAssign: Record<string, string> = {},
   buffs: Record<string, boolean> = {},
-  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; surge?: Record<string, number>; coldSnap?: Record<string, number>; bunker?: Record<string, number>; autoBackups?: boolean } = {},
+  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; surge?: Record<string, number>; coldSnap?: Record<string, number>; bunker?: Record<string, number>; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number>; autoBackups?: boolean } = {},
   realResolve = false, // resolve cross-game effects (TE-TD drip nuke) in real-time order
   oppBuffs?: string[], // live H2H: the opponent's REAL armed buffs (revealed at lock); AI default when omitted
 ): ResolvedMatchup {
@@ -459,7 +462,7 @@ export function buildMatchup(
       let real = false;
       let displayYou = you; // may reflect a real-time swap
       let youNegated = false, theirNegated = false;
-      let theirJinxed = false;
+      let theirJinxed = false, youEncore = false, youCounterWiped = false;
       let youBuffFx: BuffFx[] | undefined, theirBuffFx: BuffFx[] | undefined;
       // A suppress DST forgoes its earn points (spent as the kill-threshold).
       const suppressSpentYou = (you?.player.pos === 'DEF' && you.metricId === 'suppress') ? defSuppressScore(you.player, week) : undefined;
@@ -489,9 +492,15 @@ export function buildMatchup(
         const youSurge = win10(extras.surge?.[key]);
         const theirFreeze = win10(extras.coldSnap?.[key]);
         const youBunkerFrom = extras.bunker?.[key];
-        const opts = { youMult, theirMult, youShield, theirShield, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined, theirJinx, youSurge, theirFreeze, youBunkerFrom, realResolve };
+        // Clutch (conditional) power-ups armed on this slot: Encore (+12 on a
+        // post-arm TD) and Counter-Wipe (negate a nuke at its recorded clock).
+        const youDoubleTd = extras.clutchEncore?.[key];
+        const youCounterWipe = extras.clutchCounter?.[key];
+        const opts = { youMult, theirMult, youShield, theirShield, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined, theirJinx, youSurge, theirFreeze, youBunkerFrom, youDoubleTd, youCounterWipe, realResolve };
         let res = resolveSlot(yIn, tIn, week, gameLabel, opts);
         if (theirJinx && their) theirJinxed = res.events.some((e) => e.effect?.text.includes('JINXED'));
+        if (youDoubleTd != null && you) youEncore = res.events.some((e) => e.effect?.text.includes('ENCORE'));
+        if (youCounterWipe != null && you) youCounterWiped = res.events.some((e) => e.effect?.text.includes('COUNTER-WIPE'));
 
         // Real-time swap (Player/Metric Swap): keep your pre-swap banked points,
         // then add only the new config's gains after the swap clock. Both sides'
@@ -538,7 +547,7 @@ export function buildMatchup(
         if (bp) { displayYou = { player: bp, metricId: 'bye' }; yF = Math.round(projectedPoints(bp, week) * 10) / 10; byeStolen = true; }
       }
 
-      slots.push({ win: w.id, slotIndex: i, you: displayYou, their, events, youFinal: yF, theirFinal: tF, gameLabel, real, suppressSpentYou, suppressSpentTheir, youNegated: youNegated || undefined, theirNegated: theirNegated || undefined, theirJinxed: theirJinxed || undefined, byeStolen: byeStolen || undefined, youBuffFx, theirBuffFx, youFgMult: youMult, theirFgMult: theirMult });
+      slots.push({ win: w.id, slotIndex: i, you: displayYou, their, events, youFinal: yF, theirFinal: tF, gameLabel, real, suppressSpentYou, suppressSpentTheir, youNegated: youNegated || undefined, theirNegated: theirNegated || undefined, theirJinxed: theirJinxed || undefined, youEncore: youEncore || undefined, youCounterWiped: youCounterWiped || undefined, byeStolen: byeStolen || undefined, youBuffFx, theirBuffFx, youFgMult: youMult, theirFgMult: theirMult });
     }
     windows.push({ window: w, slots });
   }
@@ -673,6 +682,19 @@ export function buildMatchup(
     }
   }
 
+  // CLUTCH Double or Nothing (unlocked by a halftime lead): scores ×2 if the slot
+  // wins its head-to-head, 0 if it loses — same as Double or Nothing, armed
+  // conditionally mid-game.
+  if (extras.clutchDon?.length) {
+    const staked = new Set(extras.clutchDon);
+    for (const w of windows) for (const s of w.slots) {
+      if (!s.you || !s.their || !staked.has(slotKey(s.win, s.slotIndex))) continue;
+      const won = s.youFinal > s.theirFinal;
+      s.youClutchStake = won ? 'won' : 'lost';
+      bonuses.push({ id: 'clutch-don', points: won ? s.youFinal : -s.youFinal, label: won ? `Clutch Double — ${s.you.player.name} WON ×2` : `Clutch Double — ${s.you.player.name} LOST → 0` });
+    }
+  }
+
   for (const b of bonuses) youFinal += b.points;
 
   return {
@@ -685,6 +707,32 @@ export function buildMatchup(
     youWindowsWon,
     theirWindowsWon,
   };
+}
+
+// ── Clutch plays (conditional, transient-availability power-ups) ─────────────
+// A clutch offer unlocks from a LIVE game-state trigger on a slot and is only
+// arm-able for a limited game-clock window. Detected from the slot's own resolved
+// timeline so the live board can surface an offer while `armFrom ≤ clock < armUntil`.
+export interface ClutchOffer { id: 'clutch-don' | 'clutch-encore' | 'clutch-counter'; slotKey: string; armFrom: number; armUntil: number; note: string; }
+const CLUTCH_HALFTIME = 1800; // 30:00 game clock
+const CLUTCH_WINDOW = 300;    // how long an offer stays open (game seconds)
+export function clutchOffers(slot: ResolvedSlot, week: number): ClutchOffer[] {
+  const out: ClutchOffer[] = [];
+  if (!slot.you) return out;
+  const key = slotKey(slot.win, slot.slotIndex);
+  // Halftime lead ≥10 → conditional Double or Nothing (arm before Q3 develops).
+  if (slot.their) {
+    const half = banksAtClock(slot.events, CLUTCH_HALFTIME);
+    if (half.you - half.their >= 10) out.push({ id: 'clutch-don', slotKey: key, armFrom: CLUTCH_HALFTIME, armUntil: CLUTCH_HALFTIME + CLUTCH_WINDOW, note: `Up ${(half.you - half.their).toFixed(1)} at half` });
+  }
+  // A first-half TD → Encore: the next TD banks +12 (arm any time before the end).
+  const h1 = statlineAt(slot.you.player, week, CLUTCH_HALFTIME, slot.you.metricId ?? undefined);
+  const h1tds = h1.passTds + h1.rushTds + h1.recTds + h1.retTds;
+  if (h1tds > 0) out.push({ id: 'clutch-encore', slotKey: key, armFrom: CLUTCH_HALFTIME, armUntil: 3300, note: `${h1tds} first-half TD` });
+  // An opponent nuke wiped you → Counter-Wipe, open for a short window after it.
+  const wipe = [...slot.events].reverse().find((e) => e.side === 'their' && e.effect?.type === 'nuke' && /wiped|NUKE|WIPE/i.test(e.effect.text));
+  if (wipe) out.push({ id: 'clutch-counter', slotKey: key, armFrom: wipe.clock, armUntil: wipe.clock + CLUTCH_WINDOW, note: `Nuked at ${fmtClock(wipe.clock)}` });
+  return out;
 }
 
 // ── Drip-coin economy ────────────────────────────────────────────────────────

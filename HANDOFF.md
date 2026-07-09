@@ -1,6 +1,30 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-09 · Build `v0.118.0`_
+_Last updated: 2026-07-09 · Build `v0.119.0`_
+
+## Clutch plays: conditional, transient-availability power-ups (v0.119.0)
+A NEW class — power-ups that only UNLOCK from a live game-state trigger on a slot
+and are arm-able only for a limited game-clock window. `clutchOffers(slot, week)`
+(matchup.ts) detects them from the slot's own resolved timeline so the live board
+can surface an offer chip while `armFrom ≤ clock < armUntil` (and you own it, and
+it's not already armed). Priced in `0082_clutch_prices.sql`. 21/21 in h2h-verify.
+- **Halftime Gamble (`clutch-don`, ◎50).** Unlocks when a slot leads by 10+ at
+  halftime (game clock 1800), open for 5 game-min. Arms a Double-or-Nothing on
+  that slot (×2 win / 0 lose) — resolved via `extras.clutchDon` like DoN.
+- **Encore (`clutch-encore`, ◎45).** Unlocks when your player scored a first-half
+  TD; open until late game. His next TD banks +`DOUBLE_TD_BONUS` (12) via
+  `resolveSlot` `opts.youDoubleTd` (arm clock) → first post-arm TD gets +12.
+- **Counter-Wipe (`clutch-counter`, ◎55).** Unlocks right after an opponent nuke
+  wipes the slot, open for 5 game-min from the wipe. `opts.youCounterWipe` (the
+  wipe clock) → that nuke is negated in `nukeWipe` (bank + drip preserved, Bunker-style).
+- Wiring: `AppliedWeek.{clutchDon,clutchEncore,clutchCounter}` + `armClutch`; the
+  offer chip renders per-slot in the live window (WindowSectionInner, `onArmClutch`);
+  buildMatchup resolves; display flags `youClutchStake`/`youEncore`/`youCounterWiped`
+  → MatchupFinal fx + active-effect chips. resolveLiveMatchup parity for the clutch
+  opts is still open (like the other targeted plays — demo path is complete).
+- Offer availability uses game-clock windows (the demo plays back on game clock);
+  a real-clock "5 real minutes" refinement is a later polish.
+
 
 ## Live tactical power-ups: Surge / Cold Snap / Bunker (v0.118.0)
 Three reactive `timing:'live'` power-ups fired mid-window (the live layer was just

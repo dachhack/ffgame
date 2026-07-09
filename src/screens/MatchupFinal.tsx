@@ -166,6 +166,9 @@ export function MatchupFinal({ week }: { week: number }) {
               if (s.youGrudge === 'won') fx.push(`🥊 Grudge Match — won by 10+ → +${(s.youGrudgePts ?? 0).toFixed(0)}`);
               if (s.youGrudge === 'lost') fx.push(`🥊 Grudge Match — lost → ${(s.youGrudgePts ?? 0).toFixed(0)}`);
               if (s.theirJinxed) fx.push('🧿 Jinx — negated their first TD');
+              if (s.youClutchStake) fx.push(s.youClutchStake === 'won' ? '🎰 Halftime Gamble — won ×2' : '🎰 Halftime Gamble — lost → 0');
+              if (s.youEncore) fx.push('🎬 Encore — a TD banked +12');
+              if (s.youCounterWiped) fx.push('🪃 Counter-Wipe — negated a nuke');
               if (s.theirRedHerringFrom != null) fx.push(`🎣 Red Herring — capped rival ${s.theirRedHerringFrom.toFixed(1)} → ${s.theirFinal.toFixed(1)}`);
               if (s.byeStolen) fx.push('🪂 Bye steal');
               if (s.youNegated) fx.push('✕ Negated by opponent K shutdown');

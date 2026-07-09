@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { makePlayer, injectWeek, EMPTY } from '../src/engine.js';
 import { resolveSlot, windowShield, defEarnScore, defSuppressScore } from '../../src/engine/sim.ts';
 import { resolveLiveMatchup } from '../../src/engine/liveResolve.ts';
+import { clutchOffers } from '../../src/engine/matchup.ts';
 
 const WEEK = 1;
 const w = JSON.parse(readFileSync(new URL(`../../public/pbp/w${WEEK}.json`, import.meta.url)));
@@ -159,5 +160,29 @@ const bNo = resolveSlot(bVictim, bAtk, WEEK, 'nobunker').youFinal;
 const bYes = resolveSlot(bVictim, bAtk, WEEK, 'bunker', { youBunkerFrom: 0 }).youFinal;
 console.log(`BUNKER: nuked ${bNo} → bunkered ${bYes} (nuke blocked)`);
 ok('bunker preserved the bank through the nuke', bYes > bNo);
+
+// ── 12. CLUTCH PLAYS: Encore / Counter-Wipe / offer detection ────────────────
+// ENCORE: arm from kickoff → the first TD banks +12.
+const eTd = { player: P('saquon-barkley', 'RB', 'PHI'), metricId: 'td' };
+const eNo = resolveSlot(eTd, { player: EMPTY, metricId: 'none' }, WEEK, 'no-encore').youFinal;
+const eYes = resolveSlot(eTd, { player: EMPTY, metricId: 'none' }, WEEK, 'encore', { youDoubleTd: 0 }).youFinal;
+console.log(`\nENCORE: base ${eNo} → +encore ${eYes} (next TD +12)`);
+ok('encore added +12 to a post-arm TD', Math.abs(eYes - (eNo + 12)) < 0.05);
+
+// COUNTER-WIPE: negate the nuke at its own clock → victim keeps its bank.
+const cwVictim = { player: P('puka-nacua', 'WR', 'LA'), metricId: 'rec' };
+const cwAtk = { player: P('saquon-barkley', 'RB', 'PHI'), metricId: 'td' };
+const cwBase = resolveSlot(cwVictim, cwAtk, WEEK, 'cw');
+const nukeEv = cwBase.events.find((e) => e.side === 'their' && e.effect?.type === 'nuke');
+const cwYes = resolveSlot(cwVictim, cwAtk, WEEK, 'cw', { youCounterWipe: nukeEv?.clock ?? -1 }).youFinal;
+console.log(`COUNTER-WIPE: nuked ${cwBase.youFinal} → countered ${cwYes} (nuke at ${nukeEv?.clock})`);
+ok('counter-wipe negated the nuke and preserved the bank', cwYes > cwBase.youFinal);
+
+// OFFER DETECTION: a first-half TD scorer surfaces a clutch-encore offer.
+const oRes = resolveSlot(eTd, { player: P('marquise-brown', 'WR', 'KC'), metricId: 'recyd' }, WEEK, '');
+const rSlot = { win: 'early', slotIndex: 0, you: eTd, their: { player: P('marquise-brown', 'WR', 'KC'), metricId: 'recyd' }, events: oRes.events, youFinal: oRes.youFinal, theirFinal: oRes.theirFinal };
+const offers = clutchOffers(rSlot, WEEK);
+console.log(`OFFERS: ${offers.map((o) => `${o.id}(${o.note})`).join(', ') || 'none'}`);
+ok('clutch offer detection surfaced an Encore for a first-half TD', offers.some((o) => o.id === 'clutch-encore'));
 
 console.log('\nDONE.');

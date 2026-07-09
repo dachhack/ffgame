@@ -33,6 +33,9 @@ export interface AppliedWeek {
   surge?: Record<string, number>;               // live: your slotKey -> fire game-clock (×2 for 10 min)
   coldSnap?: Record<string, number>;            // live: opponent slotKey -> fire game-clock (freeze all scoring 10 min)
   bunker?: Record<string, number>;              // live: your slotKey -> fire game-clock (nuke/erase immune onward)
+  clutchDon?: string[];                          // clutch: your slotKeys staked via Halftime Gamble (×2 win / 0 lose)
+  clutchEncore?: Record<string, number>;        // clutch: your slotKey -> arm clock (next TD +12)
+  clutchCounter?: Record<string, number>;       // clutch: your slotKey -> wipe clock to negate
   lineup?: Record<string, Pick>;                 // your lineup edits (deltas over the default) — so FINAL replays your actual lineup
 }
 
@@ -202,6 +205,8 @@ interface Store {
   removeSlotListPu: (id: string, week: number, slotKey: string) => void;
   /** Fire a live slot-targeted tactical power-up (surge / cold-snap / bunker) on a slot at the given clock. */
   applyLiveSlotPu: (id: string, week: number, slotKey: string, clock: number) => boolean;
+  /** Arm a clutch (conditional) power-up from a live offer: clutch-don / clutch-encore / clutch-counter. */
+  armClutch: (id: string, week: number, slotKey: string, clock: number) => boolean;
   /** Back-outs (refund the consumable) before lock-in / kickoff. */
   clearDoubleOrNothing: (week: number) => void;
   clearSpy: (week: number) => void;
@@ -416,6 +421,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             emp: (tgt.emp && Object.keys(tgt.emp).length ? tgt.emp : b.emp) as AppliedWeek['emp'],
             rivalry: b.rivalry, leadChange: b.leadChange, grudge: b.grudge, jinx: b.jinx, redHerring: b.redHerring,
             surge: b.surge, coldSnap: b.coldSnap, bunker: b.bunker,
+            clutchDon: b.clutchDon, clutchEncore: b.clutchEncore, clutchCounter: b.clutchCounter,
             buffs: Object.fromEntries((buffs ?? []).map((x) => [x, true as const])),
           } });
         })
@@ -573,6 +579,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (applied[week]?.[key]?.[slotKey] != null) return false;
     return consumeAndApply(id, week, (cur) => ({ ...cur, [key]: { ...cur[key], [slotKey]: clock } }));
   };
+  // CLUTCH plays: conditional power-ups armed from a live offer on a slot. Encore/
+  // Counter record a clock (arm clock / wipe clock); Halftime Gamble is a list.
+  const armClutch = (id: string, week: number, slotKey: string, clock: number): boolean => {
+    const a = applied[week];
+    if (id === 'clutch-don') { if ((a?.clutchDon ?? []).includes(slotKey)) return false; return consumeAndApply(id, week, (cur) => ({ ...cur, clutchDon: [...(cur.clutchDon ?? []), slotKey] })); }
+    const rec: 'clutchEncore' | 'clutchCounter' = id === 'clutch-encore' ? 'clutchEncore' : 'clutchCounter';
+    if (a?.[rec]?.[slotKey] != null) return false;
+    return consumeAndApply(id, week, (cur) => ({ ...cur, [rec]: { ...cur[rec], [slotKey]: clock } }));
+  };
   const applyRivalry = (week: number, win: WindowId): boolean =>
     applied[week]?.rivalry?.[win] ? false : consumeAndApply('rivalry', week, (cur) => ({ ...cur, rivalry: { ...cur.rivalry, [win]: true } }));
   // Slot-targeted list power-ups (Lead Change / Grudge / Jinx / Red Herring):
@@ -641,7 +656,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
     [theme, iconSet, cardSkin, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, liveCtx, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
