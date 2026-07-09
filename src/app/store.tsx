@@ -99,12 +99,12 @@ export type IconSetName = 'emoji' | 'factory' | 'pixel';
 /** Card-table deck skins — the table felt + sealed card backs. Personal choice,
  *  saved per browser. Player card faces stay cream across all skins (a deck
  *  swaps its table + backs, not its faces). */
-export type CardSkin = 'emerald' | 'noir' | 'crimson' | 'sunset' | 'fey' | 'compass' | 'gridiron' | 'cathedral' | 'victory' | 'dynasty';
-export const CARD_SKINS: CardSkin[] = ['emerald', 'noir', 'crimson', 'sunset', 'fey', 'compass', 'gridiron', 'cathedral', 'victory', 'dynasty'];
+export type CardSkin = 'emerald';
+export const CARD_SKINS: CardSkin[] = ['emerald'];
 /** Skins whose back is a full photographic card image (vs a generated pattern).
- *  These hide the ◆ gem and drop the SEALED/SCOUT labels into a bottom ribbon
- *  (see PHOTO_SKINS use in Matchup SetupRow). */
-export const PHOTO_SKINS: CardSkin[] = ['compass', 'gridiron', 'cathedral', 'victory', 'dynasty'];
+ *  These hide the ◆ gem and show only a small SCOUT chip (see PHOTO_SKINS use in
+ *  Matchup SetupRow). Empty for now — new photo decks get added here. */
+export const PHOTO_SKINS: CardSkin[] = [];
 
 interface Store {
   theme: ThemeName;

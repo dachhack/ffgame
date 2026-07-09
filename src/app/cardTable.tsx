@@ -25,26 +25,11 @@ const backArt = (c: string, field: string, center: string) => enc(
 const fieldRect = (id: string, defs: string) =>
   `<defs><pattern id='${id}' patternUnits='userSpaceOnUse' ${defs}</pattern></defs><rect x='6' y='6' width='108' height='162' rx='8' fill='url(#${id})'/>`;
 
-// Emerald — gold diamond lattice + a concentric-diamond medallion.
+// Emerald — gold diamond lattice + a concentric-diamond medallion. (The only
+// deck for now; new photo decks get wired in from public/cardbacks/.)
 const ART_EMERALD = backArt('#E9B959',
   fieldRect('fe', `width='17' height='17'><path d='M8.5 1 L16 8.5 L8.5 16 L1 8.5 Z' fill='none' stroke='#E9B959' stroke-width='.55' opacity='.5'/><circle cx='8.5' cy='8.5' r='.9' fill='#E9B959' opacity='.55'/>`),
   `<g fill='none' stroke='#E9B959'><path d='M60 62 L84 87 L60 112 L36 87 Z' stroke-width='1.2' opacity='.6'/><path d='M60 71 L75 87 L60 103 L45 87 Z' stroke-width='.7' opacity='.45'/></g>`);
-// Midnight Noir — silver argyle weave + a heraldic shield & crown.
-const ART_NOIR = backArt('#B0C6E8',
-  fieldRect('fn', `width='22' height='22'><path d='M0 22 L22 0 M-4 4 L4 -4 M18 26 L26 18' stroke='#B0C6E8' stroke-width='.5' opacity='.4'/><path d='M0 0 L22 22 M-4 18 L4 26 M18 -4 L26 4' stroke='#B0C6E8' stroke-width='.5' opacity='.24'/>`),
-  `<path d='M60 66 L82 73 V95 C82 110 71 118 60 123 C49 118 38 110 38 95 V73 Z' fill='none' stroke='#B0C6E8' stroke-width='1.2' opacity='.55'/><path d='M50 62 L54 55 L60 60 L66 55 L70 62 Z' fill='#B0C6E8' opacity='.55'/>`);
-// Crimson High-Roller — art-deco chevrons + a rising sunburst fan.
-const ART_CRIMSON = backArt('#E9BE60',
-  fieldRect('fc', `width='22' height='13'><path d='M0 13 L11 2 L22 13' fill='none' stroke='#E9BE60' stroke-width='.6' opacity='.38'/>`),
-  `<g stroke='#E9BE60' stroke-width='1' opacity='.5' fill='none'><path d='M60 104 V68 M60 104 L45 74 M60 104 L75 74 M60 104 L35 86 M60 104 L85 86'/></g><path d='M33 104 A27 27 0 0 1 87 104' fill='none' stroke='#E9BE60' stroke-width='1.2' opacity='.6'/>`);
-// Sunset Arcade — cream fish-scale scallops + a radiant sun.
-const ART_SUNSET = backArt('#F5DCBE',
-  fieldRect('fs', `width='20' height='11'><path d='M-10 11 A10 10 0 0 1 10 11 M10 11 A10 10 0 0 1 30 11' fill='none' stroke='#F5DCBE' stroke-width='.6' opacity='.4'/>`),
-  `<circle cx='60' cy='84' r='12' fill='none' stroke='#F5DCBE' stroke-width='1.2' opacity='.6'/><g stroke='#F5DCBE' stroke-width='1' opacity='.55' fill='none'><path d='M60 66 V60 M60 108 V102 M42 84 H36 M84 84 H78 M47 71 L43 67 M73 71 L77 67 M47 97 L43 101 M73 97 L77 101'/></g>`);
-// Fey Library — antique-gold leaf trellis + a tree of life in a ring.
-const ART_FEY = backArt('#D6B678',
-  fieldRect('ff', `width='24' height='24'><path d='M0 24 L24 0' stroke='#D6B678' stroke-width='.5' opacity='.32'/><ellipse cx='12' cy='12' rx='3' ry='1.3' fill='#D6B678' opacity='.4' transform='rotate(-45 12 12)'/>`),
-  `<circle cx='60' cy='87' r='24' fill='none' stroke='#D6B678' stroke-width='1' opacity='.5'/><path d='M60 108 V78' stroke='#D6B678' stroke-width='1.6' opacity='.6' fill='none'/><path d='M60 84 C52 78 49 73 47 66 M60 84 C68 78 71 73 73 66 M60 92 C54 88 51 84 49 79 M60 92 C66 88 69 84 71 79' fill='none' stroke='#D6B678' stroke-width='1' opacity='.55'/><path d='M60 108 C55 111 52 113 49 116 M60 108 C65 111 68 113 71 116' fill='none' stroke='#D6B678' stroke-width='1' opacity='.5'/>`);
 
 const CSS = `
 @font-face{font-family:'Lilita One';font-style:normal;font-weight:400;font-display:swap;src:url('${FONT_URL}') format('woff2');}
@@ -59,18 +44,6 @@ const CSS = `
      --ct-deck      rgb of the deck's metallic trim (lattice, gem, seal border)
      --ct-back-ink  text/label color that reads on the card back              */
 :root{ --ct-felt:#0B1F1A; --ct-back1:#7E2430; --ct-back2:#571C26; --ct-back3:#40151E; --ct-deck:233,185,89; --ct-back-ink:#D9A0A6; --ct-backart:${ART_EMERALD}; }
-:root[data-card-skin="noir"]{ --ct-felt:#0E1622; --ct-back1:#2B426A; --ct-back2:#1B2C48; --ct-back3:#101A2E; --ct-deck:176,198,232; --ct-back-ink:#B9C7DF; --ct-backart:${ART_NOIR}; }
-:root[data-card-skin="crimson"]{ --ct-felt:#2A0B0E; --ct-back1:#241012; --ct-back2:#170A0B; --ct-back3:#0C0607; --ct-deck:233,190,96; --ct-back-ink:#D8B679; --ct-backart:${ART_CRIMSON}; }
-:root[data-card-skin="sunset"]{ --ct-felt:#281026; --ct-back1:#1F5A55; --ct-back2:#154240; --ct-back3:#0D2E2C; --ct-deck:245,220,190; --ct-back-ink:#BFEAE4; --ct-backart:${ART_SUNSET}; }
-:root[data-card-skin="fey"]{ --ct-felt:#0E2620; --ct-back1:#38305E; --ct-back2:#282247; --ct-back3:#191531; --ct-deck:214,182,120; --ct-back-ink:#C9BCE6; --ct-backart:${ART_FEY}; }
-/* Photographic decks — the back IS a full card image (owned art), not a
-   generated pattern. Gridiron Navy (compass/field) + Gridiron Crimson
-   (helmets/shield). Felt is tinted to the card so the table matches. */
-:root[data-card-skin="compass"]{ --ct-felt:#101A2C; --ct-back1:#20344F; --ct-back2:#16243A; --ct-back3:#0C1522; --ct-deck:190,205,225; --ct-back-ink:#D6E0EF; --ct-aspect:0.785; --ct-backart:url("${import.meta.env.BASE_URL}card-compass.jpg"); }
-:root[data-card-skin="gridiron"]{ --ct-felt:#2A0C10; --ct-back1:#5A1620; --ct-back2:#3A0E16; --ct-back3:#24080C; --ct-deck:233,190,96; --ct-back-ink:#E7C58A; --ct-aspect:0.779; --ct-backart:url("${import.meta.env.BASE_URL}card-gridiron.jpg"); }
-:root[data-card-skin="cathedral"]{ --ct-felt:#14120A; --ct-back1:#2A2410; --ct-back2:#1A160A; --ct-back3:#0C0A05; --ct-deck:233,196,110; --ct-back-ink:#E8CE93; --ct-aspect:0.769; --ct-backart:url("${import.meta.env.BASE_URL}card-cathedral.jpg"); }
-:root[data-card-skin="victory"]{ --ct-felt:#2C0D11; --ct-back1:#5A1620; --ct-back2:#3A0E16; --ct-back3:#24080C; --ct-deck:233,190,96; --ct-back-ink:#E7C58A; --ct-aspect:0.643; --ct-backart:url("${import.meta.env.BASE_URL}card-victory.jpg"); }
-:root[data-card-skin="dynasty"]{ --ct-felt:#0E2A1E; --ct-back1:#1C4A34; --ct-back2:#123522; --ct-back3:#0A2417; --ct-deck:206,178,120; --ct-back-ink:#D8C79E; --ct-aspect:0.766; --ct-backart:url("${import.meta.env.BASE_URL}card-dynasty.jpg"); }
 /* Photo decks: the back is a real card image. Instead of stretching (distorts)
    or cover (clips), size the sealed card to the image's OWN aspect ratio so it
    fills exactly — no stretch, no clip. Now that metric picking is a modal, the
