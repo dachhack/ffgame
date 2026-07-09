@@ -2136,7 +2136,7 @@ function WindowSectionInner(props: {
   onScout: (win: WindowId) => void;
   lockPlayer?: boolean; // demo setup: metric is editable, but the player is fixed
 }) {
-  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, canApplyExtra, extraSlotQty, onApplyExtra, onRemoveExtra, rivalryQty, rivalryArmed, onApplyRivalry, onRemoveRivalry, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch } = props;
+  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch } = props;
   const w = rw.window;
   // Twin Generals: with the buff armed and ≥2 of your Field General QBs in this
   // window, the top two multipliers stack — link those QB spots so you can see
@@ -2251,28 +2251,11 @@ function WindowSectionInner(props: {
             {/* Live board: this window's own state + lock time, right in its header. */}
             {stateChip}
             {timeHint && <span className="mono" style={{ fontSize: fs(9), fontWeight: 700, color: 'var(--warn)', letterSpacing: '0.04em' }}>{timeHint}</span>}
-            {canApplyExtra && (
-              <button
-                onClick={onApplyExtra}
-                title="Add a slot to this window — for you AND your opponent. Locks once any window starts."
-                className="mono"
-                style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px dashed var(--warn)', borderRadius: 4, padding: '4px 8px' }}
-              >
-                ➕ ADD SLOT (◈ ×{extraSlotQty})
-              </button>
-            )}
+            {/* Window-targeted plays (Extra Slot / Rivalry) are applied from the
+                card: arm it → a TAP TO APPLY chip appears on each window below. */}
             {rw.slots.length > w.slots && (
               <button onClick={onRemoveExtra} title="Remove the added slot (refund)" className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--opp)', background: 'var(--surface)', border: '1px solid var(--opp)', borderRadius: 4, padding: '4px 8px' }}>
                 ➖ REMOVE SLOT
-              </button>
-            )}
-            {rivalryArmed ? (
-              <button onClick={onRemoveRivalry} title="Rivalry armed on this window — siphons 50% of any same-position opponent at window-end. Tap to remove (refund)." className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--fx-reset)', border: '1px solid var(--fx-reset)', borderRadius: 4, padding: '4px 8px' }}>
-                ⚔️ RIVALRY ✕
-              </button>
-            ) : rivalryQty > 0 && (
-              <button onClick={onApplyRivalry} title="Arm Rivalry on this window (blind): siphon 50% of any opponent who plays the same position as you here, at window-end. Whiffs if they don't mirror you." className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--fx-reset)', background: 'var(--surface)', border: '1px dashed var(--fx-reset)', borderRadius: 4, padding: '4px 8px' }}>
-                ⚔️ RIVALRY (◈ ×{rivalryQty})
               </button>
             )}
             <span className="mono" style={{ fontSize: fs(9), fontWeight: 700, letterSpacing: '0.12em', color: 'var(--dim)' }}>{setN}/{rw.slots.length} SET</span>
