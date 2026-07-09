@@ -200,8 +200,18 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
     { id: 'arctic', name: 'Arctic Journey' },
   ];
   // Card-deck skins: a swatch (felt ground + a peek of the sealed card back).
+  const cb = (n: string) => `${import.meta.env.BASE_URL}cardbacks/${n}.jpg`;
   const skins: { id: CardSkin; name: string; felt: string; back: string; img?: string }[] = [
     { id: 'emerald', name: 'Emerald Table', felt: '#123A2F', back: '#7E2430' },
+    { id: 'playbook', name: 'Playbook', felt: '#10203A', back: '#10203A', img: cb('playbook') },
+    { id: 'blitz', name: 'Blitz', felt: '#0E1A30', back: '#0E1A30', img: cb('blitz') },
+    { id: 'rivalry', name: 'Rivalry', felt: '#2A0C10', back: '#2A0C10', img: cb('rivalry') },
+    { id: 'allstar', name: 'All-Star', felt: '#12213A', back: '#12213A', img: cb('allstar') },
+    { id: 'heritage', name: 'Heritage', felt: '#12100A', back: '#12100A', img: cb('heritage') },
+    { id: 'gilded', name: 'Gilded', felt: '#1E1608', back: '#1E1608', img: cb('gilded') },
+    { id: 'cosmic', name: 'Cosmic', felt: '#0E1024', back: '#0E1024', img: cb('cosmic') },
+    { id: 'fireworks', name: 'Fireworks', felt: '#14122E', back: '#14122E', img: cb('fireworks') },
+    { id: 'battalion', name: 'Battalion', felt: '#16180E', back: '#16180E', img: cb('battalion') },
   ];
   const lbl: CSSProperties = { fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--faint)' };
   const toggle = (on: boolean): CSSProperties => ({

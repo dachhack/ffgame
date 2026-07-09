@@ -44,6 +44,18 @@ const CSS = `
      --ct-deck      rgb of the deck's metallic trim (lattice, gem, seal border)
      --ct-back-ink  text/label color that reads on the card back              */
 :root{ --ct-felt:#0B1F1A; --ct-back1:#7E2430; --ct-back2:#571C26; --ct-back3:#40151E; --ct-deck:233,185,89; --ct-back-ink:#D9A0A6; --ct-backart:${ART_EMERALD}; }
+/* Photographic decks (public/cardbacks/*.jpg) — full-bleed card images at the
+   true 2.5:3.5 card ratio, so no stretch/clip and both slot cards match size.
+   Felt is tinted toward each card's dominant color. */
+:root[data-card-skin="playbook"]{ --ct-felt:#10203A; --ct-aspect:0.714; --ct-backart:url("${import.meta.env.BASE_URL}cardbacks/playbook.jpg"); }
+:root[data-card-skin="blitz"]{ --ct-felt:#0E1A30; --ct-aspect:0.714; --ct-backart:url("${import.meta.env.BASE_URL}cardbacks/blitz.jpg"); }
+:root[data-card-skin="rivalry"]{ --ct-felt:#2A0C10; --ct-aspect:0.714; --ct-backart:url("${import.meta.env.BASE_URL}cardbacks/rivalry.jpg"); }
+:root[data-card-skin="allstar"]{ --ct-felt:#12213A; --ct-aspect:0.714; --ct-backart:url("${import.meta.env.BASE_URL}cardbacks/allstar.jpg"); }
+:root[data-card-skin="heritage"]{ --ct-felt:#12100A; --ct-aspect:0.714; --ct-backart:url("${import.meta.env.BASE_URL}cardbacks/heritage.jpg"); }
+:root[data-card-skin="gilded"]{ --ct-felt:#1E1608; --ct-aspect:0.714; --ct-backart:url("${import.meta.env.BASE_URL}cardbacks/gilded.jpg"); }
+:root[data-card-skin="cosmic"]{ --ct-felt:#0E1024; --ct-aspect:0.714; --ct-backart:url("${import.meta.env.BASE_URL}cardbacks/cosmic.jpg"); }
+:root[data-card-skin="fireworks"]{ --ct-felt:#14122E; --ct-aspect:0.714; --ct-backart:url("${import.meta.env.BASE_URL}cardbacks/fireworks.jpg"); }
+:root[data-card-skin="battalion"]{ --ct-felt:#16180E; --ct-aspect:0.714; --ct-backart:url("${import.meta.env.BASE_URL}cardbacks/battalion.jpg"); }
 /* Photo decks: the back is a real card image. Instead of stretching (distorts)
    or cover (clips), size the sealed card to the image's OWN aspect ratio so it
    fills exactly — no stretch, no clip. Now that metric picking is a modal, the
