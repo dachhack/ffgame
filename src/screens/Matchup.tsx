@@ -2471,7 +2471,7 @@ export function SetupRow(props: {
           {showPicker && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {!pick?.metricId && !editing && (
-                <div className="mono" style={{ fontSize: fs(8), fontWeight: 700, letterSpacing: '0.14em', color: 'var(--warn)' }}>② PICK A METRIC ↓</div>
+                <div className="mono mx-editmet" style={{ fontSize: fs(8), fontWeight: 700, letterSpacing: '0.14em', color: 'var(--warn)' }}>② PICK A METRIC ↓</div>
               )}
               {editing && (
                 <button onClick={() => setEditing(false)} className="mono" style={{ width: '100%', textAlign: 'center', background: 'none', border: '1px dashed var(--bd)', borderRadius: 3, padding: '3px', fontSize: fs(8), letterSpacing: '0.1em', color: 'var(--faint)' }}>✕ KEEP {metric?.name?.toUpperCase()}</button>
