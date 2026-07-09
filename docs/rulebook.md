@@ -3,15 +3,14 @@
 Drip Fantasy is head-to-head fantasy where **what** you start matters less than
 **how** you score it. Every slot is a hidden bet: a player *and* a secret
 **metric** that decides how that player's real NFL game converts to points — and
-how it attacks or defends against your opponent. Picks stay sealed until kickoff —
-**each window's kickoff**: your Sunday and Monday picks stay editable (and hidden)
-after Thursday's game reveals, so what you learn can change what you play.
+how it attacks or defends against the opponent across from it. Picks stay sealed
+until **each window's kickoff**, so what you learn early can change what you play.
 
-> **The §4 catalog and §6 power-up tables below are auto-generated** from
+> **The §5 catalog and §8 power-up tables below are auto-generated** from
 > `src/data/metrics.ts` and `src/data/powerups.ts` (run `npm run gen:rulebook`),
 > so they can never drift from the live engine. The same data drives the in-app
-> Rulebook (Settings gear → Rulebook). Edit prose by hand; never edit between the
-> `AUTO-*` markers.
+> Rulebook (Settings gear → Rulebook) and the companion **[Power-Up Handbook](./powerups.md)**.
+> Edit prose by hand; never edit between the `AUTO-*` markers.
 
 ---
 
@@ -30,17 +29,18 @@ Your lineup is **8 slots** spread across the five game windows:
 - Each slot = **one player + one hidden metric**. A player is only eligible in the
   window their real NFL team plays.
 - Head-to-head, your slots are paired against your opponent's **by window and slot
-  position**. Slot 1 fights slot 1, etc.
-- Your score is the sum of every slot's banked points. Most metrics also *attack*
-  the slot they're matched against — so a slot can win by scoring big **or** by
-  zeroing out the player across from it.
+  position** — slot 1 fights slot 1, etc. Each pairing is its own little battle.
 - Picks are **sealed**: neither side sees the other's players or metrics until the
-  window locks at kickoff.
-- Windows lock **one at a time, each at its own first kickoff** — a TNF pick is
-  final Thursday night, but your SUN/SNF/MNF picks stay editable until those
-  windows kick off. Thursday's reveal is intel: you can counter-pick the rest of
-  your week against what your opponent already showed. (Pre-match power-ups are
-  the exception — they arm only before the week's FIRST kickoff.)
+  window locks at its own first kickoff.
+- Windows lock **one at a time** — a TNF pick is final Thursday night, but your
+  SUN/SNF/MNF picks stay editable until those windows kick off. Thursday's reveal
+  is intel you can counter-pick against. (Pre-match power-ups are the exception —
+  they arm only before the week's **first** kickoff.)
+
+**How you win.** Your score is the sum of every slot's banked points, plus two
+extra layers: **window battles** (§4) and a lineup-wide **power-up** economy (§8).
+A slot can win its fight by scoring big **or** by zeroing out the player across
+from it — most metrics attack as well as score.
 
 ---
 
@@ -49,44 +49,69 @@ Your lineup is **8 slots** spread across the five game windows:
 Every metric does one or both of:
 
 - **Scores** — banks points for you (flat points, or a *drip* that accrues over time).
-- **Effects** — does something to the opponent slot (wipe, erase, halve, multiply…).
+- **Effects** — does something to the opponent slot (wipe, erase, halve, multiply, siphon…).
 
 The big idea: **flat metrics are predictable, drips are explosive but fragile, and
-effect metrics win by denial.** It's rock-paper-scissors — see §5.
+effect metrics win by denial.** It's rock-paper-scissors — see §6.
 
 ---
 
 ## 3. The Drip system (the heart of the game)
 
-Drip metrics (**Rush Yards**, **Receiving Yards**, and the Combo/Return unlocks)
-don't score yards directly. Each productive touch raises a **rate** (points per
-minute), and that rate **accrues over time while your team has the ball.**
+Drip metrics (**Rush Yards**, **Receiving Yards**, the Combo/Return unlocks, and the
+DST **Earn Points** drip) don't score yards directly. Each productive play raises a
+**rate** (points per minute), and that rate **accrues over time.**
 
-- **Rate** = yards × **0.01**/min for a WR or RB · **0.005**/min for a TE (half).
-  Rate **builds gradually** — yards early in the game accrue over far more time than
-  yards late.
-- **Accrues only on offense**, on the real game clock (it pauses at quarter & half).
+- **Rate** = yards × **0.01**/min for a WR or RB · **0.0065**/min for a TE
+  (two-thirds). Rate **builds gradually** — production early in the game accrues
+  over far more time than production late.
+- **Accrues on offense**, on the real game clock (it pauses at quarter & half).
 - **HOT** — **3 straight productive touches with no opponent score in between**
   doubles your drip (**×2**). A stuffed run (<3 yds), short return (<10 yds), or
   incompletion breaks the streak. (Combo/Return drips need **4**.)
 - **A touchdown wipes the bank** — drips reward *sustained production*, not boom
-  plays. The rate survives; the bank doesn't.
+  plays. The rate survives; the banked points don't.
 
 ### WR vs TE drip — the key difference
 
 | | WR / RB drip | TE drip |
 |---|---|---|
-| Rate | **0.01**/yd per min | **0.005**/yd per min (half) |
+| Rate | **0.01**/yd per min | **0.0065**/yd per min (two-thirds) |
 | Erase/pause immunity | **Fragile** — opponent catches erase + pause it | **Bulletproof** vs WR/RB erases & pauses |
 | Cooled by per-play scorers? | Yes | **Yes** (immunity does *not* cover this) |
 
-A TE drip can't be erased by an opposing receiver — but it builds at half rate, and
-its hot streak can still be **cooled** by an opponent who banks points every play
-(a passing QB). See the worked example in §7.
+A TE drip can't be erased by an opposing receiver — but it builds slower, and its
+hot streak can still be **cooled** by an opponent who banks points every play (a
+passing QB). See the worked example in §9.
+
+### The defense drip
+
+**Earn Points** (DST) works the same way, driven by splash plays: each sack/INT/
+fumble/TD raises the rate (splash-weight × **0.02**/min), so an early splash
+snowballs. It can't be paused or erased — only a TD nuke wipes its bank. The other
+two DST metrics spend that same production differently: **Field Marshal** trades the
+drip for a window-wide shield, and **Suppress** spends it as a bigger halving bar
+(§5, §6).
 
 ---
 
-## 4. Metric catalog
+## 4. Window battles & the MVP
+
+Beyond the raw point total, **each of the five windows is its own head-to-head:**
+
+- Whoever posts the **higher window total wins the window** and banks a flat **+5
+  bonus**. A live battle meter shows who's ahead in each window; at final you'll see
+  a `⚔ windows won 3–2` tally.
+- The **single highest-scoring slot** in a window earns its side the **Window MVP
+  bounty** — drip-coin only (5 × the window's slot count), no points.
+
+This means you can sacrifice raw points to **win more windows**, and spiking one
+slot can steal a window's marquee bounty — every window is a fight worth winning on
+its own.
+
+---
+
+## 5. Metric catalog
 
 <!-- AUTO-CATALOG:START -->
 
@@ -160,7 +185,7 @@ its hot streak can still be **cooled** by an opponent who banks points every pla
 
 ---
 
-## 5. Effects & counterplay
+## 6. Effects & counterplay
 
 The hidden-metric layer is a counter game:
 
@@ -172,21 +197,42 @@ The hidden-metric layer is a counter game:
 - **Effect metrics** (erase / nuke / suppress / shutdown) win by **denial** — they
   score little, so they lose to **flat scorers** that just pile up points.
 - **Flat scorers** are steady but capless — they lose the big-points race to a drip
-  that goes hot.
+  that goes hot. **Underdog** is the exception: a flat scorer that runs **×1.5 while
+  trailing**, built to claw back rather than run up a lead.
 
-Cross-window reach: **Field General** multiplies your whole window, **TE 8-PT NUKE**
-hits every drip in the window, **DEF Suppress** halves matching slots in *any*
-window, and **K Banker** boosts *all* your TDs.
+**Cross-slot & window-wide reach** — the plays that make a whole window feel like a
+battle:
+
+- **Field General** (QB) — passing yards build a **window-wide multiplier** on all
+  your other skill players; the QB scores nothing himself.
+- **Field Marshal** (DST) — the defensive mirror: builds a **window-wide shield**
+  that blunts every opposing nuke and erase against your slots (up to 50%).
+- **TE 12-PT NUKE** — every TE TD wipes the matched opponent **and** knocks every
+  opposing drip in the window down 1.0/min.
+- **DEF Suppress** — its drip-fed kill-bar **halves every matching opponent slot in
+  any window**.
+- **K Banker** — every XP made boosts **all** your touchdowns for the week.
 
 ---
 
-## 6. Power-ups (the drip-coin economy)
+## 7. The drip-coin economy
 
-You earn **drip-coin** each week and spend it on consumables — bought into your
-inventory and spent when applied. Two kinds: **action** (a one-time tactical effect)
-and **metric** (unlocks an extra metric for the current week only). **Timing** gates
-when a power-up can be applied: *pre* locks once a window starts; *live* fires only
-during a live window (never retroactive).
+You earn **drip-coin** each week — a flat weekly stipend, an unopposed-slot bounty,
+the window MVP bounties (§4), a swing on turnovers, and coin for signature "events
+of note" (nukes, shutdowns, a drip going hot). You spend it on **power-ups**:
+consumables bought into your inventory and applied when you want them. See §8 for
+the catalog and the **[Power-Up Handbook](./powerups.md)** for the full breakdown
+by class and strategy.
+
+---
+
+## 8. Power-ups
+
+Two kinds: **action** (a one-time tactical effect) and **metric** (unlocks an extra
+metric for the current week only). **Timing** gates when a power-up applies: *pre*
+arms during setup and locks once the week's first window starts; *live* fires only
+during a live window (never retroactive). Some *live* plays are **clutch** — they
+only unlock from a live game-state trigger and are arm-able for a short window.
 
 <!-- AUTO-POWERUPS:START -->
 
@@ -244,18 +290,18 @@ during a live window (never retroactive).
 
 ---
 
-## 7. Worked example — why 127 yards scored 4 points
+## 9. Worked example — why 127 yards scored 4 points
 
 A TE posts **127 receiving yards, 0 TD** and banks just **4.0**, while a WR with
 **60 yards + 2 TD** banks 16.0. Not a bug — a clean counter:
 
-1. The TE drip builds at **half rate** (0.005), so 127 TE yards ≈ a 0.64/min rate —
-   about the same as 60 WR yards.
+1. The TE drip builds at a lower rate (0.0065), so 127 TE yards makes roughly the
+   same rate as ~80 WR yards — decent, but not a runaway.
 2. The opponent slotted a **passing QB** — in fact *the TE's own QB*. Every catch
    was also a completion that **banked points for the opponent**, which **cools the
    TE's hot streak** every single time.
 3. The TE is immune to *erases*, so the bank was never wiped — but he could never
-   string 3 unanswered catches, so the drip **never went hot (×2)**. Half rate, no
+   string 3 unanswered catches, so the drip **never went hot (×2)**. Lower rate, no
    doubling → 4.0.
 
 The counter to a drip isn't always an eraser — sometimes it's just a player who
@@ -264,15 +310,17 @@ version of that read.
 
 ---
 
-## 8. Banks, backups & edge cases
+## 10. Banks, backups & edge cases
 
 - **Missed picks** — your league policy decides: best available lineup auto-filled
   (default), an AI fills it, or it scores 0.
 - **Backups** — depth behind a beatable starter can sub in for full value if it
   outscores them; otherwise it scores 0 (all-or-nothing — no partial credit).
-- **Overtime / Garbage Time / Momentum / EMP** — power-ups (above) can keep drips
-  ticking past regulation, double late points, push a hot drip to ×3, or freeze an
-  opponent's drip.
+- **Overtime / Garbage Time / Momentum** — amplifier power-ups can keep drips
+  ticking past regulation, double late points, or push a hot drip to ×3 (capacity-
+  limited — see the handbook).
+- **Live & clutch plays** — freezes, burns, shields, and the reactive clutch offers
+  (§8) apply going forward from the moment you fire them, never retroactively.
 
 ---
 

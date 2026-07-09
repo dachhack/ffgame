@@ -31,6 +31,10 @@ export function App() {
   useEffect(() => {
     document.body.style.background = THEMES[theme].bg;
     document.documentElement.style.colorScheme = light ? 'light' : 'dark';
+    // Mirror the theme custom properties onto :root so content PORTALED to
+    // <body> (modals via ModalBackdrop) inherits --surface/--text/etc. too — the
+    // app-root <div> below carries them for the in-tree UI, but a portal escapes it.
+    for (const [k, v] of Object.entries(vars)) document.documentElement.style.setProperty(k, v);
     // CSS-reachable light/dark signal for the card-table theme (cardTable.tsx):
     // its felt + dark-stock cards get a light variant on the light app themes.
     document.documentElement.dataset.cardLight = light ? '1' : '0';

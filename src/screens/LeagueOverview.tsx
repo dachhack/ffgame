@@ -3,7 +3,7 @@ import { useStore } from '../app/store';
 import { Brand, Header, SiteSettings, UserChip, Avatar, PlayerImg, DemoControls } from '../app/ui';
 import { getTeam, teamRoster, gameForTeam, teamResults } from '../data/league';
 import { TOTAL_SLOTS } from '../data/metrics';
-import { POWERUPS } from '../data/powerups';
+import { POWERUPS, powerupCategory, POWERUP_CATEGORIES } from '../data/powerups';
 import { avatarUrl } from '../data/media';
 import { SLEEPER_HANDLE } from '../config';
 import { weekLockLabel } from '../data/nflSlate';
@@ -177,6 +177,18 @@ export function LeagueOverview() {
 export function ShopModal({ onClose, coinsOverride, onBuy, cards = false }: { onClose: () => void; coinsOverride?: number; onBuy?: (id: string) => Promise<boolean>; cards?: boolean }) {
   const { coins, inventory, buyPowerup } = useStore();
   const [flash, setFlash] = useState<string | null>(null);
+  const [tab, setTab] = useState<'all' | string>('all');
+  const shownPu = POWERUPS.filter((p) => tab === 'all' || powerupCategory(p) === tab);
+  const tabBar = (
+    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 10 }}>
+      {[{ id: 'all', label: 'All' }, ...POWERUP_CATEGORIES].map((t) => {
+        const on = tab === t.id;
+        return (
+          <button key={t.id} onClick={() => setTab(t.id)} className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', padding: '5px 10px', borderRadius: 999, cursor: 'pointer', border: `1px solid ${on ? 'var(--warn)' : 'var(--bd)'}`, background: on ? 'var(--warn)' : 'var(--surface)', color: on ? 'var(--on-accent)' : 'var(--dim)' }}>{t.label}</button>
+        );
+      })}
+    </div>
+  );
   // Hero board passes the real wallet balance + a wallet-charged buy; otherwise
   // the demo store ledger drives affordability + purchase.
   const bal = coinsOverride ?? coins;
@@ -189,9 +201,10 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false }: { on
     // buy it into your hand. Same buy/afford/flash semantics as the classic list.
     return (
       <Modal title="Power-Up Shop" sub={<><GameIcon name={COIN_GOLD} emoji="◈" size="1.4em" /> {bal} DRIP COIN · +5 per signature play</>} onClose={onClose} maxWidth={560}>
-        <div className="ctable" style={{ maxHeight: 480, overflowY: 'auto', overflowX: 'hidden' }}>
+        {tabBar}
+        <div className="ctable" style={{ maxHeight: 440, overflowY: 'auto', overflowX: 'hidden' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, 150px)', gap: 12, justifyContent: 'center', justifyItems: 'center', padding: '4px 2px' }}>
-            {POWERUPS.map((p, i) => {
+            {shownPu.map((p, i) => {
               const have = inventory[p.id] ?? 0;
               const afford = bal >= p.price;
               return (
@@ -212,8 +225,9 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false }: { on
   }
   return (
     <Modal title="Power-Up Shop" sub={<><GameIcon name={COIN_GOLD} emoji="◈" size="1.4em" /> {bal} DRIP COIN · +5 per signature play</>} onClose={onClose} maxWidth={560}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 480, overflow: 'auto' }}>
-        {POWERUPS.map((p) => {
+      {tabBar}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 440, overflow: 'auto' }}>
+        {shownPu.map((p) => {
           const have = inventory[p.id] ?? 0;
           const afford = bal >= p.price;
           const timingTag = p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME';

@@ -207,6 +207,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     // via effWinClock); the sim board uses the manual playback clock. Either way
     // EMP freezes forward from the current position, never retroactively.
     if (pendingApply === 'emp') { const clock = effWinClock(win); if (applyEmp(week, win, clock)) liveTargeted('emp', { win, clock }); setPendingApply(null); }
+    else if (pendingApply === 'extra-slot') { applyExtraSlot(week, win); setPendingApply(null); }
+    else if (pendingApply === 'rivalry') { if (applyRivalry(week, win)) liveTargeted('rivalry', { win }); setPendingApply(null); }
   }
   // Arm a clutch offer: Counter-Wipe negates the nuke at its own clock; Encore/
   // Halftime Gamble arm from the current live clock.
@@ -768,7 +770,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       deadline = liveWins.length ? `Live now: ${liveWins.map((w) => w.label).join(', ')}` : 'When a window goes live';
     }
     if (buff && buffs[p.id]) ok = false; // already armed → lives in Active
-    const action: 'arm' | 'apply' | 'hint' = buff ? 'arm' : SPOT_APPLY.has(p.id) ? 'apply' : 'hint';
+    // Window-targeted plays (Extra Slot / Rivalry / EMP) also enter tap-a-target
+    // mode — you play the card, then tap the window to apply it.
+    const action: 'arm' | 'apply' | 'hint' = buff ? 'arm' : (SPOT_APPLY.has(p.id) || p.target === 'window') ? 'apply' : 'hint';
     // Amplifier capacity (mirrors store.armBuff / server arm_buff gates).
     let blocked: string | undefined;
     if (p.id === 'amp-3' && !armedSet.has('amp-2')) blocked = 'Arm Second Amp first';
@@ -1552,6 +1556,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             onArm={(id) => armBuff(week, id)}
             onApply={(id) => { setPendingApply(id); setPuView(null); }}
             onCancel={() => setPendingApply(null)}
+            onOverflow={() => setPuView('apply')}
           />
         </>
       )}
@@ -2156,6 +2161,11 @@ function WindowSectionInner(props: {
   // Sim/demo has no `realtime`, so this is a no-op there.
   const liveNow = !realtime || realtime === 'live';
   const empEligible = applyMode === 'emp' && liveNow && phase === 'live' && clock > 0 && !done && aw?.emp?.[w.id] == null;
+  // A window-targeted play in tap mode: this window is a valid target.
+  const winApplyEligible = applyMode === 'emp' ? empEligible
+    : applyMode === 'extra-slot' ? phase === 'setup'
+      : applyMode === 'rivalry' ? (phase === 'setup' && !rivalryArmed)
+        : false;
   const spotEligible = (s: typeof rw.slots[number]) => {
     if (applyMode === 'spy') return !!s.their;                          // reveal the opponent here (locked period)
     if (applyMode === 'mulligan') return liveNow && !!s.you && !done;   // re-roll your metric
@@ -2339,13 +2349,19 @@ function WindowSectionInner(props: {
         </ModalBackdrop>
       )}
 
+      {winApplyEligible && applyMode !== 'emp' && (
+        <button onClick={() => onApplyToWindow(w.id)} className="mono" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 5, padding: '8px 10px', marginBottom: 8, cursor: 'pointer', boxShadow: '0 0 12px color-mix(in srgb, var(--warn) 45%, transparent)', animation: 'bpulse 1.5s ease infinite' }}>
+          {powerupById(applyMode!)?.icon} TAP TO APPLY {powerupById(applyMode!)?.name.toUpperCase()} → {w.label}
+        </button>
+      )}
+
       {phase !== 'setup' && <WindowBattleBar rw={rw} week={week} clock={clock} wallClock={wallClock} done={done} />}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {rw.slots.map((s) => {
           const key = slotKey(w.id, s.slotIndex);
           if (phase === 'setup') {
-            return (
+            const setupRow = (
               <SetupRow
                 key={key} slotKeyStr={key} winId={w.id} week={week} pick={picks[key]} selected={selSlot === key} inventory={inventory} armed={armed} twinLink={twinLinked.has(key)}
                 appliedPu={[...(aw?.doubleOrNothing === key ? ['double-or-nothing'] : []), ...(aw?.byeSteal?.slotKey === key ? ['bye-steal'] : []), ...(aw?.leadChange?.includes(key) ? ['lead-change'] : []), ...(aw?.grudge?.includes(key) ? ['grudge'] : []), ...(aw?.jinx?.includes(key) ? ['jinx'] : []), ...(aw?.redHerring?.includes(key) ? ['red-herring'] : [])]}
@@ -2355,6 +2371,20 @@ function WindowSectionInner(props: {
                 onDropPlayer={(id) => onAssign(id)} onScout={() => onScout(w.id)} lockPlayer={lockPlayer}
               />
             );
+            // Jinx points at the OPPONENT's (sealed) pick in this slot. Since the
+            // opponent is hidden in setup, render a face-down opponent target to tap.
+            if (applyMode === 'jinx') {
+              const jinxed = aw?.jinx?.includes(key);
+              return (
+                <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {setupRow}
+                  <button onClick={jinxed ? undefined : () => onApplyToSpot(key)} className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: jinxed ? 'var(--warn)' : 'var(--on-accent)', background: jinxed ? 'var(--surface)' : 'var(--warn)', border: `1px ${jinxed ? 'solid' : 'dashed'} var(--warn)`, borderRadius: 5, padding: '7px 10px', cursor: jinxed ? 'default' : 'pointer', ...(jinxed ? {} : { boxShadow: '0 0 12px color-mix(in srgb, var(--warn) 40%, transparent)', animation: 'bpulse 1.6s ease infinite' }) }}>
+                    🧿 {jinxed ? 'JINXED — opponent’s first TD here is negated' : `${w.label} · opponent’s sealed pick — TAP TO JINX`}
+                  </button>
+                </div>
+              );
+            }
+            return setupRow;
           }
           // Per-side clocks: in wall-clock mode `clock` is the window's real
           // position, mapped back to each player's own game clock; in game mode
@@ -2520,7 +2550,9 @@ export function SetupRow(props: {
   // Change / Grudge / Red Herring stake one of YOUR filled spots; Jinx points at
   // the opponent in that window/slot (tap your spot at that index, blind); Bye
   // Steal fills an empty spot.
-  const yourSpotPu = applyMode === 'double-or-nothing' || applyMode === 'lead-change' || applyMode === 'grudge' || applyMode === 'red-herring' || applyMode === 'jinx';
+  // Jinx points at the OPPONENT's slot (a face-down target rendered by the caller),
+  // not one of your own cards — so it's not a your-spot power-up here.
+  const yourSpotPu = applyMode === 'double-or-nothing' || applyMode === 'lead-change' || applyMode === 'grudge' || applyMode === 'red-herring';
   const fillEligible = yourSpotPu && !!player;
   const emptyEligible = applyMode === 'bye-steal' && !player;
   const applyHi = fillEligible;
