@@ -27,7 +27,7 @@ import type { Player, PbpEvent, Pos } from '../types';
 import { metricById } from '../data/metrics';
 import { capAmplifiers } from '../data/powerups';
 import { REAL_WEEKS } from '../data/realPbp';
-import { resolveSlot, windowFgMult, teTdNukeClocks, defEarnScore, hadDefTd, hadLongPassTd, clockAtRealTime, EMPTY_PLAYER, type SlotInput } from './sim';
+import { resolveSlot, windowFgMult, windowShield, teTdNukeClocks, defEarnScore, hadDefTd, hadLongPassTd, clockAtRealTime, EMPTY_PLAYER, type SlotInput } from './sim';
 import { banksAtClock, threwTrickTd } from './matchup';
 
 export interface LivePick { win: string; slot: string; player: Player; metricId: string; }
@@ -50,6 +50,8 @@ const round = (n: number) => Math.round(n * 10) / 10;
 
 // ── Drip-coin economy (mirrors src/engine/matchup.ts; kept in sync by hand) ──
 const WEEKLY_STIPEND = 50, UNOPPOSED_COIN = 15, SUPPRESS_COIN = 10;
+// Window Battle (mirrors matchup.ts WINDOW_WIN_BONUS / WINDOW_MVP_COIN).
+const WINDOW_WIN_BONUS = 5, WINDOW_MVP_COIN = 12;
 function metricCoin(pos: Pos, metricId: string | null | undefined): number {
   const m = metricById(pos, metricId);
   if (!m) return 0;
@@ -242,6 +244,10 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     // Overtime carries the multiplier past regulation; fg-stack stacks twin Generals.
     const homeMult = windowFgMult(homeIns, week, { reg, carryOT: homeBuffs.has('overtime'), stack: homeBuffs.has('fg-stack') });
     const awayMult = windowFgMult(awayIns, week, { reg, carryOT: awayBuffs.has('overtime'), stack: awayBuffs.has('fg-stack') });
+    // Field Marshal (DEF): a defensive general builds a window-wide shield that
+    // blunts opposing nukes/erases against its own side's slots in this window.
+    const homeShield = windowShield(homeIns, week, { reg, carryOT: homeBuffs.has('overtime') });
+    const awayShield = windowShield(awayIns, week, { reg, carryOT: awayBuffs.has('overtime') });
     // TE-TD 8-PT NUKE clocks: a side's TE TDs knock the OPPONENT's drips.
     const homeTeTd = teTdNukeClocks(homeIns, week).map((n) => n.c);
     const awayTeTd = teTdNukeClocks(awayIns, week).map((n) => n.c);
@@ -261,6 +267,7 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     const awayEmpAt = ax.emp?.[wid];  // away froze HOME
     const slotOpts = {
       youMult: homeMult, theirMult: awayMult,
+      youShield: homeShield, theirShield: awayShield,
       youDripNukeClocks: awayTeTd, theirDripNukeClocks: homeTeTd,
       youBuffs: homeBuffs, theirBuffs: awayBuffs,
       youEmpFreeze: awayEmpAt != null ? [awayEmpAt, awayEmpAt + EMP_SECONDS] as [number, number] : undefined,
@@ -410,6 +417,29 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     if (s.homeP) slotScores.push({ win: s.win, slot: s.slot, side: 'home', slug: s.homeP.id, metric: s.homeMetric, score: s.home, ...flagsFor(s, 'home') });
     if (s.awayP) slotScores.push({ win: s.win, slot: s.slot, side: 'away', slug: s.awayP.id, metric: s.awayMetric, score: s.away, ...flagsFor(s, 'away') });
   }
+
+  // WINDOW BATTLE (parity with buildMatchup): each contested window's higher
+  // total wins a flat bonus, baked into that window's state so the states still
+  // sum to the grand totals. The window MVP (single top-scoring slot) earns its
+  // side a coin bounty (coin only — no points).
+  let mvpHome = 0, mvpAway = 0;
+  for (const [wid, v] of Object.entries(byWin)) {
+    const anyHome = slots.some((s) => s.win === wid && s.homeP);
+    const anyAway = slots.some((s) => s.win === wid && s.awayP);
+    if (anyHome && anyAway && Math.abs(v.home - v.away) >= 0.1) {
+      if (v.home > v.away) { v.home += WINDOW_WIN_BONUS; home += WINDOW_WIN_BONUS; }
+      else { v.away += WINDOW_WIN_BONUS; away += WINDOW_WIN_BONUS; }
+    }
+    let mvpScore = 0, mvpSide: 'home' | 'away' | null = null;
+    for (const s of slots) {
+      if (s.win !== wid) continue;
+      if (s.homeP && s.home > mvpScore) { mvpScore = s.home; mvpSide = 'home'; }
+      if (s.awayP && s.away > mvpScore) { mvpScore = s.away; mvpSide = 'away'; }
+    }
+    if (mvpScore > 0 && mvpSide === 'home') mvpHome += WINDOW_MVP_COIN;
+    if (mvpScore > 0 && mvpSide === 'away') mvpAway += WINDOW_MVP_COIN;
+  }
+
   const states = Object.entries(byWin).map(([window, v]) => ({ window, home: round(v.home), away: round(v.away) }));
-  return { states, slots: slotScores, home: round(home), away: round(away), coin: { home: coinFor(slots, 'home'), away: coinFor(slots, 'away') } };
+  return { states, slots: slotScores, home: round(home), away: round(away), coin: { home: coinFor(slots, 'home') + mvpHome, away: coinFor(slots, 'away') + mvpAway } };
 }

@@ -20,8 +20,8 @@ const WEEKS = (process.env.WEEKS ?? '1,2,3,5,7,9,11,13').split(',').map(Number);
 const POOL_N = Number(process.env.POOL ?? 6);
 const METRICS = {
   QB: ['pass', 'rush'],                  // fg banks 0 in-slot (window multiplier)
-  RB: ['rush', 'carries', 'rec', 'td'],
-  WR: ['recyd', 'rec', 'tgt', 'td'],
+  RB: ['rush', 'carries', 'rec', 'td', 'duel'],
+  WR: ['recyd', 'rec', 'tgt', 'td', 'duel'],
   TE: ['recyd', 'tgt', 'rec', 'td'],
 };
 

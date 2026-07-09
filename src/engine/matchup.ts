@@ -12,7 +12,7 @@ import { hashStr } from '../data/players';
  *  no real timestamps baked. */
 export interface SlotSwap { atClock: number; atRt?: number; toMetricId?: string; toPlayerId?: string; }
 export type SlotSwaps = Record<string, SlotSwap>; // slotKey -> swap
-import { resolveSlot, projectedPoints, windowFgMult, teTdNukeClocks, defEarnScore, hadDefTd, hadLongPassTd, turnoversCommitted, clockAtRealTime, EMPTY_PLAYER, type SlotInput } from './sim';
+import { resolveSlot, projectedPoints, windowFgMult, windowShield, teTdNukeClocks, defEarnScore, hadDefTd, hadLongPassTd, turnoversCommitted, clockAtRealTime, EMPTY_PLAYER, type SlotInput } from './sim';
 import { REAL_WEEKS } from '../data/realPbp';
 import { windowForTeam, windowsForWeek, gamesInWindow } from '../data/nflSlate';
 import { injuryFor } from '../data/injuries';
@@ -57,7 +57,10 @@ export function pickMetric(p: Player, week: number): string {
 // of a random metric. (Field General scores 0 solo, so it's never auto-picked;
 // it's a coordination play left to the human.)
 export function bestMetric(p: Player, week: number, projection = false): string {
-  const list = (METRICS[p.pos] || METRICS.WR).filter((m) => !m.lock);
+  // Rivalry (duel) is a human strategic weapon — like Field General it's never
+  // auto-assigned, so the tuned default/AI meta is untouched (it scores flat solo
+  // and would otherwise crowd out the measured per-slot picks).
+  const list = (METRICS[p.pos] || METRICS.WR).filter((m) => !m.lock && m.id !== 'duel');
   if (list.length <= 1) return list[0]?.id ?? pickMetric(p, week);
   let best = list[0].id, bestScore = -Infinity;
   for (const m of list) {
@@ -130,7 +133,7 @@ function edgeVsThreats(aiPlayer: Player, metricId: string, threats: SlotInput[],
 // boosted by an FG multiplier. Field General is excluded here — it's decided at
 // the window level (it scores the QB nothing and only pays off via teammates).
 function bestVsThreats(aiPlayer: Player, threats: SlotInput[], week: number, aiBuffSet: Set<string>, mult?: (c: number) => number): { metricId: string; edge: number } {
-  const list = (METRICS[aiPlayer.pos] || METRICS.WR).filter((m) => !m.lock && m.id !== 'fg');
+  const list = (METRICS[aiPlayer.pos] || METRICS.WR).filter((m) => !m.lock && m.id !== 'fg' && m.id !== 'duel');
   if (!list.length) return { metricId: pickMetric(aiPlayer, week), edge: 0 };
   let best = list[0].id, bestEdge = -Infinity;
   for (const m of list) {
@@ -271,9 +274,25 @@ export interface ResolvedSlot {
   theirFgMult?: (clock: number) => number;
 }
 
+// WINDOW BATTLE: each window is its own head-to-head. The side with the higher
+// window total wins the window (+ a flat WINDOW_WIN_BONUS), and the single
+// highest-scoring slot in the window earns its side the Window MVP drip-coin
+// bounty (coin only — no points). Surfaced live and at FINAL so every window
+// reads as a fought battle, not just a slice of the point total.
+export interface WindowBattle {
+  youTotal: number;
+  theirTotal: number;
+  youSlotsWon: number;
+  theirSlotsWon: number;
+  winner: 'you' | 'their' | 'push';
+  bonus: number;                 // points awarded to the winner (0 on a push/uncontested window)
+  mvp?: { side: 'you' | 'their'; slotIndex: number; score: number; name: string; coin: number };
+}
+
 export interface ResolvedWindow {
   window: GameWindow;
   slots: ResolvedSlot[];
+  battle?: WindowBattle;
 }
 
 export interface ResolvedMatchup {
@@ -283,6 +302,44 @@ export interface ResolvedMatchup {
   real: boolean;
   maxClock: number;
   bonuses?: { id: string; label: string; points: number }[]; // armed-buff payouts that hit
+  youWindowsWon: number;   // windows whose head-to-head you won
+  theirWindowsWon: number;
+}
+
+/** Points awarded to the winner of a window's head-to-head battle. */
+export const WINDOW_WIN_BONUS = 5;
+/** Drip coin the window MVP (single highest-scoring slot in a window) earns. */
+export const WINDOW_MVP_COIN = 12;
+
+/** Compute the head-to-head battle for one resolved window from its slots'
+ *  final scores (call after backups + suppress so the tested scores are final).
+ *  A window is only "contested" — and only awards a bonus — when both sides
+ *  fielded at least one slot in it. */
+export function computeWindowBattle(w: ResolvedWindow): WindowBattle {
+  let youTotal = 0, theirTotal = 0, youSlotsWon = 0, theirSlotsWon = 0;
+  let mvpScore = 0, mvpSide: 'you' | 'their' | null = null, mvpIdx = -1, mvpName = '';
+  let anyYou = false, anyTheir = false;
+  for (const s of w.slots) {
+    youTotal += s.youFinal; theirTotal += s.theirFinal;
+    if (s.you) anyYou = true;
+    if (s.their) anyTheir = true;
+    if (s.you && s.their) { if (s.youFinal > s.theirFinal) youSlotsWon++; else if (s.theirFinal > s.youFinal) theirSlotsWon++; }
+    if (s.you && s.youFinal > mvpScore) { mvpScore = s.youFinal; mvpSide = 'you'; mvpIdx = s.slotIndex; mvpName = s.you.player.name; }
+    if (s.their && s.theirFinal > mvpScore) { mvpScore = s.theirFinal; mvpSide = 'their'; mvpIdx = s.slotIndex; mvpName = s.their.player.name; }
+  }
+  const contested = anyYou && anyTheir;
+  let winner: 'you' | 'their' | 'push' = 'push';
+  let bonus = 0;
+  if (contested && Math.abs(youTotal - theirTotal) >= 0.1) {
+    winner = youTotal > theirTotal ? 'you' : 'their';
+    bonus = WINDOW_WIN_BONUS;
+  }
+  return {
+    youTotal: Math.round(youTotal * 10) / 10,
+    theirTotal: Math.round(theirTotal * 10) / 10,
+    youSlotsWon, theirSlotsWon, winner, bonus,
+    mvp: mvpSide && mvpScore > 0 ? { side: mvpSide, slotIndex: mvpIdx, score: Math.round(mvpScore * 10) / 10, name: mvpName, coin: WINDOW_MVP_COIN } : undefined,
+  };
 }
 
 /** Deterministic ~6%/player-week chance a non-QB threw a TD pass (Trick Play). */
@@ -362,6 +419,10 @@ export function buildMatchup(
     const reg = REAL_WEEKS.has(week) ? 3600 : 3300;
     const youMult = windowFgMult(youIns, week, { reg, carryOT: youBuffSet.has('overtime'), stack: youBuffSet.has('fg-stack') });
     const theirMult = windowFgMult(theirIns, week, { reg, carryOT: theirBuffSet.has('overtime'), stack: theirBuffSet.has('fg-stack') });
+    // Field Marshal (DEF): a defensive general builds a window-wide shield that
+    // blunts opposing nukes/erases against this side's whole window.
+    const youShield = windowShield(youIns, week, { reg, carryOT: youBuffSet.has('overtime') });
+    const theirShield = windowShield(theirIns, week, { reg, carryOT: theirBuffSet.has('overtime') });
     // TE TD nukes reach across the window: your TEs' TD clocks knock down the
     // opponents' drips, and vice-versa.
     const youTeTd = teTdNukeClocks(youIns, week);
@@ -402,7 +463,7 @@ export function buildMatchup(
         // that's real-time ahead/behind hits at the right wall-clock moment.
         const nukeClocks = (nukes: { c: number; rt: number }[], recv: SlotInput) =>
           realResolve ? nukes.map((n) => clockAtRealTime(recv.player, week, n.rt, recv.metricId)) : nukes.map((n) => n.c);
-        const opts = { youMult, theirMult, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined, realResolve };
+        const opts = { youMult, theirMult, youShield, theirShield, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined, realResolve };
         let res = resolveSlot(yIn, tIn, week, gameLabel, opts);
 
         // Real-time swap (Player/Metric Swap): keep your pre-swap banked points,
@@ -471,8 +532,23 @@ export function buildMatchup(
     }
   }
 
+  // WINDOW BATTLE: settle each window's head-to-head on its final slot scores.
+  // The winner banks a flat bonus and the window MVP is tagged (coin only). Done
+  // after backups + suppress so the tested per-slot scores are final.
+  let youWindowsWon = 0, theirWindowsWon = 0, youWindowBonus = 0, theirWindowBonus = 0;
+  for (const w of windows) {
+    const b = computeWindowBattle(w);
+    w.battle = b;
+    if (b.winner === 'you') { youWindowsWon++; youWindowBonus += b.bonus; }
+    else if (b.winner === 'their') { theirWindowsWon++; theirWindowBonus += b.bonus; }
+  }
+
   let youFinal = 0, theirFinal = 0;
   for (const w of windows) for (const s of w.slots) { youFinal += s.youFinal; theirFinal += s.theirFinal; }
+
+  // Window-battle bonuses layer on top of the raw slot totals (both sides).
+  youFinal += youWindowBonus;
+  theirFinal += theirWindowBonus;
 
   // K banker (XP BONUS): +1 per banker XP to each of your TDs that was scored
   // under a TD-counting metric (yardage metrics don't qualify).
@@ -511,6 +587,8 @@ export function buildMatchup(
     real: anyReal,
     maxClock,
     bonuses: bonuses.length ? bonuses : undefined,
+    youWindowsWon,
+    theirWindowsWon,
   };
 }
 
@@ -538,7 +616,7 @@ export function coinRisk(n: number): 'HIGH' | 'MED' | 'NONE' {
   return n >= 10 ? 'HIGH' : n > 0 ? 'MED' : 'NONE';
 }
 
-export interface WeekEarnings { stipend: number; unopposed: number; signature: number; turnover: number; total: number; }
+export interface WeekEarnings { stipend: number; unopposed: number; signature: number; mvp: number; turnover: number; total: number; }
 /**
  * A side's full weekly drip-coin take: stipend + unopposed bounty + coin from
  * events of note + the turnover transfer. A player who throws an INT or loses a
@@ -550,22 +628,26 @@ export function weekEarnings(m: ResolvedMatchup, side: 'you' | 'their', week: nu
   // No flat stipend in Week 1 — the season opens with the commissioner's seed
   // budget only, so the board doesn't hand out a phantom +50 before any play.
   const stipend = week <= 1 ? 0 : WEEKLY_STIPEND;
-  let unopposed = 0, signature = 0, turnover = 0;
-  for (const w of m.windows) for (const s of w.slots) {
-    const me = side === 'you' ? s.you : s.their;
-    const opp = side === 'you' ? s.their : s.you;
-    if (me) {
-      if (!opp) unopposed += UNOPPOSED_COIN;
-      if (me.metricId === 'suppress') signature += SUPPRESS_COIN;
-      // Coin per event of note: the carry-wipe plus-up carries its own bounty
-      // (e.coinAmt); everything else pays the primary metric's per-note rate.
-      const rate = metricCoin(me.player.pos, me.metricId);
-      for (const e of s.events) if (e.side === side && e.coin) signature += e.coinAmt ?? rate;
-      turnover -= turnoverCoin * turnoversCommitted(me.player, week); // your giveaway → you lose
+  let unopposed = 0, signature = 0, mvp = 0, turnover = 0;
+  for (const w of m.windows) {
+    // Window MVP bounty (coin only): the single highest-scoring slot in the window.
+    if (w.battle?.mvp && w.battle.mvp.side === side) mvp += w.battle.mvp.coin;
+    for (const s of w.slots) {
+      const me = side === 'you' ? s.you : s.their;
+      const opp = side === 'you' ? s.their : s.you;
+      if (me) {
+        if (!opp) unopposed += UNOPPOSED_COIN;
+        if (me.metricId === 'suppress') signature += SUPPRESS_COIN;
+        // Coin per event of note: the carry-wipe plus-up carries its own bounty
+        // (e.coinAmt); everything else pays the primary metric's per-note rate.
+        const rate = metricCoin(me.player.pos, me.metricId);
+        for (const e of s.events) if (e.side === side && e.coin) signature += e.coinAmt ?? rate;
+        turnover -= turnoverCoin * turnoversCommitted(me.player, week); // your giveaway → you lose
+      }
+      if (opp) turnover += turnoverCoin * turnoversCommitted(opp.player, week); // their giveaway → you gain
     }
-    if (opp) turnover += turnoverCoin * turnoversCommitted(opp.player, week); // their giveaway → you gain
   }
-  return { stipend, unopposed, signature, turnover, total: stipend + unopposed + signature + turnover };
+  return { stipend, unopposed, signature, mvp, turnover, total: stipend + unopposed + signature + mvp + turnover };
 }
 
 /**
@@ -573,13 +655,15 @@ export function weekEarnings(m: ResolvedMatchup, side: 'you' | 'their', week: nu
  * except the global weekly stipend (unopposed bounty + suppress + events of note
  * + the turnover swing). Surfaced as a per-spot stat at FINAL.
  */
-export function slotCoin(slot: ResolvedSlot, side: 'you' | 'their', week: number, turnoverCoin = TURNOVER_COIN, upToClock = Infinity): number {
+export function slotCoin(slot: ResolvedSlot, side: 'you' | 'their', week: number, turnoverCoin = TURNOVER_COIN, upToClock = Infinity, battle?: WindowBattle): number {
   const me = side === 'you' ? slot.you : slot.their;
   const opp = side === 'you' ? slot.their : slot.you;
   let c = 0;
   if (me) {
     if (!opp) c += UNOPPOSED_COIN;
     if (me.metricId === 'suppress') c += SUPPRESS_COIN;
+    // Window MVP bounty: this slot posted the window's top score (final only).
+    if (battle?.mvp && battle.mvp.side === side && battle.mvp.slotIndex === slot.slotIndex && upToClock === Infinity) c += battle.mvp.coin;
     const rate = metricCoin(me.player.pos, me.metricId);
     for (const e of slot.events) if (e.side === side && e.coin && e.clock <= upToClock) c += e.coinAmt ?? rate;
     c -= turnoverCoin * turnoversCommitted(me.player, week); // your giveaway → you lose

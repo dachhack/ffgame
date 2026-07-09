@@ -1,6 +1,53 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-07 · Build `v0.107.1`_
+_Last updated: 2026-07-09 · Build `v0.116.0`_
+
+## Head-to-head battle mechanics — cross-slot & within-window (v0.116.0)
+The ask: "more head-to-head across slot and within window mechanics like Field
+General — each window/slot should feel like a battle." Four additions, all
+opt-in like Field General so the measured per-slot meta is untouched
+(`cd server && npm run study` still prints the exact documented shares).
+Everything lands in the SHARED engine (`src/engine/sim.ts` + `matchup.ts` +
+`liveResolve.ts`), so the demo (`buildMatchup`) AND the live pilot
+(`resolveLiveMatchup`, which the Fly worker runs via tsx) both get it.
+
+- **WINDOW BATTLE (new scoring layer).** Each of the ~5 windows is now its own
+  head-to-head: the side with the higher window total WINS the window and banks
+  a flat `WINDOW_WIN_BONUS` (+5), on top of the raw point total. Surfaced live as
+  a **battle meter** under each window header (who's leading, "win for +5") and at
+  FINAL as WON/LOST + the bonus + slots-won. `ResolvedWindow.battle`
+  (`computeWindowBattle`) carries it; `ResolvedMatchup.youWindowsWon/theirWindowsWon`
+  tally it. `resolveLiveMatchup` bakes the bonus into the winning window's state so
+  per-window states still sum to the grand total. MatchupFinal's window strip +
+  hero show `⚔ WINDOW BATTLES 3–2`.
+- **WINDOW MVP (drip-coin only, no points — per the founder's call).** The single
+  highest-scoring slot in a window earns its side `WINDOW_MVP_COIN` (◈12).
+  Threaded through `weekEarnings` (new `mvp` line in the earnings sheet) and
+  `battle.mvp`; the live resolver adds it to `coin`.
+- **FIELD MARSHAL (DEF metric `marshal`) — the defensive Field General.** A DST on
+  `marshal` banks its normal flat points AND builds a live, window-wide SHIELD on
+  its own side: cumulative splash production (sk1/int3/fr2/def-TD6/safety2) ramps a
+  damage-reduction fraction (`SHIELD_RATE` 0.04/pt, cap `SHIELD_CAP` 0.5) that
+  BLUNTS every opposing nuke and erase against all its window's slots. Built by
+  `windowShield()` (mirrors `windowFgMult`'s shape), wired at both resolve sites via
+  `resolveSlot` opts `youShield`/`theirShield`; the wipe/erase keep a shielded
+  fraction of the bank (log shows "🛡 SHIELD kept …" / "🛡 N% blunted").
+- **RIVALRY (WR/RB metric `duel`) — a same-slot grudge match.** Flat yardage base
+  (0.1/yd + 6/TD); at the top of each quarter the side LEADING siphons a quarter
+  (`DUEL_SIPHON` 0.25) of the trailing side's gains for that whole quarter — but
+  only the side that FIELDED the duel siphons, so it snowballs a lead and does
+  nothing when behind (pick it when you back the slot). Own family in
+  `familyOf`; siphon hooks both per-play scoring and drip accrual. EXCLUDED from
+  `bestMetric`/`bestVsThreats` (human-only, like `fg`), so default/AI lineups
+  never auto-field it and the tuned wheel is preserved. Measured: middling
+  win-rates, beats denial metrics, loses to high-ceiling drips — a real
+  specialist, not dominant.
+- No DB migration needed: `metric_id` has no allowlist constraint (only the
+  locked-metric trigger, which `duel`/`marshal` pass since they aren't locked).
+- Verify: `cd server && npx tsx test/h2h-verify.mjs` exercises all four on real
+  Week-1 PBP (siphon fires, shield blunts a landing nuke 4.2→6.9, window bonus +5
+  baked in, MVP coin present). `npm run build`, engine smoke, parity all green.
+
 
 ## Metric balance: measured, tuned, and a tool to keep it honest (v0.107.1)
 - **`server/scripts/metric-study.mjs`** (`cd server && npm run study`): runs

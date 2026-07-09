@@ -67,12 +67,14 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
     if (metricId === 'carries') return play.kind === 'rush' ? 0.85 : 0; // COMPRESSION (0.5 → 0.85: measured dead at 0.5 — 0% best-pick share)
     if (metricId === 'rec') return play.catch ? 1 : 0;
     if (metricId === 'td') return scrimmage + (play.td ? 10 : 0); // NUKE
+    if (metricId === 'duel') return play.kind === 'rush' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0; // RIVALRY: flat rushing base; the duel siphon layers on top (resolveSlot)
   }
   if (pos === 'WR') {
     if (metricId === 'recyd') return play.catch ? play.yards * 0.1 * (hot ? 2 : 1) : 0;
     if (metricId === 'rec') return play.catch ? 1 : 0;
     if (metricId === 'tgt') return play.target ? 1 : 0;
     if (metricId === 'td') return scrimmage + (play.td ? 10 : 0);
+    if (metricId === 'duel') return play.catch ? play.yards * 0.1 + (play.td ? 6 : 0) : 0; // RIVALRY: flat receiving base; the duel siphon layers on top (resolveSlot)
   }
   if (pos === 'TE') {
     if (metricId === 'tgt') return play.target ? 1 : 0;
@@ -124,8 +126,11 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
   return 0;
 }
 
-type Family = 'nuke' | 'erase' | 'streak' | 'mult' | 'compression' | 'reset' | 'stop' | 'flat';
+type Family = 'nuke' | 'erase' | 'streak' | 'mult' | 'compression' | 'reset' | 'stop' | 'duel' | 'flat';
 function familyOf(pos: Pos, metricId: string): Family {
+  // Rivalry (WR/RB) is its own family — a same-slot head-to-head duel that
+  // siphons the trailing side's quarter gains — regardless of its catalog fx key.
+  if (metricId === 'duel') return 'duel';
   const m = metricById(pos, metricId);
   if (!m) return 'flat';
   if (m.fx === 'nuke') return 'nuke';
@@ -396,6 +401,51 @@ export function windowFgMult(
   };
 }
 
+// Field Marshal (DEF): the defensive mirror of Field General. A DST on the
+// `marshal` metric builds a live, window-wide SHIELD on its OWN side — its
+// cumulative defensive production (sk1 / int3 / fr2 / def-TD6 / safety2) ramps a
+// damage-reduction fraction (SHIELD_RATE per point, capped at SHIELD_CAP) that
+// BLUNTS every opposing nuke and erase against every slot in that window. The
+// Marshal still banks its own flat defensive points — it's a coordination play,
+// not a sacrifice. Given a window's slot inputs for one side, returns a
+// clock→fraction function (or undefined if no Marshal is fielded). Mirrors
+// windowFgMult's shape so buildMatchup / resolveLiveMatchup wire it identically.
+export const SHIELD_RATE = 0.04;
+export const SHIELD_CAP = 0.5;
+const SPLASH_KINDS: RealPlayKind[] = ['sack', 'int', 'fumrec', 'dst_td', 'safety'];
+const splashWeight = (k: RealPlayKind): number => (k === 'dst_td' ? 6 : k === 'int' ? 3 : k === 'fumrec' || k === 'safety' ? 2 : 1);
+export function windowShield(
+  players: SlotInput[],
+  week: number,
+  opts: { reg?: number; carryOT?: boolean; projection?: boolean } = {},
+): ((clock: number) => number) | undefined {
+  const { reg = 3300, carryOT = false, projection = false } = opts;
+  const timelines: RawPlay[][] = [];
+  for (const p of players) {
+    if (p.player.pos === 'DEF' && p.metricId === 'marshal') {
+      // projectedPlays models only offensive lines, so a projected Marshal has no
+      // splash plays → 0 shield. That's intended: the AI can't plan on a shield
+      // it can't foresee, so a Marshal reads as plain `earn` in projection mode.
+      const plays = projection ? projectedPlays(p.player) : (realRawPlays(p.player.id, week) ?? []);
+      const splash = plays.filter((x) => SPLASH_KINDS.includes(x.kind)).sort((a, b) => a.clock - b.clock);
+      if (splash.length) timelines.push(splash);
+    }
+  }
+  if (!timelines.length) return undefined;
+  return (clock: number) => {
+    // Field Marshal resets when regulation ends — unless Overtime carries it over.
+    if (clock >= reg && !carryOT) return 0;
+    let best = 0;
+    for (const tl of timelines) {
+      let cum = 0;
+      for (const x of tl) { if (x.clock <= clock) cum += splashWeight(x.kind); else break; }
+      const s = Math.min(SHIELD_CAP, SHIELD_RATE * cum);
+      if (s > best) best = s; // multiple Marshals don't stack — the strongest shield holds
+    }
+    return best;
+  };
+}
+
 // A DST's own defensive score for the week (sk1 / int3 / fr2 / def-TD6 /
 // safety2) — used as the SUPPRESS kill-threshold. A suppress DST forgoes these
 // points (it banks 0) and spends them as the bar every opponent slot must clear.
@@ -444,7 +494,7 @@ function offSecs(intervals: number[][], t0: number, t1: number): number {
  * `opts.youMult` / `opts.theirMult` apply a per-clock multiplier to that
  * side's scoring (used by the QB Field General window multiplier).
  */
-export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; realResolve?: boolean; projection?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
+export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youShield?: (clock: number) => number; theirShield?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; realResolve?: boolean; projection?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
   // Pre-match team buffs active on each side (Momentum / Garbage Time /
   // Floodgates / Overtime). Only the human side carries buffs in the demo.
   const youBuffs = opts.youBuffs ?? new Set<string>();
@@ -472,6 +522,41 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const T: SideState = { bank: 0, hist: [], streak: 0, hot: false, kicks: 0, dead: false, rate: 0, paused: false, nukedUntil: 0 };
   const youFam = familyOf(you.player.pos, you.metricId);
   const theirFam = familyOf(their.player.pos, their.metricId);
+
+  // ── RIVALRY / DUEL ─────────────────────────────────────────────────────────
+  // A `duel` slot locks this head-to-head into a battle: at the top of each
+  // quarter we snapshot who leads, and for the rest of that quarter the leader
+  // SIPHONS a quarter (DUEL_SIPHON) of the trailing side's gains — but only the
+  // side that actually fielded the duel metric siphons. It's your weapon: pick it
+  // when you back yourself to lead, and pulling ahead snowballs; fall behind and
+  // it does nothing for you. Symmetric only when BOTH sides duel.
+  const DUEL_SIPHON = 0.25;
+  const duelYou = you.metricId === 'duel';
+  const duelTheir = their.metricId === 'duel';
+  const duelActive = duelYou || duelTheir;
+  const QUARTER_LEN = REG / 4;
+  let duelQ = -1;
+  let duelLeader: 'you' | 'their' | null = null;
+  let duelSiphonThis = 0; // cut moved by the most recent gain, for event annotation
+  const duelStep = (clock: number) => {
+    const q = clock >= REG ? 3 : Math.max(0, Math.floor(clock / QUARTER_LEN));
+    if (q !== duelQ) { duelQ = q; duelLeader = Y.bank > T.bank ? 'you' : T.bank > Y.bank ? 'their' : null; }
+  };
+  // Move the quarter leader's siphon cut off a scoring side's gain; return the net
+  // the scorer keeps. Only a duel-OWNING leader siphons (leaderSide !== scorer).
+  const duelTake = (side: 'you' | 'their', amt: number, clock: number): number => {
+    duelSiphonThis = 0;
+    if (!duelActive || !(amt > 0)) return amt;
+    duelStep(clock);
+    const L = duelLeader;
+    if (!L || L === side || !(L === 'you' ? duelYou : duelTheir)) return amt;
+    const cut = Math.round(amt * DUEL_SIPHON * 10) / 10;
+    if (!(cut > 0)) return amt;
+    const lead = L === 'you' ? Y : T;
+    lead.bank += cut; lead.hist.push({ clock, pts: cut });
+    duelSiphonThis = cut;
+    return Math.round((amt - cut) * 10) / 10;
+  };
 
   // Drip metrics: WR Receiving Yards (built by catches) and RB Rush Yards
   // (built by carries). A drip play raises a permanent rate (yds × 0.01
@@ -599,7 +684,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       const next = Math.min(to, Math.floor(t / 60) * 60 + 60);
       const yg = dripYou ? minuteGain('you', t, next) : ZERO_GAIN;
       const tg = dripTheir ? minuteGain('their', t, next) : ZERO_GAIN;
-      const ya = yg.total, ta = tg.total;
+      // A duel leader siphons a cut of the trailing side's drip gains too (the
+      // cut moves to the leader inside duelTake), so a rivalry bites drips as
+      // well as per-play scoring. Net values feed the banks + the tick's delta.
+      let ya = yg.total, ta = tg.total;
+      if (duelActive) { if (ya > 0) ya = duelTake('you', ya, next); if (ta > 0) ta = duelTake('their', ta, next); }
       if (ya > 0) { Y.bank += ya; Y.hist.push({ clock: next, pts: ya }); if (next >= REG) youOtPts += ya; recBuff('you', 'overtime', yg.ot); recBuff('you', 'momentum', yg.momentum); recBuff('you', 'garbage-time', yg.garbage); }
       if (ta > 0) { T.bank += ta; T.hist.push({ clock: next, pts: ta }); if (next >= REG) theirOtPts += ta; recBuff('their', 'overtime', tg.ot); recBuff('their', 'momentum', tg.momentum); recBuff('their', 'garbage-time', tg.garbage); }
       // Only surface a drip tick once it rounds to ≥0.1 — sub-0.1 still banks
@@ -656,6 +745,10 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const mine = play.side === 'you' ? Y : T;
     const opp = play.side === 'you' ? T : Y;
     const oppSide: 'you' | 'their' = play.side === 'you' ? 'their' : 'you';
+    // FIELD MARSHAL SHIELD: the VICTIM's side (opp) may have a window-wide shield
+    // up. It blunts the bank damage of the attacker's nuke/erase this play — the
+    // victim keeps `victimShield` of what would be wiped/erased (0 with no Marshal).
+    const victimShield = Math.max(0, Math.min(SHIELD_CAP, (oppSide === 'you' ? opts.youShield : opts.theirShield)?.(play.clock) ?? 0));
     // A nuke-suppressed slot is INERT until its 10-minute blackout lifts: this play
     // builds no drip rate, banks no points, and triggers no effects. The opponent's
     // drip accrual over [lastClock, play.clock] already ran in accrue() above, and the
@@ -678,9 +771,13 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         const ins = stealPct > 0 ? stealCut(wiped * 0.5) : 0; // steal from what was actually removed (the un-insured half)
         return ` · 🛟 INSURED ${opp.bank.toFixed(1)}${ins > 0 ? ` · steal +${ins.toFixed(1)}` : ''}`;
       }
-      opp.bank = 0; opp.hist = []; nukeDrip(opp, play.clock);
-      const stolen = stealPct > 0 ? stealCut(wiped) : 0; // a TD nuke KEEPS a quarter of the bank it wipes (see stealCut)
-      return stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : '';
+      // A Field Marshal shield lets the victim keep a fraction of the wiped bank;
+      // the rate is still disrupted (blackout stands), and the steal only credits
+      // the attacker for what actually left the victim's bank.
+      const kept = Math.round(wiped * victimShield * 10) / 10;
+      opp.bank = kept; opp.hist = kept > 0 ? [{ clock: play.clock, pts: kept }] : []; nukeDrip(opp, play.clock);
+      const stolen = stealPct > 0 ? stealCut(Math.max(0, wiped - kept)) : 0; // a TD nuke KEEPS a quarter of the bank it wipes (see stealCut)
+      return `${kept > 0 ? ` · 🛡 SHIELD kept ${kept.toFixed(1)}` : ''}${stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : ''}`;
     };
     const myFam = play.side === 'you' ? youFam : theirFam;
     const oppFam = play.side === 'you' ? theirFam : youFam;
@@ -756,6 +853,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     const isFG = myPlayer.player.pos === 'QB' && myPlayer.metricId === 'fg';
     if (isFG && play.kind === 'pass') evMult = sideMult;
 
+    // RIVALRY: if a duel-owning quarter leader is on the OTHER side, it siphons a
+    // cut of this play's production. `duelCut` (>0) is what was moved off it.
+    let duelCut = 0;
+    if (duelActive && pts > 0) { const net = duelTake(play.side, pts, play.clock); duelCut = duelSiphonThis; pts = net; }
+
     mine.bank += pts;
     if (pts > 0) mine.hist.push({ clock: play.clock, pts });
     if (pts > 0 && play.clock >= REG) { if (play.side === 'you') youOtPts += pts; else theirOtPts += pts; }
@@ -812,8 +914,10 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
           let erased = 0;
           opp.hist = opp.hist.filter((h) => { if (h.clock >= cutoff) { erased += h.pts; return false; } return true; });
           let stolen = 0;
-          if (erased > 0) { opp.bank = Math.max(0, opp.bank - erased); stolen = stealCut(erased); sig = true; }
-          effect = { type: 'erase', text: erased > 0 ? `ERASE −${erased.toFixed(1)}${stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : ''} · drip stop` : 'DRIP STOP' };
+          const eff = Math.round(erased * (1 - victimShield) * 10) / 10; // Field Marshal shield softens the erase
+          if (erased > 0) { opp.bank = Math.max(0, opp.bank - eff); stolen = stealCut(eff); sig = true; }
+          const shieldNote = erased > 0 && victimShield > 0 ? ` · 🛡 ${Math.round(victimShield * 100)}% blunted` : '';
+          effect = { type: 'erase', text: erased > 0 ? `ERASE −${eff.toFixed(1)}${stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : ''}${shieldNote} · drip stop` : 'DRIP STOP' };
         } else if (play.kind === 'rec' && myFam === 'reset') {
           opp.paused = true;
           const had = opp.rate; opp.rate = 0; opp.streak = 0; opp.hot = false;
@@ -843,9 +947,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         return true;
       });
       if (erased > 0) {
-        opp.bank = Math.max(0, opp.bank - erased);
-        const stolen = stealCut(erased);
-        effect = { type: 'erase', text: `ERASE −${erased.toFixed(1)}${stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : ''}` }; sig = true;
+        const eff = Math.round(erased * (1 - victimShield) * 10) / 10; // Field Marshal shield softens the erase
+        opp.bank = Math.max(0, opp.bank - eff);
+        const stolen = stealCut(eff);
+        const shieldNote = victimShield > 0 ? ` · 🛡 ${Math.round(victimShield * 100)}% blunted` : '';
+        effect = { type: 'erase', text: `ERASE −${eff.toFixed(1)}${stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : ''}${shieldNote}` }; sig = true;
       }
     } else if (myFam === 'reset' && play.catch) {
       const last = opp.hist[opp.hist.length - 1];
@@ -898,6 +1004,13 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       effect = { type: 'cold', text: 'STREAK COLD' };
     }
     if (!effect && isFG && play.kind === 'pass') effect = { type: 'mult', text: `FIELD GEN ×${sideMult.toFixed(2)}` }; // mult lives in the label; inline ×mult is suppressed
+    // RIVALRY badges: a siphon off this play, else the duel player's own lead state.
+    if (!effect && duelActive) {
+      if (duelCut > 0) effect = { type: 'reset', text: `⚔ SIPHONED −${duelCut.toFixed(1)}` };
+      else if ((play.side === 'you' ? duelYou : duelTheir) && myFam === 'duel' && pts > 0) {
+        effect = { type: 'streak', text: duelLeader === play.side ? '⚔ DUEL · LEADING' : '⚔ DUEL' };
+      }
+    }
     if (play.turnover) effect = { type: 'nuke', text: '✕ TURNOVER → opp' }; // giveaway: coin to the opponent
 
     events.push({

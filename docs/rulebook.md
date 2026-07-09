@@ -94,7 +94,7 @@ its hot streak can still be **cooled** by an opponent who banks points every pla
 
 | Metric | Tag | Scores | Effect |
 |---|---|---|---|
-| **Field General** | MULTIPLIER | 0 direct pts | Passing yards set a window-wide drip multiplier on all your skill players. 300 yds = 2.8×. The QB scores nothing himself. |
+| **Field General** | × | 0 direct pts | Passing yards set a window-wide drip multiplier on all your skill players. 300 yds = 2.8×. The QB scores nothing himself. |
 | **Passing Yards** | FLAT | 0.04 pts / yd + 4 / TD | Flat points on passing yards and TDs. No drip, no nuke, no interaction. Predictable. |
 | **Rush Yards** | FLAT | 0.1 pts / yd + 6 / TD | Flat points on your scrambles and rushing TDs. Purely additive — no nuke, no erase, no interaction. |
 | **Air Raid** | TD HEAVY | 0.04 / yd + 10 / TD | Unlock (1 wk): passing yards at 0.04/yd plus a huge 10 pts per passing TD. Flat — no nuke or erase. |
@@ -104,9 +104,10 @@ its hot streak can still be **cooled** by an opponent who banks points every pla
 | Metric | Tag | Scores | Effect |
 |---|---|---|---|
 | **Rush Yards** | DRIP | 0.01 / yd → rate (pts/min) | Each carry permanently raises a drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. An opponent catch erases the last 10 min and pauses it; a target pauses it; a TD wipes the bank. Rate survives erases. 3 straight (no opponent score) goes hot → drip doubles; cold when they score. |
-| **Carries** | COMPRESSION | 0.5 / carry | 0.5 per carry. A 3+ carry streak with no opponent score compresses: each further carry trims the opponent’s most recent score by 25% — and you keep a quarter of every point trimmed. |
+| **Carries** | COMPRESSION | 0.85 / carry | 0.85 per carry. A 3+ carry streak with no opponent score compresses: each further carry trims the opponent’s most recent score by 35% — and you keep a quarter of every point trimmed. |
 | **Receptions** | RATE RESET | 1 pt / catch | Each catch zeroes the opponent’s active drip rate (they keep the bank, rebuild from scratch); against a flat scorer it halves their last play — and you steal a quarter of any points cut. |
 | **Touchdowns** | NUKE | 0.04 / yd + 10 / TD | Boom-or-bust: scrimmage yards at a discount (0.04/yd) plus a big 10 per TD — and each TD wipes the opponent’s entire banked score AND steals a quarter of it. |
+| **Rivalry** | DUEL | 0.1 / yd + 6 / TD | A head-to-head grudge match with the opposing slot: flat rushing points, PLUS whenever you LEAD at the top of a quarter you siphon a quarter of your rival’s gains for that whole quarter. Pull ahead and it snowballs; fall behind and it does nothing — pick it when you back yourself to win the slot. |
 | **Combo Drip** | RUSH+REC DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk, ONE SLOT PER PURCHASE — buy it again to field another): carries AND catches both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; a TD wipes the bank. 4 straight productive touches goes hot → drip doubles (a stuffed run or incomplete cools it). |
 | **Return Yards** | RUSH+RET DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk): carries AND kick/punt return yards both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; 4 straight productive touches (rush 3+ / return 10+) goes hot → drip doubles, a stuffed run or short return cools it. |
 
@@ -118,6 +119,7 @@ its hot streak can still be **cooled** by an opponent who banks points every pla
 | **Receptions** | ERASE | 1 pt / catch | Each catch erases the opponent’s drip from the last 10 clock-minutes — and you steal a quarter of every point you erase. |
 | **Targets** | CLOCK STOP | 1 pt / target | Every target stops the opponent’s drip clock. No erase — pure denial. |
 | **Touchdowns** | NUKE | 0.04 / yd + 10 / TD | Boom-or-bust: scrimmage yards at a discount (0.04/yd) plus a big 10 per TD — and each TD wipes the opponent’s entire banked score AND steals a quarter of it. |
+| **Rivalry** | DUEL | 0.1 / yd + 6 / TD | A head-to-head grudge match with the opposing slot: flat receiving points, PLUS whenever you LEAD at the top of a quarter you siphon a quarter of your rival’s gains for that whole quarter. Pull ahead and it snowballs; fall behind and it does nothing — pick it when you back yourself to win the slot. |
 | **Combo Drip** | RUSH+REC DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk, ONE SLOT PER PURCHASE — buy it again to field another): catches AND carries both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; a TD wipes the bank. 4 straight productive touches goes hot → drip doubles (a stuffed run or incomplete cools it). |
 | **Return Yards** | REC+RET DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk): catches AND kick/punt return yards both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; 4 straight (catch / 10+ return) goes hot → drip doubles, an incomplete or short return cools it. |
 
@@ -125,12 +127,12 @@ its hot streak can still be **cooled** by an opponent who banks points every pla
 
 | Metric | Tag | Scores | Effect |
 |---|---|---|---|
-| **Receiving Yards** | DRIP | 0.005 / yd → rate (pts/min) | Each catch raises a drip rate (yds × 0.005 pts/min) — half a WR’s — that accrues while your team has the ball. Immune to WR/RB pauses and erases: only a TD (or K shutdown) stops it. 3 straight (no opponent score) goes hot → drip doubles. |
-| **Targets** | WIDE ERASE | 1 pt / target | Every target — catch or incompletion — erases the opponent’s drip from the last 15 min (you steal a quarter of every point erased). Wider than any WR, and fires on volume alone. |
+| **Receiving Yards** | DRIP | 0.0065 / yd → rate (pts/min) | Each catch raises a drip rate (yds × 0.0065 pts/min) — two-thirds of a WR’s — that accrues while your team has the ball. Immune to ALL pauses and erases: only a TD (or K shutdown) stops it. 3 straight (no opponent score) goes hot → drip doubles. |
+| **Targets** | WIDE ERASE | 1 pt / target | Every target — catch or incompletion — erases the opponent’s drip from the last 10 min (you steal a quarter of every point erased). Fires on volume alone, no catch required. |
 | **Receptions** | ERASE | 1.5 pts / catch | Each catch erases the opponent’s drip from the last 10 clock-minutes — and you steal a quarter of every point you erase. |
 | **Touchdowns** | 12-PT NUKE | 0.04 / yd + 12 / TD | The strongest single play in the game. Yards at a discount (0.04/yd) plus 12 per TD; each TD wipes the matched opponent’s entire bank (you steal a quarter of it) AND knocks every opposing drip in the window down by 1.0 pts/min (min 0). |
-| **Combo Drip** | RUSH+REC DRIP | 0.005 / yd → rate (pts/min) | Unlock (1 wk, ONE SLOT PER PURCHASE — buy it again to field another): catches AND carries both feed one drip rate (yds × 0.005 pts/min, TE rate) that accrues while your team has the ball. Immune to WR/RB pauses like any TE drip; a TD wipes the bank. 4 straight productive touches goes hot → drip doubles (an incomplete cools it). |
-| **Return Yards** | REC+RET DRIP | 0.005 / yd → rate (pts/min) | Unlock (1 wk): catches AND kick/punt return yards both feed one drip rate (yds × 0.005 pts/min, TE rate) that accrues while your team has the ball. Immune to WR/RB pauses like any TE drip; 4 straight (catch / 10+ return) goes hot → drip doubles, an incomplete or short return cools it. |
+| **Combo Drip** | RUSH+REC DRIP | 0.0075 / yd → rate (pts/min) | Unlock (1 wk, ONE SLOT PER PURCHASE — buy it again to field another): catches AND carries both feed one drip rate (yds × 0.0065 pts/min, TE rate) that accrues while your team has the ball. Immune to pauses/erases like any TE drip; a TD wipes the bank. 4 straight productive touches goes hot → drip doubles (an incomplete cools it). |
+| **Return Yards** | REC+RET DRIP | 0.0075 / yd → rate (pts/min) | Unlock (1 wk): catches AND kick/punt return yards both feed one drip rate (yds × 0.0065 pts/min, TE rate) that accrues while your team has the ball. Immune to pauses/erases like any TE drip; 4 straight (catch / 10+ return) goes hot → drip doubles, an incomplete or short return cools it. |
 
 ### Kicker
 
@@ -145,6 +147,7 @@ its hot streak can still be **cooled** by an opponent who banks points every pla
 |---|---|---|---|
 | **Suppress** | HALVING | 0 pts | Banks 0 itself — instead its own defensive week score (sk/int/fr/TD) becomes a kill-bar: EVERY opponent slot, in ANY window, that scores at or below it is halved. |
 | **Earn Points** | FLAT | sk1 / int3 / fr2 | Normal flat head-to-head scoring. No suppress, no halving. |
+| **Field Marshal** | SHIELD | sk1 / int3 / fr2 | The defensive Field General. Banks its normal defensive points AND builds a window-wide SHIELD on your side — every splash play (sack/INT/fumble/TD) ramps damage reduction (up to 50%) that BLUNTS every opposing nuke and erase against all your slots in that window. A coordination play: it protects the whole window, not just its own slot. |
 
 ### IDP (DL / LB / DB)
 

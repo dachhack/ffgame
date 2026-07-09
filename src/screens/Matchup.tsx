@@ -11,7 +11,7 @@ import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '.
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '../data/league';
 import { buildLiveLeague } from '../data/liveBoard';
 import {
-  windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, slotsFor, totalSlotsWith, byePlayers,
+  windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, slotsFor, totalSlotsWith, byePlayers,
 } from '../engine/matchup';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '../data/realPbp';
@@ -1574,7 +1574,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 }
 
 // ── Drip-coin earning opportunities, by position (risk pays more) ──
-function EarningsModal({ earnings, weeklyBudget, onReset, onClose }: { earnings: { stipend: number; unopposed: number; signature: number; turnover: number; total: number }; weeklyBudget?: number | null; onReset?: () => void; onClose: () => void }) {
+function EarningsModal({ earnings, weeklyBudget, onReset, onClose }: { earnings: { stipend: number; unopposed: number; signature: number; mvp: number; turnover: number; total: number }; weeklyBudget?: number | null; onReset?: () => void; onClose: () => void }) {
   const order: Pos[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
   const riskColor = (r: string) => (r === 'HIGH' ? 'var(--fx-nuke)' : r === 'MED' ? 'var(--warn)' : 'var(--dim)');
   // A league with its own weekly budget replaces the flat sim stipend everywhere
@@ -1597,7 +1597,7 @@ function EarningsModal({ earnings, weeklyBudget, onReset, onClose }: { earnings:
           {/* this week's running tally */}
           <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px' }}>
             <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 6 }}>THIS WEEK</div>
-            {([[stipendLabel, stipendVal], ['Unopposed players', earnings.unopposed], ['Events of note', earnings.signature], ['Turnovers', earnings.turnover]] as [string, number][]).map(([k, v]) => (
+            {([[stipendLabel, stipendVal], ['Unopposed players', earnings.unopposed], ['Events of note', earnings.signature], ['Window MVP', earnings.mvp], ['Turnovers', earnings.turnover]] as [string, number][]).map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--dim)', padding: '2px 0' }}>
                 <span>{k}</span><span className="mono" style={{ color: v < 0 ? 'var(--opp)' : 'var(--fx-streak)', fontWeight: 700 }}>{v < 0 ? '' : '+'}{v}</span>
               </div>
@@ -2288,6 +2288,8 @@ function WindowSectionInner(props: {
         </ModalBackdrop>
       )}
 
+      {phase !== 'setup' && <WindowBattleBar rw={rw} week={week} clock={clock} wallClock={wallClock} done={done} />}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {rw.slots.map((s) => {
           const key = slotKey(w.id, s.slotIndex);
@@ -2349,6 +2351,60 @@ const WindowSection = memo(WindowSectionInner, (a, b) => {
   }
   return true;
 });
+
+// ── Window Battle bar ──
+// Each window is its own head-to-head. During live play this shows the running
+// aggregate (who's winning the window) as a battle meter; at FINAL it locks to
+// the settled result — WON/LOST, the +bonus points, and the window MVP (the
+// single top-scoring slot, which earns a drip-coin bounty).
+function WindowBattleBar({ rw, week, clock, wallClock, done }: {
+  rw: ReturnType<typeof buildMatchup>['windows'][number]; week: number; clock: number; wallClock: boolean; done: boolean;
+}) {
+  const battle = rw.battle;
+  // Live aggregate at the current window clock — sum each slot's running bank.
+  let liveYou = 0, liveTheir = 0;
+  for (const s of rw.slots) {
+    const yc = wallClock && s.you ? clockAtRealTime(s.you.player, week, clock, s.you.metricId ?? undefined) : clock;
+    const tc = wallClock && s.their ? clockAtRealTime(s.their.player, week, clock, s.their.metricId ?? undefined) : clock;
+    if (s.you) liveYou += banksAtClock(s.events, yc).you;
+    if (s.their) liveTheir += banksAtClock(s.events, tc).their;
+  }
+  const yTot = done && battle ? battle.youTotal : Math.round(liveYou * 10) / 10;
+  const tTot = done && battle ? battle.theirTotal : Math.round(liveTheir * 10) / 10;
+  const total = yTot + tTot;
+  const yPct = total > 0 ? Math.max(4, Math.min(96, (yTot / total) * 100)) : 50;
+  const even = Math.abs(yTot - tTot) < 0.05;
+  const leadYou = yTot > tTot;
+  const leadColor = even ? 'var(--dim)' : leadYou ? 'var(--you)' : 'var(--opp)';
+  const mvp = battle?.mvp;
+  const bonus = done && battle ? battle.bonus : WINDOW_WIN_BONUS;
+  const status = done ? (even ? 'EVEN' : leadYou ? '★ WON' : 'LOST') : (even ? 'DEAD EVEN' : leadYou ? 'YOU LEAD' : 'THEY LEAD');
+  return (
+    <div style={{ margin: '2px 0 9px', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '7px 10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
+        <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', display: 'flex', alignItems: 'center', gap: 5 }}>
+          ⚔ WINDOW BATTLE
+          {!done && <span title="The higher window total wins the window + a bonus" style={{ color: 'var(--faint)' }}>· win for +{bonus}</span>}
+        </span>
+        <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: leadColor }}>
+          {status}{done && !even ? ` +${bonus}` : ''}
+        </span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--you)', minWidth: 38, textAlign: 'right' }}>{yTot.toFixed(1)}</span>
+        <div style={{ flex: 1, height: 6, borderRadius: 4, overflow: 'hidden', display: 'flex', background: 'var(--opp)' }}>
+          <div style={{ width: `${yPct}%`, background: 'var(--you)', transition: 'width .3s linear' }} />
+        </div>
+        <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--opp)', minWidth: 38 }}>{tTot.toFixed(1)}</span>
+      </div>
+      {done && mvp && (
+        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: mvp.side === 'you' ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>
+          ⭐ WINDOW MVP · {mvp.name} {mvp.score.toFixed(1)} <span style={{ color: 'var(--warn)' }}>◈{mvp.coin}</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Setup row ──
 // Marks the two Field General QBs that are paired under the Twin Generals power-up
