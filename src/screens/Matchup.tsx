@@ -2397,12 +2397,12 @@ export function SetupRow(props: {
   const applyDim = !!applyMode && !fillEligible && !emptyEligible;
   const cardTap = lockPlayer ? () => {} : applyMode ? (fillEligible ? onApplyToSpot : () => {}) : onOpenPicker;
   const applyPu = applyMode ? powerupById(applyMode) : null;
-  // "Change metric" re-opens the picker for an already-set spot without dropping
-  // the player. Reset whenever the slot's player changes (incl. top-down shifts).
-  const [editing, setEditing] = useState(false);
+  // Metric selection lives in its own overlay modal (not inline in the card, which
+  // would balloon its height and drag the sealed card with it). A freshly-placed
+  // player with no metric auto-opens it; ↻ METRIC re-opens it to change.
+  const [metricOpen, setMetricOpen] = useState(false);
   const [infoMetric, setInfoMetric] = useState<Metric | null>(null);
-  useEffect(() => { setEditing(false); }, [pick?.playerId]);
-  const showPicker = !!player && (!pick?.metricId || editing);
+  useEffect(() => { if (pick?.playerId && !pick?.metricId && !lockPlayer && !applyMode) setMetricOpen(true); }, [pick?.playerId]); // eslint-disable-line react-hooks/exhaustive-deps
   const link: React.CSSProperties = { background: 'none', border: 'none', padding: 0, fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.1em' };
 
   return (
@@ -2457,46 +2457,28 @@ export function SetupRow(props: {
             </div>
           )}
 
-          {/* sealed: the chosen metric (kept hidden from the opponent) */}
-          {!showPicker && (
-            <div className="mx-met" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-              <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)' }}>{metric?.name}</span>
-              <span className="mono mx-hidden" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(7), letterSpacing: '0.12em', color: 'var(--faint)' }}>
-                <span style={{ width: 5, height: 5, background: 'var(--you)', borderRadius: '50%', display: 'inline-block', animation: 'bpulse 2s ease infinite' }} /> HIDDEN
-              </span>
-              {twinLink && <TwinChip />}
-            </div>
-          )}
-
-          {/* metric picker — full card width, stacks cleanly */}
-          {showPicker && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {!pick?.metricId && !editing && (
-                <div className="mono mx-editmet" style={{ fontSize: fs(8), fontWeight: 700, letterSpacing: '0.14em', color: 'var(--warn)' }}>② PICK A METRIC ↓</div>
-              )}
-              {editing && (
-                <button onClick={() => setEditing(false)} className="mono" style={{ width: '100%', textAlign: 'center', background: 'none', border: '1px dashed var(--bd)', borderRadius: 3, padding: '3px', fontSize: fs(8), letterSpacing: '0.1em', color: 'var(--faint)' }}>✕ KEEP {metric?.name?.toUpperCase()}</button>
-              )}
-              {METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === pick?.metricId).map((m) => {
-                const cur = m.id === pick?.metricId;
-                return (
-                  <button key={m.id} onClick={() => { onPickMetric(m.id); setEditing(false); }} style={{ width: '100%', minHeight: 30, textAlign: 'left', background: cur ? 'color-mix(in srgb, var(--you) 14%, var(--bg))' : m.lock ? 'color-mix(in srgb, var(--warn) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${cur ? 'var(--you)' : m.lock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 3, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)' }}>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.lock ? '◈ ' : ''}{m.name}</span>
-                    {/* mobile: icon-only so the longest names ("Receiving Yards") never ellipsize */}
-                    <span role="button" title="What does this metric do?" onClick={(e) => { e.stopPropagation(); setInfoMetric(m); }} className="mono" style={{ flex: 'none', fontSize: isMobile ? 12 : 10, fontWeight: 700, color: 'var(--faint)', padding: '0 2px', cursor: 'help' }}>{isMobile ? 'ⓘ' : 'ⓘ info'}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          {/* metric: the chosen metric (hidden from the opponent), or a prompt to
+              pick one — either taps open the picker MODAL, keeping the card compact. */}
+          <div className="mx-met" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, cursor: lockPlayer ? undefined : 'pointer' }}
+            onClick={lockPlayer ? undefined : () => setMetricOpen(true)}>
+            {pick?.metricId ? (
+              <>
+                <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)' }}>{metric?.name}</span>
+                <span className="mono mx-hidden" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(7), letterSpacing: '0.12em', color: 'var(--faint)' }}>
+                  <span style={{ width: 5, height: 5, background: 'var(--you)', borderRadius: '50%', display: 'inline-block', animation: 'bpulse 2s ease infinite' }} /> HIDDEN
+                </span>
+                {twinLink && <TwinChip />}
+              </>
+            ) : (
+              <span className="mono mx-editmet" style={{ fontSize: fs(9), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px dashed var(--warn)', borderRadius: 4, padding: '4px 9px' }}>＋ PICK A METRIC</span>
+            )}
+          </div>
 
           {/* change controls — pinned to the bottom of the spot */}
-          {!showPicker && (
-            <div style={{ display: 'flex', gap: 14, marginTop: 'auto', paddingTop: 4 }}>
-              <button onClick={() => setEditing(true)} className="mono mx-editmet" style={{ ...link, color: 'var(--warn)' }}>↻ METRIC</button>
-              {!lockPlayer && <button onClick={onOpenPicker} className="mono mx-editplr" style={{ ...link, color: 'var(--opp)' }}>⇄ PLAYER</button>}
-            </div>
-          )}
+          <div style={{ display: 'flex', gap: 14, marginTop: 'auto', paddingTop: 4 }}>
+            {pick?.metricId && !lockPlayer && <button onClick={() => setMetricOpen(true)} className="mono mx-editmet" style={{ ...link, color: 'var(--warn)' }}>↻ METRIC</button>}
+            {!lockPlayer && <button onClick={onOpenPicker} className="mono mx-editplr" style={{ ...link, color: 'var(--opp)' }}>⇄ PLAYER</button>}
+          </div>
         </div>
       ) : (
         <div
@@ -2527,6 +2509,36 @@ export function SetupRow(props: {
         )}
       </div>
     </div>
+    {metricOpen && player && (
+      <ModalBackdrop onClick={() => setMetricOpen(false)} zIndex={72} padTop={50}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 360, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '13px 15px', borderBottom: '1px solid var(--bd)' }}>
+            <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 9 }}>
+              <PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={34} />
+              <div style={{ minWidth: 0 }}>
+                <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Pick a metric</div>
+                <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 2, letterSpacing: '0.06em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name.toUpperCase()} · {player.pos} · HIDDEN UNTIL KICKOFF</div>
+              </div>
+            </div>
+            <button onClick={() => setMetricOpen(false)} className="mono" style={{ flex: 'none', background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18, cursor: 'pointer' }}>✕</button>
+          </div>
+          <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '60vh', overflow: 'auto' }}>
+            {METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === pick?.metricId).map((m) => {
+              const cur = m.id === pick?.metricId;
+              return (
+                <button key={m.id} onClick={() => { onPickMetric(m.id); setMetricOpen(false); }} style={{ width: '100%', textAlign: 'left', background: cur ? 'color-mix(in srgb, var(--you) 14%, var(--bg))' : m.lock ? 'color-mix(in srgb, var(--warn) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${cur ? 'var(--you)' : m.lock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 5, padding: '9px 11px', display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text)', cursor: 'pointer' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="grotesk" style={{ fontSize: 13, fontWeight: 700 }}>{m.lock ? '◈ ' : ''}{m.name}{cur ? ' ✓' : ''}</div>
+                    <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.tag} · {m.sc}</div>
+                  </div>
+                  <span role="button" title="What does this metric do?" onClick={(e) => { e.stopPropagation(); setInfoMetric(m); }} className="mono" style={{ flex: 'none', fontSize: 12, fontWeight: 700, color: 'var(--faint)', padding: '3px 7px', border: '1px solid var(--bd)', borderRadius: 4, cursor: 'help' }}>ⓘ</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </ModalBackdrop>
+    )}
     {infoMetric && <MetricInfo metric={infoMetric} onClose={() => setInfoMetric(null)} />}
     </>
   );
