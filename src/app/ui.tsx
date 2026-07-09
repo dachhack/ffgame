@@ -202,15 +202,6 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
   // Card-deck skins: a swatch (felt ground + a peek of the sealed card back).
   const skins: { id: CardSkin; name: string; felt: string; back: string; img?: string }[] = [
     { id: 'emerald', name: 'Emerald Table', felt: '#123A2F', back: '#7E2430' },
-    { id: 'noir', name: 'Midnight Noir', felt: '#16233A', back: '#2B426A' },
-    { id: 'crimson', name: 'Crimson High-Roller', felt: '#2A0B0E', back: '#3A1418' },
-    { id: 'sunset', name: 'Sunset Arcade', felt: '#281026', back: '#1F5A55' },
-    { id: 'fey', name: 'Fey Library', felt: '#0E2620', back: '#38305E' },
-    { id: 'compass', name: 'Gridiron Navy', felt: '#101A2C', back: '#20344F', img: `${import.meta.env.BASE_URL}card-compass.jpg` },
-    { id: 'gridiron', name: 'Gridiron Crimson', felt: '#2A0C10', back: '#5A1620', img: `${import.meta.env.BASE_URL}card-gridiron.jpg` },
-    { id: 'cathedral', name: 'Cathedral', felt: '#14120A', back: '#2A2410', img: `${import.meta.env.BASE_URL}card-cathedral.jpg` },
-    { id: 'victory', name: 'Victory', felt: '#2C0D11', back: '#5A1620', img: `${import.meta.env.BASE_URL}card-victory.jpg` },
-    { id: 'dynasty', name: 'Dynasty', felt: '#0E2A1E', back: '#1C4A34', img: `${import.meta.env.BASE_URL}card-dynasty.jpg` },
   ];
   const lbl: CSSProperties = { fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--faint)' };
   const toggle = (on: boolean): CSSProperties => ({
