@@ -27,7 +27,7 @@ import type { Player, PbpEvent, Pos } from '../types';
 import { metricById } from '../data/metrics';
 import { capAmplifiers } from '../data/powerups';
 import { REAL_WEEKS } from '../data/realPbp';
-import { resolveSlot, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, hadDefTd, hadLongPassTd, clockAtRealTime, EMPTY_PLAYER, type SlotInput } from './sim';
+import { resolveSlot, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, hadDefTd, hadLongPassTd, clockAtRealTime, EMPTY_PLAYER, GHOST_PLAYER, GHOST_POINTS, type SlotInput } from './sim';
 import { banksAtClock, threwTrickTd } from './matchup';
 
 export interface LivePick { win: string; slot: string; player: Player; metricId: string; }
@@ -149,6 +149,9 @@ export interface LiveExtras {
    *  unopposed→backup rule like any other unopposed player (buildMatchup
    *  behaves the same); against an opponent it banks the flat score directly. */
   byeSteal?: { win: string; slot: string; player: Player; pts: number };
+  /** Ghost Player: empty slots (`win|slot`) filled with a phantom that banks a
+   *  flat set score (GHOST_POINTS) — no bench player needed, no live game. */
+  ghost?: string[];
   /** EMP: freeze every OPPONENT drip in a window for 10 game-minutes starting
    *  at the recorded clock (win → game-clock seconds). */
   emp?: Record<string, number>;
@@ -255,6 +258,8 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
   for (const p of [...homePicks, ...awayPicks]) if (!seenWin.has(p.win)) { seenWin.add(p.win); winIds.push(p.win); }
   // A Bye Steal can target a slot in a window neither side otherwise fielded.
   for (const bs of [hx.byeSteal, ax.byeSteal]) if (bs && !seenWin.has(bs.win)) { seenWin.add(bs.win); winIds.push(bs.win); }
+  // A Ghost Player can likewise target a slot in an otherwise-unfielded window.
+  for (const g of [...(hx.ghost ?? []), ...(ax.ghost ?? [])]) { const gw = g.split('|')[0]; if (!seenWin.has(gw)) { seenWin.add(gw); winIds.push(gw); } }
   for (const wid of winIds) {
     const homeIns: SlotInput[] = homePicks.filter((p) => p.win === wid).map((p) => ({ player: p.player, metricId: p.metricId }));
     const awayIns: SlotInput[] = awayPicks.filter((p) => p.win === wid).map((p) => ({ player: p.player, metricId: p.metricId }));
@@ -279,6 +284,7 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     for (const p of awayPicks) if (p.win === wid) idxs.add(p.slot);
     if (hx.byeSteal?.win === wid) idxs.add(hx.byeSteal.slot);
     if (ax.byeSteal?.win === wid) idxs.add(ax.byeSteal.slot);
+    for (const g of [...(hx.ghost ?? []), ...(ax.ghost ?? [])]) { const [gw, gs] = g.split('|'); if (gw === wid) idxs.add(gs); }
     // EMP: a side's freeze on this window suppresses the OPPONENT's drips for
     // 10 game-minutes from the recorded clock (mirrors buildMatchup's extras.emp).
     const homeEmpAt = hx.emp?.[wid];  // home froze AWAY
@@ -362,6 +368,9 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
         awayP = ax.byeSteal.player; awayMetric = 'bye';
         awayF = round(Math.max(0, Math.min(BYE_STEAL_CAP, ax.byeSteal.pts)));
       }
+      // Ghost Player: fill an empty side with a phantom for a flat set score.
+      if (!homeP && hx.ghost?.includes(`${wid}|${slot}`)) { homeP = GHOST_PLAYER; homeMetric = 'ghost'; homeF = GHOST_POINTS; }
+      if (!awayP && ax.ghost?.includes(`${wid}|${slot}`)) { awayP = GHOST_PLAYER; awayMetric = 'ghost'; awayF = GHOST_POINTS; }
 
       slots.push({ win: wid, slot, homeP, awayP, homeMetric, awayMetric, home: homeF, away: awayF, events });
       homeTds += homeTd; awayTds += awayTd;

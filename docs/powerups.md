@@ -94,6 +94,7 @@ Longshot lottery tickets — cheap-ish, but they whiff if the trigger doesn't ha
 |---|---|---|---|
 | ➕ **Extra Slot** | 80 | window | Add a slot to any window — **for you AND your opponent**. Must be applied before any window starts. |
 | 🪂 **Bye Steal** | 55 | empty slot | Field one of your **bye-week** players in an open slot for a flat projected score. |
+| 👻 **Ghost Player** | 75 | empty slot | Conjure a **phantom** into any open slot — **no bench player needed**. It banks a flat **set 14 points**, guaranteed. Pricier than a Bye Steal, but its floor is certain and it works even when you have nobody on bye. |
 | 👁️ **Spy** | 40 | opponent slot | Pick any slate slot (blind) and reveal the opponent's current sealed pick there — their **player OR metric**. Re-checking is free; they can still change it. |
 
 ---
@@ -165,7 +166,7 @@ the slot when the trigger fires.
 | 60 | Overtime · Return Yards · Third Amp · Grudge Match · Cold Snap · Napalm | pre / live | various |
 | 65 | Combo Drip · EMP · Bunker | pre / live | unlock / live |
 | 70 | Momentum · Overtime Shield · WR/TE Carries · Rivalry | pre | various |
-| 75 | Garbage Time | pre | amp |
+| 75 | Garbage Time · Ghost Player | pre | amp / bet |
 | 80 | Extra Slot · Insurance · Double or Nothing | pre | various |
 | 85 | Floodgates · Twin Generals | pre | buff / coordination |
 | 90 | Trick Play · Red Herring | pre | bonus / bet |

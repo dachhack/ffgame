@@ -52,6 +52,7 @@ export const POWERUPS: Powerup[] = [
   { id: 'red-herring', name: 'Red Herring', blurb: 'Attach to one of your players before kickoff: every OPPOSING player of the same position anywhere in that window is dragged down to your player’s total (capped at it). Field a low decoy at a position and cap all their studs there — but you waste the slot, and it whiffs if they field nobody at that position.', kind: 'action', timing: 'pre', price: 90, icon: '🎣', target: 'slot-you' },
   { id: 'spy', name: 'Spy', blurb: 'Before a window kicks off: pick any slate slot (blind) and reveal the opponent’s current sealed pick there — their player OR their chosen metric. They can still change it until kickoff; re-checking your peek is free.', kind: 'action', timing: 'pre', price: 40, icon: '👁️', target: 'slot-opp' },
   { id: 'bye-steal', name: 'Bye Steal', blurb: 'Before kickoff, field one of your players who is on bye in an open slot for a flat projected score.', kind: 'action', timing: 'pre', price: 55, icon: '🪂', target: 'bye' },
+  { id: 'ghost', name: 'Ghost Player', blurb: 'Before kickoff, conjure a phantom into any open slot — no bench player needed. It banks a flat set 14 points, guaranteed. Pricier than a Bye Steal, but its floor is certain and it works even when you have no one on bye.', kind: 'action', timing: 'pre', price: 75, icon: '👻', target: 'bye' },
   { id: 'mulligan', name: 'Mulligan', blurb: 'Re-roll one slot’s metric mid-game for free — does not spend a Metric Swap.', kind: 'action', timing: 'live', price: 30, icon: '🎲', target: 'slot-you' },
   { id: 'emp', name: 'EMP', blurb: 'Fire during a live window to freeze every opponent drip in that window for 10 minutes.', kind: 'action', timing: 'live', price: 65, icon: '💥', target: 'window' },
   { id: 'surge', name: 'Surge', blurb: 'Fire on one of YOUR live slots: everything it scores for the next 10 game-minutes counts double. Fire when your player is heating up.', kind: 'action', timing: 'live', price: 55, icon: '⚡', target: 'slot-you' },
@@ -79,7 +80,7 @@ export const POWERUP_CATEGORIES: { id: PowerupCategory; label: string }[] = [
   { id: 'clutch', label: 'Clutch' },   // conditional, live-triggered plays
 ];
 const CLUTCH_IDS = new Set(['clutch-don', 'clutch-encore', 'clutch-counter']);
-const BET_IDS = new Set(['double-or-nothing', 'grudge', 'lead-change', 'rivalry', 'jinx', 'red-herring', 'extra-slot', 'bye-steal', 'spy']);
+const BET_IDS = new Set(['double-or-nothing', 'grudge', 'lead-change', 'rivalry', 'jinx', 'red-herring', 'extra-slot', 'bye-steal', 'ghost', 'spy']);
 export function powerupCategory(p: Powerup): PowerupCategory {
   if (CLUTCH_IDS.has(p.id)) return 'clutch';
   if (p.kind === 'metric' || p.id === 'unlock-carries-wipe') return 'unlock';

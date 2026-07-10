@@ -267,6 +267,7 @@ only unlock from a live game-state trigger and are arm-able for a short window.
 | 🎣 **Red Herring** | ◎ 90 | action | Attach to one of your players before kickoff: every OPPOSING player of the same position anywhere in that window is dragged down to your player’s total (capped at it). Field a low decoy at a position and cap all their studs there — but you waste the slot, and it whiffs if they field nobody at that position. |
 | 👁️ **Spy** | ◎ 40 | action | Before a window kicks off: pick any slate slot (blind) and reveal the opponent’s current sealed pick there — their player OR their chosen metric. They can still change it until kickoff; re-checking your peek is free. |
 | 🪂 **Bye Steal** | ◎ 55 | action | Before kickoff, field one of your players who is on bye in an open slot for a flat projected score. |
+| 👻 **Ghost Player** | ◎ 75 | action | Before kickoff, conjure a phantom into any open slot — no bench player needed. It banks a flat set 14 points, guaranteed. Pricier than a Bye Steal, but its floor is certain and it works even when you have no one on bye. |
 | 🦅 **Ball Hawk** | ◎ 55 | action | Arm before kickoff: raise the turnover coin swing from 10 to 25 this week, across all windows — your giveaways cost more, their giveaways pay more. |
 
 ### In-game
