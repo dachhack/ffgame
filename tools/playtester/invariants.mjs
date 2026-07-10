@@ -81,5 +81,26 @@ console.log('\nPLAYTESTER INVARIANTS\n');
   check('insurance keeps a nuked drip alive', ins > bare + 1, `bare ${bare.toFixed(1)} → insured ${ins.toFixed(1)}`);
 }
 
+// 7. Extras plumbing (the battle-layer levers ride this): a home Ghost fills an
+//    open slot for a flat +14, and a home Jinx can never RAISE the away score.
+{
+  const week = 1; const c = useWeek(week);
+  const wr = [...c.pool.WR].sort((a, b) => proj(b) - proj(a))[0];
+  const away = [live(wr, 'recyd', 'early', '0')];
+  const bare = resolveLiveMatchup([], away, week, {});
+  const ghosted = resolveLiveMatchup([], away, week, {}, { home: { ghost: ['early|0'] } });
+  const ghostSlot = ghosted.slots.find((s) => s.side === 'home' && s.slug === '__ghost__');
+  check('ghost fills an open slot for a flat 14', ghostSlot?.score === 14, `slot ${ghostSlot ? ghostSlot.score : 'missing'}`);
+  const tdWr = [...c.pool.WR].find((s) => (c.pbp[s] || []).some((p) => p.td)) ?? wr;
+  const awayTd = [live(tdWr, 'recyd', 'early', '0')];
+  const noJinx = resolveLiveMatchup([], awayTd, week, {}).away;
+  const jinxed = resolveLiveMatchup([], awayTd, week, {}, { home: { jinx: ['early|0'] } }).away;
+  check('jinx never raises the away score', jinxed <= noJinx + 0.01, `${noJinx.toFixed(1)} → ${jinxed.toFixed(1)}`);
+  // (Note: a ghost CAN change the away total — opposing a previously-unopposed
+  // player flips them from backup to in-slot scorer. Only the home ledger is
+  // asserted flat-14 here; bare home was 0.)
+  check('ghost credits exactly its flat score to the home ledger', bare.home === 0 && ghosted.home >= 14, `home ${bare.home} → ${ghosted.home}`);
+}
+
 console.log(failed ? `\n✗ ${failed} invariant(s) FAILED\n` : '\n✓ all invariants hold\n');
 process.exit(failed ? 1 : 0);

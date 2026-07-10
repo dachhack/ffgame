@@ -1,0 +1,5 @@
+# Drip Fantasy — https://dripfantasy.com
+User-agent: *
+Allow: /
+
+Sitemap: https://dripfantasy.com/sitemap.xml

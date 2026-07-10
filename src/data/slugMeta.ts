@@ -6,8 +6,8 @@ import type { Pos } from '../types';
 import { BAKED_SLUGS } from './bakedSlugs';
 
 // Relocation / alt codes → the slate's codes (matches buildLeague.normTeam).
-function normTeam(t: string): string {
-  const u = t.toUpperCase();
+export function normTeam(t: string): string {
+  const u = (t ?? '').toUpperCase();
   return u === 'LAR' ? 'LA' : u === 'WSH' ? 'WAS' : u === 'JAC' ? 'JAX' : u === 'OAK' ? 'LV' : u === 'SD' ? 'LAC' : u === 'STL' ? 'LA' : u;
 }
 

@@ -18,8 +18,9 @@
 // General + best-ball backups on top of per-slot resolveSlot. DEF suppress,
 // cross-window TE-TD nukes, and the K banker bonus remain simplified there.
 import { db } from './supabase.js';
+import { config } from './config.js';
 import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY } from './engine.js';
-import { matchupPremium, premiumTier, hasPremiumContent, gateSide } from './premium.js';
+import { matchupPremium, premiumTier, hasPremiumContent, gateSide, hasPremiumTargeted, gateTargeted } from './premium.js';
 import { slugMeta } from '../../src/data/slugMeta.ts';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
@@ -38,8 +39,24 @@ export function baseScore(plays) {
 }
 
 async function weekPlayRows(week) {
-  const { data } = await db().from('live_play').select('player_slug,c,t,pid,k,y,td,ca,tg,"to"').eq('week', week);
-  return data ?? [];
+  // Page through the full week. PostgREST caps an un-ranged select at its
+  // max-rows default (1000); a busy Sunday runs to several thousand plays, so an
+  // un-paged read would silently truncate and the worker would compute the
+  // AUTHORITATIVE scores off an incomplete play set.
+  const PAGE = 1000;
+  const rows = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await db().from('live_play')
+      .select('player_slug,c,t,pid,k,y,td,ca,tg,"to"')
+      .eq('week', week)
+      .order('id', { ascending: true }) // stable total order (bigint PK) for paging
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+  return rows;
 }
 
 /** Fetch the week's plays ONCE and inject them into the engine's PBP cache. Call
@@ -55,14 +72,25 @@ export async function injectWeekPlays(week) {
 // of ~6 × 600). When `ctx` is absent (sim / single-matchup CLI) they self-fetch,
 // byte-identical to before.
 
-/** Enrolled side's revealed picks: [{ win, slot, slug, metric }] — or null if the
- *  manager isn't enrolled / picks aren't locked yet (caller uses the fallback). */
+/** Enrolled side's revealed picks: [{ win, slot, slug, metric }] — LOCKED rows
+ *  only (windows seal at their own kickoff, so mid-week this is the windows
+ *  already underway). Returns [] when the manager HAS picks but none are sealed
+ *  yet (e.g. a deliberately-empty TNF — nothing fields until Sunday); null only
+ *  when they have no picks at all (caller then uses the auto-lineup fallback).
+ *  Without the distinction, a manager's real-but-unsealed week would resolve as
+ *  a phantom AI lineup until their first window locked. */
 async function enrolledPicks(matchup, membership, ctx) {
   if (!(membership?.enrolled && membership.app_user_id && matchup.status !== 'scheduled')) return null;
-  if (ctx) { const ps = ctx.picks.get(`${matchup.id}:${membership.app_user_id}`); return ps && ps.length ? ps : null; }
-  const { data } = await db().from('sealed_pick').select('game_window,roster_slot,player_slug,metric_id')
-    .eq('matchup_id', matchup.id).eq('app_user_id', membership.app_user_id).eq('locked', true);
-  return data && data.length ? data.map((p) => ({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id })) : null;
+  const key = `${matchup.id}:${membership.app_user_id}`;
+  if (ctx) {
+    const ps = ctx.picks.get(key);
+    if (ps && ps.length) return ps;
+    return ctx.hasPicks.has(key) ? [] : null;
+  }
+  const { data } = await db().from('sealed_pick').select('game_window,roster_slot,player_slug,metric_id,locked')
+    .eq('matchup_id', matchup.id).eq('app_user_id', membership.app_user_id).not('player_slug', 'is', null);
+  if (!data || !data.length) return null;
+  return data.filter((p) => p.locked).map((p) => ({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id }));
 }
 
 /** A roster's real Sleeper starters (the unenrolled-opponent fallback / player pool). */
@@ -82,11 +110,6 @@ async function loadout(matchupId, appUserId, ctx) {
     .eq('matchup_id', matchupId).eq('app_user_id', appUserId).maybeSingle();
   return data?.payload_json ?? {};
 }
-async function humanBuffs(matchupId, appUserId, ctx) {
-  const b = (await loadout(matchupId, appUserId, ctx)).buffs;
-  return Array.isArray(b) ? b : [];
-}
-
 /** The league's missed-pick policy: 'best_lineup' (default) | 'ai' | 'empty'. */
 async function lineupPolicy(leagueId, ctx) {
   if (ctx) return ctx.policy.get(leagueId) ?? 'best_lineup';
@@ -108,7 +131,7 @@ export async function prefetchTick(live, week) {
     db().from('league').select('id,lineup_policy').in('id', leagueIds),
     db().from('sleeper_lineup').select('league_id,roster_id,starters_json').in('league_id', leagueIds).eq('week', week),
     db().from('applied_state').select('matchup_id,app_user_id,payload_json').in('matchup_id', matchupIds),
-    db().from('sealed_pick').select('matchup_id,app_user_id,game_window,roster_slot,player_slug,metric_id').in('matchup_id', matchupIds).eq('locked', true),
+    db().from('sealed_pick').select('matchup_id,app_user_id,game_window,roster_slot,player_slug,metric_id,locked').in('matchup_id', matchupIds).not('player_slug', 'is', null),
   ]);
   const members = new Map();   // leagueId -> Map(roster -> member)
   for (const m of mem.data ?? []) {
@@ -120,13 +143,16 @@ export async function prefetchTick(live, week) {
   for (const r of lu.data ?? []) lineups.set(`${r.league_id}:${r.roster_id}`, (r.starters_json ?? []).map((s) => s.player_slug).filter(Boolean));
   const applied = new Map();   // `${matchupId}:${appUser}` -> payload
   for (const r of ap.data ?? []) applied.set(`${r.matchup_id}:${r.app_user_id}`, r.payload_json ?? {});
-  const picks = new Map();     // `${matchupId}:${appUser}` -> [{win,slot,slug,metric}]
+  const picks = new Map();     // `${matchupId}:${appUser}` -> [{win,slot,slug,metric}] (LOCKED rows)
+  const hasPicks = new Set();  // `${matchupId}:${appUser}` — has ANY pick rows, locked or not
   for (const p of pk.data ?? []) {
     const k = `${p.matchup_id}:${p.app_user_id}`;
+    hasPicks.add(k);
+    if (!p.locked) continue; // unsealed window — not revealed, not scored yet
     if (!picks.has(k)) picks.set(k, []);
     picks.get(k).push({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id });
   }
-  return { members, policy, lineups, applied, picks };
+  return { members, policy, lineups, applied, picks, hasPicks };
 }
 
 /** Resolve one matchup → write matchup_state (per game_window) + finals when final.
@@ -170,13 +196,25 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     return {
       picks: autoLineup(await lineupSlugs(matchup, rosterId, ctx), matchup.week, owned, extra),
       buffs: Array.isArray(load.buffs) ? load.buffs : [],
+      // The AI's lock-time budget pass places targeted battle plays (rivalry /
+      // ghost — findings §17) into the same targeted payload the human RPCs use.
+      targeted: load.targeted,
     };
   };
   const sideLineup = async (rosterId) => {
     const mem = byRoster.get(rosterId);
     if (mem?.controller === 'ai') return aiSide(rosterId, mem);
     const picks = await enrolledPicks(matchup, mem, ctx);
-    if (picks) return { picks, buffs: await humanBuffs(matchup.id, mem.app_user_id, ctx) };
+    if (picks) {
+      // Buffs + targeted power-ups (swaps / EMP / DoN / Bye Steal) come from the
+      // same applied_state payload the arm/apply RPCs write. comboQty = combo
+      // drip unlocks purchased (one combodrip slot per purchase; a legacy set
+      // flag without a qty reads as 1).
+      const load = await loadout(matchup.id, mem.app_user_id, ctx);
+      const unlocks = Array.isArray(load.unlocks) ? load.unlocks : [];
+      const comboQty = Number(load.unlockQty?.['unlock-combo-drip'] ?? (unlocks.includes('unlock-combo-drip') ? 1 : 0));
+      return { picks, buffs: Array.isArray(load.buffs) ? load.buffs : [], targeted: load.targeted, comboQty };
+    }
     if (!mem?.enrolled || !mem?.app_user_id) return aiSide(rosterId, mem);
     if (policy === 'empty') return { picks: null, buffs: [] };
     return aiSide(rosterId, mem);
@@ -185,54 +223,121 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   const away = override ? { picks: override.away, buffs: [] } : await sideLineup(matchup.away_roster_id);
   let homePicks = home.picks, awayPicks = away.picks;
   let homeBuffs = home.buffs, awayBuffs = away.buffs;
+  let homeTargeted = home.targeted, awayTargeted = away.targeted;
 
   // Premium enforcement (docs/premium-model.md): a NON-premium matchup can't field premium
   // positions (K/DST/IDP), premium-unlock metrics, or premium power-ups. Stripped here at the
   // authoritative resolve regardless of how the rows were written. The cheap pre-check skips
   // the matchup_premium() RPC unless a side actually holds premium content.
-  {
+  // GATED OFF for the 2026 pilot (config.premiumEnforcement): the premium schema
+  // isn't provisioned, so matchup_premium() fails closed and this block would
+  // strip every K/DST pick from live scoring while the client shows them unlocked.
+  if (config.premiumEnforcement) {
     const tier = await premiumTier();
     const posOf = (slug) => slugMeta(slug).pos;
-    if (hasPremiumContent(homePicks, homeBuffs, tier, posOf) || hasPremiumContent(awayPicks, awayBuffs, tier, posOf)) {
+    if (hasPremiumContent(homePicks, homeBuffs, tier, posOf) || hasPremiumContent(awayPicks, awayBuffs, tier, posOf)
+      || hasPremiumTargeted(homeTargeted, tier) || hasPremiumTargeted(awayTargeted, tier)) {
       if (!(await matchupPremium(matchup.id))) {
         if (homePicks) { const g = gateSide(homePicks, homeBuffs, tier, posOf); homePicks = g.picks; homeBuffs = g.buffs; }
         if (awayPicks) { const g = gateSide(awayPicks, awayBuffs, tier, posOf); awayPicks = g.picks; awayBuffs = g.buffs; }
+        homeTargeted = gateTargeted(homeTargeted, tier);
+        awayTargeted = gateTargeted(awayTargeted, tier);
       }
     }
   }
 
   const states = []; // { game_window, home_score, away_score }
+  let slotRows = []; // per-slot detail: { win, side, slot, slug, metric, score }
   let homeTotal = 0, awayTotal = 0;
   let coin = null; // weekly drip-coin per side (only the real-engine H2H path earns it)
   const toLive = (p) => ({ win: p.win, slot: p.slot, player: player(p.slug), metricId: p.metric || 'rush' });
 
+  // Targeted payloads (validated + clamped by the apply RPCs, migration 0060)
+  // → engine extras. Slugs become engine Players; numbers re-clamped defensively.
+  const toExtras = (t) => {
+    if (!t) return undefined;
+    const ex = {};
+    if (t.don?.win != null && t.don?.slot != null) ex.don = { win: String(t.don.win), slot: String(t.don.slot) };
+    if (t.byeSteal?.slug) ex.byeSteal = {
+      win: String(t.byeSteal.win), slot: String(t.byeSteal.slot),
+      // Defensive re-clamp; the engine clamps again at BYE_STEAL_CAP (16, §19).
+      player: player(t.byeSteal.slug), pts: Math.max(0, Math.min(16, Number(t.byeSteal.pts) || 0)),
+    };
+    if (t.emp && Object.keys(t.emp).length) {
+      ex.emp = {};
+      for (const [w, c] of Object.entries(t.emp)) ex.emp[w] = Math.max(0, Math.min(3900, Number(c) || 0));
+    }
+    if (t.swaps && Object.keys(t.swaps).length) {
+      ex.swaps = {};
+      for (const [k, s] of Object.entries(t.swaps)) ex.swaps[k] = {
+        toMetricId: s.toMetric ?? undefined,
+        toPlayer: s.toPlayer ? player(s.toPlayer) : undefined,
+        atClock: Math.max(0, Math.min(3900, Number(s.atClock) || 0)),
+        atRt: s.atRt != null ? Number(s.atRt) : undefined,
+      };
+    }
+    // Battle plays (v0.124.0): rivalry = armed window ids; ghost / lead-change /
+    // grudge / jinx / red-herring = 'win|slot' lists; the live tacticals map
+    // 'win|slot' → fire game-clock (re-clamped). Written by the AI budget pass
+    // (lock.js, findings §17) — and by the client apply RPCs once extended.
+    for (const k of ['rivalry', 'ghost', 'leadChange', 'grudge', 'jinx', 'redHerring', 'clutchDon']) {
+      if (Array.isArray(t[k]) && t[k].length) ex[k] = t[k].map(String);
+    }
+    for (const k of ['surge', 'coldSnap', 'napalm', 'bunker', 'clutchEncore', 'clutchCounter']) {
+      if (t[k] && Object.keys(t[k]).length) {
+        ex[k] = {};
+        for (const [slot, c] of Object.entries(t[k])) ex[k][slot] = Math.max(0, Math.min(3900, Number(c) || 0));
+      }
+    }
+    return Object.keys(ex).length ? ex : undefined;
+  };
+
   if (homePicks && awayPicks) {
     // ── Both sides have a lineup (human, AI, or auto-backup): real H2H engine ──
     const r = resolveLiveMatchup(homePicks.map(toLive), awayPicks.map(toLive), matchup.week,
-      { homeBuffs: new Set(homeBuffs), awayBuffs: new Set(awayBuffs) });
+      { homeBuffs: new Set(homeBuffs), awayBuffs: new Set(awayBuffs),
+        homeComboQty: home.comboQty, awayComboQty: away.comboQty },
+      { home: toExtras(homeTargeted), away: toExtras(awayTargeted) });
     for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
+    slotRows = r.slots ?? [];
     homeTotal = r.home; awayTotal = r.away; coin = r.coin;
   } else {
     // ── 'empty' policy: a missed side scores 0; the other scores its lineup solo
     //    (each slot vs an empty opponent) so the present side isn't corrupted. ──
-    const solo = (picks) => {
+    const solo = (picks, side) => {
       const byWin = {}; let total = 0;
       for (const p of picks ?? []) {
         const r = resolveWindow({ player: player(p.slug), metricId: p.metric || 'rush' }, { player: EMPTY, metricId: 'none' }, matchup.week, '', {});
         byWin[p.win] = round((byWin[p.win] ?? 0) + r.youFinal); total += r.youFinal;
+        slotRows.push({ win: p.win, side, slot: p.slot, slug: p.slug, metric: p.metric || null, score: round(r.youFinal) });
       }
       return { byWin, total: round(total) };
     };
-    const h = solo(homePicks), a = solo(awayPicks);
+    const h = solo(homePicks, 'home'), a = solo(awayPicks, 'away');
     const wins = new Set([...Object.keys(h.byWin), ...Object.keys(a.byWin)]);
     for (const w of wins) states.push({ game_window: w, home_score: h.byWin[w] ?? 0, away_score: a.byWin[w] ?? 0 });
     if (!states.length) states.push({ game_window: 'ALL', home_score: 0, away_score: 0 });
     homeTotal = h.total; awayTotal = a.total;
   }
 
+  // Per-slot detail → matchup_state.slot_scores (the card-table board's banks).
+  // LEAK GUARD: enrolled sides only ever resolve with locked (revealed) picks, but
+  // the AI / Sleeper-lineup fallback covers the whole week — so keep slot rows to
+  // windows that have kicked off (opts.startedWins, from the tick's slate). A null
+  // set means the slate has no kickoffs; then everything seals at lock_at anyway
+  // (lock.js falls back the same way) and all rows are safe to write.
+  const visSlots = opts.startedWins ? slotRows.filter((s) => opts.startedWins.has(s.win)) : slotRows;
+  const slotsFor = (win) => visSlots
+    .filter((s) => s.win === win)
+    .sort((x, y) => String(x.slot).localeCompare(String(y.slot)))
+    .map(({ side, slot, slug, metric, score, hot, nuked }) => ({
+      side, slot, slug, metric: metric ?? null, score: round(Number(score) || 0),
+      ...(hot ? { hot: true } : {}), ...(nuked ? { nuked: true } : {}),
+    }));
+
   const now = new Date().toISOString();
   await db().from('matchup_state').upsert(
-    states.map((s) => ({ matchup_id: matchup.id, ...s, events_json: [], updated_at: now })),
+    states.map((s) => ({ matchup_id: matchup.id, ...s, slot_scores: slotsFor(s.game_window), events_json: [], updated_at: now })),
     { onConflict: 'matchup_id,game_window' },
   );
   const patch = {};

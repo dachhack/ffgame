@@ -1,5 +1,7 @@
 import type { League, FantasyTeam, Player, Pos, ScheduleGame } from '../types';
-import { statsForName, shortName, normName, teamForName, STAT_PLAYERS, type StatPlayer } from './players';
+import { statsForName, shortName, normName, teamForName } from './players';
+import { setSeasonYear } from './nflSlate';
+import { setInjurySeason } from './injuries';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Drip Test League — the public demo. A SANITIZED clone: the rosters,
@@ -240,21 +242,25 @@ let activeLeague: League = DEMO_LEAGUE;
 let activePlayers: Record<string, Player> = DEMO_PLAYERS;
 let activeWeeks = 14;
 
+/** The active league (the baked demo, or a loaded Sleeper sim). */
+export function getActiveLeague(): League { return activeLeague; }
+
 /** The maximum supported regular-season week (the baked NFL slate covers 1–14). */
 export const REG_SEASON_WEEKS = 14;
-/** The active league's regular-season length (≤ REG_SEASON_WEEKS). */
-export function activeRegSeasonWeeks(): number { return activeWeeks; }
-export function getActiveLeague(): League { return activeLeague; }
 
 /** A fully-built league + its player registry, ready to make active. */
 export interface BuiltLeague { league: League; players: Record<string, Player>; weeks: number; }
 /** Swap in a live (Sleeper-built) league. */
 export function setActiveLeague(b: BuiltLeague): void {
   activeLeague = b.league; activePlayers = b.players; activeWeeks = Math.min(REG_SEASON_WEEKS, Math.max(1, b.weeks));
+  setSeasonYear(b.league.season); // calendar follows this league's season (2026 → 2026 dates)
+  setInjurySeason(b.league.season); // baked 2025 injury tags only apply to a 2025 board
 }
 /** Restore the baked DRIP demo league. */
 export function resetToDemoLeague(): void {
   activeLeague = DEMO_LEAGUE; activePlayers = DEMO_PLAYERS; activeWeeks = 14;
+  setSeasonYear(2025); // the demo replays the baked 2025 season
+  setInjurySeason(2025); // baked injury tags belong to the 2025 replay
 }
 
 // Kept for back-compat: the baked demo league object.
@@ -272,22 +278,6 @@ export function teamRoster(teamId: string): Player[] {
   const t = getTeam(teamId);
   if (!t) return [];
   return t.roster.map((id) => activePlayers[id]).filter(Boolean);
-}
-
-/** All players rostered league-wide (for waiver-wire exclusion). */
-export function allRosteredIds(): Set<string> {
-  const s = new Set<string>();
-  for (const t of activeLeague.teams) for (const id of t.roster) s.add(id);
-  return s;
-}
-
-/** Top available free agents (in stats DB, not on any roster). */
-export function freeAgents(limit = 24): StatPlayer[] {
-  const rostered = allRosteredIds();
-  return STAT_PLAYERS
-    .filter((sp) => !rostered.has(normName(sp.name).replace(/\s+/g, '-')))
-    .sort((a, b) => b.ppr - a.ppr)
-    .slice(0, limit);
 }
 
 /** A team's week-by-week results from its own POV across the regular season. */

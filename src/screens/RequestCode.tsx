@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { requestCode } from '../data/liveApi';
 import { liveConfigured } from '../data/supabaseClient';
 import { useStore } from '../app/store';
+import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 
 // A persistent "out" present across the whole funnel: any visitor — wowed by the
 // demo, browsing leagues, mid-sim — can ask us to set their league up in the
@@ -14,27 +15,45 @@ export function RequestCodeFab() {
   return (
     <>
       <button onClick={() => setOpen(true)} className="mono" style={fab} title="Request a pilot code for your league">
-        ◈ get a league code
+        <GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> get a league code
       </button>
-      {open && <RequestCodeModal initialSleeper={sleeperUser?.username ?? ''} onClose={() => setOpen(false)} />}
+      {open && <RequestCodeModal initialPlatform={sleeperUser ? 'Sleeper' : ''} onClose={() => setOpen(false)} />}
     </>
   );
 }
 
-export function RequestCodeModal({ initialSleeper, onClose }: { initialSleeper: string; onClose: () => void }) {
+// The pilot supports leagues from any of these platforms.
+const PLATFORMS = ['Sleeper', 'ESPN', 'Yahoo', 'Fleaflicker', 'MFL', 'Other'];
+
+// Per-platform help for the "league ID or link" field — where to find it, and an
+// example URL, so a requester can hand us exactly what we need to import.
+const REF_GUIDE: Record<string, { placeholder: string; hint: string }> = {
+  Sleeper: { placeholder: 'sleeper.com/leagues/1234567890…', hint: 'Sleeper app/site → your league → the number in its URL.' },
+  ESPN: { placeholder: 'fantasy.espn.com/football/league?leagueId=…', hint: 'Open your league on the web and copy the URL (it has leagueId=).' },
+  Yahoo: { placeholder: 'football.fantasysports.yahoo.com/f1/123456', hint: 'Open your league on the web and copy the URL.' },
+  Fleaflicker: { placeholder: 'fleaflicker.com/nfl/leagues/123456', hint: 'Open your league and copy the URL.' },
+  MFL: { placeholder: 'www55.myfantasyleague.com/2026/home/12345', hint: 'Your league home URL — it has the league ID.' },
+  Other: { placeholder: 'a link to your league', hint: 'Paste any link that identifies your league.' },
+  '': { placeholder: 'your league URL or ID', hint: 'Pick your platform above and we’ll show where to find this.' },
+};
+
+export function RequestCodeModal({ initialPlatform, onClose }: { initialPlatform: string; onClose: () => void }) {
   const [email, setEmail] = useState('');
-  const [sleeper, setSleeper] = useState(initialSleeper);
+  const [platform, setPlatform] = useState(initialPlatform);
   const [league, setLeague] = useState('');
+  const [leagueRef, setLeagueRef] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const guide = REF_GUIDE[platform] ?? REF_GUIDE[''];
 
   const submit = async () => {
     if (busy) return;
-    if (!email.trim() && !sleeper.trim()) { setErr('Add an email or your Sleeper username so we can reach you.'); return; }
+    if (!email.trim()) { setErr('Add your email so we can send your code.'); return; }
     setBusy(true); setErr(null);
-    const r = await requestCode({ email, sleeper, league, note });
+    // `sleeper` on the API is the generic contact field; we send the platform there.
+    const r = await requestCode({ email, sleeper: platform, league, leagueRef, note });
     if (r.ok) setDone(true);
     else { setErr(r.error ?? 'Could not send — try again.'); setBusy(false); }
   };
@@ -56,12 +75,19 @@ export function RequestCodeModal({ initialSleeper, onClose }: { initialSleeper: 
               <input value={email} onChange={(e) => { setEmail(e.target.value); setErr(null); }} type="email" inputMode="email" placeholder="you@example.com"
                 spellCheck={false} autoCapitalize="none" autoCorrect="off" style={input} />
             </Field>
-            <Field label="SLEEPER USERNAME">
-              <input value={sleeper} onChange={(e) => { setSleeper(e.target.value); setErr(null); }} placeholder="your Sleeper handle"
-                spellCheck={false} autoCapitalize="none" autoCorrect="off" style={input} />
+            <Field label="FANTASY PLATFORM">
+              <select value={platform} onChange={(e) => { setPlatform(e.target.value); setErr(null); }} style={input}>
+                <option value="">select your platform…</option>
+                {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
             </Field>
             <Field label="LEAGUE NAME (OPTIONAL)">
               <input value={league} onChange={(e) => setLeague(e.target.value)} placeholder="e.g. Sunday Scaries Dynasty" style={input} />
+            </Field>
+            <Field label="LEAGUE ID OR LINK">
+              <input value={leagueRef} onChange={(e) => { setLeagueRef(e.target.value); setErr(null); }} placeholder={guide.placeholder}
+                spellCheck={false} autoCapitalize="none" autoCorrect="off" style={input} />
+              <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 5, lineHeight: 1.4 }}>{guide.hint} It’s what lets us pull your league in.</div>
             </Field>
             <Field label="ANYTHING ELSE (OPTIONAL)">
               <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="league size, when you play, questions…" rows={2} style={{ ...input, resize: 'vertical' }} />

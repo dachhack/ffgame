@@ -1,9 +1,9 @@
 // Real 2025 NFL slate per week (away @ home, final scores, time-slot window),
 // from the nflverse schedule. window: tnf/early/late/snf/mnf.
-import type { WindowId } from '../types';
+import type { WindowId, GameWindow } from '../types';
 import { WINDOWS } from './metrics';
 import { realKickoff } from './realPbp';
-export interface NflGame { away: string; home: string; aScore: number; hScore: number; win: WindowId; }
+export interface NflGame { away: string; home: string; aScore: number; hScore: number; win: WindowId; kickoff?: number; }
 export const NFL_SLATE: Record<number, NflGame[]> = {
   1: [{ away: "DAL", home: "PHI", aScore: 20, hScore: 24, win: "tnf" }, { away: "KC", home: "LAC", aScore: 21, hScore: 27, win: "tnf" }, { away: "TB", home: "ATL", aScore: 23, hScore: 20, win: "early" }, { away: "CIN", home: "CLE", aScore: 17, hScore: 16, win: "early" }, { away: "MIA", home: "IND", aScore: 8, hScore: 33, win: "early" }, { away: "CAR", home: "JAX", aScore: 10, hScore: 26, win: "early" }, { away: "LV", home: "NE", aScore: 20, hScore: 13, win: "early" }, { away: "ARI", home: "NO", aScore: 20, hScore: 13, win: "early" }, { away: "PIT", home: "NYJ", aScore: 34, hScore: 32, win: "early" }, { away: "NYG", home: "WAS", aScore: 6, hScore: 21, win: "early" }, { away: "TEN", home: "DEN", aScore: 12, hScore: 20, win: "late" }, { away: "SF", home: "SEA", aScore: 17, hScore: 13, win: "late" }, { away: "DET", home: "GB", aScore: 13, hScore: 27, win: "late" }, { away: "HOU", home: "LA", aScore: 9, hScore: 14, win: "late" }, { away: "BAL", home: "BUF", aScore: 40, hScore: 41, win: "snf" }, { away: "MIN", home: "CHI", aScore: 27, hScore: 24, win: "mnf" }],
   2: [{ away: "WAS", home: "GB", aScore: 18, hScore: 27, win: "tnf" }, { away: "CLE", home: "BAL", aScore: 17, hScore: 41, win: "early" }, { away: "JAX", home: "CIN", aScore: 27, hScore: 31, win: "early" }, { away: "NYG", home: "DAL", aScore: 37, hScore: 40, win: "early" }, { away: "CHI", home: "DET", aScore: 21, hScore: 52, win: "early" }, { away: "NE", home: "MIA", aScore: 33, hScore: 27, win: "early" }, { away: "SF", home: "NO", aScore: 26, hScore: 21, win: "early" }, { away: "BUF", home: "NYJ", aScore: 30, hScore: 10, win: "early" }, { away: "SEA", home: "PIT", aScore: 31, hScore: 17, win: "early" }, { away: "LA", home: "TEN", aScore: 33, hScore: 19, win: "early" }, { away: "CAR", home: "ARI", aScore: 22, hScore: 27, win: "late" }, { away: "DEN", home: "IND", aScore: 28, hScore: 29, win: "late" }, { away: "PHI", home: "KC", aScore: 20, hScore: 17, win: "late" }, { away: "ATL", home: "MIN", aScore: 22, hScore: 6, win: "snf" }, { away: "TB", home: "HOU", aScore: 20, hScore: 19, win: "mnf" }, { away: "LAC", home: "LV", aScore: 20, hScore: 9, win: "mnf" }],
@@ -33,12 +33,13 @@ export const NFL_SLATE: Record<number, NflGame[]> = {
 // win drive slate-gating + the K/DST bye check.)
 const RUNTIME_SLATE: Record<number, NflGame[]> = {};
 export function setRuntimeSlate(week: number, games: NflGame[]): void {
-  if (Array.isArray(games) && games.length) RUNTIME_SLATE[week] = games;
+  if (Array.isArray(games) && games.length) { RUNTIME_SLATE[week] = games; derivedCache.delete(week); }
 }
 /** Drop all live overrides → revert to the baked 2025 slate (the force-resolve /
  *  demo path resolves baked 2025 data, so it must use the 2025 slate). */
 export function clearRuntimeSlate(): void {
   for (const k of Object.keys(RUNTIME_SLATE)) delete RUNTIME_SLATE[Number(k)];
+  derivedCache.clear();
 }
 /** The slate for a week — the live override if one's been set, else baked 2025. */
 function slateFor(week: number): NflGame[] | undefined {
@@ -56,18 +57,124 @@ export function nflGameForTeam(week: number, team?: string | null): NflGame | un
 
 /** The time-slot window a team plays in for a given week, or null (bye). */
 export function windowForTeam(week: number, team?: string | null): WindowId | null {
-  return nflGameForTeam(week, team)?.win ?? null;
+  if (!team) return null;
+  return deriveWeek(week).teamWin.get(team) ?? null;
 }
 
 /** Every real NFL game scheduled in a given time-slot window that week. */
 export function gamesInWindow(week: number, win: WindowId): NflGame[] {
-  return (slateFor(week) || []).filter((g) => g.win === win);
+  return deriveWeek(week).gamesByWin.get(win) ?? [];
+}
+
+// ── Dynamic game windows ──────────────────────────────────────────────────────
+// A week's lineup windows are DERIVED from its real kickoffs: games are clustered
+// by start time (a game more than an hour after a window's first kickoff opens its
+// own window), and each window gets slots = min(3, ceil(games / 3)). A normal week
+// reproduces the fixed five — TNF / Sun-early ×3 / Sun-late ×2 / SNF / MNF = 8
+// slots — while an odd week (e.g. the 2026 Week-1 Wednesday opener) grows an extra
+// 1-slot window. When the slate carries no real kickoffs (the baked 2025 demo), we
+// fall back to the fixed WINDOWS model, grouped by each game's baked `win`.
+const WIN_HOUR = 3_600_000;
+
+interface DerivedWeek { windows: GameWindow[]; teamWin: Map<string, string>; gamesByWin: Map<string, NflGame[]>; }
+const derivedCache = new Map<number, DerivedWeek>();
+
+function etWeekday(ms: number): string {
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' }).format(ms);
+}
+/** A cluster's window id + headline labels, from its earliest kickoff (ET day +
+ *  hour). Sunday splits by kickoff hour into the familiar morning/1pm/4pm/night
+ *  buckets; every other weekday is its own named slate. */
+function winMetaFor(ms: number): { id: string; label: string; sub: string } {
+  const wd = etWeekday(ms);
+  const hr = etSod(ms) / 3600;
+  switch (wd) {
+    case 'Thu': return { id: 'tnf', label: 'TNF', sub: 'Thursday Night' };
+    case 'Wed': return { id: 'wed', label: 'WED', sub: 'Wednesday' };
+    case 'Fri': return { id: 'fri', label: 'FRI', sub: 'Friday' };
+    case 'Sat': return { id: 'sat', label: 'SAT', sub: 'Saturday' };
+    case 'Tue': return { id: 'tue', label: 'TUE', sub: 'Tuesday' };
+    case 'Mon': return { id: 'mnf', label: 'MNF', sub: 'Monday Night' };
+    default: // Sunday — bucket by kickoff hour
+      if (hr < 11) return { id: 'am', label: 'SUN AM', sub: 'Sunday Morning' };
+      if (hr < 15) return { id: 'early', label: 'SUN 1PM', sub: 'Sunday Early' };
+      if (hr < 18) return { id: 'late', label: 'SUN 4PM', sub: 'Sunday Late' };
+      return { id: 'snf', label: 'SNF', sub: 'Sunday Night' };
+  }
+}
+
+/** Cluster a week's slate into its real game windows (memoized per week). Falls
+ *  back to the fixed five when kickoffs aren't fully known. */
+function deriveWeek(week: number): DerivedWeek {
+  const cached = derivedCache.get(week);
+  if (cached) return cached;
+  const slate = slateFor(week) ?? [];
+  const kicks = slate.filter((g) => typeof g.kickoff === 'number') as (NflGame & { kickoff: number })[];
+  let result: DerivedWeek;
+  if (!slate.length || kicks.length !== slate.length) {
+    // No (complete) real kickoffs → fixed five-window model, grouped by baked `win`.
+    const gamesByWin = new Map<string, NflGame[]>();
+    const teamWin = new Map<string, string>();
+    for (const g of slate) {
+      const arr = gamesByWin.get(g.win) ?? gamesByWin.set(g.win, []).get(g.win)!;
+      arr.push(g);
+      teamWin.set(g.home, g.win); teamWin.set(g.away, g.win);
+    }
+    result = { windows: WINDOWS, teamWin, gamesByWin };
+  } else {
+    // Greedy cluster in kickoff order: a game joins the open window if it kicks
+    // within an hour of that window's anchor (first) kickoff, else starts its own.
+    const sorted = [...kicks].sort((a, b) => a.kickoff - b.kickoff);
+    const clusters: (NflGame & { kickoff: number })[][] = [];
+    let cur: (NflGame & { kickoff: number })[] = [];
+    let anchor = -Infinity;
+    for (const g of sorted) {
+      if (!cur.length || g.kickoff - anchor <= WIN_HOUR) { if (!cur.length) anchor = g.kickoff; cur.push(g); }
+      else { clusters.push(cur); cur = [g]; anchor = g.kickoff; }
+    }
+    if (cur.length) clusters.push(cur);
+
+    const windows: GameWindow[] = [];
+    const teamWin = new Map<string, string>();
+    const gamesByWin = new Map<string, NflGame[]>();
+    const usedBase = new Map<string, number>();
+    for (const games of clusters) {
+      const k0 = Math.min(...games.map((g) => g.kickoff));
+      const meta = winMetaFor(k0);
+      const n = usedBase.get(meta.id) ?? 0; usedBase.set(meta.id, n + 1);
+      const id = n === 0 ? meta.id : `${meta.id}${n + 1}`; // disambiguate a repeated bucket
+      const slots = Math.min(3, Math.ceil(games.length / 3));
+      windows.push({ id, label: meta.label, sub: meta.sub, slots, time: kickoffLabel(k0) });
+      gamesByWin.set(id, games);
+      for (const g of games) { teamWin.set(g.home, id); teamWin.set(g.away, id); }
+    }
+    result = { windows, teamWin, gamesByWin };
+  }
+  derivedCache.set(week, result);
+  return result;
+}
+
+/** The lineup windows for a week — derived from the real slate when kickoffs are
+ *  known, else the fixed five. Ordered by kickoff. */
+export function windowsForWeek(week: number): GameWindow[] {
+  return deriveWeek(week).windows;
 }
 
 // ── Calendar dates ──────────────────────────────────────────────────────────
-// 2025 NFL season opened Thursday, Sept 4 (Week 1 TNF). Each later week shifts
-// by 7 days; windows fall on Thu / Sun / Mon within the week.
-const SEASON_START = Date.UTC(2025, 8, 4); // Thu Sep 4 2025
+// Week 1 opens on the Thursday after Labor Day (first Monday of September); each
+// later week shifts by 7 days, windows fall on Thu / Sun / Mon within the week.
+// The season year is set when a league loads (setSeasonYear) so 2026 leagues show
+// 2026 dates, not the baked 2025 opener.
+function seasonStartUTC(year: number): number {
+  const sep1 = new Date(Date.UTC(year, 8, 1));
+  const toMonday = (1 - sep1.getUTCDay() + 7) % 7; // Sep 1 → first Monday (Labor Day)
+  return Date.UTC(year, 8, 1 + toMonday + 3);      // Labor Day + 3 = Thursday kickoff
+}
+let SEASON_START = seasonStartUTC(2025); // default: the baked 2025 season (demo)
+/** Point the calendar at a season's opener (Thu after Labor Day). */
+export function setSeasonYear(year: number): void {
+  if (Number.isFinite(year) && year > 2000 && year < 2100) SEASON_START = seasonStartUTC(year);
+}
 const DAY = 86_400_000;
 const WIN_DAY_OFFSET: Record<WindowId, number> = { tnf: 0, early: 3, late: 3, snf: 3, mnf: 4 };
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -75,17 +182,42 @@ const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'
 
 /** The calendar date a given window is played on, that week. */
 export function windowDate(week: number, win: WindowId): Date {
-  return new Date(SEASON_START + ((week - 1) * 7 + WIN_DAY_OFFSET[win]) * DAY);
+  return new Date(SEASON_START + ((week - 1) * 7 + (WIN_DAY_OFFSET[win] ?? 3)) * DAY);
 }
 
-/** e.g. "Thu, Sep 4" for a window. */
+// ET calendar parts for an epoch-ms — so a window's real day matches its ET
+// kickoff (a Wed-night opener reads "Wed", not the computed Thursday).
+function etParts(ms: number): { wd: string; mo: string; da: number } {
+  const p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric' }).formatToParts(new Date(ms));
+  return {
+    wd: p.find((x) => x.type === 'weekday')?.value ?? '',
+    mo: p.find((x) => x.type === 'month')?.value ?? '',
+    da: Number(p.find((x) => x.type === 'day')?.value ?? 0),
+  };
+}
+/** Every real kickoff (epoch ms) among a week's games, from the loaded slate. */
+function weekKickoffs(week: number): number[] {
+  return (slateFor(week) || []).map((g) => g.kickoff).filter((k): k is number => typeof k === 'number');
+}
+
+/** e.g. "Thu, Sep 4" for a window — the real kickoff day when the slate carries it
+ *  (so odd weeks like a Wednesday opener read correctly), else the computed slot. */
 export function windowDateLabel(week: number, win: WindowId): string {
+  const ms = windowKickoffMs(week, win);
+  if (ms != null) { const { wd, mo, da } = etParts(ms); return `${wd}, ${mo} ${da}`; }
   const d = windowDate(week, win);
   return `${WD[d.getUTCDay()]}, ${MO[d.getUTCMonth()]} ${d.getUTCDate()}`;
 }
 
-/** The week's date span, Thursday → Monday, e.g. "Sep 4 – 8". */
+/** The week's date span, first → last game, e.g. "Sep 4 – 8" — real kickoffs when
+ *  loaded (so it spans a Wed-night opener through Monday), else computed. */
 export function weekDateRange(week: number): string {
+  const ks = weekKickoffs(week);
+  if (ks.length) {
+    const lo = etParts(Math.min(...ks)), hi = etParts(Math.max(...ks));
+    const b = lo.mo === hi.mo ? `${hi.da}` : `${hi.mo} ${hi.da}`;
+    return `${lo.mo} ${lo.da} – ${b}`;
+  }
   const thu = windowDate(week, 'tnf');
   const mon = windowDate(week, 'mnf');
   const a = `${MO[thu.getUTCMonth()]} ${thu.getUTCDate()}`;
@@ -115,7 +247,8 @@ function fmtTimeOfDay(sod: number): string {
 }
 /** The first window that week that actually has games (earliest kickoff). */
 function firstGameWindow(week: number) {
-  return WINDOWS.find((w) => gamesInWindow(week, w.id).length > 0) ?? WINDOWS[0];
+  const wins = windowsForWeek(week);
+  return wins.find((w) => gamesInWindow(week, w.id).length > 0) ?? wins[0] ?? WINDOWS[0];
 }
 
 // ── Real kickoff times (when the week's play-by-play is loaded) ───────────────
@@ -131,12 +264,46 @@ function fmtSodShort(sod: number): string {
   const h = Math.floor(x / 3600), mm = Math.floor((x % 3600) / 60);
   return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, '0')}${h >= 12 ? 'p' : 'a'}`;
 }
+// ── Preseason weeks ──────────────────────────────────────────────────────────
+// Preseason is namespaced as OFFSET board weeks (ESPN preseason week N → board
+// week 100 + N) so a league can run real 2026 preseason matchups without
+// colliding with the already-loaded regular-season weeks 1-3. The slate/plays for
+// these weeks are written by the worker (seasonType=1) at the same offset.
+export const PRESEASON_BASE = 100;
+/** Is this a preseason (offset) board week? */
+export const isPreseasonWeek = (week: number): boolean => week > PRESEASON_BASE;
+/** The 1-based preseason week number for an offset board week (101 → 1). */
+export const preseasonWeekNum = (week: number): number => week - PRESEASON_BASE;
+/** How many preseason weeks a preseason league carries (P1-P3). */
+export const PRESEASON_WEEKS = 3;
+
+// ── Live-test timeline (super-admin preseason testing) ───────────────────────
+// When a league flips on live-test mode, the board anchors its window schedule to
+// the moment it was enabled and compresses it: window i kicks off a couple minutes
+// after the last, so Setup → Locked → Live → Final can be watched in real minutes
+// without waiting for the real slate. Set from the board (setTestTimeline) so every
+// window-time lookup below returns the compressed schedule automatically.
+let TEST_ANCHOR: number | null = null;
+const TEST_SETUP_LEAD_MS = 180_000; // 3m of setup before the first window kicks
+const TEST_STEP_MS = 120_000;       // 2m between successive window kickoffs
+export const TEST_LOCK_LEAD_MS = 60_000;  // window locks 1m before its (test) kickoff
+export const TEST_GAME_MS = 120_000;      // a window reads LIVE for 2m, then FINAL
+/** Enable/disable the compressed live-test timeline (anchor = epoch ms, null = off). */
+export function setTestTimeline(anchorMs: number | null): void { TEST_ANCHOR = anchorMs; }
+export function testTimelineOn(): boolean { return TEST_ANCHOR != null; }
+
 /** Earliest real kickoff (epoch ms) among a window's games, or null if unknown
- *  (week not loaded). */
+ *  (week not loaded). In live-test mode, the compressed anchor-relative kickoff. */
 export function windowKickoffMs(week: number, win: WindowId): number | null {
+  if (TEST_ANCHOR != null) {
+    const idx = windowsForWeek(week).findIndex((w) => w.id === win);
+    return idx >= 0 ? TEST_ANCHOR + TEST_SETUP_LEAD_MS + idx * TEST_STEP_MS : null;
+  }
   let min: number | null = null;
   for (const g of gamesInWindow(week, win)) {
-    const k = realKickoff(week, g.home) ?? realKickoff(week, g.away);
+    // Prefer the slate's scheduled kickoff (known pre-season); fall back to the
+    // real first-snap from play-by-play once the week is live.
+    const k = (typeof g.kickoff === 'number' ? g.kickoff : null) ?? realKickoff(week, g.home) ?? realKickoff(week, g.away);
     if (k != null && (min == null || k < min)) min = k;
   }
   return min;
@@ -149,6 +316,11 @@ export function windowKickoffSod(week: number, win: WindowId): number {
   const w = WINDOWS.find((x) => x.id === win);
   return w ? slotKickoffSod(w.time) : 13 * 3600;
 }
+/** A single game's real kickoff as "Wed 8:20p" (ET day + time). */
+export function kickoffLabel(ms: number): string {
+  return `${etParts(ms).wd} ${fmtSodShort(etSod(ms))}`;
+}
+
 /** A window's compact kickoff label e.g. "1:00p" — real when loaded, else slot. */
 export function windowTimeLabel(week: number, win: WindowId): string {
   const ms = windowKickoffMs(week, win);

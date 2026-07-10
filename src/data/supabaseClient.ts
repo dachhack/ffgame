@@ -15,8 +15,11 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 const DEFAULT_URL = 'https://auth.dripfantasy.com';
 const DEFAULT_ANON = 'sb_publishable_bEjQC0i5aZ36WFlBisxhbQ_9MwLo8d2';
 
-const URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || DEFAULT_URL;
-const ANON = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) || DEFAULT_ANON;
+// Optional-chained so the module also loads outside Vite (e.g. Node test
+// harnesses), where `import.meta.env` is undefined.
+const ENV = (import.meta as { env?: Record<string, string | undefined> }).env;
+const URL = ENV?.VITE_SUPABASE_URL || DEFAULT_URL;
+const ANON = ENV?.VITE_SUPABASE_ANON_KEY || DEFAULT_ANON;
 
 export const liveConfigured = !!(URL && ANON);
 

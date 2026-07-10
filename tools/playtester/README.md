@@ -123,8 +123,44 @@ separates "the mechanic is weak" from "the random field never triggered it".
 npx tsx tools/playtester/scenario.mjs --week=1-14 --n=200
 ```
 
+## `livefire.mjs` — live-fire timing school (v0.126.0)
+For the live tacticals (surge / cold-snap / napalm): WHEN should you fire?
+Paired policies per play — blind fixed clocks, `on-hot` (fire at the target's
+first hot streak, hold the coin otherwise), `hot-else-1800` (the shipping
+manager rule), and a hindsight ORACLE grid that bounds timing skill. Findings
+§19: late beats early, hot-else-late is the best honest policy for all three,
+and the oracle reaches amp-grade value (napalm's timing gap is 8×).
+
+```
+npx tsx tools/playtester/livefire.mjs --week=1-14 --n=100
+```
+
+## `lateswap.mjs` — score-aware late swap (per-window locks, v0.95.0)
+Windows seal one at a time, so a manager picks each later window knowing the real
+margin of the windows already played. Both sides still lock a window at the same
+kickoff (and slate-gating partitions rosters by window), so the measurable edge is
+score-state VARIANCE management, not counter-picking. Policies: `gamble` (trailing →
+skill players to the TD nuke), `gamble1` (only the weakest), `hail` (MNF-only, down
+big), `protect` (leading → denial). Paired A/B vs blind honest; fired-cohort and
+behind-at-half columns are the signal. See findings §10 — every variant measured
+NEGATIVE: the metric menu prices variance at a ruinous EV discount, so there is
+nothing profitable to spend the live-margin information on until NUKE/denial are
+retuned.
+
+```
+npx tsx tools/playtester/lateswap.mjs --week=1-14 --n=120
+```
+
+## Battle-layer coverage (v0.124.0)
+`resolve()` passes per-side `LiveExtras`, and `aggregate.mjs` levers can target
+`win|slot` off the built lineups — so every targeted/live battle play is now
+measured: `rivalry`, `jinx`, `grudge`, `lead-change`, `red-herring`,
+`double-or-nothing`, `ghost`, `bye-steal`, `surge`, `cold-snap`, `napalm`,
+`bunker`, `emp`, plus the `underdog`/`marshal` metric levers. The honest field
+(`honestMatch` / `season.mjs`) arms the AI's RETRAINED battle plays (rivalry on
+its densest window; ghost on an open slot) — findings §17.
+
 ## Not yet modeled
-The pure resolver does not implement these power-ups, so the harness reports no
-signal for them: `double-or-nothing`, `turnover-boost`, `spy`, `trick-play`,
-`hail-mary`, `pick-six`, `bye-steal`, `metric-swap`, `player-swap`, `mulligan`,
-`emp`. Measuring them needs either engine support or a separate driver.
+`turnover-boost` (no per-player turnover feed), `spy` (pure information; needs an
+information-value driver), and the CLUTCH plays (conditional live offers — no
+LiveExtras surface). Swaps/mulligan are measured as POLICIES in `lateswap.mjs`.

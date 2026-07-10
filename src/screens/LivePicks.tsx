@@ -6,16 +6,18 @@ import type { Pos, WindowId } from '../types';
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
   myBuffs, armBuff, disarmBuff, LIVE_BUFFS,
-  myUnlocks, armUnlock, disarmUnlock,
+  myUnlocks, armUnlock, disarmUnlock, myComboQty,
   myWallet, ensureWallet,
   myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium, startCheckout,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
 } from '../data/liveApi';
 import { powerupById } from '../data/powerups';
+import { PuIcon, GameIcon, Emoji, COIN_GOLD } from '../app/gameIcons';
 import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } from '../data/premiumClient';
 import { shortName } from '../data/players';
 import type { Player } from '../types';
 import { SetupRow, PlayerPicker } from './Matchup';
+import { REG_SEASON_WEEKS } from '../data/league';
 
 // Live pool entries are slug/full/pos; the reused setup card wants a Player. Build
 // a light one (zero stats — the setup board only displays name/pos/team/headshot).
@@ -42,7 +44,7 @@ const fmtLock = (iso: string | null) => {
   catch { return iso; }
 };
 
-export function LivePicks({ userId, onBack }: { userId: string; onBack: () => void }) {
+export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: string; leagueId?: string; rosterId?: number; onBack: () => void }) {
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
   const [myTeam, setMyTeam] = useState<TeamInfo | null>(null);
   const [roster, setRoster] = useState<{ leagueId: string; rosterId: number } | null>(null);
@@ -52,56 +54,100 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
   const [picks, setPicks] = useState<Record<string, { player_slug: string | null; metric_id: string | null }>>({});
   const [buffs, setBuffs] = useState<Set<string>>(new Set());
   const [unlocks, setUnlocks] = useState<Set<string>>(new Set());
+  const [comboQty, setComboQty] = useState(0); // Combo-Drip unlocks purchased (one slot per purchase)
   const [coins, setCoins] = useState<number>(0);
   const [buffBusy, setBuffBusy] = useState<string | null>(null);
   const [extra, setExtra] = useState<number>(0);
   const [extraPicks, setExtraPicks] = useState<{ win: string | null; player_slug: string | null; metric_id: string | null }[]>([]);
   const [extraBusy, setExtraBusy] = useState(false);
-  const [state, setState] = useState<'loading' | 'ready' | 'none'>('loading');
+  const [state, setState] = useState<'loading' | 'ready' | 'none' | 'error'>('loading');
+  const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   const [matchPremium, setMatchPremium] = useState(true); // default true = no false locks until we know
+  const [weekSel, setWeekSel] = useState<number | null>(null); // null = default (earliest) week
+  // Per-window locking ("late swap"): each window's picks seal at that window's
+  // OWN first kickoff, not the week's. Kickoffs come from the live slate; the
+  // server-sealed flags on our own rows are the authoritative override.
+  const [winKickIso, setWinKickIso] = useState<Record<string, string>>({});
+  const [lockedWins, setLockedWins] = useState<Set<string>>(new Set());
+  const [nowTs, setNowTs] = useState(() => Date.now());
 
   useEffect(() => { ensurePremiumTier(); }, []); // load the free/premium split for intent gating
   useEffect(() => {
     (async () => {
       try {
-        const r = await myRoster(userId);
+        // Open the specific league/roster the card asked for; fall back to the
+        // user's default roster when none is given.
+        setState('loading'); setErr(null);
+        const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
         if (!r) { setState('none'); return; }
         setRoster(r);
         myMembership(r.leagueId, r.rosterId).then((mm) => { if (mm?.controller) setController(mm.controller); }).catch(() => {});
-        const m = await myMatchup(r.leagueId, r.rosterId);
-        if (!m) { setState('none'); return; }
+        const m = await myMatchup(r.leagueId, r.rosterId, weekSel ?? undefined);
+        if (!m) { setMatchup(null); setState('none'); return; }
         setMatchup(m);
         matchupPremium(m.id).then(setMatchPremium).catch(() => {}); // premium → no power-up locks (both sides get the full set)
         matchupTeams(r.leagueId, [r.rosterId]).then((t) => setMyTeam(t[r.rosterId] ?? null)).catch(() => {});
-        const [pl, pk, bf, un, ex, slate] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId), myBuffs(m.id), myUnlocks(m.id), myExtra(m.id).catch(() => 0), liveSlate(m.week).catch(() => [])]);
+        const [pl, pk, bf, un, ex, slate, cq] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId), myBuffs(m.id), myUnlocks(m.id), myExtra(m.id).catch(() => 0), liveSlate(m.week).catch(() => []), myComboQty(m.id, userId).catch(() => 0)]);
         // Apply the live ESPN slate (overrides baked 2025) before gating below.
         setRuntimeSlate(m.week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId })));
+        // Each window's first kickoff — drives per-window lock gating below.
+        const wkick: Record<string, string> = {};
+        for (const g of slate) {
+          if (!g.kickoff) continue;
+          if (!wkick[g.win] || Date.parse(g.kickoff) < Date.parse(wkick[g.win])) wkick[g.win] = g.kickoff;
+        }
+        setWinKickIso(wkick);
         setPool(pl);
         const map: Record<string, { player_slug: string | null; metric_id: string | null }> = {};
         const xs: { win: string | null; player_slug: string | null; metric_id: string | null }[] = [];
+        const lw = new Set<string>();
         for (const p of pk) {
+          if (p.locked) lw.add(p.game_window); // the server already sealed this window
           const xm = /^x(\d+)$/.exec(p.roster_slot); // extra slots are 'x0','x1',…
           if (xm) xs[Number(xm[1])] = { win: p.game_window, player_slug: p.player_slug, metric_id: p.metric_id };
           else map[`${p.game_window}-${p.roster_slot}`] = { player_slug: p.player_slug, metric_id: p.metric_id };
         }
+        setLockedWins(lw);
         setPicks(map);
         const n = Number(ex ?? 0);
         setExtra(n);
         setExtraPicks(Array.from({ length: n }, (_, i) => xs[i] ?? { win: null, player_slug: null, metric_id: null }));
         setBuffs(new Set(bf ?? []));
         setUnlocks(new Set(un ?? []));
+        setComboQty(Number(cq ?? 0));
         ensureWallet(m.id).then((c) => setCoins(Number(c ?? 0))).catch(() => {}); // seeds once + balance
         setState('ready');
-      } catch (e) { setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('none'); }
+      } catch (e) {
+        // A real load failure is NOT "you're all set" — surface it distinctly with
+        // a retry, rather than telling the user everything's fine (see 'error' below).
+        setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('error');
+      }
     })();
-  }, [userId]);
+  }, [userId, leagueId, rosterId, weekSel, attempt]);
 
   const posBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, p.pos])), [pool]);
+  // The week has started (first kickoff passed) — gates power-ups/extra slots,
+  // which arm pre-week. Picks lock PER WINDOW (winLocked below), not here.
   const locked = !!matchup && (matchup.status !== 'scheduled' || (!!matchup.lock_at && new Date(matchup.lock_at) <= new Date()));
+  // Re-check the clock every 30s so windows flip to locked while the screen is open.
+  useEffect(() => {
+    const id = setInterval(() => setNowTs(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  /** A window's picks are final: the server sealed our rows, or its first kickoff
+   *  passed. Once the week starts, a window with no known kickoff is treated as
+   *  locked (fail safe — never leave picks editable mid-slate on missing data). */
+  const winLocked = (winId: string): boolean => {
+    if (!locked) return false;
+    if (lockedWins.has(winId)) return true;
+    const iso = winKickIso[winId];
+    return iso ? Date.parse(iso) <= nowTs : true;
+  };
+  const allLocked = !!matchup && locked && WINDOWS.every((w) => winLocked(w.id));
 
   // Slate-gating: a player can only fill a slot in the window their real NFL team
   // plays that week. Players on a bye are eligible nowhere; players whose team we
@@ -177,7 +223,10 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
       return { game_window: s.win, roster_slot: s.slot, player_slug: p?.player_slug ?? null, metric_id: p?.metric_id ?? null };
     });
     const extraRows: PickRow[] = extraPicks.map((ep, i) => ({ game_window: ep.win ?? '', roster_slot: `x${i}`, player_slug: ep.player_slug ?? null, metric_id: ep.metric_id ?? null }));
-    const rows = [...baseRows, ...extraRows].filter((r) => r.game_window && r.player_slug); // only filled slots
+    // Only filled slots, and only windows still open — a locked window's rows are
+    // sealed server-side and would fail the whole upsert (RLS + 0058 trigger).
+    const rows = [...baseRows, ...extraRows].filter((r) => r.game_window && r.player_slug && !winLocked(r.game_window));
+    if (!rows.length) { setSaved(true); setSaving(false); return; } // nothing editable to write
     try { await savePicks(matchup.id, userId, rows); setSaved(true); }
     catch (e) { setErr(e instanceof Error ? e.message : 'Could not seal picks.'); }
     finally { setSaving(false); }
@@ -229,14 +278,15 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
     try {
       const r = armed ? await disarmBuff(matchup.id, id) : await armBuff(matchup.id, id);
       if (r.ok && r.buffs) { setBuffs(new Set(r.buffs)); refreshCoins(); }
-      else setErr(r.error === 'insufficient' ? insufficientMsg(id) : (r.error ?? 'Could not update power-ups.'));
+      else setErr(r.error === 'insufficient' ? insufficientMsg(id) : (r.detail ?? r.error ?? 'Could not update power-ups.'));
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not update power-ups.'); }
     finally { setBuffBusy(null); }
   };
 
   const toggleUnlock = async (id: string) => {
     if (!matchup || locked || buffBusy) return;
-    const armed = unlocks.has(id);
+    const combo = id === 'unlock-combo-drip';
+    const armed = unlocks.has(id) && !combo; // combo: every tap BUYS ANOTHER (one slot per purchase); ➖ removes one
     if (!armed && puLocked(id)) { markGatedAttempt('powerup:' + id); setErr(upgradeMsg); return; }
     if (!armed && coins < priceOf(id)) { setErr(insufficientMsg(id)); return; }
     setBuffBusy(id); setErr(null);
@@ -244,6 +294,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
       const r = armed ? await disarmUnlock(matchup.id, id) : await armUnlock(matchup.id, id);
       if (r.ok && r.unlocks) {
         setUnlocks(new Set(r.unlocks));
+        if (combo && typeof r.comboQty === 'number') setComboQty(r.comboQty);
         refreshCoins();
         // Disarming an unlock clears dependent picks server-side — mirror locally.
         if (armed) setPicks((prev) => {
@@ -259,6 +310,19 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
     finally { setBuffBusy(null); }
   };
 
+  /** Remove ONE Combo-Drip purchase (refund). The server clears any now-excess
+   *  combodrip picks (highest slots first) — reload to mirror it exactly. */
+  const disarmComboOne = async () => {
+    if (!matchup || locked || buffBusy || comboQty <= 0) return;
+    setBuffBusy('unlock-combo-drip'); setErr(null);
+    try {
+      const r = await disarmUnlock(matchup.id, 'unlock-combo-drip');
+      if (r.ok) { setAttempt((a) => a + 1); } // full reload — picks may have been trimmed server-side
+      else setErr(r.error ?? 'Could not remove the Combo Drip.');
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Could not remove the Combo Drip.'); }
+    finally { setBuffBusy(null); }
+  };
+
   const toggleAi = async () => {
     if (!roster || aiBusy) return;
     const next: Controller = controller === 'ai' ? 'human' : 'ai';
@@ -268,12 +332,38 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
     finally { setAiBusy(false); }
   };
 
+  // Week stepper: page through the whole scheduled season (matchup?.week while
+  // viewing a week, else the selected week; defaults to the earliest).
+  const curWeek = matchup?.week ?? weekSel ?? 1;
+  const weekNav = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+      <button onClick={() => setWeekSel(Math.max(1, curWeek - 1))} disabled={curWeek <= 1} className="mono" title="previous week" style={{ ...linkBtn, fontSize: 13, padding: '0 4px', opacity: curWeek <= 1 ? 0.35 : 1 }}>‹</button>
+      <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)' }}>WK {curWeek}</span>
+      <button onClick={() => setWeekSel(Math.min(REG_SEASON_WEEKS, curWeek + 1))} disabled={curWeek >= REG_SEASON_WEEKS} className="mono" title="next week" style={{ ...linkBtn, fontSize: 13, padding: '0 4px', opacity: curWeek >= REG_SEASON_WEEKS ? 0.35 : 1 }}>›</button>
+    </div>
+  );
+
   if (state === 'loading') return <Muted text="Loading your matchup…" />;
+  if (state === 'error') return (
+    <div style={card}>
+      <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Couldn’t load your matchup</div>
+      <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 10, lineHeight: 1.5 }}>
+        Check your connection and try again. {err && <><br />— {err}</>}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 14 }}>
+        <button onClick={() => setAttempt((a) => a + 1)} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>↻ retry</button>
+        <button onClick={onBack} className="mono" style={linkBtn}>← back</button>
+      </div>
+    </div>
+  );
   if (state === 'none') return (
     <div style={card}>
-      <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>You’re all set — no matchup yet</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>No week {curWeek} matchup yet</div>
+        {weekNav}
+      </div>
       <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 10, lineHeight: 1.5 }}>
-        Your team is enrolled. Your week-1 matchup appears here once your commissioner syncs the schedule — check back closer to kickoff. {err && <><br />— {err}</>}
+        Your team is enrolled. Matchups appear here once your commissioner syncs the schedule — use ‹ › to page through the season, or check back closer to kickoff. {err && <><br />— {err}</>}
       </div>
       <div style={{ textAlign: 'center', marginTop: 14 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
     </div>
@@ -292,16 +382,19 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
               <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Week {matchup!.week} lineup</div>
             </div>
           </div>
-          <span className="mono" style={{ fontSize: 9, color: locked ? 'var(--opp)' : 'var(--you)', border: `1px solid ${locked ? 'var(--opp)' : 'var(--you)'}`, borderRadius: 4, padding: '3px 7px', flexShrink: 0 }}>{locked ? 'LOCKED' : `LOCKS ${fmtLock(matchup!.lock_at)}`}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            {weekNav}
+            <span className="mono" style={{ fontSize: 9, color: allLocked ? 'var(--opp)' : 'var(--you)', border: `1px solid ${allLocked ? 'var(--opp)' : 'var(--you)'}`, borderRadius: 4, padding: '3px 7px' }}>{allLocked ? 'LOCKED' : locked ? 'LOCKS BY WINDOW' : `FIRST LOCK ${fmtLock(matchup!.lock_at)}`}</span>
+          </div>
         </div>
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
-          Pick a player + a hidden metric per slot. Sealed picks stay hidden from your opponent until kickoff. {filled}/{SLOTS.length} set.
+          Pick a player + a hidden metric per slot. Each window locks at its own kickoff — later windows stay editable all weekend, and your opponent can’t see a pick until its window kicks off. {filled}/{SLOTS.length} set.
           {gateOn && <><br />Each slot only takes players whose real NFL team plays in that window. Players on a bye can’t be slotted.</>}
         </div>
         {/* Season-long auto-pilot: AI sets the team's best lineup each week. */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--bd)' }}>
           <div style={{ minWidth: 0 }}>
-            <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: controller === 'ai' ? 'var(--you)' : 'var(--text)' }}>🤖 Auto-pilot {controller === 'ai' ? 'ON' : 'OFF'}</div>
+            <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: controller === 'ai' ? 'var(--you)' : 'var(--text)' }}><Emoji e="🤖" /> Auto-pilot {controller === 'ai' ? 'ON' : 'OFF'}</div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>{controller === 'ai' ? 'AI sets your best lineup each week. Turn off to pick yourself.' : 'Let AI set your best lineup automatically every week.'}</div>
           </div>
           <button onClick={toggleAi} disabled={aiBusy} className="mono"
@@ -318,7 +411,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         <div style={{ ...card, marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Power-ups</div>
-            <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--you)' }}>◆ {Math.round(coins)} coin</span>
+            <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--you)' }}><GameIcon name={COIN_GOLD} emoji="◆" size="1.3em" /> {Math.round(coins)} coin</span>
           </div>
           <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
             Arm before kickoff — each buffs your whole lineup all week, spent from your drip coin. Locks at kickoff.
@@ -326,7 +419,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
           {!matchPremium && (
             <div style={{ background: 'color-mix(in srgb, var(--you) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 35%, transparent)', borderRadius: 8, padding: '8px 9px', marginTop: 8 }}>
               <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--you)', lineHeight: 1.55 }}>
-                🔒 Premium unlocks K/DST/IDP + the full power-up set + special events. Both sides of a premium matchup get the full set — never pay-to-win.
+                <Emoji e="🔒" /> Premium unlocks K/DST/IDP + the full power-up set + special events. Both sides of a premium matchup get the full set — never pay-to-win.
               </div>
               <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
                 <button onClick={() => checkout('personal')} className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>Unlock for $5 · all your leagues</button>
@@ -343,7 +436,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
                 <button key={id} onClick={() => toggleBuff(id)} disabled={locked || !!buffBusy || !afford} title={pu?.blurb}
                   className="mono"
                   style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : afford ? 'var(--text)' : 'var(--faint)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked || !afford ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : afford ? 1 : 0.5 }}>
-                  {pu?.icon} {pu?.name ?? id} {on ? '✓' : puLocked(id) ? '🔒' : `◆${priceOf(id)}`}
+                  <PuIcon id={id} emoji={pu?.icon} size="1.4em" /> {pu?.name ?? id} {on ? '✓' : puLocked(id) ? <Emoji e="🔒" size="1.2em" /> : <><GameIcon name={COIN_GOLD} emoji="◆" size="1.2em" />{priceOf(id)}</>}
                 </button>
               );
             })}
@@ -355,14 +448,23 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
             {LIVE_UNLOCKS.map((id) => {
               const pu = powerupById(id);
-              const on = unlocks.has(id);
-              const afford = on || coins >= priceOf(id);
+              const combo = id === 'unlock-combo-drip';
+              const on = combo ? comboQty > 0 : unlocks.has(id);
+              // Combo Drip is one slot PER PURCHASE — the chip always offers to
+              // buy another, so affordability matters even when armed.
+              const afford = (on && !combo) || coins >= priceOf(id);
               return (
-                <button key={id} onClick={() => toggleUnlock(id)} disabled={locked || !!buffBusy || !afford} title={pu?.blurb}
+                <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                <button onClick={() => toggleUnlock(id)} disabled={locked || !!buffBusy || !afford} title={combo ? `${pu?.blurb ?? ''} Tap to buy another (◆${priceOf(id)} each).` : pu?.blurb}
                   className="mono"
                   style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: on ? 'var(--on-accent)' : afford ? 'var(--text)' : 'var(--faint)', background: on ? 'var(--streak, var(--you))' : 'var(--bg)', border: `1px solid ${on ? 'var(--streak, var(--you))' : 'var(--bd)'}`, borderRadius: 14, padding: '6px 11px', cursor: locked || !afford ? 'default' : 'pointer', opacity: locked ? 0.55 : buffBusy === id ? 0.6 : afford ? 1 : 0.5 }}>
-                  {pu?.icon} {pu?.name ?? id} {on ? '✓' : puLocked(id) ? '🔒' : `◆${priceOf(id)}`}
+                  <PuIcon id={id} emoji={pu?.icon} size="1.4em" /> {pu?.name ?? id} {on ? (combo ? `✓ ×${comboQty} ＋` : '✓') : puLocked(id) ? <Emoji e="🔒" size="1.2em" /> : <><GameIcon name={COIN_GOLD} emoji="◆" size="1.2em" />{priceOf(id)}</>}
                 </button>
+                {combo && comboQty > 0 && !locked && (
+                  <button onClick={disarmComboOne} disabled={!!buffBusy} title="Remove one Combo Drip (refund; may clear its pick)" className="mono"
+                    style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 14, padding: '6px 8px', cursor: 'pointer' }}>➖</button>
+                )}
+                </span>
               );
             })}
           </div>
@@ -373,13 +475,17 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         const winSlots = SLOTS.filter((s) => s.win === w.id);
         const elig = gateOn ? pool.filter((pl) => winBySlug[pl.slug] === 'any' || winBySlug[pl.slug] === w.id).length : pool.length;
         const setN = winSlots.filter((s) => picks[s.key]?.player_slug && picks[s.key]?.metric_id).length;
+        const wLocked = winLocked(w.id);
         return (
-        <div key={w.id} style={{ ...card, marginBottom: 10 }}>
+        <div key={w.id} style={{ ...card, marginBottom: 10, opacity: wLocked ? 0.75 : 1 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700 }}>{w.label} · {w.sub}</div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
               {gateOn && <span className="mono" style={{ fontSize: 9, color: elig ? 'var(--faint)' : 'var(--opp)' }}>{elig} eligible</span>}
               <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: setN === winSlots.length ? 'var(--you)' : 'var(--faint)' }}>{setN}/{winSlots.length} SET</span>
+              <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: wLocked ? 'var(--opp)' : 'var(--faint)' }}>
+                {wLocked ? <><Emoji e="🔒" size="1.2em" /> LOCKED</> : winKickIso[w.id] ? `locks ${fmtLock(winKickIso[w.id])}` : 'locks at kickoff'}
+              </span>
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -391,11 +497,11 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
                   key={s.key} slotKeyStr={s.key} winId={w.id as WindowId} week={week} pick={pick}
                   selected={false} inventory={synthInv} armed={armedMap} appliedPu={[]} applyMode={null}
                   onApplyToSpot={() => {}}
-                  onOpenPicker={() => { if (!locked) setPickerSlot({ key: s.key, win: w.id as WindowId }); }}
-                  onPickMetric={(m) => setSlot(s.key, { metric_id: m })}
-                  onClearSlot={() => setSlot(s.key, { player_slug: null, metric_id: null })}
+                  onOpenPicker={() => { if (!wLocked) setPickerSlot({ key: s.key, win: w.id as WindowId }); }}
+                  onPickMetric={(m) => { if (!wLocked) setSlot(s.key, { metric_id: m }); }}
+                  onClearSlot={() => { if (!wLocked) setSlot(s.key, { player_slug: null, metric_id: null }); }}
                   onDropPlayer={() => {}} onScout={() => {}}
-                  lockPlayer={locked} resolve={(id) => playersBySlug[id]} hideScout
+                  lockPlayer={wLocked} resolve={(id) => playersBySlug[id]} hideScout
                 />
               );
             })}
@@ -410,7 +516,7 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
         <div style={{ ...card, marginBottom: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Extra slots</div>
-            <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{extra}/2 owned · ◆ {Math.round(coins)}</span>
+            <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{extra}/2 owned · <GameIcon name={COIN_GOLD} emoji="◆" size="1.2em" /> {Math.round(coins)}</span>
           </div>
           <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
             Add up to 2 bonus lineup slots (◆{priceOf('extra-slot')} each). An extra slot is one-sided — it plays unopposed as a best-ball backup. Choose its window, then a player + metric. Slate-gated like any pick.
@@ -418,29 +524,32 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
           <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
             <button onClick={buyExtra} disabled={locked || extraBusy || extra >= 2 || coins < priceOf('extra-slot')} className="mono"
               style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--you)', borderRadius: 14, padding: '6px 11px', cursor: locked || extra >= 2 || coins < priceOf('extra-slot') ? 'default' : 'pointer', opacity: locked || extra >= 2 || coins < priceOf('extra-slot') ? 0.5 : 1 }}>
-              ➕ extra slot ◆{priceOf('extra-slot')}
+              ➕ extra slot <GameIcon name={COIN_GOLD} emoji="◆" size="1.2em" />{priceOf('extra-slot')}
             </button>
             {extra > 0 && (
               <button onClick={sellExtra} disabled={locked || extraBusy} className="mono"
                 style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 14, padding: '6px 11px', cursor: locked ? 'default' : 'pointer', opacity: locked ? 0.5 : 1 }}>
-                ➖ sell ◆{priceOf('extra-slot')}
+                ➖ sell <GameIcon name={COIN_GOLD} emoji="◆" size="1.2em" />{priceOf('extra-slot')}
               </button>
             )}
           </div>
           {extraPicks.map((ep, i) => {
             const eligible = ep.win ? eligibleFor(ep.win, ep.player_slug) : [];
             const ms = metricsFor(ep.player_slug);
+            // The slot's pick follows its chosen window's lock; an unassigned slot
+            // stays editable while any window is still open.
+            const epLocked = ep.win ? winLocked(ep.win) : allLocked;
             return (
               <div key={i} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <select value={ep.win ?? ''} disabled={locked} onChange={(e) => setExtraSlot(i, { win: e.target.value || null })} style={{ ...sel, flex: 0.9 }}>
+                <select value={ep.win ?? ''} disabled={epLocked} onChange={(e) => setExtraSlot(i, { win: e.target.value || null })} style={{ ...sel, flex: 0.9 }}>
                   <option value="">— window —</option>
-                  {WINDOWS.map((w) => <option key={w.id} value={w.id}>{w.label}</option>)}
+                  {WINDOWS.map((w) => <option key={w.id} value={w.id} disabled={winLocked(w.id)}>{w.label}{winLocked(w.id) ? ' 🔒' : ''}</option>)}
                 </select>
-                <select value={ep.player_slug ?? ''} disabled={locked || !ep.win} onChange={(e) => setExtraSlot(i, { player_slug: e.target.value || null })} style={{ ...sel, flex: 1.3 }}>
+                <select value={ep.player_slug ?? ''} disabled={epLocked || !ep.win} onChange={(e) => setExtraSlot(i, { player_slug: e.target.value || null })} style={{ ...sel, flex: 1.3 }}>
                   <option value="">{ep.win ? (eligible.length ? '— player —' : '— none this window —') : '— pick a window —'}</option>
                   {eligible.map((pl) => <option key={pl.slug} value={pl.slug}>{pl.full} ({pl.pos}{teamBySlug[pl.slug] ? ` · ${teamBySlug[pl.slug]}` : ''})</option>)}
                 </select>
-                <select value={ep.metric_id ?? ''} disabled={locked || !ep.player_slug} onChange={(e) => setExtraSlot(i, { metric_id: e.target.value || null })} style={{ ...sel, flex: 1 }}>
+                <select value={ep.metric_id ?? ''} disabled={epLocked || !ep.player_slug} onChange={(e) => setExtraSlot(i, { metric_id: e.target.value || null })} style={{ ...sel, flex: 1 }}>
                   <option value="">— metric —</option>
                   {ms.map((m) => <option key={m.id} value={m.id}>{m.lock ? '🔓 ' : ''}{m.name} · {m.tag}</option>)}
                 </select>
@@ -451,9 +560,9 @@ export function LivePicks({ userId, onBack }: { userId: string; onBack: () => vo
       )}
 
       {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', margin: '4px 0 10px' }}>{err}</div>}
-      {!locked && <button onClick={seal} disabled={saving} className="mono" style={{ ...btn, opacity: saving ? 0.6 : 1 }}>{saving ? 'SEALING…' : saved ? 'SEALED ✓ — UPDATE' : 'SEAL LINEUP'}</button>}
-      {saved && !locked && <div className="mono" style={{ fontSize: 9.5, color: 'var(--you)', textAlign: 'center', marginTop: 8 }}>Saved. Editable until kickoff.</div>}
-      {locked && <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', textAlign: 'center' }}>This week is locked — picks are final.</div>}
+      {!allLocked && <button onClick={seal} disabled={saving} className="mono" style={{ ...btn, opacity: saving ? 0.6 : 1 }}>{saving ? 'SEALING…' : saved ? 'SEALED ✓ — UPDATE' : 'SEAL LINEUP'}</button>}
+      {saved && !allLocked && <div className="mono" style={{ fontSize: 9.5, color: 'var(--you)', textAlign: 'center', marginTop: 8 }}>Saved. Each window stays editable until it kicks off.</div>}
+      {allLocked && <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', textAlign: 'center' }}>Every window has kicked off — picks are final.</div>}
       <div style={{ textAlign: 'center', marginTop: 14 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
 
       {pickerSlot && (() => {

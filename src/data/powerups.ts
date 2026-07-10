@@ -29,13 +29,16 @@ export const POWERUPS: Powerup[] = [
   { id: 'extra-slot', name: 'Extra Slot', blurb: 'Add a slot to any window — for you AND your opponent. Must be applied before any window starts.', kind: 'action', timing: 'pre', price: 80, icon: '➕' },
   { id: 'unlock-return', name: 'Return Yards', blurb: 'This week only: unlock the Return Yards metric for a kick/punt returner — flat 0.1 pts per real return yard + 6 per return TD.', kind: 'metric', timing: 'pre', price: 60, icon: '🏈' },
   { id: 'unlock-carries-wipe', name: 'WR/TE Carries', blurb: 'Arm before kickoff: all week, every carry by a WR or TE in your starting spots wipes its matched opponent to 0 — a plus-up on TOP of whatever metric that slot is scoring.', kind: 'action', timing: 'pre', price: 70, icon: '💥' },
-  { id: 'unlock-combo-drip', name: 'Combo Drip', blurb: 'This week only: unlock a Rush + Receiving combo drip for one player — both carries AND catches feed a single drip rate (yds × 0.01 pts/min).', kind: 'metric', timing: 'pre', price: 65, icon: '🌀' },
-  { id: 'unlock-pass-td10', name: 'Air Raid', blurb: 'This week only: unlock a QB metric where passing TDs are worth 10 pts (plus 0.04 / passing yd). Flat — no nuke or erase.', kind: 'metric', timing: 'pre', price: 60, icon: '🚀' },
+  { id: 'unlock-combo-drip', name: 'Combo Drip', blurb: 'This week only: unlock a Rush + Receiving combo drip for ONE player — both carries AND catches feed a single drip rate (yds × 0.01 pts/min). One slot per purchase: buy it again to field another.', kind: 'metric', timing: 'pre', price: 65, icon: '🌀' },
+  { id: 'unlock-pass-td10', name: 'Air Raid', blurb: 'This week only: unlock a QB metric where passing TDs are worth 10 pts (plus 0.04 / passing yd). Flat — no nuke or erase.', kind: 'metric', timing: 'pre', price: 40, icon: '🚀' },
+  { id: 'unlock-underdog', name: 'Underdog', blurb: 'This week only: unlock the Underdog comeback metric for your RB/WR spots — flat yardage points, but every score banks ×1.5 while that slot is TRAILING. Pick it ANY TIME BEFORE KICKOFF — even after lock-in, once you can size up the fight. Best on a player you EXPECT to trail; on a stud who leads all game the boost never fires.', kind: 'metric', timing: 'pre', price: 35, icon: '🐕' },
   { id: 'trick-play', name: 'Trick Play', blurb: 'Arm before kickoff: if ANY non-QB in your starting spots throws a TD pass this week, your lineup banks a flat +50.', kind: 'action', timing: 'pre', price: 90, icon: '🎺' },
   { id: 'pick-six', name: 'Pick Six', blurb: 'Arm before kickoff: if any of your DST starters returns an INT or fumble for a touchdown, bank a flat +25.', kind: 'action', timing: 'pre', price: 45, icon: '🛡️' },
   { id: 'hail-mary', name: 'Hail Mary', blurb: 'Arm before kickoff: if a QB in your starting spots throws a touchdown of 40+ yards, bank a flat +15.', kind: 'action', timing: 'pre', price: 35, icon: '🙏' },
   { id: 'momentum', name: 'Momentum', blurb: 'Arm before kickoff: all week, your drips run 3× when hot instead of 2×.', kind: 'action', timing: 'pre', price: 70, icon: '📈' },
   { id: 'garbage-time', name: 'Garbage Time', blurb: 'Arm before kickoff: any points your players score in the final 5 game-minutes count double.', kind: 'action', timing: 'pre', price: 75, icon: '🗑️' },
+  { id: 'amp-2', name: 'Second Amp', blurb: 'Amplifiers (Momentum · Overtime · Garbage Time) are limited to ONE per week. Arm this to run a second one alongside it.', kind: 'action', timing: 'pre', price: 40, icon: '🔊' },
+  { id: 'amp-3', name: 'Third Amp', blurb: 'The full stack: with Second Amp armed, this unlocks a third amplifier for the week — Momentum, Overtime AND Garbage Time together.', kind: 'action', timing: 'pre', price: 60, icon: '📢' },
   { id: 'floodgates', name: 'Floodgates', blurb: 'Arm before kickoff: your drips are immune to opponent pauses and erases all week (TD wipes still apply).', kind: 'action', timing: 'pre', price: 85, icon: '🌊' },
   { id: 'overtime', name: 'Overtime', blurb: 'Arm before kickoff: your Field General multiplier and drips carry into overtime. Without it they reset the moment regulation ends.', kind: 'action', timing: 'pre', price: 60, icon: '⏱️' },
   { id: 'ot-shield', name: 'Overtime Shield', blurb: 'Arm before kickoff: any points your opponent scores in overtime this week are negated.', kind: 'action', timing: 'pre', price: 70, icon: '🧊' },
@@ -43,13 +46,74 @@ export const POWERUPS: Powerup[] = [
   { id: 'counter-nuke', name: 'Counter-Nuke', blurb: 'Arm before kickoff: the first time an opponent nukes one of your slots, it is reflected back — their player is wiped instead.', kind: 'action', timing: 'pre', price: 95, icon: '↩️' },
   { id: 'insurance', name: 'Insurance', blurb: 'Arm before kickoff: the first time one of your slots is nuked, half its banked score is refunded instead of zeroed.', kind: 'action', timing: 'pre', price: 80, icon: '🛟' },
   { id: 'double-or-nothing', name: 'Double or Nothing', blurb: 'Stake one of your slots before kickoff: at FINAL it scores double if it wins its head-to-head, or zero if it loses.', kind: 'action', timing: 'pre', price: 80, icon: '⚖️', target: 'slot-you' },
-  { id: 'spy', name: 'Spy', blurb: 'After rosters lock and before kickoff: pick any slate slot (blind) and reveal the opponent there — their player OR their chosen metric.', kind: 'action', timing: 'pre', price: 40, icon: '👁️', target: 'slot-opp' },
-  { id: 'bye-steal', name: 'Bye Steal', blurb: 'Before kickoff, field one of your players who is on bye in an open slot for a flat projected score.', kind: 'action', timing: 'pre', price: 55, icon: '🪂', target: 'bye' },
+  { id: 'rivalry', name: 'Rivalry', blurb: 'Arm on a window before kickoff (blind): for every slot where your opponent fields the SAME position as you, siphon 30% of that opponent’s slot score to you at the window’s end. Whiffs entirely if they don’t mirror your position — a bet on how they build the window.', kind: 'action', timing: 'pre', price: 70, icon: '⚔️', target: 'window' },
+  { id: 'lead-change', name: 'Lead Change', blurb: 'Arm on one of your slots before kickoff: every time you SEIZE the lead in that head-to-head (overtake the opponent after trailing), bank a flat +2. Rewards a back-and-forth dogfight — a blowout you never trailed in pays nothing.', kind: 'action', timing: 'pre', price: 45, icon: '🔀', target: 'slot-you' },
+  { id: 'grudge', name: 'Grudge Match', blurb: 'Stake one of your slots before kickoff: WIN its head-to-head by 10+ and bank a flat +25 — but LOSE the slot and you take −25. Win by less than 10 (or tie) and nothing happens. Double or Nothing with real downside.', kind: 'action', timing: 'pre', price: 60, icon: '🥊', target: 'slot-you' },
+  { id: 'jinx', name: 'Jinx', blurb: 'Before kickoff (blind), point at an opponent slot: the FIRST touchdown the player there scores is negated — no points, and if it was a nuke, no nuke. Whiffs entirely if they don’t score a TD in that slot — a bet on reading their stud.', kind: 'action', timing: 'pre', price: 55, icon: '🧿', target: 'slot-opp' },
+  { id: 'red-herring', name: 'Red Herring', blurb: 'Attach to one of your players before kickoff: every OPPOSING player of the same position anywhere in that window is dragged down to your player’s total (capped at it). Field a low decoy at a position and cap all their studs there — but you waste the slot, and it whiffs if they field nobody at that position.', kind: 'action', timing: 'pre', price: 90, icon: '🎣', target: 'slot-you' },
+  { id: 'spy', name: 'Spy', blurb: 'Before a window kicks off: pick any slate slot (blind) and reveal the opponent’s current sealed pick there — their player OR their chosen metric. They can still change it until kickoff; re-checking your peek is free.', kind: 'action', timing: 'pre', price: 40, icon: '👁️', target: 'slot-opp' },
+  { id: 'bye-steal', name: 'Bye Steal', blurb: 'Before kickoff, field one of your players who is on bye in an open slot for a flat projected score (capped at 16).', kind: 'action', timing: 'pre', price: 55, icon: '🪂', target: 'bye' },
+  { id: 'ghost', name: 'Ghost Player', blurb: 'Before kickoff, conjure a phantom into any open slot — no bench player needed. It banks a flat set 14 points, guaranteed. Pricier than a Bye Steal, but its floor is certain and it works even when you have no one on bye.', kind: 'action', timing: 'pre', price: 75, icon: '👻', target: 'bye' },
   { id: 'mulligan', name: 'Mulligan', blurb: 'Re-roll one slot’s metric mid-game for free — does not spend a Metric Swap.', kind: 'action', timing: 'live', price: 30, icon: '🎲', target: 'slot-you' },
   { id: 'emp', name: 'EMP', blurb: 'Fire during a live window to freeze every opponent drip in that window for 10 minutes.', kind: 'action', timing: 'live', price: 65, icon: '💥', target: 'window' },
+  { id: 'surge', name: 'Surge', blurb: 'Fire on one of YOUR live slots: everything it scores for the next 10 game-minutes counts double. Fire when your player is heating up.', kind: 'action', timing: 'live', price: 55, icon: '⚡', target: 'slot-you' },
+  { id: 'cold-snap', name: 'Cold Snap', blurb: 'Fire on a live OPPONENT slot: freeze ALL of that player’s scoring — points and drip — for the next 10 game-minutes. Shut a hot rival down cold.', kind: 'action', timing: 'live', price: 60, icon: '🧊', target: 'slot-opp' },
+  { id: 'napalm', name: 'Napalm', blurb: 'Fire on a live OPPONENT slot: for the next 10 game-minutes, any time their drip runs HOT it BURNS — the hot accrual goes negative and bleeds their bank down instead of doubling it. Punishes a rival for running too hot (does nothing while they stay cool).', kind: 'action', timing: 'live', price: 60, icon: '🔥', target: 'slot-opp' },
+  { id: 'bunker', name: 'Bunker', blurb: 'Fire on one of YOUR live slots: it goes immune to every nuke and erase for the rest of the game from the moment you fire. Lock in a lead before they can wipe it.', kind: 'action', timing: 'live', price: 65, icon: '🛡️', target: 'slot-you' },
+  { id: 'clutch-don', name: 'Halftime Gamble', blurb: 'A CLUTCH play — only offered when one of your slots leads by 10+ at halftime, and only until the third quarter gets going. Arm it and that slot scores DOUBLE if it wins its head-to-head, ZERO if it loses.', kind: 'action', timing: 'live', price: 50, icon: '🎰' },
+  { id: 'clutch-encore', name: 'Encore', blurb: 'A CLUTCH play — only offered when one of your players scores a touchdown in the first half. Arm it any time before the game ends and his NEXT touchdown banks a bonus +12.', kind: 'action', timing: 'live', price: 45, icon: '🎬' },
+  { id: 'clutch-counter', name: 'Counter-Wipe', blurb: 'A CLUTCH play — only offered right after an opponent nukes one of your slots, and only for a short window. Arm it in time and the wipe is negated — your bank is restored as if it never landed.', kind: 'action', timing: 'live', price: 55, icon: '🪃' },
   { id: 'turnover-boost', name: 'Ball Hawk', blurb: 'Arm before kickoff: raise the turnover coin swing from 10 to 25 this week, across all windows — your giveaways cost more, their giveaways pay more.', kind: 'action', timing: 'pre', price: 55, icon: '🦅' },
 ];
 
 export function powerupById(id: string): Powerup | undefined {
   return POWERUPS.find((p) => p.id === id);
+}
+
+// ── Shop categories ──────────────────────────────────────────────────────────
+// Tabs for the Power-Up Shop, grouping the catalog by how you use each one.
+export type PowerupCategory = 'buff' | 'unlock' | 'bet' | 'live' | 'clutch';
+export const POWERUP_CATEGORIES: { id: PowerupCategory; label: string }[] = [
+  { id: 'buff', label: 'Buffs' },      // whole-lineup pre-match arms (amps, protection, flat-bonus, coordination)
+  { id: 'unlock', label: 'Unlocks' },  // metric unlocks + the WR/TE carry-wipe plus-up
+  { id: 'bet', label: 'Bets' },        // targeted pre-kickoff plays + board/info
+  { id: 'live', label: 'Live' },       // in-game tactical + swaps
+  { id: 'clutch', label: 'Clutch' },   // conditional, live-triggered plays
+];
+const CLUTCH_IDS = new Set(['clutch-don', 'clutch-encore', 'clutch-counter']);
+const BET_IDS = new Set(['double-or-nothing', 'grudge', 'lead-change', 'rivalry', 'jinx', 'red-herring', 'extra-slot', 'bye-steal', 'ghost', 'spy']);
+export function powerupCategory(p: Powerup): PowerupCategory {
+  if (CLUTCH_IDS.has(p.id)) return 'clutch';
+  if (p.kind === 'metric' || p.id === 'unlock-carries-wipe') return 'unlock';
+  if (p.timing === 'live') return 'live';
+  if (BET_IDS.has(p.id)) return 'bet';
+  return 'buff';
+}
+
+// ── Drip AMPLIFIERS are capacity-limited ─────────────────────────────────────
+// Momentum / Overtime / Garbage Time all multiply the same drip accrual, and
+// the measured meta (findings §2/§12) is "everyone stacks all three". Capacity
+// replaces the old anything-goes stack: ONE amplifier per week by default; the
+// Second Amp (◎40) and Third Amp (◎60) power-ups raise the cap to 2 and 3 —
+// the full stack now costs its amps PLUS ◎100 of capacity, priced as product
+// instead of a hidden surcharge.
+export const AMPLIFIERS = ['momentum', 'garbage-time', 'overtime'] as const;
+export const isAmplifier = (id: string): boolean => (AMPLIFIERS as readonly string[]).includes(id);
+
+/** How many amplifiers a buff set may run: 1 + Second Amp + Third Amp. */
+export function ampCapacity(buffs: ReadonlySet<string>): number {
+  return 1 + (buffs.has('amp-2') ? 1 : 0) + (buffs.has('amp-2') && buffs.has('amp-3') ? 1 : 0);
+}
+
+/** Authoritative engine-side cap: drop amplifiers beyond capacity, in fixed
+ *  priority order (momentum > garbage-time > overtime) so every surface —
+ *  worker, demo, playtester — resolves the same set regardless of arm order. */
+export function capAmplifiers(buffs: ReadonlySet<string>): Set<string> {
+  const cap = ampCapacity(buffs);
+  const armed = (AMPLIFIERS as readonly string[]).filter((a) => buffs.has(a));
+  if (armed.length <= cap) return new Set(buffs);
+  const keep = new Set(armed.slice(0, cap));
+  const out = new Set<string>();
+  for (const b of buffs) if (!isAmplifier(b) || keep.has(b)) out.add(b);
+  return out;
 }

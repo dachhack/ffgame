@@ -28,8 +28,19 @@ export const INJURIES: Record<number, Record<string, 'O' | 'D' | 'Q'>> = {
 // weeks he actually played.
 export const IR_FROM: Record<string, number> = { 'brandon-aiyuk': 1, 'deshaun-watson': 1, 'george-kittle': 14, 'james-conner': 4, 'jk-dobbins': 11, 'justin-fields': 12, 'kyler-murray': 6 };
 
+// The baked report above is REAL 2025 data. It only applies to a 2025 board (the
+// demo/replay, or a real 2025 league); a live 2026+ season has no injury feed
+// yet, so the report is disabled there rather than replaying last year's tags.
+// The active season is set on league load (setActiveLeague → setInjurySeason).
+const INJURY_DATA_SEASON = 2025;
+let activeSeason = INJURY_DATA_SEASON;
+export function setInjurySeason(year: number): void {
+  if (Number.isFinite(year)) activeSeason = year;
+}
+
 // IR (from its start week) takes precedence; else the week's designation; else null.
 export function injuryFor(week: number, slug: string): InjuryStatus | null {
+  if (activeSeason !== INJURY_DATA_SEASON) return null; // no injury feed for other seasons
   const ir = IR_FROM[slug];
   if (ir != null && week >= ir) return 'IR';
   return INJURIES[week]?.[slug] ?? null;

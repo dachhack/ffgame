@@ -74,8 +74,14 @@ export async function weekKickoffMs(season, week, seasonType = 2) {
   return ks.length ? Math.min(...ks) : null;
 }
 
-/** Event ids worth polling for PBP now (live, or recently kicked off). */
+/** Event ids worth polling for PBP now (live, or recently kicked off), from an
+ *  already-fetched games array — so a caller that just fetched the scoreboard
+ *  doesn't pay for a second identical request. */
+export function gamesToPollFrom(games) {
+  return (games ?? []).filter((g) => g.state === 'in' || (g.state === 'post' && !g.completed)).map((g) => g.eventId);
+}
+
+/** The same, but fetches the scoreboard itself (for callers without one in hand). */
 export async function gamesToPoll(season, week, seasonType = 2) {
-  const games = await getGames(season, week, seasonType);
-  return games.filter((g) => g.state === 'in' || (g.state === 'post' && !g.completed)).map((g) => g.eventId);
+  return gamesToPollFrom(await getGames(season, week, seasonType));
 }

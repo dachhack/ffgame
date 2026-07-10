@@ -326,7 +326,484 @@ balances it). The only remaining ceiling lever is the single-FG curve + amplifie
 (§ probe 2), and since everything cancels in symmetric play (§1) that's a feel/variance choice,
 not a balance fix — left to the designer's taste rather than recommended._
 
-## 10. Drama audit — the game is fair but its namesake never fires (`drama.mjs`)
+## 10. Late swap — score-aware variance policies all measure NEGATIVE (`lateswap.mjs`)
+Per-window locks (v0.95.0) let a manager set each later window knowing the real
+margin so far. Both sides still lock a window at the same kickoff and slate-gating
+partitions rosters by window — so earlier reveals never expose the opponent's
+same-window pick, and the testable edge is **score-state variance management**:
+gamble when trailing, deny when leading. Paired A/B (same rosters, home runs the
+policy vs home honest, away fixed honest), weeks 1–14 × 120, seed 909.
+
+| policy | fired | fired-cohort WR vs ctrl | behind-at-half WR vs ctrl |
+|---|--:|---|---|
+| gamble T=0 (trailing → all skill → `td`) | 66% | **6.3% vs 32.8%** (n=1105) | 6.3% vs 26.7% |
+| gamble T=15 | 49% | 3.9% vs 22.2% | 13.7% vs 26.7% |
+| gamble1 T=10 (only the WEAKEST player flips) | 53% | 8.6% vs 25.2% | 13.7% vs 26.7% |
+| hail T=20 (MNF only, down 20+) | 21% | **0.0% vs 4.0%** (n=354) | 25.3% vs 26.7% |
+| protect T=0 (leading → denial) | 67% | 58.5% vs 71.0% | 26.0% vs 26.7% |
+| protect T=15 | 50% | 78.2% vs 81.7% | 28.0% vs 26.7% |
+
+**Every variant loses, including the surgically minimal ones.** Trailing teams that
+gamble convert a ~27% comeback rate into 6–14%; the desperate MNF hail mary converts
+ZERO of an already-nearly-dead cohort; lead-protection denial costs more of your own
+EV than it removes from the opponent's variance. Raising the trigger threshold only
+converges back to control from below.
+
+**Reading (design, not tooling):** the live-margin information is real, but the
+metric menu offers **no fair variance/EV trade to spend it on** — `td` is not a
+lottery ticket at a small EV discount, it's a ~60%-EV-loss ticket (§2), and denial
+only partially bites. This sharpens §4's priority: the drip monoculture doesn't just
+homogenize blind play — it **forecloses the adaptive layer** that per-window locks
+created. Retuning NUKE/denial so variance is purchasable near fair EV is what makes
+late-swap decisions live; re-run this module after any such retune (expect the
+gamble cohort to approach — not exceed — control, with the gap as the price of
+variance).
+
+**Limitations:** metric flips only — late swap also allows PLAYER changes in later
+windows, unmeasured because the projection model is mean-only (no per-player
+variance); partial margins resolve window subsets, so cross-window couplings
+(suppress/banker/backups spanning locked+unlocked windows) are approximated; the
+opponent never adapts (a human meta could punish known policies).
+
+## 11. Mechanics retune #2 — price variance & denial fairly; Combo Drip single-use (shipped)
+§10 showed late swap's information had nothing profitable to buy. Three changes
+(v0.97.0), each measured with the same seeds as the pre-tune baselines:
+
+1. **NUKE spike profile** — the `td` metric now scores scrimmage yards at 0.04/yd
+   plus a bigger boom (10/TD RB+WR, 12/TD TE), keeps the wipe+blackout, **and
+   steals a quarter of the bank it wipes** (insurance-softened wipes steal from
+   the removed half; the carry-wipe buff is excluded — it pays its own bounty).
+2. **Denial steals** — erase / rate-reset(cut) / compression credit the denier
+   25% of the points removed; WR Targets 0.5 → 1.0/target.
+3. **Combo Drip single-use** — one combodrip slot per lineup, enforced in the
+   engine (extras downgrade to the standard drip), the AI (best dual-threat
+   only), a sealed_pick trigger + apply_targeted (migration 0061).
+
+| reading | before | after |
+|---|--:|--:|
+| rb-nuke-1 (top RB flip, blind) | ~35% | **45.8%** |
+| wr-nuke-1 (top WR flip — worst-case single) | ~26-30% | 41.1% |
+| te-nuke-1 / te-nuke-all | 50.4% | 51.9% (no runaway) |
+| wr-erase-all / wr-stop-all (blind torture tests) | 33.7% / 26.4% | 36.0% / 33.4% |
+| lateswap gamble1 fired-cohort | 8.6% vs 25.2% | **16.2% vs 25.2%** |
+| lateswap behind-at-half (gamble1) | 13.7% vs 26.7% | 20.0% vs 26.7% |
+| lateswap protect T=15 fired-cohort | 78.2% vs 81.7% | **81.1% vs 81.7% (parity)** |
+
+**Reading:** single-flip nukes are now a fair-ish discount (RB in the 44-48
+target band; the WR number is the worst-case top-starter flip), lead-protection
+denial reaches statistical parity, and the trailing gamble roughly doubled its
+conversion — still below stand-pat, which is arguably correct (a gamble should
+cost EV; the crude test policy fires in bad spots too). Blind -all overrides
+remain traps, as they should.
+
+**Regression:** invariants all hold (mirror 0, honest WR 51.0%; the nuke-suppress
+invariant tightened 8.2 → 4.7 — the spike victim rebuilds less). Season economy:
+wallet bounded, cancellation r=0.96, wins-vs-roster r=0.74, and the opt-out probe
+moved 2.9 → **5.0 pts** — power-ups now carry real (but not oppressive) weight,
+which was the design review's ask. Hindsight adversary: exploit LINES diversified
+(nukes/denial/drip mix; the multi-combodrip stack is gone — single-use holds) but
+the hindsight ceiling ROSE (FREE +35 on a weeks-1-4 spot check) — expected, per
+§6: perfect TD foresight makes spike-nukes precision weapons; blind EV (the thing
+real players face) is the guard.
+
+**Next iteration candidates:** a spot-smart gamble policy (flip only vs
+drip-heavy opponent windows where the steal pays) to see if informed gambling can
+reach parity; RATE RESET still has nothing to steal vs a drip (rate isn't
+points) — consider a small erase component or fold the metric; wr-stop/erase
+remain blind traps (correct for counters, but the trap labeling from the design
+review still applies).
+
+
+## 12. Post-retune full battery (v0.97.1, merged @ 42c8c46)
+Full sweep after the spike-nuke/steal retune + one-per-purchase Combo Drip.
+- **Invariants:** all hold (mirror 0; honest WR 51.0%).
+- **Harness (14 wk x 150):** honest home WR 50.5%; score mean 115.1 (up from
+  ~97 pre-retune — steals + nuke yardage add real points; watch inflation).
+- **Aggregate:** the offensive trio still tops the board (garbage 60.8% /
+  overtime 60.4% / momentum 59.4%) — homogenization unchanged, the economy
+  pass's target. te-nuke now +2.0 (51.9%), rb-nuke-1 45.8% (band), def-suppress
+  neutral; the -all overrides remain traps by design. ot-shield crept to 52.8%
+  (+2.4) — minor watch.
+- **Double Combo (new probe):** a 2nd Combo Drip lifts margin +3.2 for ◎65
+  (≈0.5 pts/◎10 vs the buffs' ~2.0-2.5) and only 41% of rosters even have a
+  2nd candidate — legal but rarely correct. The one-per-purchase rule needs no
+  further cap; the price does the work.
+- **Season (12 x 14 x 30):** wallet bounded (96-107), cancellation r=0.96,
+  roster r=0.65, home 49.0%. **Opt-out probe Δ 11.2 pts** (2.9 pre-retune, 5.0
+  at 10 seasons) — power-ups are now genuinely mandatory. Defensible for a
+  coin-economy game (autopilot buys for AFK managers), but it sharpens the
+  homogenization problem: everyone MUST buy the same trio. The amplifier
+  stacking surcharge (economy pass) now has two reasons to exist.
+- **Adversary (14 wk x 20, ◎200):** FREE +35.0 / PAID +81.7 — ceiling up from
+  +17.4/+72 pre-retune, as §11 predicted (perfect TD foresight makes spike-
+  nukes precision weapons; blind EV is the guard). Lines are diversified
+  (nuke/denial/drip mixes) and NO line stacks a second combodrip on one unlock
+  — one-per-purchase holds under adversarial search.
+
+## 13. Amplifier capacity — Second/Third Amp unlocks (v0.98.0, migration 0063)
+Design change replacing the stacking-surcharge idea from §11/§12: amplifiers
+(Momentum / Overtime / Garbage Time) are capped at ONE armed per week; the
+"Second Amp" (◎40) and "Third Amp" (◎60, requires Second) power-ups raise the
+cap to 2 and 3. The engine (`capAmplifiers`) enforces the cap at resolve on
+every surface; `arm_buff`/`disarm_buff` reject over-cap arms and in-use
+capacity removal so a paid buff is never silently dropped. Full battery after:
+- **Invariants:** all hold (mirror 0, honest WR 51.0%). Engine probe: 10/10
+  capacity/priority cases; the demo AI never loses a drawn amp (capacity is
+  granted free to its walletless draws).
+- **Aggregate:** SINGLE amps unchanged (garbage 60.8% / overtime 60.4% /
+  momentum 59.4%) — capacity intentionally does not touch the first amp.
+- **Season (12×14×30):** buy mix is IDENTICAL to v0.97.1 (overtime 70 /
+  momentum 59.5 / garbage 53.8 buys per season ≈ 1.09 amps per team-week) —
+  at the ◎100 seed and ~◎74/week income a second amp (+◎40 capacity) was
+  never affordable, so the cap does not bind for the budget AI. Wallet
+  bounded (96–107), cancellation r=0.97, home 49.7%. **Opt-out Δ 10.0 pts**
+  (11.2 in §12 — statistically unchanged): the tax comes from the FIRST amp,
+  which capacity deliberately leaves alone; if the tax itself needs shrinking,
+  that is a single-amp pricing lever, not a capacity lever.
+- **Adversary (◎200, where capacity binds): PAID ceiling +81.7 → +60.2**
+  (−26%), FREE unchanged (+35.0). Amps nearly vanish from exploit lines
+  (garbage-time 11.1%, momentum 7.5%, overtime 0% adopted vs the old
+  every-line-stacks meta) — the rich-manager amp stack is priced out, and the
+  search shifts to metric-override lines (passbig/td/tgt) plus ot-shield
+  (76.1% — cheap insurance against the mirror). Rich-vs-poor amp inequality
+  was the whole point: capacity converts it from a hidden stack into two
+  visible ◎-priced purchases.
+- **Cost of the full stack:** ◎205 → ◎305 (amps + ◎100 capacity) — >4 weeks
+  of income; effectively a deliberate splurge, not a default.
+- Open thread: an `amp-pair`/`amp-trio` aggregate lever (arming 2–3 amps WITH
+  capacity priced in) would put a blind-EV number on the bundles; today only
+  the adversary measures them.
+
+## 14. Saver probe + amp-bundle EV — capacity pricing validated (v0.98.0 tools)
+§13's open thread, run: does hoarding coin for a capacity stack beat the
+steady one-amp-a-week meta? Three new instruments (this change touches only
+the playtester; no engine/app code):
+- **`aggregate.mjs` amp-pair / amp-trio levers** (bundles WITH capacity priced
+  in): pair (◎185) 69.8% WR / +33.9 margin, trio (◎305) 81.7% WR / **+68.8
+  margin — SUPERLINEAR** (singles sum to +46.3; the amps compound: momentum
+  raises the drip that garbage-time doubles inside the overtime the third amp
+  keeps alive). Per-coin the trio (2.26 pts/◎10) matches the singles
+  (2.0-2.5) — capacity gates the stack by WALLET SIZE, not by efficiency
+  decay. That makes the saver question the real test:
+- **`season.mjs` saver probe** (team 0 hoards until the bundle fits, splurges,
+  repeats; others steady): **steady 50.2% > saver-pair 46.7% (5.3 splurges/
+  season) > saver-trio 45.7% (3.1) > opt-out 41.0%.** Hoarding LOSES — the
+  naked weeks bleed more than the splurge weeks return, because a week''s win
+  is binary: the trio''s +69 margin in one week buys the same 1 win a single
+  amp''s +16 usually buys, while a naked week is a coin-flip forfeited at -9.
+  Superlinear points, sublinear WINS. The economy is closed; capacity prices
+  need no adjustment.
+- **`adversary.mjs` capacity-aware search** (greedy step now bundles amp-2/
+  amp-3 into an over-cap trial and prices them): ◎200 ceiling +66.4 (was
+  +60.2 blind to bundles, +81.7 pre-capacity — net −19%). +amp-2 appears in
+  51% of hindsight lines: the PAIR is a legitimate rich-manager play; the
+  trio stays priced out of a ◎200 budget. FREE ceiling unchanged (+35.0).
+- **Correction to §13''s season numbers**: `seasonBudget` (the season sim''s
+  own budget mirror) had missed the 0063 capacity rule, so carried-over
+  wallets occasionally bought a second amp the engine then silently dropped
+  (wasted coin, ~9% of amp buys). Fixed to mirror lock.js. Corrected meta:
+  amp buys 183 → 167/season and the freed coin diversifies — combo-drip 1.6
+  → 10.0 buys/season, extra-slot 0 → 4.9, occasional legit amp-2 pair (1.0).
+  Opt-out Δ 9.3 pts (was 10.0 measured with the waste; same conclusion).
+  Wallet still bounded (101-111), cancellation r=0.96, home 49.3%.
+
+## 15. First-buy variety probe (`firstbuy.mjs`) — the amp default is REAL dominance
+The last open homogenization question: everyone''s first purchase is an
+amplifier — is that dominance, or herd behavior a roster-aware manager could
+beat? New probe: ONE purchase allowed, per-matchup lift measured exactly
+(deterministic resolver) on paired draws; blind rules vs a hindsight oracle.
+14 wk × 100, vs stripped-honest field:
+- **Blind rules:** always-momentum +16.6 (WR 60.7%) tops the board;
+  combo-if-elite-dual-threat +15.8 (WR 61.2%) statistically TIES it; every
+  other conditioning attempt (air-raid with a top-8 QB, combined
+  roster-aware) lands at +14.0 or below. **No observable-feature rule beats
+  just buying an amp.** The choice AMONG the three amps barely matters
+  blind (+14.6-16.6, WR ≈ 61% for all three).
+- **Oracle (hindsight argmax):** +25.1, WR 67.2% — and only 64.7% of its
+  picks are amps (air-raid 16.0%, extra-slot 11.2%, combo-drip 8.0%). So
+  variety EXISTS per-matchup, but the 8.5-pt gap between oracle and best
+  blind rule is driven by unobservable outcomes (which QB actually spikes,
+  which bench player blows up) — luck, not surfaceable skill. Roster
+  projections don''t reach it; my rules tried.
+- **Per-buy readings:** unconditional combo +12.5 (fair for the right
+  roster — the AI''s conditional buy is correct); always-air-raid +7.0 at
+  ◎60 (per-coin 1.17 vs momentum''s 2.37 — would need ~◎35 to compete);
+  extra-slot +4.3 solo (structurally weak as a lone buy; its §12 value was
+  in stacks).
+- **Design read:** first-buy homogenization is honest dominance, not a
+  bug a smarter UI could fix. If more first-buy variety is wanted, the
+  lever is PRICE (air-raid ~◎35-40, or amp price nudges up), not
+  conditioning hints. Otherwise: the amp default is a fine casual
+  auto-pilot, and the skill expression lives where §10-§14 put it —
+  metric picks, targeted plays, and knowing when NOT to spend.
+
+## 16. Air Raid reprice ◎60 → ◎40 (v0.99.2, migration 0065) — a real second buy
+§15 said first-buy variety needs a PRICE lever; this ships one. Air Raid''s
+scoring is untouched — only the price moves.
+- **As a lone first buy (firstbuy re-run):** unchanged by design — lifts are
+  price-independent (+7.0 solo; conditioning on an elite QB still loses to
+  always-amp). The amp stays the correct FIRST buy; the reprice was never
+  going to change that.
+- **As a SECOND buy (new season probes, team 0 deviates, 30 seasons):**
+  steady amp-only 50.2% → amp-then-raid 51.2% (5.1 raid weeks/season) →
+  **raid-then-amp 52.9% (14/14 raid weeks) — best measured steady policy,
+  +2.7 pts over amp-only.** At ◎40 the unlock fits ALONGSIDE an amp inside
+  the weekly income (~◎74), so it stacks instead of competing — the amp
+  multiplies drip while passbig floors the QB slot. At ◎60 the pair
+  (◎120-135/wk) never fit; the reprice is what unlocked the pairing.
+- **Magnitude check:** +2.7 is a real but modest edge — a third of the
+  opt-out penalty (9.3), and it''s a DEVIANT''s edge vs an amp-only field;
+  symmetric adoption cancels (r≈0.96). This is the "buying power-ups to
+  win is a strategy, but never certain" target, not a new must-buy.
+- **Aggregate re-run:** air-raid 1.65 pts/◎10 at ◎40 (was 1.17) — now
+  flagged CHEAP-EDGE but still below the amps'' 2.0-2.5 solo. WATCH: if a
+  future battery shows raid-then-amp creeping past ~54%, dial to ◎45-50.
+- Shipped: powerups.ts price 40, migration 0065 (powerup_price v4),
+  rulebook regen, price-parity checker green. The AI mirrors do NOT buy
+  Air Raid (aiLiveBuffs is amps-only) — the probes drive it via the season
+  policy hook; teaching the shipping AI a QB-conditional raid buy is a
+  separate call (it would also need an aiMetric passbig hook).
+
+## 17. Battle-layer battery + AI retrain (v0.124.0) — every new mechanic measured
+The battle layer (window battles, underdog/marshal metrics, and the 13 new
+targeted/live power-ups through Ghost Player) shipped without playtester
+coverage. This round teaches the sim ALL of them and retrains the AI on the
+measurements. Substrate: `resolve()` now takes per-side `LiveExtras`;
+`aggregate.mjs` grew a post-build `extras` hook so levers can target
+`win|slot` off the BUILT lineups (blind, projection-based); `season.mjs`
+loads carry an `extrasFor` hook so symmetric policies can arm battle plays.
+
+**Lever sweep (weeks 1-14 × 200 pairs/lever, seed 4242), the new entries:**
+
+| lever | cost | homeWR | marginLift | pts/◎10 | verdict |
+|---|---|---|---|---|---|
+| bye-steal | 55 | **66.3%** | +24.5 | **4.45** | DOMINANT — see watch below |
+| rivalry | 70 | **64.1%** | +19.6 | **2.80** | DOMINANT — beats momentum per coin |
+| ghost | 75 | 58.5% | +11.3 | 1.51 | strong-but-fair; conditional on an open slot |
+| red-herring (decoy) | 90 | 57.0% | +8.9 | 0.99 | fair |
+| double-or-nothing | 80 | 56.4% | +13.7 | 1.72 | fair (top-slot stake wins >50%) |
+| emp | 65 | 54.6% | +5.5 | 0.84 | fair live play |
+| cold-snap | 60 | 54.1% | +4.7 | 0.78 | fair (scout-informed UPPER bound) |
+| surge | 55 | 53.7% | +4.5 | 0.82 | fair |
+| jinx | 55 | 53.0% | +3.7 | 0.68 | fair (upper bound) |
+| grudge / lead-change / napalm / bunker | 45-65 | 50.7-51.7% | +0-1.5 | ≤0.26 | DEAD vs honest blind field — situational human plays |
+| def-marshal (free) | 0 | 49.9% | −1.4 | — | fair option (nobody nukes blind) |
+| wr/rb-underdog-1 (free) | 0 | 39-42% | −12 to −16 | — | TRAP as a default — confirmed right to exclude from AI auto-pick |
+
+**AI retrain (shipped, all three mirrors in lockstep — `src/data/aiLineup.ts`
+`aiTargetedPlays`, `tools/playtester/lib.mjs` `aiLoadout`, `server/src/lock.js`
+`aiBudgetPass`, `season.mjs` `seasonBudget`):**
+- Buy order by measured lift-per-coin: **first amp → RIVALRY on its densest
+  window (blind mirror-probability read) → remaining amps → GHOST when the
+  lineup leaves a base slot open → combo-drip → extra slots.**
+- Demo AI (`src/engine/matchup.ts` AI_BUFF_POOL) drops the dead defensive
+  buffs (floodgates/ot-shield, 0 to +3 lift) for the measured amp trio.
+- Server wiring: `resolve.js toExtras` now maps ALL battle plays (rivalry /
+  ghost / lead-change / grudge / jinx / red-herring / surge / cold-snap /
+  napalm / bunker) from `applied_state.targeted`; `aiSide` passes the AI's
+  targeted payload through. The AI writes its plays directly to
+  `applied_state`; the HUMAN `apply_targeted` RPC still whitelists the old
+  ids — extending it (migration) is the open item for human live parity.
+
+**Validation (season.mjs, 12 teams × 14 weeks × 40 seasons):** economy stays
+bounded (wallet ~◎120 flat) with rivalry at 44.7 buys/season; cancellation
+holds (full-vs-no-budget standings r=0.92); the retrained order beats a
+legacy amps-only deviant by **+2.0 win-rate pts** over 560 games. Ghost never
+fires on deep 17-man sim rosters (0 buys — no open slots); it exists for real
+rosters with bye/slate gaps. Invariants extended (ghost flat-14, jinx
+never-raises, extras-path plumbing) — all green.
+
+**Balance watches:**
+- **bye-steal 4.45 pts/◎10 at ◎55** — the model fills an open slot with the
+  top BENCH projection (clamped 25), a stand-in for a real bye stud. The real
+  play needs a bye player + an open slot, so availability is narrower than the
+  96% the harness sees — but when it's live it's the best coin in the game.
+  WATCH: if live usage confirms, reprice toward ◎70-75 (ghost's neighborhood)
+  or clamp the flat score to ~18.
+- **rivalry 2.80 pts/◎10, 64.1% blind** — the honest field mirrors positions
+  heavily, so the "risk" rarely whiffs. Both sides buying it cancels (season
+  r=0.92), and it gives the AI a real battle-layer presence, so it ships as
+  the AI's second buy. WATCH: human-vs-AI asymmetry once the RPC opens it up;
+  the dial is siphon 50% → 33%, not price.
+- **underdog** at −12 to −26 margin is priced for drama, not EV — fine as a
+  human comeback gamble, but a trap. If it should be a real decision, the
+  ×1.5 trailing boost needs to be ~×2 or the base rate un-discounted.
+
+**Still unmodeled:** turnover-boost (no per-player turnover feed), spy
+(information value), clutch plays (conditional live offers — no LiveExtras
+surface), swaps/mulligan as POLICIES (lateswap §10 covers the mechanism).
+
+## 18. Conditional STACKS — roster-aware add-on buys, measured then adopted (v0.125.0)
+§17 gave the AI a fixed greedy order. This round asks: when the wallet allows
+AND the possible starters create the situation, which power-up STACKS earn
+their coin? Machinery: `aiBattlePlan` (aiLineup.ts) reads the AI's own built
+lineup blind — top-projected slot (a DoN stake), cheapest genuine WR decoy
+(Red Herring), open base slot (ghost), FG deployment (Air Raid waste-guard),
+twin-QB windows (fg-stack) — and `AI_STACKS` switches gate each candidate in
+every budget mirror. `season.mjs` probes each stack as a team-0 deviant vs the
+steady retrained field (12×14×60 seasons — 840 games/arm).
+
+**Verdicts:**
+| stack | Δ win-rate | fires/season | verdict |
+|---|---|---|---|
+| raid-FIRST (Air Raid ◎40 before the amp, only when no FG deploys; QB → passbig) | **+1.4 pts** | 10.1 | **ADOPTED** |
+| raid after amps | +0.8 | 4.4 | dominated by raid-first |
+| don (surplus → DoN on top slot) | 0.0 | **0.0** | never fires — no ◎80 surplus exists after amp+rivalry |
+| herring (surplus → cheap WR decoy) | 0.0 | **0.0** | never fires (◎90) |
+| extra-slot → rivalry window | 0.0 | **0.0** | extra slots are never bought at all in the retrained economy |
+| twin-FG (fg-stack when 2 QBs share a window) | 0.0 | **0.0** | the situation ~never exists: windows hold 1-3 slots, so a second QB crowds out the ≥2 drip teammates FG needs |
+
+**Adopted policy (AI_STACKS.raid + raidFirst, all mirrors in lockstep):**
+when the deterministic lineup deploys NO Field General, buy Air Raid ◎40
+BEFORE the first amp — it fits alongside the amp inside weekly income
+(~◎90) instead of competing with it — and `aiMetric` flips the QB onto
+`passbig` (strictly dominant over `pass` for the holder: same 0.04/yd,
+10 vs 4 per passing TD). The FG guard exists because `applyFieldGeneral`
+would overwrite a passbig QB — buying the unlock there is pure waste.
+
+**The real §18 lesson:** "stack when you have budget" is mostly answered by
+the ECONOMY, not the policy — after the core amp+rivalry buys (~◎130-145/wk
+desired vs ~◎90/wk income) there is never an ◎80+ surplus, so the surplus
+stacks are structurally dead. The switches + probes stay in the battery: if
+coin income rises or prices drop, the next run will light them up.
+
+**Wallet-awareness for free:** live wallets CARRY OVER (winners accumulate),
+and the budget pass is greedy through the desired list — so a fat wallet
+automatically buys deeper into the stack order with zero extra policy code.
+
+Also shipped: `applyFieldGeneral(picks, owned)` supports Twin Generals (both
+QBs flip to fg when `fg-stack` is owned and the window qualifies) — inert for
+the AI (never buys it), but the machinery is measured and ready.
+
+**Post-adoption re-battery (field-wide raid-first, 12×14×40):** economy still
+bounded (~◎117 wallet), cancellation r=0.92, honest home WR 49.8%. The buy mix
+shifts hard: `unlock-pass-td10` 115.8 buys/season while RIVALRY falls 44 → 15
+(◎70 rarely fits after amp+raid inside ~◎90/wk income) — that crowding IS the
+measured trade, and the probes vs the new field read ≈0 (the steady field now
+sits at the adopted optimum). Full retrained+stacked policy vs the legacy
+amps-only buyer: **+2.5 win-rate pts**. WATCH: if a future Air Raid or rivalry
+reprice shifts the ratio, re-run the battery — the arms are standing.
+
+## 19. Balance retunes from the §17 watches + the live-fire timing school (v0.126.0)
+Three watches closed with parameter sweeps, one metric exonerated, and a new
+driver (`livefire.mjs`) that teaches WHEN to fire the live tacticals.
+
+**Underdog — exonerated, kept at ×1.5.** The §17 lever staked the TOP player
+(−12 to −16 margin), but that's the wrong test: a bigger multiplier barely
+rescues it (×3.0 → still 42%) because the cost is trading the stud's drip
+away. On the roster's WEAKEST WR — the player who actually expects to trail,
+i.e. the intended use — it measures **49.2% at ×1.5**: already fair. The gap
+between uses is skill expression, not imbalance. Shipped: metric copy now
+says "best on a player you EXPECT to trail"; new `wr-underdog-low` lever
+keeps the honest reading in the battery.
+
+**Bye Steal — cap 25 → 16 (BYE_STEAL_CAP, one constant, both engines).**
+Sweep: cap 25 = 66.3% / 4.45 pts per ◎10 (best coin in the game); 18 = 2.95;
+**16 = 60.0% / 2.49** — the amp neighborhood, still ahead of Ghost (◎55 vs
+◎75; you earned the edge by rostering the bye stud). Also fixed a real
+parity gap: the DEMO path banked the raw projection unclamped while live
+clamped at 25 — both now clamp at the shared constant, and the client +
+worker re-clamps match.
+
+**Rivalry — siphon 50% → 30% (RIVALRY_SIPHON, one constant, both engines).**
+Sweep: 50% = 64.1% / 2.80 per ◎10; 35% = 60.8% (still flagged); 25% = 57.5%;
+**30% = 59.0% / 1.70** — a spicy-but-fair bet in Double-or-Nothing territory.
+Position mirrors are common enough that the whiff "risk" needed the dial,
+not the price. All copy synced (blurb, handbook, store notes, rulebook).
+
+**Live-fire timing school (`livefire.mjs`, 1,400 pairs/cell):** for surge /
+cold-snap / napalm, LATE beats EARLY blind (fixed-30:00 ≈ +6.6 vs +2.6 at
+10:00), the hot-streak trigger is the real signal, and the shipping-grade
+manager rule is **hot-else-late**: fire the moment the target goes HOT, else
+at ~30:00 — the best honest policy for all three (surge +6.8 / 1.24 per ◎10;
+cold-snap +6.9 / 1.16; napalm +6.5 / 1.09). The hindsight ORACLE reaches
+1.8-2.1 per ◎10 — amp-grade — so timing skill is worth roughly +60-90% on
+top of the honest rule, and napalm has the widest skill gap of any play in
+the game (blind-early 0.26 → oracle 2.09, 8×). Handbook "when to fire"
+guidance updated to match. The AI does NOT fire live plays (the worker has
+no mid-game targeted writes) — this is human guidance + the bar any future
+live-AI must clear.
+
+**Post-retune validation:** full lever battery + season battery re-run at
+the tuned values — see the §19 numbers above and the buy-mix note below.
+
+**Post-retune battery (weeks 1-14 × 200):** NO battle play carries the
+DOMINANT flag anymore — bye-steal 60.0% / 2.49 per ◎10, rivalry 59.0% / 1.70,
+ghost 58.5% / 1.51, don 56.4% / 1.72; the amps remain the deliberate core.
+The AI buy order survives the retune unchanged: rivalry at 1.70 per ◎10 still
+beats a SECOND amp once the capacity-unlock tax is counted (garbage-time ◎75 +
+Second Amp ◎40 = ◎115 for +17.6 → 1.53 per ◎10 bundled). Season battery at
+the tuned values: economy bounded (~◎117), cancellation r=0.92, retrained
+policy still +2.0 pts over legacy. h2h-verify's rivalry assertion now reads
+the shared RIVALRY_SIPHON constant instead of a hardcoded 50%.
+
+## 20. Live parity for humans, clutch in the live resolver, and the price of knowing (v0.127.0)
+Three gaps closed: the human live-league scoring path for every battle play,
+clutch plays in the live resolver, and the first measurement of Spy.
+
+**Human live parity (migration 0085).** `apply_targeted` had whitelisted only
+the 0060 set — a human arming rivalry / ghost / jinx / grudge / lead-change /
+red-herring / surge / cold-snap / napalm / bunker / clutch in a LIVE league got
+a local-display-only effect that vanished at the authoritative resolve (the AI
+was unaffected — its budget pass writes `applied_state` directly). 0085 extends
+the whitelist with per-play validation: timing gates (pre plays before lock,
+live fires only on kicked-off windows), slot-ownership checks (own-slot plays
+need your sealed pick; ghost needs the slot EMPTY), one-per-target dedupe,
+list caps, and clock clamps — and re-clamps byeSteal at the retuned 16. A new
+3-arg `clear_targeted` overload removes ONE entry from a battle-play list so
+backing out one armed slot doesn't drop the rest; the client refund flows now
+call it (rivalry / ghost / slot bets). Trust model unchanged from 0060
+(uncharged state-setters; noted: a purchase-vs-applies entitlement ledger is
+future hardening).
+
+**Clutch plays in the live resolver.** `LiveExtras` grew `clutchDon` /
+`clutchEncore` / `clutchCounter` for BOTH sides, resolved with buildMatchup
+parity: Halftime Gamble stakes ×2/0 like don, Encore pays +12 on the first TD
+after the arm clock, Counter-Wipe negates the recorded nuke. `toExtras` maps
+them, the client's `armClutch` now mirrors into the live scoring record, and
+h2h-verify asserts all three through the live path (28/28). Clutch conditions
+stay client-detected — the engine only pays when the play-by-play actually
+contains the trigger, so a fabricated arm whiffs.
+
+**Spy — the price of knowing (`spyval.mjs`).** The last unmeasured power-up
+class. Home spies the away top slot and plays the projection-best response:
+- metric-counter responses (reveal metric / player / BOTH): **+0.0 margin**,
+  flipped the pick only 11% of the time and net-zero when it did — consistent
+  with §8's "counters hurt": the post-§11 metric menu simply doesn't reward
+  slot-level counter-picking, even with perfect information.
+- bet-aiming (jinx the spied slot when the reveal shows a 'td' nuke): fired
+  **0%** — the honest meta is ALL-DRIP (the AI never fields TD nukes), so
+  against the honest field there is nothing for the reveal to catch.
+Verdict: Spy is correctly a ◎40 curiosity vs the AI meta; its real value is
+versus HUMAN metas (nuke/bet-heavy opponents) and table psychology. No retune.
+
+**§20 addendum — the entitlement ledger (0086, v0.127.1).** The "future
+hardening" shipped: `apply_targeted` now enforces **applies ≤ purchases** as a
+pure derivation — purchases counted from `coin_ledger` rows with reason
+`spend:<id>` (every buy already writes one: the shop AND the AI budget pass),
+applies summed across EVERY matchup of the caller's in the league (a
+consumable spent in week 3 stays spent in week 4). No new tables, no
+backfill; `clear_targeted` releases entitlement by removing the entry; a
+don/byeSteal re-apply is a MOVE (skips the gate); swaps gate per kind; Spy
+keeps its own use_spy consume. A new lockstep checker
+(`scripts/check-targeted-keys.mjs`, 69 checks) fails the build if the
+targeted-payload key names ever drift between the SQL gate, the worker's
+toExtras, and the engine's LiveExtras.
+
+**§19 addendum — Underdog becomes a paid unlock (v0.128.0).** The sweep's
+verdict (fair on a player you expect to trail, a trap on a stud) is the
+profile of a specialist unlock, not a free default — so underdog now sits
+behind `unlock-underdog` (◎35, the cheapest unlock: its intended-use EV is
+~fair, so it's priced as a drama pick). Twist: the flip is pickable ANY TIME
+BEFORE KICKOFF — after lock-in, once you can size up the fight, the board
+re-opens setup rows with players FIXED and the metric picker restricted to
+the Underdog flip (a 🐕 UNDERDOG? door, shown only when the unlock is owned).
+Server-side the lock period was already open by construction (per-window
+seals reject only kicked-off windows); 0087 adds the locked_metric_unlock
+mapping + price. The engine's auto-pick exclusions now ride the generic lock
+filter, and the aggregate levers price the unlock in.
+
+## 21. Drama audit — the game is fair but its namesake never fires (`drama.mjs`)
 Balance (§1–§9) measured whether the game is FAIR; this measures whether it is EXCITING.
 `drama.mjs` resolves seeded honest-field matchups with the resolver's raw event streams
 captured (`resolveLiveMatchup(..., { captureEvents: true })`) and counts the beats a viewer
@@ -362,3 +839,7 @@ green after the change (`invariants.mjs`).
 module (`src/engine/moments.ts` — `classifyEvent`/`slotMoments`/`topMoments`), consumed by
 the live board's screen-level moment banners (Matchup.tsx), the MatchupFinal "THE MOMENTS"
 recap strip, and `drama.mjs` itself — so the audit measures exactly what the player sees.
+
+_Re-validated after merging the battle layer (v0.128.0 base): the honest field still fires
+ZERO nuke/erase/counter/shutdown events; persona-both lands a nuke moment in ~17% of
+matchups; neutrality A/B 51.3% home WR; full invariants suite (incl. ghost/jinx) green._

@@ -30,10 +30,11 @@ The founder is iterating on the player onboarding flow. Start in:
    (it currently lists `claude/admiring-brown-x5limu` + `claude/charming-bardeen-tqeyue`).
    Push that change first. (The Claude GitHub token lacks `actions: write`, so
    `workflow_dispatch` 403s — push-triggered runs are the only way.)
-2. **Client changes deploy** by mirroring to the Pages branch (also the repo default):
+2. **Client changes deploy** by merging to `main` (the default branch); the Pages
+   workflow triggers on every push to `main`:
    ```
    git push origin <your-branch>
-   git push origin <your-branch>:claude/youthful-albattani-s9kprl   # to deploy
+   # open a PR and merge to main → Pages deploys automatically
    ```
    The deploy builds with `VITE_BASE=/`; `public/CNAME` pins `www.dripfantasy.com`.
 3. **Bump `src/app/version.ts`** every client change; verify via the version chip.

@@ -11,7 +11,7 @@ import type { Pos } from '../types';
 import { WINDOWS, TOTAL_SLOTS, metricById } from './metrics';
 import { slugMeta } from './slugMeta';
 import { statsForSlug } from './players';
-import { hasSlate, windowForTeam } from './nflSlate';
+import { hasSlate, windowForTeam, windowsForWeek } from './nflSlate';
 
 // Sensible default metric per position. Each is a steady, predictable scorer for
 // that spot — chosen WITHOUT seeing the week's box score. This also fixes a real
@@ -49,9 +49,14 @@ export function wantsComboDrip(slug: string, pos: Pos): boolean {
 /** The metric the AI assigns a player pre-game: combodrip for a dual-threat RB/WR
  *  ONLY when the team actually OWNS the unlock (it's a paid power-up — the AI buys
  *  it within its coin budget, like a human), otherwise the position default.
+ *  A QB flips to `passbig` when Air Raid is owned — it strictly dominates `pass`
+ *  for the holder (same 0.04/yd, 10 vs 4 per passing TD); the budget pass only
+ *  buys the unlock when the lineup deploys no Field General (findings §18), so
+ *  the flip is never wasted on a QB that applyFieldGeneral will take.
  *  Honest — reads only season totals, never the week's result. */
 export function aiMetric(slug: string, pos: Pos, owned: Set<string> = new Set()): string {
   if (owned.has('unlock-combo-drip') && wantsComboDrip(slug, pos)) return 'combodrip';
+  if (pos === 'QB' && owned.has('unlock-pass-td10')) return 'passbig';
   return defaultAiMetric(pos);
 }
 
@@ -84,19 +89,24 @@ const DRIP_POS = new Set<Pos>(['RB', 'WR', 'TE']);
  *  the multiplier only amplifies drips. K/DEF have no drip and are the sole exception.
  *  Today the position defaults already drip, so this only hardens the invariant against
  *  a future default/override change ever sneaking a non-drip into a General's window. */
-function applyFieldGeneral(picks: AiPick[]): void {
+function applyFieldGeneral(picks: AiPick[], owned: Set<string> = new Set()): void {
   const byWin = new Map<string, AiPick[]>();
   for (const p of picks) {
     const g = byWin.get(p.win);
     if (g) g.push(p); else byWin.set(p.win, [p]);
   }
   for (const group of byWin.values()) {
-    const qb = group.find((p) => slugMeta(p.slug).pos === 'QB');
+    const qbs = group.filter((p) => slugMeta(p.slug).pos === 'QB');
+    const qb = qbs[0];
     if (!qb) continue;
-    const skill = group.filter((p) => p !== qb && DRIP_POS.has(slugMeta(p.slug).pos));
+    const skill = group.filter((p) => !qbs.includes(p) && DRIP_POS.has(slugMeta(p.slug).pos));
     const drips = skill.filter((p) => isDrip(slugMeta(p.slug).pos, p.metric));
     if (drips.length >= FG_DRIP_THRESHOLD) {
       qb.metric = 'fg';
+      // TWIN GENERALS (§18): with the fg-stack buff OWNED and a second QB in the
+      // window, flip it onto fg too — the top two multipliers multiply. Only when
+      // bought (the budget pass gates the buy on this exact situation existing).
+      if (owned.has('fg-stack') && qbs[1]) qbs[1].metric = 'fg';
       for (const p of skill) if (!isDrip(slugMeta(p.slug).pos, p.metric)) p.metric = defaultAiMetric(slugMeta(p.slug).pos);
     }
   }
@@ -151,6 +161,104 @@ export function aiPersonaNuker(personaKey: string, week: number): boolean {
   return hashStr(`${personaKey}|nuker|${week}`) % 1000 < NUKER_RATE * 1000;
 }
 
+// ── Targeted battle plays (RETRAINED policy, findings §17) ───────────────────
+// The lever sweep (tools/playtester/aggregate.mjs, weeks 1-14 × 200 pairs) put
+// two targeted plays above or near the amps on lift-per-coin, and both are
+// BLIND-legal (they read only the AI's own lineup):
+//   • RIVALRY on the AI's densest window — the honest field mirrors positions
+//     heavily, so the siphon lands often (64.1% / +19.6 margin / 2.80 pts per
+//     10 coin — better per-coin than momentum).
+//   • GHOST when the lineup leaves a base slot open (slate gaps) — a flat 14
+//     beats an empty slot every time (58.5% / +11.3 / 1.51 per 10 coin).
+// Everything else measured at or below fair vs an honest blind field (grudge,
+// lead-change, jinx, napalm, bunker...) and stays human-only.
+
+/** Blind targets for the AI's bought battle plays, read off its OWN built
+ *  lineup: rivalry = its densest window (max mirror probability), ghost = the
+ *  first base window slot the lineup left unfilled (null = lineup is full). */
+export function aiTargetedPlays(picks: AiPick[], week: number): { rivalry: string | null; ghost: string | null } {
+  const perWin = new Map<string, number>();
+  for (const p of picks) perWin.set(p.win, (perWin.get(p.win) ?? 0) + 1);
+  let rivalry: string | null = null, most = 0;
+  for (const [w, k] of perWin) if (k > most) { rivalry = w; most = k; }
+  const taken = new Set(picks.map((p) => `${p.win}|${p.slot}`));
+  let ghost: string | null = null;
+  outer: for (const w of windowsForWeek(week)) {
+    for (let i = 0; i < w.slots; i++) {
+      const k = `${w.id}|${i}`;
+      if (!taken.has(k)) { ghost = k; break outer; }
+    }
+  }
+  return { rivalry, ghost };
+}
+
+/** STACK policy switches (findings §18) — which conditional add-on buys the
+ *  shipping AI makes when the wallet allows AND its lineup creates the
+ *  situation. ONE source of truth: every budget mirror (tools/playtester
+ *  lib.mjs + season.mjs, server/src/lock.js) reads these; the season probes
+ *  override them per-arm to measure each stack before it's adopted. */
+export interface AiStacks { raid: boolean; raidFirst: boolean; don: boolean; herring: boolean; stackExtras: boolean; twinFg: boolean }
+// Measured verdicts (season probes, 12×14×60 — 840 team-0 games/arm): the
+// raid-FIRST stack is the one conditional add-on that EARNS at the table
+// (+1.4 pts, fires 10.1 weeks/season). The rest never fire at the current
+// economy — after amp + rivalry the wallet never holds an ◎80+ surplus, and a
+// twin-QB window can't meet the FG drip threshold (windows hold 1-3 slots) —
+// so they ship OFF but stay probed every battery in case the economy shifts.
+export const AI_STACKS: AiStacks = {
+  raid: true,         // Air Raid add-on when no Field General deploys (QB → passbig)
+  raidFirst: true,    // …bought BEFORE the first amp (§16's raid-then-amp order, +1.4 pts)
+  don: false,         // surplus → Double-or-Nothing staked on its top slot (never fires)
+  herring: false,     // surplus → Red Herring on a genuinely cheap WR decoy (never fires)
+  stackExtras: false, // bought extra slots point INTO the rivalry window (extras never bought)
+  twinFg: false,      // Twin Generals: both QBs share a window with drips (situation ~never exists)
+};
+
+/** The full roster-aware battle plan (STACK policy, findings §18) — everything
+ *  the budget pass needs to decide conditional add-on buys, still strictly
+ *  blind (season projections + its own deterministic lineup, never the
+ *  opponent or the week's result):
+ *    • rivalry / ghost — as aiTargetedPlays.
+ *    • topSlot — its highest-projected skill slot (`win|slot`), the Double-or-
+ *      Nothing stake: the slot most likely to win its head-to-head.
+ *    • decoyWr — its LOWEST-projected WR slot in a window with ≥2 of its own
+ *      players (`win|slot`), the Red Herring decoy; null when every WR is a
+ *      real scorer (no cheap decoy → the play isn't a good situation).
+ *    • fgDeployed — the lineup runs a Field General; buying Air Raid would be
+ *      wasted on a QB that scores 0 for itself. */
+export function aiBattlePlan(picks: AiPick[], week: number): {
+  rivalry: string | null; ghost: string | null; topSlot: string | null; decoyWr: string | null; fgDeployed: boolean; twinQbWin: string | null;
+} {
+  const { rivalry, ghost } = aiTargetedPlays(picks, week);
+  const SKILL = new Set<Pos>(['RB', 'WR', 'TE']);
+  const proj = (p: AiPick) => statsForSlug(p.slug, slugMeta(p.slug).pos).ppr || 0;
+  let topSlot: string | null = null, top = -Infinity;
+  for (const p of picks) {
+    if (!SKILL.has(slugMeta(p.slug).pos)) continue;
+    const v = proj(p);
+    if (v > top) { top = v; topSlot = `${p.win}|${p.slot}`; }
+  }
+  const perWin = new Map<string, number>();
+  for (const p of picks) perWin.set(p.win, (perWin.get(p.win) ?? 0) + 1);
+  // A decoy is only a decoy when it's genuinely cheap: the lineup's weakest WR,
+  // and clearly below the top skill projection (< 60%) — otherwise capping the
+  // opponent to it caps nothing.
+  let decoyWr: string | null = null, low = Infinity;
+  for (const p of picks) {
+    if (slugMeta(p.slug).pos !== 'WR' || (perWin.get(p.win) ?? 0) < 2) continue;
+    const v = proj(p);
+    if (v < low) { low = v; decoyWr = `${p.win}|${p.slot}`; }
+  }
+  if (decoyWr && top > 0 && low > top * 0.6) decoyWr = null;
+  // Twin Generals situation: a window ALREADY running a Field General that also
+  // holds a second QB — fg-stack would multiply the top two multipliers there.
+  let twinQbWin: string | null = null;
+  for (const p of picks) {
+    if (p.metric !== 'fg') continue;
+    if (picks.some((q) => q !== p && q.win === p.win && slugMeta(q.slug).pos === 'QB')) { twinQbWin = p.win; break; }
+  }
+  return { rivalry, ghost, topSlot, decoyWr, fgDeployed: picks.some((p) => p.metric === 'fg'), twinQbWin };
+}
+
 interface Tagged { slug: string; pos: Pos; team: string; metric: string }
 
 /** Build an AI lineup from a roster's starter slugs, each on its honest pre-game
@@ -176,10 +284,19 @@ export function aiLineup(slugs: string[], week = 0, owned: Set<string> = new Set
   // full window keeps its higher-projected starters and benches the weaker ones — never
   // sitting a WR ranked 23rd behind one ranked 65th just because of roster order.
   tagged.sort((a, b) => statsForSlug(b.slug, b.pos).ppr - statsForSlug(a.slug, a.pos).ppr);
+  // COMBO DRIP is one-for-one (one slot per unlock purchased). The AI's budget
+  // pass buys at most ONE unlock, so keep it on the BEST dual-threat only;
+  // later candidates fall back to the position default.
+  let comboUsed = false;
+  for (const t of tagged) {
+    if (t.metric !== 'combodrip') continue;
+    if (!comboUsed) { comboUsed = true; continue; }
+    t.metric = defaultAiMetric(t.pos);
+  }
 
   const { picks, bench } = hasSlate(week) ? slateGated(tagged, week) : gridFill(tagged);
-  addExtraSlots(picks, bench, extraSlots);
-  applyFieldGeneral(picks);
+  addExtraSlots(picks, bench, extraSlots, week);
+  applyFieldGeneral(picks, owned);
   // Persona AFTER the FG read: applyFieldGeneral forces non-drip skill metrics
   // back to their drip defaults, which would silently undo the flip. Losing one
   // drip from an FG window is the persona's (measured-neutral) cost of theater.
@@ -202,12 +319,13 @@ interface Benched { win: string; p: Tagged }
  *  by construction (bench only holds windowed overflow). Deterministic: window
  *  order breaks ties, bench is in roster order. Extra slots are named 'x0','x1',…
  *  to match the sell/cap SQL (roster_slot ~ '^x[0-9]+$'). */
-function addExtraSlots(picks: AiPick[], bench: Benched[], extraSlots: number): void {
+function addExtraSlots(picks: AiPick[], bench: Benched[], extraSlots: number, week: number): void {
+  const wins = windowsForWeek(week);
   for (let i = 0; i < extraSlots && bench.length; i++) {
     const count = new Map<string, number>();
     for (const b of bench) count.set(b.win, (count.get(b.win) ?? 0) + 1);
     let deepest = bench[0].win, most = -1;
-    for (const w of WINDOWS) { const n = count.get(w.id) ?? 0; if (n > most) { most = n; deepest = w.id; } }
+    for (const w of wins) { const n = count.get(w.id) ?? 0; if (n > most) { most = n; deepest = w.id; } }
     const idx = bench.findIndex((b) => b.win === deepest);
     const { p } = bench.splice(idx, 1)[0];
     picks.push({ win: deepest, slot: `x${i}`, slug: p.slug, metric: defaultAiMetric(p.pos) });
@@ -219,8 +337,9 @@ function addExtraSlots(picks: AiPick[], bench: Benched[], extraSlots: number): v
  *  Flexible players (no resolvable team) fill whatever slots remain, in window
  *  order, and overflow to the marquee window's bench. */
 function slateGated(tagged: Tagged[], week: number): { picks: AiPick[]; bench: Benched[] } {
+  const wins = windowsForWeek(week);
   const free = new Map<string, number[]>();
-  for (const w of WINDOWS) free.set(w.id, Array.from({ length: w.slots }, (_, i) => i));
+  for (const w of wins) free.set(w.id, Array.from({ length: w.slots }, (_, i) => i));
   const place = (winId: string, p: Tagged): boolean => {
     const slots = free.get(winId);
     if (!slots || !slots.length) return false;
@@ -230,7 +349,7 @@ function slateGated(tagged: Tagged[], week: number): { picks: AiPick[]; bench: B
 
   const picks: AiPick[] = [];
   const bench: Benched[] = [];
-  const marquee = WINDOWS.reduce((a, b) => (b.slots > a.slots ? b : a)).id;
+  const marquee = wins.reduce((a, b) => (b.slots > a.slots ? b : a)).id;
   const flexible: Tagged[] = [];
   for (const p of tagged) {
     if (!p.team) { flexible.push(p); continue; }      // unknown team → eligible anywhere
@@ -238,7 +357,7 @@ function slateGated(tagged: Tagged[], week: number): { picks: AiPick[]; bench: B
     if (!win) continue;                                // bye → unslottable
     if (!place(win, p)) bench.push({ win, p });        // window full → bench (keep its window)
   }
-  for (const p of flexible) { let placed = false; for (const w of WINDOWS) if (place(w.id, p)) { placed = true; break; } if (!placed) bench.push({ win: marquee, p }); }
+  for (const p of flexible) { let placed = false; for (const w of wins) if (place(w.id, p)) { placed = true; break; } if (!placed) bench.push({ win: marquee, p }); }
   return { picks, bench };
 }
 

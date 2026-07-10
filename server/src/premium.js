@@ -80,6 +80,30 @@ export function gateSide(picks, buffs, tier, posOf) {
   return { picks: gPicks, buffs: (buffs ?? []).filter((b) => tier.powerups.includes(b)) };
 }
 
+// The catalog id behind each targeted-payload entry (applied_state.payload_json.targeted).
+const TARGETED_ID = { don: 'double-or-nothing', byeSteal: 'bye-steal', emp: 'emp' };
+
+/** Does a side's targeted payload hold anything premium? (Spy is info-only and
+ *  never reaches scoring, so it isn't gated here.) */
+export function hasPremiumTargeted(targeted, tier) {
+  if (!targeted) return false;
+  for (const [k, id] of Object.entries(TARGETED_ID)) if (targeted[k] && !tier.powerups.includes(id)) return true;
+  for (const s of Object.values(targeted.swaps ?? {})) if (!tier.powerups.includes(s.kind ?? 'metric-swap')) return true;
+  return false;
+}
+
+/** Strip premium targeted power-ups for a NON-premium matchup — the targeted
+ *  counterpart of gateSide, authoritative at resolve. */
+export function gateTargeted(targeted, tier) {
+  if (!targeted) return targeted;
+  const out = {};
+  for (const [k, id] of Object.entries(TARGETED_ID)) if (targeted[k] && tier.powerups.includes(id)) out[k] = targeted[k];
+  const sw = {};
+  for (const [k, s] of Object.entries(targeted.swaps ?? {})) if (tier.powerups.includes(s.kind ?? 'metric-swap')) sw[k] = s;
+  if (Object.keys(sw).length) out.swaps = sw;
+  return Object.keys(out).length ? out : undefined;
+}
+
 // ── INTEGRATION SEAMS (where to call the above when the gating ships) ────────
 // 1. server/src/lock.js materializeAutoLineups / aiBudgetPass:
 //    const premium = await matchupPremium(m.id);

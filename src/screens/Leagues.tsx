@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
-import { SiteSettings } from '../app/ui';
-import { getLeagues, sleeperAvatarUrl, type SleeperLeague } from '../data/sleeper';
+import { SiteSettings, VersionTag } from '../app/ui';
+import { getProvider, type ProviderLeague } from '../data/providers';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
+import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 
 // Leagues we've already auto-forwarded into (single-league shortcut). Tracked so
 // pressing "← LEAGUES" from that league shows the (1-item) list instead of
@@ -10,24 +11,50 @@ import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
 const autoEntered = new Set<string>();
 
 // The base league type (drops the "· Superflex" sub-tag), for filtering.
-const baseType = (lg: SleeperLeague) => lg.format.split(' · ')[0];
+const baseType = (lg: ProviderLeague) => lg.format.split(' · ')[0];
+
+// Sort key: leagues with real data (completed / in-season) before pre-draft ones.
+const STATUS_RANK: Record<string, number> = { complete: 0, in_season: 1, drafting: 2, pre_draft: 3 };
+const statusRank = (s: string) => STATUS_RANK[s] ?? 4;
+const statusLabel = (s: string) =>
+  s === 'complete' ? 'COMPLETE' : s === 'in_season' ? 'IN SEASON' : s === 'drafting' ? 'DRAFTING' : s === 'pre_draft' ? 'PRE-DRAFT' : '';
 // Display order for the filter chips.
 const TYPE_ORDER = ['Dynasty', 'Keeper', 'Redraft', 'Best Ball'];
+// The season to land on by default (this year's), auto-advancing each year.
+const CURRENT_SEASON = String(new Date().getFullYear());
 
 export function Leagues() {
   const { navigate, sleeperUser } = useStore();
-  const [leagues, setLeagues] = useState<SleeperLeague[] | null>(null);
+  const [leagues, setLeagues] = useState<ProviderLeague[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('All');
+  // null until leagues load, then defaulted to the current season (or the newest
+  // season the user actually has). 'All' shows every season.
+  const [season, setSeason] = useState<string | null>(null);
 
-  // Type chips present in this user's leagues, in a stable order.
+  // Seasons present in this user's leagues, newest first.
+  const seasons = useMemo(
+    () => [...new Set((leagues ?? []).map((l) => l.season))].sort((a, b) => b.localeCompare(a)),
+    [leagues],
+  );
+  useEffect(() => {
+    if (leagues && season === null) setSeason(seasons.includes(CURRENT_SEASON) ? CURRENT_SEASON : (seasons[0] ?? 'All'));
+  }, [leagues, seasons, season]);
+  const effSeason = season ?? CURRENT_SEASON;
+
+  // Leagues in the selected season (drives both the type chips and the grid).
+  const inSeason = useMemo(
+    () => (leagues ?? []).filter((lg) => effSeason === 'All' || lg.season === effSeason),
+    [leagues, effSeason],
+  );
+  // Type chips present in the selected season, in a stable order.
   const types = useMemo(() => {
-    const set = new Set((leagues ?? []).map(baseType));
+    const set = new Set(inSeason.map(baseType));
     return TYPE_ORDER.filter((t) => set.has(t)).concat([...set].filter((t) => !TYPE_ORDER.includes(t)));
-  }, [leagues]);
+  }, [inSeason]);
   const shown = useMemo(
-    () => (leagues ?? []).filter((lg) => filter === 'All' || baseType(lg) === filter),
-    [leagues, filter],
+    () => inSeason.filter((lg) => filter === 'All' || baseType(lg) === filter),
+    [inSeason, filter],
   );
 
   useEffect(() => {
@@ -35,9 +62,12 @@ export function Leagues() {
     let alive = true;
     setLeagues(null); setErr(null);
     prefetchPlayerDirectory(); // backstop: warm the directory if we booted straight here
-    getLeagues(sleeperUser.userId)
-      .then((ls) => {
+    getProvider(sleeperUser.provider).getLeagues(sleeperUser)
+      .then((raw) => {
         if (!alive) return;
+        // Surface playable (completed / in-season) leagues first, newest season
+        // first — so a pre-draft current-year league doesn't lead with no data.
+        const ls = [...raw].sort((a, b) => statusRank(a.status) - statusRank(b.status) || b.season.localeCompare(a.season));
         // One league? Skip the list and drop them straight in (first visit only —
         // so a back-tap can still reach the list/switch user).
         if (ls.length === 1 && !autoEntered.has(ls[0].leagueId)) {
@@ -52,13 +82,14 @@ export function Leagues() {
   }, [sleeperUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!sleeperUser) return null;
-  const av = sleeperAvatarUrl(sleeperUser.avatar);
+  const provider = getProvider(sleeperUser.provider);
+  const av = provider.avatarUrl(sleeperUser.avatar);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', borderBottom: '1px solid var(--bd)', flexWrap: 'wrap', gap: 10, position: 'sticky', top: 0, background: 'var(--bg)', zIndex: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-          <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)', whiteSpace: 'nowrap' }}>◈ DRIP FANTASY</span>
+          <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)', whiteSpace: 'nowrap' }}><GameIcon name={BRAND_MARK} emoji="◈" size="1.4em" /> DRIP FANTASY</span>
           {/* Username chip — tap to switch Sleeper user */}
           <button onClick={() => navigate({ name: 'splash' })} title="Switch Sleeper user" className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 999, padding: '4px 10px 4px 4px', cursor: 'pointer', minWidth: 0 }}>
             {av
@@ -68,22 +99,51 @@ export function Leagues() {
             <span style={{ fontSize: 8.5, color: 'var(--faint)', letterSpacing: '0.08em' }}>▾</span>
           </button>
         </div>
-        <SiteSettings />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <VersionTag />
+          <SiteSettings />
+        </div>
       </header>
 
       <main style={{ flex: 1, overflow: 'auto', padding: '20px 16px 60px' }}>
         <div style={{ maxWidth: 1000, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-            <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>Your 2025 Leagues</div>
-            {leagues && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.08em' }}>{shown.length} LEAGUE{shown.length === 1 ? '' : 'S'}{filter !== 'All' ? '' : ' · NFL'}</span>}
+            <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>Your Leagues</div>
+            {leagues && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.08em' }}>{shown.length} LEAGUE{shown.length === 1 ? '' : 'S'} · {effSeason === 'All' ? 'NFL' : effSeason}</span>}
           </div>
+
+          {/* Season filter chips (only shown when the user has more than one season) */}
+          {leagues && seasons.length > 1 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+              {['All', ...seasons].map((s) => {
+                const active = effSeason === s;
+                const n = s === 'All' ? leagues.length : leagues.filter((lg) => lg.season === s).length;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => { setSeason(s); setFilter('All'); }}
+                    className="mono"
+                    style={{
+                      fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
+                      color: active ? 'var(--on-accent)' : 'var(--dim)',
+                      background: active ? 'var(--you)' : 'var(--surface)',
+                      border: `1px solid ${active ? 'var(--you)' : 'var(--bd)'}`,
+                      borderRadius: 999, padding: '5px 11px',
+                    }}
+                  >
+                    {s === 'All' ? 'ALL SEASONS' : s} <span style={{ opacity: 0.6 }}>{n}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {/* Type filter chips (only shown when there's more than one type) */}
           {leagues && types.length > 1 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
               {['All', ...types].map((t) => {
                 const active = filter === t;
-                const n = t === 'All' ? leagues.length : leagues.filter((lg) => baseType(lg) === t).length;
+                const n = t === 'All' ? inSeason.length : inSeason.filter((lg) => baseType(lg) === t).length;
                 return (
                   <button
                     key={t}
@@ -106,12 +166,12 @@ export function Leagues() {
 
           {err && <div className="mono" style={{ fontSize: 12, color: 'var(--opp)' }}>{err}</div>}
           {!leagues && !err && <div className="mono" style={{ fontSize: 12, color: 'var(--dim)', letterSpacing: '0.08em' }}>Loading {sleeperUser.displayName}’s leagues…</div>}
-          {leagues && leagues.length === 0 && <div className="mono" style={{ fontSize: 12, color: 'var(--dim)' }}>No 2025 NFL leagues found for this user.</div>}
+          {leagues && leagues.length === 0 && <div className="mono" style={{ fontSize: 12, color: 'var(--dim)' }}>No recent NFL leagues found for this user.</div>}
 
           {leagues && leagues.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
               {shown.map((lg) => {
-                const la = sleeperAvatarUrl(lg.avatar);
+                const la = provider.avatarUrl(lg.avatar);
                 return (
                   <button
                     key={lg.leagueId}
@@ -124,7 +184,7 @@ export function Leagues() {
                         : <span style={{ width: 36, height: 36, borderRadius: 7, background: 'var(--sh)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: 'var(--you)', flex: 'none' }} className="grotesk">{lg.name.slice(0, 1).toUpperCase()}</span>}
                       <div style={{ minWidth: 0 }}>
                         <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lg.name}</div>
-                        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.06em', marginTop: 2 }}>{lg.totalRosters}-TEAM{lg.status === 'complete' ? ' · COMPLETE' : lg.status === 'in_season' ? ' · IN SEASON' : ''}</div>
+                        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.06em', marginTop: 2 }}>{lg.season} · {lg.totalRosters}-TEAM{statusLabel(lg.status) ? ` · ${statusLabel(lg.status)}` : ''}</div>
                       </div>
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>

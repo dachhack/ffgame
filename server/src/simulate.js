@@ -48,6 +48,13 @@ function loadBaked(srcWeek) {
   return { pbp: data.pbp, points: data.points ?? {} };
 }
 
+/** Baked week's game feeds ({games, teams} from public/gamefeed/) — the field
+ *  visuals' data. Optional: missing file (unbaked week) just skips the visuals. */
+function loadBakedFeeds(srcWeek) {
+  try { return JSON.parse(readFileSync(new URL(`../../public/gamefeed/w${srcWeek}.json`, import.meta.url), 'utf8')); }
+  catch { return null; }
+}
+
 /** PPR + K + DST from RealPlay rows — mirrors resolve.js:baseScore and the baker,
  *  so the dry round-trip check can compare against baked points. */
 function baseScore(plays) {
@@ -213,6 +220,7 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs, jitter, co
   await db().from('sealed_pick').update({ locked: true, revealed_at: now }).in('matchup_id', ids).eq('locked', false);
   await db().from('matchup').update({ status: 'live' }).in('id', ids);
   await db().from('live_play').delete().eq('week', week).eq('game_id', 'SIM'); // only our own feed, never real ESPN plays
+  await db().from('game_feed').delete().eq('week', week).like('game_id', 'SIM:%');
   const live = matchups.map((m) => ({ ...m, status: 'live' }));
 
   const playerIndex = await buildPlayerIndex();
@@ -254,10 +262,25 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs, jitter, co
   const maxAt = feed.length ? feed[feed.length - 1].at : 0;
   log(`feed: ${feed.length} deliveries over ${fmtClock(maxAt)} game-time · speed ${speed}×${jitter ? ` · latency ≤${jitter}s` : ''}${nCorr ? ` · ${nCorr} plays self-correct (watch the board)` : ''} · open the live board now\n`);
 
+  // Field-visual feeds, time-released on the same clock: each tick upserts every
+  // game's doc with the plays revealed so far (c <= clk) — exactly the whole-doc
+  // replacement the real poller does, so FieldView/FieldBoard animate in step.
+  const bakedFeeds = loadBakedFeeds(srcWeek);
+  if (!bakedFeeds) log('  (no public/gamefeed bake for this week — field visuals stay empty)');
+  const releaseFeeds = async (clk) => {
+    if (!bakedFeeds) return;
+    const rows = Object.entries(bakedFeeds.games).map(([key, plays]) => {
+      const [away, home] = key.split('@');
+      return { week, game_id: `SIM:${key}`, key, away, home, plays: plays.filter((p) => p.c <= clk), updated_at: new Date().toISOString() };
+    }).filter((r) => r.plays.length);
+    if (rows.length) await db().from('game_feed').upsert(rows, { onConflict: 'week,game_id' });
+  };
+
   let i = 0;
   for (let clk = 0; ; clk += speed) {
     const batch = [];
     while (i < feed.length && feed[i].at <= clk) batch.push(feed[i++]);
+    await releaseFeeds(clk);
     // Dedupe within the batch by key (keep the latest delivery), then upsert — so a
     // provisional + its later fix never collide in one write, and corrections
     // reconcile by key exactly like poll/plays.js.
@@ -306,6 +329,7 @@ async function simulateReset(leagueId, week) {
   await db().from('matchup_state').delete().in('matchup_id', ids);
   await db().from('sealed_pick').update({ locked: false, revealed_at: null }).in('matchup_id', ids);
   await db().from('live_play').delete().eq('week', week).eq('game_id', 'SIM'); // only our own feed
+  await db().from('game_feed').delete().eq('week', week).like('game_id', 'SIM:%');
   await db().from('matchup').update({ status: 'scheduled', home_final: null, away_final: null, home_coin: null, away_coin: null }).in('id', ids);
   log(`reset ${ids.length} matchups (week ${week}) → scheduled · picks unlocked · SIM feed + matchup_state cleared`);
 }

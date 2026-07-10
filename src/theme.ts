@@ -159,10 +159,6 @@ export const THEMES: Record<ThemeName, Theme> = {
   },
 };
 
-// Fixed accents used across all themes.
-export const LIVE_RED = '#FF4F62';
-export const HOT_PURPLE = '#B89AFF';
-
 /** Flatten a theme into the CSS custom properties the app reads. */
 export function themeVars(t: Theme): Record<string, string> {
   const v: Record<string, string> = {

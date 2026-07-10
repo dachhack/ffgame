@@ -39,6 +39,18 @@ const UNLOCK_FOR = { QB: ['passbig'], RB: ['combodrip', 'retyd'], WR: ['combodri
 const BUFFS = ['overtime', 'garbage-time', 'momentum', 'floodgates', 'ot-shield', 'fg-stack', 'counter-nuke', 'insurance', 'unlock-carries-wipe'];
 const price = (id) => powerupById(id)?.price ?? 0;
 
+// Amp capacity (0063): a trial arming 2-3 amplifiers must bundle the Second/
+// Third Amp unlocks or the engine caps it back to one — so the greedy step
+// prices capacity into the candidate instead of letting the cap void the buy.
+const AMPS = ['momentum', 'garbage-time', 'overtime'];
+function withCapacity(set) {
+  const t = new Set(set);
+  const n = AMPS.filter((a) => t.has(a)).length;
+  if (n >= 2) t.add('amp-2');
+  if (n >= 3) t.add('amp-3');
+  return t;
+}
+
 /** Coin the adversary spends BEYOND the honest loadout = unlocks it adds + buffs it
  *  arms that the honest AI didn't already buy. (Honest buys are matched for free, so
  *  cost reflects only the adversary's deviation — what the exploit actually costs.) */
@@ -94,13 +106,13 @@ function searchLoadout(R, week, allowPaid) {
       let pick = null, pickV = best;
       for (const b of BUFFS) {
         if (buffs.has(b)) continue;
-        const trial = new Set(buffs); trial.add(b);
+        const trial = withCapacity(new Set([...buffs, b]));
         if (costOf(metrics, trial, honest) > BUDGET) continue;
         const v = ev(metrics, trial);
-        if (v > pickV + 1e-6) { pickV = v; pick = b; }
+        if (v > pickV + 1e-6) { pickV = v; pick = trial; } // trial, not b — keeps the bundled capacity
       }
       if (!pick) break;
-      buffs.add(pick); best = pickV;
+      buffs = pick; best = pickV;
     }
     ascend(true);                                         // re-tune metrics after buffs (FG-stack etc.)
   }

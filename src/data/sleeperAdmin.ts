@@ -2,6 +2,7 @@
 // cached player directory), then persist via the admin writer RPCs. Keeps the
 // heavy 5MB directory + JSON work out of Postgres.
 import { normName } from './players';
+import { sleeperAvatarUrl } from './sleeper';
 import { loadPlayerDirectory, type PlayerMeta } from './sleeperPlayers';
 import {
   adminUpsertLeague, adminUpsertMemberships, adminUpsertMatchups, adminUpsertLineups,
@@ -31,12 +32,15 @@ interface SleeperMatchup { roster_id: number; matchup_id: number | null }
 /** Import / refresh a Sleeper league → league + memberships. Returns league_id. */
 export async function importLeague(sleeperId: string, season: string): Promise<string> {
   const [lg, users, rosters] = await Promise.all([
-    sj<{ name?: string; settings?: unknown; scoring_settings?: unknown; roster_positions?: unknown }>(`/league/${sleeperId}`),
+    sj<{ name?: string; avatar?: string | null; settings?: unknown; scoring_settings?: unknown; roster_positions?: unknown }>(`/league/${sleeperId}`),
     sj<SleeperUser[]>(`/league/${sleeperId}/users`),
     sj<SleeperRoster[]>(`/league/${sleeperId}/rosters`),
   ]);
+  // The league's Sleeper crest travels with the import (stored only while the
+  // league has no crest yet; a league without one gets random site art).
   const res = await adminUpsertLeague(sleeperId, season, lg.name ?? 'League',
-    { settings: lg.settings, scoring: lg.scoring_settings, roster_positions: lg.roster_positions });
+    { settings: lg.settings, scoring: lg.scoring_settings, roster_positions: lg.roster_positions },
+    'sleeper', sleeperAvatarUrl(lg.avatar ?? null));
   if (!res.ok || !res.league_id) throw new Error(res.error ?? 'import failed');
 
   const byId = new Map(users.map((u) => [String(u.user_id), u]));

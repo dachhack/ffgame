@@ -3,12 +3,14 @@ import type { ThemeName } from '../theme';
 import type { WindowId, Pick } from '../types';
 import { LEAGUE, YOU_TEAM_ID, setActiveLeague, resetToDemoLeague, type BuiltLeague } from '../data/league';
 import { clearSyntheticWeeks, clearLivePlays } from '../data/realPbp';
+import { clearLiveGameFeeds } from '../data/gameFeed';
 import { clearRuntimeHeadshots } from '../data/media';
 import type { League } from '../types';
-import { powerupById } from '../data/powerups';
+import { powerupById, isAmplifier, ampCapacity, capAmplifiers } from '../data/powerups';
 import { DEMO_WEEK } from '../config';
-import type { SleeperUser } from '../data/sleeper';
+import { type ProviderUser, type ProviderId } from '../data/providers';
 import { track, identify, Ev } from './analytics';
+import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, type TargetedState } from '../data/liveApi';
 
 import type { SlotSwap } from '../engine/matchup';
 export type { SlotSwap };
@@ -20,9 +22,22 @@ export interface AppliedWeek {
   backups: Record<string, string>;               // backup slotKey -> target starter slotKey (manual best-ball)
   buffs?: Record<string, true>;                  // armed pre-match team buffs, keyed by powerup id
   doubleOrNothing?: string;                      // your slotKey staked (×2 if it wins, 0 if it loses)
-  spy?: { slotKey: string; reveal: 'player' | 'metric' }; // a slate slot peeked pre-kickoff (player OR metric)
+  spy?: { slotKey: string; reveal: 'player' | 'metric'; value?: string | null }; // a slate slot peeked pre-kickoff; `value` = the server's live reveal (use_spy)
   byeSteal?: { slotKey: string; playerId: string }; // a bye player fielded for a flat projected score
+  ghost?: string[];                              // slotKeys where a Ghost Player phantom is fielded (flat set score)
   emp?: Partial<Record<WindowId, number>>;       // window -> clock at which opponent drips froze (10 min)
+  rivalry?: Partial<Record<WindowId, boolean>>;  // windows armed with Rivalry (siphon 30% of same-position opponents at window-end)
+  leadChange?: string[];                         // your slotKeys armed with Lead Change (+2 per lead you seize)
+  grudge?: string[];                             // your slotKeys staked with Grudge Match (win by 10+ → +25, lose → −25)
+  jinx?: string[];                               // slotKeys where you jinx the opponent's first TD
+  redHerring?: string[];                         // your decoy slotKeys (cap opposing same-position players in the window)
+  surge?: Record<string, number>;               // live: your slotKey -> fire game-clock (×2 for 10 min)
+  coldSnap?: Record<string, number>;            // live: opponent slotKey -> fire game-clock (freeze all scoring 10 min)
+  napalm?: Record<string, number>;              // live: opponent slotKey -> fire game-clock (hot drip burns negative 10 min)
+  bunker?: Record<string, number>;              // live: your slotKey -> fire game-clock (nuke/erase immune onward)
+  clutchDon?: string[];                          // clutch: your slotKeys staked via Halftime Gamble (×2 win / 0 lose)
+  clutchEncore?: Record<string, number>;        // clutch: your slotKey -> arm clock (next TD +12)
+  clutchCounter?: Record<string, number>;       // clutch: your slotKey -> wipe clock to negate
   lineup?: Record<string, Pick>;                 // your lineup edits (deltas over the default) — so FINAL replays your actual lineup
 }
 
@@ -30,10 +45,11 @@ export type Phase = 'setup' | 'live' | 'final';
 
 export type Route =
   | { name: 'splash' }
-  | { name: 'live' }            // authenticated live-H2H pilot (separate from the demo)
+  | { name: 'live'; view?: 'admin' } // authenticated live-H2H pilot (separate from the demo); `view:'admin'` deep-links straight to the super-admin panel
   | { name: 'demo'; view?: 'clean' | 'board' } // narrated guided demo: 'clean' explainer (default) or the real in-game board
   | { name: 'leagues' }
   | { name: 'sleeperLeague'; leagueId: string; leagueName: string }
+  | { name: 'connect'; provider: ProviderId }
   | { name: 'hub' }
   | { name: 'league' }
   | { name: 'matchup'; week: number; phase: Phase }
@@ -43,9 +59,74 @@ export type Route =
  *  persist its lineup to sealed_pick and align with the worker's scoring. */
 export interface LiveCtx { matchupId: string; userId: string; leagueId: string; rosterId: number; week: number; }
 
+// ── URL routing ──────────────────────────────────────────────────────────────
+// Routes are mirrored into the URL hash (works on GitHub Pages with no server
+// config) so the back button and refresh work and screens are shareable. The
+// Sleeper session isn't persisted (the demo re-asks each visit), so a cold load
+// of a sim/pilot-backed route can't rebuild its in-memory league — those fall
+// back to the returning-user default rather than showing stale data.
+function routeToHash(r: Route): string {
+  switch (r.name) {
+    case 'splash': return '#/';
+    case 'leagues': return '#/leagues';
+    case 'live': return '#/live';
+    case 'demo': return r.view === 'board' ? '#/demo/board' : '#/demo';
+    case 'sleeperLeague': return `#/sleeper/${encodeURIComponent(r.leagueId)}`;
+    case 'connect': return `#/connect/${encodeURIComponent(r.provider)}`;
+    case 'hub': return '#/hub';
+    case 'league': return '#/league';
+    case 'matchup': return `#/matchup/${r.week}/${r.phase}`;
+    case 'final': return `#/final/${r.week}`;
+  }
+}
+/** URL hash → Route, or null when the hash carries no (valid) route so the caller
+ *  can fall back to its default (e.g. a first visit with no hash). Board/sim
+ *  routes are intentionally not restored here — they need in-memory league state
+ *  a cold load doesn't have — so they resolve to the default instead. */
+function hashToRoute(hash: string): Route | null {
+  const h = (hash || '').replace(/^#/, '').replace(/^\/+/, '').replace(/\/+$/, '');
+  if (h === '') return null;
+  const seg = h.split('/');
+  switch (seg[0]) {
+    case 'leagues': return { name: 'leagues' };
+    case 'live': return { name: 'live' };
+    case 'demo': return { name: 'demo', view: seg[1] === 'board' ? 'board' : 'clean' };
+    case 'connect': return seg[1] ? { name: 'connect', provider: decodeURIComponent(seg[1]) as ProviderId } : null;
+    default: return null;
+  }
+}
+/** Boot route: the URL hash if it names a self-contained screen (refresh keeps
+ *  your place, screens are shareable), else the returning-user default — a
+ *  signed-in live user to their pilot, everyone else to the playable demo. */
+function bootRoute(): Route {
+  const r = hashToRoute(typeof window !== 'undefined' ? window.location.hash : '');
+  if (r) return r;
+  try { if (localStorage.getItem('dripLive') === '1') return { name: 'live' }; } catch { /* ignore */ }
+  return { name: 'demo' };
+}
+
+/** The three switchable icon skins: classic emoji, the Football Factory art
+ *  set, and the retro Pixel Bowl sprites. */
+export type IconSetName = 'emoji' | 'factory' | 'pixel';
+
+/** Card-table deck skins — the table felt + sealed card backs. Personal choice,
+ *  saved per browser. Player card faces stay cream across all skins (a deck
+ *  swaps its table + backs, not its faces). */
+export type CardSkin = 'emerald' | 'playbook' | 'blitz' | 'rivalry' | 'allstar' | 'heritage' | 'gilded' | 'cosmic' | 'fireworks' | 'battalion';
+export const CARD_SKINS: CardSkin[] = ['emerald', 'playbook', 'blitz', 'rivalry', 'allstar', 'heritage', 'gilded', 'cosmic', 'fireworks', 'battalion'];
+/** Skins whose back is a full photographic card image (vs a generated pattern).
+ *  These hide the ◆ gem and show only a small SCOUT chip (see PHOTO_SKINS use in
+ *  Matchup SetupRow). All the image decks under public/cardbacks/. */
+export const PHOTO_SKINS: CardSkin[] = ['playbook', 'blitz', 'rivalry', 'allstar', 'heritage', 'gilded', 'cosmic', 'fireworks', 'battalion'];
+
 interface Store {
   theme: ThemeName;
   setTheme: (t: ThemeName) => void;
+  iconSet: IconSetName;
+  setIconSet: (s: IconSetName) => void;
+  /** The card-table deck/felt skin (personal, saved in localStorage). */
+  cardSkin: CardSkin;
+  setCardSkin: (s: CardSkin) => void;
   /** Larger-text mode (zooms the whole UI ~20% for readability). */
   bigText: boolean;
   setBigText: (v: boolean) => void;
@@ -54,8 +135,8 @@ interface Store {
   route: Route;
   navigate: (r: Route) => void;
   /** The Sleeper account whose leagues we're browsing (null → welcome splash). */
-  sleeperUser: SleeperUser | null;
-  setSleeperUser: (u: SleeperUser | null) => void;
+  sleeperUser: ProviderUser | null;
+  setSleeperUser: (u: ProviderUser | null) => void;
   /** The league the sim is currently running on (the baked DRIP demo by default). */
   activeLeague: League;
   /** True when a real Sleeper league is loaded (vs the baked DRIP demo). */
@@ -81,6 +162,9 @@ interface Store {
   inventory: Record<string, number>; // powerup id -> qty owned
   /** Buy a powerup with coins. Returns false if unaffordable. */
   buyPowerup: (id: string) => boolean;
+  /** Add a powerup to inventory WITHOUT touching the coin ledger (the hero board
+   *  charges the real DB wallet separately, then grants the item). */
+  grantPowerup: (id: string) => void;
   /** Consume one of a held powerup. Returns false if none held. */
   useConsumable: (id: string) => boolean;
   applied: Record<number, AppliedWeek>; // week -> applied powerup effects
@@ -106,12 +190,25 @@ interface Store {
   remapDoubleOrNothing: (week: number, slotKey: string) => void;
   /** Peek one slate slot's player OR metric via Spy (consumes one). */
   setSpy: (week: number, slotKey: string, reveal: 'player' | 'metric') => boolean;
+  setSpyRevealed: (week: number, slotKey: string, reveal: 'player' | 'metric', value: string | null) => void;
   /** Field a bye player in a slot via Bye Steal (consumes one). */
   applyByeSteal: (week: number, slotKey: string, playerId: string) => boolean;
   /** Free mid-game metric re-roll via Mulligan — writes a swap, spends a Mulligan. */
   applyMulligan: (week: number, slotKey: string, atClock: number, atRt: number, toMetricId: string) => boolean;
   /** Fire EMP on a live window: freeze opponent drips from `clock` for 10 min. */
   applyEmp: (week: number, win: WindowId, clock: number) => boolean;
+  /** Arm Rivalry on a window (blind, pre-kickoff): siphon 30% of same-position opponents at window-end. */
+  applyRivalry: (week: number, win: WindowId) => boolean;
+  /** Remove Rivalry from a window (refund). */
+  removeRivalry: (week: number, win: WindowId) => void;
+  /** Arm a slot-targeted list power-up (lead-change / grudge / jinx / red-herring) on a slotKey. */
+  applySlotListPu: (id: string, week: number, slotKey: string) => boolean;
+  /** Remove a slot-targeted list power-up from a slotKey (refund). */
+  removeSlotListPu: (id: string, week: number, slotKey: string) => void;
+  /** Fire a live slot-targeted tactical power-up (surge / cold-snap / bunker) on a slot at the given clock. */
+  applyLiveSlotPu: (id: string, week: number, slotKey: string, clock: number) => boolean;
+  /** Arm a clutch (conditional) power-up from a live offer: clutch-don / clutch-encore / clutch-counter. */
+  armClutch: (id: string, week: number, slotKey: string, clock: number) => boolean;
   /** Back-outs (refund the consumable) before lock-in / kickoff. */
   clearDoubleOrNothing: (week: number) => void;
   clearSpy: (week: number) => void;
@@ -127,6 +224,8 @@ interface Store {
 const Ctx = createContext<Store | null>(null);
 
 const THEME_KEY = 'gc-theme';
+const ICONSET_KEY = 'gc-iconset';
+const CARDSKIN_KEY = 'gc-cardskin';
 const BIGTEXT_KEY = 'gc-bigtext';
 const FULLSTATS_KEY = 'gc-fullstats';
 const SLEEPER_KEY = 'gc-sleeper';
@@ -156,26 +255,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const saved = typeof localStorage !== 'undefined' ? (localStorage.getItem(THEME_KEY) as ThemeName | null) : null;
     return saved ?? 'neon';
   });
-  const [sleeperUser, setSleeperUserState] = useState<SleeperUser | null>(() => {
-    try { const s = localStorage.getItem(SLEEPER_KEY); return s ? JSON.parse(s) as SleeperUser : null; } catch { return null; }
+  // The Sleeper username is session-only on purpose: every visit to the demo
+  // requires re-entering it to reach its leagues, so nothing is remembered
+  // across loads. (Purge the key older builds persisted.)
+  const [sleeperUser, setSleeperUserState] = useState<ProviderUser | null>(() => {
+    try { localStorage.removeItem(SLEEPER_KEY); } catch { /* ignore */ }
+    return null;
   });
-  const setSleeperUser = (u: SleeperUser | null) => {
+  const setSleeperUser = (u: ProviderUser | null) => {
     setSleeperUserState(u);
     if (u) { identify(u.userId, { username: u.username }); track(Ev.sleeperConnected); }
-    try { if (u) localStorage.setItem(SLEEPER_KEY, JSON.stringify(u)); else localStorage.removeItem(SLEEPER_KEY); } catch { /* ignore */ }
   };
-  // Boot to your leagues if a Sleeper user is remembered, else the welcome splash.
-  const [route, setRoute] = useState<Route>(sleeperUser ? { name: 'leagues' } : { name: 'splash' });
-  // Browser back/forward: mirror each route into history state (URL unchanged) so the
-  // back button steps between in-app screens instead of dead-ending / leaving the site.
+  // Boot from the URL hash (refresh keeps your place; screens are shareable), else
+  // the returning-user default: a signed-in live user to their pilot, everyone
+  // else to the playable demo. The ?live=1 / OAuth deep links in App.tsx still
+  // override this after mount.
+  const [route, setRoute] = useState<Route>(() => bootRoute());
+  // Each navigate pushes the route into the URL hash so back/forward step between
+  // screens and every screen has a real, bookmarkable URL.
   const navigate = (r: Route) => {
     setRoute(r);
     track(Ev.screenView, { screen: r.name });
-    try { window.history.pushState({ __route: r }, ''); } catch { /* ignore */ }
+    try { window.history.pushState({ __route: r }, '', routeToHash(r)); } catch { /* ignore */ }
   };
   useEffect(() => {
-    try { window.history.replaceState({ __route: route }, ''); } catch { /* ignore */ }
-    const onPop = (e: PopStateEvent) => { setRoute(((e.state as { __route?: Route } | null)?.__route) ?? { name: 'splash' }); };
+    // Normalize the URL to the resolved boot route (a first visit, or a hash that
+    // named a non-restorable board route, may differ from what's in the address).
+    try { window.history.replaceState({ __route: route }, '', routeToHash(route)); } catch { /* ignore */ }
+    // Back/forward: re-read the route from the (now-updated) hash; a hash that
+    // doesn't name a restorable screen falls back to the demo landing.
+    const onPop = () => { setRoute(hashToRoute(window.location.hash) ?? { name: 'demo' }); };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -189,7 +298,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [liveCtx, setLiveCtx] = useState<LiveCtx | null>(null);
   const loadSimLeague = (built: BuiltLeague, youId: string, ctx: LiveCtx | null = null) => {
     track(Ev.leagueOpened, { live: !!ctx, teams: built.league.teams?.length ?? null });
-    clearLivePlays();                   // drop any prior league's live overlay
+    clearLivePlays(); clearLiveGameFeeds(); // drop any prior league's live overlays
     setActiveLeague(built);             // swap the engine registry (non-React reads)
     setActiveLeagueState(built.league); // re-render React consumers
     setIsSimLeague(true);
@@ -204,8 +313,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     persist({ coins: DEMO_GRANT, inv: {}, applied: {} });
   };
   const exitSimLeague = () => {
-    resetToDemoLeague(); clearSyntheticWeeks(); clearLivePlays(); clearRuntimeHeadshots();
+    resetToDemoLeague(); clearSyntheticWeeks(); clearLivePlays(); clearLiveGameFeeds(); clearRuntimeHeadshots();
     setActiveLeagueState(LEAGUE); setIsSimLeague(false); setYouTeam(YOU_TEAM_ID); setLiveCtx(null);
+  };
+  const [iconSet, setIconSetState] = useState<IconSetName>(() => {
+    try {
+      // 'pixel' is parked — anyone who saved it drops back to the default.
+      const saved = localStorage.getItem(ICONSET_KEY) as IconSetName | null;
+      return saved === 'emoji' || saved === 'factory' ? saved : 'factory';
+    } catch { return 'factory'; }
+  });
+  const setIconSet = (s: IconSetName) => {
+    setIconSetState(s);
+    try { localStorage.setItem(ICONSET_KEY, s); } catch { /* ignore */ }
+  };
+  const [cardSkin, setCardSkinState] = useState<CardSkin>(() => {
+    try {
+      const saved = localStorage.getItem(CARDSKIN_KEY) as CardSkin | null;
+      return saved && CARD_SKINS.includes(saved) ? saved : 'blitz';
+    } catch { return 'blitz'; }
+  });
+  const setCardSkin = (s: CardSkin) => {
+    setCardSkinState(s);
+    try { localStorage.setItem(CARDSKIN_KEY, s); } catch { /* ignore */ }
   };
   const [bigText, setBigTextState] = useState<boolean>(() => {
     try {
@@ -235,6 +365,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Persist coins + inventory + applied together. Pass next values explicitly so
   // we don't race React's async state.
   const persist = (next: { coins?: number; inv?: Record<string, number>; applied?: Record<number, AppliedWeek> }) => {
+    if (liveCtx) return; // live coins/inventory are server-backed — don't clobber the demo save
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({
         coins: next.coins ?? coins,
@@ -253,6 +384,71 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // updates in one handler (e.g. multiple power-up refunds from a single roster
   // change) compose via functional setters and still save the final result.
   useEffect(() => { persist({}); }, [coins, inventory, applied]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Entering a live pilot board: load the team's server-backed inventory (owned
+  // power-ups persist across devices) and start applied clean (armed powerups
+  // aren't server-backed yet). Leaving it: restore the demo save from localStorage.
+  const wasLive = useRef(false);
+  const appliedHydrated = useRef(false);
+  useEffect(() => {
+    if (liveCtx) {
+      wasLive.current = true;
+      appliedHydrated.current = false;
+      myInventory(liveCtx.matchupId).then((inv) => setInventory(inv ?? {})).catch(() => setInventory({}));
+      // Restore the full working applied-state: armed buffs (scored, from
+      // applied_state) + the working blob (extra slots, swaps, backups, targeted).
+      const wk = liveCtx.week;
+      Promise.all([
+        myBuffs(liveCtx.matchupId).catch(() => [] as string[]),
+        myHeroApplied(liveCtx.matchupId).catch(() => ({})),
+        myTargeted(liveCtx.matchupId, liveCtx.userId).catch(() => ({} as TargetedState)),
+      ])
+        .then(([buffs, blob, tgt]) => {
+          const b = (blob ?? {}) as Partial<AppliedWeek>;
+          // The server's targeted record (applied_state, what the worker scores)
+          // wins over the pre-lock working blob — it's the only store live-phase
+          // applications (EMP, swaps) can reach after hero_applied freezes.
+          const sk = (e: { win: string; slot: string }) => `${e.win}#${e.slot}`;
+          const swaps = { ...(b.swaps ?? {}) };
+          for (const [k, s] of Object.entries(tgt.swaps ?? {})) {
+            const [w, i] = k.split('|');
+            swaps[`${w}#${i}`] = { atClock: s.atClock, atRt: s.atRt, toMetricId: s.toMetric, toPlayerId: s.toPlayer };
+          }
+          const lastSpy = tgt.spy?.length ? tgt.spy[tgt.spy.length - 1] : undefined;
+          setApplied({ [wk]: {
+            extraSlots: b.extraSlots ?? {}, swaps, backups: b.backups ?? {},
+            doubleOrNothing: tgt.don ? sk(tgt.don) : b.doubleOrNothing,
+            spy: lastSpy ? { slotKey: sk(lastSpy), reveal: lastSpy.reveal } : b.spy,
+            byeSteal: tgt.byeSteal ? { slotKey: sk(tgt.byeSteal), playerId: tgt.byeSteal.slug } : b.byeSteal,
+            ghost: b.ghost,
+            emp: (tgt.emp && Object.keys(tgt.emp).length ? tgt.emp : b.emp) as AppliedWeek['emp'],
+            rivalry: b.rivalry, leadChange: b.leadChange, grudge: b.grudge, jinx: b.jinx, redHerring: b.redHerring,
+            surge: b.surge, coldSnap: b.coldSnap, napalm: b.napalm, bunker: b.bunker,
+            clutchDon: b.clutchDon, clutchEncore: b.clutchEncore, clutchCounter: b.clutchCounter,
+            buffs: Object.fromEntries((buffs ?? []).map((x) => [x, true as const])),
+          } });
+        })
+        .catch(() => setApplied({}))
+        .finally(() => { appliedHydrated.current = true; });
+    } else if (wasLive.current) {
+      wasLive.current = false;
+      appliedHydrated.current = false;
+      const s = loadState();
+      creditedWeeks.current = new Set(s.weeks);
+      setCoins(s.coins); setInventory(s.inv); setApplied(s.applied);
+    }
+  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live: persist the working applied blob (minus buffs → applied_state, and
+  // lineup → sealed_pick) on every change, once hydrated, so it restores anywhere.
+  useEffect(() => {
+    if (!liveCtx || !appliedHydrated.current) return;
+    const cur = applied[liveCtx.week];
+    if (!cur) return;
+    const rest: Record<string, unknown> = { ...cur };
+    delete rest.lineup; delete rest.buffs;
+    heroSetApplied(liveCtx.matchupId, rest).catch(() => {});
+  }, [applied, liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setTheme = (t: ThemeName) => {
     setThemeState(t);
@@ -275,10 +471,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
+  // Grant an owned powerup without spending store coin — the hero board charges
+  // the real DB wallet, then calls this to add the item to inventory.
+  const grantPowerup = (id: string): void => {
+    setInventory((prev) => { const next = { ...prev, [id]: (prev[id] ?? 0) + 1 }; persist({ inv: next }); return next; });
+  };
+
+  // Live leagues: keep owned inventory server-backed. Buys are recorded by
+  // wallet_buy_powerup; here we mirror consumes (arm/apply) and refunds (disarm/
+  // back-out) so ownership persists across devices. Fire-and-forget.
+  const syncInv = (id: string, delta: number): void => {
+    if (!liveCtx) return;
+    (delta < 0 ? consumeInventory : refundInventory)(liveCtx.matchupId, id).catch(() => {});
+  };
+  // The armed buff ids for a week (pre-mutation snapshot from `applied`).
+  const armedBuffs = (week: number): string[] => { const b = applied[week]?.buffs ?? {}; return Object.keys(b).filter((k) => b[k]); };
+  // Persist the armed buff set server-side on the hero board (survives reload).
+  const pushBuffs = (buffs: string[]): void => { if (liveCtx) heroSetBuffs(liveCtx.matchupId, buffs).catch(() => {}); };
+
   const useConsumable = (id: string): boolean => {
     if ((inventory[id] ?? 0) <= 0) return false;
     const nextInv = { ...inventory, [id]: inventory[id] - 1 };
-    setInventory(nextInv); persist({ inv: nextInv });
+    setInventory(nextInv); persist({ inv: nextInv }); syncInv(id, -1);
     return true;
   };
 
@@ -289,26 +503,48 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const nextInv = { ...inventory, [id]: inventory[id] - 1 };
     const cur: AppliedWeek = applied[week] ?? { extraSlots: {}, swaps: {}, backups: {} };
     const nextApplied = { ...applied, [week]: patch({ ...cur, extraSlots: cur.extraSlots ?? {}, swaps: cur.swaps ?? {}, backups: cur.backups ?? {} }) };
-    setInventory(nextInv); setApplied(nextApplied); persist({ inv: nextInv, applied: nextApplied });
+    setInventory(nextInv); setApplied(nextApplied); persist({ inv: nextInv, applied: nextApplied }); syncInv(id, -1);
     return true;
   };
 
   const applyExtraSlot = (week: number, win: WindowId): boolean =>
     consumeAndApply('extra-slot', week, (cur) => ({ ...cur, extraSlots: { ...cur.extraSlots, [win]: (cur.extraSlots[win] ?? 0) + 1 } }));
 
-  const armBuff = (week: number, id: string): boolean =>
-    applied[week]?.buffs?.[id] ? false : consumeAndApply(id, week, (cur) => ({ ...cur, buffs: { ...cur.buffs, [id]: true } }));
+  const armBuff = (week: number, id: string): boolean => {
+    if (applied[week]?.buffs?.[id]) return false;
+    // Amplifier capacity: at most 1 + Second Amp + Third Amp armed amplifiers,
+    // and Third Amp only on top of Second — same gates as arm_buff server-side.
+    const armed = new Set(armedBuffs(week));
+    if (id === 'amp-3' && !armed.has('amp-2')) return false;
+    if (isAmplifier(id) && [...armed].filter(isAmplifier).length >= ampCapacity(armed)) return false;
+    const ok = consumeAndApply(id, week, (cur) => ({ ...cur, buffs: { ...cur.buffs, [id]: true } }));
+    if (ok) pushBuffs([...armedBuffs(week), id]);
+    return ok;
+  };
 
   // Disarm a previously-armed buff: clear the flag and refund the consumable.
   // Functional setters so several disarms in one tick compose (persist via effect).
+  // Removing amp capacity (Second/Third Amp) cascades: Third Amp goes with
+  // Second, and amplifiers beyond the reduced cap disarm too — everything is
+  // refunded, so the engine's capAmplifiers never silently drops a paid buff.
   const disarmBuff = (week: number, id: string): void => {
     if (!applied[week]?.buffs?.[id]) return;
+    const drop = new Set([id]);
+    const armed = new Set(armedBuffs(week));
+    if (id === 'amp-2' && armed.has('amp-3')) drop.add('amp-3');
+    if (id === 'amp-2' || id === 'amp-3') {
+      const left = new Set([...armed].filter((b) => !drop.has(b)));
+      const keep = capAmplifiers(left);
+      for (const b of left) if (isAmplifier(b) && !keep.has(b)) drop.add(b);
+    }
     setApplied((prev) => {
       const cur = prev[week]; if (!cur?.buffs?.[id]) return prev;
-      const buffs = { ...cur.buffs }; delete buffs[id];
+      const buffs = { ...cur.buffs }; for (const b of drop) delete buffs[b];
       return { ...prev, [week]: { ...cur, buffs } };
     });
-    setInventory((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
+    setInventory((prev) => { const next = { ...prev }; for (const b of drop) next[b] = (next[b] ?? 0) + 1; return next; });
+    for (const b of drop) syncInv(b, 1);
+    pushBuffs(armedBuffs(week).filter((b) => !drop.has(b)));
   };
 
   const setDoubleOrNothing = (week: number, slotKey: string): boolean =>
@@ -322,12 +558,54 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
   const setSpy = (week: number, slotKey: string, reveal: 'player' | 'metric'): boolean =>
     consumeAndApply('spy', week, (cur) => ({ ...cur, spy: { slotKey, reveal } }));
+  // Live pilot: record a Spy the SERVER already consumed (use_spy, migration
+  // 0060) with its revealed value — local inventory mirrors the decrement but
+  // no consume/refund RPC fires (that would double-spend the item).
+  const setSpyRevealed = (week: number, slotKey: string, reveal: 'player' | 'metric', value: string | null): void => {
+    setInventory((prev) => ({ ...prev, spy: Math.max(0, (prev.spy ?? 0) - 1) }));
+    setApplied((prev) => {
+      const cur = prev[week] ?? { extraSlots: {}, swaps: {}, backups: {} };
+      return { ...prev, [week]: { ...cur, spy: { slotKey, reveal, value } } };
+    });
+  };
   const applyByeSteal = (week: number, slotKey: string, playerId: string): boolean =>
     consumeAndApply('bye-steal', week, (cur) => ({ ...cur, byeSteal: { slotKey, playerId } }));
   const applyMulligan = (week: number, slotKey: string, atClock: number, atRt: number, toMetricId: string): boolean =>
     consumeAndApply('mulligan', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, atRt, toMetricId } } }));
   const applyEmp = (week: number, win: WindowId, clock: number): boolean =>
     applied[week]?.emp?.[win] != null ? false : consumeAndApply('emp', week, (cur) => ({ ...cur, emp: { ...cur.emp, [win]: clock } }));
+  // Live slot-targeted tactical power-ups (Surge / Cold Snap / Bunker): fire on a
+  // slot during a live window, recording the fire game-clock. One per slot.
+  const LIVE_SLOT_PU: Record<string, 'surge' | 'coldSnap' | 'napalm' | 'bunker'> = { 'surge': 'surge', 'cold-snap': 'coldSnap', 'napalm': 'napalm', 'bunker': 'bunker' };
+  const applyLiveSlotPu = (id: string, week: number, slotKey: string, clock: number): boolean => {
+    const key = LIVE_SLOT_PU[id];
+    if (applied[week]?.[key]?.[slotKey] != null) return false;
+    return consumeAndApply(id, week, (cur) => ({ ...cur, [key]: { ...cur[key], [slotKey]: clock } }));
+  };
+  // CLUTCH plays: conditional power-ups armed from a live offer on a slot. Encore/
+  // Counter record a clock (arm clock / wipe clock); Halftime Gamble is a list.
+  const armClutch = (id: string, week: number, slotKey: string, clock: number): boolean => {
+    const a = applied[week];
+    if (id === 'clutch-don') { if ((a?.clutchDon ?? []).includes(slotKey)) return false; return consumeAndApply(id, week, (cur) => ({ ...cur, clutchDon: [...(cur.clutchDon ?? []), slotKey] })); }
+    const rec: 'clutchEncore' | 'clutchCounter' = id === 'clutch-encore' ? 'clutchEncore' : 'clutchCounter';
+    if (a?.[rec]?.[slotKey] != null) return false;
+    return consumeAndApply(id, week, (cur) => ({ ...cur, [rec]: { ...cur[rec], [slotKey]: clock } }));
+  };
+  const applyRivalry = (week: number, win: WindowId): boolean =>
+    applied[week]?.rivalry?.[win] ? false : consumeAndApply('rivalry', week, (cur) => ({ ...cur, rivalry: { ...cur.rivalry, [win]: true } }));
+  // Slot-targeted list power-ups (Lead Change / Grudge / Jinx / Red Herring):
+  // arm toggles a slotKey into the week's list, spending one consumable.
+  const SLOT_LIST_PU: Record<string, keyof AppliedWeek> = { 'lead-change': 'leadChange', 'grudge': 'grudge', 'jinx': 'jinx', 'red-herring': 'redHerring', 'ghost': 'ghost' };
+  const applySlotListPu = (id: string, week: number, slotKey: string): boolean => {
+    const key = SLOT_LIST_PU[id];
+    if (((applied[week]?.[key] as string[] | undefined) ?? []).includes(slotKey)) return false;
+    return consumeAndApply(id, week, (cur) => ({ ...cur, [key]: [ ...((cur[key] as string[] | undefined) ?? []), slotKey ] }));
+  };
+  const removeSlotListPu = (id: string, week: number, slotKey: string): void => {
+    const key = SLOT_LIST_PU[id];
+    if (!((applied[week]?.[key] as string[] | undefined) ?? []).includes(slotKey)) return;
+    clearApplied(week, id, (c) => { const arr = ((c[key] as string[] | undefined) ?? []).filter((k) => k !== slotKey); (c as unknown as Record<string, unknown>)[key] = arr.length ? arr : undefined; });
+  };
 
   // ── Back-outs: clear an applied targeted powerup and refund the consumable. ──
   const clearApplied = (week: number, refundId: string, mutate: (cur: AppliedWeek) => void): void => {
@@ -338,7 +616,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       mutate(nc);
       return { ...prev, [week]: nc };
     });
-    setInventory((prev) => ({ ...prev, [refundId]: (prev[refundId] ?? 0) + 1 }));
+    setInventory((prev) => ({ ...prev, [refundId]: (prev[refundId] ?? 0) + 1 })); syncInv(refundId, 1);
   };
   const clearDoubleOrNothing = (week: number): void => { if (applied[week]?.doubleOrNothing) clearApplied(week, 'double-or-nothing', (c) => { delete c.doubleOrNothing; }); };
   const clearSpy = (week: number): void => { if (applied[week]?.spy) clearApplied(week, 'spy', (c) => { delete c.spy; }); };
@@ -347,8 +625,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const n = applied[week]?.extraSlots?.[win] ?? 0; if (n <= 0) return;
     clearApplied(week, 'extra-slot', (c) => { if (n - 1 > 0) c.extraSlots[win] = n - 1; else delete c.extraSlots[win]; });
   };
+  const removeRivalry = (week: number, win: WindowId): void => {
+    if (!applied[week]?.rivalry?.[win]) return;
+    clearApplied(week, 'rivalry', (c) => { const r = { ...c.rivalry }; delete r[win]; c.rivalry = Object.keys(r).length ? r : undefined; });
+  };
   // Refund an unlock-metric powerup (when a player swaps off / clears that metric).
-  const refundUnlock = (id: string): void => { setInventory((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 })); };
+  const refundUnlock = (id: string): void => { setInventory((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 })); syncInv(id, 1); };
 
   const applyMetricSwap = (week: number, slotKey: string, atClock: number, atRt: number, toMetricId: string): boolean =>
     consumeAndApply('metric-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, atRt, toMetricId } } }));
@@ -377,8 +659,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, applyByeSteal, applyMulligan, applyEmp, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
-    [theme, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, liveCtx, youTeamId, demoWeek, coins, inventory, applied],
+    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    [theme, iconSet, cardSkin, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, liveCtx, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
