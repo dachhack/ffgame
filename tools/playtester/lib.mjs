@@ -199,7 +199,8 @@ export function buildSide(roster, week, { owned = new Set(), extra = 0, metricOv
 // unopposed bounty + a free best-ball slot, which the symmetric slot denies).
 //   load = { owned?:Set, extra?:int, metricOverride?:fn } per side.
 function sideLineup(roster, week, load, c) {
-  let picks = aiLineup(roster, week, load.owned ?? new Set(), 0); // base 8 — extra handled below
+  // load.persona: stable seat key opting into the NUKER persona draw (drama audit).
+  let picks = aiLineup(roster, week, load.owned ?? new Set(), 0, load.persona); // base 8 — extra handled below
   if (load.metricOverride) picks = picks.map((p) => { const o = load.metricOverride(p, slugMeta(p.slug).pos); return o ? { ...p, metric: o } : p; });
   const slotted = new Set(picks.map((p) => p.slug));
   const bench = [];

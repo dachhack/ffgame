@@ -802,3 +802,44 @@ Server-side the lock period was already open by construction (per-window
 seals reject only kicked-off windows); 0087 adds the locked_metric_unlock
 mapping + price. The engine's auto-pick exclusions now ride the generic lock
 filter, and the aggregate levers price the unlock in.
+
+## 21. Drama audit — the game is fair but its namesake never fires (`drama.mjs`)
+Balance (§1–§9) measured whether the game is FAIR; this measures whether it is EXCITING.
+`drama.mjs` resolves seeded honest-field matchups with the resolver's raw event streams
+captured (`resolveLiveMatchup(..., { captureEvents: true })`) and counts the beats a viewer
+experiences as drama. 1,120 matchups (80/wk × weeks 1–14), seed 12345.
+
+| signal (per matchup) | honest field | TE:td both sides | 40% NUKER persona |
+|---|--:|--:|--:|
+| nuke wipes (≥1 in % of matchups) | **0.00 (0%)** | 0.25 (21%) | 0.11 (9%) |
+| TE drip nukes (≥1) | **0.00 (0%)** | 0.35 (20%) | 0.16 (9%) |
+| erases / counter-nukes / shutdowns | **all 0** | 0 | 0 |
+| hot ignitions | 6.2 (100%) | 5.6 | 5.9 |
+| turnovers | 1.7 (79%) | 1.7 | 1.7 |
+| home win-rate | 50–51% | — | **51.3% persona-on-home-only** (neutral) |
+
+**Headline: the honest meta fires ZERO nuke/erase/counter/shutdown events — ever.** The
+shipping AI's defaults are 100% drip (correctly, §4), so the game's namesake mechanic never
+appears in an AI matchup: a pilot player facing an AI seat, or anyone watching AI-vs-AI,
+never sees a NUKE fire. Drama today is hot streaks (6/matchup) + turnovers. Also of note:
+in-slot lead swaps ~4/matchup and ~0.7 photo-finish slots (healthy), match lead changes
+mean 2.0 but 32% wire-to-wire, and final margins are blowout-heavy (14% within 10) — the
+latter is a random-roster artifact, not a mechanics target.
+
+**Fix shipped — the NUKER persona (`aiPersonaNuker`, `src/data/aiLineup.ts`):** 40% of AI
+seats per (seat, week) hash deterministically flip their best fielded TE onto the `td`
+8-PT NUKE — the §6-retuned metric that is EV-NEUTRAL blind (~51%). Measured: a real nuke
+moment now lands in ~16% of matchups (from 0%), biggest wipe seen 71.8 pts, and the
+neutrality A/B (persona on home only, n=1,120) holds at 51.3% home WR. Opt-in by design:
+only permanent AI seats (`controller === 'ai'` in `server/src/lock.js`) pass a persona key;
+a missed human's autofill stays on vanilla honest defaults. All §-invariants re-verified
+green after the change (`invariants.mjs`).
+
+**Presentation shipped with it:** the event→drama classification now lives in ONE shared
+module (`src/engine/moments.ts` — `classifyEvent`/`slotMoments`/`topMoments`), consumed by
+the live board's screen-level moment banners (Matchup.tsx), the MatchupFinal "THE MOMENTS"
+recap strip, and `drama.mjs` itself — so the audit measures exactly what the player sees.
+
+_Re-validated after merging the battle layer (v0.128.0 base): the honest field still fires
+ZERO nuke/erase/counter/shutdown events; persona-both lands a nuke moment in ~17% of
+matchups; neutrality A/B 51.3% home WR; full invariants suite (incl. ghost/jinx) green._

@@ -6,6 +6,8 @@ import { buildMatchup, defaultLineup, aiLineup, slotKey, WINDOW_WIN_BONUS } from
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
 import { metricById } from '../data/metrics';
 import { powerupById } from '../data/powerups';
+import { slotMoments, topMoments, MOMENT_COLOR, type Moment } from '../engine/moments';
+import { fmtClock } from '../engine/sim';
 import { PuIcon } from '../app/gameIcons';
 
 export function MatchupFinal({ week }: { week: number }) {
@@ -38,6 +40,22 @@ export function MatchupFinal({ week }: { week: number }) {
 
   const won = m.youFinal >= m.theirFinal;
   const margin = Math.abs(m.youFinal - m.theirFinal).toFixed(1);
+
+  // The week's top dramatic beats — same extraction the live board banners use,
+  // ranked by magnitude. This is the screenshot: what decided the matchup.
+  const moments = useMemo(() => {
+    const all: Moment[] = [];
+    for (const w of m.windows) {
+      let reg = 0;
+      for (const s of w.slots) for (const e of s.events) if (e.clock > reg) reg = e.clock;
+      for (const s of w.slots) {
+        if (!s.you || !s.their) continue;
+        all.push(...slotMoments(s.events, { you: s.you.player.name, their: s.their.player.name }, w.window.id, slotKey(w.window.id, s.slotIndex), reg || 3600));
+      }
+    }
+    return topMoments(all, 4);
+  }, [m]);
+  const winLabelOf = (id: string) => m.windows.find((w) => w.window.id === id)?.window.label ?? id.toUpperCase();
 
   let slotsW = 0, slotsL = 0, slotsT = 0, effects = 0;
   for (const w of m.windows) for (const s of w.slots) {
@@ -112,6 +130,31 @@ export function MatchupFinal({ week }: { week: number }) {
               </div>
             </div>
           </div>
+
+          {/* the week's top moments */}
+          {moments.length > 0 && (
+            <>
+              <div className="mono" style={{ fontSize: 10, letterSpacing: '0.16em', color: 'var(--faint)', margin: '22px 0 10px' }}>THE MOMENTS</div>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(230px, 1fr))', gap: 10 }}>
+                {moments.map((mo, i) => {
+                  const accent = mo.side === 'you' ? 'var(--you)' : 'var(--opp)';
+                  const fx = MOMENT_COLOR[mo.kind] ?? accent;
+                  return (
+                    <div key={`${mo.slotKey}|${mo.kind}|${mo.clock}|${i}`} style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderLeft: `4px solid ${accent}`, borderRadius: 5, padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                      <span style={{ fontSize: 19, lineHeight: 1.1 }}>{mo.icon}</span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                          <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: fx }}>{mo.title}</span>
+                          <span className="mono" style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)' }}>{winLabelOf(mo.win)} · {fmtClock(mo.clock)}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text)', marginTop: 4, lineHeight: 1.5 }}>{mo.detail}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
           {/* window strip — each window is its own battle */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginTop: 16 }}>

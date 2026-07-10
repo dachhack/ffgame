@@ -34,8 +34,8 @@ export { clearSyntheticWeeks, resolveLiveMatchup, aiLiveBuffs };
  *  Field-General read. With a `week` that has a known NFL slate, players are
  *  slate-gated into the window their team actually plays, exactly like a human's
  *  lineup. Returns [{ win, slot, slug, metric }] — the sealed-pick shape. */
-export function autoLineup(slugs, week = 0, owned = new Set(), extra = 0) {
-  return aiLineup(slugs ?? [], week, owned, extra);
+export function autoLineup(slugs, week = 0, owned = new Set(), extra = 0, personaKey) {
+  return aiLineup(slugs ?? [], week, owned, extra, personaKey);
 }
 
 /** Inject a week's plays so the engine sees them via realPbpFor(week, slug).

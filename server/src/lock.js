@@ -235,7 +235,11 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       // upserted by the budget pass BEFORE these rows, so a `combodrip` pick
       // clears enforce_locked_metric and the extra 'x' rows clear enforce_slot_cap.
       if (isAi && hasPicks) await db().from('sealed_pick').delete().eq('matchup_id', m.id).eq('app_user_id', mem.app_user_id);
-      const rows = autoLineup(slugs, m.week, owned, extra).map((p) => {
+      // Persona key ONLY for permanent AI seats: some weeks their TE hides an
+      // 8-PT NUKE (EV-neutral drama, see aiPersonaNuker). A missed human's
+      // autofill — even one flipped to AI policy for the week — stays vanilla.
+      const persona = isAi ? `${m.league_id}:${rosterId}` : undefined;
+      const rows = autoLineup(slugs, m.week, owned, extra, persona).map((p) => {
         const sealNow = !dueWins || dueWins.has(p.win);
         return {
           matchup_id: m.id, app_user_id: mem.app_user_id, game_window: p.win, roster_slot: p.slot,
