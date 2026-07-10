@@ -196,6 +196,9 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     return {
       picks: autoLineup(await lineupSlugs(matchup, rosterId, ctx), matchup.week, owned, extra),
       buffs: Array.isArray(load.buffs) ? load.buffs : [],
+      // The AI's lock-time budget pass places targeted battle plays (rivalry /
+      // ghost — findings §17) into the same targeted payload the human RPCs use.
+      targeted: load.targeted,
     };
   };
   const sideLineup = async (rosterId) => {
@@ -271,6 +274,19 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
         atClock: Math.max(0, Math.min(3900, Number(s.atClock) || 0)),
         atRt: s.atRt != null ? Number(s.atRt) : undefined,
       };
+    }
+    // Battle plays (v0.124.0): rivalry = armed window ids; ghost / lead-change /
+    // grudge / jinx / red-herring = 'win|slot' lists; the live tacticals map
+    // 'win|slot' → fire game-clock (re-clamped). Written by the AI budget pass
+    // (lock.js, findings §17) — and by the client apply RPCs once extended.
+    for (const k of ['rivalry', 'ghost', 'leadChange', 'grudge', 'jinx', 'redHerring']) {
+      if (Array.isArray(t[k]) && t[k].length) ex[k] = t[k].map(String);
+    }
+    for (const k of ['surge', 'coldSnap', 'napalm', 'bunker']) {
+      if (t[k] && Object.keys(t[k]).length) {
+        ex[k] = {};
+        for (const [slot, c] of Object.entries(t[k])) ex[k][slot] = Math.max(0, Math.min(3900, Number(c) || 0));
+      }
     }
     return Object.keys(ex).length ? ex : undefined;
   };

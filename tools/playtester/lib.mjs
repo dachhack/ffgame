@@ -11,7 +11,7 @@
 // (single-lever A/B) are thin CLIs over it. Run anything that imports it under tsx.
 import { readFileSync } from 'node:fs';
 import { injectWeek, resolveLiveMatchup, makePlayer } from '../../server/src/engine.js';
-import { aiLineup, aiLiveBuffs, wantsComboDrip, defaultAiMetric } from '../../src/data/aiLineup.ts';
+import { aiLineup, aiLiveBuffs, wantsComboDrip, defaultAiMetric, aiTargetedPlays } from '../../src/data/aiLineup.ts';
 import { slugMeta } from '../../src/data/slugMeta.ts';
 import { hasSlate, windowForTeam } from '../../src/data/nflSlate.ts';
 import { statsForSlug } from '../../src/data/players.ts';
@@ -106,15 +106,26 @@ export const WALLET_SEED = 100, EXTRA_SLOT_CAP = 2; // season-start balance (mir
 export function aiLoadout(slugs, key, week) {
   let bal = WALLET_SEED;
   const owned = new Set(), buffs = new Set();
+  const targeted = { rivalry: false, ghost: false };
   let extra = 0;
-  // Mirror server/src/lock.js:aiBudgetPass — EV buffs first, then combodrip, then extra.
+  // Mirror server/src/lock.js:aiBudgetPass — RETRAINED order (findings §17), by
+  // measured lift-per-coin: first amp → RIVALRY (2.80/10c) → remaining amps →
+  // GHOST when the lineup leaves a base slot open (1.51/10c) → combodrip → extra.
   // Amplifiers are capacity-limited (0063): an amp beyond capacity needs the
   // Second/Third Amp unlock bought first; skip the amp if that isn't affordable.
   const AMPS = new Set(['momentum', 'garbage-time', 'overtime']);
   const ampCap = () => 1 + (buffs.has('amp-2') ? 1 : 0) + (buffs.has('amp-2') && buffs.has('amp-3') ? 1 : 0);
-  const desired = [...aiLiveBuffs(key, week)];
+  const amps = aiLiveBuffs(key, week);
+  const basePlays = aiTargetedPlays(aiLineup(slugs, week), week); // blind read of its own lineup
+  const desired = [amps[0], 'rivalry', ...amps.slice(1)];
+  if (basePlays.ghost) desired.push('ghost');
   if (slugs.some((s) => wantsComboDrip(s, slugMeta(s).pos))) desired.push('unlock-combo-drip');
   for (const item of desired) {
+    if (item === 'rivalry' || item === 'ghost') {
+      const price = powerupById(item)?.price ?? 9999;
+      if (bal >= price) { bal -= price; targeted[item] = true; }
+      continue;
+    }
     if (AMPS.has(item) && [...buffs].filter((b) => AMPS.has(b)).length >= ampCap()) {
       const need = buffs.has('amp-2') ? 'amp-3' : 'amp-2';
       const needPrice = powerupById(need)?.price ?? 9999;
@@ -129,7 +140,18 @@ export function aiLoadout(slugs, key, week) {
     const price = powerupById('extra-slot')?.price ?? 80;
     if (bal >= price) { bal -= price; extra = i + 1; } else break;
   }
-  return { owned, buffs, extra, spent: WALLET_SEED - bal };
+  return { owned, buffs, extra, targeted, spent: WALLET_SEED - bal };
+}
+
+/** LiveExtras for a side's BOUGHT battle plays, targeted blind off its own built
+ *  lineup (aiTargetedPlays). Undefined when nothing was bought / no target. */
+export function aiExtras(load, picks, week) {
+  if (!load?.targeted?.rivalry && !load?.targeted?.ghost) return undefined;
+  const t = aiTargetedPlays(picks.map((p) => ({ win: p.win, slot: p.slot })), week);
+  const ex = {};
+  if (load.targeted.rivalry && t.rivalry) ex.rivalry = [t.rivalry];
+  if (load.targeted.ghost && t.ghost) ex.ghost = [t.ghost];
+  return Object.keys(ex).length ? ex : undefined;
 }
 
 // ── Build one side's resolved picks, with optional lever overrides ───────────
@@ -207,10 +229,13 @@ export function buildMatchup(homeRoster, awayRoster, week, homeLoad = {}, awayLo
 
 // ── Resolve + enrich ─────────────────────────────────────────────────────────
 /** Resolve a full matchup from already-built LivePicks and per-side buff sets,
- *  and annotate the raw LiveResult with the signals the aggregator scans. */
-export function resolve(homePicks, awayPicks, week, homeBuffs = new Set(), awayBuffs = new Set()) {
+ *  and annotate the raw LiveResult with the signals the aggregator scans.
+ *  `extras` = { home?: LiveExtras, away?: LiveExtras } — the targeted power-up
+ *  payloads (rivalry / jinx / grudge / lead-change / red-herring / don / ghost /
+ *  bye-steal / surge / cold-snap / napalm / bunker / emp), keyed `win|slot`. */
+export function resolve(homePicks, awayPicks, week, homeBuffs = new Set(), awayBuffs = new Set(), extras = undefined) {
   useWeek(week);
-  const res = resolveLiveMatchup(homePicks, awayPicks, week, { homeBuffs, awayBuffs });
+  const res = resolveLiveMatchup(homePicks, awayPicks, week, { homeBuffs, awayBuffs }, extras);
   const margin = round(res.home - res.away);
   // Biggest single slot score on either side — a proxy for a "blowup" play
   // (TE-TD nuke wiping a bank to a huge relative swing, FG×FG stacks, etc.).
@@ -226,13 +251,14 @@ export function resolve(homePicks, awayPicks, week, homeBuffs = new Set(), awayB
 }
 
 /** One fully-honest matchup (both sides field the shipping AI's real loadout,
- *  with extra slots resolved symmetrically). */
+ *  with extra slots resolved symmetrically and any bought battle plays armed). */
 export function honestMatch(rand, week, key = 'm') {
   const c = useWeek(week);
   const hr = drawRoster(rand, c), ar = drawRoster(rand, c);
   const hl = aiLoadout(hr, `${key}:home`, week), al = aiLoadout(ar, `${key}:away`, week);
   const { homePicks, awayPicks } = buildMatchup(hr, ar, week, { owned: hl.owned, extra: hl.extra }, { owned: al.owned, extra: al.extra });
-  const r = resolve(homePicks, awayPicks, week, hl.buffs, al.buffs);
+  const hx = aiExtras(hl, homePicks, week), ax = aiExtras(al, awayPicks, week);
+  const r = resolve(homePicks, awayPicks, week, hl.buffs, al.buffs, hx || ax ? { home: hx, away: ax } : undefined);
   return { ...r, homeRoster: hr, awayRoster: ar, homeLoad: hl, awayLoad: al };
 }
 

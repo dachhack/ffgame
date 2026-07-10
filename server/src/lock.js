@@ -9,7 +9,7 @@
 // integrity window.
 import { db } from './supabase.js';
 import { autoLineup } from './engine.js';
-import { wantsComboDrip, aiLiveBuffs } from '../../src/data/aiLineup.ts';
+import { wantsComboDrip, aiLiveBuffs, aiTargetedPlays } from '../../src/data/aiLineup.ts';
 import { powerupById } from '../../src/data/powerups.ts';
 
 /** A team's armed loadout (applied_state) — what it already OWNS coming into the
@@ -55,15 +55,23 @@ async function aiBudgetPass(m, rosterId, appUserId, starters, seed) {
     return !!sp?.ok;
   };
 
-  // 2. Buy power-ups blind + priority-ordered (own roster only): (a) the EV in-slot
-  //    buffs first, then (b) the Combo Drip unlock if the roster has a dual-threat.
-  //    The playtester (tools/playtester) shows that at the season coin seed a drip
-  //    amplifier is a better single buy than the combodrip unlock — which only pays
-  //    for a genuine dual-threat and otherwise crowds out the buff — so buffs lead.
+  // 2. Buy power-ups blind + priority-ordered (own roster only) — RETRAINED from
+  //    the lever sweep (tools/playtester/aggregate.mjs, findings §17) by measured
+  //    lift-per-coin: first amp → RIVALRY on its densest window (2.80 pts/10c —
+  //    better per-coin than momentum) → remaining amps → GHOST when the lineup
+  //    leaves a base slot open (slate/bye gaps; a flat 14 beats an empty slot) →
+  //    the Combo Drip unlock for a genuine dual-threat. Blind by construction:
+  //    the battle-play targets read only the AI's OWN deterministic lineup.
   //    Each item charged once (idempotent per item); items already owned from a prior
   //    lock are kept without re-charging, so a depleted balance can't drop a bought item.
-  const desired = [...aiLiveBuffs(`${m.league_id}:${rosterId}`, m.week)];
+  //    (Mirror: tools/playtester/lib.mjs aiLoadout — keep in lockstep.)
+  const slugs = starters.map((s) => s.player_slug).filter(Boolean);
+  const plays = aiTargetedPlays(autoLineup(slugs, m.week), m.week);
+  const amps = aiLiveBuffs(`${m.league_id}:${rosterId}`, m.week);
+  const desired = [amps[0], 'rivalry', ...amps.slice(1)];
+  if (plays.ghost) desired.push('ghost');
   if (starters.some((s) => s.player_slug && wantsComboDrip(s.player_slug, s.pos))) desired.push('unlock-combo-drip');
+  const targeted = { ...(own.payload.targeted ?? {}) };
   // Amplifiers are capacity-limited (1 + Second Amp + Third Amp, migration
   // 0063): buying an amplifier beyond capacity requires buying the capacity
   // unlock first — if THAT isn't affordable, skip the amp. (Mirrored in
@@ -76,6 +84,14 @@ async function aiBudgetPass(m, rosterId, appUserId, starters, seed) {
     return Number(data?.coins ?? 0);
   };
   for (const item of desired) {
+    // Battle plays: spend, then record the blind target in the same targeted
+    // payload the human apply RPCs use (resolve.js toExtras scores it).
+    if (item === 'rivalry' || item === 'ghost') {
+      const target = item === 'rivalry' ? plays.rivalry : plays.ghost;
+      if (!target || (targeted[item] ?? []).includes(target)) continue;
+      if (await spend(item, `${m.id}:ai:${item}:${rosterId}`)) targeted[item] = [...(targeted[item] ?? []), target];
+      continue;
+    }
     if (own.buffs.has(item) || own.unlocks.has(item)) continue;
     if (AMPS.has(item) && [...own.buffs].filter((b) => AMPS.has(b)).length >= ampCap()) {
       const need = own.buffs.has('amp-2') ? 'amp-3' : 'amp-2';
@@ -98,7 +114,7 @@ async function aiBudgetPass(m, rosterId, appUserId, starters, seed) {
   // 3. Record the bought loadout (merge, don't clobber any other payload keys).
   await db().from('applied_state').upsert({
     matchup_id: m.id, app_user_id: appUserId, week: m.week,
-    payload_json: { ...own.payload, buffs: [...own.buffs], unlocks: [...own.unlocks], extra: own.extra },
+    payload_json: { ...own.payload, buffs: [...own.buffs], unlocks: [...own.unlocks], extra: own.extra, targeted },
   }, { onConflict: 'matchup_id,app_user_id' });
 
   return { owned: own.unlocks, extra: own.extra };

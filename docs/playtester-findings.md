@@ -563,3 +563,72 @@ scoring is untouched — only the price moves.
   Air Raid (aiLiveBuffs is amps-only) — the probes drive it via the season
   policy hook; teaching the shipping AI a QB-conditional raid buy is a
   separate call (it would also need an aiMetric passbig hook).
+
+## 17. Battle-layer battery + AI retrain (v0.124.0) — every new mechanic measured
+The battle layer (window battles, underdog/marshal metrics, and the 13 new
+targeted/live power-ups through Ghost Player) shipped without playtester
+coverage. This round teaches the sim ALL of them and retrains the AI on the
+measurements. Substrate: `resolve()` now takes per-side `LiveExtras`;
+`aggregate.mjs` grew a post-build `extras` hook so levers can target
+`win|slot` off the BUILT lineups (blind, projection-based); `season.mjs`
+loads carry an `extrasFor` hook so symmetric policies can arm battle plays.
+
+**Lever sweep (weeks 1-14 × 200 pairs/lever, seed 4242), the new entries:**
+
+| lever | cost | homeWR | marginLift | pts/◎10 | verdict |
+|---|---|---|---|---|---|
+| bye-steal | 55 | **66.3%** | +24.5 | **4.45** | DOMINANT — see watch below |
+| rivalry | 70 | **64.1%** | +19.6 | **2.80** | DOMINANT — beats momentum per coin |
+| ghost | 75 | 58.5% | +11.3 | 1.51 | strong-but-fair; conditional on an open slot |
+| red-herring (decoy) | 90 | 57.0% | +8.9 | 0.99 | fair |
+| double-or-nothing | 80 | 56.4% | +13.7 | 1.72 | fair (top-slot stake wins >50%) |
+| emp | 65 | 54.6% | +5.5 | 0.84 | fair live play |
+| cold-snap | 60 | 54.1% | +4.7 | 0.78 | fair (scout-informed UPPER bound) |
+| surge | 55 | 53.7% | +4.5 | 0.82 | fair |
+| jinx | 55 | 53.0% | +3.7 | 0.68 | fair (upper bound) |
+| grudge / lead-change / napalm / bunker | 45-65 | 50.7-51.7% | +0-1.5 | ≤0.26 | DEAD vs honest blind field — situational human plays |
+| def-marshal (free) | 0 | 49.9% | −1.4 | — | fair option (nobody nukes blind) |
+| wr/rb-underdog-1 (free) | 0 | 39-42% | −12 to −16 | — | TRAP as a default — confirmed right to exclude from AI auto-pick |
+
+**AI retrain (shipped, all three mirrors in lockstep — `src/data/aiLineup.ts`
+`aiTargetedPlays`, `tools/playtester/lib.mjs` `aiLoadout`, `server/src/lock.js`
+`aiBudgetPass`, `season.mjs` `seasonBudget`):**
+- Buy order by measured lift-per-coin: **first amp → RIVALRY on its densest
+  window (blind mirror-probability read) → remaining amps → GHOST when the
+  lineup leaves a base slot open → combo-drip → extra slots.**
+- Demo AI (`src/engine/matchup.ts` AI_BUFF_POOL) drops the dead defensive
+  buffs (floodgates/ot-shield, 0 to +3 lift) for the measured amp trio.
+- Server wiring: `resolve.js toExtras` now maps ALL battle plays (rivalry /
+  ghost / lead-change / grudge / jinx / red-herring / surge / cold-snap /
+  napalm / bunker) from `applied_state.targeted`; `aiSide` passes the AI's
+  targeted payload through. The AI writes its plays directly to
+  `applied_state`; the HUMAN `apply_targeted` RPC still whitelists the old
+  ids — extending it (migration) is the open item for human live parity.
+
+**Validation (season.mjs, 12 teams × 14 weeks × 40 seasons):** economy stays
+bounded (wallet ~◎120 flat) with rivalry at 44.7 buys/season; cancellation
+holds (full-vs-no-budget standings r=0.92); the retrained order beats a
+legacy amps-only deviant by **+2.0 win-rate pts** over 560 games. Ghost never
+fires on deep 17-man sim rosters (0 buys — no open slots); it exists for real
+rosters with bye/slate gaps. Invariants extended (ghost flat-14, jinx
+never-raises, extras-path plumbing) — all green.
+
+**Balance watches:**
+- **bye-steal 4.45 pts/◎10 at ◎55** — the model fills an open slot with the
+  top BENCH projection (clamped 25), a stand-in for a real bye stud. The real
+  play needs a bye player + an open slot, so availability is narrower than the
+  96% the harness sees — but when it's live it's the best coin in the game.
+  WATCH: if live usage confirms, reprice toward ◎70-75 (ghost's neighborhood)
+  or clamp the flat score to ~18.
+- **rivalry 2.80 pts/◎10, 64.1% blind** — the honest field mirrors positions
+  heavily, so the "risk" rarely whiffs. Both sides buying it cancels (season
+  r=0.92), and it gives the AI a real battle-layer presence, so it ships as
+  the AI's second buy. WATCH: human-vs-AI asymmetry once the RPC opens it up;
+  the dial is siphon 50% → 33%, not price.
+- **underdog** at −12 to −26 margin is priced for drama, not EV — fine as a
+  human comeback gamble, but a trap. If it should be a real decision, the
+  ×1.5 trailing boost needs to be ~×2 or the base rate un-discounted.
+
+**Still unmodeled:** turnover-boost (no per-player turnover feed), spy
+(information value), clutch plays (conditional live offers — no LiveExtras
+surface), swaps/mulligan as POLICIES (lateswap §10 covers the mechanism).

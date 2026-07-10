@@ -22,6 +22,8 @@ function makeFakeDb(tables) {
       select: () => api,
       eq: (c, v) => builder(rows.filter((r) => r[c] === v)),
       in: (c, vs) => { const s = new Set(vs); return builder(rows.filter((r) => s.has(r[c]))); },
+      // .not(col, 'is', null) — the only negation resolve.js uses (v0.109.0+).
+      not: (c, op, v) => builder(rows.filter((r) => (op === 'is' && v === null ? r[c] != null : true))),
       maybeSingle: () => Promise.resolve({ data: rows[0] ?? null, error: null }),
       then: (res, rej) => Promise.resolve({ data: rows, error: null }).then(res, rej),
     };
