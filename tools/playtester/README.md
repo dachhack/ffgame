@@ -123,6 +123,18 @@ separates "the mechanic is weak" from "the random field never triggered it".
 npx tsx tools/playtester/scenario.mjs --week=1-14 --n=200
 ```
 
+## `livefire.mjs` — live-fire timing school (v0.126.0)
+For the live tacticals (surge / cold-snap / napalm): WHEN should you fire?
+Paired policies per play — blind fixed clocks, `on-hot` (fire at the target's
+first hot streak, hold the coin otherwise), `hot-else-1800` (the shipping
+manager rule), and a hindsight ORACLE grid that bounds timing skill. Findings
+§19: late beats early, hot-else-late is the best honest policy for all three,
+and the oracle reaches amp-grade value (napalm's timing gap is 8×).
+
+```
+npx tsx tools/playtester/livefire.mjs --week=1-14 --n=100
+```
+
 ## `lateswap.mjs` — score-aware late swap (per-window locks, v0.95.0)
 Windows seal one at a time, so a manager picks each later window knowing the real
 margin of the windows already played. Both sides still lock a window at the same

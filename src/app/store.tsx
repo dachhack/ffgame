@@ -26,7 +26,7 @@ export interface AppliedWeek {
   byeSteal?: { slotKey: string; playerId: string }; // a bye player fielded for a flat projected score
   ghost?: string[];                              // slotKeys where a Ghost Player phantom is fielded (flat set score)
   emp?: Partial<Record<WindowId, number>>;       // window -> clock at which opponent drips froze (10 min)
-  rivalry?: Partial<Record<WindowId, boolean>>;  // windows armed with Rivalry (siphon 50% of same-position opponents at window-end)
+  rivalry?: Partial<Record<WindowId, boolean>>;  // windows armed with Rivalry (siphon 30% of same-position opponents at window-end)
   leadChange?: string[];                         // your slotKeys armed with Lead Change (+2 per lead you seize)
   grudge?: string[];                             // your slotKeys staked with Grudge Match (win by 10+ → +25, lose → −25)
   jinx?: string[];                               // slotKeys where you jinx the opponent's first TD
@@ -197,7 +197,7 @@ interface Store {
   applyMulligan: (week: number, slotKey: string, atClock: number, atRt: number, toMetricId: string) => boolean;
   /** Fire EMP on a live window: freeze opponent drips from `clock` for 10 min. */
   applyEmp: (week: number, win: WindowId, clock: number) => boolean;
-  /** Arm Rivalry on a window (blind, pre-kickoff): siphon 50% of same-position opponents at window-end. */
+  /** Arm Rivalry on a window (blind, pre-kickoff): siphon 30% of same-position opponents at window-end. */
   applyRivalry: (week: number, win: WindowId) => boolean;
   /** Remove Rivalry from a window (refund). */
   removeRivalry: (week: number, win: WindowId) => void;

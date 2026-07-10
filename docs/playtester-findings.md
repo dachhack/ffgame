@@ -683,3 +683,56 @@ measured trade, and the probes vs the new field read ≈0 (the steady field now
 sits at the adopted optimum). Full retrained+stacked policy vs the legacy
 amps-only buyer: **+2.5 win-rate pts**. WATCH: if a future Air Raid or rivalry
 reprice shifts the ratio, re-run the battery — the arms are standing.
+
+## 19. Balance retunes from the §17 watches + the live-fire timing school (v0.126.0)
+Three watches closed with parameter sweeps, one metric exonerated, and a new
+driver (`livefire.mjs`) that teaches WHEN to fire the live tacticals.
+
+**Underdog — exonerated, kept at ×1.5.** The §17 lever staked the TOP player
+(−12 to −16 margin), but that's the wrong test: a bigger multiplier barely
+rescues it (×3.0 → still 42%) because the cost is trading the stud's drip
+away. On the roster's WEAKEST WR — the player who actually expects to trail,
+i.e. the intended use — it measures **49.2% at ×1.5**: already fair. The gap
+between uses is skill expression, not imbalance. Shipped: metric copy now
+says "best on a player you EXPECT to trail"; new `wr-underdog-low` lever
+keeps the honest reading in the battery.
+
+**Bye Steal — cap 25 → 16 (BYE_STEAL_CAP, one constant, both engines).**
+Sweep: cap 25 = 66.3% / 4.45 pts per ◎10 (best coin in the game); 18 = 2.95;
+**16 = 60.0% / 2.49** — the amp neighborhood, still ahead of Ghost (◎55 vs
+◎75; you earned the edge by rostering the bye stud). Also fixed a real
+parity gap: the DEMO path banked the raw projection unclamped while live
+clamped at 25 — both now clamp at the shared constant, and the client +
+worker re-clamps match.
+
+**Rivalry — siphon 50% → 30% (RIVALRY_SIPHON, one constant, both engines).**
+Sweep: 50% = 64.1% / 2.80 per ◎10; 35% = 60.8% (still flagged); 25% = 57.5%;
+**30% = 59.0% / 1.70** — a spicy-but-fair bet in Double-or-Nothing territory.
+Position mirrors are common enough that the whiff "risk" needed the dial,
+not the price. All copy synced (blurb, handbook, store notes, rulebook).
+
+**Live-fire timing school (`livefire.mjs`, 1,400 pairs/cell):** for surge /
+cold-snap / napalm, LATE beats EARLY blind (fixed-30:00 ≈ +6.6 vs +2.6 at
+10:00), the hot-streak trigger is the real signal, and the shipping-grade
+manager rule is **hot-else-late**: fire the moment the target goes HOT, else
+at ~30:00 — the best honest policy for all three (surge +6.8 / 1.24 per ◎10;
+cold-snap +6.9 / 1.16; napalm +6.5 / 1.09). The hindsight ORACLE reaches
+1.8-2.1 per ◎10 — amp-grade — so timing skill is worth roughly +60-90% on
+top of the honest rule, and napalm has the widest skill gap of any play in
+the game (blind-early 0.26 → oracle 2.09, 8×). Handbook "when to fire"
+guidance updated to match. The AI does NOT fire live plays (the worker has
+no mid-game targeted writes) — this is human guidance + the bar any future
+live-AI must clear.
+
+**Post-retune validation:** full lever battery + season battery re-run at
+the tuned values — see the §19 numbers above and the buy-mix note below.
+
+**Post-retune battery (weeks 1-14 × 200):** NO battle play carries the
+DOMINANT flag anymore — bye-steal 60.0% / 2.49 per ◎10, rivalry 59.0% / 1.70,
+ghost 58.5% / 1.51, don 56.4% / 1.72; the amps remain the deliberate core.
+The AI buy order survives the retune unchanged: rivalry at 1.70 per ◎10 still
+beats a SECOND amp once the capacity-unlock tax is counted (garbage-time ◎75 +
+Second Amp ◎40 = ◎115 for +17.6 → 1.53 per ◎10 bundled). Season battery at
+the tuned values: economy bounded (~◎117), cancellation r=0.92, retrained
+policy still +2.0 pts over legacy. h2h-verify's rivalry assertion now reads
+the shared RIVALRY_SIPHON constant instead of a hardcoded 50%.

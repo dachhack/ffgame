@@ -260,7 +260,8 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     if (t.don?.win != null && t.don?.slot != null) ex.don = { win: String(t.don.win), slot: String(t.don.slot) };
     if (t.byeSteal?.slug) ex.byeSteal = {
       win: String(t.byeSteal.win), slot: String(t.byeSteal.slot),
-      player: player(t.byeSteal.slug), pts: Math.max(0, Math.min(25, Number(t.byeSteal.pts) || 0)),
+      // Defensive re-clamp; the engine clamps again at BYE_STEAL_CAP (16, §19).
+      player: player(t.byeSteal.slug), pts: Math.max(0, Math.min(16, Number(t.byeSteal.pts) || 0)),
     };
     if (t.emp && Object.keys(t.emp).length) {
       ex.emp = {};

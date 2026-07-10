@@ -11,7 +11,7 @@ import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '.
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '../data/league';
 import { buildLiveLeague } from '../data/liveBoard';
 import {
-  windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
+  windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
 } from '../engine/matchup';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, GAME_SECONDS, type StatLine } from '../engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '../data/realPbp';
@@ -1493,7 +1493,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           onPick={(pid) => {
             if (applyByeSteal(week, byeStealSlot, pid)) {
               const bp = getPlayer(pid);
-              liveTargeted('bye-steal', { ...keyParts(byeStealSlot), slug: pid, pts: bp ? Math.round(projectedPoints(bp, week) * 10) / 10 : 0 });
+              liveTargeted('bye-steal', { ...keyParts(byeStealSlot), slug: pid, pts: bp ? Math.min(BYE_STEAL_CAP, Math.round(projectedPoints(bp, week) * 10) / 10) : 0 });
             }
             setByeStealSlot(null); setPendingApply(null);
           }}

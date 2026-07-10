@@ -158,7 +158,7 @@ export interface LiveExtras {
   /** Real-time swaps on this side's own slots. */
   swaps?: Record<string, LiveSwap>;
   /** Rivalry: windows armed (blind, pre-kickoff) — at window-end, for every slot
-   *  where the opponent fields the SAME position as this side, siphon 50% of the
+   *  where the opponent fields the SAME position as this side, siphon a RIVALRY_SIPHON cut of the
    *  opponent's slot score to this side. */
   rivalry?: string[];
   /** Lead Change: this side's slots (`win|slot`) armed — +2 each time it seizes the lead. */
@@ -179,7 +179,8 @@ export interface LiveExtras {
 export interface LiveExtrasBySide { home?: LiveExtras; away?: LiveExtras; }
 
 const EMP_SECONDS = 600;
-export const BYE_STEAL_CAP = 25; // flat-score ceiling — see LiveExtras.byeSteal
+import { BYE_STEAL_CAP, RIVALRY_SIPHON } from './matchup'; // tuned constants — ONE source for both engines
+export { BYE_STEAL_CAP };
 
 // Armed flat-award buffs (mirrors buildMatchup's award()): scans a side's fielded
 // players for a trigger and returns the payout, credited to the triggering slot.
@@ -445,7 +446,7 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     return { hot: hot || undefined, nuked: nuked || undefined };
   };
 
-  // RIVALRY (parity with buildMatchup): for each armed window, siphon 50% of a
+  // RIVALRY (parity with buildMatchup): for each armed window, siphon a RIVALRY_SIPHON cut of a
   // same-position opponent's slot score to the arming side, at window-end. Home
   // then away (each on the running scores).
   const applyRivalry = (wins: string[] | undefined, side: 'home' | 'away') => {
@@ -453,8 +454,8 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     const armed = new Set(wins);
     for (const s of slots) {
       if (!armed.has(s.win) || !s.homeP || !s.awayP || s.homeP.pos !== s.awayP.pos) continue;
-      if (side === 'home' && s.away > 0) { const take = round(s.away * 0.5); s.away = round(s.away - take); s.home = round(s.home + take); }
-      else if (side === 'away' && s.home > 0) { const take = round(s.home * 0.5); s.home = round(s.home - take); s.away = round(s.away + take); }
+      if (side === 'home' && s.away > 0) { const take = round(s.away * RIVALRY_SIPHON); s.away = round(s.away - take); s.home = round(s.home + take); }
+      else if (side === 'away' && s.home > 0) { const take = round(s.home * RIVALRY_SIPHON); s.home = round(s.home - take); s.away = round(s.away + take); }
     }
   };
   applyRivalry(hx.rivalry, 'home');

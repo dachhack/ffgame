@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { makePlayer, injectWeek, EMPTY } from '../src/engine.js';
 import { resolveSlot, windowShield, defEarnScore, defSuppressScore } from '../../src/engine/sim.ts';
 import { resolveLiveMatchup } from '../../src/engine/liveResolve.ts';
-import { clutchOffers } from '../../src/engine/matchup.ts';
+import { clutchOffers, RIVALRY_SIPHON } from '../../src/engine/matchup.ts';
 
 const WEEK = 1;
 const w = JSON.parse(readFileSync(new URL(`../../public/pbp/w${WEEK}.json`, import.meta.url)));
@@ -77,7 +77,7 @@ ok('earn DST surfaced DEF DRIP tick events', defDripEvents.length > 0);
 
 // ── 6. RIVALRY power-up — blind same-position siphon at window-end ────────────
 // Home & away both field a WR in the same slot (a positional mirror). Home arms
-// Rivalry on the window → siphons 50% of away's slot score. A non-mirror (WR vs
+// Rivalry on the window → siphons RIVALRY_SIPHON of away's slot score. A non-mirror (WR vs
 // RB) should whiff.
 const rHome = [{ win: 'early', slot: '0', player: P('puka-nacua', 'WR', 'LA'), metricId: 'recyd' }];
 const rAwayMirror = [{ win: 'early', slot: '0', player: P('marquise-brown', 'WR', 'KC'), metricId: 'recyd' }];
@@ -90,7 +90,7 @@ const awayRiv = withRiv.slots.find((s) => s.side === 'away').score;
 const whiffAway = whiff.slots.find((s) => s.side === 'away').score;
 const whiffNo = resolveLiveMatchup(rHome, rAwayNoMirror, WEEK).slots.find((s) => s.side === 'away').score;
 console.log(`\nRIVALRY: mirror away ${awayNo} → ${awayRiv} (siphoned) · non-mirror away ${whiffNo} → ${whiffAway} (whiff)`);
-ok('rivalry siphons ~50% of a same-position rival', Math.abs(awayRiv - awayNo * 0.5) < 0.2);
+ok('rivalry siphons the tuned cut of a same-position rival', Math.abs(awayRiv - awayNo * (1 - RIVALRY_SIPHON)) < 0.2);
 ok('rivalry whiffs when the opponent plays a different position', Math.abs(whiffAway - whiffNo) < 0.05);
 
 // ── 5. SUPPRESS drips into a bigger kill-bar (still banks 0) ──────────────────
