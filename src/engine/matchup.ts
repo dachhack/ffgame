@@ -88,8 +88,12 @@ export function slotKey(win: WindowId, idx: number): string {
 
 // Power-ups the AI opponent loads with. Limited to whole-lineup buffs that affect
 // head-to-head scoring from the opponent's (their) side — so the AI always
-// benefits from arming them (drip/OT buffs; reactive/bonus buffs are human-only).
-const AI_BUFF_POOL = ['momentum', 'garbage-time', 'floodgates', 'overtime', 'ot-shield'];
+// benefits from arming them. RETRAINED from the playtester lever sweep
+// (tools/playtester/aggregate.mjs, findings §17): the three drip amplifiers are
+// the only buffs with real honest-field lift (overtime +17.1 / momentum +18.1 /
+// garbage-time +17.6 margin); floodgates and ot-shield measured DEAD vs an
+// honest field (0 to +3 lift — nobody nukes blind) and only diluted the draw.
+const AI_BUFF_POOL = ['momentum', 'garbage-time', 'overtime'];
 
 /** The AI's three armed power-ups for the week — a deterministic random draw,
  *  seeded per team+week, from the buffs it can actually use. */

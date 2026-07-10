@@ -17,8 +17,8 @@
 // hindsight-free); it never sees the opponent's players, metrics, or buys.
 //
 //   npx tsx tools/playtester/season.mjs --teams=12 --weeks=14 --seasons=40
-import { rng, useWeek, buildMatchup, resolve, slugMeta, powerupById, WALLET_SEED, EXTRA_SLOT_CAP, mean, fmt } from './lib.mjs';
-import { aiLiveBuffs, wantsComboDrip } from '../../src/data/aiLineup.ts';
+import { rng, useWeek, buildMatchup, resolve, slugMeta, powerupById, aiExtras, WALLET_SEED, EXTRA_SLOT_CAP, mean, fmt } from './lib.mjs';
+import { aiLiveBuffs, wantsComboDrip, aiLineup, aiTargetedPlays } from '../../src/data/aiLineup.ts';
 
 const flags = {};
 for (const a of process.argv.slice(2)) { const m = /^--([^=]+)(?:=(.*))?$/.exec(a); if (m) flags[m[1]] = m[2] ?? true; }
@@ -65,19 +65,26 @@ function schedule(M, W) {
 }
 
 /** Blind budget pass with a CARRIED-OVER wallet (no per-week reseed). Mirrors
- *  server/src/lock.js:aiBudgetPass priority order: EV buffs → combo-drip → extra
- *  slots — including the amp-capacity rule (0063): an amp beyond the cap needs
- *  Second/Third Amp bought first, and only when BOTH unlock and amp fit. */
-function seasonBudget(wallet, roster, key, week) {
+ *  server/src/lock.js:aiBudgetPass RETRAINED priority order (findings §17):
+ *  first amp → RIVALRY → remaining amps → GHOST (only when the lineup leaves a
+ *  base slot open) → combo-drip → extra slots — including the amp-capacity rule
+ *  (0063): an amp beyond the cap needs Second/Third Amp bought first, and only
+ *  when BOTH unlock and amp fit. `legacy: true` restores the pre-battle-play
+ *  order (no rivalry/ghost) for the retrain-validation probe. */
+function seasonBudget(wallet, roster, key, week, legacy = false) {
   let bal = wallet;
   const owned = new Set(), buffs = new Set();
+  const targeted = { rivalry: false, ghost: false };
   let extra = 0;
   const buy = (item) => { const p = powerupById(item)?.price ?? 9999; if (bal >= p) { bal -= p; return true; } return false; };
   const AMPS = new Set(['momentum', 'garbage-time', 'overtime']);
   const ampCap = () => 1 + (buffs.has('amp-2') ? 1 : 0) + (buffs.has('amp-2') && buffs.has('amp-3') ? 1 : 0);
-  const desired = [...aiLiveBuffs(key, week)];
+  const amps = aiLiveBuffs(key, week);
+  const desired = legacy ? [...amps] : [amps[0], 'rivalry', ...amps.slice(1)];
+  if (!legacy && aiTargetedPlays(aiLineup(roster, week), week).ghost) desired.push('ghost');
   if (roster.some((s) => wantsComboDrip(s, slugMeta(s).pos))) desired.push('unlock-combo-drip');
   for (const item of desired) {
+    if (item === 'rivalry' || item === 'ghost') { if (buy(item)) targeted[item] = true; continue; }
     if (AMPS.has(item) && [...buffs].filter((b) => AMPS.has(b)).length >= ampCap()) {
       const need = buffs.has('amp-2') ? 'amp-3' : 'amp-2';
       if (bal < (powerupById(need)?.price ?? 9999) + (powerupById(item)?.price ?? 9999)) continue;
@@ -86,7 +93,8 @@ function seasonBudget(wallet, roster, key, week) {
     if (buy(item)) (item.startsWith('unlock-') ? owned : buffs).add(item);
   }
   for (let i = 0; i < EXTRA_SLOT_CAP; i++) { if (buy('extra-slot')) extra++; else break; }
-  return { owned, buffs, extra, wallet: bal };
+  const extrasFor = (ownPicks, oppPicks, wk) => aiExtras({ targeted }, ownPicks, wk);
+  return { owned, buffs, extra, targeted, extrasFor, wallet: bal };
 }
 
 // ── Saver policies (team-0 probes): buy NOTHING until the amp bundle fits the
@@ -153,13 +161,20 @@ function runSeason(seed, skip = new Set(), t0policy = null) {
       if (t === 0 && t0policy) return t0policy(wallet[0], r, `${seed}:t0`, week);
       const l = seasonBudget(wallet[t], r, `${seed}:t${t}`, week);
       for (const b of [...l.buffs, ...l.owned]) buys[b] = (buys[b] || 0) + 1;
+      if (l.targeted?.rivalry) buys['rivalry'] = (buys['rivalry'] || 0) + 1;
+      if (l.targeted?.ghost) buys['ghost'] = (buys['ghost'] || 0) + 1;
       if (l.extra) buys['extra-slot'] = (buys['extra-slot'] || 0) + l.extra;
       return l;
     });
     for (const [h, a] of sched[wi]) {
       wallet[h] = load[h].wallet; wallet[a] = load[a].wallet; // post-spend
       const { homePicks, awayPicks } = buildMatchup(rosters[h], rosters[a], week, load[h], load[a]);
-      const r = resolve(homePicks, awayPicks, week, load[h].buffs, load[a].buffs);
+      // Targeted plays (rivalry / ghost / …): a load may carry an extrasFor hook
+      // that reads the BUILT lineups (own side first) and returns LiveExtras —
+      // both sides get theirs, so symmetric policies cancel like buffs do.
+      const hx = load[h].extrasFor?.(homePicks, awayPicks, week);
+      const ax = load[a].extrasFor?.(awayPicks, homePicks, week);
+      const r = resolve(homePicks, awayPicks, week, load[h].buffs, load[a].buffs, hx || ax ? { home: hx, away: ax } : undefined);
       if (r.winner === 'home') { wins[h]++; losses[a]++; } else if (r.winner === 'away') { wins[a]++; losses[h]++; }
       wallet[h] += r.coin.home; wallet[a] += r.coin.away; // bank weekly earnings
       homeWins += r.winner === 'home' ? 1 : 0; games++;
@@ -190,6 +205,7 @@ let strengthCorrSum = 0;   // wins vs roster strength (sanity: sim rewards roste
 let devWith = 0, devWithout = 0, devGames = 0; // mandatory-tax probe (team 0)
 let savPair = 0, savTrio = 0, savPairN = 0, savTrioN = 0; // saver probes (team 0)
 let raidA = 0, raidB = 0, raidAN = 0, raidBN = 0;         // Air Raid reprice probes (team 0)
+let legacyWins = 0;                                        // retrain probe: team 0 on the OLD (no battle-play) order
 
 for (let s = 0; s < SEASONS; s++) {
   const seed = baseSeed + s * 101;
@@ -213,6 +229,11 @@ for (let s = 0; s < SEASONS; s++) {
   const G = runSeason(seed, new Set(), raidAmp);   // team 0: Air Raid first, amp when it fits
   raidA += F.wins[0]; raidAN += ampRaid.raids;
   raidB += G.wins[0]; raidBN += raidAmp.raids;
+  // Retrain validation: team 0 keeps the LEGACY order (amps only, no battle
+  // plays) while the field runs the retrained policy. If the retrain is real,
+  // legacy team 0 should fall below the steady buyer's win-rate.
+  const H = runSeason(seed, new Set(), (w, r, k, wk) => seasonBudget(w, r, k, wk, true));
+  legacyWins += H.wins[0];
 }
 
 console.log('── economy ──');
@@ -246,3 +267,9 @@ const wRaidA = raidA / devGames * 100, wRaidB = raidB / devGames * 100;
 console.log(`  steady buyer (amp only)                          ${fmt(wWith)}%`);
 console.log(`  amp-then-raid (Air Raid when wallet allows)      ${fmt(wRaidA)}%  (${fmt(raidAN / SEASONS, 1)} raid weeks/season)`);
 console.log(`  raid-then-amp (Air Raid first, amp when it fits) ${fmt(wRaidB)}%  (${fmt(raidBN / SEASONS, 1)} raid weeks/season)`);
+
+console.log('\n── retrain probe (team 0 on the LEGACY amps-only order vs the retrained field) ──');
+const wLegacy = legacyWins / devGames * 100;
+console.log(`  retrained buyer (amps + rivalry/ghost)           ${fmt(wWith)}%`);
+console.log(`  legacy buyer (amps only, battle plays skipped)   ${fmt(wLegacy)}%  (Δ ${fmt(wWith - wLegacy)} pts)`);
+console.log(`  ${wWith - wLegacy > 1 ? '⇒ the retrained battle-play order EARNS its coin at the table' : '⇒ battle plays wash out at the table — keep them optional, revisit prices'}`);

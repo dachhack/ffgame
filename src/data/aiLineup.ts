@@ -135,6 +135,37 @@ export function aiLiveBuffs(teamKey: string, week: number, n = 3): string[] {
   return out;
 }
 
+// ── Targeted battle plays (RETRAINED policy, findings §17) ───────────────────
+// The lever sweep (tools/playtester/aggregate.mjs, weeks 1-14 × 200 pairs) put
+// two targeted plays above or near the amps on lift-per-coin, and both are
+// BLIND-legal (they read only the AI's own lineup):
+//   • RIVALRY on the AI's densest window — the honest field mirrors positions
+//     heavily, so the siphon lands often (64.1% / +19.6 margin / 2.80 pts per
+//     10 coin — better per-coin than momentum).
+//   • GHOST when the lineup leaves a base slot open (slate gaps) — a flat 14
+//     beats an empty slot every time (58.5% / +11.3 / 1.51 per 10 coin).
+// Everything else measured at or below fair vs an honest blind field (grudge,
+// lead-change, jinx, napalm, bunker...) and stays human-only.
+
+/** Blind targets for the AI's bought battle plays, read off its OWN built
+ *  lineup: rivalry = its densest window (max mirror probability), ghost = the
+ *  first base window slot the lineup left unfilled (null = lineup is full). */
+export function aiTargetedPlays(picks: AiPick[], week: number): { rivalry: string | null; ghost: string | null } {
+  const perWin = new Map<string, number>();
+  for (const p of picks) perWin.set(p.win, (perWin.get(p.win) ?? 0) + 1);
+  let rivalry: string | null = null, most = 0;
+  for (const [w, k] of perWin) if (k > most) { rivalry = w; most = k; }
+  const taken = new Set(picks.map((p) => `${p.win}|${p.slot}`));
+  let ghost: string | null = null;
+  outer: for (const w of windowsForWeek(week)) {
+    for (let i = 0; i < w.slots; i++) {
+      const k = `${w.id}|${i}`;
+      if (!taken.has(k)) { ghost = k; break outer; }
+    }
+  }
+  return { rivalry, ghost };
+}
+
 interface Tagged { slug: string; pos: Pos; team: string; metric: string }
 
 /** Build an AI lineup from a roster's starter slugs, each on its honest pre-game

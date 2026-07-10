@@ -139,9 +139,16 @@ retuned.
 npx tsx tools/playtester/lateswap.mjs --week=1-14 --n=120
 ```
 
+## Battle-layer coverage (v0.124.0)
+`resolve()` passes per-side `LiveExtras`, and `aggregate.mjs` levers can target
+`win|slot` off the built lineups — so every targeted/live battle play is now
+measured: `rivalry`, `jinx`, `grudge`, `lead-change`, `red-herring`,
+`double-or-nothing`, `ghost`, `bye-steal`, `surge`, `cold-snap`, `napalm`,
+`bunker`, `emp`, plus the `underdog`/`marshal` metric levers. The honest field
+(`honestMatch` / `season.mjs`) arms the AI's RETRAINED battle plays (rivalry on
+its densest window; ghost on an open slot) — findings §17.
+
 ## Not yet modeled
-`resolveLiveMatchup` now implements the targeted power-ups (v0.96.0: `double-or-
-nothing`, `bye-steal`, `emp`, `metric-swap`/`player-swap`/`mulligan` via extras, and
-the `trick-play`/`pick-six`/`hail-mary` awards), so drivers CAN measure them — only
-`lateswap.mjs` does so far. Still unmodeled anywhere: `turnover-boost` (no per-player
-turnover feed) and `spy` (pure information; needs an information-value driver).
+`turnover-boost` (no per-player turnover feed), `spy` (pure information; needs an
+information-value driver), and the CLUTCH plays (conditional live offers — no
+LiveExtras surface). Swaps/mulligan are measured as POLICIES in `lateswap.mjs`.
