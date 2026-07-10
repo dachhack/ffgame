@@ -776,3 +776,16 @@ class. Home spies the away top slot and plays the projection-best response:
   against the honest field there is nothing for the reveal to catch.
 Verdict: Spy is correctly a ◎40 curiosity vs the AI meta; its real value is
 versus HUMAN metas (nuke/bet-heavy opponents) and table psychology. No retune.
+
+**§20 addendum — the entitlement ledger (0086, v0.127.1).** The "future
+hardening" shipped: `apply_targeted` now enforces **applies ≤ purchases** as a
+pure derivation — purchases counted from `coin_ledger` rows with reason
+`spend:<id>` (every buy already writes one: the shop AND the AI budget pass),
+applies summed across EVERY matchup of the caller's in the league (a
+consumable spent in week 3 stays spent in week 4). No new tables, no
+backfill; `clear_targeted` releases entitlement by removing the entry; a
+don/byeSteal re-apply is a MOVE (skips the gate); swaps gate per kind; Spy
+keeps its own use_spy consume. A new lockstep checker
+(`scripts/check-targeted-keys.mjs`, 69 checks) fails the build if the
+targeted-payload key names ever drift between the SQL gate, the worker's
+toExtras, and the engine's LiveExtras.
