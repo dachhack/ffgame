@@ -632,3 +632,54 @@ never-raises, extras-path plumbing) — all green.
 **Still unmodeled:** turnover-boost (no per-player turnover feed), spy
 (information value), clutch plays (conditional live offers — no LiveExtras
 surface), swaps/mulligan as POLICIES (lateswap §10 covers the mechanism).
+
+## 18. Conditional STACKS — roster-aware add-on buys, measured then adopted (v0.125.0)
+§17 gave the AI a fixed greedy order. This round asks: when the wallet allows
+AND the possible starters create the situation, which power-up STACKS earn
+their coin? Machinery: `aiBattlePlan` (aiLineup.ts) reads the AI's own built
+lineup blind — top-projected slot (a DoN stake), cheapest genuine WR decoy
+(Red Herring), open base slot (ghost), FG deployment (Air Raid waste-guard),
+twin-QB windows (fg-stack) — and `AI_STACKS` switches gate each candidate in
+every budget mirror. `season.mjs` probes each stack as a team-0 deviant vs the
+steady retrained field (12×14×60 seasons — 840 games/arm).
+
+**Verdicts:**
+| stack | Δ win-rate | fires/season | verdict |
+|---|---|---|---|
+| raid-FIRST (Air Raid ◎40 before the amp, only when no FG deploys; QB → passbig) | **+1.4 pts** | 10.1 | **ADOPTED** |
+| raid after amps | +0.8 | 4.4 | dominated by raid-first |
+| don (surplus → DoN on top slot) | 0.0 | **0.0** | never fires — no ◎80 surplus exists after amp+rivalry |
+| herring (surplus → cheap WR decoy) | 0.0 | **0.0** | never fires (◎90) |
+| extra-slot → rivalry window | 0.0 | **0.0** | extra slots are never bought at all in the retrained economy |
+| twin-FG (fg-stack when 2 QBs share a window) | 0.0 | **0.0** | the situation ~never exists: windows hold 1-3 slots, so a second QB crowds out the ≥2 drip teammates FG needs |
+
+**Adopted policy (AI_STACKS.raid + raidFirst, all mirrors in lockstep):**
+when the deterministic lineup deploys NO Field General, buy Air Raid ◎40
+BEFORE the first amp — it fits alongside the amp inside weekly income
+(~◎90) instead of competing with it — and `aiMetric` flips the QB onto
+`passbig` (strictly dominant over `pass` for the holder: same 0.04/yd,
+10 vs 4 per passing TD). The FG guard exists because `applyFieldGeneral`
+would overwrite a passbig QB — buying the unlock there is pure waste.
+
+**The real §18 lesson:** "stack when you have budget" is mostly answered by
+the ECONOMY, not the policy — after the core amp+rivalry buys (~◎130-145/wk
+desired vs ~◎90/wk income) there is never an ◎80+ surplus, so the surplus
+stacks are structurally dead. The switches + probes stay in the battery: if
+coin income rises or prices drop, the next run will light them up.
+
+**Wallet-awareness for free:** live wallets CARRY OVER (winners accumulate),
+and the budget pass is greedy through the desired list — so a fat wallet
+automatically buys deeper into the stack order with zero extra policy code.
+
+Also shipped: `applyFieldGeneral(picks, owned)` supports Twin Generals (both
+QBs flip to fg when `fg-stack` is owned and the window qualifies) — inert for
+the AI (never buys it), but the machinery is measured and ready.
+
+**Post-adoption re-battery (field-wide raid-first, 12×14×40):** economy still
+bounded (~◎117 wallet), cancellation r=0.92, honest home WR 49.8%. The buy mix
+shifts hard: `unlock-pass-td10` 115.8 buys/season while RIVALRY falls 44 → 15
+(◎70 rarely fits after amp+raid inside ~◎90/wk income) — that crowding IS the
+measured trade, and the probes vs the new field read ≈0 (the steady field now
+sits at the adopted optimum). Full retrained+stacked policy vs the legacy
+amps-only buyer: **+2.5 win-rate pts**. WATCH: if a future Air Raid or rivalry
+reprice shifts the ratio, re-run the battery — the arms are standing.
