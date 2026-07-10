@@ -8,6 +8,7 @@ import { METRICS } from '../data/metrics';
 import { loadRealWeek } from '../data/realPbp';
 import { gamesInWindow, windowsForWeek } from '../data/nflSlate';
 import { FX_COLOR, fmtClock, buildBeats, type Beat } from '../data/demoNarration';
+import { classifyEvent } from '../engine/moments';
 import { avatarUrl } from '../data/media';
 import { getProvider } from '../data/providers';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
@@ -478,7 +479,7 @@ export function DemoBoard() {
             const winClock = st === 'live' ? wClock : winMaxes[i] ?? 0;
             return (
               <div key={key} style={{ borderBottom: '1px solid var(--bd)' }}>
-                <SlotRow slot={s} state={st} you={b.you} their={b.their} noBorder
+                <SlotRow slot={s} state={st} you={b.you} their={b.their} clock={winClock} noBorder
                   frozen={isFeatured && frozen} armedPu={isFeatured ? armedPu : undefined} />
                 {canOpen && (
                   <div style={{ padding: '0 12px 8px' }}>
@@ -789,12 +790,30 @@ function DuelLog({ slot, clock, live, armedPu }: { slot: ResolvedSlot; clock: nu
   );
 }
 
-function SlotRow({ slot, state, you, their, frozen, armedPu, noBorder }: {
+function SlotRow({ slot, state, you, their, clock, frozen, armedPu, noBorder }: {
   slot: ResolvedSlot; state: 'upcoming' | 'live' | 'final'; you: number; their: number;
-  frozen?: boolean; armedPu?: { id?: string; icon: string; name: string }; noBorder?: boolean;
+  clock?: number; frozen?: boolean; armedPu?: { id?: string; icon: string; name: string }; noBorder?: boolean;
 }) {
   const fs = useFinePrint();
   const sealed = state === 'upcoming'; // opponent picks + metrics unseal at kickoff
+  // The DRAMA overlay: when a bank-zeroing beat lands at the current clock, the
+  // row explodes instead of whispering a log line — 💥 burst + the victim's
+  // score shakes. Same classification the real board's moment banners use
+  // (src/engine/moments.ts), lingering ~2 game-minutes so a viewer can't miss it.
+  const nuke = useMemo(() => {
+    if (state !== 'live' || clock == null) return null;
+    let last: { clock: number; pts: number; victim: 'you' | 'their' } | null = null;
+    for (const e of slot.events) {
+      if (e.clock > clock) break;
+      const k = classifyEvent(e);
+      if (!k || k.kind === 'turnover' || k.kind === 'hot' || k.kind === 'erase') continue;
+      // tenuke events sit on the VICTIM's side; every other nuke-class beat
+      // is logged on the attacker's side (see moments.ts).
+      const victim = k.kind === 'tenuke' ? e.side : e.side === 'you' ? 'their' : 'you';
+      last = { clock: e.clock, pts: k.pts, victim };
+    }
+    return last && clock - last.clock <= 120 ? last : null;
+  }, [slot.events, clock, state]);
   // Unused-at-final backup: its accrued points are struck (they banked 0 —
   // a backup only counts by subbing into a starter spot, which applyBackups
   // resolves at FINAL).
@@ -842,17 +861,26 @@ function SlotRow({ slot, state, you, their, frozen, armedPu, noBorder }: {
   // "Field General · MULTIPLIER" without wrapping. Here each chip has half the
   // row and stays on one line (your metric left, opponent's right once unsealed).
   const showMetrics = !!slot.you?.metricId || (!sealed && !!slot.their?.metricId);
+  const nukeShake = (who: 'you' | 'their') => (nuke && nuke.victim === who ? 'shake .6s ease' : undefined);
   return (
-    <div style={{ borderBottom: noBorder ? 'none' : '1px solid var(--bd)' }}>
+    <div style={{ borderBottom: noBorder ? 'none' : '1px solid var(--bd)', position: 'relative' }}>
+      {nuke && (
+        <div key={nuke.clock} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, pointerEvents: 'none', zIndex: 2, animation: 'nukeburst .9s cubic-bezier(.2,1.6,.4,1)' }}>
+          <span style={{ fontSize: 34, lineHeight: 1, filter: 'drop-shadow(0 0 14px rgba(255,79,98,.85))' }}><Emoji e="💥" size="1em" /></span>
+          <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: '0.16em', color: 'var(--fx-nuke, #FF4F62)', background: 'color-mix(in srgb, var(--bg) 80%, transparent)', border: '1px solid var(--fx-nuke, #FF4F62)', borderRadius: 6, padding: '4px 11px', boxShadow: '0 0 20px color-mix(in srgb, var(--fx-nuke, #FF4F62) 60%, transparent)', textShadow: '0 0 8px color-mix(in srgb, var(--fx-nuke, #FF4F62) 70%, transparent)' }}>
+            NUKED{nuke.pts >= 3 ? ` −${nuke.pts.toFixed(1)}` : ''}
+          </span>
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: showMetrics ? '8px 12px 3px' : '8px 12px' }}>
         {side('you')}
         <div className="mono" style={{ flex: 'none', minWidth: 60, textAlign: 'center' }}>
           {state === 'upcoming'
             ? <span style={{ fontSize: 9, color: 'var(--faint)' }}>–&nbsp;·&nbsp;–</span>
             : <span style={{ fontSize: 11.5, fontWeight: 700 }}>
-                <span style={{ color: 'var(--you)', textDecoration: backupStruck && slot.you ? 'line-through' : undefined, opacity: backupStruck && slot.you ? 0.55 : 1 }}>{you.toFixed(1)}</span>
+                <span key={nuke?.victim === 'you' ? `n${nuke.clock}` : 'y'} style={{ display: 'inline-block', color: 'var(--you)', textDecoration: backupStruck && slot.you ? 'line-through' : undefined, opacity: backupStruck && slot.you ? 0.55 : 1, animation: nukeShake('you') }}>{you.toFixed(1)}</span>
                 <span style={{ color: 'var(--faint)' }}> · </span>
-                <span style={{ color: 'var(--opp)', textDecoration: backupStruck && slot.their ? 'line-through' : undefined, opacity: backupStruck && slot.their ? 0.55 : 1 }}>{their.toFixed(1)}</span>
+                <span key={nuke?.victim === 'their' ? `n${nuke.clock}` : 't'} style={{ display: 'inline-block', color: 'var(--opp)', textDecoration: backupStruck && slot.their ? 'line-through' : undefined, opacity: backupStruck && slot.their ? 0.55 : 1, animation: nukeShake('their') }}>{their.toFixed(1)}</span>
               </span>}
         </div>
         {side('their')}
