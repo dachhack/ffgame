@@ -135,13 +135,14 @@ const LEVERS = [
 
   // ── New battle-layer metric picks (free) ────────────────────────────────────
   // Underdog: RB/WR comeback metric — ×1.5 on gains fired while trailing the
-  // matched slot. -1 targets the top player; -all is the torture test.
-  { id: 'wr-underdog-1', cost: 0, build: (r, c) => ({ metricOverride: overrideSlug(topOf(r, 'WR', c), 'underdog') }) },
-  { id: 'rb-underdog-1', cost: 0, build: (r, c) => ({ metricOverride: overrideSlug(topOf(r, 'RB', c), 'underdog') }) },
-  { id: 'wr-underdog-all', cost: 0, build: () => ({ metricOverride: overridePos('WR', 'underdog') }) },
+  // matched slot. A PAID UNLOCK since v0.128.0 (◎35) — the costs price that in.
+  // -1 targets the top player; -all is the torture test.
+  { id: 'wr-underdog-1', cost: price('unlock-underdog'), build: (r, c) => ({ metricOverride: overrideSlug(topOf(r, 'WR', c), 'underdog') }) },
+  { id: 'rb-underdog-1', cost: price('unlock-underdog'), build: (r, c) => ({ metricOverride: overrideSlug(topOf(r, 'RB', c), 'underdog') }) },
+  { id: 'wr-underdog-all', cost: price('unlock-underdog'), build: () => ({ metricOverride: overridePos('WR', 'underdog') }) },
   // The INTENDED use: the roster's weakest WR — the player who actually expects
   // to trail its head-to-head (the comeback boost is live most of the game).
-  { id: 'wr-underdog-low', cost: 0, build: (r, c) => ({ metricOverride: overrideSlug(lowOf(r, 'WR', c), 'underdog') }) },
+  { id: 'wr-underdog-low', cost: price('unlock-underdog'), build: (r, c) => ({ metricOverride: overrideSlug(lowOf(r, 'WR', c), 'underdog') }) },
   // Field Marshal: DEF builds a window-wide shield vs opposing nukes/erases.
   { id: 'def-marshal', cost: 0, build: () => ({ metricOverride: overridePos('DEF', 'marshal') }) },
 

@@ -57,11 +57,10 @@ export function pickMetric(p: Player, week: number): string {
 // of a random metric. (Field General scores 0 solo, so it's never auto-picked;
 // it's a coordination play left to the human.)
 export function bestMetric(p: Player, week: number, projection = false): string {
-  // Underdog is a human strategic pick — like Field General it's never
-  // auto-assigned, so the tuned default/AI meta is untouched (it scores flat solo
-  // — no trailing boost vs an empty opponent — and would otherwise crowd out the
-  // measured per-slot picks).
-  const list = (METRICS[p.pos] || METRICS.WR).filter((m) => !m.lock && m.id !== 'underdog');
+  // Underdog is a paid unlock now (lock: 'unlock-underdog'), so the generic
+  // lock filter keeps it out of the auto-pick — the tuned default/AI meta is
+  // untouched (it scores flat solo, no trailing boost vs an empty opponent).
+  const list = (METRICS[p.pos] || METRICS.WR).filter((m) => !m.lock);
   if (list.length <= 1) return list[0]?.id ?? pickMetric(p, week);
   let best = list[0].id, bestScore = -Infinity;
   for (const m of list) {
@@ -138,7 +137,7 @@ function edgeVsThreats(aiPlayer: Player, metricId: string, threats: SlotInput[],
 // boosted by an FG multiplier. Field General is excluded here — it's decided at
 // the window level (it scores the QB nothing and only pays off via teammates).
 function bestVsThreats(aiPlayer: Player, threats: SlotInput[], week: number, aiBuffSet: Set<string>, mult?: (c: number) => number): { metricId: string; edge: number } {
-  const list = (METRICS[aiPlayer.pos] || METRICS.WR).filter((m) => !m.lock && m.id !== 'fg' && m.id !== 'underdog');
+  const list = (METRICS[aiPlayer.pos] || METRICS.WR).filter((m) => !m.lock && m.id !== 'fg'); // underdog is lock-gated now
   if (!list.length) return { metricId: pickMetric(aiPlayer, week), edge: 0 };
   let best = list[0].id, bestEdge = -Infinity;
   for (const m of list) {
