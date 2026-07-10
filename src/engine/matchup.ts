@@ -199,6 +199,22 @@ export function aiLineup(aiTeamId: string, humanTeamId: string, week: number, ex
   return picks;
 }
 
+/** Bye Steal flat-score ceiling — one constant for BOTH engines (the demo path
+ *  above and liveResolve, which re-exports it). RETUNED by the playtester
+ *  sweep (findings §19): at the original 25 the play measured 66.3% / 4.45
+ *  pts per ◎10 — the best coin in the game by a wide margin; at 16 it lands
+ *  60.0% / 2.49 per ◎10, the amp neighborhood, while still beating Ghost
+ *  (you earned the edge by rostering the bye stud). */
+export const BYE_STEAL_CAP = 16;
+
+/** Rivalry siphon fraction: the cut of a mirrored opponent slot's final score
+ *  taken at window's end — one constant for BOTH engines. RETUNED by the
+ *  playtester sweep (findings §19): at the original 50% the "bet" measured
+ *  64.1% / 2.80 pts per ◎10 vs the honest field — position mirrors are so
+ *  common the whiff risk barely existed. At 30% it lands 59.0% / 1.70 per
+ *  ◎10 — a spicy-but-fair battle play in the Double-or-Nothing neighborhood. */
+export const RIVALRY_SIPHON = 0.3;
+
 /** Extra-slot powerups: per-window count of bonus slots applied this week. */
 export type ExtraSlots = Partial<Record<WindowId, number>>;
 /** Slots in a window including any Extra Slot powerups applied this week. The
@@ -547,10 +563,13 @@ export function buildMatchup(
 
       // Bye Steal: an empty slot can be filled with a benched bye player for a
       // flat projected score (no live game — it just banks its projection).
+      // Clamped at BYE_STEAL_CAP — the same ceiling the live resolver applies
+      // (a demo/live parity gap until v0.126.0: the demo banked the raw
+      // projection while live clamped at 25).
       let byeStolen = false;
       if (extras.byeSteal && extras.byeSteal.slotKey === key && !displayYou) {
         const bp = getPlayer(extras.byeSteal.playerId);
-        if (bp) { displayYou = { player: bp, metricId: 'bye' }; yF = Math.round(projectedPoints(bp, week) * 10) / 10; byeStolen = true; }
+        if (bp) { displayYou = { player: bp, metricId: 'bye' }; yF = Math.min(BYE_STEAL_CAP, Math.round(projectedPoints(bp, week) * 10) / 10); byeStolen = true; }
       }
 
       // Ghost Player: an empty slot can be filled with a phantom that banks a
@@ -582,7 +601,7 @@ export function buildMatchup(
   }
 
   // RIVALRY power-up (blind, window-targeted): for every slot in an armed window
-  // where the opponent fielded the SAME position as you, siphon 50% of their slot
+  // where the opponent fielded the SAME position as you, siphon a RIVALRY_SIPHON cut of their slot
   // score to you at window's end — whiffs entirely if they didn't mirror your
   // position (the risk). Only the human side arms it in the demo. Applied after
   // backups + suppress (on final scores), before the window battle settles.
@@ -593,7 +612,7 @@ export function buildMatchup(
       for (const s of w.slots) {
         if (!s.you || !s.their || s.theirFinal <= 0) continue;
         if (s.you.player.pos !== s.their.player.pos) continue; // needs a same-position mirror
-        const take = Math.round(s.theirFinal * 0.5 * 10) / 10;
+        const take = Math.round(s.theirFinal * RIVALRY_SIPHON * 10) / 10;
         s.theirFinal = Math.round((s.theirFinal - take) * 10) / 10;
         s.youFinal = Math.round((s.youFinal + take) * 10) / 10;
         s.youRivalry = Math.round(((s.youRivalry ?? 0) + take) * 10) / 10;

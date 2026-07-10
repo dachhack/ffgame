@@ -275,6 +275,15 @@ export const EMPTY_PLAYER: Player = {
   stats: { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 },
 };
 
+/** UNDERDOG trailing boost: every scoring play banks ×this while the slot is
+ *  behind. SWEPT by the playtester (findings §19) and deliberately KEPT at
+ *  ×1.5: on the roster's weakest WR — the player who actually expects to
+ *  trail, the intended use — it already measures ~fair (49.2% vs the honest
+ *  field), while on a stud it's a −12 to −16 margin misplay (the boost never
+ *  fires and the drip is gone) that a bigger multiplier barely rescues
+ *  (×3.0 → still 42%). The gap is skill expression, not imbalance. */
+export const UNDERDOG_MULT = 1.5;
+
 /** Ghost Player: a phantom conjured into any open slot by the Ghost power-up.
  *  It has no real game — it just banks GHOST_POINTS, a fixed set score. Pricier
  *  than a Bye Steal, but needs no benched bye player and its floor is certain. */
@@ -566,7 +575,6 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   // slot every scoring play banks ×UNDERDOG_MULT. Fall behind → you punch above
   // your weight and claw back; pull ahead → the boost switches off (you can't run
   // up the score). It rewards comebacks, not a rich-get-richer lead.
-  const UNDERDOG_MULT = 1.5;
   const underdogYou = you.metricId === 'underdog';
   const underdogTheir = their.metricId === 'underdog';
 

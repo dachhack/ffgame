@@ -32,6 +32,10 @@ function topOf(roster, pos, c) {
   const cand = roster.filter((s) => slugMeta(s).pos === pos);
   return cand.sort((a, b) => (c.proj.get(b) || 0) - (c.proj.get(a) || 0))[0] ?? null;
 }
+function lowOf(roster, pos, c) {
+  const cand = roster.filter((s) => slugMeta(s).pos === pos);
+  return cand.sort((a, b) => (c.proj.get(a) || 0) - (c.proj.get(b) || 0))[0] ?? null;
+}
 const overridePos = (pos, metric) => (p, pp) => (pp === pos ? metric : null);
 const overrideSlug = (slug, metric) => (p) => (p.slug === slug ? metric : null);
 
@@ -135,6 +139,9 @@ const LEVERS = [
   { id: 'wr-underdog-1', cost: 0, build: (r, c) => ({ metricOverride: overrideSlug(topOf(r, 'WR', c), 'underdog') }) },
   { id: 'rb-underdog-1', cost: 0, build: (r, c) => ({ metricOverride: overrideSlug(topOf(r, 'RB', c), 'underdog') }) },
   { id: 'wr-underdog-all', cost: 0, build: () => ({ metricOverride: overridePos('WR', 'underdog') }) },
+  // The INTENDED use: the roster's weakest WR — the player who actually expects
+  // to trail its head-to-head (the comeback boost is live most of the game).
+  { id: 'wr-underdog-low', cost: 0, build: (r, c) => ({ metricOverride: overrideSlug(lowOf(r, 'WR', c), 'underdog') }) },
   // Field Marshal: DEF builds a window-wide shield vs opposing nukes/erases.
   { id: 'def-marshal', cost: 0, build: () => ({ metricOverride: overridePos('DEF', 'marshal') }) },
 
