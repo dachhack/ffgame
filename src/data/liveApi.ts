@@ -167,12 +167,17 @@ export async function redeemInvite(code: string, sleeperUsername: string): Promi
 // ── "Request a code" lead capture (migration 0016) ───────────────────────────────
 /** Pre-auth request to have a pilot code set up for the visitor's league. Routes
  *  through a SECURITY DEFINER RPC granted to anon, so it works before sign-in. */
-export async function requestCode(input: { email?: string; sleeper?: string; league?: string; leagueRef?: string; note?: string }): Promise<{ ok: boolean; error?: string }> {
+export async function requestCode(input: { email?: string; sleeper?: string; league?: string; leagueRef?: string; note?: string; attribution?: Record<string, unknown> }): Promise<{ ok: boolean; error?: string }> {
   if (!supabase) return { ok: false, error: 'Live mode is not configured.' };
-  const { data, error } = await client().rpc('request_code', {
+  const base = {
     p_email: input.email ?? null, p_sleeper: input.sleeper ?? null, p_league: input.league ?? null,
     p_league_ref: input.leagueRef ?? null, p_note: input.note ?? null,
-  });
+  };
+  const attr = input.attribution && Object.keys(input.attribution).length ? input.attribution : null;
+  let { data, error } = await client().rpc('request_code', attr ? { ...base, p_attribution: attr } : base);
+  // A fresh bundle can briefly race the 0088 migration (Pages deploy vs the
+  // migrate Action) — never lose a lead to that window: retry without the arg.
+  if (error && attr) ({ data, error } = await client().rpc('request_code', base));
   if (error) return { ok: false, error: friendlyError(error) };
   return data as { ok: boolean; error?: string };
 }
