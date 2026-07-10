@@ -14,6 +14,7 @@ import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, GAME_SECONDS, type S
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '../data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
+import { slotMoments, MOMENT_COLOR, type Moment } from '../engine/moments';
 import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, type PickRow } from '../data/liveApi';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx, Metric } from '../types';
@@ -457,6 +458,58 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const liveWins = WINDOWS.filter((w) => winLife[w.id] === 'live');
   const preKickPhase = phase === 'live' && !anyStarted; // locked in, no game kicked yet
 
+  // ── Moment banners — screen-level drama (nukes / hot streaks / lead flips) ──
+  // Every dramatic beat already exists in the slot event streams; this surfaces
+  // it as a headline instead of a log line. Moments trigger exactly in sync with
+  // the log's visibility rule (per-side clock, mode-aware), queue through bursts
+  // (fast-forward shows only a burst's biggest three), and never replay history
+  // when you re-enter a board mid-week. The guided demo narrates its own beats.
+  const momentsBySlot = useMemo(() => {
+    const m = new Map<string, Moment[]>();
+    for (const rw of resolved.windows) {
+      for (const s of rw.slots) {
+        if (!s.you || !s.their) continue;
+        const key = slotKey(rw.window.id, s.slotIndex);
+        const ms = slotMoments(s.events, { you: s.you.player.name, their: s.their.player.name }, rw.window.id, key, winMax[rw.window.id] ?? GAME_SECONDS);
+        if (ms.length) m.set(key, ms);
+      }
+    }
+    return m;
+  }, [resolved, winMax]);
+  const [moment, setMoment] = useState<Moment | null>(null);
+  const momentQueue = useRef<Moment[]>([]);
+  const momentSeen = useRef<Set<string> | null>(null);
+  const nextMoment = () => setMoment(momentQueue.current.shift() ?? null);
+  useEffect(() => {
+    if (phase !== 'live' || demo) { momentSeen.current = null; momentQueue.current = []; setMoment(null); return; }
+    const keyOf = (m: Moment) => `${m.slotKey}|${m.kind}|${m.clock}|${m.side}`;
+    const vis: Moment[] = [];
+    for (const rw of resolved.windows) {
+      const c = winClocks[rw.window.id] ?? 0;
+      if (c <= 0) continue;
+      for (const s of rw.slots) {
+        if (!s.you || !s.their) continue;
+        const ms = momentsBySlot.get(slotKey(rw.window.id, s.slotIndex));
+        if (!ms) continue;
+        const yc = wallClock ? clockAtRealTime(s.you.player, week, c, s.you.metricId ?? undefined) : c;
+        const tc = wallClock ? clockAtRealTime(s.their.player, week, c, s.their.metricId ?? undefined) : c;
+        for (const m of ms) if (m.clock <= (m.side === 'you' ? yc : tc)) vis.push(m);
+      }
+    }
+    if (!momentSeen.current) { momentSeen.current = new Set(vis.map(keyOf)); return; } // seed silently on entry
+    const seen = momentSeen.current;
+    const fresh = vis.filter((m) => !seen.has(keyOf(m)));
+    if (!fresh.length) return;
+    for (const m of fresh) seen.add(keyOf(m));
+    momentQueue.current = [...momentQueue.current, ...fresh].sort((a, b) => b.magnitude - a.magnitude).slice(0, 3);
+    if (!moment) nextMoment();
+  }, [phase, demo, resolved, winClocks, wallClock, week, momentsBySlot]); // eslint-disable-line react-hooks/exhaustive-deps -- `moment` read only to kick-start an idle queue
+  useEffect(() => {
+    if (!moment) return;
+    const t = setTimeout(nextMoment, 3800);
+    return () => clearTimeout(t);
+  }, [moment]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // On lock-in, walk through EVERY UNOPPOSED player (your player with no
   // head-to-head opponent) — they're best-ball backups that can sub in. The
   // prompt is a REQUIRED interrupt: it can't be dismissed, so you can't reach
@@ -867,6 +920,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           )}
         </div>
       </header>
+
+      {moment && <MomentBanner m={moment} isMobile={isMobile} onClose={nextMoment} />}
 
       <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 10 : 14, padding: isMobile ? 10 : 14, overflow: isMobile ? 'auto' : 'hidden', minHeight: 0 }}>
         {!isMobile && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={!rosterOpen.you} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} />}
@@ -2672,6 +2727,26 @@ function PlayDetailModal({ ev, player, week, realStamp, onClose }: { ev: PbpEven
           {ev.effect && <Row k="EFFECT" v={<span style={{ color: FX_COLOR[ev.effect.type] ?? 'var(--dim)' }}>{ev.effect.text}</span>} />}
           {ev.buffNote && <Row k="POWER-UP" v={<span style={{ color: 'var(--warn)' }}>{ev.buffNote}</span>} />}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Moment banner — one dramatic beat, headline-sized. Fixed under the header,
+// side-accented (you/opp), kind-colored, tap to advance the queue. ──
+function MomentBanner({ m, isMobile, onClose }: { m: Moment; isMobile: boolean; onClose: () => void }) {
+  const accent = m.side === 'you' ? 'var(--you)' : 'var(--opp)';
+  const fx = MOMENT_COLOR[m.kind] ?? accent;
+  const winLabel = WINDOWS.find((w) => w.id === m.win)?.label ?? m.win.toUpperCase();
+  return (
+    <div onClick={onClose} className="mono" style={{ position: 'fixed', top: isMobile ? 60 : 72, left: '50%', transform: 'translateX(-50%)', zIndex: 60, display: 'flex', alignItems: 'center', gap: 11, width: 'max-content', maxWidth: 'min(92vw, 560px)', background: 'color-mix(in srgb, var(--surface) 92%, transparent)', backdropFilter: 'blur(6px)', border: `1px solid ${fx}`, borderLeft: `4px solid ${accent}`, borderRadius: 8, padding: '10px 14px', boxShadow: `0 6px 30px color-mix(in srgb, ${fx} 40%, transparent)`, cursor: 'pointer', animation: 'mburst .45s cubic-bezier(.2,1.4,.4,1)' }}>
+      <span style={{ fontSize: 21, lineHeight: 1 }}>{m.icon}</span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', gap: 9, alignItems: 'baseline', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.14em', color: fx }}>{m.title}</span>
+          <span style={{ fontSize: 8.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>{winLabel} · {fmtClock(m.clock)}</span>
+        </div>
+        <div style={{ fontSize: 10.5, color: 'var(--text)', marginTop: 3, lineHeight: 1.45 }}>{m.detail}</div>
       </div>
     </div>
   );

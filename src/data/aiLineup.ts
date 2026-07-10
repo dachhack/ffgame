@@ -135,6 +135,22 @@ export function aiLiveBuffs(teamKey: string, week: number, n = 3): string[] {
   return out;
 }
 
+// ── NUKER persona — measured drama at zero balance cost ─────────────────────
+// The drama audit (tools/playtester/drama.mjs) showed the honest field fires ZERO
+// nuke/erase/counter effects — the game's namesake mechanic never appears in an
+// AI matchup, because every default is a drip. The TE-TD nuke is EV-NEUTRAL after
+// the §6 retune (~51% blind, docs/playtester-findings.md), so a slice of AI teams
+// can arm it purely for spectacle: some weeks your AI opponent is hiding a nuke.
+// Deterministic per (seat, week) — no results peeked, previews and re-resolves
+// agree. Opt-in via aiLineup's personaKey: ONLY permanent AI seats pass a key;
+// a missed human's autofill stays on the safest honest defaults.
+const NUKER_RATE = 0.4;
+
+/** Whether this AI seat plays its TE as a hidden 8-PT NUKE this week. */
+export function aiPersonaNuker(personaKey: string, week: number): boolean {
+  return hashStr(`${personaKey}|nuker|${week}`) % 1000 < NUKER_RATE * 1000;
+}
+
 interface Tagged { slug: string; pos: Pos; team: string; metric: string }
 
 /** Build an AI lineup from a roster's starter slugs, each on its honest pre-game
@@ -146,8 +162,12 @@ interface Tagged { slug: string; pos: Pos; team: string; metric: string }
  *  This closes the fairness gap where the AI could grid-fill synthetic windows a
  *  human can't use. Without a slate (weeks we have no schedule for) it falls back
  *  to the deterministic grid-fill. No hindsight either way — placement reads only
- *  the schedule and the AI's own roster, never the opponent or the week's result. */
-export function aiLineup(slugs: string[], week = 0, owned: Set<string> = new Set(), extraSlots = 0): AiPick[] {
+ *  the schedule and the AI's own roster, never the opponent or the week's result.
+ *
+ *  personaKey (optional): a stable seat identity that opts this lineup into the
+ *  deterministic persona draw (NUKER weeks flip the best fielded TE onto `td`).
+ *  Omit it — the default — for human autofill and every existing caller. */
+export function aiLineup(slugs: string[], week = 0, owned: Set<string> = new Set(), extraSlots = 0, personaKey?: string): AiPick[] {
   const tagged: Tagged[] = (slugs ?? []).filter(Boolean).map((slug) => {
     const { pos, team } = slugMeta(slug);
     return { slug, pos, team, metric: aiMetric(slug, pos, owned) };
@@ -160,6 +180,14 @@ export function aiLineup(slugs: string[], week = 0, owned: Set<string> = new Set
   const { picks, bench } = hasSlate(week) ? slateGated(tagged, week) : gridFill(tagged);
   addExtraSlots(picks, bench, extraSlots);
   applyFieldGeneral(picks);
+  // Persona AFTER the FG read: applyFieldGeneral forces non-drip skill metrics
+  // back to their drip defaults, which would silently undo the flip. Losing one
+  // drip from an FG window is the persona's (measured-neutral) cost of theater.
+  if (personaKey && aiPersonaNuker(personaKey, week)) {
+    const tes = picks.filter((p) => slugMeta(p.slug).pos === 'TE');
+    const best = tes.sort((a, b) => statsForSlug(b.slug, 'TE').ppr - statsForSlug(a.slug, 'TE').ppr)[0];
+    if (best) best.metric = 'td';
+  }
   return picks;
 }
 

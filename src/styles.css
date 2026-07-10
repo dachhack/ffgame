@@ -19,6 +19,7 @@ a { color: inherit; }
 @keyframes flash { 0% { background-color: rgba(255,79,98,0.6); } 100% { background-color: transparent; } }
 @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-3px); } 40%, 80% { transform: translateX(3px); } }
 @keyframes slidein { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes mburst { 0% { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(0.92); } 100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
 
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .grotesk { font-family: 'Space Grotesk', system-ui, sans-serif; }

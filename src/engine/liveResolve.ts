@@ -36,7 +36,12 @@ export interface LiveResult {
   slots: SlotScore[];                 // per-player scores after all adjustments
   home: number; away: number;         // grand totals
   coin: { home: number; away: number };
+  slotEvents?: SlotEvents[];          // raw per-slot event streams (only with captureEvents)
 }
+
+// The raw resolveSlot event stream for one (window, slot) pairing — banks are
+// pre-backup/suppress/banker, so they can differ from the official finals.
+export interface SlotEvents { win: string; slot: string; events: PbpEvent[] }
 
 const round = (n: number) => Math.round(n * 10) / 10;
 
@@ -109,7 +114,12 @@ function coinFor(slots: SlotRes[], side: 'home' | 'away'): number {
  *  garbage-time / floodgates / counter-nuke / insurance / fg-stack). These are
  *  the in-slot buffs resolveSlot + windowFgMult already understand — the live
  *  path simply hands them through, the way the demo's buildMatchup does. */
-export interface LiveBuffs { homeBuffs?: Set<string>; awayBuffs?: Set<string>; }
+export interface LiveBuffs {
+  homeBuffs?: Set<string>; awayBuffs?: Set<string>;
+  // Include each slot's raw event stream in the result (drama audit / recaps).
+  // Off by default — the worker's hot path doesn't pay for events it won't read.
+  captureEvents?: boolean;
+}
 
 /** Resolve a full H2H week from each side's sealed picks (slug-keyed). Picks are
  *  paired by (window, slot). The week's plays must already be injected into the
@@ -206,5 +216,7 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     if (s.awayP) slotScores.push({ win: s.win, slot: s.slot, side: 'away', slug: s.awayP.id, metric: s.awayMetric, score: s.away });
   }
   const states = Object.entries(byWin).map(([window, v]) => ({ window, home: round(v.home), away: round(v.away) }));
-  return { states, slots: slotScores, home: round(home), away: round(away), coin: { home: coinFor(slots, 'home'), away: coinFor(slots, 'away') } };
+  const result: LiveResult = { states, slots: slotScores, home: round(home), away: round(away), coin: { home: coinFor(slots, 'home'), away: coinFor(slots, 'away') } };
+  if (buffs.captureEvents) result.slotEvents = slots.map((s) => ({ win: s.win, slot: s.slot, events: s.events }));
+  return result;
 }
