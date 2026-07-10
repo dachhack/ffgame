@@ -280,10 +280,10 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     // grudge / jinx / red-herring = 'win|slot' lists; the live tacticals map
     // 'win|slot' → fire game-clock (re-clamped). Written by the AI budget pass
     // (lock.js, findings §17) — and by the client apply RPCs once extended.
-    for (const k of ['rivalry', 'ghost', 'leadChange', 'grudge', 'jinx', 'redHerring']) {
+    for (const k of ['rivalry', 'ghost', 'leadChange', 'grudge', 'jinx', 'redHerring', 'clutchDon']) {
       if (Array.isArray(t[k]) && t[k].length) ex[k] = t[k].map(String);
     }
-    for (const k of ['surge', 'coldSnap', 'napalm', 'bunker']) {
+    for (const k of ['surge', 'coldSnap', 'napalm', 'bunker', 'clutchEncore', 'clutchCounter']) {
       if (t[k] && Object.keys(t[k]).length) {
         ex[k] = {};
         for (const [slot, c] of Object.entries(t[k])) ex[k][slot] = Math.max(0, Math.min(3900, Number(c) || 0));

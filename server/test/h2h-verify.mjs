@@ -206,4 +206,34 @@ console.log(`\nGHOST: away conjured a phantom → ${ghostSlot ? ghostSlot.score 
 ok('ghost filled the empty away slot with a phantom', !!ghostSlot);
 ok('ghost banked the flat set score of 14', ghostSlot?.score === 14);
 
+
+// ── 15. CLUTCH plays through the LIVE resolver (parity with buildMatchup) ─────
+// Encore: armed from kickoff on home's TD scorer → his next TD banks +12.
+const clHome = [{ win: 'early', slot: '0', player: P('saquon-barkley', 'RB', 'PHI'), metricId: 'td' }];
+const clAway = [{ win: 'early', slot: '0', player: P('marquise-brown', 'WR', 'KC'), metricId: 'recyd' }];
+const clBase = resolveLiveMatchup(clHome, clAway, WEEK, {});
+const clEnc = resolveLiveMatchup(clHome, clAway, WEEK, {}, { home: { clutchEncore: { 'early|0': 0 } } });
+console.log(`\nCLUTCH LIVE: encore home ${clBase.home} → ${clEnc.home} (+12 on next TD)`);
+ok('clutch Encore pays +12 through the live resolver', Math.abs(clEnc.home - (clBase.home + 12)) < 0.05);
+
+// Halftime Gamble: stake home's slot → ×2 if it wins its head-to-head, 0 if not.
+const cdRes = resolveLiveMatchup(clHome, clAway, WEEK, {}, { home: { clutchDon: ['early|0'] } });
+const cdBaseSlot = clBase.slots.find((s) => s.side === 'home' && s.slot === '0').score;
+const cdBaseAway = clBase.slots.find((s) => s.side === 'away' && s.slot === '0').score;
+const cdSlot = cdRes.slots.find((s) => s.side === 'home' && s.slot === '0').score;
+const cdExpect = cdBaseSlot > cdBaseAway ? Math.round(cdBaseSlot * 2 * 10) / 10 : 0;
+console.log(`CLUTCH LIVE: gamble slot ${cdBaseSlot} (vs ${cdBaseAway}) → ${cdSlot} (expected ${cdExpect})`);
+ok('clutch Halftime Gamble stakes ×2/0 through the live resolver', Math.abs(cdSlot - cdExpect) < 0.05);
+
+// Counter-Wipe: home drip vs away TD-nuker; negate the nuke at its clock.
+const cwHome2 = [{ win: 'early', slot: '0', player: P('puka-nacua', 'WR', 'LA'), metricId: 'rec' }];
+const cwAway2 = [{ win: 'early', slot: '0', player: P('saquon-barkley', 'RB', 'PHI'), metricId: 'td' }];
+const cwBase2 = resolveLiveMatchup(cwHome2, cwAway2, WEEK, {});
+// find the nuke clock from a standalone slot resolution (same play data)
+const cwSolo = resolveSlot({ player: P('puka-nacua', 'WR', 'LA'), metricId: 'rec' }, { player: P('saquon-barkley', 'RB', 'PHI'), metricId: 'td' }, WEEK, 'cw2');
+const cwNuke = cwSolo.events.find((e) => e.side === 'their' && e.effect?.type === 'nuke');
+const cwLive = resolveLiveMatchup(cwHome2, cwAway2, WEEK, {}, { home: { clutchCounter: { 'early|0': cwNuke?.clock ?? -1 } } });
+console.log(`CLUTCH LIVE: counter-wipe home ${cwBase2.home} → ${cwLive.home} (nuke at ${cwNuke?.clock})`);
+ok('clutch Counter-Wipe negates the nuke through the live resolver', cwLive.home > cwBase2.home);
+
 console.log('\nDONE.');
