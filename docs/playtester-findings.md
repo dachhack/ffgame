@@ -789,3 +789,16 @@ keeps its own use_spy consume. A new lockstep checker
 (`scripts/check-targeted-keys.mjs`, 69 checks) fails the build if the
 targeted-payload key names ever drift between the SQL gate, the worker's
 toExtras, and the engine's LiveExtras.
+
+**§19 addendum — Underdog becomes a paid unlock (v0.128.0).** The sweep's
+verdict (fair on a player you expect to trail, a trap on a stud) is the
+profile of a specialist unlock, not a free default — so underdog now sits
+behind `unlock-underdog` (◎35, the cheapest unlock: its intended-use EV is
+~fair, so it's priced as a drama pick). Twist: the flip is pickable ANY TIME
+BEFORE KICKOFF — after lock-in, once you can size up the fight, the board
+re-opens setup rows with players FIXED and the metric picker restricted to
+the Underdog flip (a 🐕 UNDERDOG? door, shown only when the unlock is owned).
+Server-side the lock period was already open by construction (per-window
+seals reject only kicked-off windows); 0087 adds the locked_metric_unlock
+mapping + price. The engine's auto-pick exclusions now ride the generic lock
+filter, and the aggregate levers price the unlock in.

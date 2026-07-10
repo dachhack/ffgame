@@ -765,6 +765,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     let ok = false; let deadline = '';
     if (p.timing === 'pre') {
       if (p.id === 'spy') { ok = preKickPhase; deadline = 'After lock, before kickoff'; }
+      else if (p.id === 'unlock-underdog') { ok = phase === 'setup' || preKickPhase; deadline = 'Any time before kickoff'; } // the comeback flip stays open through the lock period
       else { ok = phase === 'setup'; deadline = 'Before lock-in'; }
     } else {
       ok = liveWins.length > 0;
@@ -1409,6 +1410,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 onApplyToWindow={applyToWindow}
                 onScout={(win) => setScoutWin(win)}
                 onArmClutch={onArmClutch}
+                preKick={preKickPhase}
               />
             ))}
           </div>
@@ -1904,6 +1906,7 @@ const POWERUP_HINT: Record<string, string> = {
   'unlock-return': 'Pick the ◈ metric on a spot.',
   'unlock-combo-drip': 'Pick the ◈ metric on a spot.',
   'unlock-pass-td10': 'Pick the ◈ metric on a spot.',
+  'unlock-underdog': 'Pick the ◈ metric on a spot — up to kickoff.',
   'double-or-nothing': 'Stake a spot in the panel below.',
   'lead-change': 'Arm on one of your spots below.',
   'grudge': 'Stake one of your spots below.',
@@ -2134,11 +2137,14 @@ function WindowSectionInner(props: {
   onArmClutch: (o: ClutchOffer) => void;
   applyMode: string | null;
   onApplyToSpot: (key: string) => void;
+  /** Locked in but nothing kicked yet — the board re-opens SetupRows with the
+   *  player fixed and the metric picker restricted to the Underdog flip. */
+  preKick?: boolean;
   onApplyToWindow: (win: WindowId) => void;
   onScout: (win: WindowId) => void;
   lockPlayer?: boolean; // demo setup: metric is editable, but the player is fixed
 }) {
-  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch } = props;
+  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch, preKick } = props;
   const w = rw.window;
   // Twin Generals: with the buff armed and ≥2 of your Field General QBs in this
   // window, the top two multipliers stack — link those QB spots so you can see
@@ -2345,7 +2351,10 @@ function WindowSectionInner(props: {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {rw.slots.map((s) => {
           const key = slotKey(w.id, s.slotIndex);
-          if (phase === 'setup') {
+          // The lock period (locked in, nothing kicked) re-opens the setup rows:
+          // players are FIXED, but the metric picker offers the Underdog flip —
+          // the comeback unlock is pickable any time before kickoff.
+          if (phase === 'setup' || preKick) {
             const setupRow = (
               <SetupRow
                 key={key} slotKeyStr={key} winId={w.id} week={week} pick={picks[key]} selected={selSlot === key} inventory={inventory} armed={armed} twinLink={twinLinked.has(key)}
@@ -2353,7 +2362,7 @@ function WindowSectionInner(props: {
                 applyMode={applyMode} onApplyToSpot={() => onApplyToSpot(key)}
                 onOpenPicker={() => onOpenPicker(key, w.id)} onPickMetric={(m) => pickMetricFor(key, m)}
                 onClearSlot={() => onClearSlot(key)}
-                onDropPlayer={(id) => onAssign(id)} onScout={() => onScout(w.id)} lockPlayer={lockPlayer}
+                onDropPlayer={(id) => onAssign(id)} onScout={() => onScout(w.id)} lockPlayer={lockPlayer || preKick} preKick={preKick}
               />
             );
             return setupRow;
@@ -2499,8 +2508,15 @@ export function SetupRow(props: {
   // drops the SCOUT affordance where there's no opponent pool to scout (live pre-lock).
   resolve?: (id: string) => Player | undefined;
   hideScout?: boolean;
+  /** Lock period (post-lock, pre-kick): player fixed, but the metric picker
+   *  stays open RESTRICTED to the Underdog comeback flip (unlock-underdog). */
+  preKick?: boolean;
 }) {
-  const { winId, week, pick, selected, inventory, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout, lockPlayer, resolve, hideScout } = props;
+  const { winId, week, pick, selected, inventory, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout, lockPlayer, resolve, hideScout, preKick } = props;
+  // Pre-kick, the metric door stays open ONLY for the Underdog flip — and only
+  // when the unlock is actually owned (or the slot already flipped).
+  const underdogDoor = !!preKick && ((inventory['unlock-underdog'] ?? 0) > 0 || pick?.metricId === 'underdog');
+  const metricLocked = !!lockPlayer && !underdogDoor;
   const isMobile = useIsMobile();
   const { bigText, cardSkin } = useStore();
   const photoSkin = PHOTO_SKINS.includes(cardSkin); // a full-image card back → SEALED/SCOUT go in a bottom ribbon
@@ -2596,8 +2612,8 @@ export function SetupRow(props: {
 
           {/* metric: the chosen metric (hidden from the opponent), or a prompt to
               pick one — either taps open the picker MODAL, keeping the card compact. */}
-          <div className="mx-met" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, cursor: lockPlayer ? undefined : 'pointer' }}
-            onClick={lockPlayer ? undefined : () => setMetricOpen(true)}>
+          <div className="mx-met" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, cursor: metricLocked ? undefined : 'pointer' }}
+            onClick={metricLocked ? undefined : () => setMetricOpen(true)}>
             {pick?.metricId ? (
               <>
                 <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)' }}>{metric?.name}</span>
@@ -2613,13 +2629,13 @@ export function SetupRow(props: {
 
           {/* change controls — pinned to the bottom of the spot */}
           <div style={{ display: 'flex', gap: 14, marginTop: 'auto', paddingTop: 4 }}>
-            {pick?.metricId && !lockPlayer && <button onClick={() => setMetricOpen(true)} className="mono mx-editmet" style={{ ...link, color: 'var(--warn)' }}>↻ METRIC</button>}
+            {pick?.metricId && !metricLocked && <button onClick={() => setMetricOpen(true)} className="mono mx-editmet" style={{ ...link, color: 'var(--warn)' }}>{preKick ? '🐕 UNDERDOG?' : '↻ METRIC'}</button>}
             {!lockPlayer && <button onClick={onOpenPicker} className="mono mx-editplr" style={{ ...link, color: 'var(--opp)' }}>⇄ PLAYER</button>}
           </div>
         </div>
       ) : (
         <div
-          onClick={applyMode ? (emptyEligible ? onApplyToSpot : undefined) : onOpenPicker}
+          onClick={applyMode ? (emptyEligible ? onApplyToSpot : undefined) : lockPlayer ? undefined : onOpenPicker}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); onDropPlayer(e.dataTransfer.getData('text/plain')); }}
           className={`mx-empty${emptyEligible || applyDim ? ' mx-state' : ''}${selected ? ' mx-sel' : ''}`}
@@ -2675,7 +2691,9 @@ export function SetupRow(props: {
             <button onClick={() => setMetricOpen(false)} className="mono" style={{ flex: 'none', background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18, cursor: 'pointer' }}>✕</button>
           </div>
           <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '60vh', overflow: 'auto' }}>
-            {METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === pick?.metricId).map((m) => {
+            {METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === pick?.metricId)
+              .filter((m) => !preKick || m.id === pick?.metricId || m.id === 'underdog') // lock period: only the comeback flip
+              .map((m) => {
               const cur = m.id === pick?.metricId;
               return (
                 <button key={m.id} onClick={() => { onPickMetric(m.id); setMetricOpen(false); }} style={{ width: '100%', textAlign: 'left', background: cur ? 'color-mix(in srgb, var(--you) 14%, var(--bg))' : m.lock ? 'color-mix(in srgb, var(--warn) 12%, var(--bg))' : 'var(--bg)', border: `1px solid ${cur ? 'var(--you)' : m.lock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 5, padding: '9px 11px', display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text)', cursor: 'pointer' }}>

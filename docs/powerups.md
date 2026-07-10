@@ -1,7 +1,7 @@
 # Drip Fantasy — Power-Up Handbook
 
 The complete guide to every power-up: what it does, when you can play it, what it
-targets, and how to use it. There are **38** power-ups across the classes below.
+targets, and how to use it. There are **40** power-ups across the classes below.
 
 > Costs and effect text are the source of truth in `src/data/powerups.ts` (and the
 > auto-generated tables in the [Rulebook §8](./rulebook.md)). This handbook adds the
@@ -19,6 +19,8 @@ inventory, then applied when you want them. Two mechanical kinds:
 And two **timings** that gate *when* you can apply one:
 
 - **pre** — arm during setup; locks the moment the week's **first** window kicks off.
+  (Exceptions: **Spy** works after lock until a window kicks off, and the **Underdog**
+  unlock's metric flip stays open **any time before kickoff**.)
 - **live** — fire only while a window is **live**, and only *going forward* (never
   retroactive). A subset of live plays are **clutch** — they don't even appear until
   a live game-state trigger unlocks them, and then only for a short window.
@@ -81,6 +83,7 @@ Longshot lottery tickets — cheap-ish, but they whiff if the trigger doesn't ha
 | Power-up | ◎ | Unlocks |
 |---|---|---|
 | 🚀 **Air Raid** | 40 | A QB metric where passing TDs are worth **10** (plus 0.04/yd). Flat. |
+| 🐕 **Underdog** | 35 | The RB/WR **comeback metric** — flat yardage points, ×1.5 on every score **while trailing** the slot. Pickable **any time before kickoff**, even after lock-in. Best on a player you *expect* to trail. |
 | 🌀 **Combo Drip** | 65 | A **Rush + Receiving** combo drip for ONE player (carries *and* catches feed one rate). One slot per purchase — buy again to field another. |
 | 🏈 **Return Yards** | 60 | The **Return Yards** drip for a returner (position yardage *and* kick/punt returns feed one rate). |
 | 💥 **WR/TE Carries** | 70 | All week, **every carry by a WR or TE** in your starting spots **wipes its matched opponent to 0** — on top of whatever that slot is scoring. |
@@ -158,7 +161,7 @@ the slot when the trigger fires.
 | ◎ | Power-up | Timing | Class |
 |---|---|---|---|
 | 30 | Metric Swap · Mulligan | live | swap |
-| 35 | Hail Mary | pre | flat-bonus |
+| 35 | Hail Mary · Underdog | pre | flat-bonus / unlock |
 | 40 | Air Raid · Spy · Second Amp | pre | unlock / info / amp |
 | 45 | Pick Six · Lead Change · Encore | pre / clutch | bonus / bet / clutch |
 | 50 | Player Swap · Halftime Gamble | live | swap / clutch |
