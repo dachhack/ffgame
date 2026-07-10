@@ -104,7 +104,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const backupAssign = applied[week]?.backups ?? EMPTY_REC;
   const aw = applied[week];
   const rivalryWins = aw?.rivalry ? (Object.keys(aw.rivalry).filter((w) => aw.rivalry![w as WindowId]) as WindowId[]) : undefined;
-  const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, emp: aw?.emp, rivalry: rivalryWins, leadChange: aw?.leadChange, grudge: aw?.grudge, jinx: aw?.jinx, redHerring: aw?.redHerring, surge: aw?.surge, coldSnap: aw?.coldSnap, napalm: aw?.napalm, bunker: aw?.bunker, clutchDon: aw?.clutchDon, clutchEncore: aw?.clutchEncore, clutchCounter: aw?.clutchCounter };
+  const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, ghost: aw?.ghost, emp: aw?.emp, rivalry: rivalryWins, leadChange: aw?.leadChange, grudge: aw?.grudge, jinx: aw?.jinx, redHerring: aw?.redHerring, surge: aw?.surge, coldSnap: aw?.coldSnap, napalm: aw?.napalm, bunker: aw?.bunker, clutchDon: aw?.clutchDon, clutchEncore: aw?.clutchEncore, clutchCounter: aw?.clutchCounter };
   const extrasKey = JSON.stringify(extras);
   const oppId = gameForTeam(YOU, week)?.oppId ?? 'rock-tunnel';
   const you = getTeam(YOU)!;
@@ -199,7 +199,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     else if (pendingApply === 'spy') setSpySlot(key); // keep pending until a reveal is chosen
     else if (pendingApply === 'mulligan') setMulliganSlot(key); // keep pending until a metric is chosen
     else if (pendingApply === 'metric-swap' || pendingApply === 'player-swap') { setSwapTarget({ key, win: key.split('#')[0] as WindowId }); setPendingApply(null); } // open the swap menu on the tapped live spot
-    else if (pendingApply === 'lead-change' || pendingApply === 'grudge' || pendingApply === 'jinx' || pendingApply === 'red-herring') { if (applySlotListPu(pendingApply, week, key)) liveTargeted(pendingApply, keyParts(key)); setPendingApply(null); }
+    else if (pendingApply === 'lead-change' || pendingApply === 'grudge' || pendingApply === 'jinx' || pendingApply === 'red-herring' || pendingApply === 'ghost') { if (applySlotListPu(pendingApply, week, key)) liveTargeted(pendingApply, keyParts(key)); setPendingApply(null); }
     else if (pendingApply === 'surge' || pendingApply === 'cold-snap' || pendingApply === 'napalm' || pendingApply === 'bunker') { const clock = effWinClock(key.split('#')[0]); if (applyLiveSlotPu(pendingApply, week, key, clock)) liveTargeted(pendingApply, { ...keyParts(key), clock }); setPendingApply(null); } // live: fire from the slot's current clock
   }
   function applyToWindow(win: WindowId) {
@@ -752,6 +752,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const slotPuName = (key: string) => { const s = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === key); const wl = windowsForWeek(week).find((w) => w.id === key.split('#')[0])?.label ?? key.split('#')[0]; return s?.you?.player.name ? `${s.you.player.name} · ${wl}` : wl; };
   const slotPuLists: [string, string[] | undefined][] = [['lead-change', aw?.leadChange], ['grudge', aw?.grudge], ['jinx', aw?.jinx], ['red-herring', aw?.redHerring]];
   for (const [id, keys] of slotPuLists) for (const key of keys ?? []) activeEffects.push({ key: id + '-' + key, id, icon: powerupById(id)?.icon ?? '✦', name: powerupById(id)?.name ?? id, detail: (id === 'jinx' ? 'Hex opp at ' : 'On ') + slotPuName(key), onRemove: phase === 'setup' ? () => removeSlotListPu(id, week, key) : undefined });
+  for (const key of aw?.ghost ?? []) { const wl = windowsForWeek(week).find((w) => w.id === key.split('#')[0])?.label ?? key.split('#')[0]; activeEffects.push({ key: 'ghost-' + key, id: 'ghost', icon: '👻', name: 'Ghost Player', detail: `Fielded on ${wl}`, onRemove: phase === 'setup' ? () => removeSlotListPu('ghost', week, key) : undefined }); }
   const liveSlotPu: [string, Record<string, number> | undefined][] = [['surge', aw?.surge], ['cold-snap', aw?.coldSnap], ['napalm', aw?.napalm], ['bunker', aw?.bunker], ['clutch-encore', aw?.clutchEncore], ['clutch-counter', aw?.clutchCounter]];
   for (const [id, rec] of liveSlotPu) for (const key of Object.keys(rec ?? {})) activeEffects.push({ key: id + '-' + key, id, icon: powerupById(id)?.icon ?? '✦', name: powerupById(id)?.name ?? id, detail: (id === 'cold-snap' ? 'Froze ' : id === 'napalm' ? 'Napalmed ' : 'On ') + slotPuName(key) });
   for (const key of aw?.clutchDon ?? []) activeEffects.push({ key: 'cd-' + key, id: 'clutch-don', icon: powerupById('clutch-don')?.icon ?? '🎰', name: 'Halftime Gamble', detail: 'Staked ' + slotPuName(key) });
@@ -1910,6 +1911,7 @@ const POWERUP_HINT: Record<string, string> = {
   'red-herring': 'Attach to a decoy player below.',
   'spy': 'Reveal a slot after lock-in, before kickoff.',
   'bye-steal': 'Field a bye player in the panel below.',
+  'ghost': 'Tap an open spot below to conjure a ghost.',
   'mulligan': 'Re-roll a spot’s metric during LIVE.',
   'emp': 'Fire on a window during LIVE.',
   'surge': 'Fire on YOUR live spot to double it 10 min.',
@@ -1920,7 +1922,7 @@ const POWERUP_HINT: Record<string, string> = {
 
 // Targeted power-ups applied by tapping a spot/window (vs. whole-field buffs
 // that just arm). Each enters apply-mode, then the tap finishes it.
-const SPOT_APPLY = new Set(['double-or-nothing', 'lead-change', 'grudge', 'jinx', 'red-herring', 'bye-steal', 'spy', 'mulligan', 'emp', 'metric-swap', 'player-swap', 'surge', 'cold-snap', 'napalm', 'bunker']);
+const SPOT_APPLY = new Set(['double-or-nothing', 'lead-change', 'grudge', 'jinx', 'red-herring', 'bye-steal', 'ghost', 'spy', 'mulligan', 'emp', 'metric-swap', 'player-swap', 'surge', 'cold-snap', 'napalm', 'bunker']);
 
 // Shared modal shell for the two power-up cards.
 function PuShell({ title, subtitle, accent, onClose, children }: { title: ReactNode; subtitle: string; accent: string; onClose: () => void; children: ReactNode }) {
@@ -2128,7 +2130,7 @@ function WindowSectionInner(props: {
   turnoverCoin: number;
   backups: Record<string, string>;
   slotName: Record<string, string>;
-  aw?: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>>; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number> };
+  aw?: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; ghost?: string[]; emp?: Partial<Record<WindowId, number>>; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number> };
   onArmClutch: (o: ClutchOffer) => void;
   applyMode: string | null;
   onApplyToSpot: (key: string) => void;
@@ -2347,7 +2349,7 @@ function WindowSectionInner(props: {
             const setupRow = (
               <SetupRow
                 key={key} slotKeyStr={key} winId={w.id} week={week} pick={picks[key]} selected={selSlot === key} inventory={inventory} armed={armed} twinLink={twinLinked.has(key)}
-                appliedPu={[...(aw?.doubleOrNothing === key ? ['double-or-nothing'] : []), ...(aw?.byeSteal?.slotKey === key ? ['bye-steal'] : []), ...(aw?.leadChange?.includes(key) ? ['lead-change'] : []), ...(aw?.grudge?.includes(key) ? ['grudge'] : []), ...(aw?.jinx?.includes(key) ? ['jinx'] : []), ...(aw?.redHerring?.includes(key) ? ['red-herring'] : [])]}
+                appliedPu={[...(aw?.doubleOrNothing === key ? ['double-or-nothing'] : []), ...(aw?.byeSteal?.slotKey === key ? ['bye-steal'] : []), ...(aw?.ghost?.includes(key) ? ['ghost'] : []), ...(aw?.leadChange?.includes(key) ? ['lead-change'] : []), ...(aw?.grudge?.includes(key) ? ['grudge'] : []), ...(aw?.jinx?.includes(key) ? ['jinx'] : []), ...(aw?.redHerring?.includes(key) ? ['red-herring'] : [])]}
                 applyMode={applyMode} onApplyToSpot={() => onApplyToSpot(key)}
                 onOpenPicker={() => onOpenPicker(key, w.id)} onPickMetric={(m) => pickMetricFor(key, m)}
                 onClearSlot={() => onClearSlot(key)}
@@ -2527,7 +2529,7 @@ export function SetupRow(props: {
   // not one of your own cards — so it's not a your-spot power-up here.
   const yourSpotPu = applyMode === 'double-or-nothing' || applyMode === 'lead-change' || applyMode === 'grudge' || applyMode === 'red-herring';
   const fillEligible = yourSpotPu && !!player;
-  const emptyEligible = applyMode === 'bye-steal' && !player;
+  const emptyEligible = (applyMode === 'bye-steal' || applyMode === 'ghost') && !player;
   const applyHi = fillEligible;
   const applyDim = !!applyMode && !fillEligible && !emptyEligible;
   const cardTap = lockPlayer ? () => {} : applyMode ? (fillEligible ? onApplyToSpot : () => {}) : onOpenPicker;
@@ -2624,7 +2626,7 @@ export function SetupRow(props: {
           style={{ minWidth: 0, minHeight: 78, background: emptyEligible ? 'color-mix(in srgb, var(--warn) 12%, transparent)' : selected ? 'var(--surface)' : 'transparent', border: `1px dashed ${emptyEligible ? 'var(--warn)' : selected ? 'var(--you)' : 'var(--bdh)'}`, borderLeft: `3px dashed ${emptyEligible ? 'var(--warn)' : selected ? 'var(--you)' : 'var(--bdh)'}`, borderRadius: 4, padding: '16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', opacity: applyDim ? 0.4 : 1 }}
         >
           <span className="grotesk" style={{ fontSize: 20, color: emptyEligible ? 'var(--warn)' : 'var(--faint)' }}>{emptyEligible ? <PuIcon id={applyPu?.id} emoji={applyPu?.icon} size={22} /> : '+'}</span>
-          <span className="mono" style={{ fontSize: bigText ? 10.5 : 10, color: emptyEligible ? 'var(--warn)' : 'var(--faint)', letterSpacing: '0.08em', fontWeight: emptyEligible ? 700 : 400, whiteSpace: 'nowrap' }}>{emptyEligible ? 'TAP TO FIELD BYE' : 'TAP TO PICK PLAYER'}</span>
+          <span className="mono" style={{ fontSize: bigText ? 10.5 : 10, color: emptyEligible ? 'var(--warn)' : 'var(--faint)', letterSpacing: '0.08em', fontWeight: emptyEligible ? 700 : 400, whiteSpace: 'nowrap' }}>{emptyEligible ? (applyMode === 'ghost' ? 'TAP TO FIELD GHOST' : 'TAP TO FIELD BYE') : 'TAP TO PICK PLAYER'}</span>
         </div>
       )}
       <div

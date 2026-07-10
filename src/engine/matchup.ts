@@ -12,7 +12,7 @@ import { hashStr } from '../data/players';
  *  no real timestamps baked. */
 export interface SlotSwap { atClock: number; atRt?: number; toMetricId?: string; toPlayerId?: string; }
 export type SlotSwaps = Record<string, SlotSwap>; // slotKey -> swap
-import { resolveSlot, projectedPoints, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, hadDefTd, hadLongPassTd, turnoversCommitted, clockAtRealTime, statlineAt, fmtClock, EMPTY_PLAYER, type SlotInput } from './sim';
+import { resolveSlot, projectedPoints, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, hadDefTd, hadLongPassTd, turnoversCommitted, clockAtRealTime, statlineAt, fmtClock, EMPTY_PLAYER, GHOST_PLAYER, GHOST_POINTS, type SlotInput } from './sim';
 import { REAL_WEEKS } from '../data/realPbp';
 import { windowForTeam, windowsForWeek, gamesInWindow } from '../data/nflSlate';
 import { injuryFor } from '../data/injuries';
@@ -264,6 +264,7 @@ export interface ResolvedSlot {
   youNegated?: boolean;
   theirNegated?: boolean;
   byeStolen?: boolean;          // a bye player fielded here for a flat projection
+  ghostFielded?: boolean;       // a Ghost Player phantom conjured here for a flat set score
   youStake?: 'won' | 'lost';    // Double or Nothing result on this slot (at FINAL)
   youRivalry?: number;          // points siphoned TO you via the Rivalry power-up (same-position mirror)
   theirRivalry?: number;        // points siphoned to THEM via their Rivalry (live H2H)
@@ -390,7 +391,7 @@ export function buildMatchup(
   swaps: SlotSwaps = {},
   backupAssign: Record<string, string> = {},
   buffs: Record<string, boolean> = {},
-  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; surge?: Record<string, number>; coldSnap?: Record<string, number>; napalm?: Record<string, number>; bunker?: Record<string, number>; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number>; autoBackups?: boolean } = {},
+  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; ghost?: string[]; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; surge?: Record<string, number>; coldSnap?: Record<string, number>; napalm?: Record<string, number>; bunker?: Record<string, number>; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number>; autoBackups?: boolean } = {},
   realResolve = false, // resolve cross-game effects (TE-TD drip nuke) in real-time order
   oppBuffs?: string[], // live H2H: the opponent's REAL armed buffs (revealed at lock); AI default when omitted
 ): ResolvedMatchup {
@@ -548,7 +549,14 @@ export function buildMatchup(
         if (bp) { displayYou = { player: bp, metricId: 'bye' }; yF = Math.round(projectedPoints(bp, week) * 10) / 10; byeStolen = true; }
       }
 
-      slots.push({ win: w.id, slotIndex: i, you: displayYou, their, events, youFinal: yF, theirFinal: tF, gameLabel, real, suppressSpentYou, suppressSpentTheir, youNegated: youNegated || undefined, theirNegated: theirNegated || undefined, theirJinxed: theirJinxed || undefined, youEncore: youEncore || undefined, youCounterWiped: youCounterWiped || undefined, byeStolen: byeStolen || undefined, youBuffFx, theirBuffFx, youFgMult: youMult, theirFgMult: theirMult });
+      // Ghost Player: an empty slot can be filled with a phantom that banks a
+      // flat set score (GHOST_POINTS) — no bench player needed, no live game.
+      let ghostFielded = false;
+      if (extras.ghost?.includes(key) && !displayYou) {
+        displayYou = { player: GHOST_PLAYER, metricId: 'ghost' }; yF = GHOST_POINTS; ghostFielded = true;
+      }
+
+      slots.push({ win: w.id, slotIndex: i, you: displayYou, their, events, youFinal: yF, theirFinal: tF, gameLabel, real, suppressSpentYou, suppressSpentTheir, youNegated: youNegated || undefined, theirNegated: theirNegated || undefined, theirJinxed: theirJinxed || undefined, youEncore: youEncore || undefined, youCounterWiped: youCounterWiped || undefined, byeStolen: byeStolen || undefined, ghostFielded: ghostFielded || undefined, youBuffFx, theirBuffFx, youFgMult: youMult, theirFgMult: theirMult });
     }
     windows.push({ window: w, slots });
   }

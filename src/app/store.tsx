@@ -24,6 +24,7 @@ export interface AppliedWeek {
   doubleOrNothing?: string;                      // your slotKey staked (×2 if it wins, 0 if it loses)
   spy?: { slotKey: string; reveal: 'player' | 'metric'; value?: string | null }; // a slate slot peeked pre-kickoff; `value` = the server's live reveal (use_spy)
   byeSteal?: { slotKey: string; playerId: string }; // a bye player fielded for a flat projected score
+  ghost?: string[];                              // slotKeys where a Ghost Player phantom is fielded (flat set score)
   emp?: Partial<Record<WindowId, number>>;       // window -> clock at which opponent drips froze (10 min)
   rivalry?: Partial<Record<WindowId, boolean>>;  // windows armed with Rivalry (siphon 50% of same-position opponents at window-end)
   leadChange?: string[];                         // your slotKeys armed with Lead Change (+2 per lead you seize)
@@ -419,6 +420,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             doubleOrNothing: tgt.don ? sk(tgt.don) : b.doubleOrNothing,
             spy: lastSpy ? { slotKey: sk(lastSpy), reveal: lastSpy.reveal } : b.spy,
             byeSteal: tgt.byeSteal ? { slotKey: sk(tgt.byeSteal), playerId: tgt.byeSteal.slug } : b.byeSteal,
+            ghost: b.ghost,
             emp: (tgt.emp && Object.keys(tgt.emp).length ? tgt.emp : b.emp) as AppliedWeek['emp'],
             rivalry: b.rivalry, leadChange: b.leadChange, grudge: b.grudge, jinx: b.jinx, redHerring: b.redHerring,
             surge: b.surge, coldSnap: b.coldSnap, napalm: b.napalm, bunker: b.bunker,
@@ -593,7 +595,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     applied[week]?.rivalry?.[win] ? false : consumeAndApply('rivalry', week, (cur) => ({ ...cur, rivalry: { ...cur.rivalry, [win]: true } }));
   // Slot-targeted list power-ups (Lead Change / Grudge / Jinx / Red Herring):
   // arm toggles a slotKey into the week's list, spending one consumable.
-  const SLOT_LIST_PU: Record<string, keyof AppliedWeek> = { 'lead-change': 'leadChange', 'grudge': 'grudge', 'jinx': 'jinx', 'red-herring': 'redHerring' };
+  const SLOT_LIST_PU: Record<string, keyof AppliedWeek> = { 'lead-change': 'leadChange', 'grudge': 'grudge', 'jinx': 'jinx', 'red-herring': 'redHerring', 'ghost': 'ghost' };
   const applySlotListPu = (id: string, week: number, slotKey: string): boolean => {
     const key = SLOT_LIST_PU[id];
     if (((applied[week]?.[key] as string[] | undefined) ?? []).includes(slotKey)) return false;

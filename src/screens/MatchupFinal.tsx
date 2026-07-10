@@ -171,6 +171,7 @@ export function MatchupFinal({ week }: { week: number }) {
               if (s.youCounterWiped) fx.push('🪃 Counter-Wipe — negated a nuke');
               if (s.theirRedHerringFrom != null) fx.push(`🎣 Red Herring — capped rival ${s.theirRedHerringFrom.toFixed(1)} → ${s.theirFinal.toFixed(1)}`);
               if (s.byeStolen) fx.push('🪂 Bye steal');
+              if (s.ghostFielded) fx.push('👻 Ghost player');
               if (s.youNegated) fx.push('✕ Negated by opponent K shutdown');
               if (s.youHalvedFrom != null) fx.push(`÷2 Suppressed (from ${s.youHalvedFrom.toFixed(1)})`);
               for (const b of s.youBuffFx ?? []) { const p = powerupById(b.id); if (p) fx.push(`${p.icon} ${p.name} ${b.vsOpp ? '−' : '+'}${b.points.toFixed(1)}`); }

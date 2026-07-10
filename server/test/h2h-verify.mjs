@@ -196,4 +196,14 @@ console.log(`\nNAPALM: hot drip ${napBase} → napalmed ${napRes.youFinal} (${bu
 ok('napalm drove a hot drip well below its normal total', napRes.youFinal < napBase);
 ok('napalm never pushed the bank below 0', napRes.youFinal >= 0 && burns > 0);
 
+// ── 14. GHOST PLAYER: a phantom fills an empty slot for a flat set score ──────
+// Away fields nobody in the window; a Ghost armed on that slot conjures a
+// phantom worth a flat 14, opposing home's real player head-to-head.
+const ghHome = [{ win: 'early', slot: '0', player: P('puka-nacua', 'WR', 'LA'), metricId: 'recyd' }];
+const gRes = resolveLiveMatchup(ghHome, [], WEEK, {}, { away: { ghost: ['early|0'] } });
+const ghostSlot = gRes.slots.find((s) => s.side === 'away' && s.slug === '__ghost__');
+console.log(`\nGHOST: away conjured a phantom → ${ghostSlot ? ghostSlot.score : 'none'} (expected 14)`);
+ok('ghost filled the empty away slot with a phantom', !!ghostSlot);
+ok('ghost banked the flat set score of 14', ghostSlot?.score === 14);
+
 console.log('\nDONE.');

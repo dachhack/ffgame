@@ -275,6 +275,15 @@ export const EMPTY_PLAYER: Player = {
   stats: { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 },
 };
 
+/** Ghost Player: a phantom conjured into any open slot by the Ghost power-up.
+ *  It has no real game — it just banks GHOST_POINTS, a fixed set score. Pricier
+ *  than a Bye Steal, but needs no benched bye player and its floor is certain. */
+export const GHOST_POINTS = 14;
+export const GHOST_PLAYER: Player = {
+  id: '__ghost__', name: 'Ghost', full: 'Ghost Player', pos: 'WR', team: 'GHOST',
+  stats: { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 },
+};
+
 /** Real kick/punt returns (from baked 2025 play-by-play) — each at its EXACT
  *  game-elapsed second. Feeds the Return Yards metric. No synthesized timing. */
 function returnPlays(player: Player, week: number): RawPlay[] {
