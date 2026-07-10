@@ -26,6 +26,10 @@ export const Ev = {
   demoStep: 'demo_step',   // {step:'metric'|'power'} — advanced a decision step
   demoRun: 'demo_run',     // {star, metric, powerup} — hit RUN on the demo board
   powerupBought: 'powerup_bought',
+  // lead-capture funnel (the "request a code" modal — the demo's conversion)
+  codeRequestOpened: 'code_request_opened',   // {platform} — modal shown
+  codeRequested: 'code_requested',            // {platform, has_league_ref} — lead submitted (no PII)
+  codeRequestFailed: 'code_request_failed',   // {error} — submit rejected
   // premium funnel (docs/premium-model.md; fire once the gating + entitlements ship)
   gatedFeatureAttempted: 'gated_feature_attempted', // tried K/DST/IDP/locked power-up → premium INTENT
   premiumTierViewed: 'premium_tier_viewed',         // {tier:'personal'|'league'}
@@ -36,6 +40,32 @@ export const Ev = {
   splitCompleted: 'split_completed',                // pool reached $30 → league unlocked
   commishPremiumToggled: 'commish_premium_toggled', // {on}
 } as const;
+
+// ── First-touch attribution ──────────────────────────────────────────────────
+// Captured once from the FIRST visit's URL (utm_* params + referrer), persisted,
+// and merged into every event so paid traffic (e.g. the Reddit ads) stays
+// distinguishable from organic all the way down the funnel. First-touch by
+// design: a later organic revisit must not overwrite the ad that found them.
+const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'] as const;
+const ATTR_STORE = 'drip.attribution.v1';
+let attr: Props | null = null;
+
+/** The visitor's first-touch attribution ({} when organic/direct with no referrer). */
+export function attribution(): Props {
+  if (attr) return attr;
+  try {
+    const saved = localStorage.getItem(ATTR_STORE);
+    if (saved) { attr = JSON.parse(saved); return attr!; }
+    const q = new URLSearchParams(window.location.search);
+    const a: Props = {};
+    for (const k of UTM_KEYS) { const v = q.get(k); if (v) a[k] = v.slice(0, 200); }
+    const ref = document.referrer;
+    if (ref && !ref.includes(window.location.hostname)) a.first_referrer = ref.slice(0, 300);
+    if (Object.keys(a).length) { a.first_touch_at = new Date().toISOString(); localStorage.setItem(ATTR_STORE, JSON.stringify(a)); }
+    attr = a;
+  } catch { attr = {}; }
+  return attr;
+}
 
 let sink: AnalyticsSink | null = null;
 type Buffered = { kind: 'track'; event: string; props?: Props } | { kind: 'identify'; id: string; traits?: Props };
@@ -52,9 +82,11 @@ export function registerSink(s: AnalyticsSink): void {
 
 export function track(event: string, props?: Props): void {
   try {
-    if (sink) { sink.track(event, props); return; }
-    if (isDev) console.debug('[analytics]', event, props ?? {});
-    if (buffer.length < 100) buffer.push({ kind: 'track', event, props });
+    const a = attribution();
+    const merged = Object.keys(a).length ? { ...a, ...props } : props;
+    if (sink) { sink.track(event, merged); return; }
+    if (isDev) console.debug('[analytics]', event, merged ?? {});
+    if (buffer.length < 100) buffer.push({ kind: 'track', event, props: merged });
   } catch { /* never throw */ }
 }
 

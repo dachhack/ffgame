@@ -72,6 +72,18 @@ Implemented now (`src/app/analytics.ts`, `Ev.*`, wired in `src/app/store.tsx`):
 | `powerup_bought {id, price}` | `buyPowerup` | engagement |
 | `demo_step {step}` | `DemoBoard` — advanced a guided decision step | acquisition |
 | `demo_run {star, metric, powerup}` | `DemoBoard` — hit RUN on the landing demo | acquisition |
+| `code_request_opened {platform}` | `RequestCodeModal` mount (any entry point) | **conversion** |
+| `code_requested {platform, has_league_ref}` | lead submitted — no PII in the event | **conversion** |
+| `code_request_failed {error}` | submit rejected | conversion |
+
+Every event also carries the visitor's **first-touch attribution** (`utm_source` /
+`utm_medium` / `utm_campaign` / `utm_content` / `utm_term` + `first_referrer` +
+`first_touch_at`), captured on the first load and persisted (`analytics.ts
+attribution()`). The same object is stored on the lead row itself
+(`code_request.attribution`, migration 0088) so admin triage can see which channel
+produced each league request — this is what makes the paid-ads spend (e.g. Reddit,
+`?utm_source=reddit&utm_campaign=...`) measurable end to end. First-touch by design:
+a later organic revisit doesn't overwrite the ad that found them.
 
 To add as the gating/paywall ships (constants already defined):
 | Event | Fire when |

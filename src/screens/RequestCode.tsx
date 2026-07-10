@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { requestCode } from '../data/liveApi';
 import { liveConfigured } from '../data/supabaseClient';
 import { useStore } from '../app/store';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
+import { track, Ev, attribution } from '../app/analytics';
 
 // A persistent "out" present across the whole funnel: any visitor — wowed by the
 // demo, browsing leagues, mid-sim — can ask us to set their league up in the
@@ -48,14 +49,19 @@ export function RequestCodeModal({ initialPlatform, onClose }: { initialPlatform
   const [done, setDone] = useState(false);
   const guide = REF_GUIDE[platform] ?? REF_GUIDE[''];
 
+  // The demo's conversion funnel: opened → requested (or failed). No PII in
+  // events — the email stays in the lead row; attribution rides on every event
+  // automatically (analytics.ts) and is stored on the lead for admin triage.
+  useEffect(() => { track(Ev.codeRequestOpened, { platform: initialPlatform || null }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const submit = async () => {
     if (busy) return;
     if (!email.trim()) { setErr('Add your email so we can send your code.'); return; }
     setBusy(true); setErr(null);
     // `sleeper` on the API is the generic contact field; we send the platform there.
-    const r = await requestCode({ email, sleeper: platform, league, leagueRef, note });
-    if (r.ok) setDone(true);
-    else { setErr(r.error ?? 'Could not send — try again.'); setBusy(false); }
+    const r = await requestCode({ email, sleeper: platform, league, leagueRef, note, attribution: attribution() });
+    if (r.ok) { track(Ev.codeRequested, { platform: platform || null, has_league_ref: !!leagueRef.trim() }); setDone(true); }
+    else { track(Ev.codeRequestFailed, { error: (r.error ?? 'unknown').slice(0, 120) }); setErr(r.error ?? 'Could not send — try again.'); setBusy(false); }
   };
 
   return (
