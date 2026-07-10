@@ -189,9 +189,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       .then((r) => { if (!r.ok) console.warn('[live] apply_targeted', id, r.error); })
       .catch((e) => console.warn('[live] apply_targeted', id, e));
   };
-  const liveClearTargeted = (id: string) => {
+  const liveClearTargeted = (id: string, payload?: Record<string, unknown>) => {
     if (!liveCtx) return;
-    clearTargeted(liveCtx.matchupId, id).catch((e) => console.warn('[live] clear_targeted', id, e));
+    clearTargeted(liveCtx.matchupId, id, payload).catch((e) => console.warn('[live] clear_targeted', id, e));
   };
   function applyToSpot(key: string) {
     if (pendingApply === 'double-or-nothing') { if (setDoubleOrNothing(week, key)) liveTargeted('double-or-nothing', keyParts(key)); setPendingApply(null); }
@@ -214,7 +214,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // Halftime Gamble arm from the current live clock.
   const onArmClutch = (o: ClutchOffer) => {
     const clock = o.id === 'clutch-counter' ? o.armFrom : effWinClock(o.slotKey.split('#')[0]);
-    armClutch(o.id, week, o.slotKey, clock);
+    if (armClutch(o.id, week, o.slotKey, clock)) liveTargeted(o.id, { ...keyParts(o.slotKey), clock }); // mirror into the live scoring record (0085)
   };
   // Rosters expand in setup (you need them to set lineups), collapse otherwise.
   const [rosterOpen, setRosterOpen] = useState<{ you: boolean; their: boolean }>(() => ({ you: initialPhase === 'setup', their: initialPhase === 'setup' }));
@@ -748,11 +748,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   if (aw?.spy) { const sp = aw.spy; activeEffects.push({ key: 'spy', id: 'spy', icon: '👁️', name: 'Spy', detail: `Revealed a slot’s ${sp.reveal}`, onRemove: preKickPhase && !liveCtx ? () => clearSpy(week) : undefined }); } // live: use_spy already consumed the item — no undo
   for (const [win, n] of Object.entries(aw?.extraSlots ?? {})) if ((n ?? 0) > 0) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'x-' + win, id: 'extra-slot', icon: '➕', name: 'Extra Slot', detail: `+${n} on ${wl}`, onRemove: phase === 'setup' ? () => removeExtraSlot(week, win as WindowId) : undefined }); }
   for (const [win, c] of Object.entries(aw?.emp ?? {})) if (c != null) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'emp-' + win, id: 'emp', icon: '💥', name: 'EMP', detail: `Fired on ${wl}` }); }
-  for (const [win, on] of Object.entries(aw?.rivalry ?? {})) if (on) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'riv-' + win, id: 'rivalry', icon: '⚔️', name: 'Rivalry', detail: `Armed on ${wl}`, onRemove: phase === 'setup' ? () => removeRivalry(week, win as WindowId) : undefined }); }
+  for (const [win, on] of Object.entries(aw?.rivalry ?? {})) if (on) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'riv-' + win, id: 'rivalry', icon: '⚔️', name: 'Rivalry', detail: `Armed on ${wl}`, onRemove: phase === 'setup' ? () => { removeRivalry(week, win as WindowId); liveClearTargeted('rivalry', { win }); } : undefined }); }
   const slotPuName = (key: string) => { const s = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === key); const wl = windowsForWeek(week).find((w) => w.id === key.split('#')[0])?.label ?? key.split('#')[0]; return s?.you?.player.name ? `${s.you.player.name} · ${wl}` : wl; };
   const slotPuLists: [string, string[] | undefined][] = [['lead-change', aw?.leadChange], ['grudge', aw?.grudge], ['jinx', aw?.jinx], ['red-herring', aw?.redHerring]];
-  for (const [id, keys] of slotPuLists) for (const key of keys ?? []) activeEffects.push({ key: id + '-' + key, id, icon: powerupById(id)?.icon ?? '✦', name: powerupById(id)?.name ?? id, detail: (id === 'jinx' ? 'Hex opp at ' : 'On ') + slotPuName(key), onRemove: phase === 'setup' ? () => removeSlotListPu(id, week, key) : undefined });
-  for (const key of aw?.ghost ?? []) { const wl = windowsForWeek(week).find((w) => w.id === key.split('#')[0])?.label ?? key.split('#')[0]; activeEffects.push({ key: 'ghost-' + key, id: 'ghost', icon: '👻', name: 'Ghost Player', detail: `Fielded on ${wl}`, onRemove: phase === 'setup' ? () => removeSlotListPu('ghost', week, key) : undefined }); }
+  for (const [id, keys] of slotPuLists) for (const key of keys ?? []) activeEffects.push({ key: id + '-' + key, id, icon: powerupById(id)?.icon ?? '✦', name: powerupById(id)?.name ?? id, detail: (id === 'jinx' ? 'Hex opp at ' : 'On ') + slotPuName(key), onRemove: phase === 'setup' ? () => { removeSlotListPu(id, week, key); liveClearTargeted(id, keyParts(key)); } : undefined });
+  for (const key of aw?.ghost ?? []) { const wl = windowsForWeek(week).find((w) => w.id === key.split('#')[0])?.label ?? key.split('#')[0]; activeEffects.push({ key: 'ghost-' + key, id: 'ghost', icon: '👻', name: 'Ghost Player', detail: `Fielded on ${wl}`, onRemove: phase === 'setup' ? () => { removeSlotListPu('ghost', week, key); liveClearTargeted('ghost', keyParts(key)); } : undefined }); }
   const liveSlotPu: [string, Record<string, number> | undefined][] = [['surge', aw?.surge], ['cold-snap', aw?.coldSnap], ['napalm', aw?.napalm], ['bunker', aw?.bunker], ['clutch-encore', aw?.clutchEncore], ['clutch-counter', aw?.clutchCounter]];
   for (const [id, rec] of liveSlotPu) for (const key of Object.keys(rec ?? {})) activeEffects.push({ key: id + '-' + key, id, icon: powerupById(id)?.icon ?? '✦', name: powerupById(id)?.name ?? id, detail: (id === 'cold-snap' ? 'Froze ' : id === 'napalm' ? 'Napalmed ' : 'On ') + slotPuName(key) });
   for (const key of aw?.clutchDon ?? []) activeEffects.push({ key: 'cd-' + key, id: 'clutch-don', icon: powerupById('clutch-don')?.icon ?? '🎰', name: 'Halftime Gamble', detail: 'Staked ' + slotPuName(key) });

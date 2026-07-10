@@ -736,3 +736,43 @@ Second Amp ◎40 = ◎115 for +17.6 → 1.53 per ◎10 bundled). Season battery 
 the tuned values: economy bounded (~◎117), cancellation r=0.92, retrained
 policy still +2.0 pts over legacy. h2h-verify's rivalry assertion now reads
 the shared RIVALRY_SIPHON constant instead of a hardcoded 50%.
+
+## 20. Live parity for humans, clutch in the live resolver, and the price of knowing (v0.127.0)
+Three gaps closed: the human live-league scoring path for every battle play,
+clutch plays in the live resolver, and the first measurement of Spy.
+
+**Human live parity (migration 0085).** `apply_targeted` had whitelisted only
+the 0060 set — a human arming rivalry / ghost / jinx / grudge / lead-change /
+red-herring / surge / cold-snap / napalm / bunker / clutch in a LIVE league got
+a local-display-only effect that vanished at the authoritative resolve (the AI
+was unaffected — its budget pass writes `applied_state` directly). 0085 extends
+the whitelist with per-play validation: timing gates (pre plays before lock,
+live fires only on kicked-off windows), slot-ownership checks (own-slot plays
+need your sealed pick; ghost needs the slot EMPTY), one-per-target dedupe,
+list caps, and clock clamps — and re-clamps byeSteal at the retuned 16. A new
+3-arg `clear_targeted` overload removes ONE entry from a battle-play list so
+backing out one armed slot doesn't drop the rest; the client refund flows now
+call it (rivalry / ghost / slot bets). Trust model unchanged from 0060
+(uncharged state-setters; noted: a purchase-vs-applies entitlement ledger is
+future hardening).
+
+**Clutch plays in the live resolver.** `LiveExtras` grew `clutchDon` /
+`clutchEncore` / `clutchCounter` for BOTH sides, resolved with buildMatchup
+parity: Halftime Gamble stakes ×2/0 like don, Encore pays +12 on the first TD
+after the arm clock, Counter-Wipe negates the recorded nuke. `toExtras` maps
+them, the client's `armClutch` now mirrors into the live scoring record, and
+h2h-verify asserts all three through the live path (28/28). Clutch conditions
+stay client-detected — the engine only pays when the play-by-play actually
+contains the trigger, so a fabricated arm whiffs.
+
+**Spy — the price of knowing (`spyval.mjs`).** The last unmeasured power-up
+class. Home spies the away top slot and plays the projection-best response:
+- metric-counter responses (reveal metric / player / BOTH): **+0.0 margin**,
+  flipped the pick only 11% of the time and net-zero when it did — consistent
+  with §8's "counters hurt": the post-§11 metric menu simply doesn't reward
+  slot-level counter-picking, even with perfect information.
+- bet-aiming (jinx the spied slot when the reveal shows a 'td' nuke): fired
+  **0%** — the honest meta is ALL-DRIP (the AI never fields TD nukes), so
+  against the honest field there is nothing for the reveal to catch.
+Verdict: Spy is correctly a ◎40 curiosity vs the AI meta; its real value is
+versus HUMAN metas (nuke/bet-heavy opponents) and table psychology. No retune.

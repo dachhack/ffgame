@@ -643,8 +643,12 @@ export const myHeroApplied = (matchupId: string) => rpc<Record<string, unknown>>
 // inventory), except use_spy which consumes a purchased Spy itself.
 export const applyTargeted = (matchupId: string, powerupId: string, payload: Record<string, unknown>) =>
   rpc<{ ok: boolean; error?: string }>('apply_targeted', { p_matchup_id: matchupId, p_powerup_id: powerupId, p_payload: payload });
-export const clearTargeted = (matchupId: string, powerupId: string) =>
-  rpc<{ ok: boolean; error?: string }>('clear_targeted', { p_matchup_id: matchupId, p_powerup_id: powerupId });
+export const clearTargeted = (matchupId: string, powerupId: string, payload?: Record<string, unknown>) =>
+  // 2-arg form drops a single-entry key (don/byeSteal, 0060); the 3-arg overload
+  // (0085) removes ONE entry from a battle-play list (rivalry/ghost/slot bets).
+  rpc<{ ok: boolean; error?: string }>('clear_targeted', payload
+    ? { p_matchup_id: matchupId, p_powerup_id: powerupId, p_payload: payload }
+    : { p_matchup_id: matchupId, p_powerup_id: powerupId });
 export const useSpy = (matchupId: string, win: string, slot: string, reveal: 'player' | 'metric') =>
   rpc<{ ok: boolean; error?: string; reveal?: string | null; present?: boolean }>('use_spy', { p_matchup_id: matchupId, p_win: win, p_slot: slot, p_reveal: reveal });
 export interface TargetedState {

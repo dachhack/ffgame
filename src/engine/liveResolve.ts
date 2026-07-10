@@ -175,6 +175,14 @@ export interface LiveExtras {
   coldSnap?: Record<string, number>;
   napalm?: Record<string, number>;
   bunker?: Record<string, number>;
+  /** CLUTCH plays (conditional, armed live from transient offers — parity with
+   *  buildMatchup's clutch extras): Halftime Gamble stakes this side's slots
+   *  (`win|slot` list — ×2 if the slot wins its head-to-head, 0 if it loses);
+   *  Encore records the arm clock per slot (the NEXT TD after it banks +12);
+   *  Counter-Wipe records the clock of the opponent nuke to negate. */
+  clutchDon?: string[];
+  clutchEncore?: Record<string, number>;
+  clutchCounter?: Record<string, number>;
 }
 export interface LiveExtrasBySide { home?: LiveExtras; away?: LiveExtras; }
 
@@ -315,7 +323,11 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
         youSurge: win10(hx.surge?.[jinxKey]), theirSurge: win10(ax.surge?.[jinxKey]),
         theirFreeze: win10(hx.coldSnap?.[jinxKey]), youFreeze: win10(ax.coldSnap?.[jinxKey]),
         theirNapalm: win10(hx.napalm?.[jinxKey]), youNapalm: win10(ax.napalm?.[jinxKey]),
-        youBunkerFrom: hx.bunker?.[jinxKey], theirBunkerFrom: ax.bunker?.[jinxKey] });
+        youBunkerFrom: hx.bunker?.[jinxKey], theirBunkerFrom: ax.bunker?.[jinxKey],
+        // CLUTCH: Encore (+12 on the next TD after the arm clock) and
+        // Counter-Wipe (negate the opponent nuke at the recorded clock).
+        youDoubleTd: hx.clutchEncore?.[jinxKey], theirDoubleTd: ax.clutchEncore?.[jinxKey],
+        youCounterWipe: hx.clutchCounter?.[jinxKey], theirCounterWipe: ax.clutchCounter?.[jinxKey] });
       let homeF = res.youFinal, awayF = res.theirFinal;
       let events = res.events;
       let homeTd = res.youTds, awayTd = res.theirTds, homeXp = res.youBankerXp, awayXp = res.theirBankerXp;
@@ -417,6 +429,21 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
   };
   donFor(hx, 'home');
   donFor(ax, 'away');
+
+  // CLUTCH Double or Nothing (Halftime Gamble): same ×2/0 stake as don, armed
+  // conditionally mid-game — a LIST of this side's slots (parity with
+  // buildMatchup's clutchDon bonuses; baked into the slot like live don).
+  const clutchDonFor = (x: LiveExtras, side: 'home' | 'away') => {
+    for (const kk of x.clutchDon ?? []) {
+      const [win, slot] = kk.split('|');
+      const s = slots.find((t) => t.win === win && t.slot === slot);
+      if (!s || !s.homeP || !s.awayP) continue; // unopposed/empty slots can't be staked
+      if (side === 'home') { const won = s.home > s.away; s.home = won ? round(s.home * 2) : 0; }
+      else { const won = s.away > s.home; s.away = won ? round(s.away * 2) : 0; }
+    }
+  };
+  clutchDonFor(hx, 'home');
+  clutchDonFor(ax, 'away');
 
   // Trick Play / Pick Six / Hail Mary: armed flat awards, credited to the
   // triggering player's slot so per-window sums still equal the totals.
