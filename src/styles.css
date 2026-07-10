@@ -20,6 +20,7 @@ a { color: inherit; }
 @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-3px); } 40%, 80% { transform: translateX(3px); } }
 @keyframes slidein { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes mburst { 0% { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(0.92); } 100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
+@keyframes nukeburst { 0% { opacity: 0; transform: scale(0.25); } 45% { opacity: 1; transform: scale(1.45); } 70% { transform: scale(0.94); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes fvdraw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes fvtakeover { 0% { opacity: 0; transform: scale(0.6); } 12% { opacity: 1; transform: scale(1.1); } 20% { transform: scale(1); } 78% { opacity: 1; } 100% { opacity: 0; transform: scale(1); } }
 .fv-txt { animation: slidein .3s ease; }
