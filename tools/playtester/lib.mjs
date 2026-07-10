@@ -11,7 +11,7 @@
 // (single-lever A/B) are thin CLIs over it. Run anything that imports it under tsx.
 import { readFileSync } from 'node:fs';
 import { injectWeek, resolveLiveMatchup, makePlayer } from '../../server/src/engine.js';
-import { aiLineup, aiLiveBuffs, wantsComboDrip, defaultAiMetric, aiTargetedPlays } from '../../src/data/aiLineup.ts';
+import { aiLineup, aiLiveBuffs, wantsComboDrip, defaultAiMetric, aiTargetedPlays, aiBattlePlan, AI_STACKS } from '../../src/data/aiLineup.ts';
 import { slugMeta } from '../../src/data/slugMeta.ts';
 import { hasSlate, windowForTeam } from '../../src/data/nflSlate.ts';
 import { statsForSlug } from '../../src/data/players.ts';
@@ -103,26 +103,38 @@ export function toLive(picks) {
 // aiLiveBuffs draw, then extra slots up to the cap — spending only what it can
 // afford. Returns { owned, buffs, extra } to feed aiLineup + resolveLiveMatchup.
 export const WALLET_SEED = 100, EXTRA_SLOT_CAP = 2; // season-start balance (mirrors wallet_seed())
-export function aiLoadout(slugs, key, week) {
-  let bal = WALLET_SEED;
+export function aiLoadout(slugs, key, week, wallet = WALLET_SEED, stacks = AI_STACKS) {
+  let bal = wallet;
   const owned = new Set(), buffs = new Set();
-  const targeted = { rivalry: false, ghost: false };
+  const targeted = { rivalry: false, ghost: false, don: false, herring: false };
   let extra = 0;
   // Mirror server/src/lock.js:aiBudgetPass — RETRAINED order (findings §17), by
   // measured lift-per-coin: first amp → RIVALRY (2.80/10c) → remaining amps →
-  // GHOST when the lineup leaves a base slot open (1.51/10c) → combodrip → extra.
+  // then the CONDITIONAL STACKS (§18) when the wallet still allows AND the
+  // lineup creates the situation: Air Raid (no Field General to waste it on) →
+  // Double-or-Nothing on its top slot → GHOST on an open base slot → combodrip
+  // → Red Herring on a genuinely cheap decoy → extra slots.
   // Amplifiers are capacity-limited (0063): an amp beyond capacity needs the
   // Second/Third Amp unlock bought first; skip the amp if that isn't affordable.
   const AMPS = new Set(['momentum', 'garbage-time', 'overtime']);
   const ampCap = () => 1 + (buffs.has('amp-2') ? 1 : 0) + (buffs.has('amp-2') && buffs.has('amp-3') ? 1 : 0);
   const amps = aiLiveBuffs(key, week);
-  const basePlays = aiTargetedPlays(aiLineup(slugs, week), week); // blind read of its own lineup
-  const desired = [amps[0], 'rivalry', ...amps.slice(1)];
-  if (basePlays.ghost) desired.push('ghost');
+  const plan = aiBattlePlan(aiLineup(slugs, week), week); // blind read of its own lineup
+  const raidFits = (stacks.raid || stacks.raidFirst) && !plan.fgDeployed;
+  const desired = [];
+  if (raidFits && stacks.raidFirst) desired.push('unlock-pass-td10'); // §16 raid-then-amp order
+  desired.push(amps[0]);
+  if (stacks.twinFg && plan.twinQbWin) desired.push('fg-stack');      // Twin Generals situation
+  desired.push('rivalry', ...amps.slice(1));
+  if (raidFits && !stacks.raidFirst) desired.push('unlock-pass-td10');
+  if (stacks.don && plan.topSlot) desired.push('don');
+  if (plan.ghost) desired.push('ghost');
   if (slugs.some((s) => wantsComboDrip(s, slugMeta(s).pos))) desired.push('unlock-combo-drip');
+  if (stacks.herring && plan.decoyWr) desired.push('herring');
+  const PLAY_ID = { don: 'double-or-nothing', herring: 'red-herring', rivalry: 'rivalry', ghost: 'ghost' };
   for (const item of desired) {
-    if (item === 'rivalry' || item === 'ghost') {
-      const price = powerupById(item)?.price ?? 9999;
+    if (PLAY_ID[item]) {
+      const price = powerupById(PLAY_ID[item])?.price ?? 9999;
       if (bal >= price) { bal -= price; targeted[item] = true; }
       continue;
     }
@@ -136,21 +148,31 @@ export function aiLoadout(slugs, key, week) {
     const price = powerupById(item)?.price ?? 9999;
     if (bal >= price) { bal -= price; (item.startsWith('unlock-') ? owned : buffs).add(item); }
   }
+  // fg-stack is a BUFF for the engine (windowFgMult stack) but the lineup
+  // builder also needs to see it (it flips the second QB onto fg) — mirror it
+  // into the owned set the aiLineup calls receive.
+  if (buffs.has('fg-stack')) owned.add('fg-stack');
   for (let i = extra; i < EXTRA_SLOT_CAP; i++) {
     const price = powerupById('extra-slot')?.price ?? 80;
     if (bal >= price) { bal -= price; extra = i + 1; } else break;
   }
-  return { owned, buffs, extra, targeted, spent: WALLET_SEED - bal };
+  // Extra slots stack INTO the rivalry window when that stack is on (§18) — the
+  // matchup builder honors preferWin while the side's bench can fill it.
+  const preferWin = stacks.stackExtras && targeted.rivalry ? plan.rivalry : null;
+  return { owned, buffs, extra, targeted, preferWin, spent: wallet - bal, wallet: bal };
 }
 
 /** LiveExtras for a side's BOUGHT battle plays, targeted blind off its own built
- *  lineup (aiTargetedPlays). Undefined when nothing was bought / no target. */
+ *  lineup (aiBattlePlan). Undefined when nothing was bought / no target. */
 export function aiExtras(load, picks, week) {
-  if (!load?.targeted?.rivalry && !load?.targeted?.ghost) return undefined;
-  const t = aiTargetedPlays(picks.map((p) => ({ win: p.win, slot: p.slot })), week);
+  const t = load?.targeted;
+  if (!t || !(t.rivalry || t.ghost || t.don || t.herring)) return undefined;
+  const plan = aiBattlePlan(picks.map((p) => ({ win: p.win, slot: p.slot, slug: p.player.id, metric: p.metricId })), week);
   const ex = {};
-  if (load.targeted.rivalry && t.rivalry) ex.rivalry = [t.rivalry];
-  if (load.targeted.ghost && t.ghost) ex.ghost = [t.ghost];
+  if (t.rivalry && plan.rivalry) ex.rivalry = [plan.rivalry];
+  if (t.ghost && plan.ghost) ex.ghost = [plan.ghost];
+  if (t.don && plan.topSlot) { const [win, slot] = plan.topSlot.split('|'); ex.don = { win, slot }; }
+  if (t.herring && plan.decoyWr) ex.redHerring = [plan.decoyWr];
   return Object.keys(ex).length ? ex : undefined;
 }
 
@@ -192,11 +214,14 @@ function sideLineup(roster, week, load, c) {
   return { picks: [...picks], bench, extra: load.extra ?? 0 };
 }
 
-function deepestWindows(bench, n) {
+function deepestWindows(bench, n, prefer = null) {
   const avail = new Map();
   for (const b of bench) avail.set(b.win, (avail.get(b.win) || 0) + 1);
   const out = [];
   for (let i = 0; i < n; i++) {
+    // stackExtras (§18): point bought slots INTO the preferred (rivalry) window
+    // first, while the bench can still fill it — then fall back to deepest.
+    if (prefer && (avail.get(prefer) || 0) > 0) { out.push(prefer); avail.set(prefer, avail.get(prefer) - 1); continue; }
     let best = null, bc = 0;
     for (const [w, k] of avail) if (k > bc) { best = w; bc = k; }
     if (!best) break;
@@ -212,7 +237,7 @@ export function buildMatchup(homeRoster, awayRoster, week, homeLoad = {}, awayLo
 
   // Union the two buyers' chosen windows; each gets x0,x1,… and BOTH sides fill it.
   const winCounts = new Map();
-  for (const w of [...deepestWindows(H.bench, H.extra), ...deepestWindows(A.bench, A.extra)]) winCounts.set(w, (winCounts.get(w) || 0) + 1);
+  for (const w of [...deepestWindows(H.bench, H.extra, homeLoad.preferWin), ...deepestWindows(A.bench, A.extra, awayLoad.preferWin)]) winCounts.set(w, (winCounts.get(w) || 0) + 1);
   const byWin = (s) => { const m = new Map(); for (const b of s.bench) { if (!m.has(b.win)) m.set(b.win, []); m.get(b.win).push(b); } return m; };
   const hbw = byWin(H), abw = byWin(A);
   for (const [w, count] of winCounts) {

@@ -17,8 +17,8 @@
 // hindsight-free); it never sees the opponent's players, metrics, or buys.
 //
 //   npx tsx tools/playtester/season.mjs --teams=12 --weeks=14 --seasons=40
-import { rng, useWeek, buildMatchup, resolve, slugMeta, powerupById, aiExtras, WALLET_SEED, EXTRA_SLOT_CAP, mean, fmt } from './lib.mjs';
-import { aiLiveBuffs, wantsComboDrip, aiLineup, aiTargetedPlays } from '../../src/data/aiLineup.ts';
+import { rng, useWeek, buildMatchup, resolve, slugMeta, powerupById, aiExtras, aiLoadout, WALLET_SEED, EXTRA_SLOT_CAP, mean, fmt } from './lib.mjs';
+import { aiLiveBuffs, wantsComboDrip, AI_STACKS } from '../../src/data/aiLineup.ts';
 
 const flags = {};
 for (const a of process.argv.slice(2)) { const m = /^--([^=]+)(?:=(.*))?$/.exec(a); if (m) flags[m[1]] = m[2] ?? true; }
@@ -64,37 +64,35 @@ function schedule(M, W) {
   return Array.from({ length: W }, (_, w) => rounds[w % rounds.length]);
 }
 
-/** Blind budget pass with a CARRIED-OVER wallet (no per-week reseed). Mirrors
- *  server/src/lock.js:aiBudgetPass RETRAINED priority order (findings §17):
- *  first amp → RIVALRY → remaining amps → GHOST (only when the lineup leaves a
- *  base slot open) → combo-drip → extra slots — including the amp-capacity rule
- *  (0063): an amp beyond the cap needs Second/Third Amp bought first, and only
- *  when BOTH unlock and amp fit. `legacy: true` restores the pre-battle-play
- *  order (no rivalry/ghost) for the retrain-validation probe. */
-function seasonBudget(wallet, roster, key, week, legacy = false) {
-  let bal = wallet;
-  const owned = new Set(), buffs = new Set();
-  const targeted = { rivalry: false, ghost: false };
-  let extra = 0;
-  const buy = (item) => { const p = powerupById(item)?.price ?? 9999; if (bal >= p) { bal -= p; return true; } return false; };
-  const AMPS = new Set(['momentum', 'garbage-time', 'overtime']);
-  const ampCap = () => 1 + (buffs.has('amp-2') ? 1 : 0) + (buffs.has('amp-2') && buffs.has('amp-3') ? 1 : 0);
-  const amps = aiLiveBuffs(key, week);
-  const desired = legacy ? [...amps] : [amps[0], 'rivalry', ...amps.slice(1)];
-  if (!legacy && aiTargetedPlays(aiLineup(roster, week), week).ghost) desired.push('ghost');
-  if (roster.some((s) => wantsComboDrip(s, slugMeta(s).pos))) desired.push('unlock-combo-drip');
-  for (const item of desired) {
-    if (item === 'rivalry' || item === 'ghost') { if (buy(item)) targeted[item] = true; continue; }
-    if (AMPS.has(item) && [...buffs].filter((b) => AMPS.has(b)).length >= ampCap()) {
-      const need = buffs.has('amp-2') ? 'amp-3' : 'amp-2';
-      if (bal < (powerupById(need)?.price ?? 9999) + (powerupById(item)?.price ?? 9999)) continue;
-      buy(need); buffs.add(need);
+/** Blind budget pass with a CARRIED-OVER wallet (no per-week reseed) — thin
+ *  wrapper over the SHARED aiLoadout mirror (lib.mjs ⇄ server/src/lock.js):
+ *  first amp → RIVALRY → remaining amps → the conditional STACKS (§18, gated
+ *  by `stacks`) → combo-drip → extra slots. `legacy: true` restores the
+ *  pre-battle-play amps-only order for the retrain-validation probe. */
+function seasonBudget(wallet, roster, key, week, legacy = false, stacks = AI_STACKS) {
+  if (legacy) {
+    let bal = wallet;
+    const owned = new Set(), buffs = new Set();
+    let extra = 0;
+    const buy = (item) => { const p = powerupById(item)?.price ?? 9999; if (bal >= p) { bal -= p; return true; } return false; };
+    const AMPS = new Set(['momentum', 'garbage-time', 'overtime']);
+    const ampCap = () => 1 + (buffs.has('amp-2') ? 1 : 0) + (buffs.has('amp-2') && buffs.has('amp-3') ? 1 : 0);
+    const desired = [...aiLiveBuffs(key, week)];
+    if (roster.some((s) => wantsComboDrip(s, slugMeta(s).pos))) desired.push('unlock-combo-drip');
+    for (const item of desired) {
+      if (AMPS.has(item) && [...buffs].filter((b) => AMPS.has(b)).length >= ampCap()) {
+        const need = buffs.has('amp-2') ? 'amp-3' : 'amp-2';
+        if (bal < (powerupById(need)?.price ?? 9999) + (powerupById(item)?.price ?? 9999)) continue;
+        buy(need); buffs.add(need);
+      }
+      if (buy(item)) (item.startsWith('unlock-') ? owned : buffs).add(item);
     }
-    if (buy(item)) (item.startsWith('unlock-') ? owned : buffs).add(item);
+    for (let i = 0; i < EXTRA_SLOT_CAP; i++) { if (buy('extra-slot')) extra++; else break; }
+    return { owned, buffs, extra, targeted: {}, wallet: bal };
   }
-  for (let i = 0; i < EXTRA_SLOT_CAP; i++) { if (buy('extra-slot')) extra++; else break; }
-  const extrasFor = (ownPicks, oppPicks, wk) => aiExtras({ targeted }, ownPicks, wk);
-  return { owned, buffs, extra, targeted, extrasFor, wallet: bal };
+  const l = aiLoadout(roster, key, week, wallet, stacks);
+  const extrasFor = (ownPicks, oppPicks, wk) => aiExtras(l, ownPicks, wk);
+  return { ...l, extrasFor };
 }
 
 // ── Saver policies (team-0 probes): buy NOTHING until the amp bundle fits the
@@ -163,6 +161,8 @@ function runSeason(seed, skip = new Set(), t0policy = null) {
       for (const b of [...l.buffs, ...l.owned]) buys[b] = (buys[b] || 0) + 1;
       if (l.targeted?.rivalry) buys['rivalry'] = (buys['rivalry'] || 0) + 1;
       if (l.targeted?.ghost) buys['ghost'] = (buys['ghost'] || 0) + 1;
+      if (l.targeted?.don) buys['double-or-nothing'] = (buys['double-or-nothing'] || 0) + 1;
+      if (l.targeted?.herring) buys['red-herring'] = (buys['red-herring'] || 0) + 1;
       if (l.extra) buys['extra-slot'] = (buys['extra-slot'] || 0) + l.extra;
       return l;
     });
@@ -206,6 +206,11 @@ let devWith = 0, devWithout = 0, devGames = 0; // mandatory-tax probe (team 0)
 let savPair = 0, savTrio = 0, savPairN = 0, savTrioN = 0; // saver probes (team 0)
 let raidA = 0, raidB = 0, raidAN = 0, raidBN = 0;         // Air Raid reprice probes (team 0)
 let legacyWins = 0;                                        // retrain probe: team 0 on the OLD (no battle-play) order
+// §18 stack probes: team 0 turns ONE conditional stack on (rest of the field
+// steady) — plus a full-stack arm. Buy counters show how often each fires.
+const STACK_ARMS = ['raid', 'raidFirst', 'twinFg', 'don', 'herring', 'stackExtras', 'all'];
+const stackWins = Object.fromEntries(STACK_ARMS.map((a) => [a, 0]));
+const stackBuys = Object.fromEntries(STACK_ARMS.map((a) => [a, 0]));
 
 for (let s = 0; s < SEASONS; s++) {
   const seed = baseSeed + s * 101;
@@ -234,6 +239,25 @@ for (let s = 0; s < SEASONS; s++) {
   // legacy team 0 should fall below the steady buyer's win-rate.
   const H = runSeason(seed, new Set(), (w, r, k, wk) => seasonBudget(w, r, k, wk, true));
   legacyWins += H.wins[0];
+  // §18 stack probes: team 0 deviates with one stack on (or all of them).
+  for (const arm of STACK_ARMS) {
+    const OFF = { raid: false, raidFirst: false, twinFg: false, don: false, herring: false, stackExtras: false };
+    const stacks = arm === 'all'
+      ? { ...OFF, raid: true, twinFg: true, don: true, herring: true, stackExtras: true }
+      : arm === 'raidFirst' ? { ...OFF, raid: true, raidFirst: true }
+      : { ...OFF, [arm]: true };
+    const policy = (w, r, k, wk) => {
+      const l = seasonBudget(w, r, k, wk, false, stacks);
+      if (l.owned.has('unlock-pass-td10')) stackBuys[arm]++;
+      if (l.buffs.has('fg-stack')) stackBuys[arm]++;
+      if (l.targeted?.don) stackBuys[arm]++;
+      if (l.targeted?.herring) stackBuys[arm]++;
+      if (arm === 'stackExtras' && l.preferWin && l.extra) stackBuys[arm]++;
+      return l;
+    };
+    const S = runSeason(seed, new Set(), policy);
+    stackWins[arm] += S.wins[0];
+  }
 }
 
 console.log('── economy ──');
@@ -273,3 +297,19 @@ const wLegacy = legacyWins / devGames * 100;
 console.log(`  retrained buyer (amps + rivalry/ghost)           ${fmt(wWith)}%`);
 console.log(`  legacy buyer (amps only, battle plays skipped)   ${fmt(wLegacy)}%  (Δ ${fmt(wWith - wLegacy)} pts)`);
 console.log(`  ${wWith - wLegacy > 1 ? '⇒ the retrained battle-play order EARNS its coin at the table' : '⇒ battle plays wash out at the table — keep them optional, revisit prices'}`);
+
+console.log('\n── §18 stack probes (team 0 turns ONE conditional stack on, field steady) ──');
+console.log(`  steady buyer (no stacks)                         ${fmt(wWith)}%`);
+const ARM_LABEL = {
+  raid: 'raid stack (Air Raid when no FG deploys)     ',
+  raidFirst: 'raid-FIRST stack (Air Raid before the amp)   ',
+  twinFg: 'twin-FG stack (fg-stack, 2 QBs share window) ',
+  don: 'don stack (surplus → DoN on its top slot)    ',
+  herring: 'herring stack (surplus → cheap WR decoy)     ',
+  stackExtras: 'extra-slot stack (extras → rivalry window)   ',
+  all: 'FULL stack (raid+twinFg+don+herring+extras)  ',
+};
+for (const arm of STACK_ARMS) {
+  const wr = stackWins[arm] / devGames * 100;
+  console.log(`  ${ARM_LABEL[arm]} ${fmt(wr)}%  (Δ ${fmt(wr - wWith)} pts · ${fmt(stackBuys[arm] / SEASONS, 1)} fires/season)`);
+}

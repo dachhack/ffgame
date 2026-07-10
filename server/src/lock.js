@@ -9,7 +9,7 @@
 // integrity window.
 import { db } from './supabase.js';
 import { autoLineup } from './engine.js';
-import { wantsComboDrip, aiLiveBuffs, aiTargetedPlays } from '../../src/data/aiLineup.ts';
+import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS } from '../../src/data/aiLineup.ts';
 import { powerupById } from '../../src/data/powerups.ts';
 
 /** A team's armed loadout (applied_state) — what it already OWNS coming into the
@@ -66,10 +66,19 @@ async function aiBudgetPass(m, rosterId, appUserId, starters, seed) {
   //    lock are kept without re-charging, so a depleted balance can't drop a bought item.
   //    (Mirror: tools/playtester/lib.mjs aiLoadout — keep in lockstep.)
   const slugs = starters.map((s) => s.player_slug).filter(Boolean);
-  const plays = aiTargetedPlays(autoLineup(slugs, m.week), m.week);
+  const plan = aiBattlePlan(autoLineup(slugs, m.week), m.week);
   const amps = aiLiveBuffs(`${m.league_id}:${rosterId}`, m.week);
-  const desired = [amps[0], 'rivalry', ...amps.slice(1)];
-  if (plays.ghost) desired.push('ghost');
+  // The raid STACK (findings §18): when the lineup deploys no Field General,
+  // Air Raid (◎40) is bought FIRST — it fits alongside the amp inside weekly
+  // income, and aiMetric flips the QB onto passbig once the unlock is owned.
+  // (The other probed stacks — don/herring/twin-FG/extra-stacking — ship OFF in
+  // AI_STACKS: they never fire at the current economy, so no dead code here.)
+  const raidFits = (AI_STACKS.raid || AI_STACKS.raidFirst) && !plan.fgDeployed;
+  const desired = [];
+  if (raidFits && AI_STACKS.raidFirst) desired.push('unlock-pass-td10');
+  desired.push(amps[0], 'rivalry', ...amps.slice(1));
+  if (raidFits && !AI_STACKS.raidFirst) desired.push('unlock-pass-td10');
+  if (plan.ghost) desired.push('ghost');
   if (starters.some((s) => s.player_slug && wantsComboDrip(s.player_slug, s.pos))) desired.push('unlock-combo-drip');
   const targeted = { ...(own.payload.targeted ?? {}) };
   // Amplifiers are capacity-limited (1 + Second Amp + Third Amp, migration
@@ -87,7 +96,7 @@ async function aiBudgetPass(m, rosterId, appUserId, starters, seed) {
     // Battle plays: spend, then record the blind target in the same targeted
     // payload the human apply RPCs use (resolve.js toExtras scores it).
     if (item === 'rivalry' || item === 'ghost') {
-      const target = item === 'rivalry' ? plays.rivalry : plays.ghost;
+      const target = item === 'rivalry' ? plan.rivalry : plan.ghost;
       if (!target || (targeted[item] ?? []).includes(target)) continue;
       if (await spend(item, `${m.id}:ai:${item}:${rosterId}`)) targeted[item] = [...(targeted[item] ?? []), target];
       continue;
