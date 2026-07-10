@@ -227,6 +227,16 @@ const CSS = `
   background-image:radial-gradient(rgba(184,134,59,.12) 1px,transparent 1.2px),radial-gradient(circle at 50% 36%,#FDF8E9 0%,#F4EDDA 55%,#E2D5B6 100%) !important;
   background-size:11px 11px,100% 100% !important;}
 .ctable .mx-hidden{display:none !important;}
+/* SELECTED keeps the card footprint (it used to ride .mx-state and explode into
+   the raw full-width panel — the "two different empty boxes" bug): the accent
+   is a ring + tint on the same card shape. Apply-mode states still opt out via
+   .mx-state so the warn/target overlays keep their flexible layout. */
+.ctable .mx-empty.mx-sel:not(.mx-state){
+  border-color:var(--you) !important;border-left-color:var(--you) !important;
+  background:color-mix(in srgb, var(--you) 12%, rgba(233,185,89,.05)) !important;
+  box-shadow:0 0 0 2px color-mix(in srgb, var(--you) 45%, transparent);}
+.ctable .mx-spot.mx-sel:not(.mx-state){
+  box-shadow:0 4px 0 rgba(0,0,0,.55),0 0 0 2px var(--you) !important;}
 .ctable .mx-spot:not(.mx-state) .mx-id{flex-direction:column;align-items:center;padding-right:0 !important;margin-top:auto;}
 .ctable .mx-spot:not(.mx-state) .mx-idbtn{flex-direction:column;align-items:center;text-align:center;gap:6px !important;flex:none !important;}
 .ctable .mx-spot:not(.mx-state) .mx-idbtn>div{text-align:center;}

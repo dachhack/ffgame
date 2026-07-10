@@ -2549,7 +2549,7 @@ export function SetupRow(props: {
         <div
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); onDropPlayer(e.dataTransfer.getData('text/plain')); }}
-          className={`mx-spot${applyHi || applyDim || selected ? ' mx-state' : ''}`}
+          className={`mx-spot${applyHi || applyDim ? ' mx-state' : ''}${selected ? ' mx-sel' : ''}`}
           style={{ position: 'relative', minWidth: 0, background: applyHi ? 'color-mix(in srgb, var(--warn) 12%, var(--surface))' : selected ? 'var(--sh)' : 'var(--surface)', border: `1px ${applyHi ? 'dashed var(--warn)' : `solid ${selected ? 'var(--you)' : 'var(--bd)'}`}`, borderLeft: applyHi ? '3px dashed var(--warn)' : '3px solid var(--you)', borderRadius: 4, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 7, opacity: applyDim ? 0.45 : 1 }}
         >
           {applyHi && (
@@ -2622,7 +2622,7 @@ export function SetupRow(props: {
           onClick={applyMode ? (emptyEligible ? onApplyToSpot : undefined) : onOpenPicker}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); onDropPlayer(e.dataTransfer.getData('text/plain')); }}
-          className={`mx-empty${emptyEligible || applyDim || selected ? ' mx-state' : ''}`}
+          className={`mx-empty${emptyEligible || applyDim ? ' mx-state' : ''}${selected ? ' mx-sel' : ''}`}
           style={{ minWidth: 0, minHeight: 78, background: emptyEligible ? 'color-mix(in srgb, var(--warn) 12%, transparent)' : selected ? 'var(--surface)' : 'transparent', border: `1px dashed ${emptyEligible ? 'var(--warn)' : selected ? 'var(--you)' : 'var(--bdh)'}`, borderLeft: `3px dashed ${emptyEligible ? 'var(--warn)' : selected ? 'var(--you)' : 'var(--bdh)'}`, borderRadius: 4, padding: '16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', opacity: applyDim ? 0.4 : 1 }}
         >
           <span className="grotesk" style={{ fontSize: 20, color: emptyEligible ? 'var(--warn)' : 'var(--faint)' }}>{emptyEligible ? <PuIcon id={applyPu?.id} emoji={applyPu?.icon} size={22} /> : '+'}</span>
