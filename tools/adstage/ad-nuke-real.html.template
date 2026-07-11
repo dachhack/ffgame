@@ -1,0 +1,312 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@font-face { font-family: 'Space Grotesk'; src: url(data:font/woff2;base64,__SG__) format('woff2'); font-weight: 300 800; }
+@font-face { font-family: 'Lilita One'; src: url(data:font/woff2;base64,__LO__) format('woff2'); }
+:root {
+  --bg: #08141A; --surface: #0E1E26; --bd: #1E3540;
+  --you: #2EE6C0; --opp: #FF5A6E; --warn: #F4C95D; --nuke: #FF4F62;
+  --text: #EAF4F2; --dim: #8FA8A6; --faint: #5C7472;
+  --cream: #F2EAD3; --cream2: #E5DBBE; --ink: #2A2312; --gold: #FFD86B;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { background: #000; }
+#stage {
+  position: relative; width: 1080px; height: 1350px; overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 8%, #0D2530 0%, var(--bg) 55%, #050D11 100%);
+  font-family: 'Space Grotesk', system-ui, sans-serif; color: var(--text);
+}
+#stage::after { /* vignette */
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(85% 75% at 50% 45%, transparent 60%, rgba(0,0,0,.42) 100%);
+}
+.mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; }
+.scene { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .45s ease; }
+.scene.on { opacity: 1; }
+.scene.cut { transition: none; }
+
+/* ── shared chrome ── */
+.topchip { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); font-size: 24px; font-weight: 700; letter-spacing: .28em; color: var(--faint); }
+.headline { font-size: 78px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.06; text-align: center; max-width: 900px; }
+.sub { font-size: 30px; letter-spacing: .22em; color: var(--dim); font-weight: 700; }
+
+/* ── cards ── */
+.cardwrap { width: 340px; height: 490px; perspective: 1600px; }
+.card { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .8s cubic-bezier(.3,1.3,.45,1); }
+.cardwrap.flipped .card { transform: rotateY(180deg); }
+.cface { position: absolute; inset: 0; backface-visibility: hidden; border-radius: 22px; border: 3px solid #000; box-shadow: 0 22px 60px rgba(0,0,0,.55), 0 4px 0 #000; }
+.cback {
+  background:
+    radial-gradient(circle at 50% 42%, #7E2430 0%, #571C26 62%, #40151E 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px;
+}
+.cback .gem { font-size: 96px; color: #E9B959; text-shadow: 0 5px 0 #000; }
+.cback .seal { font-size: 20px; letter-spacing: .34em; color: #D9A0A6; border: 2px solid rgba(233,185,89,.45); padding: 10px 20px; border-radius: 8px; background: rgba(0,0,0,.35); }
+.cback::before { content: ''; position: absolute; inset: 16px; border: 2px solid rgba(233,185,89,.35); border-radius: 14px; }
+.cfront {
+  transform: rotateY(180deg);
+  background: radial-gradient(circle at 50% 12%, #FFFDF4 0%, var(--cream) 46%, var(--cream2) 100%);
+  color: var(--ink); display: flex; flex-direction: column; align-items: center; padding: 26px 22px;
+}
+.pospill { align-self: flex-start; font-size: 26px; font-weight: 800; letter-spacing: .06em; padding: 8px 16px; border-radius: 10px; border: 4px solid; }
+.pos-wr { color: #6D4FD1; border-color: #6D4FD1; }
+.pos-te { color: #C05621; border-color: #C05621; }
+.cname { font-family: 'Lilita One', 'Space Grotesk', sans-serif; font-size: 52px; line-height: 1.1; letter-spacing: .03em; text-align: center; margin-top: 84px; text-transform: uppercase; }
+.cteam { font-size: 26px; font-weight: 700; letter-spacing: .22em; color: #6E6650; margin-top: 14px; }
+.cmetric { margin-top: auto; text-align: center; }
+.cmetric .lab { font-size: 17px; letter-spacing: .3em; color: #6E6650; margin-bottom: 10px; }
+.cmetric .chip { display: inline-block; font-size: 26px; font-weight: 800; letter-spacing: .04em; color: var(--gold); background: linear-gradient(#3A2E15, #241C10); border: 3px solid #000; border-radius: 10px; padding: 10px 22px; box-shadow: 0 4px 0 #000, inset 0 0 14px rgba(255,216,107,.28); text-shadow: 0 2px 0 #000; }
+.cmetric .chip.nuke { color: #FFB3BC; background: linear-gradient(#4A1218, #2A0C10); box-shadow: 0 4px 0 #000, inset 0 0 16px rgba(255,79,98,.4); }
+
+/* ── S1 ── */
+#s1 .cardwrap { animation: wobble 3.2s ease-in-out infinite; margin-top: 46px; }
+@keyframes wobble { 0%,100% { transform: rotate(-2.2deg) } 50% { transform: rotate(2.2deg) } }
+#s1 .headline { margin-bottom: 42px; }
+#s1 .sub { margin-top: 40px; }
+
+/* ── S2 reveal ── */
+#s2 .revealhead { font-size: 40px; font-weight: 800; letter-spacing: .3em; color: var(--warn); text-shadow: 0 0 26px rgba(244,201,93,.55); margin-bottom: 46px; opacity: 0; transition: opacity .4s; }
+#s2.on .revealhead { opacity: 1; }
+
+/* ── S3 face-off ── */
+#s3 .duel { display: flex; align-items: center; gap: 54px; }
+#s3 .vs { font-size: 54px; font-weight: 800; color: var(--faint); letter-spacing: .1em; }
+#s3 .cardwrap { width: 300px; height: 434px; }
+#s3 .cname { font-size: 44px; margin-top: 66px; }
+#s3 .tag { margin-top: 56px; font-size: 30px; font-weight: 700; letter-spacing: .2em; color: var(--dim); }
+#s3 .cardwrap.mine { box-shadow: 0 0 0 5px color-mix(in srgb, var(--nuke) 55%, transparent), 0 26px 60px rgba(0,0,0,.5); border-radius: 22px; }
+
+/* ── S4/S5 scoreboard ── */
+.board { width: 900px; }
+.h2h { display: flex; justify-content: space-between; align-items: flex-start; }
+.pside { width: 400px; }
+.pside.right { text-align: right; }
+.pname { font-size: 58px; font-weight: 700; letter-spacing: -0.01em; }
+.ppos { font-size: 26px; font-weight: 700; letter-spacing: .22em; color: var(--dim); margin-top: 8px; }
+.pmet { display: inline-block; margin-top: 18px; font-size: 22px; font-weight: 700; letter-spacing: .06em; padding: 8px 16px; border-radius: 8px; }
+.pmet.drip { color: var(--you); border: 2px solid color-mix(in srgb, var(--you) 55%, transparent); }
+.pmet.nuke { color: var(--nuke); border: 2px solid color-mix(in srgb, var(--nuke) 6O%, transparent); border: 2px solid var(--nuke); box-shadow: 0 0 18px color-mix(in srgb, var(--nuke) 45%, transparent); }
+.bank { font-size: 148px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; margin-top: 34px; }
+.bank.you-c { color: var(--nuke); }
+.bank.opp-c { color: var(--you); }
+.livechip { display: inline-flex; align-items: center; gap: 12px; font-size: 24px; font-weight: 800; letter-spacing: .24em; color: var(--you); border: 2px solid color-mix(in srgb, var(--you) 45%, transparent); border-radius: 999px; padding: 10px 24px; }
+.livechip .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--you); animation: pulse 1.2s ease infinite; }
+@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
+.ticker { margin-top: 60px; width: 100%; display: flex; flex-direction: column; gap: 16px; min-height: 300px; }
+.tick { font-size: 30px; display: flex; gap: 26px; justify-content: flex-end; opacity: 0; transform: translateY(10px); transition: all .35s ease; }
+.tick.on { opacity: 1; transform: none; }
+.tick .clk { color: var(--faint); min-width: 120px; }
+.tick .what { color: var(--you); font-weight: 700; }
+.tick .amt { color: var(--text); font-weight: 700; min-width: 110px; text-align: right; }
+.sweathead { position: absolute; bottom: 108px; left: 0; right: 0; text-align: center; font-size: 40px; font-weight: 700; color: var(--dim); letter-spacing: .01em; }
+.sweathead b { color: var(--text); }
+
+/* ── nuke moment ── */
+#stage.quake { animation: quake .55s ease; }
+@keyframes quake { 0%,100% { transform: none } 15% { transform: translate(-14px,8px) rotate(-.5deg) } 35% { transform: translate(12px,-10px) rotate(.4deg) } 55% { transform: translate(-9px,-6px) } 75% { transform: translate(7px,9px) } }
+#flashlayer { position: absolute; inset: 0; background: radial-gradient(circle at 50% 42%, rgba(255,110,120,.75), rgba(255,79,98,.18) 55%, transparent 75%); opacity: 0; pointer-events: none; z-index: 40; }
+#flashlayer.go { animation: flashout 1s ease-out; }
+@keyframes flashout { 0% { opacity: 1 } 100% { opacity: 0 } }
+.boom { position: absolute; left: 50%; top: 44%; transform: translate(-50%,-50%); z-index: 41; text-align: center; opacity: 0; }
+.boom.go { animation: boomin 1s cubic-bezier(.2,1.7,.4,1) forwards; }
+@keyframes boomin { 0% { opacity: 0; transform: translate(-50%,-50%) scale(.2) } 40% { opacity: 1; transform: translate(-50%,-50%) scale(1.35) } 65% { transform: translate(-50%,-50%) scale(.95) } 100% { opacity: 1; transform: translate(-50%,-50%) scale(1) } }
+.boom .bx { font-size: 200px; line-height: 1; filter: drop-shadow(0 0 44px rgba(255,79,98,.9)); }
+.boom .bchip { display: inline-block; margin-top: 8px; font-size: 40px; font-weight: 800; letter-spacing: .2em; color: var(--nuke); background: rgba(5,10,12,.88); border: 3px solid var(--nuke); border-radius: 14px; padding: 14px 34px; box-shadow: 0 0 44px rgba(255,79,98,.65); }
+.playline { position: absolute; top: 150px; left: 0; right: 0; text-align: center; font-size: 34px; font-weight: 800; letter-spacing: .12em; color: var(--warn); opacity: 0; transition: opacity .3s; z-index: 42; }
+.playline.on { opacity: 1; }
+.blackout { margin-top: 26px; font-size: 26px; font-weight: 700; letter-spacing: .18em; color: var(--dim); opacity: 0; transition: opacity .4s; }
+.blackout.on { opacity: 1; }
+
+/* ── S6 final ── */
+#s6 .again { font-size: 46px; font-weight: 800; letter-spacing: .1em; color: var(--warn); margin-bottom: 60px; }
+#s6 .fscore { display: flex; align-items: baseline; gap: 44px; }
+#s6 .fname { font-size: 44px; font-weight: 700; color: var(--dim); letter-spacing: .04em; }
+#s6 .fnum { font-size: 190px; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
+#s6 .won { margin-top: 64px; font-size: 30px; font-weight: 800; letter-spacing: .3em; color: var(--you); border: 2px solid color-mix(in srgb, var(--you) 5O%, transparent); border: 2px solid var(--you); padding: 14px 34px; border-radius: 999px; }
+
+/* ── S7 end card ── */
+#s7 { background: radial-gradient(120% 90% at 50% 10%, #0D2530 0%, var(--bg) 60%, #050D11 100%); }
+#s7 .mark { font-size: 62px; font-weight: 800; letter-spacing: .16em; display: flex; align-items: center; gap: 22px; }
+#s7 .mark .g { color: #E9B959; }
+#s7 .tag2 { margin-top: 44px; font-size: 58px; font-weight: 700; letter-spacing: -.01em; text-align: center; line-height: 1.15; }
+#s7 .facts { margin-top: 34px; font-size: 27px; letter-spacing: .2em; color: var(--dim); font-weight: 700; }
+#s7 .cta { margin-top: 84px; font-size: 34px; font-weight: 800; letter-spacing: .04em; color: #05221C; background: var(--you); padding: 26px 54px; border-radius: 16px; box-shadow: 0 0 54px color-mix(in srgb, var(--you) 45%, transparent); }
+#s7 .url { margin-top: 30px; font-size: 30px; letter-spacing: .22em; color: var(--dim); font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="topchip mono">WEEK 13 · SUN 4:05 PM · REAL 2025 NFL DATA</div>
+
+  <!-- S1: sealed -->
+  <div class="scene on" id="s1">
+    <div class="headline">Your opponent is<br>hiding something.</div>
+    <div class="cardwrap"><div class="card">
+      <div class="cface cback"><div class="gem">◆</div><div class="seal mono">SEALED PICK</div></div>
+      <div class="cface cfront"></div>
+    </div></div>
+    <div class="sub mono">HIDDEN UNTIL KICKOFF</div>
+  </div>
+
+  <!-- S2: reveal -->
+  <div class="scene" id="s2">
+    <div class="revealhead mono">🔓 PICKS REVEALED</div>
+    <div class="cardwrap" id="flip2"><div class="card">
+      <div class="cface cback"><div class="gem">◆</div><div class="seal mono">SEALED PICK</div></div>
+      <div class="cface cfront">
+        <div class="pospill pos-wr mono">WR</div>
+        <div class="cname">Q. Johnston</div>
+        <div class="cteam mono">WR · LAC</div>
+        <div class="cmetric"><div class="lab mono">METRIC</div><div class="chip">Receiving Yards · DRIP</div></div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- S3: face-off -->
+  <div class="scene" id="s3">
+    <div class="duel">
+      <div>
+        <div class="cardwrap mine flipped"><div class="card">
+          <div class="cface cback"></div>
+          <div class="cface cfront">
+            <div class="pospill pos-te mono">TE</div>
+            <div class="cname">B. Bowers</div>
+            <div class="cteam mono">TE · LV</div>
+            <div class="cmetric"><div class="lab mono">METRIC</div><div class="chip nuke">Touchdowns · 12-PT NUKE</div></div>
+          </div>
+        </div></div>
+      </div>
+      <div class="vs">VS</div>
+      <div>
+        <div class="cardwrap flipped"><div class="card">
+          <div class="cface cback"></div>
+          <div class="cface cfront">
+            <div class="pospill pos-wr mono">WR</div>
+            <div class="cname">Q. Johnston</div>
+            <div class="cteam mono">WR · LAC</div>
+            <div class="cmetric"><div class="lab mono">METRIC</div><div class="chip">Receiving Yards · DRIP</div></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+    <div class="tag mono">YOUR METRIC IS A WEAPON</div>
+  </div>
+
+  <!-- S4: sweat + S5: nuke share the board -->
+  <div class="scene" id="s4">
+    <div class="board">
+      <div style="text-align:center; margin-bottom:64px"><span class="livechip mono"><span class="dot"></span>LIVE · SUN 4PM</span></div>
+      <div class="h2h">
+        <div class="pside">
+          <div class="pname">B. Bowers</div>
+          <div class="ppos mono">TE · LV</div><br>
+          <span class="pmet nuke mono">Touchdowns · 12-PT NUKE</span>
+          <div class="bank you-c" id="bankYou">0.0</div>
+        </div>
+        <div class="pside right">
+          <div class="pname">Q. Johnston</div>
+          <div class="ppos mono">WR · LAC</div><br>
+          <span class="pmet drip mono">Receiving Yards · DRIP</span>
+          <div class="bank opp-c" id="bankOpp">0.0</div>
+          <div class="blackout mono" id="blackout">☠ SLOT BLACKED OUT · 10 MIN</div>
+        </div>
+      </div>
+      <div class="ticker mono" id="ticker"></div>
+    </div>
+    <div class="sweathead" id="sweathead">His drip banks points <b>every minute they have the ball.</b></div>
+  </div>
+
+  <!-- S6: final -->
+  <div class="scene" id="s6">
+    <div class="again mono" id="again">Q4 · 1:42 — HE DID IT AGAIN 💥</div>
+    <div class="fscore">
+      <div style="text-align:center">
+        <div class="fname">B. BOWERS</div>
+        <div class="fnum" style="color:var(--nuke)">26.8</div>
+      </div>
+      <div class="fname" style="font-size:60px; color:var(--faint)">–</div>
+      <div style="text-align:center">
+        <div class="fname">Q. JOHNSTON</div>
+        <div class="fnum" style="color:var(--dim)">0.0</div>
+      </div>
+    </div>
+    <div class="won mono">SLOT WON · NUKED TWICE</div>
+  </div>
+
+  <!-- S7: end card -->
+  <div class="scene" id="s7">
+    <div class="mark"><span class="g">◈</span> DRIP FANTASY</div>
+    <div class="tag2">Fantasy football<br>where you fight back.</div>
+    <div class="facts mono">HIDDEN PICKS · LIVE SABOTAGE · YOUR LEAGUE</div>
+    <div class="cta">Get a code for your league</div>
+    <div class="url mono">DRIPFANTASY.COM</div>
+  </div>
+
+  <!-- overlays -->
+  <div class="playline mono" id="playline">28:06 — BOWERS · 6-YD CATCH · TOUCHDOWN</div>
+  <div class="boom" id="boom"><div class="bx">💥</div><div class="bchip mono">NUKED −14.6</div></div>
+  <div id="flashlayer"></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const scenes = ['s1','s2','s3','s4','s6','s7'];
+function show(id, cut) {
+  for (const s of scenes) { const el = $(s); el.classList.toggle('on', s === id); el.classList.toggle('cut', !!cut); }
+}
+function count(el, from, to, ms, dp = 1) {
+  const t0 = performance.now();
+  (function f(t) {
+    const k = Math.min(1, (t - t0) / ms);
+    el.textContent = (from + (to - from) * (k < .5 ? 2*k*k : 1 - Math.pow(-2*k + 2, 2) / 2)).toFixed(dp);
+    if (k < 1) requestAnimationFrame(f);
+  })(t0);
+}
+const TICKS = [
+  ['17:00','drip','+0.1'], ['19:00','drip','+0.1'], ['21:00','drip','+0.1'],
+  ['23:00','drip','+0.1'], ['27:20','+24-yd catch','+1.0'], ['27:58','drip','+0.4'],
+];
+function addTick(i) {
+  const [clk, what, amt] = TICKS[i];
+  const d = document.createElement('div');
+  d.className = 'tick';
+  d.innerHTML = `<span class="clk">${clk}</span><span class="what">${what}</span><span class="amt">${amt}</span>`;
+  $('ticker').appendChild(d);
+  requestAnimationFrame(() => d.classList.add('on'));
+}
+window.__START = () => {
+  const at = (ms, fn) => setTimeout(fn, ms);
+  // S1 0–3.2 (already on)
+  at(3200, () => { show('s2'); });
+  at(3900, () => { $('flip2').classList.add('flipped'); });
+  // S3 6.4–9.2
+  at(6400, () => show('s3'));
+  // S4 sweat 9.2–14.4
+  at(9200, () => { show('s4'); });
+  TICKS.forEach((_, i) => at(9900 + i * 640, () => addTick(i)));
+  at(10000, () => count($('bankOpp'), 0, 14.6, 3800));
+  // S5 nuke 14.4–17.6 (same board)
+  at(14400, () => { $('playline').classList.add('on'); });
+  at(15100, () => {
+    $('flashlayer').classList.add('go');
+    $('boom').classList.add('go');
+    $('stage').classList.add('quake');
+    count($('bankOpp'), 14.6, 0.0, 700);
+    count($('bankYou'), 0, 13.5, 700);
+    $('sweathead').innerHTML = 'A touchdown under the NUKE metric <b>wipes their bank to zero.</b>';
+  });
+  at(16400, () => { $('blackout').classList.add('on'); });
+  // S6 final 17.8–20.6
+  at(17800, () => {
+    $('playline').classList.remove('on');
+    $('boom').classList.remove('go');
+    show('s6');
+  });
+  // S7 end 20.6–25.5
+  at(20600, () => show('s7'));
+};
+</script>
+</body>
+</html>
