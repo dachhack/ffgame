@@ -13,7 +13,7 @@ import { avatarUrl } from '../data/media';
 import { getProvider } from '../data/providers';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
 import { getSession, demoCardTheme } from '../data/liveApi';
-import { CardTableCss } from '../app/cardTable';
+import { CardTableCss, PlayerCard } from '../app/cardTable';
 import { SlotFieldViews } from '../app/FieldView';
 import { SetupRow, PlayerPicker, RosterAside, ScoutModal } from './Matchup';
 import { RequestCodeModal } from './RequestCode';
@@ -278,9 +278,21 @@ export function DemoBoard() {
   const [ended, setEnded] = useState(false);
   const [speed, setSpeed] = useState<1 | 2 | 4>(1);
 
+  // KICKOFF REVEAL: when a window goes live, hold the clock for a beat and flip
+  // the opponent's sealed cards face-up — the hidden-pick payoff, made visible
+  // before the first play resolves. Shorter at higher speeds.
+  const [revealWin, setRevealWin] = useState<number | null>(null);
+  useEffect(() => {
+    if (phase !== 'watch' || ended || !resolved) { setRevealWin(null); return; }
+    setRevealWin(wIdx);
+    const t = setTimeout(() => setRevealWin(null), Math.max(2000, 3200 / speed));
+    return () => clearTimeout(t);
+  }, [phase, wIdx, ended, resolved]); // eslint-disable-line react-hooks/exhaustive-deps -- speed read at fire time; a mid-reveal speed change shouldn't restart the flip
+
   useEffect(() => {
     if (phase !== 'watch' || !playing || ended || !resolved) return;
     const id = setInterval(() => {
+      if (revealWin !== null) return; // hold the game clock while cards flip
       setWClock((c) => {
         const max = winMaxes[wIdx] ?? 0;
         const slots = resolved.windows[wIdx]?.slots.length ?? 1;
@@ -295,7 +307,7 @@ export function DemoBoard() {
       });
     }, TICK_MS);
     return () => clearInterval(id);
-  }, [phase, playing, ended, wIdx, speed, resolved, winMaxes]);
+  }, [phase, playing, ended, wIdx, speed, resolved, winMaxes, revealWin]);
 
   type WinState = 'upcoming' | 'live' | 'final';
   const winState = (i: number): WinState => {
@@ -466,6 +478,22 @@ export function DemoBoard() {
                 </div>
               );
             })}
+          </div>
+        ) : st === 'live' && revealWin === i && rslots.some((s) => s.their) ? (
+          // Kickoff reveal: the opponent's sealed cards flip face-up on the felt,
+          // metrics exposed, before the window's first play resolves.
+          <div className="ctable" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 11, padding: '16px 10px 18px' }}>
+            {!cardHand && <CardTableCss />}
+            <div className="mono" style={{ fontSize: fs(10.5), fontWeight: 800, letterSpacing: '0.22em', color: 'var(--warn)', textShadow: '0 0 12px color-mix(in srgb, var(--warn) 55%, transparent)' }}>
+              🔓 PICKS REVEALED
+            </div>
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {rslots.filter((s) => s.their).map((s, k) => (
+                <PlayerCard key={s.slotIndex} slug={s.their!.player.id} name={s.their!.player.name} pos={s.their!.player.pos} opp idx={k}
+                  metric={(METRICS[s.their!.player.pos] ?? []).find((m) => m.id === s.their!.metricId)?.name ?? null} />
+              ))}
+            </div>
+            <div className="mono" style={{ fontSize: fs(8.5), letterSpacing: '0.14em', color: 'var(--dim)' }}>THEIR HIDDEN PICKS · {w.label} IS LIVE</div>
           </div>
         ) : (
           rslots.map((s) => {
