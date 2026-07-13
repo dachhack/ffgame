@@ -484,8 +484,8 @@ const CSS = `
    light BAIZE GREEN on Feeling Lucky (daylight), PAPER GRAY on Arctic Journey
    (arctic) — with the ink text still comfortably readable. */
 :root[data-card-light="1"] .mx-scorecard.mx-sc-cards{
-  background-image:radial-gradient(rgba(50,85,55,.08) 1px,transparent 1.2px),radial-gradient(circle at 50% 34%,#D5E2CE 0%,#CFDCC7 55%,#C7D6BF 100%) !important;
-  box-shadow:0 4px 0 rgba(60,95,60,.22) !important;}
+  background-image:radial-gradient(rgba(50,85,55,.07) 1px,transparent 1.2px),radial-gradient(circle at 50% 34%,#E1E9DB 0%,#DCE5D5 55%,#D5E0CD 100%) !important;
+  box-shadow:0 4px 0 rgba(60,95,60,.18) !important;}
 :root[data-app-theme="arctic"] .mx-scorecard.mx-sc-cards{
   background-image:radial-gradient(rgba(60,70,80,.08) 1px,transparent 1.2px),radial-gradient(circle at 50% 34%,#DFE3E6 0%,#D8DDE1 55%,#D0D7DC 100%) !important;
   box-shadow:0 4px 0 rgba(70,80,90,.22) !important;}
