@@ -335,9 +335,12 @@ const CSS = `
 .ctable .ct-lmet span{font-size:6.8px;font-weight:700;letter-spacing:.1em;color:var(--faint);white-space:nowrap;}
 .ctable .ct-lstat{font-size:8.6px;line-height:1.4;color:var(--dimstrong);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}
 .ctable .ct-lchip{font-size:7.5px;font-weight:800;letter-spacing:.1em;border:1px solid;border-radius:999px;padding:2px 6px;white-space:nowrap;}
-.ctable .ct-lscore{display:flex;align-items:baseline;gap:6px;font-variant-numeric:tabular-nums;flex-wrap:wrap;margin-top:1px;}
-.ctable .ct-live.ct-opp .ct-lscore{flex-direction:row-reverse;}
-.ctable .ct-lpts{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;font-size:21px;line-height:1;
+/* Accumulated points live in their OWN column pinned to the half's inner edge
+   (last flex child + row-reverse on the opponent), so the two big scores face
+   each other in the middle of the duel — no hollow center on wide screens. */
+.ctable .ct-lscol{flex:none;align-self:center;display:flex;flex-direction:column;align-items:flex-end;gap:3px;padding:0 2px;font-variant-numeric:tabular-nums;}
+.ctable .ct-live.ct-opp .ct-lscol{align-items:flex-start;}
+.ctable .ct-lpts{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;font-size:24px;line-height:1;
   text-shadow:-1.2px -1.2px 0 #14100A,1.2px -1.2px 0 #14100A,-1.2px 1.2px 0 #14100A,1.2px 1.2px 0 #14100A,0 2px 0 #14100A;}
 .ctable .ct-llab{font-size:7px;color:var(--faint);letter-spacing:.1em;}
 .ctable .ct-lhalf{font-size:9px;font-weight:700;color:var(--fx-stop,#FF8A5C);}
@@ -347,6 +350,15 @@ const CSS = `
   background:rgba(233,185,89,.05);display:flex;align-items:center;justify-content:center;}
 .ctable .ct-frost{position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;
   background:rgba(150,200,235,.22);border-radius:6px;}
+/* Narrow screens: the side-by-side score column would crush the metric chip —
+   wrap the points to their own line under the card+text instead (the stacked
+   mobile look), indented past the card so they read with the text column. */
+@media (max-width:600px){
+  .ctable .ct-live{flex-wrap:wrap;}
+  .ctable .ct-lscol{flex-basis:100%;align-self:auto;flex-direction:row;align-items:baseline;justify-content:flex-start;gap:5px;padding:0 0 0 87px;}
+  .ctable .ct-live.ct-opp .ct-lscol{flex-direction:row-reverse;padding:0 87px 0 0;}
+  .ctable .ct-lpts{font-size:21px;}
+}
 @media (prefers-reduced-motion:reduce){.ctable .ct-lcard{animation:none;}}
 
 /* ── power-up cards (shop + apply modals) — the hand's leather stock, dealt
@@ -641,27 +653,27 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, gameLabe
           <div className="ct-lmet"><b>{metricName}</b>{tag && <span>{tag}</span>}</div>
         )}
         {stat && <div className="ct-lstat">{stat}</div>}
-        {bank != null && (
-          <div className="ct-lscore">
-            {suppressSpent != null ? (
-              <span className="ct-lpts" style={{ color: 'var(--dim)', textDecoration: 'line-through', fontSize: 16 }}>{fmt(suppressSpent)}</span>
-            ) : halvedFrom != null ? (
-              <>
-                <span className="ct-lpts" style={{ color: 'var(--fx-stop, #FF8A5C)' }}>{fmt(bank)}</span>
-                <span className="ct-lhalf"><s>{fmt(halvedFrom)}</s> ÷2</span>
-              </>
-            ) : (
-              <span className="ct-lpts" style={{ color: negated ? 'var(--fx-nuke, #FF4F62)' : accent, textDecoration: negated ? 'line-through' : undefined }}>{fmt(bank)}</span>
-            )}
-            <span className="ct-llab">PTS</span>
-            {fgMult != null && fgMult > 1.005 && <span className="ct-lfg" title={`A Field General QB in this window is multiplying this slot's scoring ×${fgMult.toFixed(2)} right now`}>⚡×{fgMult.toFixed(2)}</span>}
-            {coin != null && coin !== 0 && <span className="ct-lcoin" title="drip coin earned so far this window"><DripCoin size={9} /> {coin > 0 ? '+' : ''}{coin}</span>}
-          </div>
-        )}
         {suppressSpent != null && <div className="ct-lnote" style={{ color: 'var(--fx-stop, #FF8A5C)' }}>✕ spent on SUPPRESS</div>}
         {halvedFrom != null && <div className="ct-lnote" style={{ color: 'var(--fx-stop, #FF8A5C)' }}>÷2 SUPPRESSED</div>}
         {note && <div className="ct-lnote">{note}</div>}
       </div>
+      {bank != null && (
+        <div className="ct-lscol">
+          {suppressSpent != null ? (
+            <span className="ct-lpts" style={{ color: 'var(--dim)', textDecoration: 'line-through', fontSize: 16 }}>{fmt(suppressSpent)}</span>
+          ) : halvedFrom != null ? (
+            <>
+              <span className="ct-lpts" style={{ color: 'var(--fx-stop, #FF8A5C)' }}>{fmt(bank)}</span>
+              <span className="ct-lhalf"><s>{fmt(halvedFrom)}</s> ÷2</span>
+            </>
+          ) : (
+            <span className="ct-lpts" style={{ color: negated ? 'var(--fx-nuke, #FF4F62)' : accent, textDecoration: negated ? 'line-through' : undefined }}>{fmt(bank)}</span>
+          )}
+          <span className="ct-llab">PTS</span>
+          {fgMult != null && fgMult > 1.005 && <span className="ct-lfg" title={`A Field General QB in this window is multiplying this slot's scoring ×${fgMult.toFixed(2)} right now`}>⚡×{fgMult.toFixed(2)}</span>}
+          {coin != null && coin !== 0 && <span className="ct-lcoin" title="drip coin earned so far this window"><DripCoin size={9} /> {coin > 0 ? '+' : ''}{coin}</span>}
+        </div>
+      )}
     </div>
   );
 }

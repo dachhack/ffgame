@@ -10,7 +10,11 @@ still carrying the liquid bank fill, HOT glow, NUKE scorch, wobble) with all
 the changing text BESIDE it on the felt (real game clock, metric chip,
 statline, accumulated points, coin/FG chips, power-up + final-state notes).
 A live duel row measures ~95px vs ~250 before. New `sealed` variant renders
-the deck's face-down back + a 🔒 SEALED PICK chip.
+the deck's face-down back + a 🔒 SEALED PICK chip. Wide-screen polish (owner
+round 2): the points live in their own column (`.ct-lscol`) pinned to each
+half's INNER edge, so the two big scores face each other scoreboard-style in
+the middle of the duel — no hollow center on desktop; ≤600px wraps the score
+to its own line under the text (the stacked mobile look).
 - Seal timing: WindowSectionInner computes per-window `kicked` (live board:
   realtime live/final; sim playback: this window's own clock > 0 or done) →
   ScoreRow. Pre-kick in card mode: your card face-up with metric but NO score,
