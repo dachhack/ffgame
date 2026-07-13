@@ -1,6 +1,32 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-13 · Build `v0.132.0`_
+_Last updated: 2026-07-13 · Build `v0.133.0`_
+
+## Mini live cards + sealed-until-kickoff (v0.133.0)
+Owner feedback on v0.132: the tall live cards ate too much vertical space, and
+the opponent's cards flipped face-up before their window went live. LiveCard is
+now a compact ROW: a 78px mini physical card (headshot, position, name, team —
+still carrying the liquid bank fill, HOT glow, NUKE scorch, wobble) with all
+the changing text BESIDE it on the felt (real game clock, metric chip,
+statline, accumulated points, coin/FG chips, power-up + final-state notes).
+A live duel row measures ~95px vs ~250 before. New `sealed` variant renders
+the deck's face-down back + a 🔒 SEALED PICK chip.
+- Seal timing: WindowSectionInner computes per-window `kicked` (live board:
+  realtime live/final; sim playback: this window's own clock > 0 or done) →
+  ScoreRow. Pre-kick in card mode: your card face-up with metric but NO score,
+  the opponent's card face-down — another window kicking off no longer flips
+  this one's seal (the old leak: global preKick ended when ANY window started).
+  DemoBoard's upcoming windows now deal the same sealed pair instead of the
+  classic strip; its kickoff PICKS-REVEALED flip moment is unchanged.
+- CSS gotcha (bit twice): `.ct-lcard>*` position reset + generic child rules
+  lose to/beat same-specificity rules by SHEET ORDER — overlays re-assert
+  `position:absolute` after the reset, and the PTS label needed its own class
+  (`.ct-llab`) because `.ct-lscore>span` out-specified `.ct-lpts` and shrank
+  the score to 7px.
+- Verified (Playwright, theme RPC forced): kicking ONE window face-ups exactly
+  its 6 cards while the other 5 slots stay sealed backs; FINAL reveals all;
+  landing shows 7 sealed backs during TNF; HOT chip + glow; row tap opens the
+  log; `.ct-lpts` computed 21px.
 
 ## Staging QC deploys (deploy-staging.yml — needs one-time admin setup)
 GitHub Pages IS production here: deploy.yml publishes every merge to main as

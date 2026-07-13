@@ -821,8 +821,8 @@ function DuelLog({ slot, clock, live, armedPu }: { slot: ResolvedSlot; clock: nu
 function SlotRow({ slot, state, you, their, clock, frozen, armedPu, noBorder, cards }: {
   slot: ResolvedSlot; state: 'upcoming' | 'live' | 'final'; you: number; their: number;
   clock?: number; frozen?: boolean; armedPu?: { id?: string; icon: string; name: string }; noBorder?: boolean;
-  /** Card-table theme: a kicked-off duel stays two face-up LiveCards on the
-   *  felt instead of dropping to the compact strip. */
+  /** Card-table theme: duels render as compact mini-card rows on the felt —
+   *  the opponent's card stays face-down until the window kicks off. */
   cards?: boolean;
 }) {
   const fs = useFinePrint();
@@ -901,28 +901,35 @@ function SlotRow({ slot, state, you, their, clock, frozen, armedPu, noBorder, ca
       </span>
     </div>
   );
-  // Card-table theme: once the window kicks off, a head-to-head duel stays two
-  // face-up cards on the felt — live bank fill, HOT glow, NUKE scorch — instead
-  // of dropping to the compact strip. One-sided (backup) rows keep the strip,
-  // which reads their sub/UNOPPOSED explanations better.
-  if (cards && state !== 'upcoming' && slot.you && slot.their) {
-    const met = (p: NonNullable<ResolvedSlot['you']>) => (METRICS[p.player.pos] ?? []).find((m) => m.id === p.metricId)?.name ?? null;
-    const c = clock ?? Number.MAX_SAFE_INTEGER;
-    const yf = liveCardFlags(slot.events, 'you', c);
-    const tf = liveCardFlags(slot.events, 'their', c);
+  // Card-table theme: a head-to-head duel renders as two mini-card rows on the
+  // felt — the physical card (headshot/pos/name/team, with the bank fill, HOT
+  // glow and NUKE scorch) plus the changing text beside it, so the window stays
+  // vertically compact. Before this window kicks off the opponent's card stays
+  // FACE-DOWN (the deck's sealed back) — it only flips at kickoff. One-sided
+  // (backup) rows keep the classic strip, which reads their sub/UNOPPOSED
+  // explanations better.
+  if (cards && slot.you && slot.their) {
+    const met = (p: NonNullable<ResolvedSlot['you']>) => (METRICS[p.player.pos] ?? []).find((m) => m.id === p.metricId);
+    const live = state !== 'upcoming';
+    const yf = live ? liveCardFlags(slot.events, 'you', clock ?? Number.MAX_SAFE_INTEGER) : null;
+    const tf = live ? liveCardFlags(slot.events, 'their', clock ?? Number.MAX_SAFE_INTEGER) : null;
     return (
-      <div style={{ position: 'relative', padding: '10px 2px' }}>
+      <div style={{ position: 'relative', padding: '9px 2px' }}>
         {nukeBurst}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'stretch' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'start' }}>
           <LiveCard side="you" slug={slot.you.player.id} name={slot.you.player.name} pos={slot.you.player.pos} team={slot.you.player.team}
-            metricName={met(slot.you)} bank={you} hot={yf.hot} nuked={yf.nuked && !slot.youSub}
-            negated={backupStruck && !!slot.you}
+            metricName={met(slot.you)?.name} tag={met(slot.you)?.tag} bank={live ? you : null}
+            hot={yf?.hot} nuked={!!yf?.nuked && !slot.youSub} negated={live && backupStruck}
             note={armedPu ? <><PuIcon id={armedPu.id} emoji={armedPu.icon} size="1.4em" /> {armedPu.name.toUpperCase()}</>
               : state === 'final' && slot.youSub ? <>🛟 {slot.youSub.name} subbed in</> : undefined} />
-          <LiveCard side="their" slug={slot.their.player.id} name={slot.their.player.name} pos={slot.their.player.pos} team={slot.their.player.team}
-            metricName={met(slot.their)} bank={their} hot={tf.hot} nuked={tf.nuked && !slot.theirSub} frozen={frozen}
-            negated={backupStruck && !!slot.their}
-            note={state === 'final' && slot.theirSub ? <>🛟 {slot.theirSub.name} subbed in</> : undefined} />
+          {live ? (
+            <LiveCard side="their" slug={slot.their.player.id} name={slot.their.player.name} pos={slot.their.player.pos} team={slot.their.player.team}
+              metricName={met(slot.their)?.name} tag={met(slot.their)?.tag} bank={their} hot={tf?.hot} nuked={!!tf?.nuked && !slot.theirSub} frozen={frozen}
+              negated={backupStruck}
+              note={state === 'final' && slot.theirSub ? <>🛟 {slot.theirSub.name} subbed in</> : undefined} />
+          ) : (
+            <LiveCard side="their" slug={`sealed-${slot.slotIndex}`} sealed />
+          )}
         </div>
       </div>
     );

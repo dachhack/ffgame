@@ -2220,6 +2220,11 @@ function WindowSectionInner(props: {
   // all ingested plays but isn't over); otherwise it's the playback position.
   const done = realtime ? realtime === 'final' : clock >= maxClock;
   const pct = Math.round((Math.min(clock, maxClock) / maxClock) * 100);
+  // Has THIS window kicked off? On the live board that's its real-clock state;
+  // on the sim/demo playback it's this window's own clock having started. Until
+  // then the card theme keeps the opponent's cards face-down — another window
+  // kicking off must not flip this one's seal.
+  const kicked = realtime ? realtime === 'live' || realtime === 'final' : clock > 0 || done;
   // Live apply-mode: EMP targets the whole live window; Spy/Mulligan target a
   // single spot. Highlight what's eligible and dim the rest.
   // Live-timing power-ups only apply to a genuinely LIVE window. On the live board
@@ -2431,7 +2436,7 @@ function WindowSectionInner(props: {
           // both sides share it.
           const youClock = wallClock && s.you ? clockAtRealTime(s.you.player, week, clock, s.you.metricId ?? undefined) : clock;
           const theirClock = wallClock && s.their ? clockAtRealTime(s.their.player, week, clock, s.their.metricId ?? undefined) : clock;
-          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={windowKickoffSod(week, w.id)} youTwin={twinLinked.has(key)} cards={cards} />;
+          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={windowKickoffSod(week, w.id)} youTwin={twinLinked.has(key)} cards={cards} kicked={kicked} />;
           // CLUTCH offers: a conditional power-up unlocked by this slot's live
           // state (halftime lead / first-half TD / a nuke just landed), owned but
           // not yet armed, with the current clock inside its transient window.
@@ -2953,12 +2958,14 @@ function BuffFxRow({ side, fx, stake }: { side: 'you' | 'their'; fx?: BuffFx[]; 
 }
 
 // ── Score row (live / final) ──
-function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName, realClock, kickoffSec, youTwin, cards }: {
+function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName, realClock, kickoffSec, youTwin, cards, kicked = true }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
   week: number; youClock: number; theirClock: number; open: boolean; onToggle: () => void; phase: Phase; done: boolean;
   onAssignBackup: () => void; turnoverCoin: number;
   backups: Record<string, string>; slotName: Record<string, string>;
   realClock: boolean; kickoffSec: number; youTwin?: boolean; cards?: boolean;
+  /** This window has kicked off — card theme keeps the opponent sealed until then. */
+  kicked?: boolean;
 }) {
   const ownKey = slotKey(slot.win, slot.slotIndex);
   const isMobile = useIsMobile();
@@ -3010,7 +3017,12 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
     const bFg = (mineBackup ? slot.youFgMult : slot.theirFgMult) && !(be.player.pos === 'QB' && be.metricId === 'fg')
       ? (mineBackup ? slot.youFgMult : slot.theirFgMult)!(bclock) : undefined;
     const bFlags = cards ? liveCardFlags(slot.events, mineBackup ? 'you' : 'their', bclock) : null;
-    const card = (
+    // Card theme, window not kicked: your side face-up without a score, the
+    // opponent's backup face-down — the seal only breaks at this window's kickoff.
+    const preCard = mineBackup
+      ? <LiveCard side="you" slug={be.player.id} name={be.player.name} pos={be.player.pos} team={be.player.team} metricName={bp?.name} tag={bp?.tag} chip={chip} bank={null} badge={<InjuryBadge week={week} slug={be.player.id} />} />
+      : <LiveCard side="their" slug={`sealed-${ownKey}`} sealed />;
+    const card = cards && !kicked ? preCard : (
       <ScoreCard
         side={mineBackup ? 'you' : 'their'} player={be.player} week={week} clock={bclock} metricId={be.metricId}
         metricName={bp?.name ?? ''} tag={bp?.tag ?? ''} bank={liveBackup} onClick={onToggle}
@@ -3118,6 +3130,17 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
   const lastEffect = [...visibleEvents].reverse().find((e) => e.effect)?.effect;
   const yMet = metricById(slot.you.player.pos, slot.you.metricId);
   const tMet = metricById(slot.their.player.pos, slot.their.metricId);
+  // Card theme, window not kicked yet: your card face-up (your own pick — no
+  // score to show), the opponent's still the deck's sealed back. Flips live.
+  if (cards && !kicked) {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'start', gap: rowGap }}>
+        <LiveCard side="you" slug={slot.you.player.id} name={slot.you.player.name} pos={slot.you.player.pos} team={slot.you.player.team}
+          metricName={yMet?.name} tag={yMet?.tag} bank={null} badge={<><InjuryBadge week={week} slug={slot.you.player.id} />{youTwin && <TwinChip />}</>} />
+        <LiveCard side="their" slug={`sealed-${ownKey}`} sealed />
+      </div>
+    );
+  }
   // A backup you've assigned to challenge THIS starter — shown in its spot too.
   const incomingKey = Object.keys(backups).find((k) => backups[k] === ownKey);
   const incomingName = incomingKey ? slotName[incomingKey] : undefined;
@@ -3300,7 +3323,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
       <LiveCard
         side={side} slug={player.id} name={player.name} pos={player.pos} team={player.team}
         gameLabel={g ? `${g.away}@${g.home} · ${gameOver ? 'FINAL' : fmtGameClock(clock)}` : null}
-        metricName={metricName || null} stat={subName ? null : stat} bank={bank}
+        metricName={metricName || null} tag={tag || null} stat={subName ? null : stat} bank={bank}
         hot={hot} nuked={!!scorched && !subName} chip={chip} coin={coin} fgMult={fgMult}
         negated={negated} halvedFrom={halvedFrom} suppressSpent={suppressSpent}
         note={subName ? `⤴ ${subName} scoring` : undefined}
