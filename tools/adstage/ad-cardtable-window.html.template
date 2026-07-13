@@ -56,7 +56,12 @@ html, body { background: #000; }
 .cmet.nukey.blink { animation: metblink .8s ease 2; }
 @keyframes metblink { 0%,100% { box-shadow: 0 3px 0 #000, inset 0 0 11px rgba(255,79,98,.4) } 50% { box-shadow: 0 3px 0 #000, 0 0 26px rgba(255,79,98,.95), inset 0 0 11px rgba(255,79,98,.6) } }
 
-/* bank chip on card */
+/* big on-card running score */
+.score { margin-top: auto; font-size: 78px; font-weight: 700; letter-spacing: -.03em; line-height: 1; font-family: 'Space Grotesk', sans-serif; color: #B7273B; opacity: .28; transition: opacity .5s; }
+.mini.you .score { color: #0B7D66; }
+#table.golive .score { opacity: 1; }
+.sclab { font-size: 13px; font-weight: 800; letter-spacing: .3em; color: #6E6650; margin-top: 6px; font-family: ui-monospace, Menlo, monospace; opacity: .7; }
+/* bank chip on card (retired) */
 .bank { position: absolute; left: 50%; bottom: -24px; transform: translateX(-50%); z-index: 3;
   font-size: 24px; font-weight: 800; font-family: ui-monospace, Menlo, monospace; color: var(--text);
   background: #0A1A21; border: 2px solid var(--bd); border-radius: 10px; padding: 6px 16px; box-shadow: 0 4px 14px rgba(0,0,0,.5); opacity: 0; transition: opacity .4s; }
@@ -74,10 +79,10 @@ html, body { background: #000; }
 .scorch.on { opacity: 1; }
 .scorch .sk { font-size: 74px; filter: drop-shadow(0 0 16px rgba(255,79,98,.8)); }
 .scorch .t { font-size: 20px; font-weight: 800; letter-spacing: .26em; color: #FFB3BC; font-family: ui-monospace, Menlo, monospace; }
-.frost { position: absolute; inset: 0; border-radius: 16px; background: linear-gradient(rgba(127,212,255,.32), rgba(30,80,120,.5)); border: 3px solid var(--ice); z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; opacity: 0; transition: opacity .5s; box-shadow: inset 0 0 34px rgba(127,212,255,.5); }
+.frost { position: absolute; inset: 0; border-radius: 16px; background: linear-gradient(rgba(150,215,255,.28), rgba(60,120,170,.34)); border: 3px solid var(--ice); z-index: 2; display: flex; flex-direction: row; align-items: flex-start; justify-content: center; padding-top: 134px; gap: 9px; opacity: 0; transition: opacity .5s; box-shadow: inset 0 0 40px rgba(127,212,255,.55); }
 .frost.on { opacity: 1; }
-.frost .ic { font-size: 66px; filter: drop-shadow(0 0 14px rgba(127,212,255,.9)); }
-.frost .t { font-size: 16px; text-align: center; font-weight: 800; letter-spacing: .26em; color: #DFF4FF; font-family: ui-monospace, Menlo, monospace; }
+.frost .ic { font-size: 28px; line-height: 1; filter: drop-shadow(0 0 14px rgba(127,212,255,.9)); }
+.frost .t { font-size: 15px; padding-top: 7px; text-align: center; font-weight: 800; letter-spacing: .26em; color: #DFF4FF; font-family: ui-monospace, Menlo, monospace; }
 
 /* boom + flash + quake */
 #stage.quake { animation: quake .55s ease; }
@@ -133,31 +138,31 @@ html, body { background: #000; }
     <div class="crow them" id="rowThem">
       <div class="mini" id="t0"><div class="card">
         <div class="cface cback"><div class="gem">◆</div><div class="seal mono">SEALED</div></div>
-        <div class="cface cfront"><div class="pospill pos-rb mono">RB</div><div class="cname">J. Gibbs</div><div class="cteam">RB · DET</div><div class="cmet">Rush Yards · DRIP</div></div>
-      </div><div class="bank" id="bt0">0.0</div><div class="frost" id="ft0"><div class="ic">❄️</div><div class="t">FROZEN &middot; 10 MIN</div></div></div>
+        <div class="cface cfront"><div class="pospill pos-rb mono">RB</div><div class="cname">J. Gibbs</div><div class="cteam">RB · DET</div><div class="score" id="bt0">0.0</div><div class="sclab">BANK · LIVE</div><div class="cmet">Rush Yards · DRIP</div></div>
+      </div><div class="frost" id="ft0"><div class="ic">❄️</div><div class="t">FROZEN &middot; 10 MIN</div></div></div>
       <div class="mini" id="t1"><div class="card">
         <div class="cface cback"><div class="gem">◆</div><div class="seal mono">SEALED</div></div>
-        <div class="cface cfront"><div class="pospill pos-wr mono">WR</div><div class="cname">P. Nacua</div><div class="cteam">WR · LA</div><div class="cmet">Receiving Yds · DRIP</div></div>
-      </div><div class="bank" id="bt1">0.0</div><div class="frost" id="ft1"><div class="ic">❄️</div><div class="t">FROZEN &middot; 10 MIN</div></div></div>
+        <div class="cface cfront"><div class="pospill pos-wr mono">WR</div><div class="cname">P. Nacua</div><div class="cteam">WR · LA</div><div class="score" id="bt1">0.0</div><div class="sclab">BANK · LIVE</div><div class="cmet">Receiving Yds · DRIP</div></div>
+      </div><div class="frost" id="ft1"><div class="ic">❄️</div><div class="t">FROZEN &middot; 10 MIN</div></div></div>
       <div class="mini" id="t2"><div class="card">
         <div class="cface cback"><div class="gem">◆</div><div class="seal mono">SEALED</div></div>
-        <div class="cface cfront"><div class="pospill pos-te mono">TE</div><div class="cname">H. Fannin</div><div class="cteam">TE · CLE</div><div class="cmet nukey" id="nukemet">TDs · 12-PT NUKE</div></div>
-      </div><div class="bank" id="bt2">0.0</div><div class="frost" id="ft2"><div class="ic">❄️</div><div class="t">FROZEN &middot; 10 MIN</div></div></div>
+        <div class="cface cfront"><div class="pospill pos-te mono">TE</div><div class="cname">H. Fannin</div><div class="cteam">TE · CLE</div><div class="score" id="bt2">0.0</div><div class="sclab">BANK · LIVE</div><div class="cmet nukey" id="nukemet">TDs · 12-PT NUKE</div></div>
+      </div><div class="frost" id="ft2"><div class="ic">❄️</div><div class="t">FROZEN &middot; 10 MIN</div></div></div>
     </div>
     <div class="vsdiv"><div class="ln"></div><div class="vs">VS</div><div class="ln"></div></div>
     <div class="crow you" id="rowYou">
       <div class="mini you" id="y0"><div class="card">
         <div class="cface cback"></div>
-        <div class="cface cfront"><div class="pospill pos-rb mono">RB</div><div class="cname">C. McCaffrey</div><div class="cteam">RB · SF</div><div class="cmet">Rush Yards · DRIP</div></div>
-      </div><div class="bank" id="by0">0.0</div></div>
+        <div class="cface cfront"><div class="pospill pos-rb mono">RB</div><div class="cname">C. McCaffrey</div><div class="cteam">RB · SF</div><div class="score" id="by0">0.0</div><div class="sclab">BANK · LIVE</div><div class="cmet">Rush Yards · DRIP</div></div>
+      </div></div>
       <div class="mini you" id="y1"><div class="card">
         <div class="cface cback"></div>
-        <div class="cface cfront"><div class="pospill pos-wr mono">WR</div><div class="cname">D. Smith</div><div class="cteam">WR · PHI</div><div class="cmet">Receiving Yds · DRIP</div></div>
-      </div><div class="bank" id="by1">0.0</div></div>
+        <div class="cface cfront"><div class="pospill pos-wr mono">WR</div><div class="cname">D. Smith</div><div class="cteam">WR · PHI</div><div class="score" id="by1">0.0</div><div class="sclab">BANK · LIVE</div><div class="cmet">Receiving Yds · DRIP</div></div>
+      </div></div>
       <div class="mini you" id="y2"><div class="card">
         <div class="cface cback"></div>
-        <div class="cface cfront"><div class="pospill pos-te mono">TE</div><div class="cname">G. Kittle</div><div class="cteam">TE · SF</div><div class="cmet">Receptions · ERASE</div></div>
-      </div><div class="bank" id="by2">0.0</div><div class="scorch" id="sy2"><div class="sk">☠</div><div class="t">NUKED · 0.0</div></div></div>
+        <div class="cface cfront"><div class="pospill pos-te mono">TE</div><div class="cname">G. Kittle</div><div class="cteam">TE · SF</div><div class="score" id="by2">0.0</div><div class="sclab">BANK · LIVE</div><div class="cmet">Receptions · ERASE</div></div>
+      </div><div class="scorch" id="sy2"><div class="sk">☠</div><div class="t">NUKED · 0.0</div></div></div>
     </div>
     <div class="rowlab mono">YOUR ROW</div>
   </div>
@@ -218,7 +223,7 @@ window.__START = () => {
   at(8200, () => {
     $('headline').textContent = 'Every card banks. Live.';
     $('footline').innerHTML = 'Points drip in <b>every minute their team has the ball.</b>';
-    ['by0','by1','by2','bt0','bt1','bt2'].forEach((b) => $(b).classList.add('on'));
+    $('table').classList.add('golive');
     count($('by0'), 0, 9.8, 5400); count($('by1'), 0, 7.2, 5400); count($('by2'), 0, 6.4, 5400);
     count($('bt0'), 0, 8.9, 5400); count($('bt1'), 0, 10.3, 5400); count($('bt2'), 0, 1.2, 5400);
   });
@@ -228,7 +233,7 @@ window.__START = () => {
   at(14000, () => $('playline').classList.add('on'));
   at(14700, () => {
     $('flashlayer').classList.add('go'); $('boom').classList.add('go'); $('stage').classList.add('quake');
-    $('sy2').classList.add('on');
+    $('sy2').classList.add('on'); $('by2').style.opacity = '0';
     count($('by2'), 6.4, 0.0, 600); count($('bt2'), 1.2, 13.2, 600);
     $('headline').textContent = 'Their nuke hit first.';
     $('footline').innerHTML = 'Kittle: wiped to zero. <b>Blacked out ten minutes.</b>';
