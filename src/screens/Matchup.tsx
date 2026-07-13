@@ -19,7 +19,7 @@ import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
 import { slotMoments, MOMENT_COLOR, type Moment } from '../engine/moments';
 import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, type PickRow } from '../data/liveApi';
-import { CardTableCss, PowerupHand, PlayerCard, PowerupCard } from '../app/cardTable';
+import { CardTableCss, PowerupHand, PlayerCard, PowerupCard, LiveCard, liveCardFlags } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import { Rulebook } from './Rulebook';
 import { PuIcon, GameIcon, Emoji, DripCoin, UI_ART } from '../app/gameIcons';
@@ -1460,6 +1460,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 slotName={slotName}
                 armed={buffs}
                 aw={aw}
+                cards={cardHand}
                 applyMode={pendingApply}
                 onApplyToSpot={applyToSpot}
                 onApplyToWindow={applyToWindow}
@@ -2198,8 +2199,11 @@ function WindowSectionInner(props: {
   onApplyToWindow: (win: WindowId) => void;
   onScout: (win: WindowId) => void;
   lockPlayer?: boolean; // demo setup: metric is editable, but the player is fixed
+  /** Card-table theme: live/final slots stay face-up LiveCards on the felt
+   *  instead of dropping to the compact score strips at kickoff. */
+  cards?: boolean;
 }) {
-  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch, preKick } = props;
+  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch, preKick, cards } = props;
   const w = rw.window;
   // Twin Generals: with the buff armed and ≥2 of your Field General QBs in this
   // window, the top two multipliers stack — link those QB spots so you can see
@@ -2427,7 +2431,7 @@ function WindowSectionInner(props: {
           // both sides share it.
           const youClock = wallClock && s.you ? clockAtRealTime(s.you.player, week, clock, s.you.metricId ?? undefined) : clock;
           const theirClock = wallClock && s.their ? clockAtRealTime(s.their.player, week, clock, s.their.metricId ?? undefined) : clock;
-          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={windowKickoffSod(week, w.id)} youTwin={twinLinked.has(key)} />;
+          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={windowKickoffSod(week, w.id)} youTwin={twinLinked.has(key)} cards={cards} />;
           // CLUTCH offers: a conditional power-up unlocked by this slot's live
           // state (halftime lead / first-half TD / a nuke just landed), owned but
           // not yet armed, with the current clock inside its transient window.
@@ -2949,12 +2953,12 @@ function BuffFxRow({ side, fx, stake }: { side: 'you' | 'their'; fx?: BuffFx[]; 
 }
 
 // ── Score row (live / final) ──
-function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName, realClock, kickoffSec, youTwin }: {
+function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName, realClock, kickoffSec, youTwin, cards }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
   week: number; youClock: number; theirClock: number; open: boolean; onToggle: () => void; phase: Phase; done: boolean;
   onAssignBackup: () => void; turnoverCoin: number;
   backups: Record<string, string>; slotName: Record<string, string>;
-  realClock: boolean; kickoffSec: number; youTwin?: boolean;
+  realClock: boolean; kickoffSec: number; youTwin?: boolean; cards?: boolean;
 }) {
   const ownKey = slotKey(slot.win, slot.slotIndex);
   const isMobile = useIsMobile();
@@ -3005,15 +3009,21 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
     const showSuppress = isSuppress && (done || phase === 'final') ? (suppressSpent ?? undefined) : undefined;
     const bFg = (mineBackup ? slot.youFgMult : slot.theirFgMult) && !(be.player.pos === 'QB' && be.metricId === 'fg')
       ? (mineBackup ? slot.youFgMult : slot.theirFgMult)!(bclock) : undefined;
+    const bFlags = cards ? liveCardFlags(slot.events, mineBackup ? 'you' : 'their', bclock) : null;
     const card = (
       <ScoreCard
         side={mineBackup ? 'you' : 'their'} player={be.player} week={week} clock={bclock} metricId={be.metricId}
         metricName={bp?.name ?? ''} tag={bp?.tag ?? ''} bank={liveBackup} onClick={onToggle}
         chip={chip} suppressSpent={showSuppress} coin={slotCoin(slot, mineBackup ? 'you' : 'their', week, turnoverCoin, bclock)}
         negated={canSub && isFinal && !subbedIn ? true : undefined} fgMult={bFg}
+        cards={cards} hot={bFlags?.hot} scorched={bFlags?.nuked}
       />
     );
-    const blankBox = (
+    const blankBox = cards ? (
+      <div className="ct-liveempty">
+        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.14em', color: 'rgba(233,185,89,.75)' }}>— NO OPPONENT —</span>
+      </div>
+    ) : (
       <div style={{ flex: 1, minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bd)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)' }}>— NO OPPONENT —</span>
       </div>
@@ -3116,8 +3126,10 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
   const isFgSrc = (p: { player: Player; metricId: string }) => p.player.pos === 'QB' && p.metricId === 'fg';
   const youFg = slot.youFgMult && !isFgSrc(slot.you) ? slot.youFgMult(youClock) : undefined;
   const theirFg = slot.theirFgMult && !isFgSrc(slot.their) ? slot.theirFgMult(theirClock) : undefined;
-  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={final ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} twin={youTwin} />;
-  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={final ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} />;
+  const youFlags = cards ? liveCardFlags(slot.events, 'you', youClock) : null;
+  const theirFlags = cards ? liveCardFlags(slot.events, 'their', theirClock) : null;
+  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={final ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} twin={youTwin} cards={cards} hot={youFlags?.hot} scorched={youFlags?.nuked} />;
+  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={final ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} cards={cards} hot={theirFlags?.hot} scorched={theirFlags?.nuked} />;
   const centerKids = (
     <>
       {slot.events.length > 0 && (
@@ -3246,8 +3258,12 @@ function fmtStat(pos: Pos, s: StatLine, compact = false): string {
   return '—';
 }
 
-function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, suppressSpent, negated, halvedFrom, chip, coin, fgMult, twin }: {
+function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, suppressSpent, negated, halvedFrom, chip, coin, fgMult, twin, cards, hot, scorched }: {
   side: 'you' | 'their'; player: Player; week: number; clock: number; metricId?: string; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string; coin?: number; fgMult?: number; twin?: boolean;
+  /** Card-table theme: render as a face-up LiveCard on the felt (with the
+   *  hot/nuked flags derived from the slot's play-by-play) instead of the
+   *  compact score strip — the cards stay on the board after kickoff. */
+  cards?: boolean; hot?: boolean; scorched?: boolean;
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
   const isMobile = useIsMobile();
@@ -3277,6 +3293,22 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // game's OT doesn't read "OT" on a game that already ended in regulation.
   const gEnd = realGameEndClock(week, player.team);
   const gameOver = gEnd > 0 ? clock >= gEnd - 1 : clock >= 3595;
+  // Card-table theme: the slot stays a face-up card on the felt — same data
+  // (game clock, statline, coin, FG mult, final-state outcomes), card stock.
+  if (cards) {
+    return (
+      <LiveCard
+        side={side} slug={player.id} name={player.name} pos={player.pos} team={player.team}
+        gameLabel={g ? `${g.away}@${g.home} · ${gameOver ? 'FINAL' : fmtGameClock(clock)}` : null}
+        metricName={metricName || null} stat={subName ? null : stat} bank={bank}
+        hot={hot} nuked={!!scorched && !subName} chip={chip} coin={coin} fgMult={fgMult}
+        negated={negated} halvedFrom={halvedFrom} suppressSpent={suppressSpent}
+        note={subName ? `⤴ ${subName} scoring` : undefined}
+        badge={<><InjuryBadge week={week} slug={player.id} />{twin && <TwinChip />}</>}
+        onClick={onClick}
+      />
+    );
+  }
   const gameLine = g ? (
     <div className="mono" title="real NFL game · real game clock" style={{ display: 'flex', alignItems: 'center', gap: 5, flexDirection: side === 'you' ? 'row' : 'row-reverse', fontSize: fs(8.5), letterSpacing: '0.02em', marginTop: 2 }}>
       <Img src={teamLogo(g.away)} size={12} radius={2} fallback={<span />} />

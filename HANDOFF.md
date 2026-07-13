@@ -1,6 +1,42 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-09 · Build `v0.120.0`_
+_Last updated: 2026-07-13 · Build `v0.132.0`_
+
+## Card retention — the cards stay on the felt after kickoff (v0.132.0)
+The ask: "keep the cards on the board longer — they drop off after kick off."
+In the card theme the portrait cards only lived in SETUP/LOCKED (SetupRow); at
+kickoff both boards swapped to compact score strips, so the theme vanished
+right when the game got exciting. Now a kicked-off slot stays a face-up card
+through LIVE and FINAL.
+- **`LiveCard` (cardTable.tsx).** The setup card's cream stock at the same
+  footprint (172×250), carrying the live state: the drip bank as a rising
+  liquid fill (`ct-fill`, bank×3.2 capped 92%), 🔥 HOT glow + chip, ☠ NUKE
+  scorch, real game clock line (`AWY@HOM · Q3 4:12` / FINAL), running
+  statline, coin, ⚡ Field General ×N, and the final-state outcomes (K-negation
+  strike, ÷2 suppress-halving, suppress spend, `⤴ backup scoring`). Tap = open
+  the log, same as the strip. Gotcha: `.ct-live>*` resets children to
+  `position:relative` (fill stacking), so the fill/scorch/hotchip re-assert
+  `position:absolute` right after — equal specificity, later rule wins.
+- **`liveCardFlags(events, side, clock)` (cardTable.tsx).** HOT/NUKED at a
+  playback clock from the slot's own PBP — the sim mirror of the worker's
+  `flagsFor` (liveResolve.ts). hot follows the side's LATEST drip/streak badge
+  (HOT / STREAK 2× on, plain DRIP ↑ or an opponent's STREAK COLD off, a nuke
+  kills it); nuked latches on a landed nuke (sig = attacker-side event, else
+  victim-side TE-TD). Giveaway events are typed 'nuke' for the log's red ✕ but
+  wipe nothing — TURNOVER text is excluded so a pick thrower isn't scorched.
+- **Matchup.tsx.** `cards` (from the existing `cardHand` league flag) threads
+  WindowSection → ScoreRow → ScoreCard; ScoreCard in card mode renders the
+  SAME computed data as a LiveCard (no info loss — statline, game clock, coin,
+  chips, sub/negation states all ride along). Unopposed rows keep their
+  explanatory strip; their blank side becomes a dashed card footprint on the
+  felt. The guided demo (`demo` prop) stays classic — it has no felt.
+- **DemoBoard.tsx (landing).** Watch-phase head-to-head slots deal LiveCards
+  (metric chip, bank, hot/nuked, EMP ❄ frost on the featured opponent, armedPu
+  note); one-sided backup rows keep the strip. The kickoff reveal flip is
+  untouched — cards now persist after it instead of dropping to strips.
+- Verified end-to-end (Playwright, card-theme RPC forced on): 16 live cards on
+  the full board through LIVE and FINAL, tap-opens-log, HOT chip + glow on a
+  hot drip, liquid fill measured bottom-anchored (bank 6.2 → 50px/252px card).
 
 ## Napalm — a live power-up that punishes a hot drip (v0.120.0)
 `napalm` (◎60, live, slot-opp). Fire on a live opponent slot: for 10 game-minutes,

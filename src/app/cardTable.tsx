@@ -5,7 +5,8 @@
 // the rest of the app; suit colors come from the active theme's --pos-* vars.
 import { useEffect, useMemo, useState } from 'react';
 import { headshot } from '../data/media';
-import { PuIcon } from './gameIcons';
+import { DripCoin, FxIcon, PuIcon } from './gameIcons';
+import type { PbpEvent } from '../types';
 
 const FONT_URL = `${import.meta.env.BASE_URL}fonts/lilita-one.woff2`;
 
@@ -278,6 +279,49 @@ const CSS = `
   .ctable .mx-sc-big{font-size:22px !important;}
 }
 
+/* ── live face-up cards (post-kickoff) — the setup card's cream stock stays on
+   the felt through LIVE and FINAL, now carrying the live state: the drip bank's
+   liquid fill, the real game clock, the running statline, HOT glow and the NUKE
+   scorch. Same footprint as the setup pair so kickoff doesn't shrink the table.
+   Inert outside a .ctable ancestor (the same contract as the mx-* hooks). */
+.ctable .ct-live{position:relative;width:100%;max-width:172px;min-height:250px;justify-self:center;box-sizing:border-box;
+  display:flex;flex-direction:column;gap:4px;padding:8px 8px 10px;color:#201C12;isolation:isolate;
+  border:2px solid #000;border-radius:10px;box-shadow:0 4px 0 rgba(0,0,0,.6);
+  background-image:radial-gradient(rgba(184,134,59,.12) 1px,transparent 1.2px),radial-gradient(circle at 50% 36%,#FDF8E9 0%,#F4EDDA 55%,#E2D5B6 100%);
+  background-size:11px 11px,100% 100%;
+  animation:ct-wob var(--wobdur,5.2s) ease-in-out var(--wobdel,0s) infinite alternate;}
+.ctable .ct-live>*{position:relative;z-index:1;}
+/* Re-assert the overlays' absolute positioning — the >* reset above (equal
+   specificity, later in the sheet) would otherwise flatten them into flowed
+   blocks: the fill to a top-of-column band, the scorch to a strip, the HOT
+   chip into the card footer. */
+.ctable .ct-live .ct-fill{position:absolute;z-index:0;}
+.ctable .ct-live .ct-scorch{position:absolute;z-index:4;}
+.ctable .ct-live .ct-hotchip{position:absolute;z-index:5;}
+.ctable .ct-live.ct-tap{cursor:pointer;}
+.ctable .ct-live.ct-tap:hover{translate:0 -3px;}
+.ctable .ct-liveyou{border-top:4px solid var(--you) !important;}
+.ctable .ct-liveopp{border-top:4px solid var(--opp) !important;}
+.ctable .ct-live .ct-art{width:86px;height:60px;}
+.ctable .ct-live .ct-name{font-size:11px;}
+.ctable .ct-live.ct-hot{box-shadow:0 4px 0 rgba(0,0,0,.6),0 0 14px 2px rgba(233,185,89,.55);}
+.ctable .ct-live.ct-nuked{animation:none;filter:saturate(.6);}
+.ctable .ct-lgame{text-align:center;font-size:7.5px;letter-spacing:.06em;color:#6E6650;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ctable .ct-lstat{text-align:center;font-size:8.4px;line-height:1.45;color:#57503A;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}
+.ctable .ct-lchip{align-self:center;font-size:7.5px;font-weight:800;letter-spacing:.1em;color:#8A6A1E;border:1px solid rgba(184,134,59,.8);border-radius:999px;padding:2px 7px;background:rgba(233,185,89,.18);white-space:nowrap;}
+.ctable .ct-lscore{margin-top:auto;display:flex;justify-content:center;align-items:baseline;gap:5px;padding-top:4px;font-variant-numeric:tabular-nums;flex-wrap:wrap;}
+.ctable .ct-lscore b{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;font-size:23px;line-height:1;color:#1E1809;}
+.ctable .ct-lscore span{font-size:7px;color:#9A8E6E;letter-spacing:.1em;}
+.ctable .ct-lscore .ct-lhalf{font-size:9px;color:#A23A44;font-weight:700;}
+.ctable .ct-lscore .ct-lfg,.ctable .ct-lscore .ct-lcoin{display:inline-flex;align-items:center;gap:2px;font-size:8.5px;font-weight:800;color:#8A6A1E;letter-spacing:.03em;}
+.ctable .ct-lnote{text-align:center;font-size:8px;font-weight:700;letter-spacing:.03em;line-height:1.4;color:#8A6A1E;}
+.ctable .ct-liveempty{width:100%;max-width:172px;min-height:250px;justify-self:center;box-sizing:border-box;
+  border:2px dashed rgba(233,185,89,.5);border-radius:10px;background:rgba(233,185,89,.05);
+  display:flex;align-items:center;justify-content:center;}
+.ctable .ct-frost{position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;
+  background:rgba(150,200,235,.22);border-radius:8px;}
+@media (prefers-reduced-motion:reduce){.ctable .ct-live{animation:none;}}
+
 /* ── power-up cards (shop + apply modals) — the hand's leather stock, dealt
    as a tappable grid on the felt ─────────────────────────────────────────── */
 .ctable .ct-puwrap{width:150px;position:relative;animation:ct-deal .5s cubic-bezier(.3,1.5,.5,1) backwards;}
@@ -469,6 +513,99 @@ export function PlayerCard({ slug, name, pos, slot, metric, bank, opp = false, h
       </div>
       {hot && !nuked && <div className="ct-hotchip">🔥 HOT</div>}
       {selected && <div className="ct-curchip">CURRENT ✓</div>}
+    </div>
+  );
+}
+
+/** HOT / NUKED at a playback clock, from a slot's own play-by-play — the sim
+ *  mirror of the worker's `flagsFor` (engine/liveResolve.ts), which feeds the
+ *  same flags to LiveBoard's cards from published slot_scores. Attribution:
+ *    • hot — the side's own drip/streak badges carry the state; the LATEST one
+ *      before the clock wins (🔥 HOT / STREAK 2× turns it on, a plain DRIP ↑
+ *      tick turns it off), and an opponent's STREAK COLD or a nuke cools it.
+ *    • nuked — latches once a nuke lands on this side: TD/erasure nukes ride
+ *      the ATTACKER's play (sig), TE-TD drip nukes sit on the VICTIM's own
+ *      standalone event. */
+export function liveCardFlags(events: PbpEvent[], side: 'you' | 'their', clock: number): { hot: boolean; nuked: boolean } {
+  let hot = false, nuked = false;
+  for (const e of events) {
+    if (e.clock > clock) continue;
+    const t = e.effect?.text ?? e.play ?? '';
+    if (e.side === side) {
+      if (e.effect?.type === 'streak' || e.drip) hot = t.includes('HOT') || t.includes('STREAK 2×');
+    } else if (e.effect?.type === 'cold') hot = false;
+    // Giveaways are typed 'nuke' for the log's red ✕ (they pay the opponent
+    // coin) but wipe nothing — a pick-six thrower isn't a scorched card.
+    if (e.effect?.type === 'nuke' && !t.includes('TURNOVER') && (e.sig ? e.side !== side : e.side === side)) { nuked = true; hot = false; }
+  }
+  return { hot, nuked };
+}
+
+/** A large face-up LIVE card — the setup card's cream stock carrying a slot's
+ *  post-kickoff state: the drip bank (with its liquid fill), the real game
+ *  clock, the running statline, HOT glow / NUKE scorch, and the final-state
+ *  outcomes (K-negation strike, suppress-halving, suppress spend). This is what
+ *  keeps the cards ON the felt once a window kicks off — ScoreRow (Matchup) and
+ *  the demo watch phase (DemoBoard) deal these instead of dropping to the
+ *  compact score strips. Tapping it mirrors the score strip: opens the log. */
+export function LiveCard({ side, slug, name, pos, team, gameLabel, metricName, stat, bank, hot = false, nuked = false, frozen = false, chip, coin, fgMult, negated = false, halvedFrom, suppressSpent, note, badge, onClick }: {
+  side: 'you' | 'their'; slug: string; name: string; pos: string; team?: string | null;
+  gameLabel?: string | null; metricName?: string | null; stat?: string | null; bank: number;
+  hot?: boolean; nuked?: boolean; frozen?: boolean; chip?: string; coin?: number | null; fgMult?: number | null;
+  negated?: boolean; halvedFrom?: number | null; suppressSpent?: number | null;
+  note?: React.ReactNode; badge?: React.ReactNode; onClick?: () => void;
+}) {
+  const [imgOk, setImgOk] = useState(true);
+  const url = useMemo(() => headshot(slug), [slug]);
+  const suit = posVars(pos);
+  const scorched = nuked && suppressSpent == null;
+  const fillPct = Math.max(0, Math.min(92, bank * 3.2));
+  const fmt = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
+  return (
+    <div className={`ct-live ${side === 'you' ? 'ct-liveyou' : 'ct-liveopp ct-opp'}${hot && !scorched ? ' ct-hot' : ''}${scorched ? ' ct-nuked' : ''}${onClick ? ' ct-tap' : ''}`}
+      style={wobbleVars(slug)} onClick={onClick}>
+      <div className="ct-fill" style={{ height: `${fillPct}%` }} />
+      <div className="ct-facehead">
+        <span className="ct-suit" style={suit}>{pos === 'DEF' ? 'DST' : pos}</span>
+        {team && <span className="ct-slot">{team.toUpperCase()}</span>}
+      </div>
+      <div className="ct-art" style={{ borderColor: suit.color as string }}>
+        {url && imgOk
+          ? <img src={url} alt="" draggable={false} onError={() => setImgOk(false)} />
+          : <span className="ct-mono" style={{ color: suit.color as string }}>{initials(name)}</span>}
+      </div>
+      <div className="ct-name">{name}{badge && <span style={{ marginLeft: 3 }}>{badge}</span>}</div>
+      {chip && <span className="ct-lchip">{chip}</span>}
+      {gameLabel && <div className="ct-lgame">{gameLabel}</div>}
+      {metricName && <div className="ct-metric" style={{ marginTop: 2 }}>METRIC <b>{metricName}</b></div>}
+      {stat && <div className="ct-lstat">{stat}</div>}
+      <div className="ct-lscore">
+        {fgMult != null && fgMult > 1.005 && <span className="ct-lfg" title={`A Field General QB in this window is multiplying this slot's scoring ×${fgMult.toFixed(2)} right now`}>⚡×{fgMult.toFixed(2)}</span>}
+        {coin != null && coin !== 0 && <span className="ct-lcoin" title="drip coin earned so far this window"><DripCoin size={9} /> {coin > 0 ? '+' : ''}{coin}</span>}
+        {suppressSpent != null ? (
+          <b style={{ textDecoration: 'line-through', color: '#8C8270' }}>{fmt(suppressSpent)}</b>
+        ) : halvedFrom != null ? (
+          <>
+            <b>{fmt(bank)}</b>
+            <span className="ct-lhalf"><s>{fmt(halvedFrom)}</s> ÷2</span>
+          </>
+        ) : (
+          <b style={negated ? { textDecoration: 'line-through', color: '#A23A44' } : undefined}>{fmt(bank)}</b>
+        )}
+        <span>PTS</span>
+      </div>
+      {suppressSpent != null && <div className="ct-lnote" style={{ color: '#A23A44' }}>✕ spent on SUPPRESS</div>}
+      {halvedFrom != null && <div className="ct-lnote" style={{ color: '#A23A44' }}>÷2 SUPPRESSED</div>}
+      {note && <div className="ct-lnote">{note}</div>}
+      {scorched && (
+        <div className="ct-scorch">
+          <span className="ct-skull">☠</span>
+          <span className="ct-sup">NUKED</span>
+          <span className="ct-wiped">bank {fmt(bank)}</span>
+        </div>
+      )}
+      {frozen && <div className="ct-frost"><FxIcon k="freeze" emoji="❄️" size={26} /></div>}
+      {hot && !scorched && <div className="ct-hotchip">🔥 HOT</div>}
     </div>
   );
 }

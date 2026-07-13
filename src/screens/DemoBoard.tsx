@@ -13,7 +13,7 @@ import { avatarUrl } from '../data/media';
 import { getProvider } from '../data/providers';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
 import { getSession, demoCardTheme } from '../data/liveApi';
-import { CardTableCss, PlayerCard } from '../app/cardTable';
+import { CardTableCss, PlayerCard, LiveCard, liveCardFlags } from '../app/cardTable';
 import { SlotFieldViews } from '../app/FieldView';
 import { SetupRow, PlayerPicker, RosterAside, ScoutModal } from './Matchup';
 import { RequestCodeModal } from './RequestCode';
@@ -508,7 +508,7 @@ export function DemoBoard() {
             return (
               <div key={key} style={{ borderBottom: '1px solid var(--bd)' }}>
                 <SlotRow slot={s} state={st} you={b.you} their={b.their} clock={winClock} noBorder
-                  frozen={isFeatured && frozen} armedPu={isFeatured ? armedPu : undefined} />
+                  frozen={isFeatured && frozen} armedPu={isFeatured ? armedPu : undefined} cards={cardHand} />
                 {canOpen && (
                   <div style={{ padding: '0 12px 8px' }}>
                     <div style={{ textAlign: 'center' }}>
@@ -818,9 +818,12 @@ function DuelLog({ slot, clock, live, armedPu }: { slot: ResolvedSlot; clock: nu
   );
 }
 
-function SlotRow({ slot, state, you, their, clock, frozen, armedPu, noBorder }: {
+function SlotRow({ slot, state, you, their, clock, frozen, armedPu, noBorder, cards }: {
   slot: ResolvedSlot; state: 'upcoming' | 'live' | 'final'; you: number; their: number;
   clock?: number; frozen?: boolean; armedPu?: { id?: string; icon: string; name: string }; noBorder?: boolean;
+  /** Card-table theme: a kicked-off duel stays two face-up LiveCards on the
+   *  felt instead of dropping to the compact strip. */
+  cards?: boolean;
 }) {
   const fs = useFinePrint();
   const sealed = state === 'upcoming'; // opponent picks + metrics unseal at kickoff
@@ -890,16 +893,43 @@ function SlotRow({ slot, state, you, their, clock, frozen, armedPu, noBorder }: 
   // row and stays on one line (your metric left, opponent's right once unsealed).
   const showMetrics = !!slot.you?.metricId || (!sealed && !!slot.their?.metricId);
   const nukeShake = (who: 'you' | 'their') => (nuke && nuke.victim === who ? 'shake .6s ease' : undefined);
+  const nukeBurst = nuke && (
+    <div key={nuke.clock} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, pointerEvents: 'none', zIndex: 2, animation: 'nukeburst .9s cubic-bezier(.2,1.6,.4,1)' }}>
+      <span style={{ fontSize: 34, lineHeight: 1, filter: 'drop-shadow(0 0 14px rgba(255,79,98,.85))' }}><Emoji e="💥" size="1em" /></span>
+      <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: '0.16em', color: 'var(--fx-nuke, #FF4F62)', background: 'color-mix(in srgb, var(--bg) 80%, transparent)', border: '1px solid var(--fx-nuke, #FF4F62)', borderRadius: 6, padding: '4px 11px', boxShadow: '0 0 20px color-mix(in srgb, var(--fx-nuke, #FF4F62) 60%, transparent)', textShadow: '0 0 8px color-mix(in srgb, var(--fx-nuke, #FF4F62) 70%, transparent)' }}>
+        NUKED{nuke.pts >= 3 ? ` −${nuke.pts.toFixed(1)}` : ''}
+      </span>
+    </div>
+  );
+  // Card-table theme: once the window kicks off, a head-to-head duel stays two
+  // face-up cards on the felt — live bank fill, HOT glow, NUKE scorch — instead
+  // of dropping to the compact strip. One-sided (backup) rows keep the strip,
+  // which reads their sub/UNOPPOSED explanations better.
+  if (cards && state !== 'upcoming' && slot.you && slot.their) {
+    const met = (p: NonNullable<ResolvedSlot['you']>) => (METRICS[p.player.pos] ?? []).find((m) => m.id === p.metricId)?.name ?? null;
+    const c = clock ?? Number.MAX_SAFE_INTEGER;
+    const yf = liveCardFlags(slot.events, 'you', c);
+    const tf = liveCardFlags(slot.events, 'their', c);
+    return (
+      <div style={{ position: 'relative', padding: '10px 2px' }}>
+        {nukeBurst}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'stretch' }}>
+          <LiveCard side="you" slug={slot.you.player.id} name={slot.you.player.name} pos={slot.you.player.pos} team={slot.you.player.team}
+            metricName={met(slot.you)} bank={you} hot={yf.hot} nuked={yf.nuked && !slot.youSub}
+            negated={backupStruck && !!slot.you}
+            note={armedPu ? <><PuIcon id={armedPu.id} emoji={armedPu.icon} size="1.4em" /> {armedPu.name.toUpperCase()}</>
+              : state === 'final' && slot.youSub ? <>🛟 {slot.youSub.name} subbed in</> : undefined} />
+          <LiveCard side="their" slug={slot.their.player.id} name={slot.their.player.name} pos={slot.their.player.pos} team={slot.their.player.team}
+            metricName={met(slot.their)} bank={their} hot={tf.hot} nuked={tf.nuked && !slot.theirSub} frozen={frozen}
+            negated={backupStruck && !!slot.their}
+            note={state === 'final' && slot.theirSub ? <>🛟 {slot.theirSub.name} subbed in</> : undefined} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div style={{ borderBottom: noBorder ? 'none' : '1px solid var(--bd)', position: 'relative' }}>
-      {nuke && (
-        <div key={nuke.clock} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, pointerEvents: 'none', zIndex: 2, animation: 'nukeburst .9s cubic-bezier(.2,1.6,.4,1)' }}>
-          <span style={{ fontSize: 34, lineHeight: 1, filter: 'drop-shadow(0 0 14px rgba(255,79,98,.85))' }}><Emoji e="💥" size="1em" /></span>
-          <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: '0.16em', color: 'var(--fx-nuke, #FF4F62)', background: 'color-mix(in srgb, var(--bg) 80%, transparent)', border: '1px solid var(--fx-nuke, #FF4F62)', borderRadius: 6, padding: '4px 11px', boxShadow: '0 0 20px color-mix(in srgb, var(--fx-nuke, #FF4F62) 60%, transparent)', textShadow: '0 0 8px color-mix(in srgb, var(--fx-nuke, #FF4F62) 70%, transparent)' }}>
-            NUKED{nuke.pts >= 3 ? ` −${nuke.pts.toFixed(1)}` : ''}
-          </span>
-        </div>
-      )}
+      {nukeBurst}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: showMetrics ? '8px 12px 3px' : '8px 12px' }}>
         {side('you')}
         <div className="mono" style={{ flex: 'none', minWidth: 60, textAlign: 'center' }}>
