@@ -2,6 +2,20 @@
 
 _Last updated: 2026-07-13 · Build `v0.132.0`_
 
+## Staging QC deploys (deploy-staging.yml — needs one-time admin setup)
+GitHub Pages IS production here: deploy.yml publishes every merge to main as
+dripfantasy.com (public/CNAME + VITE_BASE=/), so there was no way to QC a
+branch on Pages without shipping it. `deploy-staging.yml` publishes any branch
+to a SECOND Pages site (dachhack.github.io/ffgame-staging): push a branch to
+`staging` (`git push -f origin <branch>:staging`) or run it via
+workflow_dispatch. Build uses VITE_BASE=/ffgame-staging/, strips dist/CNAME
+(so staging can't claim the prod domain), injects `noindex`, and leaves
+VITE_POSTHOG_KEY unset (no analytics pollution). Inert until the admin does
+the one-time setup in the workflow's header comment (create dachhack/
+ffgame-staging, add the STAGING_DEPLOY_TOKEN fine-grained PAT, set that repo's
+Pages source to gh-pages). Staging hits the production Supabase, so flags/
+data are live; auth redirects need the staging origin whitelisted in Supabase.
+
 ## Card retention — the cards stay on the felt after kickoff (v0.132.0)
 The ask: "keep the cards on the board longer — they drop off after kick off."
 In the card theme the portrait cards only lived in SETUP/LOCKED (SetupRow); at
