@@ -358,9 +358,13 @@ const CSS = `
    wrap the points to their own line under the card+text instead (the stacked
    mobile look), indented past the card so they read with the text column. */
 @media (max-width:600px){
-  /* Floating strip card: smaller footprint + gentler overhang so the strip's
-     game-clock line and metric chip keep their room on a phone. */
-  .ctable .ct-float{width:58px;margin-top:-7px;margin-bottom:-7px;}
+  /* Floating strip card on a phone: same proportions, floated further out —
+     it pokes past the strip's outer side onto the felt margin (the window
+     frame's ~12px padding absorbs it) and a bit more above/below. Bonus: the
+     outward shift hands the strip's text the room back. */
+  .ctable .ct-float{width:58px;margin-top:-11px;margin-bottom:-11px;}
+  .ctable .ct-float.ct-lyou{margin-left:-16px;}
+  .ctable .ct-float.ct-lopp{margin-right:-16px;}
   .ctable .ct-float .ct-lart{height:36px;}
   .ctable .ct-float .ct-lname{font-size:6.8px;}
   .ctable .ct-float .ct-lhead .ct-suit{font-size:5.5px;padding:1px 2.5px;}

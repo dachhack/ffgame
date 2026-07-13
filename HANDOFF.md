@@ -8,8 +8,10 @@ back to the ORIGINAL dense full-width ScoreCard strips (mx-scorecard leather
 stock on the felt) with one change: the physical mini card (`MiniCard`, new
 export — headshot art, position suit, name, team, bank fill, HOT/NUKE/frost
 overlays) FLOATS over each strip where the round headshot used to sit
-(`.ct-float`: 72px, −12px vertical overhang; ≤600px: 58px, −7px — a taller
-narrower card with an outer-side poke was tried and rejected by the owner). The strip's
+(`.ct-float`: 72px, −12px vertical overhang; ≤600px: 58px, −11px vertical +
+a −16px outer-side poke onto the felt, per the owner's sketch — the window
+frame's padding absorbs it, no horizontal scroll. A taller/narrower card
+shape was tried and rejected). The strip's
 name row drops the name/team text (they're on the card) and keeps its chips;
 injury badge rides the card. Mobile card mode gets its own strip layout — the
 card spans the strip height with ONE text column beside it (compact
