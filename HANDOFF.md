@@ -1,6 +1,114 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-09 · Build `v0.120.0`_
+_Last updated: 2026-07-13 · Build `v0.133.0`_
+
+## Floating strip cards (v0.133.0, owner round 3)
+The mini-card ROWS still read airy on wide screens, so the live layout went
+back to the ORIGINAL dense full-width ScoreCard strips (mx-scorecard leather
+stock on the felt) with one change: the physical mini card (`MiniCard`, new
+export — headshot art, position suit, name, team, bank fill, HOT/NUKE/frost
+overlays) FLOATS over each strip where the round headshot used to sit
+(`.ct-float`: 72px, −12px vertical overhang; ≤600px: 58px, −11px vertical +
+a −16px outer-side poke onto the felt, per the owner's sketch — the window
+frame's padding absorbs it, no horizontal scroll. A taller/narrower card
+shape was tried and rejected). The strip's
+name row drops the name/team text (they're on the card) and keeps its chips;
+injury badge rides the card. Mobile card mode gets its own strip layout — the
+card spans the strip height with ONE text column beside it (compact
+`AWY@HOM · Qx clock` line, metric, score+coin, statline) so the floating card
+never overlaps the strip's own text. The kicked window's slot stack widens its
+row gap (20px + 10px top pad) so overhanging cards never collide. LiveCard
+still renders the pre-kick sealed pairs + DemoBoard's demo rows, now composing
+MiniCard.
+
+## Per-theme card-strip grounds in light mode (owner picks)
+Card-mode strips (mx-sc-cards) under the floating MiniCards take a per-theme
+ground in the light app themes so the cream card pops: BAIZE GREEN on Feeling
+Lucky (daylight), PAPER GRAY on Arctic Journey (arctic). Wired via a new
+`data-app-theme` attribute App.tsx stamps on <html> (alongside data-card-light
+etc.) — the arctic override sits after the daylight-default rule in the sheet.
+Tan variants were tried and rejected ("dingy"); slate-blue and clay mockups
+lost the vote. Dark themes keep the dark leather stock.
+
+## Mini live cards + sealed-until-kickoff (v0.133.0)
+Owner feedback on v0.132: the tall live cards ate too much vertical space, and
+the opponent's cards flipped face-up before their window went live. LiveCard is
+now a compact ROW: a 78px mini physical card (headshot, position, name, team —
+still carrying the liquid bank fill, HOT glow, NUKE scorch, wobble) with all
+the changing text BESIDE it on the felt (real game clock, metric chip,
+statline, accumulated points, coin/FG chips, power-up + final-state notes).
+A live duel row measures ~95px vs ~250 before. New `sealed` variant renders
+the deck's face-down back + a 🔒 SEALED PICK chip. Wide-screen polish (owner
+round 2): the points live in their own column (`.ct-lscol`) pinned to each
+half's INNER edge, so the two big scores face each other scoreboard-style in
+the middle of the duel — no hollow center on desktop; ≤600px wraps the score
+to its own line under the text (the stacked mobile look).
+- Seal timing: WindowSectionInner computes per-window `kicked` (live board:
+  realtime live/final; sim playback: this window's own clock > 0 or done) →
+  ScoreRow. Pre-kick in card mode: your card face-up with metric but NO score,
+  the opponent's card face-down — another window kicking off no longer flips
+  this one's seal (the old leak: global preKick ended when ANY window started).
+  DemoBoard's upcoming windows now deal the same sealed pair instead of the
+  classic strip; its kickoff PICKS-REVEALED flip moment is unchanged.
+- CSS gotcha (bit twice): `.ct-lcard>*` position reset + generic child rules
+  lose to/beat same-specificity rules by SHEET ORDER — overlays re-assert
+  `position:absolute` after the reset, and the PTS label needed its own class
+  (`.ct-llab`) because `.ct-lscore>span` out-specified `.ct-lpts` and shrank
+  the score to 7px.
+- Verified (Playwright, theme RPC forced): kicking ONE window face-ups exactly
+  its 6 cards while the other 5 slots stay sealed backs; FINAL reveals all;
+  landing shows 7 sealed backs during TNF; HOT chip + glow; row tap opens the
+  log; `.ct-lpts` computed 21px.
+
+## Staging QC deploys (deploy-staging.yml — needs one-time admin setup)
+GitHub Pages IS production here: deploy.yml publishes every merge to main as
+dripfantasy.com (public/CNAME + VITE_BASE=/), so there was no way to QC a
+branch on Pages without shipping it. `deploy-staging.yml` publishes any branch
+to a SECOND Pages site (dachhack.github.io/ffgame-staging): push a branch to
+`staging` (`git push -f origin <branch>:staging`) or run it via
+workflow_dispatch. Build uses VITE_BASE=/ffgame-staging/, strips dist/CNAME
+(so staging can't claim the prod domain), injects `noindex`, and leaves
+VITE_POSTHOG_KEY unset (no analytics pollution). Inert until the admin does
+the one-time setup in the workflow's header comment (create dachhack/
+ffgame-staging, add the STAGING_DEPLOY_TOKEN fine-grained PAT, set that repo's
+Pages source to gh-pages). Staging hits the production Supabase, so flags/
+data are live; auth redirects need the staging origin whitelisted in Supabase.
+
+## Card retention — the cards stay on the felt after kickoff (v0.132.0)
+The ask: "keep the cards on the board longer — they drop off after kick off."
+In the card theme the portrait cards only lived in SETUP/LOCKED (SetupRow); at
+kickoff both boards swapped to compact score strips, so the theme vanished
+right when the game got exciting. Now a kicked-off slot stays a face-up card
+through LIVE and FINAL.
+- **`LiveCard` (cardTable.tsx).** The setup card's cream stock at the same
+  footprint (172×250), carrying the live state: the drip bank as a rising
+  liquid fill (`ct-fill`, bank×3.2 capped 92%), 🔥 HOT glow + chip, ☠ NUKE
+  scorch, real game clock line (`AWY@HOM · Q3 4:12` / FINAL), running
+  statline, coin, ⚡ Field General ×N, and the final-state outcomes (K-negation
+  strike, ÷2 suppress-halving, suppress spend, `⤴ backup scoring`). Tap = open
+  the log, same as the strip. Gotcha: `.ct-live>*` resets children to
+  `position:relative` (fill stacking), so the fill/scorch/hotchip re-assert
+  `position:absolute` right after — equal specificity, later rule wins.
+- **`liveCardFlags(events, side, clock)` (cardTable.tsx).** HOT/NUKED at a
+  playback clock from the slot's own PBP — the sim mirror of the worker's
+  `flagsFor` (liveResolve.ts). hot follows the side's LATEST drip/streak badge
+  (HOT / STREAK 2× on, plain DRIP ↑ or an opponent's STREAK COLD off, a nuke
+  kills it); nuked latches on a landed nuke (sig = attacker-side event, else
+  victim-side TE-TD). Giveaway events are typed 'nuke' for the log's red ✕ but
+  wipe nothing — TURNOVER text is excluded so a pick thrower isn't scorched.
+- **Matchup.tsx.** `cards` (from the existing `cardHand` league flag) threads
+  WindowSection → ScoreRow → ScoreCard; ScoreCard in card mode renders the
+  SAME computed data as a LiveCard (no info loss — statline, game clock, coin,
+  chips, sub/negation states all ride along). Unopposed rows keep their
+  explanatory strip; their blank side becomes a dashed card footprint on the
+  felt. The guided demo (`demo` prop) stays classic — it has no felt.
+- **DemoBoard.tsx (landing).** Watch-phase head-to-head slots deal LiveCards
+  (metric chip, bank, hot/nuked, EMP ❄ frost on the featured opponent, armedPu
+  note); one-sided backup rows keep the strip. The kickoff reveal flip is
+  untouched — cards now persist after it instead of dropping to strips.
+- Verified end-to-end (Playwright, card-theme RPC forced on): 16 live cards on
+  the full board through LIVE and FINAL, tap-opens-log, HOT chip + glow on a
+  hot drip, liquid fill measured bottom-anchored (bank 6.2 → 50px/252px card).
 
 ## Napalm — a live power-up that punishes a hot drip (v0.120.0)
 `napalm` (◎60, live, slot-opp). Fire on a live opponent slot: for 10 game-minutes,

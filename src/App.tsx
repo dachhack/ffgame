@@ -38,6 +38,9 @@ export function App() {
     // CSS-reachable light/dark signal for the card-table theme (cardTable.tsx):
     // its felt + dark-stock cards get a light variant on the light app themes.
     document.documentElement.dataset.cardLight = light ? '1' : '0';
+    // The theme NAME too, for per-theme card-table accents (e.g. arctic's
+    // card-mode strips go paper gray where daylight's go baize green).
+    document.documentElement.dataset.appTheme = theme;
     // Personal card-deck skin (cardTable.tsx reads [data-card-skin] for its felt
     // + sealed card-back colors). Default emerald.
     document.documentElement.dataset.cardSkin = cardSkin;

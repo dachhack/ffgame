@@ -5,7 +5,8 @@
 // the rest of the app; suit colors come from the active theme's --pos-* vars.
 import { useEffect, useMemo, useState } from 'react';
 import { headshot } from '../data/media';
-import { PuIcon } from './gameIcons';
+import { DripCoin, FxIcon, PuIcon } from './gameIcons';
+import type { PbpEvent } from '../types';
 
 const FONT_URL = `${import.meta.env.BASE_URL}fonts/lilita-one.woff2`;
 
@@ -278,6 +279,103 @@ const CSS = `
   .ctable .mx-sc-big{font-size:22px !important;}
 }
 
+/* ── live rows (post-kickoff) — a MINI physical card (headshot, position, name,
+   team) with all the changing text beside it on the felt (metric, statline,
+   accumulated points, power-up notes), so a live window stays vertically
+   compact. The mini card still carries the physical drama: liquid bank fill,
+   HOT glow, NUKE scorch, wobble. A sealed variant shows the deck's card back
+   until the window kicks off. Inert outside a .ctable ancestor. */
+.ctable .ct-live{display:flex;gap:9px;align-items:flex-start;min-width:0;}
+.ctable .ct-live.ct-opp{flex-direction:row-reverse;}
+.ctable .ct-live.ct-tap{cursor:pointer;}
+.ctable .ct-live.ct-tap:hover .ct-lcard{translate:0 -3px;}
+.ctable .ct-lcard{position:relative;flex:none;width:78px;box-sizing:border-box;
+  display:flex;flex-direction:column;gap:3px;padding:5px 5px 6px;color:#201C12;isolation:isolate;
+  border:2px solid #000;border-radius:8px;box-shadow:0 3px 0 rgba(0,0,0,.55);
+  background-image:radial-gradient(rgba(184,134,59,.12) 1px,transparent 1.2px),radial-gradient(circle at 50% 36%,#FDF8E9 0%,#F4EDDA 55%,#E2D5B6 100%);
+  background-size:11px 11px,100% 100%;transition:translate .2s;
+  animation:ct-wob var(--wobdur,5.2s) ease-in-out var(--wobdel,0s) infinite alternate;}
+/* No side-accent edge on the mini card — plain black card border; the side
+   reads from position and the score colors (owner call). */
+.ctable .ct-lcard>*{position:relative;z-index:1;}
+/* Re-assert the overlays' absolute positioning — the >* reset above (equal
+   specificity, later in the sheet) would otherwise flatten them into flowed
+   blocks: the fill to a top band, the scorch to a strip, the HOT chip into
+   the card footer. */
+.ctable .ct-lcard .ct-fill{position:absolute;z-index:0;}
+.ctable .ct-lcard .ct-scorch{position:absolute;z-index:4;border-radius:6px;}
+.ctable .ct-lcard .ct-scorch .ct-skull{font-size:13px;}
+.ctable .ct-lcard .ct-scorch .ct-sup{font-size:8px;}
+.ctable .ct-lcard .ct-scorch .ct-wiped{font-size:7px;}
+.ctable .ct-lcard .ct-hotchip{position:absolute;z-index:5;font-size:7px;padding:2px 5px;}
+.ctable .ct-lcard.ct-hot{box-shadow:0 3px 0 rgba(0,0,0,.55),0 0 12px 2px rgba(233,185,89,.55);}
+.ctable .ct-lcard.ct-nuked{animation:none;filter:saturate(.6);}
+/* Floating over a score strip (ScoreCard card mode): the mini card overhangs
+   the strip's top/bottom edges like a card dealt onto it. */
+.ctable .ct-float{width:72px;margin-top:-12px;margin-bottom:-12px;z-index:2;}
+.ctable .ct-float .ct-lart{height:46px;}
+.ctable .ct-lhead{display:flex;justify-content:space-between;align-items:center;gap:3px;}
+.ctable .ct-lhead .ct-suit{font-size:6.5px;padding:1.5px 3.5px;border-width:1px;}
+.ctable .ct-lteam{font-size:6.5px;color:#6E6650;letter-spacing:.08em;font-weight:700;}
+.ctable .ct-lart{align-self:stretch;height:50px;border-radius:5px;border:1.5px solid;overflow:hidden;position:relative;
+  background:radial-gradient(circle at 50% 20%,#FFF 0%,#E8E0C8 100%);display:flex;align-items:center;justify-content:center;}
+.ctable .ct-lart img{width:100%;height:100%;object-fit:cover;object-position:top;display:block;}
+.ctable .ct-lart .ct-mono{font-size:13px;}
+.ctable .ct-lname{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:8.2px;letter-spacing:.03em;line-height:1.15;
+  text-align:center;text-transform:uppercase;color:#2A2312;text-wrap:balance;margin-top:1px;}
+/* Sealed variant: the deck's card back at the mini footprint. */
+.ctable .ct-lcard.ct-lsealed{min-height:106px;justify-content:center;align-items:center;
+  background:var(--ct-backart) center/100% 100% no-repeat,radial-gradient(circle at 50% 46%,var(--ct-back1,#7E2430) 0%,var(--ct-back2,#571C26) 62%,var(--ct-back3,#40151E) 100%);}
+.ctable .ct-lcard.ct-lsealed .ct-lgem{font-size:17px;color:rgb(var(--ct-deck,233,185,89));text-shadow:0 2px 0 #000;}
+/* The info panel sits on the FELT (not card stock) — theme vars for contrast. */
+.ctable .ct-linfo{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;align-items:flex-start;padding-top:1px;}
+.ctable .ct-live.ct-opp .ct-linfo{align-items:flex-end;text-align:right;}
+.ctable .ct-lgame{font-size:8px;font-weight:700;letter-spacing:.04em;color:var(--dimstrong);font-variant-numeric:tabular-nums;}
+.ctable .ct-lmet{display:flex;align-items:baseline;gap:4px;min-width:0;max-width:100%;}
+.ctable .ct-live.ct-opp .ct-lmet{flex-direction:row-reverse;}
+.ctable .ct-lmet b{display:inline-block;padding:2.5px 7px;border-radius:5px;background:linear-gradient(#3A2E15,#241C10);color:#FFD86B;
+  font-size:8.5px;font-weight:800;letter-spacing:.06em;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  border:1.5px solid #000;box-shadow:0 2px 0 #000,inset 0 0 6px rgba(255,216,107,.28);text-shadow:0 1px 0 #000;}
+.ctable .ct-lmet span{font-size:6.8px;font-weight:700;letter-spacing:.1em;color:var(--faint);white-space:nowrap;}
+.ctable .ct-lstat{font-size:8.6px;line-height:1.4;color:var(--dimstrong);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}
+.ctable .ct-lchip{font-size:7.5px;font-weight:800;letter-spacing:.1em;border:1px solid;border-radius:999px;padding:2px 6px;white-space:nowrap;}
+/* Accumulated points live in their OWN column pinned to the half's inner edge
+   (last flex child + row-reverse on the opponent), so the two big scores face
+   each other in the middle of the duel — no hollow center on wide screens. */
+.ctable .ct-lscol{flex:none;align-self:center;display:flex;flex-direction:column;align-items:flex-end;gap:3px;padding:0 2px;font-variant-numeric:tabular-nums;}
+.ctable .ct-live.ct-opp .ct-lscol{align-items:flex-start;}
+.ctable .ct-lpts{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;font-size:24px;line-height:1;
+  text-shadow:-1.2px -1.2px 0 #14100A,1.2px -1.2px 0 #14100A,-1.2px 1.2px 0 #14100A,1.2px 1.2px 0 #14100A,0 2px 0 #14100A;}
+.ctable .ct-llab{font-size:7px;color:var(--faint);letter-spacing:.1em;}
+.ctable .ct-lhalf{font-size:9px;font-weight:700;color:var(--fx-stop,#FF8A5C);}
+.ctable .ct-lfg,.ctable .ct-lcoin{display:inline-flex;align-items:center;gap:2px;font-size:8.5px;font-weight:800;color:#F2C14E;letter-spacing:.03em;}
+.ctable .ct-lnote{font-size:8px;font-weight:700;letter-spacing:.03em;line-height:1.4;color:var(--dimstrong);}
+.ctable .ct-liveempty{min-height:106px;box-sizing:border-box;border:2px dashed rgba(233,185,89,.5);border-radius:8px;
+  background:rgba(233,185,89,.05);display:flex;align-items:center;justify-content:center;}
+.ctable .ct-frost{position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;
+  background:rgba(150,200,235,.22);border-radius:6px;}
+/* Narrow screens: the side-by-side score column would crush the metric chip —
+   wrap the points to their own line under the card+text instead (the stacked
+   mobile look), indented past the card so they read with the text column. */
+@media (max-width:600px){
+  /* Floating strip card on a phone: same proportions, floated further out —
+     it pokes past the strip's outer side onto the felt margin (the window
+     frame's ~12px padding absorbs it) and a bit more above/below. Bonus: the
+     outward shift hands the strip's text the room back. */
+  .ctable .ct-float{width:58px;margin-top:-11px;margin-bottom:-11px;}
+  .ctable .ct-float.ct-lyou{margin-left:-16px;}
+  .ctable .ct-float.ct-lopp{margin-right:-16px;}
+  .ctable .ct-float .ct-lart{height:36px;}
+  .ctable .ct-float .ct-lname{font-size:6.8px;}
+  .ctable .ct-float .ct-lhead .ct-suit{font-size:5.5px;padding:1px 2.5px;}
+  .ctable .ct-float .ct-lteam{font-size:5.5px;}
+  .ctable .ct-live{flex-wrap:wrap;}
+  .ctable .ct-lscol{flex-basis:100%;align-self:auto;flex-direction:row;align-items:baseline;justify-content:flex-start;gap:5px;padding:0 0 0 87px;}
+  .ctable .ct-live.ct-opp .ct-lscol{flex-direction:row-reverse;padding:0 87px 0 0;}
+  .ctable .ct-lpts{font-size:21px;}
+}
+@media (prefers-reduced-motion:reduce){.ctable .ct-lcard{animation:none;}}
+
 /* ── power-up cards (shop + apply modals) — the hand's leather stock, dealt
    as a tappable grid on the felt ─────────────────────────────────────────── */
 .ctable .ct-puwrap{width:150px;position:relative;animation:ct-deal .5s cubic-bezier(.3,1.5,.5,1) backwards;}
@@ -380,6 +478,17 @@ const CSS = `
 :root[data-card-light="1"] .mx-scorecard{
   background-image:radial-gradient(rgba(120,90,40,.12) 1px,transparent 1.2px),radial-gradient(circle at 50% 34%,#F3ECD7 0%,#E9DFC4 55%,#DCCFAC 100%) !important;
   box-shadow:0 4px 0 rgba(120,90,40,.2) !important;}
+/* Card-mode strips (a MiniCard floats on them): the light stock above is
+   nearly the card's own cream, so the card vanished into it. Per the owner's
+   picks these strips take a per-theme ground the cream card pops against —
+   light BAIZE GREEN on Feeling Lucky (daylight), PAPER GRAY on Arctic Journey
+   (arctic) — with the ink text still comfortably readable. */
+:root[data-card-light="1"] .mx-scorecard.mx-sc-cards{
+  background-image:radial-gradient(rgba(50,85,55,.07) 1px,transparent 1.2px),radial-gradient(circle at 50% 34%,#E1E9DB 0%,#DCE5D5 55%,#D5E0CD 100%) !important;
+  box-shadow:0 4px 0 rgba(60,95,60,.18) !important;}
+:root[data-app-theme="arctic"] .mx-scorecard.mx-sc-cards{
+  background-image:radial-gradient(rgba(60,70,80,.08) 1px,transparent 1.2px),radial-gradient(circle at 50% 34%,#DFE3E6 0%,#D8DDE1 55%,#D0D7DC 100%) !important;
+  box-shadow:0 4px 0 rgba(70,80,90,.22) !important;}
 `;
 
 /** Inject the card-table stylesheet once per document. */
@@ -469,6 +578,145 @@ export function PlayerCard({ slug, name, pos, slot, metric, bank, opp = false, h
       </div>
       {hot && !nuked && <div className="ct-hotchip">🔥 HOT</div>}
       {selected && <div className="ct-curchip">CURRENT ✓</div>}
+    </div>
+  );
+}
+
+/** HOT / NUKED at a playback clock, from a slot's own play-by-play — the sim
+ *  mirror of the worker's `flagsFor` (engine/liveResolve.ts), which feeds the
+ *  same flags to LiveBoard's cards from published slot_scores. Attribution:
+ *    • hot — the side's own drip/streak badges carry the state; the LATEST one
+ *      before the clock wins (🔥 HOT / STREAK 2× turns it on, a plain DRIP ↑
+ *      tick turns it off), and an opponent's STREAK COLD or a nuke cools it.
+ *    • nuked — latches once a nuke lands on this side: TD/erasure nukes ride
+ *      the ATTACKER's play (sig), TE-TD drip nukes sit on the VICTIM's own
+ *      standalone event. */
+export function liveCardFlags(events: PbpEvent[], side: 'you' | 'their', clock: number): { hot: boolean; nuked: boolean } {
+  let hot = false, nuked = false;
+  for (const e of events) {
+    if (e.clock > clock) continue;
+    const t = e.effect?.text ?? e.play ?? '';
+    if (e.side === side) {
+      if (e.effect?.type === 'streak' || e.drip) hot = t.includes('HOT') || t.includes('STREAK 2×');
+    } else if (e.effect?.type === 'cold') hot = false;
+    // Giveaways are typed 'nuke' for the log's red ✕ (they pay the opponent
+    // coin) but wipe nothing — a pick-six thrower isn't a scorched card.
+    if (e.effect?.type === 'nuke' && !t.includes('TURNOVER') && (e.sig ? e.side !== side : e.side === side)) { nuked = true; hot = false; }
+  }
+  return { hot, nuked };
+}
+
+/** A live duel row — a MINI physical card (headshot, position, name, team on
+ *  cream stock, with the liquid bank fill / HOT glow / NUKE scorch) and all the
+ *  changing text laid BESIDE it on the felt: real game clock, metric chip,
+ *  statline, accumulated points, power-up notes and final-state outcomes
+ *  (K-negation strike, suppress-halving, suppress spend). Compact vertically —
+ *  this is what a slot renders as once its window kicks off (ScoreRow in
+ *  Matchup, the demo watch phase in DemoBoard). `sealed` renders the deck's
+ *  face-down card back instead — the opponent's pick before its window is
+ *  live. Tapping mirrors the old score strip: opens the log. */
+/** Just the physical mini card — headshot art, position suit, team tag and
+ *  name on the cream stock, carrying the liquid bank fill and the HOT glow /
+ *  NUKE scorch / EMP frost overlays. `float` deals it overhanging the strip
+ *  it sits on (ScoreCard's card mode uses this in place of the round
+ *  headshot). LiveCard composes this same card into a full duel row. */
+export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked = false, frozen = false, badge, float = false }: {
+  side: 'you' | 'their'; slug: string; name: string; pos: string; team?: string | null;
+  bank?: number | null; hot?: boolean; nuked?: boolean; frozen?: boolean;
+  badge?: React.ReactNode; float?: boolean;
+}) {
+  const [imgOk, setImgOk] = useState(true);
+  const url = useMemo(() => headshot(slug), [slug]);
+  const suit = posVars(pos);
+  const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
+  const fmt = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
+  return (
+    <div className={`ct-lcard ${side === 'you' ? 'ct-lyou' : 'ct-lopp'}${hot && !nuked ? ' ct-hot' : ''}${nuked ? ' ct-nuked' : ''}${float ? ' ct-float' : ''}`}
+      style={wobbleVars(slug)}>
+      <div className="ct-fill" style={{ height: `${fillPct}%` }} />
+      <div className="ct-lhead">
+        <span className="ct-suit" style={suit}>{pos === 'DEF' ? 'DST' : pos}</span>
+        {team && <span className="ct-lteam">{team.toUpperCase()}</span>}
+      </div>
+      <div className="ct-lart" style={{ borderColor: suit.color as string }}>
+        {url && imgOk
+          ? <img src={url} alt="" draggable={false} onError={() => setImgOk(false)} />
+          : <span className="ct-mono" style={{ color: suit.color as string }}>{initials(name)}</span>}
+      </div>
+      <div className="ct-lname">{name}{badge && <span style={{ marginLeft: 2 }}>{badge}</span>}</div>
+      {nuked && (
+        <div className="ct-scorch">
+          <span className="ct-skull">☠</span>
+          <span className="ct-sup">NUKED</span>
+          {bank != null && <span className="ct-wiped">bank {fmt(bank)}</span>}
+        </div>
+      )}
+      {frozen && <div className="ct-frost"><FxIcon k="freeze" emoji="❄️" size={22} /></div>}
+      {hot && !nuked && <div className="ct-hotchip">🔥 HOT</div>}
+    </div>
+  );
+}
+
+export function LiveCard({ side, slug, name, pos, team, sealed = false, gameLabel, metricName, tag, stat, bank, hot = false, nuked = false, frozen = false, chip, coin, fgMult, negated = false, halvedFrom, suppressSpent, note, badge, onClick }: {
+  side: 'you' | 'their'; slug: string; name?: string; pos?: string; team?: string | null;
+  /** Face-down: the deck's card back + a SEALED chip (identity props unused). */
+  sealed?: boolean;
+  gameLabel?: string | null; metricName?: string | null; tag?: string | null; stat?: string | null;
+  /** Accumulated points; null/undefined hides the score (e.g. pre-kick). */
+  bank?: number | null;
+  hot?: boolean; nuked?: boolean; frozen?: boolean; chip?: string; coin?: number | null; fgMult?: number | null;
+  negated?: boolean; halvedFrom?: number | null; suppressSpent?: number | null;
+  note?: React.ReactNode; badge?: React.ReactNode; onClick?: () => void;
+}) {
+  const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
+  const opp = side === 'their';
+  if (sealed) {
+    return (
+      <div className={`ct-live${opp ? ' ct-opp' : ''}`}>
+        <div className="ct-lcard ct-lsealed" style={wobbleVars(slug)}>
+          <span className="ct-lgem">◈</span>
+        </div>
+        <div className="ct-linfo">
+          <span className="ct-lchip" style={{ color: 'var(--dim)', borderColor: 'var(--bd)' }}>🔒 SEALED PICK</span>
+          <div className="ct-lgame" style={{ fontWeight: 400, color: 'var(--faint)' }}>flips face-up at kickoff</div>
+        </div>
+      </div>
+    );
+  }
+  const scorched = nuked && suppressSpent == null;
+  const fmt = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
+  return (
+    <div className={`ct-live${opp ? ' ct-opp' : ''}${onClick ? ' ct-tap' : ''}`} onClick={onClick}>
+      <MiniCard side={side} slug={slug} name={name ?? ''} pos={pos ?? 'DEF'} team={team} bank={bank}
+        hot={hot} nuked={scorched} frozen={frozen} badge={badge} />
+      <div className="ct-linfo">
+        {chip && <span className="ct-lchip" style={{ color: accent, borderColor: accent }}>{chip}</span>}
+        {gameLabel && <div className="ct-lgame">{gameLabel}</div>}
+        {metricName && (
+          <div className="ct-lmet"><b>{metricName}</b>{tag && <span>{tag}</span>}</div>
+        )}
+        {stat && <div className="ct-lstat">{stat}</div>}
+        {suppressSpent != null && <div className="ct-lnote" style={{ color: 'var(--fx-stop, #FF8A5C)' }}>✕ spent on SUPPRESS</div>}
+        {halvedFrom != null && <div className="ct-lnote" style={{ color: 'var(--fx-stop, #FF8A5C)' }}>÷2 SUPPRESSED</div>}
+        {note && <div className="ct-lnote">{note}</div>}
+      </div>
+      {bank != null && (
+        <div className="ct-lscol">
+          {suppressSpent != null ? (
+            <span className="ct-lpts" style={{ color: 'var(--dim)', textDecoration: 'line-through', fontSize: 16 }}>{fmt(suppressSpent)}</span>
+          ) : halvedFrom != null ? (
+            <>
+              <span className="ct-lpts" style={{ color: 'var(--fx-stop, #FF8A5C)' }}>{fmt(bank)}</span>
+              <span className="ct-lhalf"><s>{fmt(halvedFrom)}</s> ÷2</span>
+            </>
+          ) : (
+            <span className="ct-lpts" style={{ color: negated ? 'var(--fx-nuke, #FF4F62)' : accent, textDecoration: negated ? 'line-through' : undefined }}>{fmt(bank)}</span>
+          )}
+          <span className="ct-llab">PTS</span>
+          {fgMult != null && fgMult > 1.005 && <span className="ct-lfg" title={`A Field General QB in this window is multiplying this slot's scoring ×${fgMult.toFixed(2)} right now`}>⚡×{fgMult.toFixed(2)}</span>}
+          {coin != null && coin !== 0 && <span className="ct-lcoin" title="drip coin earned so far this window"><DripCoin size={9} /> {coin > 0 ? '+' : ''}{coin}</span>}
+        </div>
+      )}
     </div>
   );
 }

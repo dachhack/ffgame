@@ -1,0 +1,77 @@
+# Staging QC deploys — publish ANY branch to a separate GitHub Pages site
+# (https://dachhack.github.io/ffgame-staging/) so changes can be eyeballed in a
+# real browser BEFORE merging to main, which deploys straight to dripfantasy.com
+# (deploy.yml). One repo gets one Pages site, so staging lives in its own repo.
+#
+# ── One-time setup (repo admin) ───────────────────────────────────────────────
+# 1. Create an empty repo `dachhack/ffgame-staging` (public — Pages on a private
+#    repo needs a paid plan). No content needed; this workflow pushes a
+#    `gh-pages` branch into it.
+# 2. Create a fine-grained PAT: Settings → Developer settings → Personal access
+#    tokens → Fine-grained, repository access = ffgame-staging only, permission
+#    Contents: Read and write.
+# 3. In THIS repo: Settings → Secrets and variables → Actions → New secret
+#    `STAGING_DEPLOY_TOKEN` = that PAT.
+# 4. After the first run: in ffgame-staging → Settings → Pages → Source:
+#    "Deploy from a branch" → gh-pages / root.
+#
+# ── Usage ─────────────────────────────────────────────────────────────────────
+# Point the `staging` branch at whatever you want to QC and push it:
+#     git push -f origin <feature-branch>:staging
+# …or run this workflow manually from the Actions tab (workflow_dispatch) on a
+# chosen branch. One staging slot — the latest push wins.
+#
+# Notes:
+# • The staging build talks to the SAME Supabase backend as production (the
+#   client falls back to auth.dripfantasy.com), so league flags/data are live —
+#   good for realistic QC, but sign-in redirects only work if the staging
+#   origin is added to Supabase Auth's allowed redirect URLs.
+# • VITE_POSTHOG_KEY is deliberately not set: staging traffic never pollutes
+#   production analytics.
+name: Deploy to staging Pages
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+# One staging slot — a newer QC push supersedes an in-flight one.
+concurrency:
+  group: staging-pages
+  cancel-in-progress: true
+
+env:
+  STAGING_REPO: dachhack/ffgame-staging
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          # Served from the staging repo's project path, not the domain root.
+          VITE_BASE: /ffgame-staging/
+      # public/CNAME (dripfantasy.com) is copied into dist by Vite. Shipping it
+      # to the staging repo would try to claim the production custom domain —
+      # GitHub rejects the duplicate and staging Pages breaks. Strip it.
+      - run: rm -f dist/CNAME
+      # Keep QC builds out of search results — staging is public but unlisted.
+      - run: |
+          for f in dist/index.html dist/404.html; do
+            [ -f "$f" ] && sed -i 's|<head>|<head><meta name="robots" content="noindex">|' "$f"
+          done
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.STAGING_DEPLOY_TOKEN }}
+          external_repository: ${{ env.STAGING_REPO }}
+          publish_branch: gh-pages
+          publish_dir: dist
+          # History of QC builds is worthless — keep the staging repo tiny.
+          force_orphan: true
+          commit_message: 'staging: ${{ github.ref_name }} @ ${{ github.sha }}'
