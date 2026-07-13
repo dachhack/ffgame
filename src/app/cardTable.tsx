@@ -295,8 +295,8 @@ const CSS = `
   background-image:radial-gradient(rgba(184,134,59,.12) 1px,transparent 1.2px),radial-gradient(circle at 50% 36%,#FDF8E9 0%,#F4EDDA 55%,#E2D5B6 100%);
   background-size:11px 11px,100% 100%;transition:translate .2s;
   animation:ct-wob var(--wobdur,5.2s) ease-in-out var(--wobdel,0s) infinite alternate;}
-.ctable .ct-lcard.ct-lyou{border-top:3px solid var(--you);}
-.ctable .ct-lcard.ct-lopp{border-top:3px solid var(--opp);}
+/* No side-accent edge on the mini card — plain black card border; the side
+   reads from position and the score colors (owner call). */
 .ctable .ct-lcard>*{position:relative;z-index:1;}
 /* Re-assert the overlays' absolute positioning — the >* reset above (equal
    specificity, later in the sheet) would otherwise flatten them into flowed
