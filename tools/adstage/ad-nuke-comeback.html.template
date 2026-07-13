@@ -75,6 +75,8 @@ html, body { background: #000; }
 #s3 .vs { font-size: 54px; font-weight: 800; color: var(--faint); letter-spacing: .1em; }
 #s3 .cardwrap { width: 300px; height: 434px; }
 #s3 .cname { font-size: 44px; margin-top: 66px; }
+#s3 .cmetric .chip { font-size: 21px; padding: 9px 16px; }
+#s3 .cname { font-size: 40px; margin-top: 48px; }
 #s3 .tag { margin-top: 56px; font-size: 30px; font-weight: 700; letter-spacing: .2em; color: var(--dim); }
 #s3 .cardwrap.mine { box-shadow: 0 0 0 5px color-mix(in srgb, var(--nuke) 55%, transparent), 0 26px 60px rgba(0,0,0,.5); border-radius: 22px; }
 
@@ -164,8 +166,8 @@ html, body { background: #000; }
       <div class="cface cback"><div class="gem">◆</div><div class="seal mono">SEALED PICK</div></div>
       <div class="cface cfront">
         <div class="pospill pos-wr mono">WR</div>
-        <div class="cname">Q. Johnston</div>
-        <div class="cteam mono">WR · LAC</div>
+        <div class="cname">Nico Collins</div>
+        <div class="cteam mono">WR · HOU</div>
         <div class="cmetric"><div class="lab mono">METRIC</div><div class="chip">Receiving Yards · DRIP</div></div>
       </div>
     </div></div>
@@ -187,8 +189,8 @@ html, body { background: #000; }
         <div class="cface cback"></div>
         <div class="cface cfront">
           <div class="pospill pos-wr mono">WR</div>
-          <div class="cname">Q. Johnston</div>
-          <div class="cteam mono">WR · LAC</div>
+          <div class="cname">Nico Collins</div>
+          <div class="cteam mono">WR · HOU</div>
           <div class="cmetric"><div class="lab mono">METRIC</div><div class="chip">Receiving Yards · DRIP</div></div>
         </div>
       </div></div></div>
@@ -207,8 +209,8 @@ html, body { background: #000; }
           <div class="bank you-c" id="bankYou">0.0</div>
         </div>
         <div class="pside right">
-          <div class="pname">Q. Johnston</div>
-          <div class="ppos mono">WR · LAC</div><br>
+          <div class="pname">Nico Collins</div>
+          <div class="ppos mono">WR · HOU</div><br>
           <span class="pmet drip mono">Receiving Yards · DRIP</span>
           <div class="bank opp-c" id="bankOpp">0.0</div>
           <div class="blackout mono" id="blackout">☠ SLOT BLACKED OUT · 10 MIN</div>
@@ -229,7 +231,7 @@ html, body { background: #000; }
       </div>
       <div class="fname" style="font-size:60px; color:var(--faint)">–</div>
       <div style="text-align:center">
-        <div class="fname">Q. JOHNSTON</div>
+        <div class="fname">N. COLLINS</div>
         <div class="fnum" style="color:var(--you)">19.4</div>
       </div>
     </div>
@@ -278,7 +280,7 @@ window.__START = () => {
   at(6400, () => show('s3'));
   at(8600, () => show('s4'));
   // sweat: 0 -> 14.6
-  [['17:00','drip','+0.1'],['21:00','drip','+0.1'],['23:00','drip','+0.1'],['27:20','+24-yd catch','+1.0'],['27:58','drip','+0.4']]
+  [['17:00','drip','+0.1'],['19:30','drip','+0.1'],['22:04','+15-yd catch','+0.7'],['24:06','+22-yd catch','+1.0'],['27:12','drip','+0.4']]
     .forEach((r, i) => at(9100 + i * 560, () => tick(...r)));
   at(9200, () => count($('bankOpp'), 0, 14.6, 3400));
   // nuke @ 13.2
@@ -296,7 +298,7 @@ window.__START = () => {
     $('liveline').textContent = 'Q4 · THE BLACKOUT LIFTS';
     $('sweathead').innerHTML = 'He rebuilds. <b>This is not a box score — it is a fight.</b>';
   });
-  [['38:12','drip','+0.3'],['41:05','+38-yd catch','+1.5'],['44:00','drip','+0.6'],['47:31','+19-yd catch','+0.9'],['51:12','drip','+0.7']]
+  [['38:12','drip','+0.3'],['41:05','+19-yd catch','+0.9'],['44:00','drip','+0.6'],['51:25','+29-yd catch','+1.3'],['51:12','drip','+0.7']]
     .forEach((r, i) => at(16700 + i * 700, () => tick(...r)));
   at(16800, () => count($('bankOpp'), 0, 19.4, 4000));
   at(17600, () => count($('bankYou'), 13.5, 14.1, 3000));
