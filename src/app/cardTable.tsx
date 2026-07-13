@@ -310,13 +310,10 @@ const CSS = `
 .ctable .ct-lcard .ct-hotchip{position:absolute;z-index:5;font-size:7px;padding:2px 5px;}
 .ctable .ct-lcard.ct-hot{box-shadow:0 3px 0 rgba(0,0,0,.55),0 0 12px 2px rgba(233,185,89,.55);}
 .ctable .ct-lcard.ct-nuked{animation:none;filter:saturate(.6);}
-/* Floating over a score strip (ScoreCard card mode): a taller, narrower card
-   dealt onto the strip — it overhangs the top/bottom edges AND pokes past the
-   strip's outer side into the felt margin. */
-.ctable .ct-float{width:64px;margin-top:-16px;margin-bottom:-16px;z-index:2;}
-.ctable .ct-float.ct-lyou{margin-left:-24px;}
-.ctable .ct-float.ct-lopp{margin-right:-24px;}
-.ctable .ct-float .ct-lart{height:58px;}
+/* Floating over a score strip (ScoreCard card mode): the mini card overhangs
+   the strip's top/bottom edges like a card dealt onto it. */
+.ctable .ct-float{width:72px;margin-top:-12px;margin-bottom:-12px;z-index:2;}
+.ctable .ct-float .ct-lart{height:46px;}
 .ctable .ct-lhead{display:flex;justify-content:space-between;align-items:center;gap:3px;}
 .ctable .ct-lhead .ct-suit{font-size:6.5px;padding:1.5px 3.5px;border-width:1px;}
 .ctable .ct-lteam{font-size:6.5px;color:#6E6650;letter-spacing:.08em;font-weight:700;}
@@ -362,11 +359,9 @@ const CSS = `
    mobile look), indented past the card so they read with the text column. */
 @media (max-width:600px){
   /* Floating strip card: smaller footprint + gentler overhang so the strip's
-     text keeps its room on a phone, and the side poke stays inside the felt. */
-  .ctable .ct-float{width:54px;margin-top:-10px;margin-bottom:-10px;}
-  .ctable .ct-float.ct-lyou{margin-left:-9px;}
-  .ctable .ct-float.ct-lopp{margin-right:-9px;}
-  .ctable .ct-float .ct-lart{height:46px;}
+     game-clock line and metric chip keep their room on a phone. */
+  .ctable .ct-float{width:58px;margin-top:-7px;margin-bottom:-7px;}
+  .ctable .ct-float .ct-lart{height:36px;}
   .ctable .ct-float .ct-lname{font-size:6.8px;}
   .ctable .ct-float .ct-lhead .ct-suit{font-size:5.5px;padding:1px 2.5px;}
   .ctable .ct-float .ct-lteam{font-size:5.5px;}
