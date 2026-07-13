@@ -3392,7 +3392,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
     // a stray green/red shadow behind it (the card's own top accent carries
     // the side identity).
     return (
-      <div onClick={onClick} className={`mx-scorecard mx-sc-${side}`} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 8px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 8, alignItems: 'center', cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
+      <div onClick={onClick} className={`mx-scorecard mx-sc-cards mx-sc-${side}`} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 8px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 8, alignItems: 'center', cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
         {imgEl}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3, alignItems: side === 'you' ? 'flex-start' : 'flex-end' }}>
           {(chip || twin) && nameRow}
@@ -3438,7 +3438,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   }
 
   return (
-    <div onClick={onClick} className={`mx-scorecard mx-sc-${side}`} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 11, alignItems: 'center', cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
+    <div onClick={onClick} className={`mx-scorecard${cards ? ' mx-sc-cards' : ''} mx-sc-${side}`} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 11, alignItems: 'center', cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
       {imgEl}
       <div style={{ flex: 1, minWidth: 0, textAlign: edge }}>
         {nameRow}
