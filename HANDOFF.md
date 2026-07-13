@@ -21,6 +21,15 @@ row gap (20px + 10px top pad) so overhanging cards never collide. LiveCard
 still renders the pre-kick sealed pairs + DemoBoard's demo rows, now composing
 MiniCard.
 
+## Per-theme card-strip grounds in light mode (owner picks)
+Card-mode strips (mx-sc-cards) under the floating MiniCards take a per-theme
+ground in the light app themes so the cream card pops: BAIZE GREEN on Feeling
+Lucky (daylight), PAPER GRAY on Arctic Journey (arctic). Wired via a new
+`data-app-theme` attribute App.tsx stamps on <html> (alongside data-card-light
+etc.) — the arctic override sits after the daylight-default rule in the sheet.
+Tan variants were tried and rejected ("dingy"); slate-blue and clay mockups
+lost the vote. Dark themes keep the dark leather stock.
+
 ## Mini live cards + sealed-until-kickoff (v0.133.0)
 Owner feedback on v0.132: the tall live cards ate too much vertical space, and
 the opponent's cards flipped face-up before their window went live. LiveCard is

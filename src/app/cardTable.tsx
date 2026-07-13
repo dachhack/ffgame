@@ -479,12 +479,16 @@ const CSS = `
   background-image:radial-gradient(rgba(120,90,40,.12) 1px,transparent 1.2px),radial-gradient(circle at 50% 34%,#F3ECD7 0%,#E9DFC4 55%,#DCCFAC 100%) !important;
   box-shadow:0 4px 0 rgba(120,90,40,.2) !important;}
 /* Card-mode strips (a MiniCard floats on them): the light stock above is
-   nearly the card's own cream, so the card vanished into it. These strips go
-   light BAIZE GREEN instead — a patch of table felt the warm cream card pops
-   against, with the ink text still comfortably readable. */
+   nearly the card's own cream, so the card vanished into it. Per the owner's
+   picks these strips take a per-theme ground the cream card pops against —
+   light BAIZE GREEN on Feeling Lucky (daylight), PAPER GRAY on Arctic Journey
+   (arctic) — with the ink text still comfortably readable. */
 :root[data-card-light="1"] .mx-scorecard.mx-sc-cards{
   background-image:radial-gradient(rgba(50,85,55,.10) 1px,transparent 1.2px),radial-gradient(circle at 50% 34%,#CFDEC8 0%,#BCD0B3 55%,#A8C09E 100%) !important;
   box-shadow:0 4px 0 rgba(60,95,60,.28) !important;}
+:root[data-app-theme="arctic"] .mx-scorecard.mx-sc-cards{
+  background-image:radial-gradient(rgba(60,70,80,.10) 1px,transparent 1.2px),radial-gradient(circle at 50% 34%,#DBDFE2 0%,#C6CCD1 55%,#B0B8BF 100%) !important;
+  box-shadow:0 4px 0 rgba(70,80,90,.28) !important;}
 `;
 
 /** Inject the card-table stylesheet once per document. */
