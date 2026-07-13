@@ -2,6 +2,22 @@
 
 _Last updated: 2026-07-13 · Build `v0.133.0`_
 
+## Floating strip cards (v0.133.0, owner round 3)
+The mini-card ROWS still read airy on wide screens, so the live layout went
+back to the ORIGINAL dense full-width ScoreCard strips (mx-scorecard leather
+stock on the felt) with one change: the physical mini card (`MiniCard`, new
+export — headshot art, position suit, name, team, bank fill, HOT/NUKE/frost
+overlays) FLOATS over each strip where the round headshot used to sit
+(`.ct-float`: 72px, −12px vertical overhang; ≤600px: 58px, −7px). The strip's
+name row drops the name/team text (they're on the card) and keeps its chips;
+injury badge rides the card. Mobile card mode gets its own strip layout — the
+card spans the strip height with ONE text column beside it (compact
+`AWY@HOM · Qx clock` line, metric, score+coin, statline) so the floating card
+never overlaps the strip's own text. The kicked window's slot stack widens its
+row gap (20px + 10px top pad) so overhanging cards never collide. LiveCard
+still renders the pre-kick sealed pairs + DemoBoard's demo rows, now composing
+MiniCard.
+
 ## Mini live cards + sealed-until-kickoff (v0.133.0)
 Owner feedback on v0.132: the tall live cards ate too much vertical space, and
 the opponent's cards flipped face-up before their window went live. LiveCard is

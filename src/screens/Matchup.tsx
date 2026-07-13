@@ -19,7 +19,7 @@ import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '../data/demoNarration';
 import { slotMoments, MOMENT_COLOR, type Moment } from '../engine/moments';
 import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, type PickRow } from '../data/liveApi';
-import { CardTableCss, PowerupHand, PlayerCard, PowerupCard, LiveCard, liveCardFlags } from '../app/cardTable';
+import { CardTableCss, PowerupHand, PlayerCard, PowerupCard, LiveCard, MiniCard, liveCardFlags } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import { Rulebook } from './Rulebook';
 import { PuIcon, GameIcon, Emoji, DripCoin, UI_ART } from '../app/gameIcons';
@@ -2412,7 +2412,9 @@ function WindowSectionInner(props: {
 
       {phase !== 'setup' && <WindowBattleBar rw={rw} week={week} clock={clock} wallClock={wallClock} done={done} />}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {/* Card theme, kicked window: the floating mini cards overhang each strip
+          by ~12px — widen the row gap (and pad the top) so they never collide. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: cards && phase !== 'setup' && !preKick && kicked ? 20 : 6, paddingTop: cards && phase !== 'setup' && !preKick && kicked ? 10 : 0 }}>
         {rw.slots.map((s) => {
           const key = slotKey(w.id, s.slotIndex);
           // The lock period (locked in, nothing kicked) re-opens the setup rows:
@@ -3300,11 +3302,11 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   const edge = side === 'you' ? 'left' : 'right';
   const nameRow = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexDirection: side === 'you' ? 'row' : 'row-reverse' }}>
-      <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>
+      {!cards && <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>}
       {chip && <span className="mono" style={{ fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.1em', color: accent, border: `1px solid ${accent}`, borderRadius: 3, padding: '1px 4px', flex: 'none' }}>{chip}</span>}
       <InjuryBadge week={week} slug={player.id} />
       {twin && <TwinChip />}
-      {!isMobile && <span className="mono" style={{ fontSize: fs(8), color: 'var(--faint)' }}>{player.team}</span>}
+      {!isMobile && !cards && <span className="mono" style={{ fontSize: fs(8), color: 'var(--faint)' }}>{player.team}</span>}
     </div>
   );
   // The player's REAL NFL game this week + its real game clock (quarter +
@@ -3316,22 +3318,16 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // game's OT doesn't read "OT" on a game that already ended in regulation.
   const gEnd = realGameEndClock(week, player.team);
   const gameOver = gEnd > 0 ? clock >= gEnd - 1 : clock >= 3595;
-  // Card-table theme: the slot stays a face-up card on the felt — same data
-  // (game clock, statline, coin, FG mult, final-state outcomes), card stock.
-  if (cards) {
-    return (
-      <LiveCard
-        side={side} slug={player.id} name={player.name} pos={player.pos} team={player.team}
-        gameLabel={g ? `${g.away}@${g.home} · ${gameOver ? 'FINAL' : fmtGameClock(clock)}` : null}
-        metricName={metricName || null} tag={tag || null} stat={subName ? null : stat} bank={bank}
-        hot={hot} nuked={!!scorched && !subName} chip={chip} coin={coin} fgMult={fgMult}
-        negated={negated} halvedFrom={halvedFrom} suppressSpent={suppressSpent}
-        note={subName ? `⤴ ${subName} scoring` : undefined}
-        badge={<><InjuryBadge week={week} slug={player.id} />{twin && <TwinChip />}</>}
-        onClick={onClick}
-      />
-    );
-  }
+  // Card-table theme: the SAME dense strip, but the physical mini card (image,
+  // name, team — with the bank fill, HOT glow, NUKE scorch) floats over it in
+  // the headshot's place; the name row keeps only its chips.
+  const imgEl = cards ? (
+    <MiniCard float side={side} slug={player.id} name={player.name} pos={player.pos} team={player.team}
+      bank={bank} hot={hot} nuked={!!scorched && !subName && suppressSpent == null}
+      badge={<InjuryBadge week={week} slug={player.id} />} />
+  ) : (
+    <span className="mx-sc-img" style={{ flex: 'none', display: 'inline-flex' }}><PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={isMobile ? 46 : 64} /></span>
+  );
   const gameLine = g ? (
     <div className="mono" title="real NFL game · real game clock" style={{ display: 'flex', alignItems: 'center', gap: 5, flexDirection: side === 'you' ? 'row' : 'row-reverse', fontSize: fs(8.5), letterSpacing: '0.02em', marginTop: 2 }}>
       <Img src={teamLogo(g.away)} size={12} radius={2} fallback={<span />} />
@@ -3388,6 +3384,31 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
     <span className="mono" title={`A Field General QB in this window is multiplying this slot's scoring ×${fgMult.toFixed(2)} right now`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-mult)', border: '1px solid color-mix(in srgb, var(--fx-mult) 55%, transparent)', background: 'color-mix(in srgb, var(--fx-mult) 14%, transparent)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>⚡ FIELD GEN ×{fgMult.toFixed(2)}</span>
   ) : null;
 
+  if (isMobile && cards) {
+    // Card theme on a phone: the mini card spans the strip's height on the
+    // outer edge, with ONE text column beside it (game clock, metric, score,
+    // statline) — no internal rows for the floating card to overlap.
+    return (
+      <div onClick={onClick} className={`mx-scorecard mx-sc-${side}`} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '6px 8px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 8, alignItems: 'center', cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
+        {imgEl}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3, alignItems: side === 'you' ? 'flex-start' : 'flex-end' }}>
+          {(chip || twin) && nameRow}
+          {g && (
+            <div className="mono" title="real NFL game · real game clock" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: fs(8.5), fontWeight: 700, color: 'var(--dimstrong)', letterSpacing: '0.02em' }}>
+              {g.away}@{g.home} · {gameOver ? 'FINAL' : fmtGameClock(clock)}
+            </div>
+          )}
+          {metricChip}
+          {fgEl}
+          <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'baseline', gap: 6 }}>
+            {bigNum}
+            {coinEl}
+          </div>
+          {statLine}
+        </div>
+      </div>
+    );
+  }
   if (isMobile) {
     // Name on top, headshot on the outer side, metric + coin/score stacked
     // beside it, statline pinned to the bottom (mirrored for the opponent). The
@@ -3398,7 +3419,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
         {nameRow}
         {gameLine}
         <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'center', gap: 8 }}>
-          <span className="mx-sc-img" style={{ flex: 'none', display: 'inline-flex' }}><PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={46} /></span>
+          {imgEl}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2, alignItems: side === 'you' ? 'flex-end' : 'flex-start' }}>
             <div style={{ minHeight: 18, display: 'flex', alignItems: 'center', width: '100%', justifyContent: side === 'you' ? 'flex-end' : 'flex-start' }}>{metricChip}</div>
             {fgEl}
@@ -3415,7 +3436,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
 
   return (
     <div onClick={onClick} className={`mx-scorecard mx-sc-${side}`} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 11, alignItems: 'center', cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
-      <span className="mx-sc-img" style={{ flex: 'none', display: 'inline-flex' }}><PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={64} /></span>
+      {imgEl}
       <div style={{ flex: 1, minWidth: 0, textAlign: edge }}>
         {nameRow}
         {gameLine}

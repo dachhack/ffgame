@@ -295,8 +295,8 @@ const CSS = `
   background-image:radial-gradient(rgba(184,134,59,.12) 1px,transparent 1.2px),radial-gradient(circle at 50% 36%,#FDF8E9 0%,#F4EDDA 55%,#E2D5B6 100%);
   background-size:11px 11px,100% 100%;transition:translate .2s;
   animation:ct-wob var(--wobdur,5.2s) ease-in-out var(--wobdel,0s) infinite alternate;}
-.ctable .ct-live:not(.ct-opp) .ct-lcard{border-top:3px solid var(--you);}
-.ctable .ct-live.ct-opp .ct-lcard{border-top:3px solid var(--opp);}
+.ctable .ct-lcard.ct-lyou{border-top:3px solid var(--you);}
+.ctable .ct-lcard.ct-lopp{border-top:3px solid var(--opp);}
 .ctable .ct-lcard>*{position:relative;z-index:1;}
 /* Re-assert the overlays' absolute positioning — the >* reset above (equal
    specificity, later in the sheet) would otherwise flatten them into flowed
@@ -308,8 +308,12 @@ const CSS = `
 .ctable .ct-lcard .ct-scorch .ct-sup{font-size:8px;}
 .ctable .ct-lcard .ct-scorch .ct-wiped{font-size:7px;}
 .ctable .ct-lcard .ct-hotchip{position:absolute;z-index:5;font-size:7px;padding:2px 5px;}
-.ctable .ct-live.ct-hot .ct-lcard{box-shadow:0 3px 0 rgba(0,0,0,.55),0 0 12px 2px rgba(233,185,89,.55);}
-.ctable .ct-live.ct-nuked .ct-lcard{animation:none;filter:saturate(.6);}
+.ctable .ct-lcard.ct-hot{box-shadow:0 3px 0 rgba(0,0,0,.55),0 0 12px 2px rgba(233,185,89,.55);}
+.ctable .ct-lcard.ct-nuked{animation:none;filter:saturate(.6);}
+/* Floating over a score strip (ScoreCard card mode): the mini card overhangs
+   the strip's top/bottom edges like a card dealt onto it. */
+.ctable .ct-float{width:72px;margin-top:-12px;margin-bottom:-12px;z-index:2;}
+.ctable .ct-float .ct-lart{height:46px;}
 .ctable .ct-lhead{display:flex;justify-content:space-between;align-items:center;gap:3px;}
 .ctable .ct-lhead .ct-suit{font-size:6.5px;padding:1.5px 3.5px;border-width:1px;}
 .ctable .ct-lteam{font-size:6.5px;color:#6E6650;letter-spacing:.08em;font-weight:700;}
@@ -354,6 +358,13 @@ const CSS = `
    wrap the points to their own line under the card+text instead (the stacked
    mobile look), indented past the card so they read with the text column. */
 @media (max-width:600px){
+  /* Floating strip card: smaller footprint + gentler overhang so the strip's
+     game-clock line and metric chip keep their room on a phone. */
+  .ctable .ct-float{width:58px;margin-top:-7px;margin-bottom:-7px;}
+  .ctable .ct-float .ct-lart{height:36px;}
+  .ctable .ct-float .ct-lname{font-size:6.8px;}
+  .ctable .ct-float .ct-lhead .ct-suit{font-size:5.5px;padding:1px 2.5px;}
+  .ctable .ct-float .ct-lteam{font-size:5.5px;}
   .ctable .ct-live{flex-wrap:wrap;}
   .ctable .ct-lscol{flex-basis:100%;align-self:auto;flex-direction:row;align-items:baseline;justify-content:flex-start;gap:5px;padding:0 0 0 87px;}
   .ctable .ct-live.ct-opp .ct-lscol{flex-direction:row-reverse;padding:0 87px 0 0;}
@@ -589,6 +600,48 @@ export function liveCardFlags(events: PbpEvent[], side: 'you' | 'their', clock: 
  *  Matchup, the demo watch phase in DemoBoard). `sealed` renders the deck's
  *  face-down card back instead — the opponent's pick before its window is
  *  live. Tapping mirrors the old score strip: opens the log. */
+/** Just the physical mini card — headshot art, position suit, team tag and
+ *  name on the cream stock, carrying the liquid bank fill and the HOT glow /
+ *  NUKE scorch / EMP frost overlays. `float` deals it overhanging the strip
+ *  it sits on (ScoreCard's card mode uses this in place of the round
+ *  headshot). LiveCard composes this same card into a full duel row. */
+export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked = false, frozen = false, badge, float = false }: {
+  side: 'you' | 'their'; slug: string; name: string; pos: string; team?: string | null;
+  bank?: number | null; hot?: boolean; nuked?: boolean; frozen?: boolean;
+  badge?: React.ReactNode; float?: boolean;
+}) {
+  const [imgOk, setImgOk] = useState(true);
+  const url = useMemo(() => headshot(slug), [slug]);
+  const suit = posVars(pos);
+  const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
+  const fmt = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
+  return (
+    <div className={`ct-lcard ${side === 'you' ? 'ct-lyou' : 'ct-lopp'}${hot && !nuked ? ' ct-hot' : ''}${nuked ? ' ct-nuked' : ''}${float ? ' ct-float' : ''}`}
+      style={wobbleVars(slug)}>
+      <div className="ct-fill" style={{ height: `${fillPct}%` }} />
+      <div className="ct-lhead">
+        <span className="ct-suit" style={suit}>{pos === 'DEF' ? 'DST' : pos}</span>
+        {team && <span className="ct-lteam">{team.toUpperCase()}</span>}
+      </div>
+      <div className="ct-lart" style={{ borderColor: suit.color as string }}>
+        {url && imgOk
+          ? <img src={url} alt="" draggable={false} onError={() => setImgOk(false)} />
+          : <span className="ct-mono" style={{ color: suit.color as string }}>{initials(name)}</span>}
+      </div>
+      <div className="ct-lname">{name}{badge && <span style={{ marginLeft: 2 }}>{badge}</span>}</div>
+      {nuked && (
+        <div className="ct-scorch">
+          <span className="ct-skull">☠</span>
+          <span className="ct-sup">NUKED</span>
+          {bank != null && <span className="ct-wiped">bank {fmt(bank)}</span>}
+        </div>
+      )}
+      {frozen && <div className="ct-frost"><FxIcon k="freeze" emoji="❄️" size={22} /></div>}
+      {hot && !nuked && <div className="ct-hotchip">🔥 HOT</div>}
+    </div>
+  );
+}
+
 export function LiveCard({ side, slug, name, pos, team, sealed = false, gameLabel, metricName, tag, stat, bank, hot = false, nuked = false, frozen = false, chip, coin, fgMult, negated = false, halvedFrom, suppressSpent, note, badge, onClick }: {
   side: 'you' | 'their'; slug: string; name?: string; pos?: string; team?: string | null;
   /** Face-down: the deck's card back + a SEALED chip (identity props unused). */
@@ -600,8 +653,6 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, gameLabe
   negated?: boolean; halvedFrom?: number | null; suppressSpent?: number | null;
   note?: React.ReactNode; badge?: React.ReactNode; onClick?: () => void;
 }) {
-  const [imgOk, setImgOk] = useState(true);
-  const url = useMemo(() => (sealed ? null : headshot(slug)), [slug, sealed]);
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
   const opp = side === 'their';
   if (sealed) {
@@ -617,35 +668,12 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, gameLabe
       </div>
     );
   }
-  const suit = posVars(pos ?? 'DEF');
   const scorched = nuked && suppressSpent == null;
-  const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
   const fmt = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
   return (
-    <div className={`ct-live${opp ? ' ct-opp' : ''}${hot && !scorched ? ' ct-hot' : ''}${scorched ? ' ct-nuked' : ''}${onClick ? ' ct-tap' : ''}`}
-      onClick={onClick}>
-      <div className="ct-lcard" style={wobbleVars(slug)}>
-        <div className="ct-fill" style={{ height: `${fillPct}%` }} />
-        <div className="ct-lhead">
-          <span className="ct-suit" style={suit}>{pos === 'DEF' ? 'DST' : pos}</span>
-          {team && <span className="ct-lteam">{team.toUpperCase()}</span>}
-        </div>
-        <div className="ct-lart" style={{ borderColor: suit.color as string }}>
-          {url && imgOk
-            ? <img src={url} alt="" draggable={false} onError={() => setImgOk(false)} />
-            : <span className="ct-mono" style={{ color: suit.color as string }}>{initials(name ?? '')}</span>}
-        </div>
-        <div className="ct-lname">{name}{badge && <span style={{ marginLeft: 2 }}>{badge}</span>}</div>
-        {scorched && (
-          <div className="ct-scorch">
-            <span className="ct-skull">☠</span>
-            <span className="ct-sup">NUKED</span>
-            {bank != null && <span className="ct-wiped">bank {fmt(bank)}</span>}
-          </div>
-        )}
-        {frozen && <div className="ct-frost"><FxIcon k="freeze" emoji="❄️" size={22} /></div>}
-        {hot && !scorched && <div className="ct-hotchip">🔥 HOT</div>}
-      </div>
+    <div className={`ct-live${opp ? ' ct-opp' : ''}${onClick ? ' ct-tap' : ''}`} onClick={onClick}>
+      <MiniCard side={side} slug={slug} name={name ?? ''} pos={pos ?? 'DEF'} team={team} bank={bank}
+        hot={hot} nuked={scorched} frozen={frozen} badge={badge} />
       <div className="ct-linfo">
         {chip && <span className="ct-lchip" style={{ color: accent, borderColor: accent }}>{chip}</span>}
         {gameLabel && <div className="ct-lgame">{gameLabel}</div>}
