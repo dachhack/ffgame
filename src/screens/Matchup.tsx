@@ -2414,7 +2414,7 @@ function WindowSectionInner(props: {
 
       {/* Card theme, kicked window: the floating mini cards overhang each strip
           by ~12px — widen the row gap (and pad the top) so they never collide. */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: cards && phase !== 'setup' && !preKick && kicked ? 20 : 6, paddingTop: cards && phase !== 'setup' && !preKick && kicked ? 10 : 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: cards && phase !== 'setup' && !preKick && kicked ? 28 : 6, paddingTop: cards && phase !== 'setup' && !preKick && kicked ? 16 : 0 }}>
         {rw.slots.map((s) => {
           const key = slotKey(w.id, s.slotIndex);
           // The lock period (locked in, nothing kicked) re-opens the setup rows:
