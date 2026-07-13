@@ -3387,9 +3387,12 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   if (isMobile && cards) {
     // Card theme on a phone: the mini card spans the strip's height on the
     // outer edge, with ONE text column beside it (game clock, metric, score,
-    // statline) — no internal rows for the floating card to overlap.
+    // statline) — no internal rows for the floating card to overlap. No accent
+    // spine here: the card pokes past that edge and the colored border read as
+    // a stray green/red shadow behind it (the card's own top accent carries
+    // the side identity).
     return (
-      <div onClick={onClick} className={`mx-scorecard mx-sc-${side}`} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '6px 8px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 8, alignItems: 'center', cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
+      <div onClick={onClick} className={`mx-scorecard mx-sc-${side}`} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 8px', display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 8, alignItems: 'center', cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
         {imgEl}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3, alignItems: side === 'you' ? 'flex-start' : 'flex-end' }}>
           {(chip || twin) && nameRow}
