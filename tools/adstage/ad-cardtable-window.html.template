@@ -21,11 +21,14 @@ html, body { background: #000; }
 .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; }
 .topchip { position: absolute; top: 56px; left: 0; right: 0; text-align: center; font-size: 24px; font-weight: 700; letter-spacing: .28em; color: var(--faint); z-index: 5; }
 .headline { position: absolute; top: 108px; left: 0; right: 0; text-align: center; font-size: 56px; font-weight: 700; letter-spacing: -.01em; z-index: 5; transition: opacity .4s; }
-.footline { position: absolute; bottom: 200px; left: 60px; right: 60px; text-align: center; font-size: 36px; font-weight: 700; color: var(--dim); z-index: 5; transition: opacity .4s; line-height: 1.35; }
+.footline { position: absolute; bottom: 148px; left: 60px; right: 60px; text-align: center; font-size: 36px; font-weight: 700; color: var(--dim); z-index: 5; transition: opacity .4s; line-height: 1.35; }
 .footline b { color: var(--text); }
 
 /* table */
-#table { position: absolute; top: 236px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 26px; }
+#table { position: absolute; top: 218px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.vsdiv { display: flex; align-items: center; gap: 20px; width: 780px; margin: 14px 0; }
+.vsdiv .ln { flex: 1; height: 2px; background: linear-gradient(90deg, transparent, var(--bd) 30%, var(--bd) 70%, transparent); }
+.vsdiv .vs { font-size: 30px; font-weight: 800; letter-spacing: .18em; color: var(--dim); border: 2px solid var(--bd); border-radius: 999px; padding: 10px 26px; background: var(--surface); font-family: ui-monospace, Menlo, monospace; }
 .rowlab { font-size: 22px; font-weight: 800; letter-spacing: .3em; color: var(--faint); }
 .crow { display: flex; gap: 28px; }
 
@@ -141,6 +144,7 @@ html, body { background: #000; }
         <div class="cface cfront"><div class="pospill pos-te mono">TE</div><div class="cname">H. Fannin</div><div class="cteam">TE · CLE</div><div class="cmet nukey" id="nukemet">TDs · 12-PT NUKE</div></div>
       </div><div class="bank" id="bt2">0.0</div><div class="frost" id="ft2"><div class="ic">❄️</div><div class="t">FROZEN &middot; 10 MIN</div></div></div>
     </div>
+    <div class="vsdiv"><div class="ln"></div><div class="vs">VS</div><div class="ln"></div></div>
     <div class="crow you" id="rowYou">
       <div class="mini you" id="y0"><div class="card">
         <div class="cface cback"></div>
