@@ -72,6 +72,7 @@ Implemented now (`src/app/analytics.ts`, `Ev.*`, wired in `src/app/store.tsx`):
 | `powerup_bought {id, price}` | `buyPowerup` | engagement |
 | `demo_step {step}` | `DemoBoard` — advanced a guided decision step | acquisition |
 | `demo_run {star, metric, powerup}` | `DemoBoard` — hit RUN on the landing demo | acquisition |
+| `demo_quickrun {placed}` | `DemoBoard` — one-tap RUN A LIVE WEEK (auto-picks); always precedes its `demo_run` | acquisition |
 | `code_request_opened {platform}` | `RequestCodeModal` mount (any entry point) | **conversion** |
 | `code_requested {platform, has_league_ref}` | lead submitted — no PII in the event | **conversion** |
 | `code_request_failed {error}` | submit rejected | conversion |

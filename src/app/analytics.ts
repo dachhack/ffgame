@@ -25,6 +25,7 @@ export const Ev = {
   // guided demo funnel (the logged-out landing board)
   demoStep: 'demo_step',   // {step:'metric'|'power'} — advanced a decision step
   demoRun: 'demo_run',     // {star, metric, powerup} — hit RUN on the demo board
+  demoQuickrun: 'demo_quickrun', // {placed} — one-tap RUN A LIVE WEEK (auto-picks) — the cold-traffic path
   powerupBought: 'powerup_bought',
   // lead-capture funnel (the "request a code" modal — the demo's conversion)
   codeRequestOpened: 'code_request_opened',   // {platform} — modal shown
