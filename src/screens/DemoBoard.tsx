@@ -211,19 +211,14 @@ export function DemoBoard() {
     }
     return null;
   }, [wins, picks]);
-  // Tapping the ghosted RUN button redirects attention instead of no-opping:
-  // the step card shakes and the hint flips to the warn color for a beat.
-  const [nudged, setNudged] = useState(0);
-  useEffect(() => {
-    if (!nudged) return;
-    const t = setTimeout(() => setNudged(0), 1600);
-    return () => clearTimeout(t);
-  }, [nudged]);
+  // There is no ghosted RUN state anymore: the primary CTA is ALWAYS runnable.
+  // Cold (ad) traffic bounced off the old disabled button + instructions wall —
+  // the payoff has to be one tap away (PostHog: app_open → nothing).
 
   // ── RUN — auto-fill the rest, resolve the whole week for real ─────────────
   const [runPicks, setRunPicks] = useState<Record<string, Pick> | null>(null);
-  const run = () => {
-    if (!canRun) return;
+  const run = (force = false) => {
+    if (!force && !canRun) return;
     track(Ev.demoRun, { placed: placedN, powerup: chosenBuff });
     const fp = autoFill(picks);
     setRunPicks(fp);
@@ -233,6 +228,13 @@ export function DemoBoard() {
     const fkey = Object.entries(fp).find(([, p]) => p.playerId === fid)?.[0];
     setOpenSlots(fkey ? { [fkey]: true } : {});
     setWIdx(0); setWClock(0); setEnded(false); setPlaying(true); setPhase('watch');
+  };
+  // One-tap wow for cold traffic: we pick the lineup, the week runs, the
+  // reveal/drips/nukes land within seconds of the ad click. Building your own
+  // lineup stays available as the enthusiast path.
+  const quickRun = () => {
+    track(Ev.demoQuickrun, { placed: placedN });
+    run(true);
   };
   const replay = () => { setWIdx(0); setWClock(0); setEnded(false); setPlaying(true); };
   // Full reset — a pristine board, back at step ①.
@@ -557,7 +559,7 @@ export function DemoBoard() {
 
           {/* guided prompt + power-ups + run — always directly under the score */}
           {phase === 'setup' && (
-            <div key={nudged} style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: '12px 14px', marginTop: 10, animation: nudged ? 'shake .35s ease' : undefined }}>
+            <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: '12px 14px', marginTop: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 {prompts.map((_, i) => (
                   <span key={i} style={{ width: i === promptIdx ? 20 : 7, height: 7, borderRadius: 4, background: i <= promptIdx ? 'var(--you)' : 'var(--bd)', transition: 'all .2s' }} />
@@ -588,22 +590,16 @@ export function DemoBoard() {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
                 <button onClick={() => setPicks(autoFill(picks))} className="mono" style={{ ...ctlBtn, flex: 'none' }}>✦ AUTO-FILL</button>
                 <button
-                  onClick={() => (canRun ? run() : setNudged(Date.now()))}
-                  aria-disabled={!canRun}
+                  onClick={() => (canRun ? run() : quickRun())}
                   className="mono"
-                  style={{
-                    ...cta, flex: '1 1 240px', width: 'auto', whiteSpace: 'nowrap',
-                    ...(canRun
-                      ? { boxShadow: '0 0 18px color-mix(in srgb, var(--you) 25%, transparent)' }
-                      : { background: 'var(--surface)', color: 'var(--faint)', border: '1px dashed var(--bd)', cursor: 'default' }),
-                  }}
+                  style={{ ...cta, flex: '1 1 240px', width: 'auto', whiteSpace: 'nowrap', boxShadow: '0 0 22px color-mix(in srgb, var(--you) 35%, transparent)' }}
                 >
-                  {canRun ? `▶ RUN WEEK ${DEMO_WEEK}` : 'FILL THE PICKS TO RUN THE WEEK'}
+                  {canRun ? `▶ RUN WEEK ${DEMO_WEEK}` : '▶ RUN A LIVE WEEK · AUTO-PICKS'}
                 </button>
               </div>
               {!canRun && (
-                <div className="mono" style={{ fontSize: fs(8.5), fontWeight: nudged ? 700 : 400, color: nudged ? 'var(--warn)' : 'var(--faint)', marginTop: 7, textAlign: 'center', transition: 'color .2s' }}>
-                  {!allFilled ? `↑ fill every spot to run — ${placedN}/${totalSlots} set (✦ AUTO-FILL does the rest)` : '↑ seal a metric on every glowing spot first'}
+                <div className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)', marginTop: 7, textAlign: 'center' }}>
+                  one tap — we set the lineup for you · or build your own below ({placedN}/{totalSlots} set)
                 </div>
               )}
             </div>
