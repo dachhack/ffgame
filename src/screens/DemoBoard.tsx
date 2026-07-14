@@ -331,11 +331,22 @@ export function DemoBoard() {
         : { you: 0, their: 0 };
   };
 
-  let youTot = 0, theirTot = 0;
+  // Live BACKUP accrual is tracked separately: an unopposed player's points
+  // only reach the team total by subbing in at the final, so the header shows
+  // them as a pending 🛟 chip — otherwise a backup-only window (the quick-run's
+  // TNF) reads as "players score but the total never moves".
+  let youTot = 0, theirTot = 0, youBench = 0, theirBench = 0;
   if (resolved) {
     if (ended) { youTot = resolved.youFinal; theirTot = resolved.theirFinal; }
     else resolved.windows.forEach((w, i) => w.slots.forEach((s) => {
-      if (s.backup) return; // counts only via its FINAL sub, already in the starter's slot
+      if (s.backup) { // counts only via its FINAL sub, already in the starter's slot
+        if (winState(i) === 'live') {
+          const b = banksAtClock(s.events, wClock);
+          if (s.you) youBench += b.you;
+          if (s.their) theirBench += b.their;
+        }
+        return;
+      }
       const b = slotBanks(s, winState(i)); youTot += b.you; theirTot += b.their;
     }));
   }
@@ -347,6 +358,11 @@ export function DemoBoard() {
     const out = buildBeats(w.slots.flatMap((s) => s.events));
     if (chosenBuff === 'emp' && w.window.id === empWin) {
       out.push({ clock: EMP_AT, key: 'freeze', icon: '❄️', title: 'EMP — FREEZE', body: 'Your EMP fires: the opponent’s drip clock is frozen for 10 minutes. Passive points stop cold — only a touchdown can still score.' });
+    }
+    // A backup-only window (the quick-run's TNF) needs the rule narrated, or the
+    // header total looks stuck while the row visibly scores.
+    if (w.slots.some((s) => s.backup && (s.you || s.their))) {
+      out.push({ clock: 90, key: 'backup', icon: '🛟', title: 'UNOPPOSED — BANKS AS BACKUP', body: 'Nobody is fielded against him, so he scores as a BACKUP: at the week’s final he subs into the weakest starter spot. His points ride the 🛟 chip until then — not the team total.' });
     }
     return out.sort((a, b) => a.clock - b.clock);
   }, [resolved, wIdx, chosenBuff, empWin]);
@@ -432,11 +448,11 @@ export function DemoBoard() {
   const scoreHdr = (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: '14px 14px 12px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <TeamSide team={youTeam.name} owner={youTeam.owner} ownerId={youTeam.ownerId} score={youTot} accent="var(--you)" you />
+        <TeamSide team={youTeam.name} owner={youTeam.owner} ownerId={youTeam.ownerId} score={youTot} accent="var(--you)" you bench={youBench} />
         <div className="mono" style={{ fontSize: fs(9), color: 'var(--faint)', letterSpacing: '0.12em', flex: 'none' }}>
           {phase === 'watch' && !ended && liveWin ? <span style={{ color: 'var(--you)' }}>{liveWin.window.label} · {fmtClock(wClock)}</span> : ended ? <span style={{ color: 'var(--you)' }}>FINAL</span> : 'VS'}
         </div>
-        <TeamSide team={oppTeam.name} owner={oppTeam.owner} ownerId={oppTeam.ownerId} score={theirTot} accent="var(--opp)" />
+        <TeamSide team={oppTeam.name} owner={oppTeam.owner} ownerId={oppTeam.ownerId} score={theirTot} accent="var(--opp)" bench={theirBench} />
       </div>
     </div>
   );
@@ -745,7 +761,7 @@ export function DemoBoard() {
 
 // ── Presentational bits ───────────────────────────────────────────────────────
 
-function TeamSide({ team, owner, ownerId, score, accent, you }: { team: string; owner: string; ownerId: string; score: number; accent: string; you?: boolean }) {
+function TeamSide({ team, owner, ownerId, score, accent, you, bench = 0 }: { team: string; owner: string; ownerId: string; score: number; accent: string; you?: boolean; bench?: number }) {
   const fs = useFinePrint();
   const right = !you;
   return (
@@ -758,6 +774,11 @@ function TeamSide({ team, owner, ownerId, score, accent, you }: { team: string; 
         </div>
       </div>
       <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, color: accent, marginTop: 6, lineHeight: 1 }}>{score.toFixed(1)}</div>
+      {bench > 0 && (
+        <div className="mono" title="Unopposed backup — his points bank by subbing into the weakest starter at the week's final" style={{ fontSize: fs(8.5), fontWeight: 700, color: 'var(--warn)', marginTop: 5, whiteSpace: 'nowrap' }}>
+          🛟 +{bench.toFixed(1)} · subs in at final
+        </div>
+      )}
     </div>
   );
 }
@@ -855,7 +876,7 @@ function SlotRow({ slot, state, you, their, clock, frozen, armedPu, noBorder, ca
         : slot.you
           ? (state === 'final'
             ? (slot.backupUsed ? '✓ BACKUP · subbed in' : '✕ BACKUP · banks 0')
-            : 'UNOPPOSED · banks backup')
+            : 'UNOPPOSED · 🛟')
           : '—';
       return <div className="mono" style={{ flex: 1, minWidth: 0, fontSize: fs(8.5), color: 'var(--faint)', textAlign: right ? 'right' : 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>;
     }
