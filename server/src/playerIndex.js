@@ -32,6 +32,8 @@ export async function buildPlayerIndex() {
     slugForName: (name) => byName.get(normName(name)) ?? null,
     sleeper: (sid) => bySleeperId.get(String(sid)) ?? null,
     metaForSlug: (slug) => bySlug.get(slug) ?? null,
+    /** Every indexed player as { slug, full, pos, team } (pod dealing). */
+    allSlugs: () => [...bySlug.entries()].map(([slug, m]) => ({ slug, ...m })),
     size: bySleeperId.size,
   };
 }

@@ -17,6 +17,7 @@ import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues } from './sync.js';
 import { sweepNative } from './native.js';
 import { db } from './supabase.js';
+import { ensurePods } from './pods.js';
 import { setRuntimeSlate } from '../../src/data/nflSlate.ts';
 
 let playerIndex = null;
@@ -175,6 +176,17 @@ async function main() {
   if (config.leagueIds.length) {
     await syncTick().catch((e) => log('sync tick error', e.message));
     setInterval(() => syncTick().catch((e) => log('sync tick error', e.message)), config.syncCheckMs);
+    // Public pods (0089): deal rosters + pair matchups for the current week.
+    // Own cadence, independent of PILOT_LEAGUE_IDS; skipped in preseason-offset
+    // mode (the offset weeks are seeded by the admin toggle, not dealt).
+    const podTick = async () => {
+      if (config.weekOffset) return;
+      const { season, week } = await currentWeek();
+      const r = await ensurePods(week, season, playerIndex);
+      if (r.dealt || r.matchups) log('pods:', JSON.stringify(r), 'week', week);
+    };
+    await podTick().catch((e) => log('pod tick error', e.message));
+    setInterval(() => podTick().catch((e) => log('pod tick error', e.message)), config.syncCheckMs);
   } else {
     log('no PILOT_LEAGUE_IDS set — weekly auto-sync disabled');
   }

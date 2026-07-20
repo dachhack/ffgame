@@ -194,7 +194,11 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     const owned = new Set(Array.isArray(load.unlocks) ? load.unlocks : []);
     const extra = Number.isFinite(load.extra) ? load.extra : 0;
     return {
-      picks: autoLineup(await lineupSlugs(matchup, rosterId, ctx), matchup.week, owned, extra),
+      // Permanent AI seats (pods, fake leagues) get the NUKER persona draw —
+      // measured drama at zero balance cost (findings §21); human autofill and
+      // empty seats stay vanilla, matching lock.js.
+      picks: autoLineup(await lineupSlugs(matchup, rosterId, ctx), matchup.week, owned, extra,
+        mem?.controller === 'ai' ? `${matchup.league_id}:${rosterId}` : undefined),
       buffs: Array.isArray(load.buffs) ? load.buffs : [],
       // The AI's lock-time budget pass places targeted battle plays (rivalry /
       // ghost — findings §17) into the same targeted payload the human RPCs use.
