@@ -164,6 +164,17 @@ export async function redeemInvite(code: string, sleeperUsername: string): Promi
   return data as RedeemResult;
 }
 
+// ── Public pods (migration 0089) ────────────────────────────────────────────────
+export interface PodJoin { ok: boolean; error?: string; already?: boolean; league_id?: string; league?: string; roster_id?: number; team?: string; }
+
+/** Join (or found) a public drop-in pod — no invite code, no Sleeper league.
+ *  Idempotent: already seated this season → returns that seat with already:true. */
+export async function joinPod(teamName?: string): Promise<PodJoin> {
+  const { data, error } = await client().rpc('join_pod', { p_team_name: teamName?.trim() || null });
+  if (error) return { ok: false, error: friendlyError(error) };
+  return data as PodJoin;
+}
+
 // ── "Request a code" lead capture (migration 0016) ───────────────────────────────
 /** Pre-auth request to have a pilot code set up for the visitor's league. Routes
  *  through a SECURITY DEFINER RPC granted to anon, so it works before sign-in. */

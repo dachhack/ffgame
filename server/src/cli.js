@@ -106,6 +106,15 @@ async function main() {
       console.log(`clone-week: ${leagueId} wk${fromW} → wk${toW} — ${r.matchups} matchups, ${r.lineups} lineups`);
       break;
     }
+    case 'pods': {
+      const { buildPlayerIndex } = await import('./playerIndex.js');
+      const { ensurePods } = await import('./pods.js');
+      const idx = await buildPlayerIndex();
+      const week = Number(args[0]);
+      const season = args[1] ?? config.season;
+      console.log(JSON.stringify(await ensurePods(week, season, idx)));
+      break;
+    }
     case 'seed-test-users': {
       const rows = await seedTestUsers(args[0], args[1]);
       console.log(`seeded ${rows.length} test users (log in with these on the live site):`);
@@ -113,7 +122,7 @@ async function main() {
       break;
     }
     default:
-      console.log('commands: leagues | sync <leagueId> | sync-week <leagueId> <wk> | poll-once | inj-once | simulate <lg> <wk> [--dry]');
+      console.log('commands: leagues | sync <leagueId> | sync-week <leagueId> <wk> | poll-once | inj-once | simulate <lg> <wk> [--dry] | pods <wk> [season]');
   }
 }
 

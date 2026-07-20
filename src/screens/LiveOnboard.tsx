@@ -5,12 +5,13 @@ import { liveConfigured } from '../data/supabaseClient';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   getSession, onAuth, signOut, ensureAppUser,
-  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, myEnrollments, myLinkedSleeper, claimMyRosters,
+  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, myEnrollments, myLinkedSleeper, claimMyRosters,
   redeemCommish, isAdmin, commishOverview, friendlyError, deleteMockDraft,
   myMatchup, matchupTeams, leagueResults, defaultOpenWeek,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
 } from '../data/liveApi';
 import { buildDripTestLeague } from '../data/dripTest';
+import { track, Ev } from '../app/analytics';
 import { buildLiveLeague } from '../data/liveBoard';
 import { PRESEASON_BASE, clearRuntimeSlate } from '../data/nflSlate';
 import { LiveBoard } from './LiveBoard';
@@ -362,6 +363,9 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   const [target, setTarget] = useState<{ leagueId: string; rosterId: number } | null>(null);
   // "My league isn't in the pilot yet" → the request-a-code capture sheet.
   const [requesting, setRequesting] = useState(false);
+  // Solo path (0089): one tap into a public pod — no invite, no Sleeper league.
+  const [soloBusy, setSoloBusy] = useState(false);
+  const [soloErr, setSoloErr] = useState<string | null>(null);
   const commishIds = new Set(commishLeagues.map((l) => l.league_id));
   const isCommish = commishIds.size > 0;
 
@@ -395,6 +399,19 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     /* eslint-disable-next-line */
   }, [session.user.id]);
 
+  const playSolo = async () => {
+    if (soloBusy) return;
+    setSoloBusy(true); setSoloErr(null);
+    try {
+      const r = await joinPod();
+      if (!r.ok) { setSoloErr(friendlyError(r.error ?? 'Couldn’t join a pod — try again.')); return; }
+      track(Ev.podJoined, { already: !!r.already });
+      await refresh();
+      setView('home');
+    } catch (x) { setSoloErr(friendlyError(x)); }
+    finally { setSoloBusy(false); }
+  };
+
   if (view === 'commish') return <CommishVerify initialCode={commishCode ?? undefined} onBack={() => { setView('home'); refresh(); }} />;
   if (view === 'commishdash') return <CommishDash focusId={manageId} defaultTab={manageTab} onBack={() => { setManageId(null); setManageTab(undefined); setView('home'); }} />;
   // Add another league from My Leagues: fork by role (join with an invite code, or
@@ -403,7 +420,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     <>
       {/* "Start a fresh league" is super-admin-only while native leagues are in
           closed testing (the create RPC enforces the same gate server-side). */}
-      <RoleChooser onPlayer={() => setView('join')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} />
+      <RoleChooser onPlayer={() => setView('join')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={playSolo} soloBusy={soloBusy} soloErr={soloErr} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </>
@@ -448,7 +465,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (enrollments.length === 0) return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} />
+        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={playSolo} soloBusy={soloBusy} soloErr={soloErr} />
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
@@ -852,7 +869,7 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
   );
 }
 
-function RoleChooser({ onPlayer, onCreate, onCommish, onRequest }: { onPlayer: () => void; onCreate?: () => void; onCommish: () => void; onRequest?: () => void }) {
+function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, soloBusy, soloErr }: { onPlayer: () => void; onCreate?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; soloBusy?: boolean; soloErr?: string | null }) {
   const choice: React.CSSProperties = { width: '100%', textAlign: 'left', fontFamily: 'inherit', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, cursor: 'pointer' };
   return (
     <>
@@ -861,6 +878,13 @@ function RoleChooser({ onPlayer, onCreate, onCommish, onRequest }: { onPlayer: (
         <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>How are you joining the pilot?</div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {onSolo && (
+          <button onClick={onSolo} disabled={soloBusy} style={{ ...choice, borderLeft: '3px solid var(--you)', opacity: soloBusy ? 0.6 : 1 }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>{soloBusy ? 'Finding you a pod…' : '🎲 Play solo — join a public pod →'}</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No league needed. One tap seats you in a 6-team public pod — you get a fresh dealt squad and a head-to-head every week.</div>
+            {soloErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 6, lineHeight: 1.4 }}>{soloErr}</div>}
+          </button>
+        )}
         <button onClick={onPlayer} style={choice}>
           <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>I’m a player →</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>I have a league invite code. Link my Sleeper team and set my lineup.</div>

@@ -102,6 +102,13 @@ for (const r of ALL_ROWS) {
   if (!SLUG_INDEX.has(key)) SLUG_INDEX.set(key, r);
 }
 
+/** Whether the slug has a REAL baked stat row. statsForSlug silently falls back
+ *  to a positional baseline for unknown slugs — callers that need to filter on
+ *  actual season production (e.g. the pod deal pool) must check this first. */
+export function hasStatsForSlug(slug: string): boolean {
+  return SLUG_INDEX.has(slug);
+}
+
 /** Season totals for an engine slug, falling back to the position's baseline
  *  line when the slug isn't in the stats DB (deep bench / rookie). */
 export function statsForSlug(slug: string, pos: Pos): PlayerStats {

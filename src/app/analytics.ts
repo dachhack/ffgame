@@ -27,6 +27,7 @@ export const Ev = {
   demoRun: 'demo_run',     // {star, metric, powerup} — hit RUN on the demo board
   demoQuickrun: 'demo_quickrun', // {placed} — one-tap RUN A LIVE WEEK (auto-picks) — the cold-traffic path
   powerupBought: 'powerup_bought',
+  podJoined: 'pod_joined',       // {already, founded} — joined a public drop-in pod (solo path)
   // lead-capture funnel (the "request a code" modal — the demo's conversion)
   codeRequestOpened: 'code_request_opened',   // {platform} — modal shown
   codeRequested: 'code_requested',            // {platform, has_league_ref} — lead submitted (no PII)
