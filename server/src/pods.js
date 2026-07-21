@@ -96,11 +96,26 @@ export function podPool(idx, slateTeams) {
   return pool;
 }
 
-/** Ensure every pod with at least one enrolled human has dealt rosters and
- *  paired matchups for `week`. Idempotent (deterministic upserts). */
+/** Ensure every pod (season-long) and weekly showdown (0090) with at least one
+ *  enrolled human has dealt rosters and paired matchups for `week`. Weekly
+ *  leagues only deal in their own contest_week, and are TOSSED (all seats
+ *  unenrolled) two weeks after it — one week of crown-display, then gone.
+ *  Idempotent (deterministic upserts). */
 export async function ensurePods(week, season, idx) {
-  const { data: pods } = await db().from('league').select('id, name').eq('kind', 'pod').eq('season', season);
-  if (!pods?.length) return { pods: 0, dealt: 0, matchups: 0 };
+  const { data: all } = await db().from('league')
+    .select('id, name, kind, contest_week').in('kind', ['pod', 'weekly']).eq('season', season);
+  // Toss expired showdowns: their members' home screens drop the card once
+  // every seat is unenrolled. League + matchup rows stay as history.
+  let tossed = 0;
+  const expired = (all ?? []).filter((l) => l.kind === 'weekly' && l.contest_week != null && l.contest_week <= week - 2);
+  if (expired.length) {
+    const { data: gone } = await db().from('league_membership')
+      .update({ enrolled: false })
+      .in('league_id', expired.map((l) => l.id)).eq('enrolled', true).select('id');
+    tossed = gone?.length ?? 0;
+  }
+  const pods = (all ?? []).filter((l) => l.kind === 'pod' || l.contest_week === week);
+  if (!pods?.length) return { pods: 0, dealt: 0, matchups: 0, tossed };
 
   // Slate: prefer the synced nfl_slate rows; fall back to a live ESPN build.
   let { data: slateRows } = await db().from('nfl_slate').select('home, away').eq('season', season).eq('week', week);
@@ -111,7 +126,7 @@ export async function ensurePods(week, season, idx) {
     } catch { slateRows = []; }
   }
   const slateTeams = new Set(slateRows.flatMap((g) => [g.home, g.away]).filter(Boolean));
-  if (!slateTeams.size) return { pods: pods.length, dealt: 0, matchups: 0, skipped: 'no slate' };
+  if (!slateTeams.size) return { pods: pods.length, dealt: 0, matchups: 0, tossed, skipped: 'no slate' };
 
   const pool = podPool(idx, slateTeams);
   const lockMs = await weekKickoffMs(season, week, config.seasonType).catch(() => null);
@@ -149,5 +164,5 @@ export async function ensurePods(week, season, idx) {
       if (rows.length) { await db().from('matchup').upsert(rows, { onConflict: 'league_id,week,home_roster_id,away_roster_id' }); made += rows.length; }
     }
   }
-  return { pods: pods.length, dealt, matchups: made };
+  return { pods: pods.length, dealt, matchups: made, tossed };
 }

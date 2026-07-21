@@ -77,6 +77,7 @@ Implemented now (`src/app/analytics.ts`, `Ev.*`, wired in `src/app/store.tsx`):
 | `code_requested {platform, has_league_ref}` | lead submitted — no PII in the event | **conversion** |
 | `code_request_failed {error}` | submit rejected | conversion |
 | `pod_joined {already}` | `LiveOnboard` — one-tap seat in a public drop-in pod (solo path, 0089) | **activation** |
+| `weekly_joined {already, week}` | `LiveOnboard` — one-tap seat in this week's one-shot showdown (0090) | **activation** |
 
 Every event also carries the visitor's **first-touch attribution** (`utm_source` /
 `utm_medium` / `utm_campaign` / `utm_content` / `utm_term` + `first_referrer` +

@@ -175,6 +175,15 @@ export async function joinPod(teamName?: string): Promise<PodJoin> {
   return data as PodJoin;
 }
 
+/** Join (or found) this week's one-shot showdown (0090). The server derives the
+ *  target NFL week from the slate; `week` comes back in the result. Idempotent
+ *  per week — a new contest every week, the old one is tossed by the worker. */
+export async function joinWeekly(teamName?: string): Promise<PodJoin & { week?: number }> {
+  const { data, error } = await client().rpc('join_weekly', { p_team_name: teamName?.trim() || null });
+  if (error) return { ok: false, error: friendlyError(error) };
+  return data as PodJoin & { week?: number };
+}
+
 // ── "Request a code" lead capture (migration 0016) ───────────────────────────────
 /** Pre-auth request to have a pilot code set up for the visitor's league. Routes
  *  through a SECURITY DEFINER RPC granted to anon, so it works before sign-in. */
@@ -193,13 +202,13 @@ export async function requestCode(input: { email?: string; sleeper?: string; lea
   return data as { ok: boolean; error?: string };
 }
 
-export interface Enrollment { league_id: string; team_name: string; sleeper_roster_id: number; avatar_url: string | null; league: { name: string; season: string; preseason_at?: string | null; provider?: string; avatar_url?: string | null; is_mock?: boolean } | null; }
+export interface Enrollment { league_id: string; team_name: string; sleeper_roster_id: number; avatar_url: string | null; league: { name: string; season: string; preseason_at?: string | null; provider?: string; avatar_url?: string | null; is_mock?: boolean; kind?: string; contest_week?: number | null } | null; }
 
 /** The caller's enrolled memberships (RLS scopes to their own rows). */
 export async function myEnrollments(userId: string): Promise<Enrollment[]> {
   const { data, error } = await client()
     .from('league_membership')
-    .select('league_id, team_name, sleeper_roster_id, avatar_url, league:league_id(name, season, preseason_at, provider, avatar_url, is_mock)')
+    .select('league_id, team_name, sleeper_roster_id, avatar_url, league:league_id(name, season, preseason_at, provider, avatar_url, is_mock, kind, contest_week)')
     .eq('app_user_id', userId)
     .eq('enrolled', true);
   if (error) throw error;
