@@ -183,7 +183,7 @@ async function main() {
       if (config.weekOffset) return;
       const { season, week } = await currentWeek();
       const r = await ensurePods(week, season, playerIndex);
-      if (r.dealt || r.matchups) log('pods:', JSON.stringify(r), 'week', week);
+      if (r.dealt || r.matchups || r.tossed) log('pods:', JSON.stringify(r), 'week', week);
     };
     await podTick().catch((e) => log('pod tick error', e.message));
     setInterval(() => podTick().catch((e) => log('pod tick error', e.message)), config.syncCheckMs);

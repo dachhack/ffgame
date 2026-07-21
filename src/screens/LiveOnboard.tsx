@@ -5,7 +5,7 @@ import { liveConfigured } from '../data/supabaseClient';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   getSession, onAuth, signOut, ensureAppUser,
-  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, myEnrollments, myLinkedSleeper, claimMyRosters,
+  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, myEnrollments, myLinkedSleeper, claimMyRosters,
   redeemCommish, isAdmin, commishOverview, friendlyError, deleteMockDraft,
   myMatchup, matchupTeams, leagueResults, defaultOpenWeek,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
@@ -363,9 +363,10 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   const [target, setTarget] = useState<{ leagueId: string; rosterId: number } | null>(null);
   // "My league isn't in the pilot yet" → the request-a-code capture sheet.
   const [requesting, setRequesting] = useState(false);
-  // Solo path (0089): one tap into a public pod — no invite, no Sleeper league.
-  const [soloBusy, setSoloBusy] = useState(false);
-  const [soloErr, setSoloErr] = useState<string | null>(null);
+  // Solo paths: one tap into a season pod (0089) or this week's showdown (0090)
+  // — no invite, no Sleeper league. soloBusy remembers WHICH card is working.
+  const [soloBusy, setSoloBusy] = useState<'pod' | 'weekly' | null>(null);
+  const [soloErr, setSoloErr] = useState<{ mode: 'pod' | 'weekly'; msg: string } | null>(null);
   const commishIds = new Set(commishLeagues.map((l) => l.league_id));
   const isCommish = commishIds.size > 0;
 
@@ -399,17 +400,18 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     /* eslint-disable-next-line */
   }, [session.user.id]);
 
-  const playSolo = async () => {
+  const playSolo = async (mode: 'pod' | 'weekly') => {
     if (soloBusy) return;
-    setSoloBusy(true); setSoloErr(null);
+    setSoloBusy(mode); setSoloErr(null);
     try {
-      const r = await joinPod();
-      if (!r.ok) { setSoloErr(friendlyError(r.error ?? 'Couldn’t join a pod — try again.')); return; }
-      track(Ev.podJoined, { already: !!r.already });
+      const r = mode === 'weekly' ? await joinWeekly() : await joinPod();
+      if (!r.ok) { setSoloErr({ mode, msg: friendlyError(r.error ?? 'Couldn’t seat you — try again.') }); return; }
+      if (mode === 'weekly') track(Ev.weeklyJoined, { already: !!r.already, week: (r as { week?: number }).week });
+      else track(Ev.podJoined, { already: !!r.already });
       await refresh();
       setView('home');
-    } catch (x) { setSoloErr(friendlyError(x)); }
-    finally { setSoloBusy(false); }
+    } catch (x) { setSoloErr({ mode, msg: friendlyError(x) }); }
+    finally { setSoloBusy(null); }
   };
 
   if (view === 'commish') return <CommishVerify initialCode={commishCode ?? undefined} onBack={() => { setView('home'); refresh(); }} />;
@@ -420,7 +422,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     <>
       {/* "Start a fresh league" is super-admin-only while native leagues are in
           closed testing (the create RPC enforces the same gate server-side). */}
-      <RoleChooser onPlayer={() => setView('join')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={playSolo} soloBusy={soloBusy} soloErr={soloErr} />
+      <RoleChooser onPlayer={() => setView('join')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={() => playSolo('pod')} onWeekly={() => playSolo('weekly')} soloBusy={soloBusy} soloErr={soloErr} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </>
@@ -465,7 +467,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (enrollments.length === 0) return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={playSolo} soloBusy={soloBusy} soloErr={soloErr} />
+        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={() => playSolo('pod')} onWeekly={() => playSolo('weekly')} soloBusy={soloBusy} soloErr={soloErr} />
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
@@ -748,6 +750,7 @@ function LeagueCard({ e, card, commish, userId, onBoard, onResults, onManage, on
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
             <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{e.team_name}</span>
             {commish && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', borderRadius: 4, padding: '2px 6px' }}>⚑ COMMISSIONER</span>}
+            {e.league?.kind === 'weekly' && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>🏆 WK {e.league.contest_week ?? '—'} SHOWDOWN</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, minWidth: 0 }}>
             {e.league?.avatar_url && <img src={e.league.avatar_url} alt="" width={14} height={14} style={{ borderRadius: 3, flexShrink: 0 }} />}
@@ -764,6 +767,7 @@ function LeagueCard({ e, card, commish, userId, onBoard, onResults, onManage, on
         <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', flexShrink: 0 }}>vs</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{opp?.team_name ?? (m ? `Roster ${oppRoster}` : 'schedule pending')}</span>
       </div>
+      {e.league?.kind === 'weekly' && <WeeklyCrown leagueId={e.league_id} week={e.league.contest_week} myRoster={e.sleeper_roster_id} />}
 
       {/* actions — default goes to the REAL board for this league's season (the
           live 2026 slate once the week is synced). The 2025 full-board sim is an
@@ -780,6 +784,37 @@ function LeagueCard({ e, card, commish, userId, onBoard, onResults, onManage, on
         <button onClick={playFullBoard} disabled={building} className="mono" title="try the full board on last year's data" style={{ ...linkBtn, color: 'var(--dim)', opacity: building ? 0.6 : 1 }}>{building ? (buildNote || 'loading…') : '▷ demo (2025)'}</button>
         {commish && <button onClick={onManage} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚑ manage league</button>}
       </div>
+    </div>
+  );
+}
+
+// The showdown's terminal moment (0090): once EVERY matchup of the contest week
+// is final, the top total score in the pod takes the crown. Computed from the
+// finals any member can read (matchup.home_final/away_final) — no server-side
+// standings. Renders nothing until the whole week is in.
+function WeeklyCrown({ leagueId, week, myRoster }: { leagueId: string; week?: number | null; myRoster: number }) {
+  const [champ, setChamp] = useState<{ rid: number; name: string; pts: number } | null>(null);
+  useEffect(() => {
+    let ok = true;
+    leagueResults(leagueId).then(async (rs) => {
+      const wkRows = rs.filter((r) => week == null || r.week === week);
+      if (!wkRows.length || wkRows.some((r) => r.status !== 'final' || r.home_final == null || r.away_final == null)) return;
+      const pts = new Map<number, number>();
+      for (const r of wkRows) { pts.set(r.home_roster_id, Number(r.home_final)); pts.set(r.away_roster_id, Number(r.away_final)); }
+      const [rid, top] = [...pts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+      const teams = await matchupTeams(leagueId, [rid]).catch(() => ({} as Record<number, TeamInfo>));
+      if (ok) setChamp({ rid, name: teams[rid]?.team_name ?? `Roster ${rid}`, pts: top });
+    }).catch(() => {});
+    return () => { ok = false; };
+  }, [leagueId, week]);
+  if (!champ) return null;
+  const you = champ.rid === myRoster;
+  return (
+    <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, padding: '9px 12px', background: 'color-mix(in srgb, var(--warn) 10%, var(--bg))', border: '1px solid color-mix(in srgb, var(--warn) 45%, var(--bd))', borderRadius: 6 }}>
+      <span style={{ fontSize: 13 }}>👑</span>
+      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {you ? 'YOU TOOK THE CROWN' : `CHAMP · ${champ.name.toUpperCase()}`} · {champ.pts.toFixed(1)} PTS
+      </span>
     </div>
   );
 }
@@ -869,7 +904,7 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
   );
 }
 
-function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, soloBusy, soloErr }: { onPlayer: () => void; onCreate?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; soloBusy?: boolean; soloErr?: string | null }) {
+function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekly, soloBusy, soloErr }: { onPlayer: () => void; onCreate?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; onWeekly?: () => void; soloBusy?: 'pod' | 'weekly' | null; soloErr?: { mode: 'pod' | 'weekly'; msg: string } | null }) {
   const choice: React.CSSProperties = { width: '100%', textAlign: 'left', fontFamily: 'inherit', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, cursor: 'pointer' };
   return (
     <>
@@ -878,11 +913,18 @@ function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, soloBus
         <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>How are you joining the pilot?</div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {onWeekly && (
+          <button onClick={onWeekly} disabled={!!soloBusy} style={{ ...choice, borderLeft: '3px solid var(--warn)', opacity: soloBusy ? 0.6 : 1 }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--warn)' }}>{soloBusy === 'weekly' ? 'Seating you in the showdown…' : '🏆 This week’s showdown →'}</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>One-week contest, no strings. Get a dealt squad, battle head-to-head this Sunday, top score takes the crown — then it’s over.</div>
+            {soloErr?.mode === 'weekly' && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 6, lineHeight: 1.4 }}>{soloErr.msg}</div>}
+          </button>
+        )}
         {onSolo && (
-          <button onClick={onSolo} disabled={soloBusy} style={{ ...choice, borderLeft: '3px solid var(--you)', opacity: soloBusy ? 0.6 : 1 }}>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>{soloBusy ? 'Finding you a pod…' : '🎲 Play solo — join a public pod →'}</div>
-            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No league needed. One tap seats you in a 6-team public pod — you get a fresh dealt squad and a head-to-head every week.</div>
-            {soloErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 6, lineHeight: 1.4 }}>{soloErr}</div>}
+          <button onClick={onSolo} disabled={!!soloBusy} style={{ ...choice, borderLeft: '3px solid var(--you)', opacity: soloBusy ? 0.6 : 1 }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>{soloBusy === 'pod' ? 'Finding you a pod…' : '🎲 Play solo — join a public pod →'}</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No league needed. One tap seats you in a 6-team public pod — you get a fresh dealt squad and a head-to-head every week, all season.</div>
+            {soloErr?.mode === 'pod' && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 6, lineHeight: 1.4 }}>{soloErr.msg}</div>}
           </button>
         )}
         <button onClick={onPlayer} style={choice}>
