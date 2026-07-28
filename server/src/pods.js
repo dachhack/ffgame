@@ -14,6 +14,7 @@ import { db } from './supabase.js';
 import { config } from './config.js';
 import { weekKickoffMs, buildSlate } from './poll/scoreboard.js';
 import { statsForSlug, hasStatsForSlug } from '../../src/data/players.ts';
+import { PROJ_2026 } from '../../src/data/proj2026.ts';
 
 // ── Seeded RNG (mulberry32 over a string hash — mirrors the playtester) ──────
 function hashStr(s) {
@@ -33,6 +34,21 @@ function rng(seedStr) {
 
 // A dealt starting squad mirrors the playtester's honest roster shape.
 const DEAL_COUNTS = { QB: 1, RB: 2, WR: 3, TE: 1, K: 1, DEF: 1 };
+
+/** Deal value in projected PPR points-per-game. Prefers the baked 2026
+ *  StatHead projection (proj2026.ts — includes rookies, prices offseason
+ *  situation changes); falls back to 2025 actual production scaled to
+ *  per-game for vets outside the ~300-player projection set. 0 = unknown. */
+export function dealPpg(slug, pos) {
+  const proj = PROJ_2026.get(slug);
+  if (proj != null) return proj;
+  if (!hasStatsForSlug(slug)) return 0;
+  const st = statsForSlug(slug, pos);
+  return (st.ppr || 0) / Math.max(1, st.games || 14);
+}
+
+// Startable floor, in ppg (≈ the old 40-season-ppr bar over a 14-game season).
+const MIN_DEAL_PPG = 3;
 
 /** Projection-weighted draw without replacement (managers start studs). */
 function weightedDraw(rand, cand, weightOf) {
@@ -56,7 +72,7 @@ export function dealPodRosters(leagueId, week, seats, pool) {
       const cand = (pool[pos] ?? []).filter((s) => !taken.has(s));
       const weighted = pos !== 'K' && pos !== 'DEF';
       for (let i = 0; i < n && cand.length; i++) {
-        const idx = weighted ? weightedDraw(rand, cand, (s) => statsForSlug(s, pos).ppr || 0.5) : Math.floor(rand() * cand.length);
+        const idx = weighted ? weightedDraw(rand, cand, (s) => dealPpg(s, pos)) : Math.floor(rand() * cand.length);
         const slug = cand.splice(idx, 1)[0];
         taken.add(slug);
         squad.push({ slug, pos });
@@ -86,10 +102,10 @@ export function podPool(idx, slateTeams) {
   for (const p of idx.allSlugs()) {
     if (!p.slug || !p.pos || !pool[p.pos] || p.pos === 'K' || p.pos === 'DEF') continue;
     if (!p.team || !slateTeams.has(p.team)) continue;
-    // Skill floor: must have a REAL baked stat row (statsForSlug falls back to a
-    // positional baseline for unknowns, which would wave everyone through) and
-    // enough season ppr to be ~startable.
-    if (!hasStatsForSlug(p.slug) || (statsForSlug(p.slug, p.pos).ppr || 0) < 40) continue;
+    // Skill floor: a real 2026 projection OR real 2025 production, ~startable.
+    // (dealPpg returns 0 for slugs with neither — statsForSlug's positional
+    // fallback would otherwise wave every unknown through.)
+    if (dealPpg(p.slug, p.pos) < MIN_DEAL_PPG) continue;
     pool[p.pos].push(p.slug);
   }
   for (const t of slateTeams) { pool.K.push(`${t.toLowerCase()}-k`); pool.DEF.push(`${t.toLowerCase()}-dst`); }
