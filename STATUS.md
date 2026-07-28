@@ -18,7 +18,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked
 
-2026-07-21 — Shipped public drop-in pods (solo-joinable, AI-filled leagues; PR #212) and weekly showdowns (one-week contests: recruit → crown → toss; PR #213). Migrations 0089/0090 applied; both need a Fly worker redeploy to go live.
+2026-07-28 — Yahoo went live-ready: the approved app's key is wired into the Pages builds (PR #215; founder set the secrets + redirect URI). Lead alerting built: new `code_request` rows now email the founder via a pg_net trigger → `lead-alert` Edge Function (migration 0091; function needs a one-time deploy via the Deploy Edge Functions workflow).
 
 ## Current blockers
 
@@ -28,5 +28,5 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 ## Next 3 tasks
 
 1. Redeploy the Fly worker, then smoke-test the solo paths live: fresh account → Play solo / This week's showdown → dealt roster + matchup appear.
-2. Lead alerting for `code_request` rows (Reddit-ad leads currently sit unnoticed in the admin table; no email/notification on new leads).
+2. Deploy the `lead-alert` function + smoke-test one live lead end-to-end; validate the first real Yahoo league connect (the JSON mapping has never seen live Fantasy data).
 3. Bar mode (DFS path step 3): same-room group play — design scope against the pod/showdown infra.
