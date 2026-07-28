@@ -35,6 +35,11 @@ jobs:
           # Settings → Secrets and variables → Actions → Variables → VITE_POSTHOG_KEY.
           # Unset → analytics is a no-op (posthog-js isn't even loaded).
           VITE_POSTHOG_KEY: ${{ vars.VITE_POSTHOG_KEY }}
+          # Yahoo app Consumer Key (public — the secret lives in the yahoo-oauth
+          # Edge Function's Supabase secrets). Set as a repo Variable:
+          # Settings → Secrets and variables → Actions → Variables → VITE_YAHOO_CLIENT_ID.
+          # Unset → the Yahoo connect screen shows "not configured".
+          VITE_YAHOO_CLIENT_ID: ${{ vars.VITE_YAHOO_CLIENT_ID }}
       - uses: actions/configure-pages@v5
         with:
           enablement: true

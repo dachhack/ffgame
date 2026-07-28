@@ -57,6 +57,10 @@ jobs:
         env:
           # Served from the staging repo's project path, not the domain root.
           VITE_BASE: /ffgame-staging/
+          # Yahoo OAuth on staging only works if the staging origin is also a
+          # registered redirect URI on the Yahoo app; harmless otherwise (the
+          # sign-in redirect just gets rejected by Yahoo).
+          VITE_YAHOO_CLIENT_ID: ${{ vars.VITE_YAHOO_CLIENT_ID }}
       # public/CNAME (dripfantasy.com) is copied into dist by Vite. Shipping it
       # to the staging repo would try to claim the production custom domain —
       # GitHub rejects the duplicate and staging Pages breaks. Strip it.
