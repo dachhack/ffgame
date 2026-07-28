@@ -5,7 +5,7 @@
 // which re-validates everything server-side (shape, cap, lock, membership).
 import { useEffect, useMemo, useState } from 'react';
 import {
-  podSalaries, savePodEntry, myPool, defaultOpenWeek, friendlyError,
+  podSalaries, savePodEntry, myPool, defaultOpenWeek, weekGameLocks, friendlyError,
   POD_SALARY_CAP, type PodSalaryRow,
 } from '../data/liveApi';
 import { track, Ev } from '../app/analytics';
@@ -26,6 +26,12 @@ export function PodBuilder({ leagueId, rosterId, week: weekProp, leagueName, onB
 }) {
   const [week, setWeek] = useState<number | null>(weekProp ?? null);
   const [board, setBoard] = useState<PodSalaryRow[] | null>(null);
+  const [locks, setLocks] = useState<Map<string, number> | null>(null);
+  // Per-game locks (0093): a player freezes 1h before HIS kickoff. Tick so the
+  // UI crosses lock boundaries without a reload.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(id); }, []);
+  const teamLocked = (team: string) => { const t = locks?.get(team); return t != null && t <= now; };
   const [picks, setPicks] = useState<(string | null)[]>(() => SLOTS.map(() => null));
   const [active, setActive] = useState<number | null>(null);
   const [search, setSearch] = useState('');
@@ -41,9 +47,13 @@ export function PodBuilder({ leagueId, rosterId, week: weekProp, leagueName, onB
       const w = weekProp ?? await defaultOpenWeek(leagueId, '2026', false).catch(() => 1);
       if (!ok) return;
       setWeek(w);
-      const rows = await podSalaries(w).catch(() => [] as PodSalaryRow[]);
+      const [rows, lk] = await Promise.all([
+        podSalaries(w).catch(() => [] as PodSalaryRow[]),
+        weekGameLocks(w).catch(() => new Map<string, number>()),
+      ]);
       if (!ok) return;
       setBoard(rows);
+      setLocks(lk);
       // starters_json rows are {slot, sleeper_id, player_slug, pos} — PoolPlayer's
       // declared shape predates that; read the raw field.
       const mine = (await myPool(leagueId, w, rosterId).catch(() => [])) as unknown as { player_slug?: string | null }[];
@@ -114,7 +124,7 @@ export function PodBuilder({ leagueId, rosterId, week: weekProp, leagueName, onB
           style={{ fontFamily: 'inherit', fontSize: 13, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '9px 11px', outline: 'none', marginBottom: 8 }} />
         <div style={{ overflowY: 'auto', flex: 1 }}>
           {board
-            .filter((r) => r.pos === SLOTS[active].pos && !picks.includes(r.slug))
+            .filter((r) => r.pos === SLOTS[active].pos && !picks.includes(r.slug) && !teamLocked(r.team))
             .filter((r) => !search.trim() || (r.name + ' ' + r.team).toLowerCase().includes(search.trim().toLowerCase()))
             .map((r) => {
               const afford = r.salary <= maxForActive(active);
@@ -138,7 +148,7 @@ export function PodBuilder({ leagueId, rosterId, week: weekProp, leagueName, onB
     <div style={{ maxWidth: 560, margin: '0 auto' }}>
       <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← back</button>
       <div className="grotesk" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>Build your Week {week} squad</div>
-      <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>{leagueName ? `${leagueName} · ` : ''}9 starters under the {fmt$(POD_SALARY_CAP)} cap. Star somewhere, save somewhere.</div>
+      <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>{leagueName ? `${leagueName} · ` : ''}9 starters under the {fmt$(POD_SALARY_CAP)} cap. Star somewhere, save somewhere. Each player locks 1h before his game — swap the rest all week.</div>
 
       {/* budget bar */}
       <div style={{ margin: '14px 0 12px', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: '10px 12px' }}>
@@ -167,7 +177,9 @@ export function PodBuilder({ leagueId, rosterId, week: weekProp, leagueName, onB
                   <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{r.team} · proj {r.proj.toFixed(1)}</span>
                 </span>
                 <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)', fontVariantNumeric: 'tabular-nums' }}>{fmt$(r.salary)}</span>
-                <button onClick={() => clearSlot(i)} className="mono" style={{ ...linkBtn, color: 'var(--opp)', padding: '2px 4px' }}>✕</button>
+                {teamLocked(r.team)
+                  ? <span className="mono" title="his game locked — he's in" style={{ fontSize: 10, color: 'var(--faint)', padding: '2px 4px' }}>🔒</span>
+                  : <button onClick={() => clearSlot(i)} className="mono" style={{ ...linkBtn, color: 'var(--opp)', padding: '2px 4px' }}>✕</button>}
               </>
             ) : (
               <button onClick={() => { setActive(i); setSearch(''); }} className="mono"
