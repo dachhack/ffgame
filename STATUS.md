@@ -18,7 +18,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked
 
-2026-07-28 — Yahoo went live-ready: the approved app's key is wired into the Pages builds (PR #215; founder set the secrets + redirect URI). Lead alerting shipped: new `code_request` rows email the founder via a pg_net trigger → `lead-alert` Edge Function (migration 0091; needs its one-click function deploy). Pod/showdown deals now fueled by 2026 StatHead projections with 2025-actuals fallback — rookies dealable, offseason moves priced — and proj2026.ts re-baked at the new 416-player depth with Sleeper-id exact joins (StatHead MCP shipped our feedback: deeper pool, ids, as_of, injury-aware weekly + K/DST; weekly tool callable from the next session). Engagement strategy reframed: ads sell solo play; league adoption is the expansion step.
+2026-07-28 — DFS-style team building shipped for pods + showdowns (0092): players build a 9-man squad under a $50k salary cap from a weekly-frozen salary board (weekly projections → salaries; source chain StatHead-weekly-bake → Sleeper live weekly → StatHead season → 2025 actuals); AI seats and no-show humans get a seeded auto-build; random deal removed. Earlier same day: Yahoo live-ready (PR #215), lead alerting (0091, needs one-click function deploy), proj2026.ts re-baked at 416-player depth with Sleeper-id exact joins (StatHead MCP shipped our feedback incl. injury-aware weekly + K/DST). Engagement strategy reframed: ads sell solo play; league adoption is the expansion step.
 
 ## Current blockers
 
@@ -27,6 +27,6 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Next 3 tasks
 
-1. Founder ops pass: redeploy the Fly worker + one-click deploy `lead-alert`, then smoke-test live — solo paths (fresh account → Play solo / This week's showdown → dealt roster + matchup), one lead end-to-end, and the first real Yahoo league connect (the JSON mapping has never seen live Fantasy data).
+1. Founder ops pass: redeploy the Fly worker + one-click deploy `lead-alert`, then smoke-test live — solo paths (fresh account → Play solo / This week's showdown → BUILD YOUR SQUAD under the $50k cap → entry saves), one lead end-to-end, and the first real Yahoo league connect (the JSON mapping has never seen live Fantasy data). Also: start a fresh Claude session to bake StatHead weekly projections (this session's tool registry predates get_weekly_projections) — the worker auto-consumes server/data/statheadWeekly2026.json once it lands.
 2. Repoint the demo's post-run CTA at solo play (pod/showdown) instead of "request a code" — align the ad → demo → playing-user funnel with the new solo paths.
 3. Weekly showdown re-engagement email ("Week N is open — defend your crown") — the recruit→crown→toss loop has no delivery channel yet; can reuse lead-alert's Gmail machinery.

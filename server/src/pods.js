@@ -1,17 +1,20 @@
-// PUBLIC PODS — weekly maintenance for solo-joinable drop-in leagues (0089).
+// PUBLIC PODS — weekly maintenance for solo-joinable drop-in leagues (0089/0090)
+// and their DFS-STYLE team building (0092).
 //
-// Pods have no Sleeper source, so the worker fills the two things the Sleeper
-// sync normally provides: each seat's weekly roster (DEALT — a deterministic,
-// projection-weighted draw from players actually on this week's slate) and the
-// week's matchup pairings (a seeded shuffle of the 6 seats → 3 head-to-heads).
-// Everything downstream (lock → resolve → live board → coin) is unchanged: AI
-// seats are app_user-less, so the resolver auto-lineups them exactly like the
-// fake test league's.
+// Pods have no Sleeper source, so the worker fills what the Sleeper sync
+// normally provides: the week's SALARY BOARD (pod_salary — weekly projections
+// priced into DFS salaries, one frozen snapshot per week), each AI seat's
+// entry (a seeded auto-build from that board; no-show humans get the same at
+// lock), and the week's matchup pairings (a seeded shuffle of the 6 seats →
+// 3 head-to-heads). Humans build their own entry via save_pod_entry (0092).
+// Everything downstream (lock → resolve → live board → coin) is unchanged.
 //
-// Deterministic by construction — every draw seeds off (league_id, week, seat),
-// so re-runs upsert identical rows and a preview matches the resolve.
+// Deterministic by construction — every build seeds off (league_id, week,
+// seat), so re-runs upsert identical rows and a preview matches the resolve.
+import { readFileSync } from 'node:fs';
 import { db } from './supabase.js';
 import { config } from './config.js';
+import { getWeekProjections } from './sleeper.js';
 import { weekKickoffMs, buildSlate } from './poll/scoreboard.js';
 import { statsForSlug, hasStatsForSlug } from '../../src/data/players.ts';
 import { PROJ_2026, PROJ_2026_SID } from '../../src/data/proj2026.ts';
@@ -32,8 +35,11 @@ function rng(seedStr) {
   };
 }
 
-// A dealt starting squad mirrors the playtester's honest roster shape.
+// An entry mirrors the playtester's honest roster shape (also enforced
+// server-side by save_pod_entry in 0092 — keep the two in sync).
 const DEAL_COUNTS = { QB: 1, RB: 2, WR: 3, TE: 1, K: 1, DEF: 1 };
+export const SALARY_CAP = 50000;
+const MIN_SALARY = 3000;
 
 // Slugs whose projection was resolved via Sleeper id at pool time (the name
 // join missed — display names drift between sources). Lets the slug-only draw
@@ -61,37 +67,102 @@ export function dealPpg(slug, pos, sid) {
 // Startable floor, in ppg (≈ the old 40-season-ppr bar over a 14-game season).
 const MIN_DEAL_PPG = 3;
 
-/** Projection-weighted draw without replacement (managers start studs). */
-function weightedDraw(rand, cand, weightOf) {
-  let total = 0;
-  const w = cand.map((c) => { const v = Math.max(0.5, weightOf(c)); total += v; return v; });
-  let r = rand() * total;
-  for (let i = 0; i < w.length; i++) { r -= w[i]; if (r <= 0) return i; }
-  return w.length - 1;
+// ── Weekly projection sources (the salary board prices the WEEK, not the
+// season). Per-player chain:
+//   1. baked StatHead weekly file (server/data/statheadWeekly2026.json) —
+//      matchup-adjusted + injury-aware; landed by the weekly bake session
+//   2. Sleeper's live weekly endpoint — news-reactive, includes K + team DST
+//   3. dealPpg (baked StatHead season → 2025 actuals)
+let bakedWeekly = null; // parsed file | false (missing)
+function bakedWeekFor(week) {
+  if (bakedWeekly === null) {
+    try { bakedWeekly = JSON.parse(readFileSync(new URL('../data/statheadWeekly2026.json', import.meta.url), 'utf8')); }
+    catch { bakedWeekly = false; }
+  }
+  const rows = bakedWeekly && bakedWeekly.weeks && bakedWeekly.weeks[String(week)];
+  if (!Array.isArray(rows) || !rows.length) return null;
+  const bySid = new Map(), defByTeam = new Map(), kByTeam = new Map();
+  for (const r of rows) {
+    const ppg = Number(r.ppg);
+    if (!Number.isFinite(ppg)) continue;
+    if (r.pos === 'DEF' && r.team) defByTeam.set(r.team, ppg);
+    else if (r.pos === 'K' && r.team) kByTeam.set(r.team, Math.max(kByTeam.get(r.team) ?? 0, ppg));
+    if (r.sid) bySid.set(String(r.sid), ppg);
+  }
+  return { bySid, defByTeam, kByTeam, source: 'stathead-weekly' };
 }
 
-/** PURE: deal rosters for every seat of one pod-week. `pool` is
- *  { QB: slug[], RB: [], ... } of players whose teams play this week.
- *  Returns Map(rosterId → slug[]). Players are unique within the pod. */
-export function dealPodRosters(leagueId, week, seats, pool) {
-  const taken = new Set();
-  const out = new Map();
-  for (const rosterId of [...seats].sort((a, b) => a - b)) {
-    const rand = rng(`${leagueId}|w${week}|seat${rosterId}`);
-    const squad = [];
-    for (const [pos, n] of Object.entries(DEAL_COUNTS)) {
-      const cand = (pool[pos] ?? []).filter((s) => !taken.has(s));
-      const weighted = pos !== 'K' && pos !== 'DEF';
-      for (let i = 0; i < n && cand.length; i++) {
-        const idx = weighted ? weightedDraw(rand, cand, (s) => dealPpg(s, pos)) : Math.floor(rand() * cand.length);
-        const slug = cand.splice(idx, 1)[0];
-        taken.add(slug);
-        squad.push({ slug, pos });
-      }
+async function sleeperWeekFor(season, week, idx) {
+  try {
+    const d = await getWeekProjections(season, week);
+    const bySid = new Map(), defByTeam = new Map(), kByTeam = new Map();
+    for (const [key, v] of Object.entries(d ?? {})) {
+      const pts = Number(v?.pts_ppr);
+      if (!Number.isFinite(pts) || pts <= 0) continue;
+      if (/^[A-Z]{2,3}$/.test(key)) { defByTeam.set(key, pts); continue; } // team DEF rows
+      bySid.set(key, pts);
+      const meta = idx.sleeper(key);
+      if (meta?.pos === 'K' && meta.team) kByTeam.set(meta.team, Math.max(kByTeam.get(meta.team) ?? 0, pts));
     }
-    out.set(rosterId, squad);
+    return bySid.size ? { bySid, defByTeam, kByTeam, source: 'sleeper-weekly' } : null;
+  } catch { return null; }
+}
+
+/** ppg → DFS salary (deterministic, $100 steps, $3k floor). ~26 ppg ≈ $10,400;
+ *  a 9-man cap of $50k averages $5,555/slot — stars-and-scrubs tension. */
+export function salaryOf(ppg) {
+  return Math.max(MIN_SALARY, Math.round((ppg * 400) / 100) * 100);
+}
+
+/** PURE: the week's salary board — one row per pickable option. Skill players
+ *  slate-gated + floored on season relevance OR weekly projection; K/DST as
+ *  the engine's team-keyed synthetics, priced from weekly K/DEF projections
+ *  when available. `weekly` may be null (season-projection pricing only). */
+export function buildSalaryBoard(idx, slateTeams, weekly) {
+  const rows = [];
+  for (const p of idx.allSlugs()) {
+    if (!p.slug || !['QB', 'RB', 'WR', 'TE'].includes(p.pos)) continue;
+    if (!p.team || !slateTeams.has(p.team)) continue;
+    const seasonPpg = dealPpg(p.slug, p.pos, p.sid);
+    const weekPpg = weekly?.bySid.get(String(p.sid));
+    if (seasonPpg < MIN_DEAL_PPG && (weekPpg ?? 0) < MIN_DEAL_PPG) continue;
+    const ppg = weekPpg ?? seasonPpg;
+    rows.push({ slug: p.slug, name: p.full, pos: p.pos, team: p.team, salary: salaryOf(ppg), proj: Math.round(ppg * 10) / 10 });
   }
-  return out;
+  for (const t of slateTeams) {
+    const kPpg = weekly?.kByTeam.get(t) ?? 7.5;
+    const dPpg = weekly?.defByTeam.get(t) ?? 7;
+    rows.push({ slug: `${t.toLowerCase()}-k`, name: `${t} Kicker`, pos: 'K', team: t, salary: salaryOf(kPpg), proj: Math.round(kPpg * 10) / 10 });
+    rows.push({ slug: `${t.toLowerCase()}-dst`, name: `${t} D/ST`, pos: 'DEF', team: t, salary: salaryOf(dPpg), proj: Math.round(dPpg * 10) / 10 });
+  }
+  return rows;
+}
+
+/** PURE: seeded auto-build of a legal entry from the salary board — AI seats,
+ *  and no-show humans at lock. Greedy by per-seat jittered value (same board,
+ *  different builds), always reserving MIN_SALARY per unfilled slot so the
+ *  entry can never bust the cap. Deterministic per (league, week, seat). */
+export function aiSalaryEntry(leagueId, week, rosterId, board) {
+  const rand = rng(`${leagueId}|w${week}|dfs${rosterId}`);
+  const byPos = { QB: [], RB: [], WR: [], TE: [], K: [], DEF: [] };
+  for (const r of board) byPos[r.pos]?.push(r);
+  const pref = new Map(board.map((r) => [r.slug, r.proj * (0.8 + rand() * 0.4)]));
+  const slots = Object.entries(DEAL_COUNTS).flatMap(([pos, n]) => Array(n).fill(pos));
+  const squad = [];
+  const taken = new Set();
+  let budget = SALARY_CAP;
+  for (let i = 0; i < slots.length; i++) {
+    const pos = slots[i];
+    const maxSpend = budget - (slots.length - i - 1) * MIN_SALARY;
+    const pick = byPos[pos]
+      .filter((r) => !taken.has(r.slug) && r.salary <= maxSpend)
+      .sort((a, b) => (pref.get(b.slug) ?? 0) - (pref.get(a.slug) ?? 0))[0];
+    if (!pick) continue; // board too thin at this price — resolver copes with a short lineup
+    taken.add(pick.slug);
+    budget -= pick.salary;
+    squad.push({ slug: pick.slug, pos });
+  }
+  return squad;
 }
 
 /** PURE: seeded pairing of a pod's seats into head-to-heads (odd seat count
@@ -105,29 +176,14 @@ export function pairPodSeats(leagueId, week, seats) {
   return pairs;
 }
 
-/** Build the position pool: skill players from the index, slate-gated to teams
- *  playing this week and floored on season relevance so deals are startable;
- *  K/DEF as the engine's team-keyed `<team>-k` / `<team>-dst` slugs (kdst.ts). */
-export function podPool(idx, slateTeams) {
-  const pool = { QB: [], RB: [], WR: [], TE: [], K: [], DEF: [] };
-  for (const p of idx.allSlugs()) {
-    if (!p.slug || !p.pos || !pool[p.pos] || p.pos === 'K' || p.pos === 'DEF') continue;
-    if (!p.team || !slateTeams.has(p.team)) continue;
-    // Skill floor: a real 2026 projection OR real 2025 production, ~startable.
-    // (dealPpg returns 0 for slugs with neither — statsForSlug's positional
-    // fallback would otherwise wave every unknown through.)
-    if (dealPpg(p.slug, p.pos, p.sid) < MIN_DEAL_PPG) continue;
-    pool[p.pos].push(p.slug);
-  }
-  for (const t of slateTeams) { pool.K.push(`${t.toLowerCase()}-k`); pool.DEF.push(`${t.toLowerCase()}-dst`); }
-  return pool;
-}
-
 /** Ensure every pod (season-long) and weekly showdown (0090) with at least one
- *  enrolled human has dealt rosters and paired matchups for `week`. Weekly
- *  leagues only deal in their own contest_week, and are TOSSED (all seats
- *  unenrolled) two weeks after it — one week of crown-display, then gone.
- *  Idempotent (deterministic upserts). */
+ *  enrolled human has this week's salary board, AI entries, and paired
+ *  matchups. Humans build their own entry (save_pod_entry); a human with no
+ *  entry by lock gets the seeded auto-build so a no-show still has a game.
+ *  Weekly leagues only run in their own contest_week, and are TOSSED (all
+ *  seats unenrolled) two weeks after it — one week of crown-display, then
+ *  gone. Idempotent (deterministic upserts; the board freezes once written
+ *  so cap math never shifts under a part-built entry). */
 export async function ensurePods(week, season, idx) {
   const { data: all } = await db().from('league')
     .select('id, name, kind, contest_week').in('kind', ['pod', 'weekly']).eq('season', season);
@@ -155,27 +211,56 @@ export async function ensurePods(week, season, idx) {
   const slateTeams = new Set(slateRows.flatMap((g) => [g.home, g.away]).filter(Boolean));
   if (!slateTeams.size) return { pods: pods.length, dealt: 0, matchups: 0, tossed, skipped: 'no slate' };
 
-  const pool = podPool(idx, slateTeams);
+  // The week's salary board: build + freeze on first sight of the week, then
+  // always read back the frozen rows (weekly projections drift; the board a
+  // human is building against must not).
+  let board;
+  const { data: haveSal } = await db().from('pod_salary')
+    .select('slug').eq('season', season).eq('week', week).limit(1);
+  if (!haveSal?.length) {
+    const weekly = bakedWeekFor(week) ?? await sleeperWeekFor(season, week, idx);
+    board = buildSalaryBoard(idx, slateTeams, weekly);
+    if (board.length) {
+      await db().from('pod_salary').upsert(
+        board.map((r) => ({ season, week, ...r })), { onConflict: 'season,week,slug' });
+    }
+  } else {
+    const { data: rows } = await db().from('pod_salary')
+      .select('slug, name, pos, team, salary, proj').eq('season', season).eq('week', week);
+    board = rows ?? [];
+  }
+  if (!board.length) return { pods: pods.length, dealt: 0, matchups: 0, tossed, skipped: 'no board' };
+
   const lockMs = await weekKickoffMs(season, week, config.seasonType).catch(() => null);
   const lockAt = lockMs ? new Date(lockMs).toISOString() : null;
+  const lockPassed = lockMs != null && lockMs <= Date.now();
 
   let dealt = 0, made = 0;
   for (const pod of pods) {
     const { data: mems } = await db().from('league_membership')
-      .select('sleeper_roster_id, enrolled, app_user_id').eq('league_id', pod.id);
+      .select('sleeper_roster_id, enrolled, app_user_id, controller').eq('league_id', pod.id);
     const seats = (mems ?? []).map((m) => m.sleeper_roster_id);
     const hasHuman = (mems ?? []).some((m) => m.enrolled && m.app_user_id);
     if (!seats.length || !hasHuman) continue;
 
-    // Deal once per (pod, week): skip if lineups already exist.
-    const { data: existing } = await db().from('sleeper_lineup')
-      .select('roster_id').eq('league_id', pod.id).eq('week', week).limit(1);
-    if (!existing?.length) {
-      const squads = dealPodRosters(pod.id, week, seats, pool);
-      const rows = [...squads.entries()].map(([rosterId, squad]) => ({
-        league_id: pod.id, week, roster_id: rosterId,
-        starters_json: squad.map((p, i) => ({ slot: i, sleeper_id: null, player_slug: p.slug, pos: p.pos })),
-      }));
+    // Entries: AI seats auto-build immediately; human seats build their own
+    // via save_pod_entry, but an entry-less human gets the auto-build at lock.
+    const { data: have } = await db().from('sleeper_lineup')
+      .select('roster_id').eq('league_id', pod.id).eq('week', week);
+    const haveSet = new Set((have ?? []).map((r) => r.roster_id));
+    const need = (mems ?? []).filter((m) => {
+      if (haveSet.has(m.sleeper_roster_id)) return false;
+      const isAi = m.controller === 'ai' || !m.app_user_id;
+      return isAi || lockPassed;
+    });
+    if (need.length) {
+      const rows = need.map((m) => {
+        const squad = aiSalaryEntry(pod.id, week, m.sleeper_roster_id, board);
+        return {
+          league_id: pod.id, week, roster_id: m.sleeper_roster_id,
+          starters_json: squad.map((p, i) => ({ slot: i, sleeper_id: null, player_slug: p.slug, pos: p.pos })),
+        };
+      });
       await db().from('sleeper_lineup').upsert(rows, { onConflict: 'league_id,week,roster_id' });
       dealt += rows.length;
     }

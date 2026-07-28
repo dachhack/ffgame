@@ -184,6 +184,27 @@ export async function joinWeekly(teamName?: string): Promise<PodJoin & { week?: 
   return data as PodJoin & { week?: number };
 }
 
+// ── DFS-style team building (migration 0092) ────────────────────────────────
+export const POD_SALARY_CAP = 50000;
+export interface PodSalaryRow { slug: string; name: string; pos: string; team: string; salary: number; proj: number; }
+
+/** The week's frozen salary board (public game data — priced weekly projections). */
+export async function podSalaries(week: number, season = '2026'): Promise<PodSalaryRow[]> {
+  const { data } = await client().from('pod_salary')
+    .select('slug, name, pos, team, salary, proj')
+    .eq('season', season).eq('week', week)
+    .order('salary', { ascending: false });
+  return (data ?? []) as PodSalaryRow[];
+}
+
+/** Save the caller's pod/showdown entry (9 slugs). Server validates membership,
+ *  week, lock, roster shape (QB·2RB·3WR·TE·K·DST), and the $50k cap. */
+export async function savePodEntry(leagueId: string, week: number, picks: string[]): Promise<{ ok: boolean; error?: string; spent?: number; cap?: number }> {
+  const { data, error } = await client().rpc('save_pod_entry', { p_league: leagueId, p_week: week, p_picks: picks });
+  if (error) return { ok: false, error: friendlyError(error) };
+  return data as { ok: boolean; error?: string; spent?: number; cap?: number };
+}
+
 // ── "Request a code" lead capture (migration 0016) ───────────────────────────────
 /** Pre-auth request to have a pilot code set up for the visitor's league. Routes
  *  through a SECURITY DEFINER RPC granted to anon, so it works before sign-in. */
