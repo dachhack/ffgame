@@ -18,7 +18,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked
 
-2026-07-21 — Shipped public drop-in pods (solo-joinable, AI-filled leagues; PR #212) and weekly showdowns (one-week contests: recruit → crown → toss; PR #213). Migrations 0089/0090 applied; both need a Fly worker redeploy to go live.
+2026-07-28 — Pod/showdown deals now fueled by 2026 StatHead projections (proj2026.ts) with 2025-actuals fallback — rookies dealable, offseason moves priced. Engagement strategy reframed: ads should sell solo play (pods/showdowns), not league adoption; league conversion becomes the expansion step.
 
 ## Current blockers
 
@@ -28,5 +28,5 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 ## Next 3 tasks
 
 1. Redeploy the Fly worker, then smoke-test the solo paths live: fresh account → Play solo / This week's showdown → dealt roster + matchup appear.
-2. Lead alerting for `code_request` rows (Reddit-ad leads currently sit unnoticed in the admin table; no email/notification on new leads).
-3. Bar mode (DFS path step 3): same-room group play — design scope against the pod/showdown infra.
+2. Repoint the demo's post-run CTA at solo play (pod/showdown) instead of "request a code" — align the ad → demo → playing-user funnel with the new solo paths.
+3. Weekly showdown re-engagement email ("Week N is open — defend your crown") — the recruit→crown→toss loop has no delivery channel yet; also covers lead alerting for `code_request` rows.
