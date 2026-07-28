@@ -18,7 +18,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked
 
-2026-07-28 — Yahoo went live-ready: the approved app's key is wired into the Pages builds (PR #215; founder set the secrets + redirect URI). Lead alerting shipped: new `code_request` rows email the founder via a pg_net trigger → `lead-alert` Edge Function (migration 0091; needs its one-click function deploy). Also: pod/showdown deals now fueled by 2026 StatHead projections (proj2026.ts) with 2025-actuals fallback — rookies dealable, offseason moves priced. Engagement strategy reframed: ads should sell solo play (pods/showdowns), not league adoption; league conversion becomes the expansion step.
+2026-07-28 — Yahoo went live-ready: the approved app's key is wired into the Pages builds (PR #215; founder set the secrets + redirect URI). Lead alerting shipped: new `code_request` rows email the founder via a pg_net trigger → `lead-alert` Edge Function (migration 0091; needs its one-click function deploy). Pod/showdown deals now fueled by 2026 StatHead projections with 2025-actuals fallback — rookies dealable, offseason moves priced — and proj2026.ts re-baked at the new 416-player depth with Sleeper-id exact joins (StatHead MCP shipped our feedback: deeper pool, ids, as_of, injury-aware weekly + K/DST; weekly tool callable from the next session). Engagement strategy reframed: ads sell solo play; league adoption is the expansion step.
 
 ## Current blockers
 
