@@ -28,3 +28,8 @@ export async function resolveUser(username) {
 
 /** Full NFL player directory (~5 MB). Heavy — fetch at most daily. */
 export const getPlayers = () => getJson(`${BASE}/players/nfl`);
+
+/** Sleeper's live weekly projections: { sleeper_id|team_abbr: { pts_ppr, ... } }.
+ *  Team DEFs are keyed by team abbreviation; kickers by numeric id. Undocumented
+ *  endpoint — callers must treat failure as "no weekly data" and fall back. */
+export const getWeekProjections = (season, week) => getJson(`${BASE}/projections/nfl/regular/${season}/${week}`);
