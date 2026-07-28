@@ -18,7 +18,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked
 
-2026-07-28 — Pod/showdown deals now fueled by 2026 StatHead projections (proj2026.ts) with 2025-actuals fallback — rookies dealable, offseason moves priced. Engagement strategy reframed: ads should sell solo play (pods/showdowns), not league adoption; league conversion becomes the expansion step.
+2026-07-28 — Pod/showdown deals now fueled by 2026 StatHead projections with 2025-actuals fallback — rookies dealable, offseason moves priced. Re-baked proj2026.ts at the new 416-player depth with Sleeper-id exact joins (StatHead MCP shipped our feedback: deeper pool, ids, as_of, injury-aware weekly + K/DST — weekly tool callable from the next session). Engagement strategy reframed: ads sell solo play; league adoption is the expansion step.
 
 ## Current blockers
 

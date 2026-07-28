@@ -14,7 +14,7 @@ import { db } from './supabase.js';
 import { config } from './config.js';
 import { weekKickoffMs, buildSlate } from './poll/scoreboard.js';
 import { statsForSlug, hasStatsForSlug } from '../../src/data/players.ts';
-import { PROJ_2026 } from '../../src/data/proj2026.ts';
+import { PROJ_2026, PROJ_2026_SID } from '../../src/data/proj2026.ts';
 
 // ── Seeded RNG (mulberry32 over a string hash — mirrors the playtester) ──────
 function hashStr(s) {
@@ -35,12 +35,23 @@ function rng(seedStr) {
 // A dealt starting squad mirrors the playtester's honest roster shape.
 const DEAL_COUNTS = { QB: 1, RB: 2, WR: 3, TE: 1, K: 1, DEF: 1 };
 
+// Slugs whose projection was resolved via Sleeper id at pool time (the name
+// join missed — display names drift between sources). Lets the slug-only draw
+// weighting agree with pool admission.
+const sidResolved = new Map(); // slug -> ppg
+
 /** Deal value in projected PPR points-per-game. Prefers the baked 2026
  *  StatHead projection (proj2026.ts — includes rookies, prices offseason
- *  situation changes); falls back to 2025 actual production scaled to
- *  per-game for vets outside the ~300-player projection set. 0 = unknown. */
-export function dealPpg(slug, pos) {
-  const proj = PROJ_2026.get(slug);
+ *  situation changes), joined by Sleeper id when available (exact) with the
+ *  normName slug as the fallback join; vets outside the projection set fall
+ *  back to 2025 actual production scaled to per-game. 0 = unknown. */
+export function dealPpg(slug, pos, sid) {
+  const bySid = sid != null ? PROJ_2026_SID.get(String(sid)) : undefined;
+  if (bySid != null) {
+    if (!PROJ_2026.has(slug)) sidResolved.set(slug, bySid);
+    return bySid;
+  }
+  const proj = sidResolved.get(slug) ?? PROJ_2026.get(slug);
   if (proj != null) return proj;
   if (!hasStatsForSlug(slug)) return 0;
   const st = statsForSlug(slug, pos);
@@ -105,7 +116,7 @@ export function podPool(idx, slateTeams) {
     // Skill floor: a real 2026 projection OR real 2025 production, ~startable.
     // (dealPpg returns 0 for slugs with neither — statsForSlug's positional
     // fallback would otherwise wave every unknown through.)
-    if (dealPpg(p.slug, p.pos) < MIN_DEAL_PPG) continue;
+    if (dealPpg(p.slug, p.pos, p.sid) < MIN_DEAL_PPG) continue;
     pool[p.pos].push(p.slug);
   }
   for (const t of slateTeams) { pool.K.push(`${t.toLowerCase()}-k`); pool.DEF.push(`${t.toLowerCase()}-dst`); }
