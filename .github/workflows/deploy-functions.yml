@@ -15,6 +15,10 @@ name: Deploy Edge Functions
 #                   secrets (GOOGLE_SA_EMAIL / GOOGLE_SA_PRIVATE_KEY / GMAIL_SENDER
 #                   / GMAIL_FROM_NAME) — set those in the Supabase dashboard
 #                   (Edge Functions → Secrets), so the Google key never touches CI.
+#   lead-alert    — Emails a digest of new code_request leads; poked by a DB
+#                   trigger (migration 0091). Same Gmail secrets as send-invite
+#                   (+ optional LEAD_ALERT_TO recipient override). Anonymous
+#                   invocation (the poke is a no-op without unnotified rows).
 #
 # The demo proxies deploy with --no-verify-jwt so anonymous visitors can invoke
 # them; send-invite keeps JWT verification on. See the per-function logic below.
@@ -38,6 +42,7 @@ on:
           - 'fantasy-proxy'
           - 'yahoo-oauth'
           - 'send-invite'
+          - 'lead-alert'
 
 concurrency: supabase-functions-deploy
 

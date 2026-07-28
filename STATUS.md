@@ -18,7 +18,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked
 
-2026-07-28 — Pod/showdown deals now fueled by 2026 StatHead projections (proj2026.ts) with 2025-actuals fallback — rookies dealable, offseason moves priced. Engagement strategy reframed: ads should sell solo play (pods/showdowns), not league adoption; league conversion becomes the expansion step.
+2026-07-28 — Yahoo went live-ready: the approved app's key is wired into the Pages builds (PR #215; founder set the secrets + redirect URI). Lead alerting shipped: new `code_request` rows email the founder via a pg_net trigger → `lead-alert` Edge Function (migration 0091; needs its one-click function deploy). Also: pod/showdown deals now fueled by 2026 StatHead projections (proj2026.ts) with 2025-actuals fallback — rookies dealable, offseason moves priced. Engagement strategy reframed: ads should sell solo play (pods/showdowns), not league adoption; league conversion becomes the expansion step.
 
 ## Current blockers
 
@@ -27,6 +27,6 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Next 3 tasks
 
-1. Redeploy the Fly worker, then smoke-test the solo paths live: fresh account → Play solo / This week's showdown → dealt roster + matchup appear.
+1. Founder ops pass: redeploy the Fly worker + one-click deploy `lead-alert`, then smoke-test live — solo paths (fresh account → Play solo / This week's showdown → dealt roster + matchup), one lead end-to-end, and the first real Yahoo league connect (the JSON mapping has never seen live Fantasy data).
 2. Repoint the demo's post-run CTA at solo play (pod/showdown) instead of "request a code" — align the ad → demo → playing-user funnel with the new solo paths.
-3. Weekly showdown re-engagement email ("Week N is open — defend your crown") — the recruit→crown→toss loop has no delivery channel yet; also covers lead alerting for `code_request` rows.
+3. Weekly showdown re-engagement email ("Week N is open — defend your crown") — the recruit→crown→toss loop has no delivery channel yet; can reuse lead-alert's Gmail machinery.
