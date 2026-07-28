@@ -197,8 +197,22 @@ export async function podSalaries(week: number, season = '2026'): Promise<PodSal
   return (data ?? []) as PodSalaryRow[];
 }
 
+/** Per-team entry-lock times for a week (0093 late swap): each game locks its
+ *  players one hour before kickoff. Map team → lock epoch-ms (absent = never). */
+export async function weekGameLocks(week: number, season = '2026'): Promise<Map<string, number>> {
+  const { data } = await client().from('nfl_slate')
+    .select('home, away, kickoff').eq('season', season).eq('week', week);
+  const m = new Map<string, number>();
+  for (const g of (data ?? []) as { home: string; away: string; kickoff: string | null }[]) {
+    if (!g.kickoff) continue;
+    const lock = Date.parse(g.kickoff) - 3_600_000;
+    m.set(g.home, lock); m.set(g.away, lock);
+  }
+  return m;
+}
+
 /** Save the caller's pod/showdown entry (9 slugs). Server validates membership,
- *  week, lock, roster shape (QB·2RB·3WR·TE·K·DST), and the $50k cap. */
+ *  week, per-game locks (0093), roster shape (QB·2RB·3WR·TE·K·DST), and the $50k cap. */
 export async function savePodEntry(leagueId: string, week: number, picks: string[]): Promise<{ ok: boolean; error?: string; spent?: number; cap?: number }> {
   const { data, error } = await client().rpc('save_pod_entry', { p_league: leagueId, p_week: week, p_picks: picks });
   if (error) return { ok: false, error: friendlyError(error) };

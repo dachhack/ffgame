@@ -778,9 +778,10 @@ function LeagueCard({ e, card, commish, userId, onBoard, onPodBuild, onResults, 
       {e.league?.kind === 'weekly' && <WeeklyCrown leagueId={e.league_id} week={e.league.contest_week} myRoster={e.sleeper_roster_id} />}
 
       {/* Pods + showdowns: the squad is BUILT under the salary cap (0092), not
-          dealt — the builder is the primary pre-kickoff action. */}
-      {(e.league?.kind === 'pod' || e.league?.kind === 'weekly') && !live && !final && (
-        <button onClick={onPodBuild} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 12, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>⛏ BUILD YOUR SQUAD · $50K CAP →</button>
+          dealt. Stays available through LIVE — players late-swap per game
+          (each locks 1h before his own kickoff, 0093) until the week is final. */}
+      {(e.league?.kind === 'pod' || e.league?.kind === 'weekly') && !final && (
+        <button onClick={onPodBuild} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 12, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>{live ? '⛏ LATE-SWAP YOUR SQUAD →' : '⛏ BUILD YOUR SQUAD · $50K CAP →'}</button>
       )}
 
       {/* actions — default goes to the REAL board for this league's season (the
