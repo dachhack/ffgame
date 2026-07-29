@@ -428,9 +428,9 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // claim with a commish code), then return home refreshed.
   if (view === 'add') return (
     <>
-      {/* "Start a fresh league" is super-admin-only while native leagues are in
-          closed testing (the create RPC enforces the same gate server-side). */}
-      <RoleChooser onPlayer={() => setView('join')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={() => setView('dfsjoin')} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+      {/* "Start a fresh league" needs the founder-granted 'native' flag (0095;
+          admins always pass — the create RPC enforces the same gate server-side). */}
+      <RoleChooser onPlayer={() => setView('join')} onCreate={admin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={() => setView('dfsjoin')} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </>
@@ -481,7 +481,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (enrollments.length === 0) return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={() => setView('dfsjoin')} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={admin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={() => setView('dfsjoin')} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}

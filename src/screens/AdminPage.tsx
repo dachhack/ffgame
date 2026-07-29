@@ -1413,13 +1413,14 @@ function DeleteLeague({ name, onDelete }: { name: string; onDelete: () => Promis
   );
 }
 
-// Per-account feature gates (0094): 'solo' = standalone pods/showdowns;
-// 'dfs_commish' = may found DFS leagues (the founder-approval switch).
+// Per-account feature gates (0094/0095): 'solo' = standalone pods/showdowns;
+// 'dfs_commish' = may found DFS leagues; 'native' = may create in-app drafted
+// leagues (incl. mock drafts). All founder-approval switches.
 function FeatureFlags() {
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const set = async (feature: 'solo' | 'dfs_commish', on: boolean) => {
+  const set = async (feature: 'solo' | 'dfs_commish' | 'native', on: boolean) => {
     if (busy || !email.trim()) return;
     setBusy(true); setMsg(null);
     const r = await adminSetFeature(email, feature, on).catch((x) => ({ ok: false, error: String(x) }));
@@ -1431,7 +1432,7 @@ function FeatureFlags() {
     <div style={card}>
       <div style={h}>FEATURE FLAGS</div>
       <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
-        <b>solo</b> — standalone pods + weekly showdowns · <b>dfs_commish</b> — may create DFS leagues. Account must exist (signed in once).
+        <b>solo</b> — standalone pods + weekly showdowns · <b>dfs_commish</b> — may create DFS leagues · <b>native</b> — may create drafted-on-site leagues (incl. mocks). Account must exist (signed in once).
       </div>
       <input value={email} onChange={(e) => { setEmail(e.target.value); setMsg(null); }} placeholder="player@email.com" type="email"
         style={{ fontFamily: 'inherit', fontSize: 12, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 10px', outline: 'none', width: '100%', boxSizing: 'border-box' }} />
@@ -1440,6 +1441,8 @@ function FeatureFlags() {
         <button className="mono" style={b} disabled={busy} onClick={() => set('solo', false)}>− solo</button>
         <button className="mono" style={{ ...b, color: 'var(--warn)' }} disabled={busy} onClick={() => set('dfs_commish', true)}>+ dfs commish</button>
         <button className="mono" style={b} disabled={busy} onClick={() => set('dfs_commish', false)}>− dfs commish</button>
+        <button className="mono" style={{ ...b, color: 'var(--text)' }} disabled={busy} onClick={() => set('native', true)}>+ native</button>
+        <button className="mono" style={b} disabled={busy} onClick={() => set('native', false)}>− native</button>
       </div>
       {msg && <div className="mono" style={{ ...mono, fontSize: 10, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{msg}</div>}
     </div>
