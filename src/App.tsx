@@ -70,6 +70,10 @@ export function App() {
       // survives the magic-link bounce; LiveOnboard opens the claim screen.
       const commish = p.get('commish');
       if (commish) { try { localStorage.setItem('dripCommishCode', commish.toUpperCase()); } catch { /* ignore */ } }
+      // A DFS league invite link (?dfs=CODE) → stash; LiveOnboard auto-joins
+      // after sign-in (0094 — the link IS the access; no card in the chooser).
+      const dfs = p.get('dfs');
+      if (dfs) { try { localStorage.setItem('dripDfsCode', dfs.toUpperCase()); } catch { /* ignore */ } }
       navigate({ name: 'live' });
       // Consume the params so a later refresh doesn't teleport back into Live (the
       // route now lives in the hash). Keep the path + the just-set #/live hash.

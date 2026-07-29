@@ -177,6 +177,7 @@ function AuthForm() {
     try {
       if (localStorage.getItem('dripCommishCode')) return 'commish';
       if (localStorage.getItem('dripInviteCode')) return 'player';
+      if (localStorage.getItem('dripDfsCode')) return 'player'; // DFS link → same "join your league" framing
     } catch { /* ignore */ }
     return null;
   })();
@@ -408,6 +409,23 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     /* eslint-disable-next-line */
   }, [session.user.id]);
 
+  // DFS invite link (?dfs=CODE → dripDfsCode): once signed in, auto-join the
+  // league — the link is the whole flow, no chooser card for normal users.
+  // On failure, open the manual join form with the code prefilled.
+  const [dfsCode, setDfsCode] = useState<string | null>(null);
+  useEffect(() => {
+    let code: string | null = null;
+    try { code = localStorage.getItem('dripDfsCode'); localStorage.removeItem('dripDfsCode'); } catch { /* ignore */ }
+    if (!code) return;
+    joinDfs(code)
+      .then((r) => {
+        if (r.ok) { track(Ev.dfsJoined, { already: !!r.already, via: 'link' }); refresh(); setView('home'); }
+        else { setDfsCode(code); setView('dfsjoin'); }
+      })
+      .catch(() => { setDfsCode(code); setView('dfsjoin'); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.user.id]);
+
   const playSolo = async (mode: 'pod' | 'weekly') => {
     if (soloBusy) return;
     setSoloBusy(mode); setSoloErr(null);
@@ -430,7 +448,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     <>
       {/* "Start a fresh league" needs the founder-granted 'native' flag (0095;
           admins always pass — the create RPC enforces the same gate server-side). */}
-      <RoleChooser onPlayer={() => setView('join')} onCreate={admin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={() => setView('dfsjoin')} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+      <RoleChooser onPlayer={() => setView('join')} onCreate={admin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </>
@@ -454,7 +472,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
     </>
   );
-  if (view === 'dfsjoin') return <DfsJoinForm onJoined={() => { setView('home'); refresh(); }} onBack={() => setView('home')} />;
+  if (view === 'dfsjoin') return <DfsJoinForm initialCode={dfsCode ?? undefined} onJoined={() => { setDfsCode(null); setView('home'); refresh(); }} onBack={() => { setDfsCode(null); setView('home'); }} />;
   if (view === 'dfscreate') return <DfsCreateForm onDone={() => { setView('home'); refresh(); }} onBack={() => setView('home')} />;
   if (view === 'podbuild' && target) return (
     <PodBuilder leagueId={target.leagueId} rosterId={target.rosterId} week={target.week} leagueName={target.name}
@@ -481,7 +499,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (enrollments.length === 0) return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={admin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={() => setView('dfsjoin')} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={admin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
@@ -990,8 +1008,8 @@ function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekl
 
 // Join a commissioner's DFS league by code (0094). The invite IS the access —
 // no feature flag needed on the joiner's account.
-function DfsJoinForm({ onJoined, onBack }: { onJoined: () => void; onBack: () => void }) {
-  const [code, setCode] = useState('');
+function DfsJoinForm({ onJoined, onBack, initialCode }: { onJoined: () => void; onBack: () => void; initialCode?: string }) {
+  const [code, setCode] = useState(initialCode ?? '');
   const [team, setTeam] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -1049,17 +1067,25 @@ function DfsCreateForm({ onDone, onBack }: { onDone: () => void; onBack: () => v
     } catch (x) { setErr(friendlyError(x)); }
     finally { setBusy(false); }
   };
-  if (made) return (
-    <div style={{ maxWidth: 440, margin: '0 auto' }}>
-      <div style={card}>
-        <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--you)' }}>{made.league} is live.</div>
-        <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Share this invite code — players sign in, pick “I have a DFS invite”, and enter it. Unclaimed seats play as AI.</div>
-        <button onClick={() => { navigator.clipboard?.writeText(made.invite_code ?? ''); setCopied(true); }}
-          className="mono" style={{ ...btn, width: '100%', padding: '12px 0', marginTop: 14, letterSpacing: '0.2em', fontSize: 15 }}>{copied ? '✓ copied' : made.invite_code}</button>
-        <button onClick={onDone} className="mono" style={{ ...linkBtn, display: 'block', margin: '16px auto 0', color: 'var(--you)' }}>→ to my leagues</button>
+  if (made) {
+    // One link is the whole join flow: open → sign in → auto-seated (?dfs=CODE
+    // is stashed through the auth bounce, same as the commissioner links).
+    const joinLink = `${window.location.origin}${window.location.pathname}?live=1&dfs=${made.invite_code}`;
+    return (
+      <div style={{ maxWidth: 440, margin: '0 auto' }}>
+        <div style={card}>
+          <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--you)' }}>{made.league} is live.</div>
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Share one link — players open it, sign in, and they’re seated. Unclaimed seats play as AI.</div>
+          <button onClick={() => { navigator.clipboard?.writeText(joinLink); setCopied(true); }}
+            className="mono" style={{ ...btn, width: '100%', padding: '12px 0', marginTop: 14 }}>{copied ? '✓ invite link copied' : '⛓ Copy invite link'}</button>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5 }}>
+            Code, if you’d rather say it out loud: <span style={{ color: 'var(--text)', fontWeight: 700, letterSpacing: '0.1em' }}>{made.invite_code}</span>
+          </div>
+          <button onClick={onDone} className="mono" style={{ ...linkBtn, display: 'block', margin: '16px auto 0', color: 'var(--you)' }}>→ to my leagues</button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
   return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
       <div style={card}>
