@@ -948,6 +948,13 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
 
 function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekly, onDfsJoin, onDfsCreate, soloBusy, soloErr }: { onPlayer: () => void; onCreate?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; onWeekly?: () => void; onDfsJoin?: () => void; onDfsCreate?: () => void; soloBusy?: 'pod' | 'weekly' | null; soloErr?: { mode: 'pod' | 'weekly'; msg: string } | null }) {
   const choice: React.CSSProperties = { width: '100%', textAlign: 'left', fontFamily: 'inherit', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, cursor: 'pointer' };
+  // Everyone sees the platform-league paths; everything below the divider only
+  // renders because THIS account holds a feature flag (or is admin) — the chip
+  // names the flag so the founder can tell at a glance who else would see it.
+  const gate = (label: string) => (
+    <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', border: '1px dashed var(--bd)', borderRadius: 4, padding: '2px 6px', marginLeft: 8, verticalAlign: 'middle' }}>{label}</span>
+  );
+  const anyGated = !!(onWeekly || onSolo || onDfsJoin || onDfsCreate || onCreate);
   return (
     <>
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
@@ -955,42 +962,10 @@ function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekl
         <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>How are you joining the pilot?</div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {onWeekly && (
-          <button onClick={onWeekly} disabled={!!soloBusy} style={{ ...choice, borderLeft: '3px solid var(--warn)', opacity: soloBusy ? 0.6 : 1 }}>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--warn)' }}>{soloBusy === 'weekly' ? 'Seating you in the showdown…' : '🏆 This week’s showdown →'}</div>
-            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>One-week contest, no strings. Build a squad under the $50k cap, battle head-to-head this Sunday, top score takes the crown — then it’s over.</div>
-            {soloErr?.mode === 'weekly' && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 6, lineHeight: 1.4 }}>{soloErr.msg}</div>}
-          </button>
-        )}
-        {onSolo && (
-          <button onClick={onSolo} disabled={!!soloBusy} style={{ ...choice, borderLeft: '3px solid var(--you)', opacity: soloBusy ? 0.6 : 1 }}>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>{soloBusy === 'pod' ? 'Finding you a pod…' : '🎲 Play solo — join a public pod →'}</div>
-            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No league needed. One tap seats you in a 6-team public pod — build a fresh salary-cap squad and battle head-to-head every week, all season.</div>
-            {soloErr?.mode === 'pod' && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 6, lineHeight: 1.4 }}>{soloErr.msg}</div>}
-          </button>
-        )}
         <button onClick={onPlayer} style={choice}>
           <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>I’m a player →</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>I have a league invite code. Link my Sleeper team and set my lineup.</div>
         </button>
-        {onDfsJoin && (
-          <button onClick={onDfsJoin} style={choice}>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>I have a DFS invite →</div>
-            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>A commissioner sent me a DFS code. Join, build a salary-cap squad, battle weekly.</div>
-          </button>
-        )}
-        {onDfsCreate && (
-          <button onClick={onDfsCreate} style={{ ...choice, borderLeft: '3px solid var(--warn)' }}>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--warn)' }}>🏈 Start a DFS league →</div>
-            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>You’re an approved DFS commissioner. Found a private league and share its invite code.</div>
-          </button>
-        )}
-        {onCreate && (
-          <button onClick={onCreate} style={{ ...choice, borderLeft: '3px solid var(--you)' }}>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>Start a fresh league →</div>
-            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No existing league needed — create one here, invite friends, and draft your teams right in the app.</div>
-          </button>
-        )}
         <button onClick={onCommish} style={choice}>
           <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>I run this league →</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Verify as commissioner with the code you were given, then share a player invite code with your league.</div>
@@ -999,6 +974,46 @@ function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekl
           <button onClick={onRequest} style={choice}>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>My league isn’t in the pilot yet →</div>
             <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No code? Request one — we’ll set your league up. Sleeper · ESPN · Yahoo · Fleaflicker · MFL.</div>
+          </button>
+        )}
+
+        {anyGated && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '10px 0 2px' }}>
+            <span style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
+            <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)' }}>VISIBLE TO YOU VIA FEATURE FLAGS</span>
+            <span style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
+          </div>
+        )}
+        {onWeekly && (
+          <button onClick={onWeekly} disabled={!!soloBusy} style={{ ...choice, borderLeft: '3px solid var(--warn)', opacity: soloBusy ? 0.6 : 1 }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--warn)' }}>{soloBusy === 'weekly' ? 'Seating you in the showdown…' : '🏆 This week’s showdown →'}{gate('SOLO')}</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>One-week contest, no strings. Build a squad under the $50k cap, battle head-to-head this Sunday, top score takes the crown — then it’s over.</div>
+            {soloErr?.mode === 'weekly' && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 6, lineHeight: 1.4 }}>{soloErr.msg}</div>}
+          </button>
+        )}
+        {onSolo && (
+          <button onClick={onSolo} disabled={!!soloBusy} style={{ ...choice, borderLeft: '3px solid var(--you)', opacity: soloBusy ? 0.6 : 1 }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>{soloBusy === 'pod' ? 'Finding you a pod…' : '🎲 Play solo — join a public pod →'}{gate('SOLO')}</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No league needed. One tap seats you in a 6-team public pod — build a fresh salary-cap squad and battle head-to-head every week, all season.</div>
+            {soloErr?.mode === 'pod' && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 6, lineHeight: 1.4 }}>{soloErr.msg}</div>}
+          </button>
+        )}
+        {onDfsJoin && (
+          <button onClick={onDfsJoin} style={choice}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>I have a DFS invite →{gate('FALLBACK')}</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Manual code entry — invitees normally just open the commissioner’s link and are seated automatically.</div>
+          </button>
+        )}
+        {onDfsCreate && (
+          <button onClick={onDfsCreate} style={{ ...choice, borderLeft: '3px solid var(--warn)' }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--warn)' }}>🏈 Start a DFS league →{gate('DFS COMMISH')}</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>You’re an approved DFS commissioner. Found a private league and share its invite link.</div>
+          </button>
+        )}
+        {onCreate && (
+          <button onClick={onCreate} style={{ ...choice, borderLeft: '3px solid var(--you)' }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>Start a fresh league →{gate('NATIVE')}</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No existing league needed — create one here, invite friends, and draft your teams right in the app.</div>
           </button>
         )}
       </div>
