@@ -5,7 +5,7 @@ import { liveConfigured } from '../data/supabaseClient';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   getSession, onAuth, signOut, ensureAppUser,
-  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, myEnrollments, myLinkedSleeper, claimMyRosters,
+  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, myFeatures, myEnrollments, myLinkedSleeper, claimMyRosters,
   redeemCommish, isAdmin, commishOverview, friendlyError, deleteMockDraft,
   myMatchup, matchupTeams, leagueResults, defaultOpenWeek,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
@@ -48,7 +48,7 @@ function GoogleG() {
   );
 }
 
-type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin' | 'add' | 'join' | 'results' | 'create' | 'draft' | 'team' | 'podbuild';
+type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin' | 'add' | 'join' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate';
 
 export function LiveOnboard() {
   const { navigate, route } = useStore();
@@ -369,6 +369,12 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // — no invite, no Sleeper league. soloBusy remembers WHICH card is working.
   const [soloBusy, setSoloBusy] = useState<'pod' | 'weekly' | null>(null);
   const [soloErr, setSoloErr] = useState<{ mode: 'pod' | 'weekly'; msg: string } | null>(null);
+  // Per-account gates (0094): 'solo' shows the standalone cards; 'dfs_commish'
+  // shows "start a DFS league". Admins see everything.
+  const [features, setFeatures] = useState<Record<string, boolean>>({});
+  useEffect(() => { myFeatures().then(setFeatures).catch(() => setFeatures({})); }, [session.user.id]);
+  const showSolo = admin || !!features.solo;
+  const showDfsCreate = admin || !!features.dfs_commish;
   const commishIds = new Set(commishLeagues.map((l) => l.league_id));
   const isCommish = commishIds.size > 0;
 
@@ -424,7 +430,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     <>
       {/* "Start a fresh league" is super-admin-only while native leagues are in
           closed testing (the create RPC enforces the same gate server-side). */}
-      <RoleChooser onPlayer={() => setView('join')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={() => playSolo('pod')} onWeekly={() => playSolo('weekly')} soloBusy={soloBusy} soloErr={soloErr} />
+      <RoleChooser onPlayer={() => setView('join')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={() => setView('dfsjoin')} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </>
@@ -448,6 +454,8 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
     </>
   );
+  if (view === 'dfsjoin') return <DfsJoinForm onJoined={() => { setView('home'); refresh(); }} onBack={() => setView('home')} />;
+  if (view === 'dfscreate') return <DfsCreateForm onDone={() => { setView('home'); refresh(); }} onBack={() => setView('home')} />;
   if (view === 'podbuild' && target) return (
     <PodBuilder leagueId={target.leagueId} rosterId={target.rosterId} week={target.week} leagueName={target.name}
       onBack={() => { setView('home'); refresh(); }} />
@@ -473,7 +481,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (enrollments.length === 0) return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={() => playSolo('pod')} onWeekly={() => playSolo('weekly')} soloBusy={soloBusy} soloErr={soloErr} />
+        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={admin ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={() => setView('dfsjoin')} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
@@ -759,6 +767,7 @@ function LeagueCard({ e, card, commish, userId, onBoard, onPodBuild, onResults, 
             <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{e.team_name}</span>
             {commish && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', borderRadius: 4, padding: '2px 6px' }}>⚑ COMMISSIONER</span>}
             {e.league?.kind === 'weekly' && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>🏆 WK {e.league.contest_week ?? '—'} SHOWDOWN</span>}
+            {e.league?.kind === 'dfs' && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>⚔ DFS LEAGUE</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, minWidth: 0 }}>
             {e.league?.avatar_url && <img src={e.league.avatar_url} alt="" width={14} height={14} style={{ borderRadius: 3, flexShrink: 0 }} />}
@@ -780,7 +789,7 @@ function LeagueCard({ e, card, commish, userId, onBoard, onPodBuild, onResults, 
       {/* Pods + showdowns: the squad is BUILT under the salary cap (0092), not
           dealt. Stays available through LIVE — players late-swap per game
           (each locks 1h before his own kickoff, 0093) until the week is final. */}
-      {(e.league?.kind === 'pod' || e.league?.kind === 'weekly') && !final && (
+      {(e.league?.kind === 'pod' || e.league?.kind === 'weekly' || e.league?.kind === 'dfs') && !final && (
         <button onClick={onPodBuild} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 12, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>{live ? '⛏ LATE-SWAP YOUR SQUAD →' : '⛏ BUILD YOUR SQUAD · $50K CAP →'}</button>
       )}
 
@@ -919,7 +928,7 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
   );
 }
 
-function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekly, soloBusy, soloErr }: { onPlayer: () => void; onCreate?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; onWeekly?: () => void; soloBusy?: 'pod' | 'weekly' | null; soloErr?: { mode: 'pod' | 'weekly'; msg: string } | null }) {
+function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekly, onDfsJoin, onDfsCreate, soloBusy, soloErr }: { onPlayer: () => void; onCreate?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; onWeekly?: () => void; onDfsJoin?: () => void; onDfsCreate?: () => void; soloBusy?: 'pod' | 'weekly' | null; soloErr?: { mode: 'pod' | 'weekly'; msg: string } | null }) {
   const choice: React.CSSProperties = { width: '100%', textAlign: 'left', fontFamily: 'inherit', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, cursor: 'pointer' };
   return (
     <>
@@ -946,6 +955,18 @@ function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekl
           <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>I’m a player →</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>I have a league invite code. Link my Sleeper team and set my lineup.</div>
         </button>
+        {onDfsJoin && (
+          <button onClick={onDfsJoin} style={choice}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>I have a DFS invite →</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>A commissioner sent me a DFS code. Join, build a salary-cap squad, battle weekly.</div>
+          </button>
+        )}
+        {onDfsCreate && (
+          <button onClick={onDfsCreate} style={{ ...choice, borderLeft: '3px solid var(--warn)' }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--warn)' }}>🏈 Start a DFS league →</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>You’re an approved DFS commissioner. Found a private league and share its invite code.</div>
+          </button>
+        )}
         {onCreate && (
           <button onClick={onCreate} style={{ ...choice, borderLeft: '3px solid var(--you)' }}>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>Start a fresh league →</div>
@@ -964,6 +985,103 @@ function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekl
         )}
       </div>
     </>
+  );
+}
+
+// Join a commissioner's DFS league by code (0094). The invite IS the access —
+// no feature flag needed on the joiner's account.
+function DfsJoinForm({ onJoined, onBack }: { onJoined: () => void; onBack: () => void }) {
+  const [code, setCode] = useState('');
+  const [team, setTeam] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const go = async () => {
+    if (busy || !code.trim()) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await joinDfs(code, team);
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'Couldn’t join — check the code.')); return; }
+      track(Ev.dfsJoined, { already: !!r.already });
+      onJoined();
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ maxWidth: 440, margin: '0 auto' }}>
+      <div style={card}>
+        <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>Join a DFS league</div>
+        <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Enter the invite code your commissioner shared. You’ll build a salary-cap squad each week and battle head-to-head.</div>
+        <label className="mono" style={{ ...label, display: 'block', marginTop: 14 }}>INVITE CODE</label>
+        <input value={code} autoFocus onChange={(e) => { setCode(e.target.value.toUpperCase()); setErr(null); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
+          placeholder="ABC123" style={{ ...input, width: '100%', boxSizing: 'border-box', marginTop: 7, letterSpacing: '0.15em' }} />
+        <label className="mono" style={{ ...label, display: 'block', marginTop: 12 }}>TEAM NAME <span style={{ fontWeight: 400 }}>(optional)</span></label>
+        <input value={team} onChange={(e) => setTeam(e.target.value)} maxLength={30}
+          onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
+          placeholder="The Underdogs" style={{ ...input, width: '100%', boxSizing: 'border-box', marginTop: 7 }} />
+        <button onClick={go} disabled={busy || !code.trim()} className="mono"
+          style={{ ...btn, width: '100%', padding: '12px 0', marginTop: 14, opacity: busy || !code.trim() ? 0.6 : 1 }}>{busy ? '…' : 'JOIN LEAGUE →'}</button>
+        {err && <div className="mono" style={errStyle}>{err}</div>}
+      </div>
+      <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
+    </div>
+  );
+}
+
+// Found a private DFS league (0094) — approved commissioners only (server-
+// gated too). Shows the invite code once created; seats fill from it.
+function DfsCreateForm({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
+  const [name, setName] = useState('');
+  const [teams, setTeams] = useState(6);
+  const [team, setTeam] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [made, setMade] = useState<{ league?: string; invite_code?: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const go = async () => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await createDfsLeague(name, teams, team);
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'Couldn’t create the league.')); return; }
+      track(Ev.dfsCreated, { teams });
+      setMade({ league: r.league, invite_code: (r as { invite_code?: string }).invite_code });
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  if (made) return (
+    <div style={{ maxWidth: 440, margin: '0 auto' }}>
+      <div style={card}>
+        <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--you)' }}>{made.league} is live.</div>
+        <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Share this invite code — players sign in, pick “I have a DFS invite”, and enter it. Unclaimed seats play as AI.</div>
+        <button onClick={() => { navigator.clipboard?.writeText(made.invite_code ?? ''); setCopied(true); }}
+          className="mono" style={{ ...btn, width: '100%', padding: '12px 0', marginTop: 14, letterSpacing: '0.2em', fontSize: 15 }}>{copied ? '✓ copied' : made.invite_code}</button>
+        <button onClick={onDone} className="mono" style={{ ...linkBtn, display: 'block', margin: '16px auto 0', color: 'var(--you)' }}>→ to my leagues</button>
+      </div>
+    </div>
+  );
+  return (
+    <div style={{ maxWidth: 440, margin: '0 auto' }}>
+      <div style={card}>
+        <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>Start a DFS league</div>
+        <label className="mono" style={{ ...label, display: 'block', marginTop: 14 }}>LEAGUE NAME</label>
+        <input value={name} autoFocus onChange={(e) => setName(e.target.value)} maxLength={40}
+          placeholder="Tuesday Night Degens" style={{ ...input, width: '100%', boxSizing: 'border-box', marginTop: 7 }} />
+        <label className="mono" style={{ ...label, display: 'block', marginTop: 12 }}>TEAMS</label>
+        <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+          {[2, 4, 6, 8, 10, 12].map((n) => (
+            <button key={n} onClick={() => setTeams(n)} className="mono" style={{ flex: 1, fontSize: 12, fontWeight: 700, color: teams === n ? 'var(--on-accent)' : 'var(--dim)', background: teams === n ? 'var(--you)' : 'var(--bg)', border: `1px solid ${teams === n ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, padding: '9px 0', cursor: 'pointer' }}>{n}</button>
+          ))}
+        </div>
+        <label className="mono" style={{ ...label, display: 'block', marginTop: 12 }}>YOUR TEAM NAME <span style={{ fontWeight: 400 }}>(optional)</span></label>
+        <input value={team} onChange={(e) => setTeam(e.target.value)} maxLength={30}
+          placeholder="Commish’s Crew" style={{ ...input, width: '100%', boxSizing: 'border-box', marginTop: 7 }} />
+        <button onClick={go} disabled={busy} className="mono"
+          style={{ ...btn, width: '100%', padding: '12px 0', marginTop: 14, opacity: busy ? 0.6 : 1 }}>{busy ? '…' : '🏈 CREATE LEAGUE →'}</button>
+        {err && <div className="mono" style={errStyle}>{err}</div>}
+      </div>
+      <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
+    </div>
   );
 }
 

@@ -186,7 +186,7 @@ export function pairPodSeats(leagueId, week, seats) {
  *  so cap math never shifts under a part-built entry). */
 export async function ensurePods(week, season, idx) {
   const { data: all } = await db().from('league')
-    .select('id, name, kind, contest_week').in('kind', ['pod', 'weekly']).eq('season', season);
+    .select('id, name, kind, contest_week').in('kind', ['pod', 'weekly', 'dfs']).eq('season', season);
   // Toss expired showdowns: their members' home screens drop the card once
   // every seat is unenrolled. League + matchup rows stay as history.
   let tossed = 0;
@@ -197,7 +197,7 @@ export async function ensurePods(week, season, idx) {
       .in('league_id', expired.map((l) => l.id)).eq('enrolled', true).select('id');
     tossed = gone?.length ?? 0;
   }
-  const pods = (all ?? []).filter((l) => l.kind === 'pod' || l.contest_week === week);
+  const pods = (all ?? []).filter((l) => l.kind === 'pod' || l.kind === 'dfs' || l.contest_week === week);
   if (!pods?.length) return { pods: 0, dealt: 0, matchups: 0, tossed };
 
   // Slate: prefer the synced nfl_slate rows; fall back to a live ESPN build.
