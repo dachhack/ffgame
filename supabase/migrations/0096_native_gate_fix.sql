@@ -1,24 +1,18 @@
--- 0095: native (drafted-on-site) league creation becomes a per-account
--- feature the pilot owner grants — third flag in the 0094 access model.
+-- 0096: re-apply 0095 against the LIVE database.
 --
--- create_native_league's gate was hard `is_admin()` ("closed testing").
--- Now: admins OR accounts flagged 'native'. The mock-draft path wraps
--- create_native_league, so flag-holders get practice mocks too. Rather than
--- re-stating the ~150-line function body (0071's latest definition) just to
--- change one line, the DO block pulls the LIVE definition and swaps the gate
--- — and fails loudly if the expected line isn't found, so a future rewrite
--- of the function can't silently drop the gate change.
+-- 0095's first cut hardcoded create_native_league's signature and missed
+-- p_season, so pg_get_functiondef raised and psql aborted the file mid-way:
+-- has_native() was created, but the gate patch and admin_set_feature's
+-- 'native' flag never applied. The migrate workflow only runs NEW files, so
+-- the fix ships as this file (0095 itself is also corrected in-repo for
+-- fresh-database replays; this file is a no-op after a successful 0095 —
+-- every statement below is idempotent / already-patched-tolerant).
 
-/** True when the caller may create native (in-app drafted) leagues. */
 create or replace function has_native() returns boolean
   language sql stable security definer set search_path = public as $$
   select is_admin() or coalesce((select features ? 'native' from app_user where id = auth.uid()), false);
 $$;
 
--- Look the function up BY NAME (signatures drift — hardcoding one bit us in
--- the first cut of this migration): patch every public overload that carries
--- the gate line; tolerate already-patched; fail loudly only if NO overload
--- carries either form.
 do $patch$
 declare
   fn regprocedure;
@@ -46,7 +40,6 @@ begin
   end if;
 end $patch$;
 
--- admin_set_feature learns the third flag.
 create or replace function admin_set_feature(p_email text, p_feature text, p_on boolean)
   returns jsonb
   language plpgsql security definer set search_path = public as $$
