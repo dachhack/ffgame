@@ -5,7 +5,7 @@ import {
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
   adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminSetPreseason, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
-  leagueKdst, setKdstMode, setTeamKdst,
+  leagueKdst, setKdstMode, setTeamKdst, adminSetFeature,
   rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
   setTransactionRules, commishMovePlayer, commishRemovePlayer, commishRuleTrade,
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
@@ -187,6 +187,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 
       {tab === 'users' && (
         <>
+          <FeatureFlags />
           <Users />
           <Admins />
           <Overrides overrides={overrides} reload={load} />
@@ -1408,6 +1409,39 @@ function DeleteLeague({ name, onDelete }: { name: string; onDelete: () => Promis
         style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-accent, #fff)', background: danger, border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', opacity: busy || confirm.trim() !== name ? 0.5 : 1 }}>{busy ? 'deleting…' : 'delete forever'}</button>
       <button onClick={() => { setOpen(false); setConfirm(''); setErr(null); }} className="mono" style={{ ...linkBtn, fontSize: 9 }}>cancel</button>
       {err && <span className="mono" style={{ ...mono, fontSize: 9, color: danger }}>{err}</span>}
+    </div>
+  );
+}
+
+// Per-account feature gates (0094): 'solo' = standalone pods/showdowns;
+// 'dfs_commish' = may found DFS leagues (the founder-approval switch).
+function FeatureFlags() {
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const set = async (feature: 'solo' | 'dfs_commish', on: boolean) => {
+    if (busy || !email.trim()) return;
+    setBusy(true); setMsg(null);
+    const r = await adminSetFeature(email, feature, on).catch((x) => ({ ok: false, error: String(x) }));
+    setBusy(false);
+    setMsg(r.ok ? `✓ ${feature} ${on ? 'ON' : 'OFF'} for ${email.trim()}` : `⚠ ${(r as { error?: string }).error ?? 'failed'}`);
+  };
+  const b: React.CSSProperties = { fontSize: 9.5, fontWeight: 700, letterSpacing: '0.05em', color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 9px', cursor: 'pointer', fontFamily: 'inherit' };
+  return (
+    <div style={card}>
+      <div style={h}>FEATURE FLAGS</div>
+      <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
+        <b>solo</b> — standalone pods + weekly showdowns · <b>dfs_commish</b> — may create DFS leagues. Account must exist (signed in once).
+      </div>
+      <input value={email} onChange={(e) => { setEmail(e.target.value); setMsg(null); }} placeholder="player@email.com" type="email"
+        style={{ fontFamily: 'inherit', fontSize: 12, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 10px', outline: 'none', width: '100%', boxSizing: 'border-box' }} />
+      <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+        <button className="mono" style={{ ...b, color: 'var(--you)' }} disabled={busy} onClick={() => set('solo', true)}>+ solo</button>
+        <button className="mono" style={b} disabled={busy} onClick={() => set('solo', false)}>− solo</button>
+        <button className="mono" style={{ ...b, color: 'var(--warn)' }} disabled={busy} onClick={() => set('dfs_commish', true)}>+ dfs commish</button>
+        <button className="mono" style={b} disabled={busy} onClick={() => set('dfs_commish', false)}>− dfs commish</button>
+      </div>
+      {msg && <div className="mono" style={{ ...mono, fontSize: 10, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{msg}</div>}
     </div>
   );
 }

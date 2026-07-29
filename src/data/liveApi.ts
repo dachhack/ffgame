@@ -184,6 +184,35 @@ export async function joinWeekly(teamName?: string): Promise<PodJoin & { week?: 
   return data as PodJoin & { week?: number };
 }
 
+// ── Feature gates + commissioner DFS leagues (migration 0094) ───────────────
+/** The caller's per-account feature flags ({} when none). Known keys:
+ *  solo (standalone pods/showdowns) · dfs_commish (may create DFS leagues). */
+export async function myFeatures(): Promise<Record<string, boolean>> {
+  const { data } = await client().rpc('my_features');
+  return (data as Record<string, boolean>) ?? {};
+}
+
+/** Owner-only: flip a feature flag for an account by email. */
+export async function adminSetFeature(email: string, feature: string, on: boolean): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await client().rpc('admin_set_feature', { p_email: email.trim(), p_feature: feature, p_on: on });
+  if (error) return { ok: false, error: friendlyError(error) };
+  return data as { ok: boolean; error?: string };
+}
+
+/** Approved commissioners: found a private DFS league; returns its invite code. */
+export async function createDfsLeague(name: string, teams: number, teamName?: string): Promise<PodJoin & { invite_code?: string }> {
+  const { data, error } = await client().rpc('create_dfs_league', { p_name: name.trim(), p_teams: teams, p_team_name: teamName?.trim() || null });
+  if (error) return { ok: false, error: friendlyError(error) };
+  return data as PodJoin & { invite_code?: string };
+}
+
+/** Join a commissioner's DFS league by invite code (the invite IS the access). */
+export async function joinDfs(code: string, teamName?: string): Promise<PodJoin> {
+  const { data, error } = await client().rpc('join_dfs', { p_code: code.trim(), p_team_name: teamName?.trim() || null });
+  if (error) return { ok: false, error: friendlyError(error) };
+  return data as PodJoin;
+}
+
 // ── DFS-style team building (migration 0092) ────────────────────────────────
 export const POD_SALARY_CAP = 50000;
 export interface PodSalaryRow { slug: string; name: string; pos: string; team: string; salary: number; proj: number; }

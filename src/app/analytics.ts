@@ -30,6 +30,8 @@ export const Ev = {
   podJoined: 'pod_joined',       // {already} — joined a public drop-in pod (solo path)
   weeklyJoined: 'weekly_joined', // {already, week} — joined this week's one-shot showdown
   podEntrySaved: 'pod_entry_saved', // {week, spent} — saved a salary-cap entry (DFS builder)
+  dfsCreated: 'dfs_created',     // {teams} — approved commish founded a DFS league
+  dfsJoined: 'dfs_joined',       // {already} — joined a DFS league by invite code
   // lead-capture funnel (the "request a code" modal — the demo's conversion)
   codeRequestOpened: 'code_request_opened',   // {platform} — modal shown
   codeRequested: 'code_requested',            // {platform, has_league_ref} — lead submitted (no PII)

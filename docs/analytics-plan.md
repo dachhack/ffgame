@@ -79,6 +79,8 @@ Implemented now (`src/app/analytics.ts`, `Ev.*`, wired in `src/app/store.tsx`):
 | `pod_joined {already}` | `LiveOnboard` — one-tap seat in a public drop-in pod (solo path, 0089) | **activation** |
 | `weekly_joined {already, week}` | `LiveOnboard` — one-tap seat in this week's one-shot showdown (0090) | **activation** |
 | `pod_entry_saved {week, spent}` | `PodBuilder` — saved a salary-cap entry (DFS builder, 0092) | **activation** |
+| `dfs_created {teams}` | `LiveOnboard` — approved commish founded a DFS league (0094) | acquisition |
+| `dfs_joined {already}` | `LiveOnboard` — joined a DFS league by invite code (0094) | **activation** |
 
 Every event also carries the visitor's **first-touch attribution** (`utm_source` /
 `utm_medium` / `utm_campaign` / `utm_content` / `utm_term` + `first_referrer` +
