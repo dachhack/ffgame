@@ -333,8 +333,8 @@ export function DemoBoard() {
 
   // Live BACKUP accrual is tracked separately: an unopposed player's points
   // only reach the team total by subbing in at the final, so the header shows
-  // them as a pending 🛟 chip — otherwise a backup-only window (the quick-run's
-  // TNF) reads as "players score but the total never moves".
+  // them as a pending 🛟 chip — otherwise a backup-only window reads as
+  // "players score but the total never moves".
   let youTot = 0, theirTot = 0, youBench = 0, theirBench = 0;
   if (resolved) {
     if (ended) { youTot = resolved.youFinal; theirTot = resolved.theirFinal; }
@@ -359,8 +359,8 @@ export function DemoBoard() {
     if (chosenBuff === 'emp' && w.window.id === empWin) {
       out.push({ clock: EMP_AT, key: 'freeze', icon: '❄️', title: 'EMP — FREEZE', body: 'Your EMP fires: the opponent’s drip clock is frozen for 10 minutes. Passive points stop cold — only a touchdown can still score.' });
     }
-    // A backup-only window (the quick-run's TNF) needs the rule narrated, or the
-    // header total looks stuck while the row visibly scores.
+    // A window with unopposed players needs the rule narrated, or the header
+    // total looks stuck while the backup row visibly scores.
     if (w.slots.some((s) => s.backup && (s.you || s.their))) {
       out.push({ clock: 90, key: 'backup', icon: '🛟', title: 'UNOPPOSED — BANKS AS BACKUP', body: 'Nobody is fielded against him, so he scores as a BACKUP: at the week’s final he subs into the weakest starter spot. His points ride the 🛟 chip until then — not the team total.' });
     }
@@ -922,9 +922,43 @@ function SlotRow({ slot, state, you, their, clock, frozen, armedPu, noBorder, ca
   // felt — the physical card (headshot/pos/name/team, with the bank fill, HOT
   // glow and NUKE scorch) plus the changing text beside it, so the window stays
   // vertically compact. Before this window kicks off the opponent's card stays
-  // FACE-DOWN (the deck's sealed back) — it only flips at kickoff. One-sided
-  // (backup) rows keep the classic strip, which reads their sub/UNOPPOSED
-  // explanations better.
+  // FACE-DOWN (the deck's sealed back) — it only flips at kickoff.
+  // One-sided (unopposed/backup) rows get the same card treatment: the fielded
+  // player's card with an UNOPPOSED chip and the backup-rule note, a dashed
+  // NO OPPONENT box on the empty side (mirrors the real board's ScoreRow).
+  if (cards && (slot.you || slot.their) && !(slot.you && slot.their)) {
+    const mine = !!slot.you;
+    const pick = (slot.you ?? slot.their)!;
+    const met = (METRICS[pick.player.pos] ?? []).find((m) => m.id === pick.metricId);
+    const live = state !== 'upcoming';
+    const flags = live ? liveCardFlags(slot.events, mine ? 'you' : 'their', clock ?? Number.MAX_SAFE_INTEGER) : null;
+    const note = !slot.backup ? undefined
+      : state === 'final'
+        ? (slot.backupUsed ? <>🛟 ✓ subbed in at final — points counted</> : <>✕ banked 0 — did not sub in</>)
+        : <>🛟 banks as backup — subs into {mine ? 'your' : 'their'} weakest starter at final</>;
+    // The opponent's backup stays face-down until its window kicks off, like
+    // any other sealed pick.
+    const card = !live && !mine
+      ? <LiveCard side="their" slug={`sealed-${slot.slotIndex}`} sealed />
+      : <LiveCard side={mine ? 'you' : 'their'} slug={pick.player.id} name={pick.player.name} pos={pick.player.pos} team={pick.player.team}
+          metricName={met?.name} tag={met?.tag} chip="UNOPPOSED" bank={live ? (mine ? you : their) : null}
+          hot={flags?.hot} nuked={!!flags?.nuked} frozen={!mine && frozen} negated={backupStruck}
+          note={mine && armedPu ? <><PuIcon id={armedPu.id} emoji={armedPu.icon} size="1.4em" /> {armedPu.name.toUpperCase()}{note && <> · {note}</>}</> : note} />;
+    const blank = (
+      <div className="ct-liveempty">
+        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.14em', color: 'rgba(233,185,89,.75)' }}>— NO OPPONENT —</span>
+      </div>
+    );
+    return (
+      <div style={{ position: 'relative', padding: '9px 2px' }}>
+        {nukeBurst}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'stretch' }}>
+          {mine ? card : blank}
+          {mine ? blank : card}
+        </div>
+      </div>
+    );
+  }
   if (cards && slot.you && slot.their) {
     const met = (p: NonNullable<ResolvedSlot['you']>) => (METRICS[p.player.pos] ?? []).find((m) => m.id === p.metricId);
     const live = state !== 'upcoming';

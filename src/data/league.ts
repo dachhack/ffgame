@@ -61,7 +61,9 @@ const RAW_TEAMS: RawTeam[] = [
       ['Ladd McConkey', 'WR'], ['Drake London', 'WR'], ['Ricky Pearsall', 'WR'], ['Harold Fannin', 'TE'],
       ['Ashton Jeanty', 'RB'], ['TreVeyon Henderson', 'RB'], ['Rashee Rice', 'WR'], ['Emeka Egbuka', 'WR'],
       ['J.J. McCarthy', 'QB'], ['Trey Benson', 'RB'], ['Isaiah Likely', 'TE'], ['Bhayshul Tuten', 'RB'],
-      ['Brandon Aiyuk', 'WR'], ['Jayden Reed', 'WR'],
+      // Doubs (GB) gives this team a TNF-eligible starter, so the demo's first
+      // window plays as a real head-to-head duel instead of an unopposed backup.
+      ['Brandon Aiyuk', 'WR'], ['Romeo Doubs', 'WR'],
     ],
   },
   {
