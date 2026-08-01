@@ -671,7 +671,17 @@ export function DemoBoard() {
                     </div>
                   </div>
                 ) : (
-                  <SlotRow slot={previewSlot} state="live" you={b.you} their={b.their} clock={pClock} noBorder cards={cardHand} />
+                  <>
+                    <SlotRow slot={previewSlot} state="live" you={b.you} their={b.their} clock={pClock} noBorder cards={cardHand} />
+                    {/* WHY the numbers move: the play log + the real game field.
+                        Without these the live stage reads as bare counters.
+                        stopPropagation so scrolling the log / toggling the field
+                        doesn't fire the container's tap-to-run. */}
+                    <div onClick={(e) => e.stopPropagation()} style={{ cursor: 'default' }}>
+                      <DuelLog slot={previewSlot} clock={pClock} live />
+                      <SlotFieldViews week={DEMO_WEEK} youTeam={previewSlot.you?.player.team} theirTeam={previewSlot.their?.player.team} youClock={pClock} theirClock={pClock} />
+                    </div>
+                  </>
                 )}
               </div>
             );
@@ -1150,10 +1160,10 @@ function SlotRow({ slot, state, you, their, clock, frozen, armedPu, noBorder, ca
       {nukeBurst}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: showMetrics ? '8px 12px 3px' : '8px 12px' }}>
         {side('you')}
-        <div className="mono" style={{ flex: 'none', minWidth: 60, textAlign: 'center' }}>
+        <div className="mono" style={{ flex: 'none', minWidth: 78, textAlign: 'center' }}>
           {state === 'upcoming'
             ? <span style={{ fontSize: 9, color: 'var(--faint)' }}>–&nbsp;·&nbsp;–</span>
-            : <span style={{ fontSize: 11.5, fontWeight: 700 }}>
+            : <span style={{ fontSize: 19, fontWeight: 700 }}>
                 <span key={nuke?.victim === 'you' ? `n${nuke.clock}` : 'y'} style={{ display: 'inline-block', color: 'var(--you)', textDecoration: backupStruck && slot.you ? 'line-through' : undefined, opacity: backupStruck && slot.you ? 0.55 : 1, animation: nukeShake('you') }}>{you.toFixed(1)}</span>
                 <span style={{ color: 'var(--faint)' }}> · </span>
                 <span key={nuke?.victim === 'their' ? `n${nuke.clock}` : 't'} style={{ display: 'inline-block', color: 'var(--opp)', textDecoration: backupStruck && slot.their ? 'line-through' : undefined, opacity: backupStruck && slot.their ? 0.55 : 1, animation: nukeShake('their') }}>{their.toFixed(1)}</span>

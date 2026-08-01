@@ -346,7 +346,7 @@ const CSS = `
    each other in the middle of the duel — no hollow center on wide screens. */
 .ctable .ct-lscol{flex:none;align-self:center;display:flex;flex-direction:column;align-items:flex-end;gap:3px;padding:0 2px;font-variant-numeric:tabular-nums;}
 .ctable .ct-live.ct-opp .ct-lscol{align-items:flex-start;}
-.ctable .ct-lpts{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;font-size:24px;line-height:1;
+.ctable .ct-lpts{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;font-size:31px;line-height:1;
   text-shadow:-1.2px -1.2px 0 #14100A,1.2px -1.2px 0 #14100A,-1.2px 1.2px 0 #14100A,1.2px 1.2px 0 #14100A,0 2px 0 #14100A;}
 .ctable .ct-llab{font-size:7px;color:var(--faint);letter-spacing:.1em;}
 .ctable .ct-lhalf{font-size:9px;font-weight:700;color:var(--fx-stop,#FF8A5C);}
@@ -374,7 +374,7 @@ const CSS = `
   .ctable .ct-live{flex-wrap:wrap;}
   .ctable .ct-lscol{flex-basis:100%;align-self:auto;flex-direction:row;align-items:baseline;justify-content:flex-start;gap:5px;padding:0 0 0 87px;}
   .ctable .ct-live.ct-opp .ct-lscol{flex-direction:row-reverse;padding:0 87px 0 0;}
-  .ctable .ct-lpts{font-size:21px;}
+  .ctable .ct-lpts{font-size:26px;}
 }
 @media (prefers-reduced-motion:reduce){.ctable .ct-lcard{animation:none;}}
 
