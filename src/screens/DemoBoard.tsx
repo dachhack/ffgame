@@ -174,12 +174,22 @@ export function DemoBoard() {
     return slots.find((s) => s.you && s.their) ?? slots[0] ?? null;
   }, [previewResolved]);
   const previewMax = useMemo(() => (previewSlot ? previewSlot.events.reduce((m, e) => Math.max(m, e.clock), 0) : 0), [previewSlot]);
+  // The loop tells the game's story arc, opening on the SIGNATURE moment: a
+  // sealed face-down pick (tension) → the kickoff card-flip reveal (the one
+  // beat no other fantasy product has) → the drip building live. Then repeat.
+  const [pStage, setPStage] = useState<'sealed' | 'reveal' | 'live'>('sealed');
   const [pClock, setPClock] = useState(0);
   useEffect(() => {
     if (!previewSlot || previewMax <= 0) return;
-    setPClock(Math.floor(previewMax * 0.45)); // land mid-game — banks already built, drips visibly ticking
-    const step = Math.max(20, Math.ceil(previewMax / 90)); // one full loop ≈ 45s
-    const id = setInterval(() => setPClock((c) => (c + step > previewMax ? 0 : c + step)), 500);
+    const SEALED = 5, REVEAL = 7, LIVE = 45; // ×400ms → 2s sealed, 2.8s reveal, 18s of live drip per loop
+    let tick = 0;
+    setPStage('sealed'); setPClock(0);
+    const id = setInterval(() => {
+      tick = (tick + 1) % (SEALED + REVEAL + LIVE);
+      if (tick < SEALED) { setPStage('sealed'); setPClock(0); }
+      else if (tick < SEALED + REVEAL) { setPStage('reveal'); setPClock(0); }
+      else { setPStage('live'); setPClock(Math.round(((tick - SEALED - REVEAL + 1) / LIVE) * previewMax)); }
+    }, 400);
     return () => clearInterval(id);
   }, [previewSlot, previewMax]);
 
@@ -619,25 +629,45 @@ export function DemoBoard() {
             </div>
           </div>
 
-          {/* live mid-drip preview — the payoff on screen before any interaction */}
+          {/* live preview — opens on the SIGNATURE beat: sealed pick → kickoff
+              card-flip reveal → the drip building live, on loop */}
           {phase === 'setup' && previewSlot && previewResolved && (() => {
-            const b = banksAtClock(previewSlot.events, pClock);
+            const b = banksAtClock(previewSlot.events, pStage === 'live' ? pClock : 0);
+            const winLabel = previewResolved.windows[0]?.window.label ?? 'TNF';
+            const theirPick = previewSlot.their;
+            const revealAccent = pStage === 'reveal';
             return (
               <div
                 onClick={quickRun}
                 role="button"
                 title="Run a full live week with auto-picks"
-                style={{ cursor: 'pointer', background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 10, padding: '9px 12px 4px', marginBottom: 10, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 12%, transparent)' }}
+                style={{ cursor: 'pointer', background: 'var(--surface)', border: `1px solid color-mix(in srgb, ${revealAccent ? 'var(--warn)' : 'var(--you)'} 35%, var(--bd))`, borderRadius: 10, padding: '9px 12px 4px', marginBottom: 10, boxShadow: `0 0 18px color-mix(in srgb, ${revealAccent ? 'var(--warn)' : 'var(--you)'} 12%, transparent)`, transition: 'border-color .3s, box-shadow .3s' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
-                  <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 3, background: 'var(--you)', animation: 'bpulse 1.2s infinite' }} />
-                  <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.14em', color: 'var(--you)' }}>
-                    LIVE PREVIEW · {previewResolved.windows[0]?.window.label ?? 'TNF'} · {fmtClock(pClock)}
+                  <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 3, background: revealAccent ? 'var(--warn)' : 'var(--you)', animation: 'bpulse 1.2s infinite' }} />
+                  <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.14em', color: revealAccent ? 'var(--warn)' : 'var(--you)' }}>
+                    {pStage === 'sealed' ? `LIVE PREVIEW · ${winLabel} · PICKS SEALED — KICKOFF…`
+                      : pStage === 'reveal' ? '🔓 KICKOFF — THE SEAL BREAKS'
+                      : `LIVE PREVIEW · ${winLabel} · ${fmtClock(pClock)}`}
                   </span>
                   <span style={{ flex: 1 }} />
-                  <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)' }}>▶ TAP TO RUN YOURS</span>
+                  <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', whiteSpace: 'nowrap' }}>▶ TAP TO RUN YOURS</span>
                 </div>
-                <SlotRow slot={previewSlot} state="live" you={b.you} their={b.their} clock={pClock} noBorder cards={cardHand} />
+                {pStage === 'reveal' && theirPick ? (
+                  // The same reveal panel the real playout uses: the opponent's
+                  // hidden pick flips face-up (PlayerCard's `opp` = ct-flip).
+                  <div className="ctable" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '12px 6px 12px', borderRadius: 8 }}>
+                    {!cardHand && <CardTableCss />}
+                    <div className="mono" style={{ fontSize: fs(10), fontWeight: 800, letterSpacing: '0.22em', color: 'var(--warn)', textShadow: '0 0 12px color-mix(in srgb, var(--warn) 55%, transparent)' }}>
+                      🔓 PICKS REVEALED
+                    </div>
+                    <PlayerCard slug={theirPick.player.id} name={theirPick.player.name} pos={theirPick.player.pos} opp idx={0}
+                      metric={(METRICS[theirPick.player.pos] ?? []).find((m) => m.id === theirPick.metricId)?.name ?? null} />
+                    <div className="mono" style={{ fontSize: fs(8.5), letterSpacing: '0.14em', color: 'var(--dim)' }}>THE HIDDEN PICK — SEALED UNTIL THIS MOMENT</div>
+                  </div>
+                ) : (
+                  <SlotRow slot={previewSlot} state={pStage === 'sealed' ? 'upcoming' : 'live'} you={b.you} their={b.their} clock={pClock} noBorder cards={cardHand} />
+                )}
               </div>
             );
           })()}
