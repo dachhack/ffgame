@@ -953,13 +953,13 @@ function TeamSide({ team, owner, ownerId, score, accent, you, bench = 0, showSco
   );
 }
 
-function MetricChip({ pos, metricId }: { pos: Player['pos']; metricId: string | null }) {
+function MetricChip({ pos, metricId, big }: { pos: Player['pos']; metricId: string | null; big?: boolean }) {
   const fs = useFinePrint();
   const m = (METRICS[pos] ?? []).find((x) => x.id === metricId);
   if (!m) return null;
   const color = FX_COLOR[m.fx] ?? 'var(--you)';
   return (
-    <span className="mono" title={m.ef} style={{ display: 'inline-block', fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.06em', color, border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`, background: `color-mix(in srgb, ${color} 10%, transparent)`, borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>
+    <span className="mono" title={m.ef} style={{ display: 'inline-block', fontSize: fs(big ? 9 : 7.5), fontWeight: 700, letterSpacing: '0.06em', color, border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`, background: `color-mix(in srgb, ${color} 10%, transparent)`, borderRadius: 3, padding: big ? '3px 8px' : '1px 5px', whiteSpace: 'nowrap' }}>
       {m.name} · {m.tag}
     </span>
   );
@@ -1099,7 +1099,6 @@ function SlotRow({ slot, state, you, their, clock, frozen, armedPu, noBorder, ca
   if (cards && (slot.you || slot.their) && !(slot.you && slot.their)) {
     const mine = !!slot.you;
     const pick = (slot.you ?? slot.their)!;
-    const met = (METRICS[pick.player.pos] ?? []).find((m) => m.id === pick.metricId);
     const live = state !== 'upcoming';
     const flags = live ? liveCardFlags(slot.events, mine ? 'you' : 'their', clock ?? Number.MAX_SAFE_INTEGER) : null;
     const note = !slot.backup ? undefined
@@ -1111,7 +1110,7 @@ function SlotRow({ slot, state, you, their, clock, frozen, armedPu, noBorder, ca
     const card = !live && !mine
       ? <LiveCard side="their" slug={`sealed-${slot.slotIndex}`} sealed />
       : <LiveCard side={mine ? 'you' : 'their'} slug={pick.player.id} name={pick.player.name} pos={pick.player.pos} team={pick.player.team}
-          metricName={met?.name} tag={met?.tag} chip="UNOPPOSED" bank={live ? (mine ? you : their) : null}
+          chip="UNOPPOSED" bank={live ? (mine ? you : their) : null}
           hot={flags?.hot} nuked={!!flags?.nuked} frozen={!mine && frozen} negated={backupStruck}
           note={mine && armedPu ? <><PuIcon id={armedPu.id} emoji={armedPu.icon} size="1.4em" /> {armedPu.name.toUpperCase()}{note && <> · {note}</>}</> : note} />;
     const blank = (
@@ -1126,11 +1125,15 @@ function SlotRow({ slot, state, you, their, clock, frozen, armedPu, noBorder, ca
           {mine ? card : blank}
           {mine ? blank : card}
         </div>
+        {(mine || live) && pick.metricId && (
+          <div style={{ display: 'flex', justifyContent: mine ? 'flex-start' : 'flex-end', padding: '7px 2px 0' }}>
+            <MetricChip pos={pick.player.pos} metricId={pick.metricId} big />
+          </div>
+        )}
       </div>
     );
   }
   if (cards && slot.you && slot.their) {
-    const met = (p: NonNullable<ResolvedSlot['you']>) => (METRICS[p.player.pos] ?? []).find((m) => m.id === p.metricId);
     const live = state !== 'upcoming';
     const yf = live ? liveCardFlags(slot.events, 'you', clock ?? Number.MAX_SAFE_INTEGER) : null;
     const tf = live ? liveCardFlags(slot.events, 'their', clock ?? Number.MAX_SAFE_INTEGER) : null;
@@ -1139,19 +1142,28 @@ function SlotRow({ slot, state, you, their, clock, frozen, armedPu, noBorder, ca
         {nukeBurst}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'start' }}>
           <LiveCard side="you" slug={slot.you.player.id} name={slot.you.player.name} pos={slot.you.player.pos} team={slot.you.player.team}
-            metricName={met(slot.you)?.name} tag={met(slot.you)?.tag} bank={live ? you : null}
+            bank={live ? you : null}
             hot={yf?.hot} nuked={!!yf?.nuked && !slot.youSub} negated={live && backupStruck}
             note={armedPu ? <><PuIcon id={armedPu.id} emoji={armedPu.icon} size="1.4em" /> {armedPu.name.toUpperCase()}</>
               : state === 'final' && slot.youSub ? <>🛟 {slot.youSub.name} subbed in</> : undefined} />
           {live ? (
             <LiveCard side="their" slug={slot.their.player.id} name={slot.their.player.name} pos={slot.their.player.pos} team={slot.their.player.team}
-              metricName={met(slot.their)?.name} tag={met(slot.their)?.tag} bank={their} hot={tf?.hot} nuked={!!tf?.nuked && !slot.theirSub} frozen={frozen}
+              bank={their} hot={tf?.hot} nuked={!!tf?.nuked && !slot.theirSub} frozen={frozen}
               negated={backupStruck}
               note={state === 'final' && slot.theirSub ? <>🛟 {slot.theirSub.name} subbed in</> : undefined} />
           ) : (
             <LiveCard side="their" slug={`sealed-${slot.slotIndex}`} sealed />
           )}
         </div>
+        {/* metric chips on their own full-width line (the real hero board's
+            pattern) — the card's info column is too narrow and ellipsized
+            names like "Receiving Yards". Yours left; theirs right once live. */}
+        {(slot.you.metricId || (live && slot.their.metricId)) && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, padding: '7px 2px 0' }}>
+            <span style={{ minWidth: 0 }}>{slot.you.metricId && <MetricChip pos={slot.you.player.pos} metricId={slot.you.metricId} big />}</span>
+            <span style={{ minWidth: 0 }}>{live && slot.their.metricId && <MetricChip pos={slot.their.player.pos} metricId={slot.their.metricId} big />}</span>
+          </div>
+        )}
       </div>
     );
   }
