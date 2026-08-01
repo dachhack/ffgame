@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
 import { SiteSettings, VersionTag } from '../app/ui';
-import { liveConfigured } from '../data/supabaseClient';
+import { liveConfigured } from '../data/liveConfig';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   getSession, onAuth, signOut, ensureAppUser,
@@ -170,6 +170,7 @@ function NotConfigured() {
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'magic';
 
 function AuthForm() {
+  const { navigate } = useStore();
   // Framing from the invite link (persisted by App.tsx). A commissioner who
   // clicked ?commish=… should see league-setup copy, not the player pitch — so
   // signing in doesn't feel like a gate. Read-only; the code is consumed later.
@@ -244,13 +245,24 @@ function AuthForm() {
           {mode !== 'signin' ? title
             : commishCtx ? <>Set up your <span style={{ color: 'var(--you)' }}>league</span>.</>
             : playerCtx ? <>Join your <span style={{ color: 'var(--you)' }}>league</span>.</>
-            : <>The <span style={{ color: 'var(--you)' }}>live H2H</span> pilot.</>}
+            : <>Set your lineup. <span style={{ color: 'var(--you)' }}>Watch it fight live.</span></>}
         </div>
         {mode === 'signin' && <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 10 }}>
           {commishCtx ? 'Sign in to claim and manage your league.'
             : playerCtx ? 'Sign in to claim your team and set your lineup.'
-            : 'Sign in to set your lineup and watch it play live.'}
+            : 'Sign in to play your week live — drips, nukes and reveals on real NFL games.'}
         </div>}
+        {/* Invite expectations belong ABOVE the form, not in the fine print below
+            it — an un-invited visitor shouldn't discover the wall after typing a
+            password. */}
+        {mode === 'signin' && !commishCtx && !playerCtx && (
+          <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
+            The live game is invite-only for now — you’ll need an <span style={{ color: 'var(--dim)' }}>invite code</span>.{' '}
+            <button onClick={() => navigate({ name: 'demo' })} className="mono" style={{ background: 'none', border: 'none', padding: 0, fontSize: 10, fontWeight: 700, color: 'var(--you)', cursor: 'pointer', textDecoration: 'underline' }}>
+              No invite yet? Play the demo &amp; request one →
+            </button>
+          </div>
+        )}
       </div>
       <div style={card}>
         {showPw && (SHOW_GOOGLE || SHOW_APPLE) && (
@@ -275,7 +287,7 @@ function AuthForm() {
             <input value={password} type="password" autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
               onChange={(e) => { setPassword(e.target.value); reset(); }}
               onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
-              placeholder={mode === 'signup' ? 'at least 6 characters' : '••••••••'} style={{ ...input, width: '100%', boxSizing: 'border-box', marginTop: 7 }} />
+              placeholder={mode === 'signup' ? 'at least 6 characters' : 'your password'} style={{ ...input, width: '100%', boxSizing: 'border-box', marginTop: 7 }} />
           </>
         )}
         <button onClick={submit} disabled={busy || !email.trim() || (showPw && password.length < 6)} className="mono"

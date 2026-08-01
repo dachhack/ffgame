@@ -11,7 +11,7 @@
 // NOTE: mapped to ESPN's documented v3 shape; the per-week boxscore extraction in
 // particular should be validated against a real league once the proxy is
 // deployed (see docs/multi-league-integration-research.md §7).
-import { supabase } from './supabaseClient';
+import { getSupabase } from './supabaseClient';
 import { loadDirectoryByEspn } from './sleeperPlayers';
 import { REG_SEASON_WEEKS } from './league';
 import type { Pos } from '../types';
@@ -54,8 +54,9 @@ export type EspnFetch = (creds: EspnCreds, weeks: number[]) => Promise<ProxyResp
 
 /** Default fetcher: call the espn-league proxy for the base league + boxscores. */
 export const espnProxyFetch: EspnFetch = async (creds, weeks) => {
-  if (!supabase) throw new Error('ESPN import needs the backend, which isn’t configured here.');
-  const { data, error } = await supabase.functions.invoke('espn-league', {
+  const sb = await getSupabase();
+  if (!sb) throw new Error('ESPN import needs the backend, which isn’t configured here.');
+  const { data, error } = await sb.functions.invoke('espn-league', {
     body: { leagueId: creds.leagueId, season: creds.season, swid: creds.swid ?? '', s2: creds.s2 ?? '', weeks },
   });
   if (error) throw new Error(error.message || 'Could not reach ESPN.');

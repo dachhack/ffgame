@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { requestCode } from '../data/liveApi';
-import { liveConfigured } from '../data/supabaseClient';
+import { liveConfigured } from '../data/liveConfig';
 import { useStore } from '../app/store';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { track, Ev, attribution } from '../app/analytics';
@@ -16,15 +16,18 @@ export function RequestCodeFab() {
   return (
     <>
       <button onClick={() => setOpen(true)} className="mono" style={fab} title="Request a pilot code for your league">
-        <GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> get a league code
+        <GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> get an invite
       </button>
       {open && <RequestCodeModal initialPlatform={sleeperUser ? 'Sleeper' : ''} onClose={() => setOpen(false)} />}
     </>
   );
 }
 
-// The pilot supports leagues from any of these platforms.
-const PLATFORMS = ['Sleeper', 'ESPN', 'Yahoo', 'Fleaflicker', 'MFL', 'Other'];
+// The pilot supports leagues from any of these platforms. 'Solo' is the
+// no-league path (the ads sell solo play) — those leads get flagged for the
+// solo pods/showdowns rollout instead of a league import.
+const SOLO = 'Solo — just me, no league';
+const PLATFORMS = ['Sleeper', 'ESPN', 'Yahoo', 'Fleaflicker', 'MFL', SOLO, 'Other'];
 
 // Per-platform help for the "league ID or link" field — where to find it, and an
 // example URL, so a requester can hand us exactly what we need to import.
@@ -70,36 +73,47 @@ export function RequestCodeModal({ initialPlatform, onClose }: { initialPlatform
         {done ? (
           <div style={{ textAlign: 'center' }}>
             <div className="grotesk" style={{ fontSize: 21, fontWeight: 700, color: 'var(--text)' }}>You’re on the list.</div>
-            <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>We’ll set your league up in the pilot and send a code to redeem. Keep playing in the meantime.</div>
+            <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>We onboard new players every week — invites usually land within a few days. Keep playing the demo in the meantime.</div>
             <button onClick={onClose} className="mono" style={{ ...primaryBtn, marginTop: 18 }}>done</button>
           </div>
         ) : (
           <>
-            <div className="grotesk" style={{ fontSize: 21, fontWeight: 700, color: 'var(--text)' }}>Get your league in the pilot</div>
-            <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>The live head-to-head pilot is invite-only. Leave a way to reach you and we’ll send a code to bring your league in.</div>
+            <div className="grotesk" style={{ fontSize: 21, fontWeight: 700, color: 'var(--text)' }}>Get in the pilot</div>
+            <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>The live pilot is invite-only, and we onboard new players every week. Your email is all we need — the rest just helps your invite land sooner.</div>
             <Field label="EMAIL">
               <input value={email} onChange={(e) => { setEmail(e.target.value); setErr(null); }} type="email" inputMode="email" placeholder="you@example.com"
                 spellCheck={false} autoCapitalize="none" autoCorrect="off" style={input} />
             </Field>
-            <Field label="FANTASY PLATFORM">
+            <Field label="HOW DO YOU PLAY?">
               <select value={platform} onChange={(e) => { setPlatform(e.target.value); setErr(null); }} style={input}>
                 <option value="">select your platform…</option>
                 {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
               </select>
             </Field>
-            <Field label="LEAGUE NAME (OPTIONAL)">
-              <input value={league} onChange={(e) => setLeague(e.target.value)} placeholder="e.g. Sunday Scaries Dynasty" style={input} />
-            </Field>
-            <Field label="LEAGUE ID OR LINK">
-              <input value={leagueRef} onChange={(e) => { setLeagueRef(e.target.value); setErr(null); }} placeholder={guide.placeholder}
-                spellCheck={false} autoCapitalize="none" autoCorrect="off" style={input} />
-              <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 5, lineHeight: 1.4 }}>{guide.hint} It’s what lets us pull your league in.</div>
-            </Field>
+            {/* League fields only make sense for league requests — the solo path
+                (no league to import) skips straight to submit. */}
+            {platform !== SOLO && (
+              <>
+                <Field label="LEAGUE NAME (OPTIONAL)">
+                  <input value={league} onChange={(e) => setLeague(e.target.value)} placeholder="e.g. Sunday Scaries Dynasty" style={input} />
+                </Field>
+                <Field label="LEAGUE ID OR LINK (OPTIONAL)">
+                  <input value={leagueRef} onChange={(e) => { setLeagueRef(e.target.value); setErr(null); }} placeholder={guide.placeholder}
+                    spellCheck={false} autoCapitalize="none" autoCorrect="off" style={input} />
+                  <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 5, lineHeight: 1.4 }}>{guide.hint} It’s what lets us pull your league in — you can also send it later.</div>
+                </Field>
+              </>
+            )}
+            {platform === SOLO && (
+              <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 12, lineHeight: 1.5, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px' }}>
+                No league needed — solo players get drop-in pods and weekly showdowns against other players. We’ll email your invite as solo seats open.
+              </div>
+            )}
             <Field label="ANYTHING ELSE (OPTIONAL)">
               <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="league size, when you play, questions…" rows={2} style={{ ...input, resize: 'vertical' }} />
             </Field>
             {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', marginTop: 4, lineHeight: 1.4 }}>{err}</div>}
-            <button onClick={submit} disabled={busy} className="mono" style={{ ...primaryBtn, marginTop: 14, opacity: busy ? 0.6 : 1 }}>{busy ? 'sending…' : 'request a code →'}</button>
+            <button onClick={submit} disabled={busy} className="mono" style={{ ...primaryBtn, marginTop: 14, opacity: busy ? 0.6 : 1 }}>{busy ? 'sending…' : 'request an invite →'}</button>
             <button onClick={onClose} className="mono" style={cancelBtn}>cancel</button>
             <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 10, lineHeight: 1.4, textAlign: 'center' }}>We only use this to reach you about the pilot.</div>
           </>

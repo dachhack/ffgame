@@ -11,7 +11,7 @@ import { Rulebook } from '../screens/Rulebook';
 import { markBootSessionChecked } from '../screens/DemoBoard';
 import { Faq } from '../screens/Faq';
 import { GameIcon, UI_ART, BRAND_MARK, ICON_SETS } from './gameIcons';
-import { liveConfigured } from '../data/supabaseClient';
+import { liveConfigured } from '../data/liveConfig';
 import { getSession, onAuth, signOut, isAdmin } from '../data/liveApi';
 
 /** True when the viewport is at/below `maxWidth` — drives the mobile layout. */
@@ -161,7 +161,11 @@ export function Avatar({ name, accent = 'var(--you)', size = 30, src }: { name: 
 /** Site settings — one gear chip that opens a popover with the theme picker + text
  *  toggles (previously inline chips). `superAdmin`, when provided, adds a super-admin
  *  entry at the bottom (shown only for admins in the live app). */
-export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
+/** `minimal` (the logged-out demo landing): hide the theme / icon / card-deck
+ *  customizers — a 12-skin picker on a first visit reads as scope creep, and
+ *  nobody customizes before they're convinced. Accessibility toggles and the
+ *  Rulebook / FAQ / sign-in links stay. Signed-in screens keep the full menu. */
+export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void; minimal?: boolean }) {
   const { theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, fullStats, setFullStats, setSleeperUser, navigate } = useStore();
   const [open, setOpen] = useState(false);
   // Which side the dropdown opens toward — chosen on open so it never flies off
@@ -248,7 +252,7 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
             boxShadow: '0 10px 28px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column', gap: 14,
           }}
         >
-          <div>
+          {!minimal && <div>
             <div style={lbl}>THEME</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 7 }}>
               {opts.map((o) => {
@@ -262,8 +266,8 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
                 );
               })}
             </div>
-          </div>
-          <div>
+          </div>}
+          {!minimal && <div>
             <div style={lbl}>ICONS</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 7 }}>
               {ICON_SETS.map((s) => {
@@ -278,8 +282,8 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
                 );
               })}
             </div>
-          </div>
-          <div>
+          </div>}
+          {!minimal && <div>
             <div style={lbl}>CARD DECK</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 7 }}>
               {skins.map((s) => {
@@ -298,7 +302,7 @@ export function SiteSettings({ superAdmin }: { superAdmin?: () => void }) {
                 );
               })}
             </div>
-          </div>
+          </div>}
           <div>
             <div style={lbl}>DISPLAY</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>

@@ -26,6 +26,7 @@ export const Ev = {
   demoStep: 'demo_step',   // {step:'metric'|'power'} — advanced a decision step
   demoRun: 'demo_run',     // {star, metric, powerup} — hit RUN on the demo board
   demoQuickrun: 'demo_quickrun', // {placed} — one-tap RUN A LIVE WEEK (auto-picks) — the cold-traffic path
+  demoSkip: 'demo_skip',         // {window} — jumped to the final whistle mid-playout (intent signal, not a failure)
   powerupBought: 'powerup_bought',
   podJoined: 'pod_joined',       // {already} — joined a public drop-in pod (solo path)
   weeklyJoined: 'weekly_joined', // {already, week} — joined this week's one-shot showdown
