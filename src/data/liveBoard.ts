@@ -9,7 +9,7 @@ import { REG_SEASON_WEEKS } from './league';
 import type { League, FantasyTeam, Player, Pos, PlayerStats, ScheduleGame } from '../types';
 import { shortName, teamForName, normName } from './players';
 import { slugMeta, normTeam } from './slugMeta';
-import { supabase } from './supabaseClient';
+import { getSupabase } from './supabaseClient';
 import { liveSlate } from './liveApi';
 import { setRuntimeSlate } from './nflSlate';
 import type { WindowId } from '../types';
@@ -47,8 +47,8 @@ function poolToPlayer(p: PoolEntry): Player {
  * roster. `week` picks which week's rosters seed each team's player pool.
  */
 export async function buildLiveLeague(leagueId: string, youRosterId: number, week: number): Promise<{ built: BuiltLeague; youTeamId: string }> {
-  if (!supabase) throw new Error('live mode not configured');
-  const sb = supabase;
+  const sb = await getSupabase();
+  if (!sb) throw new Error('live mode not configured');
 
   const [membersRes, schedRes, poolsRes, leagueRes] = await Promise.all([
     sb.from('league_membership').select('sleeper_roster_id, team_name, avatar_url').eq('league_id', leagueId),

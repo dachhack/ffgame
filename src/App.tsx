@@ -65,7 +65,10 @@ export function App() {
     }
     if (p.get('live') === '1') {
       const code = p.get('code');
-      if (code) { try { localStorage.setItem('dripInviteCode', code.toUpperCase()); } catch { /* ignore */ } }
+      // A SOLO- pass (0097) rides the same ?code= param but is redeemed by the
+      // solo-pass flow, not the league-invite form.
+      if (code && /^solo-/i.test(code)) { try { localStorage.setItem('dripSoloPass', code.toUpperCase()); } catch { /* ignore */ } }
+      else if (code) { try { localStorage.setItem('dripInviteCode', code.toUpperCase()); } catch { /* ignore */ } }
       // A commissioner invite link (?commish=CODE) → stash the commish code so it
       // survives the magic-link bounce; LiveOnboard opens the claim screen.
       const commish = p.get('commish');

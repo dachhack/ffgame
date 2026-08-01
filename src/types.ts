@@ -46,6 +46,7 @@ export interface Metric {
   fx: FxKey;            // effect family (drives accent color)
   sc: string;           // scoring summary
   ef: string;           // full effect description (tooltip)
+  hook: string;         // one-line plain-English pitch (what it DOES, verb-first) — the picker leads with this; the sc/ef math lives behind ⓘ
   lock?: string;        // powerup id that must be owned to pick this metric (per-week unlock)
 }
 

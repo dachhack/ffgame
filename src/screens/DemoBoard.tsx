@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../app/store';
-import { SiteSettings, VersionTag, PlayerImg, Avatar, useIsMobile } from '../app/ui';
+import { SiteSettings, PlayerImg, Avatar, useIsMobile } from '../app/ui';
 import { buildMatchup, defaultLineup, aiLineup, slotKey, slotsFor, windowPools, byePlayers, banksAtClock, type ResolvedSlot } from '../engine/matchup';
 import { YOU_TEAM_ID, gameForTeam, getTeam } from '../data/league';
 import { DEMO_WEEK } from '../config';
@@ -15,7 +15,7 @@ import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
 import { getSession, demoCardTheme } from '../data/liveApi';
 import { CardTableCss, PlayerCard, LiveCard, liveCardFlags } from '../app/cardTable';
 import { SlotFieldViews } from '../app/FieldView';
-import { SetupRow, PlayerPicker, RosterAside, ScoutModal } from './Matchup';
+import { SetupRow, PlayerPicker, RosterAside, ScoutModal } from './boardParts';
 import { RequestCodeModal } from './RequestCode';
 import { Faq } from './Faq';
 import { track, Ev } from '../app/analytics';
@@ -130,6 +130,8 @@ export function DemoBoard() {
   const [openSlots, setOpenSlots] = useState<Record<string, boolean>>({});
   const armedPu = POWER_OPTIONS.find((p) => p.id === chosenBuff);
 
+
+
   // Keep each window filled top-down (spot 2 never filled while spot 1 is empty).
   const compact = (p: Record<string, Pick>) => {
     const out: Record<string, Pick> = {};
@@ -156,6 +158,30 @@ export function DemoBoard() {
     }
     return compact(out);
   };
+
+  // ── Hero preview: an auto-playing TNF duel, ALREADY mid-drip on arrival ────
+  // The empty board was the first thing a cold visitor saw — the product at its
+  // worst moment. This resolves the default lineups once and loops the opening
+  // window's duel under the headline: score ticking, drips landing, before the
+  // visitor has touched anything. Tapping it runs their own week (quickRun).
+  const previewResolved = useMemo(() => {
+    if (!ready || !oppId || phase !== 'setup') return null;
+    return buildMatchup(youId, oppId, DEMO_WEEK, autoFill({}), oppPicks, {}, {}, {}, {}, { autoBackups: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- autoFill is a stable function of `defaults`
+  }, [ready, oppId, youId, oppPicks, defaults, phase]);
+  const previewSlot = useMemo(() => {
+    const slots = previewResolved?.windows[0]?.slots ?? [];
+    return slots.find((s) => s.you && s.their) ?? slots[0] ?? null;
+  }, [previewResolved]);
+  const previewMax = useMemo(() => (previewSlot ? previewSlot.events.reduce((m, e) => Math.max(m, e.clock), 0) : 0), [previewSlot]);
+  const [pClock, setPClock] = useState(0);
+  useEffect(() => {
+    if (!previewSlot || previewMax <= 0) return;
+    setPClock(Math.floor(previewMax * 0.45)); // land mid-game — banks already built, drips visibly ticking
+    const step = Math.max(20, Math.ceil(previewMax / 90)); // one full loop ≈ 45s
+    const id = setInterval(() => setPClock((c) => (c + step > previewMax ? 0 : c + step)), 500);
+    return () => clearInterval(id);
+  }, [previewSlot, previewMax]);
 
   const assignFromRoster = (playerId: string) => {
     if (phase !== 'setup') return;
@@ -237,6 +263,18 @@ export function DemoBoard() {
     run(true);
   };
   const replay = () => { setWIdx(0); setWClock(0); setEnded(false); setPlaying(true); };
+  // Jump straight to the final whistle — the end screen is the conversion moment,
+  // and nobody should have to sit through five windows to reach it.
+  const skipToFinal = () => {
+    if (!resolved) return;
+    track(Ev.demoSkip, { window: wIdx });
+    setRevealWin(null);
+    setWIdx(resolved.windows.length - 1);
+    setWClock(winMaxes[resolved.windows.length - 1] ?? 0);
+    setPlaying(false);
+    setEnded(true);
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { /* ignore */ }
+  };
   // Full reset — a pristine board, back at step ①.
   const backToStart = () => {
     setPhase('setup'); setPicks({}); setRunPicks(null); setFeaturedId(null); setOpenSlots({});
@@ -278,7 +316,9 @@ export function DemoBoard() {
   const [wClock, setWClock] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [ended, setEnded] = useState(false);
-  const [speed, setSpeed] = useState<1 | 2 | 4>(1);
+  // Default 2×: at 1× a full week runs 5+ minutes and cold traffic never reaches
+  // the payoff. 1× stays available for viewers who want the slow burn.
+  const [speed, setSpeed] = useState<1 | 2 | 4>(2);
 
   // KICKOFF REVEAL: when a window goes live, hold the clock for a beat and flip
   // the opponent's sealed cards face-up — the hidden-pick payoff, made visible
@@ -415,12 +455,14 @@ export function DemoBoard() {
         )}
         {sleeperUser && <button onClick={() => navigate({ name: 'leagues' })} className="mono" style={chipBtn}>← {sleeperUser.displayName}’s leagues</button>}
       </div>
+      {/* No version tag here — build numbers belong on admin screens, not a
+          marketing landing. Settings menu is minimal (no theme/deck customizer)
+          until sign-in. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <button onClick={() => navigate({ name: 'live' })} className="mono" style={linkBtn}>sign in</button>
         <span style={{ color: 'var(--faint)' }}>·</span>
         <button onClick={() => setFaq(true)} className="mono" style={linkBtn}>FAQ</button>
-        <VersionTag />
-        <SiteSettings />
+        <SiteSettings minimal />
       </div>
     </header>
   );
@@ -445,14 +487,16 @@ export function DemoBoard() {
   ];
 
   // ── Board pieces ───────────────────────────────────────────────────────────
+  // Scores render only once the week is running — a 0.0–0.0 scoreboard at rest
+  // shows the product at its worst possible moment (first paint).
   const scoreHdr = (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: '14px 14px 12px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <TeamSide team={youTeam.name} owner={youTeam.owner} ownerId={youTeam.ownerId} score={youTot} accent="var(--you)" you bench={youBench} />
-        <div className="mono" style={{ fontSize: fs(9), color: 'var(--faint)', letterSpacing: '0.12em', flex: 'none' }}>
-          {phase === 'watch' && !ended && liveWin ? <span style={{ color: 'var(--you)' }}>{liveWin.window.label} · {fmtClock(wClock)}</span> : ended ? <span style={{ color: 'var(--you)' }}>FINAL</span> : 'VS'}
+        <TeamSide team={youTeam.name} owner={youTeam.owner} ownerId={youTeam.ownerId} score={youTot} accent="var(--you)" you bench={youBench} showScore={phase === 'watch'} youTag />
+        <div className="mono" style={{ fontSize: fs(9), color: 'var(--faint)', letterSpacing: '0.12em', flex: 'none', textAlign: 'center' }}>
+          {phase === 'watch' && !ended && liveWin ? <span style={{ color: 'var(--you)' }}>{liveWin.window.label} · {fmtClock(wClock)}</span> : ended ? <span style={{ color: 'var(--you)' }}>FINAL</span> : <>WEEK {DEMO_WEEK}<br />VS</>}
         </div>
-        <TeamSide team={oppTeam.name} owner={oppTeam.owner} ownerId={oppTeam.ownerId} score={theirTot} accent="var(--opp)" bench={theirBench} />
+        <TeamSide team={oppTeam.name} owner={oppTeam.owner} ownerId={oppTeam.ownerId} score={theirTot} accent="var(--opp)" bench={theirBench} showScore={phase === 'watch'} />
       </div>
     </div>
   );
@@ -561,15 +605,42 @@ export function DemoBoard() {
 
         <div className={cardHand ? 'ctable mx-felt mx-demo' : undefined} style={{ width: '100%', maxWidth: 520, ...(cardHand ? { padding: '10px 10px 16px' } : {}) }}>
           {cardHand && <><CardTableCss /><div className="ct-feltlayers" aria-hidden /></>}
-          {/* hero one-liner */}
+          {/* hero one-liner — the mechanic, not a slogan: sealed picks + kickoff reveal
+              is the one thing no other fantasy product can say */}
           <div style={{ textAlign: 'center', margin: '6px 0 14px' }}>
             <div className="grotesk" style={{ fontSize: 'clamp(19px, 5.5vw, 26px)', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1.15 }}>
-              Next-level fantasy football <span style={{ color: 'var(--you)' }}>strategy</span>
+              Your picks are sealed. <span style={{ color: 'var(--you)' }}>Theirs are too.</span>
             </div>
-            <div className="mono" style={{ fontSize: fs(9.5), fontWeight: 700, letterSpacing: '0.14em', color: 'var(--dim)', marginTop: 7 }}>
-              INTERACTIVE DEMO · BUILD A LINEUP &amp; RUN IT — NO SIGN-IN NEEDED
+            <div style={{ fontSize: fs(12), color: 'var(--dim)', marginTop: 7, lineHeight: 1.45 }}>
+              Kickoff flips every card — hidden metrics, nukes and live scoring on real NFL plays.
+            </div>
+            <div className="mono" style={{ fontSize: fs(9), fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginTop: 6 }}>
+              FREE INTERACTIVE DEMO · NO SIGN-IN NEEDED
             </div>
           </div>
+
+          {/* live mid-drip preview — the payoff on screen before any interaction */}
+          {phase === 'setup' && previewSlot && previewResolved && (() => {
+            const b = banksAtClock(previewSlot.events, pClock);
+            return (
+              <div
+                onClick={quickRun}
+                role="button"
+                title="Run a full live week with auto-picks"
+                style={{ cursor: 'pointer', background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 10, padding: '9px 12px 4px', marginBottom: 10, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 12%, transparent)' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                  <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 3, background: 'var(--you)', animation: 'bpulse 1.2s infinite' }} />
+                  <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.14em', color: 'var(--you)' }}>
+                    LIVE PREVIEW · {previewResolved.windows[0]?.window.label ?? 'TNF'} · {fmtClock(pClock)}
+                  </span>
+                  <span style={{ flex: 1 }} />
+                  <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)' }}>▶ TAP TO RUN YOURS</span>
+                </div>
+                <SlotRow slot={previewSlot} state="live" you={b.you} their={b.their} clock={pClock} noBorder cards={cardHand} />
+              </div>
+            );
+          })()}
 
           {scoreHdr}
 
@@ -641,9 +712,18 @@ export function DemoBoard() {
                 <div className="mono" style={{ fontSize: fs(9.5), fontWeight: 700, letterSpacing: '0.1em', color: activeBeat && FX_COLOR[activeBeat.key] ? FX_COLOR[activeBeat.key] : 'var(--you)' }}>{activeBeat?.title}</div>
                 <div style={{ fontSize: 11.5, color: 'var(--text)', marginTop: 3, lineHeight: 1.45 }}>{activeBeat?.body}</div>
               </div>
-              <div style={{ display: 'flex', gap: 6, flex: 'none' }}>
-                <button onClick={() => setPlaying((p) => !p)} className="mono" style={miniBtn}>{playing ? '❚❚' : '▶'}</button>
-                <button onClick={() => setSpeed((s) => (s === 4 ? 1 : (s * 2) as 2 | 4))} className="mono" title="Playback speed" style={miniBtn}>{speed}×</button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 'none', alignItems: 'flex-end' }}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => setPlaying((p) => !p)} className="mono" title={playing ? 'Pause' : 'Play'} style={miniBtn}>{playing ? '❚❚' : '▶'}</button>
+                  {/* visible segmented speed control — a lone cycling "1×" chip was invisible to cold traffic */}
+                  <div style={{ display: 'flex', border: '1px solid var(--bd)', borderRadius: 5, overflow: 'hidden' }}>
+                    {([1, 2, 4] as const).map((s) => (
+                      <button key={s} onClick={() => setSpeed(s)} className="mono" title={`${s}× speed`}
+                        style={{ ...speedSeg, ...(speed === s ? { background: 'var(--you)', color: 'var(--on-accent)' } : {}) }}>{s}×</button>
+                    ))}
+                  </div>
+                </div>
+                <button onClick={skipToFinal} className="mono" title="Jump to the final score" style={{ ...miniBtn, color: 'var(--you)', borderColor: 'color-mix(in srgb, var(--you) 45%, var(--bd))' }}>⏭ FINAL</button>
               </div>
             </div>
           )}
@@ -679,7 +759,7 @@ export function DemoBoard() {
                 <div className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)', marginTop: 6 }}>Sleeper public API — username only, never a password.</div>
               </div>
               <button onClick={() => setRequesting(true)} className="mono" style={{ ...cta, marginTop: 12, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--bd)' }}>
-                ◈ Request a code for your league
+                ◈ Request an invite — league or solo
               </button>
               <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 10, flexWrap: 'wrap' }}>
                 <button onClick={replay} className="mono" style={linkBtn}>↺ replay</button>
@@ -702,11 +782,12 @@ export function DemoBoard() {
             </div>
           )}
 
-          {/* request-a-code — the standing CTA under the board */}
+          {/* request-a-code — the standing CTA under the board. Speaks to BOTH
+              audiences: league players and the solo traffic the ads bring in. */}
           <div style={{ marginTop: 16, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14, textAlign: 'center' }}>
-            <div className="grotesk" style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)' }}>Want this for your league?</div>
-            <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 4, lineHeight: 1.5 }}>We’ll set it up and send you a code — Sleeper · ESPN · MFL · Fleaflicker.</div>
-            <button onClick={() => setRequesting(true)} className="mono" style={{ ...cta, marginTop: 10 }}><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> Request a code for your league</button>
+            <div className="grotesk" style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)' }}>Want in — with your league, or solo?</div>
+            <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 4, lineHeight: 1.5 }}>The pilot is invite-only; we onboard new players every week. Leagues: Sleeper · ESPN · Yahoo · MFL · Fleaflicker. No league? Solo pods &amp; weekly showdowns.</div>
+            <button onClick={() => setRequesting(true)} className="mono" style={{ ...cta, marginTop: 10 }}><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> Request an invite</button>
           </div>
 
           <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 14 }}>
@@ -722,7 +803,10 @@ export function DemoBoard() {
         )}
       </main>
 
-      {/* persistent "More demo?" bar — the identity ask, always one glance away */}
+      {/* "More demo?" bar — the identity ask, shown only AFTER the payoff starts
+          (first window gone final). Showing it from second zero contradicted the
+          guided-demo playbook above: value before any ask. */}
+      {phase === 'watch' && (ended || wIdx > 0) && (
       <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50, background: 'color-mix(in srgb, var(--bg) 90%, transparent)', backdropFilter: 'blur(8px)', borderTop: '1px solid var(--bd)', padding: '9px 14px' }}>
         <div style={{ maxWidth: 520, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -742,6 +826,7 @@ export function DemoBoard() {
           {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', marginTop: 6 }}>{err}</div>}
         </div>
       </div>
+      )}
 
       {/* hero-board modals: tap-a-spot player picker + opponent-pool scout */}
       {pickerSlot && (
@@ -761,7 +846,7 @@ export function DemoBoard() {
 
 // ── Presentational bits ───────────────────────────────────────────────────────
 
-function TeamSide({ team, owner, ownerId, score, accent, you, bench = 0 }: { team: string; owner: string; ownerId: string; score: number; accent: string; you?: boolean; bench?: number }) {
+function TeamSide({ team, owner, ownerId, score, accent, you, bench = 0, showScore = true, youTag }: { team: string; owner: string; ownerId: string; score: number; accent: string; you?: boolean; bench?: number; showScore?: boolean; youTag?: boolean }) {
   const fs = useFinePrint();
   const right = !you;
   return (
@@ -769,11 +854,15 @@ function TeamSide({ team, owner, ownerId, score, accent, you, bench = 0 }: { tea
       <div style={{ display: 'flex', flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 6 }}>
         <Avatar name={team} accent={accent} size={24} src={avatarUrl(ownerId)} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', lineHeight: 1.15, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }}>{team}</div>
+          <div className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', lineHeight: 1.15, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }}>
+            {team}
+            {/* first-timers need to know which side is theirs — the rails say YOUR ROSTER but the scoreboard never did */}
+            {youTag && <span className="mono" style={{ fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.1em', color: accent, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)`, borderRadius: 3, padding: '1px 4px', marginLeft: 6, verticalAlign: 'middle' }}>YOU</span>}
+          </div>
           <div className="mono" style={{ fontSize: fs(8), color: 'var(--faint)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{owner}</div>
         </div>
       </div>
-      <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, color: accent, marginTop: 6, lineHeight: 1 }}>{score.toFixed(1)}</div>
+      {showScore && <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, color: accent, marginTop: 6, lineHeight: 1 }}>{score.toFixed(1)}</div>}
       {bench > 0 && (
         <div className="mono" title="Unopposed backup — his points bank by subbing into the weakest starter at the week's final" style={{ fontSize: fs(8.5), fontWeight: 700, color: 'var(--warn)', marginTop: 5, whiteSpace: 'nowrap' }}>
           🛟 +{bench.toFixed(1)} · subs in at final
@@ -1016,5 +1105,6 @@ const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontS
 const stateChip: React.CSSProperties = { fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', border: '1px solid', borderRadius: 3, padding: '2px 6px', display: 'inline-flex', alignItems: 'center' };
 const ctlBtn: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 14px', cursor: 'pointer' };
 const miniBtn: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 5, padding: '5px 9px', cursor: 'pointer' };
+const speedSeg: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: 'var(--dim)', background: 'var(--surface)', border: 'none', padding: '5px 8px', cursor: 'pointer' };
 const cta: React.CSSProperties = { width: '100%', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 7, padding: '12px 0', cursor: 'pointer' };
 const optCard = (on: boolean): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left', background: on ? 'color-mix(in srgb, var(--you) 9%, var(--surface))' : 'var(--surface)', border: `1.5px solid ${on ? 'var(--you)' : 'var(--bd)'}`, boxShadow: on ? '0 0 0 3px color-mix(in srgb, var(--you) 14%, transparent)' : 'none', transition: 'all .15s' });

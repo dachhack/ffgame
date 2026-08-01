@@ -3,7 +3,7 @@
 // returned tokens, and auto-refresh the short-lived access token. The long-lived
 // refresh_token is kept in localStorage (it grants only read access to the user's
 // own Yahoo fantasy data, scoped by the app's permissions).
-import { supabase } from '../supabaseClient';
+import { getSupabase } from '../supabaseClient';
 
 const KEY = 'gc-yahoo-tok';
 const AUTH = 'https://api.login.yahoo.com/oauth2/request_auth';
@@ -21,8 +21,9 @@ export const yahooConnected = () => !!load();
 export function yahooDisconnect() { save(null); }
 
 async function invoke(body: Record<string, unknown>): Promise<any> {
-  if (!supabase) throw new Error('Yahoo import needs the backend, which isn’t configured here.');
-  const { data, error } = await supabase.functions.invoke('yahoo-oauth', { body });
+  const sb = await getSupabase();
+  if (!sb) throw new Error('Yahoo import needs the backend, which isn’t configured here.');
+  const { data, error } = await sb.functions.invoke('yahoo-oauth', { body });
   if (error) throw new Error(error.message || 'Yahoo request failed.');
   if (!data?.ok) throw new Error(data?.error || 'Yahoo returned an error.');
   return data;

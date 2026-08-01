@@ -16,7 +16,7 @@ import { PuIcon, GameIcon, Emoji, COIN_GOLD } from '../app/gameIcons';
 import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } from '../data/premiumClient';
 import { shortName } from '../data/players';
 import type { Player } from '../types';
-import { SetupRow, PlayerPicker } from './Matchup';
+import { SetupRow, PlayerPicker } from './boardParts';
 import { REG_SEASON_WEEKS } from '../data/league';
 
 // Live pool entries are slug/full/pos; the reused setup card wants a Player. Build

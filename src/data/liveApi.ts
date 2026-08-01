@@ -1,13 +1,14 @@
 // Live-pilot client API: magic-link auth + invite-code redemption, on top of the
 // Supabase client. All table access is RLS-guarded; enrollment goes through the
 // redeem_invite RPC (migration 0002), never a direct membership write.
-import { supabase } from './supabaseClient';
+import { getSupabase } from './supabaseClient';
 import { resolveUser } from './sleeper';
 import type { Session } from '@supabase/supabase-js';
 
-function client() {
-  if (!supabase) throw new Error('Live mode is not configured');
-  return supabase;
+async function client() {
+  const sb = await getSupabase();
+  if (!sb) throw new Error('Live mode is not configured');
+  return sb;
 }
 
 /** Turn a raw Supabase / auth / network error into calm, player-facing copy.
@@ -53,7 +54,9 @@ function redirectTo(): string {
   try {
     const p = new URLSearchParams(window.location.search);
     const commish = p.get('commish') || localStorage.getItem('dripCommishCode');
-    const code = p.get('code') || localStorage.getItem('dripInviteCode');
+    // A pending solo pass (0097) rides the same &code= param — App.tsx routes
+    // SOLO-prefixed codes back to the dripSoloPass stash on landing.
+    const code = p.get('code') || localStorage.getItem('dripInviteCode') || localStorage.getItem('dripSoloPass');
     if (commish) extra = `&commish=${encodeURIComponent(commish)}`;
     else if (code) extra = `&code=${encodeURIComponent(code)}`;
   } catch { /* ignore */ }
@@ -61,60 +64,69 @@ function redirectTo(): string {
 }
 
 export async function sendMagicLink(email: string): Promise<void> {
-  const { error } = await client().auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: redirectTo() } });
+  const { error } = await (await client()).auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: redirectTo() } });
   if (error) throw error;
 }
 
 /** Sign in with the 6-digit code from the email (magic-link fallback for mobile). */
 export async function verifyEmailOtp(email: string, token: string): Promise<void> {
-  const { error } = await client().auth.verifyOtp({ email: email.trim(), token: token.trim(), type: 'email' });
+  const { error } = await (await client()).auth.verifyOtp({ email: email.trim(), token: token.trim(), type: 'email' });
   if (error) throw error;
 }
 
 /** Third-party OAuth (Google / Apple). Redirects the page to the provider and
  *  back to ?live=1. Each provider must be enabled in Supabase → Auth → Providers. */
 export async function signInWithProvider(provider: 'google' | 'apple'): Promise<void> {
-  const { error } = await client().auth.signInWithOAuth({ provider, options: { redirectTo: redirectTo() } });
+  const { error } = await (await client()).auth.signInWithOAuth({ provider, options: { redirectTo: redirectTo() } });
   if (error) throw error;
 }
 
 // ── Password auth ───────────────────────────────────────────────────────────────
 export async function signInPassword(email: string, password: string): Promise<void> {
-  const { error } = await client().auth.signInWithPassword({ email: email.trim(), password });
+  const { error } = await (await client()).auth.signInWithPassword({ email: email.trim(), password });
   if (error) throw error;
 }
 /** Create an account. needsConfirm=true when the project requires email confirmation. */
 export async function signUpPassword(email: string, password: string): Promise<{ needsConfirm: boolean }> {
-  const { data, error } = await client().auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: redirectTo() } });
+  const { data, error } = await (await client()).auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: redirectTo() } });
   if (error) throw error;
   return { needsConfirm: !data.session };
 }
 export async function sendPasswordReset(email: string): Promise<void> {
-  const { error } = await client().auth.resetPasswordForEmail(email.trim(), { redirectTo: redirectTo() });
+  const { error } = await (await client()).auth.resetPasswordForEmail(email.trim(), { redirectTo: redirectTo() });
   if (error) throw error;
 }
 export async function updatePassword(password: string): Promise<void> {
-  const { error } = await client().auth.updateUser({ password });
+  const { error } = await (await client()).auth.updateUser({ password });
   if (error) throw error;
 }
 
 export async function getSession(): Promise<Session | null> {
-  const { data } = await client().auth.getSession();
+  const { data } = await (await client()).auth.getSession();
   return data.session;
 }
 
 export function onAuth(cb: (s: Session | null, event?: string) => void): () => void {
-  const { data } = client().auth.onAuthStateChange((event, session) => cb(session, event));
-  return () => data.subscription.unsubscribe();
+  // The SDK loads lazily, so subscribe once it lands; if the caller already
+  // unsubscribed by then, drop the subscription immediately.
+  let unsub: (() => void) | null = null;
+  let dead = false;
+  getSupabase().then((sb) => {
+    if (!sb || dead) return;
+    const { data } = sb.auth.onAuthStateChange((event, session) => cb(session, event));
+    unsub = () => data.subscription.unsubscribe();
+    if (dead) unsub();
+  }).catch(() => {});
+  return () => { dead = true; unsub?.(); };
 }
 
 export async function signOut(): Promise<void> {
-  await client().auth.signOut();
+  await (await client()).auth.signOut();
 }
 
 /** Ensure the caller's app_user row exists (FK target for enrollment). */
 export async function ensureAppUser(session: Session): Promise<void> {
-  await client().from('app_user').upsert(
+  await (await client()).from('app_user').upsert(
     { id: session.user.id, email: session.user.email ?? null },
     { onConflict: 'id', ignoreDuplicates: false },
   );
@@ -124,7 +136,7 @@ export async function ensureAppUser(session: Session): Promise<void> {
  *  join or commish-verify). Lets a returning player skip re-typing their username.
  *  RLS (`app_user_self`) restricts this to the caller's own row. */
 export async function myLinkedSleeper(userId: string): Promise<{ userId: string; username: string } | null> {
-  const { data } = await client().from('app_user')
+  const { data } = await (await client()).from('app_user')
     .select('sleeper_user_id, sleeper_username').eq('id', userId).maybeSingle();
   return data?.sleeper_user_id
     ? { userId: data.sleeper_user_id as string, username: (data.sleeper_username as string | null) ?? '' }
@@ -135,7 +147,7 @@ export interface LeaguePreview { league_id: string; name: string; season: string
 
 /** Preview a league by invite code (so we can show "You're joining <name>"). */
 export async function previewLeague(code: string): Promise<LeaguePreview | null> {
-  const { data, error } = await client().rpc('league_by_invite', { code: code.trim() });
+  const { data, error } = await (await client()).rpc('league_by_invite', { code: code.trim() });
   if (error) throw error;
   return (data && data[0]) || null;
 }
@@ -148,7 +160,7 @@ export interface PreviewRedeem { ok: boolean; error?: string; league?: string; t
 export async function redeemPreview(code: string, sleeperUsername: string): Promise<PreviewRedeem> {
   const user = await resolveUser(sleeperUsername);
   if (!user) return { ok: false, error: `No Sleeper user “${sleeperUsername}”. Check the spelling.` };
-  const { data, error } = await client().rpc('redeem_preview', { p_code: code.trim(), p_sleeper_user_id: user.userId });
+  const { data, error } = await (await client()).rpc('redeem_preview', { p_code: code.trim(), p_sleeper_user_id: user.userId });
   if (error) return { ok: false, error: error.message };
   return data as PreviewRedeem;
 }
@@ -157,7 +169,7 @@ export async function redeemPreview(code: string, sleeperUsername: string): Prom
 export async function redeemInvite(code: string, sleeperUsername: string): Promise<RedeemResult> {
   const user = await resolveUser(sleeperUsername);
   if (!user) return { ok: false, error: `No Sleeper user “${sleeperUsername}”. Check the spelling.` };
-  const { data, error } = await client().rpc('redeem_invite', {
+  const { data, error } = await (await client()).rpc('redeem_invite', {
     code: code.trim(), p_sleeper_user_id: user.userId, p_sleeper_username: user.username,
   });
   if (error) return { ok: false, error: error.message };
@@ -170,7 +182,7 @@ export interface PodJoin { ok: boolean; error?: string; already?: boolean; leagu
 /** Join (or found) a public drop-in pod — no invite code, no Sleeper league.
  *  Idempotent: already seated this season → returns that seat with already:true. */
 export async function joinPod(teamName?: string): Promise<PodJoin> {
-  const { data, error } = await client().rpc('join_pod', { p_team_name: teamName?.trim() || null });
+  const { data, error } = await (await client()).rpc('join_pod', { p_team_name: teamName?.trim() || null });
   if (error) return { ok: false, error: friendlyError(error) };
   return data as PodJoin;
 }
@@ -179,7 +191,7 @@ export async function joinPod(teamName?: string): Promise<PodJoin> {
  *  target NFL week from the slate; `week` comes back in the result. Idempotent
  *  per week — a new contest every week, the old one is tossed by the worker. */
 export async function joinWeekly(teamName?: string): Promise<PodJoin & { week?: number }> {
-  const { data, error } = await client().rpc('join_weekly', { p_team_name: teamName?.trim() || null });
+  const { data, error } = await (await client()).rpc('join_weekly', { p_team_name: teamName?.trim() || null });
   if (error) return { ok: false, error: friendlyError(error) };
   return data as PodJoin & { week?: number };
 }
@@ -188,27 +200,27 @@ export async function joinWeekly(teamName?: string): Promise<PodJoin & { week?: 
 /** The caller's per-account feature flags ({} when none). Known keys:
  *  solo (standalone pods/showdowns) · dfs_commish (may create DFS leagues). */
 export async function myFeatures(): Promise<Record<string, boolean>> {
-  const { data } = await client().rpc('my_features');
+  const { data } = await (await client()).rpc('my_features');
   return (data as Record<string, boolean>) ?? {};
 }
 
 /** Owner-only: flip a feature flag for an account by email. */
 export async function adminSetFeature(email: string, feature: string, on: boolean): Promise<{ ok: boolean; error?: string }> {
-  const { data, error } = await client().rpc('admin_set_feature', { p_email: email.trim(), p_feature: feature, p_on: on });
+  const { data, error } = await (await client()).rpc('admin_set_feature', { p_email: email.trim(), p_feature: feature, p_on: on });
   if (error) return { ok: false, error: friendlyError(error) };
   return data as { ok: boolean; error?: string };
 }
 
 /** Approved commissioners: found a private DFS league; returns its invite code. */
 export async function createDfsLeague(name: string, teams: number, teamName?: string): Promise<PodJoin & { invite_code?: string }> {
-  const { data, error } = await client().rpc('create_dfs_league', { p_name: name.trim(), p_teams: teams, p_team_name: teamName?.trim() || null });
+  const { data, error } = await (await client()).rpc('create_dfs_league', { p_name: name.trim(), p_teams: teams, p_team_name: teamName?.trim() || null });
   if (error) return { ok: false, error: friendlyError(error) };
   return data as PodJoin & { invite_code?: string };
 }
 
 /** Join a commissioner's DFS league by invite code (the invite IS the access). */
 export async function joinDfs(code: string, teamName?: string): Promise<PodJoin> {
-  const { data, error } = await client().rpc('join_dfs', { p_code: code.trim(), p_team_name: teamName?.trim() || null });
+  const { data, error } = await (await client()).rpc('join_dfs', { p_code: code.trim(), p_team_name: teamName?.trim() || null });
   if (error) return { ok: false, error: friendlyError(error) };
   return data as PodJoin;
 }
@@ -219,7 +231,7 @@ export interface PodSalaryRow { slug: string; name: string; pos: string; team: s
 
 /** The week's frozen salary board (public game data — priced weekly projections). */
 export async function podSalaries(week: number, season = '2026'): Promise<PodSalaryRow[]> {
-  const { data } = await client().from('pod_salary')
+  const { data } = await (await client()).from('pod_salary')
     .select('slug, name, pos, team, salary, proj')
     .eq('season', season).eq('week', week)
     .order('salary', { ascending: false });
@@ -229,7 +241,7 @@ export async function podSalaries(week: number, season = '2026'): Promise<PodSal
 /** Per-team entry-lock times for a week (0093 late swap): each game locks its
  *  players one hour before kickoff. Map team → lock epoch-ms (absent = never). */
 export async function weekGameLocks(week: number, season = '2026'): Promise<Map<string, number>> {
-  const { data } = await client().from('nfl_slate')
+  const { data } = await (await client()).from('nfl_slate')
     .select('home, away, kickoff').eq('season', season).eq('week', week);
   const m = new Map<string, number>();
   for (const g of (data ?? []) as { home: string; away: string; kickoff: string | null }[]) {
@@ -243,7 +255,7 @@ export async function weekGameLocks(week: number, season = '2026'): Promise<Map<
 /** Save the caller's pod/showdown entry (9 slugs). Server validates membership,
  *  week, per-game locks (0093), roster shape (QB·2RB·3WR·TE·K·DST), and the $50k cap. */
 export async function savePodEntry(leagueId: string, week: number, picks: string[]): Promise<{ ok: boolean; error?: string; spent?: number; cap?: number }> {
-  const { data, error } = await client().rpc('save_pod_entry', { p_league: leagueId, p_week: week, p_picks: picks });
+  const { data, error } = await (await client()).rpc('save_pod_entry', { p_league: leagueId, p_week: week, p_picks: picks });
   if (error) return { ok: false, error: friendlyError(error) };
   return data as { ok: boolean; error?: string; spent?: number; cap?: number };
 }
@@ -252,16 +264,17 @@ export async function savePodEntry(leagueId: string, week: number, picks: string
 /** Pre-auth request to have a pilot code set up for the visitor's league. Routes
  *  through a SECURITY DEFINER RPC granted to anon, so it works before sign-in. */
 export async function requestCode(input: { email?: string; sleeper?: string; league?: string; leagueRef?: string; note?: string; attribution?: Record<string, unknown> }): Promise<{ ok: boolean; error?: string }> {
-  if (!supabase) return { ok: false, error: 'Live mode is not configured.' };
+  const sb = await getSupabase();
+  if (!sb) return { ok: false, error: 'Live mode is not configured.' };
   const base = {
     p_email: input.email ?? null, p_sleeper: input.sleeper ?? null, p_league: input.league ?? null,
     p_league_ref: input.leagueRef ?? null, p_note: input.note ?? null,
   };
   const attr = input.attribution && Object.keys(input.attribution).length ? input.attribution : null;
-  let { data, error } = await client().rpc('request_code', attr ? { ...base, p_attribution: attr } : base);
+  let { data, error } = await (await client()).rpc('request_code', attr ? { ...base, p_attribution: attr } : base);
   // A fresh bundle can briefly race the 0088 migration (Pages deploy vs the
   // migrate Action) — never lose a lead to that window: retry without the arg.
-  if (error && attr) ({ data, error } = await client().rpc('request_code', base));
+  if (error && attr) ({ data, error } = await (await client()).rpc('request_code', base));
   if (error) return { ok: false, error: friendlyError(error) };
   return data as { ok: boolean; error?: string };
 }
@@ -270,7 +283,7 @@ export interface Enrollment { league_id: string; team_name: string; sleeper_rost
 
 /** The caller's enrolled memberships (RLS scopes to their own rows). */
 export async function myEnrollments(userId: string): Promise<Enrollment[]> {
-  const { data, error } = await client()
+  const { data, error } = await (await client())
     .from('league_membership')
     .select('league_id, team_name, sleeper_roster_id, avatar_url, league:league_id(name, season, preseason_at, provider, avatar_url, is_mock, kind, contest_week)')
     .eq('app_user_id', userId)
@@ -287,7 +300,7 @@ export interface ConfirmCommish { ok: boolean; error?: string; invite_code?: str
 export async function startCommishVerify(commishCode: string, sleeperUsername: string): Promise<StartCommish> {
   const user = await resolveUser(sleeperUsername);
   if (!user) return { ok: false, error: `No Sleeper user “${sleeperUsername}”. Check the spelling.` };
-  const { data, error } = await client().rpc('start_commish_verify', {
+  const { data, error } = await (await client()).rpc('start_commish_verify', {
     p_code: commishCode.trim(), p_sleeper_user_id: user.userId, p_sleeper_username: user.username,
   });
   if (error) return { ok: false, error: error.message };
@@ -296,7 +309,7 @@ export async function startCommishVerify(commishCode: string, sleeperUsername: s
 
 /** Step 2: confirm the tag is now in the Sleeper team name → become commissioner + get the invite code. */
 export async function confirmCommishVerify(commishCode: string): Promise<ConfirmCommish> {
-  const { data, error } = await client().rpc('confirm_commish_verify', { p_code: commishCode.trim() });
+  const { data, error } = await (await client()).rpc('confirm_commish_verify', { p_code: commishCode.trim() });
   if (error) return { ok: false, error: error.message };
   return data as ConfirmCommish;
 }
@@ -304,7 +317,7 @@ export async function confirmCommishVerify(commishCode: string): Promise<Confirm
 /** Admin-assigned commissioner: redeem the commish code the admin sent you → become
  *  this league's commissioner (platform-agnostic, no Sleeper team-tagging). */
 export async function redeemCommish(commishCode: string): Promise<ConfirmCommish & { league_id?: string }> {
-  const { data, error } = await client().rpc('redeem_commish', { p_code: commishCode.trim() });
+  const { data, error } = await (await client()).rpc('redeem_commish', { p_code: commishCode.trim() });
   if (error) return { ok: false, error: error.message };
   return data as ConfirmCommish & { league_id?: string };
 }
@@ -316,14 +329,14 @@ export interface PickRow { game_window: string; roster_slot: string; player_slug
 
 /** The caller's enrolled roster in a league (first enrolled membership). */
 export async function myRoster(userId: string): Promise<{ leagueId: string; rosterId: number } | null> {
-  const { data } = await client().from('league_membership')
+  const { data } = await (await client()).from('league_membership')
     .select('league_id, sleeper_roster_id').eq('app_user_id', userId).eq('enrolled', true).limit(1).maybeSingle();
   return data ? { leagueId: data.league_id, rosterId: data.sleeper_roster_id } : null;
 }
 
 /** The caller's next/earliest matchup in a league. */
 export async function myMatchup(leagueId: string, rosterId: number, week?: number): Promise<LiveMatchup | null> {
-  let q = client().from('matchup').select('*')
+  let q = (await client()).from('matchup').select('*')
     .eq('league_id', leagueId).or(`home_roster_id.eq.${rosterId},away_roster_id.eq.${rosterId}`);
   if (week != null) q = q.eq('week', week);
   const { data } = await q.order('week').limit(1).maybeSingle();
@@ -337,8 +350,8 @@ export async function myMatchup(leagueId: string, rosterId: number, week?: numbe
  *  and rolls into Week 1 once preseason is done. Falls back to the first week. */
 export async function defaultOpenWeek(leagueId: string, season: string, preseasonEnabled: boolean): Promise<number> {
   const [msRes, slRes] = await Promise.all([
-    client().from('matchup').select('week').eq('league_id', leagueId),
-    client().from('nfl_slate').select('week, kickoff').eq('season', season),
+    (await client()).from('matchup').select('week').eq('league_id', leagueId),
+    (await client()).from('nfl_slate').select('week, kickoff').eq('season', season),
   ]);
   const weeks = [...new Set(((msRes.data ?? []) as { week: number }[]).map((r) => r.week))];
   if (!weeks.length) return preseasonEnabled ? 101 : 1;
@@ -362,7 +375,7 @@ export interface MatchupResult { id: string; week: number; home_roster_id: numbe
 /** Every matchup in a league (all weeks) with its final totals — the scoreboard/
  *  results feed. Readable by any league member (finals live on the matchup row). */
 export async function leagueResults(leagueId: string): Promise<MatchupResult[]> {
-  const { data } = await client().from('matchup')
+  const { data } = await (await client()).from('matchup')
     .select('id, week, home_roster_id, away_roster_id, home_final, away_final, status')
     .eq('league_id', leagueId).order('week');
   return (data ?? []) as MatchupResult[];
@@ -370,14 +383,14 @@ export async function leagueResults(leagueId: string): Promise<MatchupResult[]> 
 
 /** The caller's player pool for a week (their Sleeper roster, from sleeper_lineup). */
 export async function myPool(leagueId: string, week: number, rosterId: number): Promise<PoolPlayer[]> {
-  const { data } = await client().from('sleeper_lineup').select('starters_json')
+  const { data } = await (await client()).from('sleeper_lineup').select('starters_json')
     .eq('league_id', leagueId).eq('week', week).eq('roster_id', rosterId).maybeSingle();
   return ((data?.starters_json) ?? []) as PoolPlayer[];
 }
 
 /** The caller's saved picks for a matchup (locked = that window has sealed). */
 export async function myPicks(matchupId: string, userId: string): Promise<PickRow[]> {
-  const { data } = await client().from('sealed_pick')
+  const { data } = await (await client()).from('sealed_pick')
     .select('game_window, roster_slot, player_slug, metric_id, locked')
     .eq('matchup_id', matchupId).eq('app_user_id', userId);
   return (data ?? []) as PickRow[];
@@ -389,7 +402,7 @@ export async function myPicks(matchupId: string, userId: string): Promise<PickRo
  *  only the server sets it (the RLS WITH CHECK rejects it from clients anyway). */
 export async function savePicks(matchupId: string, userId: string, rows: PickRow[]): Promise<void> {
   const payload = rows.map(({ locked: _locked, ...r }) => ({ matchup_id: matchupId, app_user_id: userId, ...r }));
-  const { error } = await client().from('sealed_pick').upsert(payload, { onConflict: 'matchup_id,app_user_id,game_window,roster_slot' });
+  const { error } = await (await client()).from('sealed_pick').upsert(payload, { onConflict: 'matchup_id,app_user_id,game_window,roster_slot' });
   if (error) throw error;
 }
 
@@ -403,14 +416,14 @@ export interface RevealedPick { app_user_id: string; game_window: string; roster
 
 /** Re-read a matchup's row (status / lock_at / finals may have changed). */
 export async function getMatchup(matchupId: string): Promise<LiveMatchup | null> {
-  const { data } = await client().from('matchup').select('*').eq('id', matchupId).maybeSingle();
+  const { data } = await (await client()).from('matchup').select('*').eq('id', matchupId).maybeSingle();
   return (data as LiveMatchup) ?? null;
 }
 
 /** Per-window engine scores for a matchup (written by the worker's resolver),
  *  including per-slot detail for the card-table board. */
 export async function getMatchupState(matchupId: string): Promise<WindowScore[]> {
-  const { data } = await client().from('matchup_state').select('game_window, home_score, away_score, slot_scores').eq('matchup_id', matchupId);
+  const { data } = await (await client()).from('matchup_state').select('game_window, home_score, away_score, slot_scores').eq('matchup_id', matchupId);
   return (data ?? []) as WindowScore[];
 }
 
@@ -419,7 +432,7 @@ export async function getMatchupState(matchupId: string): Promise<WindowScore[]>
  *  until the worker has synced that week (then the client falls back to baked). */
 export interface SlateGame { away: string; home: string; win: string; kickoff?: string | null }
 export async function liveSlate(week: number, season?: string): Promise<SlateGame[]> {
-  let q = client().from('nfl_slate').select('season, away, home, win, kickoff').eq('week', week);
+  let q = (await client()).from('nfl_slate').select('season, away, home, win, kickoff').eq('week', week);
   if (season) q = q.eq('season', season); // 2025 (demo) + 2026 rows share week #s — scope by season
   const { data } = await q;
   const rows = (data ?? []) as (SlateGame & { season?: string })[];
@@ -437,7 +450,7 @@ export async function liveSlate(week: number, season?: string): Promise<SlateGam
  *  read all memberships (RLS), so this drives the live board's team headers. */
 export interface TeamInfo { roster_id: number; team_name: string | null; avatar: string | null }
 export async function matchupTeams(leagueId: string, rosterIds: number[]): Promise<Record<number, TeamInfo>> {
-  const { data } = await client().from('league_membership')
+  const { data } = await (await client()).from('league_membership')
     .select('sleeper_roster_id, team_name, avatar_url').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
   const out: Record<number, TeamInfo> = {};
   for (const m of (data ?? []) as { sleeper_roster_id: number; team_name: string | null; avatar_url: string | null }[]) {
@@ -448,7 +461,7 @@ export async function matchupTeams(leagueId: string, rosterIds: number[]): Promi
 
 /** Sealed picks visible under RLS: always yours; the opponent's only once locked. */
 export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[]> {
-  const { data } = await client().from('sealed_pick')
+  const { data } = await (await client()).from('sealed_pick')
     .select('app_user_id, game_window, roster_slot, player_slug, metric_id, locked').eq('matchup_id', matchupId);
   return (data ?? []) as RevealedPick[];
 }
@@ -463,7 +476,7 @@ export async function weekLivePlays(week: number): Promise<LivePlayRow[]> {
   const PAGE = 1000;
   const rows: LivePlayRow[] = [];
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await client().from('live_play')
+    const { data, error } = await (await client()).from('live_play')
       .select('player_slug, c, t, pid, k, y, td, ca, tg, to')
       .eq('week', week)
       .order('id', { ascending: true }) // stable total order (bigint PK) for paging
@@ -480,7 +493,7 @@ export async function weekLivePlays(week: number): Promise<LivePlayRow[]> {
  *  user) — drives FieldView/FieldBoard on the live board. */
 export interface GameFeedRow { key: string; away: string; home: string; plays: import('./gameFeed').GamePlay[]; }
 export async function weekGameFeeds(week: number): Promise<GameFeedRow[]> {
-  const { data } = await client().from('game_feed')
+  const { data } = await (await client()).from('game_feed')
     .select('key, away, home, plays').eq('week', week);
   return (data ?? []) as GameFeedRow[];
 }
@@ -490,7 +503,7 @@ export async function weekGameFeeds(week: number): Promise<GameFeedRow[]> {
  *  visible yet (pre-lock) so callers can keep the AI default; an array (possibly
  *  empty) once revealed. */
 export async function revealedOppBuffs(matchupId: string, userId: string): Promise<string[] | null> {
-  const { data } = await client().from('applied_state').select('app_user_id, payload_json').eq('matchup_id', matchupId);
+  const { data } = await (await client()).from('applied_state').select('app_user_id, payload_json').eq('matchup_id', matchupId);
   const opp = (data ?? []).find((r) => r.app_user_id && r.app_user_id !== userId) as { payload_json: { buffs?: string[] } | null } | undefined;
   if (!opp) return null;
   return opp.payload_json?.buffs ?? [];
@@ -511,7 +524,7 @@ export interface AdminOverride { sleeper_user_id: string; note: string | null; }
 export interface AdminAudit { table: string; op: string; row_id: string | null; at: string; detail?: string | null; actor?: string | null; }
 
 async function rpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
-  const { data, error } = await client().rpc(fn, args);
+  const { data, error } = await (await client()).rpc(fn, args);
   if (error) throw error;
   return data as T;
 }
@@ -525,7 +538,7 @@ export const matchupPremium = (matchupId: string) => rpc<boolean>('matchup_premi
 /** Start a Stripe Checkout for a premium purchase → redirects to Stripe. The edge
  *  function derives the season from the league; the webhook grants on payment. */
 export async function startCheckout(kind: 'personal' | 'league' | 'split', leagueId: string, amountCents?: number): Promise<void> {
-  const { data, error } = await client().functions.invoke('stripe-checkout', { body: { kind, leagueId, amountCents } });
+  const { data, error } = await (await client()).functions.invoke('stripe-checkout', { body: { kind, leagueId, amountCents } });
   if (error) throw error;
   const url = (data as { url?: string } | null)?.url;
   if (url) window.location.href = url;
@@ -546,6 +559,18 @@ export const adminSetDemoCardTheme = (on: boolean) =>
   rpc<{ ok: boolean; error?: string; card_theme?: boolean }>('admin_set_demo_card_theme', { p_on: on });
 export const adminSetCardTheme = (leagueId: string, on: boolean) =>
   rpc<{ ok: boolean; error?: string; card_theme?: boolean }>('admin_set_card_theme', { p_league: leagueId, p_on: on });
+
+// ── Solo passes (0097): auto-issued, capped, self-serve solo access ──────────
+/** Anonymous mint from the request funnel's solo path. Over quota → waitlisted. */
+export const issueSoloPass = (email: string) =>
+  rpc<{ ok: boolean; error?: string; code?: string; already?: boolean; waitlisted?: boolean }>('issue_solo_pass', { p_email: email });
+/** Signed-in redemption — claims the pass and unlocks the 'solo' feature. */
+export const redeemSoloPass = (code: string) =>
+  rpc<{ ok: boolean; error?: string; already?: boolean }>('redeem_solo_pass', { p_code: code });
+export interface SoloPassAdmin { weekly_quota: number; minted_7d: number; claimed_7d: number; passes: { code: string; created_at: string; email: string; claimed: boolean; claimed_at: string | null }[] }
+export const adminSoloPasses = () => rpc<SoloPassAdmin | { error: string }>('admin_solo_passes');
+export const adminSetSoloQuota = (quota: number) =>
+  rpc<{ ok: boolean; error?: string; weekly_quota?: number }>('admin_set_solo_quota', { p_quota: quota });
 
 export const adminOverview = () => rpc<AdminLeague[]>('admin_overview');
 export const adminMatchups = (leagueId: string) => rpc<AdminMatchup[]>('admin_matchups', { p_league_id: leagueId });
@@ -628,14 +653,14 @@ export const setTeamKdst = (leagueId: string, rosterId: number, kSlug: string | 
 /** Launch the real server-driven live feed sim via the dispatch-sim edge function
  *  (admin-only; the function re-checks is_admin and holds the GitHub token). */
 export async function dispatchSim(input: { mode?: 'live' | 'reset' | 'check' | 'dry'; league: string; week?: number | string; src?: number | string; speed?: number; jitter?: number; corrections?: number }): Promise<{ ok: boolean; error?: string }> {
-  const { data, error } = await client().functions.invoke('dispatch-sim', { body: input });
+  const { data, error } = await (await client()).functions.invoke('dispatch-sim', { body: input });
   if (error) return { ok: false, error: friendlyError(error) };
   return data as { ok: boolean; error?: string };
 }
 /** Email an invite (share link + code) to a code-request, via the send-invite edge
  *  function (admin-only; the function re-checks is_admin and sends through Gmail). */
 export async function sendInvite(input: { to: string; code: string; link: string; leagueName?: string; kind?: 'player' | 'commish' }): Promise<{ ok: boolean; error?: string }> {
-  const { data, error } = await client().functions.invoke('send-invite', { body: input });
+  const { data, error } = await (await client()).functions.invoke('send-invite', { body: input });
   if (error) {
     // On a non-2xx the FunctionsHttpError only says "non-2xx status code"; the real
     // reason is in the response body (.context is the Response). Surface it.
@@ -666,8 +691,9 @@ export const adminLeagueWallets = (leagueId: string) => rpc<RosterWallet[]>('adm
  *  shows it in place of the generic stipend when the league sets its own). Null
  *  when unreadable/unset. */
 export const leagueWeeklyBudget = async (leagueId: string): Promise<number | null> => {
-  if (!supabase) return null;
-  const { data } = await supabase.from('league').select('weekly_budget').eq('id', leagueId).maybeSingle();
+  const sb = await getSupabase();
+  if (!sb) return null;
+  const { data } = await sb.from('league').select('weekly_budget').eq('id', leagueId).maybeSingle();
   const b = (data as { weekly_budget?: number } | null)?.weekly_budget;
   return b == null ? null : Number(b);
 };
@@ -681,8 +707,9 @@ export const adminSetPreseason = (leagueId: string, on: boolean) =>
 /** The league's live-test anchor (epoch ms) if test mode is on, else null. Any
  *  member can read it — the board compresses its window timeline from this. */
 export const leagueTestLiveAt = async (leagueId: string): Promise<number | null> => {
-  if (!supabase) return null;
-  const { data } = await supabase.from('league').select('test_live_at').eq('id', leagueId).maybeSingle();
+  const sb = await getSupabase();
+  if (!sb) return null;
+  const { data } = await sb.from('league').select('test_live_at').eq('id', leagueId).maybeSingle();
   const t = (data as { test_live_at?: string | null } | null)?.test_live_at;
   return t ? Date.parse(t) : null;
 };
@@ -749,7 +776,7 @@ export interface TargetedState {
 }
 /** The caller's recorded targeted power-ups (own applied_state row, readable under RLS). */
 export async function myTargeted(matchupId: string, userId: string): Promise<TargetedState> {
-  const { data } = await client().from('applied_state').select('payload_json')
+  const { data } = await (await client()).from('applied_state').select('payload_json')
     .eq('matchup_id', matchupId).eq('app_user_id', userId).maybeSingle();
   return ((data?.payload_json as { targeted?: TargetedState } | null)?.targeted) ?? {};
 }
@@ -762,7 +789,7 @@ export const myUnlocks = (matchupId: string) => rpc<string[]>('my_unlocks', { p_
 /** Combo-Drip unlocks purchased this week (one combodrip slot per purchase).
  *  A legacy set flag without a qty reads as 1. Own applied_state row, RLS-readable. */
 export async function myComboQty(matchupId: string, userId: string): Promise<number> {
-  const { data } = await client().from('applied_state').select('payload_json')
+  const { data } = await (await client()).from('applied_state').select('payload_json')
     .eq('matchup_id', matchupId).eq('app_user_id', userId).maybeSingle();
   const pj = data?.payload_json as { unlocks?: string[]; unlockQty?: Record<string, number> } | null;
   return Number(pj?.unlockQty?.['unlock-combo-drip'] ?? (pj?.unlocks?.includes('unlock-combo-drip') ? 1 : 0));
@@ -967,7 +994,7 @@ export const setDraftQueue = (leagueId: string, rosterId: number, slugs: string[
   rpc<{ ok: boolean; error?: string; queued?: number }>('set_draft_queue', { p_league_id: leagueId, p_roster_id: rosterId, p_slugs: slugs });
 /** The caller's own queue (RLS hides everyone else's). */
 export async function myDraftQueue(leagueId: string, rosterId: number): Promise<string[]> {
-  const { data, error } = await client().from('draft_queue')
+  const { data, error } = await (await client()).from('draft_queue')
     .select('slug, pos').eq('league_id', leagueId).eq('roster_id', rosterId).order('pos');
   if (error) throw error;
   return ((data ?? []) as { slug: string }[]).map((r) => r.slug);
@@ -1001,7 +1028,7 @@ export const draftTick = (leagueId: string) => rpc<{ ok: boolean; error?: string
 
 export interface LeaguePoolPlayer { slug: string; full_name: string; pos: string; team: string; rank: number; waived_until: string | null; espn_id?: string | null; }
 export async function leaguePool(leagueId: string): Promise<LeaguePoolPlayer[]> {
-  const { data, error } = await client().from('league_pool')
+  const { data, error } = await (await client()).from('league_pool')
     .select('slug, full_name, pos, team, rank, waived_until, espn_id')
     .eq('league_id', leagueId).order('rank').range(0, 1999);
   if (error) throw error;
@@ -1009,7 +1036,7 @@ export async function leaguePool(leagueId: string): Promise<LeaguePoolPlayer[]> 
 }
 export interface NativeRosterRow { roster_id: number; slug: string; acquired: string; }
 export async function nativeRosters(leagueId: string): Promise<NativeRosterRow[]> {
-  const { data, error } = await client().from('native_roster')
+  const { data, error } = await (await client()).from('native_roster')
     .select('roster_id, slug, acquired').eq('league_id', leagueId).range(0, 1999);
   if (error) throw error;
   return (data ?? []) as NativeRosterRow[];
@@ -1058,10 +1085,18 @@ export const setLeagueAvatar = (leagueId: string, url: string | null) =>
 
 /** Subscribe to live score changes for a matchup. Returns an unsubscribe fn. */
 export function subscribeMatchup(matchupId: string, onChange: () => void): () => void {
-  const c = client();
-  const ch = c.channel(`mw-${matchupId}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'matchup_state', filter: `matchup_id=eq.${matchupId}` }, onChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'matchup', filter: `id=eq.${matchupId}` }, onChange)
-    .subscribe();
-  return () => { c.removeChannel(ch); };
+  // Lazy SDK: open the channel once the client lands; tear down cleanly if the
+  // caller unsubscribed before it did.
+  let cleanup: (() => void) | null = null;
+  let dead = false;
+  getSupabase().then((c) => {
+    if (!c || dead) return;
+    const ch = c.channel(`mw-${matchupId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matchup_state', filter: `matchup_id=eq.${matchupId}` }, onChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matchup', filter: `id=eq.${matchupId}` }, onChange)
+      .subscribe();
+    cleanup = () => { c.removeChannel(ch); };
+    if (dead) cleanup();
+  }).catch(() => {});
+  return () => { dead = true; cleanup?.(); };
 }

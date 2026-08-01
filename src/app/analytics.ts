@@ -26,6 +26,7 @@ export const Ev = {
   demoStep: 'demo_step',   // {step:'metric'|'power'} — advanced a decision step
   demoRun: 'demo_run',     // {star, metric, powerup} — hit RUN on the demo board
   demoQuickrun: 'demo_quickrun', // {placed} — one-tap RUN A LIVE WEEK (auto-picks) — the cold-traffic path
+  demoSkip: 'demo_skip',         // {window} — jumped to the final whistle mid-playout (intent signal, not a failure)
   powerupBought: 'powerup_bought',
   podJoined: 'pod_joined',       // {already} — joined a public drop-in pod (solo path)
   weeklyJoined: 'weekly_joined', // {already, week} — joined this week's one-shot showdown
@@ -36,6 +37,8 @@ export const Ev = {
   codeRequestOpened: 'code_request_opened',   // {platform} — modal shown
   codeRequested: 'code_requested',            // {platform, has_league_ref} — lead submitted (no PII)
   codeRequestFailed: 'code_request_failed',   // {error} — submit rejected
+  soloPassIssued: 'solo_pass_issued',         // {waitlisted} — solo request auto-minted a pass (or hit the weekly cap)
+  soloPassRedeemed: 'solo_pass_redeemed',     // {via:'link'|'manual'} — signed-in user claimed a pass, solo unlocked
   // premium funnel (docs/premium-model.md; fire once the gating + entitlements ship)
   gatedFeatureAttempted: 'gated_feature_attempted', // tried K/DST/IDP/locked power-up → premium INTENT
   premiumTierViewed: 'premium_tier_viewed',         // {tier:'personal'|'league'}
