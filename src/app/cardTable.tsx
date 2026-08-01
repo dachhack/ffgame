@@ -560,16 +560,20 @@ function CornerLogo({ src, size = 11 }: { src: string; size?: number }) {
     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />;
 }
 
-export function PlayerCard({ slug, name, pos, team, slot, metric, bank, opp = false, hot = false, nuked = false, idx = 0, onClick, selected = false, locked = false, badge }: {
+export function PlayerCard({ slug, name, pos, team, slot, metric, bank, opp = false, flip = false, hot = false, nuked = false, idx = 0, onClick, selected = false, locked = false, badge }: {
   slug: string; name: string; pos: string; team?: string | null; slot?: string; metric?: string | null;
-  bank?: number | null; opp?: boolean; hot?: boolean; nuked?: boolean; idx?: number;
+  bank?: number | null; opp?: boolean;
+  /** Flip-in entrance (the reveal animation) WITHOUT the opponent styling — a
+   *  YOUR-side card turning face-up (the demo preview's opening beat). */
+  flip?: boolean;
+  hot?: boolean; nuked?: boolean; idx?: number;
   onClick?: () => void; selected?: boolean; locked?: boolean; badge?: React.ReactNode;
 }) {
   const art = useCardArt(slug, team);
   const suit = posVars(pos);
   const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
   return (
-    <div className={`ct-wrap ${opp ? 'ct-flip ct-opp' : 'ct-dealin'}${hot && !nuked ? ' ct-hot' : ''}${nuked ? ' ct-nuked' : ''}${selected ? ' ct-sel' : ''}${onClick ? ' ct-tap' : ''}`}
+    <div className={`ct-wrap ${opp ? 'ct-flip ct-opp' : flip ? 'ct-flip' : 'ct-dealin'}${hot && !nuked ? ' ct-hot' : ''}${nuked ? ' ct-nuked' : ''}${selected ? ' ct-sel' : ''}${onClick ? ' ct-tap' : ''}`}
       style={{ animationDelay: `${idx * 90}ms` }} onClick={onClick}>
       <div className="ct-card" style={wobbleVars(slug)}>
         <div className="ct-side ct-face" style={locked ? { filter: 'grayscale(.55) brightness(.75)' } : undefined}>
@@ -864,14 +868,18 @@ export function PowerupHand({ cards, pendingId, onArm, onApply, onCancel, onOver
   );
 }
 
-/** A face-down sealed pick — the opponent's card before its window kicks off. */
-export function SealedCard({ seed, idx = 0 }: { seed: string; idx?: number }) {
+/** A face-down sealed pick — the opponent's card before its window kicks off.
+ *  `mystery` swaps the deck gem for a big ? — the demo preview's opening beat
+ *  ("who are they fielding?") before the card flips at the reveal. */
+export function SealedCard({ seed, idx = 0, mystery = false }: { seed: string; idx?: number; mystery?: boolean }) {
   return (
     <div className="ct-wrap ct-dealin" style={{ animationDelay: `${idx * 90}ms` }}>
       <div className="ct-card" style={wobbleVars(seed)}>
         <div className="ct-side ct-back">
           <div className="ct-lattice" />
-          <div className="ct-gem">◈</div>
+          {mystery
+            ? <div className="ct-gem" style={{ fontSize: 38, fontWeight: 800, textShadow: '0 2px 0 #000, 0 0 14px rgba(0,0,0,0.35)' }}>?</div>
+            : <div className="ct-gem">◈</div>}
           <div className="ct-sealtag">SEALED ◈ PICK</div>
         </div>
       </div>

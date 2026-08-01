@@ -13,7 +13,7 @@ import { avatarUrl } from '../data/media';
 import { getProvider } from '../data/providers';
 import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
 import { getSession, demoCardTheme } from '../data/liveApi';
-import { CardTableCss, PlayerCard, LiveCard, liveCardFlags } from '../app/cardTable';
+import { CardTableCss, PlayerCard, SealedCard, LiveCard, liveCardFlags } from '../app/cardTable';
 import { SlotFieldViews } from '../app/FieldView';
 import { SetupRow, PlayerPicker, RosterAside, ScoutModal } from './boardParts';
 import { RequestCodeModal } from './RequestCode';
@@ -174,21 +174,22 @@ export function DemoBoard() {
     return slots.find((s) => s.you && s.their) ?? slots[0] ?? null;
   }, [previewResolved]);
   const previewMax = useMemo(() => (previewSlot ? previewSlot.events.reduce((m, e) => Math.max(m, e.clock), 0) : 0), [previewSlot]);
-  // The loop tells the game's story arc, opening on the SIGNATURE moment: a
-  // sealed face-down pick (tension) → the kickoff card-flip reveal (the one
-  // beat no other fantasy product has) → the drip building live. Then repeat.
-  const [pStage, setPStage] = useState<'sealed' | 'reveal' | 'live'>('sealed');
+  // The loop tells the game's story arc, opening on the SIGNATURE frame — the
+  // duel: YOUR card flips face-up beside the opponent's face-down ? card
+  // (tension), then THEIR card flips at kickoff (the one beat no other fantasy
+  // product has), then the drip builds live. Then repeat.
+  const [pStage, setPStage] = useState<'yours' | 'reveal' | 'live'>('yours');
   const [pClock, setPClock] = useState(0);
   useEffect(() => {
     if (!previewSlot || previewMax <= 0) return;
-    const SEALED = 5, REVEAL = 7, LIVE = 45; // ×400ms → 2s sealed, 2.8s reveal, 18s of live drip per loop
+    const YOURS = 6, REVEAL = 7, LIVE = 45; // ×400ms → 2.4s your flip, 2.8s their reveal, 18s of live drip per loop
     let tick = 0;
-    setPStage('sealed'); setPClock(0);
+    setPStage('yours'); setPClock(0);
     const id = setInterval(() => {
-      tick = (tick + 1) % (SEALED + REVEAL + LIVE);
-      if (tick < SEALED) { setPStage('sealed'); setPClock(0); }
-      else if (tick < SEALED + REVEAL) { setPStage('reveal'); setPClock(0); }
-      else { setPStage('live'); setPClock(Math.round(((tick - SEALED - REVEAL + 1) / LIVE) * previewMax)); }
+      tick = (tick + 1) % (YOURS + REVEAL + LIVE);
+      if (tick < YOURS) { setPStage('yours'); setPClock(0); }
+      else if (tick < YOURS + REVEAL) { setPStage('reveal'); setPClock(0); }
+      else { setPStage('live'); setPClock(Math.round(((tick - YOURS - REVEAL + 1) / LIVE) * previewMax)); }
     }, 400);
     return () => clearInterval(id);
   }, [previewSlot, previewMax]);
@@ -647,27 +648,30 @@ export function DemoBoard() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
                   <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 3, background: revealAccent ? 'var(--warn)' : 'var(--you)', animation: 'bpulse 1.2s infinite' }} />
                   <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.14em', color: revealAccent ? 'var(--warn)' : 'var(--you)' }}>
-                    {pStage === 'sealed' ? `LIVE PREVIEW · ${winLabel} · PICKS SEALED — KICKOFF…`
+                    {pStage === 'yours' ? `LIVE PREVIEW · ${winLabel} · YOUR PICK IS IN`
                       : pStage === 'reveal' ? '🔓 KICKOFF — THE SEAL BREAKS'
                       : `LIVE PREVIEW · ${winLabel} · ${fmtClock(pClock)}`}
                   </span>
                   <span style={{ flex: 1 }} />
                   <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', whiteSpace: 'nowrap' }}>▶ TAP TO RUN YOURS</span>
                 </div>
-                {pStage === 'reveal' && theirPick ? (
-                  // The same reveal panel the real playout uses — YOUR card stays
-                  // face-up beside the opponent's flipping card (ct-flip), so the
-                  // reveal unmistakably reads as THEIR sealed pick turning over.
+                {pStage !== 'live' && theirPick ? (
+                  // The demo OPENS on this frame: your card flips face-up beside
+                  // the opponent's face-down ? card — then at kickoff THEIR card
+                  // flips too. One continuous scene (the panel stays mounted
+                  // across both stages, so your card only animates once).
                   <div className="ctable" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '12px 6px 12px', borderRadius: 8 }}>
                     {!cardHand && <CardTableCss />}
-                    <div className="mono" style={{ fontSize: fs(10), fontWeight: 800, letterSpacing: '0.22em', color: 'var(--warn)', textShadow: '0 0 12px color-mix(in srgb, var(--warn) 55%, transparent)' }}>
-                      🔓 PICKS REVEALED
+                    <div className="mono" style={{ fontSize: fs(10), fontWeight: 800, letterSpacing: '0.22em', color: revealAccent ? 'var(--warn)' : 'var(--you)', textShadow: `0 0 12px color-mix(in srgb, ${revealAccent ? 'var(--warn)' : 'var(--you)'} 55%, transparent)` }}>
+                      {pStage === 'yours' ? '🃏 THE DUEL IS SET' : '🔓 PICKS REVEALED'}
                     </div>
-                    <RevealPair you={previewSlot.you} their={theirPick} />
-                    <div className="mono" style={{ fontSize: fs(8.5), letterSpacing: '0.14em', color: 'var(--dim)' }}>THEIR METRIC — SEALED UNTIL THIS MOMENT</div>
+                    <RevealPair you={previewSlot.you} their={theirPick} revealed={pStage === 'reveal'} flipYou />
+                    <div className="mono" style={{ fontSize: fs(8.5), letterSpacing: '0.14em', color: 'var(--dim)' }}>
+                      {pStage === 'yours' ? 'WHO ARE THEY FIELDING? SEALED UNTIL KICKOFF…' : 'THEIR METRIC — SEALED UNTIL THIS MOMENT'}
+                    </div>
                   </div>
                 ) : (
-                  <SlotRow slot={previewSlot} state={pStage === 'sealed' ? 'upcoming' : 'live'} you={b.you} their={b.their} clock={pClock} noBorder cards={cardHand} />
+                  <SlotRow slot={previewSlot} state="live" you={b.you} their={b.their} clock={pClock} noBorder cards={cardHand} />
                 )}
               </div>
             );
@@ -881,7 +885,13 @@ export function DemoBoard() {
 // you) while the opponent's flips in beside it — so it's unmistakable WHOSE
 // card is being revealed. Used by both the hero preview's reveal stage and the
 // real playout's kickoff reveal.
-function RevealPair({ you, their, idx = 0 }: { you: ResolvedSlot['you']; their: ResolvedSlot['their']; idx?: number }) {
+function RevealPair({ you, their, idx = 0, revealed = true, flipYou = false }: {
+  you: ResolvedSlot['you']; their: ResolvedSlot['their']; idx?: number;
+  /** false = pre-kickoff: the opponent's side stays a face-down ? card. */
+  revealed?: boolean;
+  /** Your card enters with the flip animation (the preview's opening beat). */
+  flipYou?: boolean;
+}) {
   const fs = useFinePrint();
   const met = (p: NonNullable<ResolvedSlot['you']>) => (METRICS[p.player.pos] ?? []).find((m) => m.id === p.metricId)?.name ?? null;
   const lab: React.CSSProperties = { fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.14em' };
@@ -890,16 +900,18 @@ function RevealPair({ you, their, idx = 0 }: { you: ResolvedSlot['you']; their: 
     <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'center' }}>
       <div style={col}>
         {you
-          ? <PlayerCard slug={you.player.id} name={you.player.name} pos={you.player.pos} team={you.player.team} idx={idx} metric={met(you)} />
+          ? <PlayerCard slug={you.player.id} name={you.player.name} pos={you.player.pos} team={you.player.team} flip={flipYou} idx={idx} metric={met(you)} />
           : <span className="mono" style={{ ...lab, color: 'var(--faint)', padding: '20px 6px' }}>— NO PICK —</span>}
         <span className="mono" style={{ ...lab, color: 'var(--you)' }}>YOUR PICK</span>
       </div>
       <span className="mono" style={{ fontSize: fs(9), fontWeight: 800, letterSpacing: '0.1em', color: 'var(--faint)', flex: 'none' }}>VS</span>
       <div style={col}>
-        {their
-          ? <PlayerCard slug={their.player.id} name={their.player.name} pos={their.player.pos} team={their.player.team} opp idx={idx} metric={met(their)} />
-          : <span className="mono" style={{ ...lab, color: 'var(--faint)', padding: '20px 6px' }}>— NO PICK —</span>}
-        <span className="mono" style={{ ...lab, color: 'var(--warn)' }}>🔓 THEIRS — REVEALED</span>
+        {!revealed
+          ? <SealedCard seed={their?.player.id ?? `mystery-${idx}`} idx={idx} mystery />
+          : their
+            ? <PlayerCard slug={their.player.id} name={their.player.name} pos={their.player.pos} team={their.player.team} opp idx={idx} metric={met(their)} />
+            : <span className="mono" style={{ ...lab, color: 'var(--faint)', padding: '20px 6px' }}>— NO PICK —</span>}
+        <span className="mono" style={{ ...lab, color: revealed ? 'var(--warn)' : 'var(--dim)' }}>{revealed ? '🔓 THEIRS — REVEALED' : '❓ THEIRS — SEALED'}</span>
       </div>
     </div>
   );
