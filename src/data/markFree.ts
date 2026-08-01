@@ -5,8 +5,11 @@
 // marks appear anywhere. (Team abbreviations and player names are text/facts, kept.)
 //
 // Baked in, with three switches (first one set wins):
-//   1. ?markfree=1 | ?markfree=0  URL param — persisted; for live demos / flipping fast.
-//   2. setMarkFree(bool)          — programmatic runtime toggle (persists).
+//   1. ?markfree=1 | ?markfree=0  URL param — THIS PAGE LOAD ONLY (=0 also clears
+//      any stored flag). It used to persist, which was a footgun: one visit to a
+//      shared/tested markfree link stripped imagery from that browser FOREVER —
+//      and the demo silently looked broken ("where did the player photos go?").
+//   2. setMarkFree(bool)          — the explicit admin toggle (persists).
 //   3. VITE_MARK_FREE=true        — build-time env: the production "ship mark-free" switch.
 // Default OFF (full imagery), so nothing changes until you flip a switch.
 const KEY = 'drip:markFree';
@@ -16,7 +19,8 @@ function readInitial(): boolean {
     const q = new URLSearchParams(window.location.search).get('markfree');
     if (q != null) {
       const on = q !== '0' && q.toLowerCase() !== 'false';
-      try { localStorage.setItem(KEY, String(on)); } catch { /* ignore */ }
+      // ?markfree=0 is the antidote: also clear a previously-persisted flag.
+      if (!on) { try { localStorage.removeItem(KEY); } catch { /* ignore */ } }
       return on;
     }
     const ls = localStorage.getItem(KEY);

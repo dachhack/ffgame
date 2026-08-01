@@ -406,7 +406,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
                 const sel = p.id === currentId;
                 const isGated = !sel && !!gated?.(p);
                 return (
-                  <PlayerCard key={p.id} slug={p.id} name={p.name} pos={p.pos} slot={p.team ?? undefined} idx={i}
+                  <PlayerCard key={p.id} slug={p.id} name={p.name} pos={p.pos} team={p.team} slot={p.team ?? undefined} idx={i}
                     selected={sel} locked={isGated}
                     badge={<InjuryBadge week={week} slug={p.id} />}
                     onClick={() => (isGated ? onGated?.(p) : onPick(p.id))} />
