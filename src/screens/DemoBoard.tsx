@@ -559,13 +559,14 @@ export function DemoBoard() {
             <div className="mono" style={{ fontSize: fs(10.5), fontWeight: 800, letterSpacing: '0.22em', color: 'var(--warn)', textShadow: '0 0 12px color-mix(in srgb, var(--warn) 55%, transparent)' }}>
               🔓 PICKS REVEALED
             </div>
-            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
-              {rslots.filter((s) => s.their).map((s, k) => (
-                <PlayerCard key={s.slotIndex} slug={s.their!.player.id} name={s.their!.player.name} pos={s.their!.player.pos} team={s.their!.player.team} opp idx={k}
-                  metric={(METRICS[s.their!.player.pos] ?? []).find((m) => m.id === s.their!.metricId)?.name ?? null} />
+            {/* duel pairs — your card stays face-up beside the flip, so the
+                reveal reads as THEIR sealed pick turning over, not yours */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {rslots.filter((s) => s.their || s.you).map((s, k) => (
+                <RevealPair key={s.slotIndex} you={s.you} their={s.their} idx={k} />
               ))}
             </div>
-            <div className="mono" style={{ fontSize: fs(8.5), letterSpacing: '0.14em', color: 'var(--dim)' }}>THEIR HIDDEN PICKS · {w.label} IS LIVE</div>
+            <div className="mono" style={{ fontSize: fs(8.5), letterSpacing: '0.14em', color: 'var(--dim)' }}>THE SEAL BREAKS · {w.label} IS LIVE</div>
           </div>
         ) : (
           rslots.map((s) => {
@@ -654,16 +655,16 @@ export function DemoBoard() {
                   <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', whiteSpace: 'nowrap' }}>▶ TAP TO RUN YOURS</span>
                 </div>
                 {pStage === 'reveal' && theirPick ? (
-                  // The same reveal panel the real playout uses: the opponent's
-                  // hidden pick flips face-up (PlayerCard's `opp` = ct-flip).
+                  // The same reveal panel the real playout uses — YOUR card stays
+                  // face-up beside the opponent's flipping card (ct-flip), so the
+                  // reveal unmistakably reads as THEIR sealed pick turning over.
                   <div className="ctable" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '12px 6px 12px', borderRadius: 8 }}>
                     {!cardHand && <CardTableCss />}
                     <div className="mono" style={{ fontSize: fs(10), fontWeight: 800, letterSpacing: '0.22em', color: 'var(--warn)', textShadow: '0 0 12px color-mix(in srgb, var(--warn) 55%, transparent)' }}>
                       🔓 PICKS REVEALED
                     </div>
-                    <PlayerCard slug={theirPick.player.id} name={theirPick.player.name} pos={theirPick.player.pos} team={theirPick.player.team} opp idx={0}
-                      metric={(METRICS[theirPick.player.pos] ?? []).find((m) => m.id === theirPick.metricId)?.name ?? null} />
-                    <div className="mono" style={{ fontSize: fs(8.5), letterSpacing: '0.14em', color: 'var(--dim)' }}>THE HIDDEN PICK — SEALED UNTIL THIS MOMENT</div>
+                    <RevealPair you={previewSlot.you} their={theirPick} />
+                    <div className="mono" style={{ fontSize: fs(8.5), letterSpacing: '0.14em', color: 'var(--dim)' }}>THEIR METRIC — SEALED UNTIL THIS MOMENT</div>
                   </div>
                 ) : (
                   <SlotRow slot={previewSlot} state={pStage === 'sealed' ? 'upcoming' : 'live'} you={b.you} their={b.their} clock={pClock} noBorder cards={cardHand} />
@@ -875,6 +876,34 @@ export function DemoBoard() {
 }
 
 // ── Presentational bits ───────────────────────────────────────────────────────
+
+// A kickoff-reveal duel pair: YOUR card stays face-up (it was never hidden from
+// you) while the opponent's flips in beside it — so it's unmistakable WHOSE
+// card is being revealed. Used by both the hero preview's reveal stage and the
+// real playout's kickoff reveal.
+function RevealPair({ you, their, idx = 0 }: { you: ResolvedSlot['you']; their: ResolvedSlot['their']; idx?: number }) {
+  const fs = useFinePrint();
+  const met = (p: NonNullable<ResolvedSlot['you']>) => (METRICS[p.player.pos] ?? []).find((m) => m.id === p.metricId)?.name ?? null;
+  const lab: React.CSSProperties = { fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.14em' };
+  const col: React.CSSProperties = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, minWidth: 0 };
+  return (
+    <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'center' }}>
+      <div style={col}>
+        {you
+          ? <PlayerCard slug={you.player.id} name={you.player.name} pos={you.player.pos} team={you.player.team} idx={idx} metric={met(you)} />
+          : <span className="mono" style={{ ...lab, color: 'var(--faint)', padding: '20px 6px' }}>— NO PICK —</span>}
+        <span className="mono" style={{ ...lab, color: 'var(--you)' }}>YOUR PICK</span>
+      </div>
+      <span className="mono" style={{ fontSize: fs(9), fontWeight: 800, letterSpacing: '0.1em', color: 'var(--faint)', flex: 'none' }}>VS</span>
+      <div style={col}>
+        {their
+          ? <PlayerCard slug={their.player.id} name={their.player.name} pos={their.player.pos} team={their.player.team} opp idx={idx} metric={met(their)} />
+          : <span className="mono" style={{ ...lab, color: 'var(--faint)', padding: '20px 6px' }}>— NO PICK —</span>}
+        <span className="mono" style={{ ...lab, color: 'var(--warn)' }}>🔓 THEIRS — REVEALED</span>
+      </div>
+    </div>
+  );
+}
 
 function TeamSide({ team, owner, ownerId, score, accent, you, bench = 0, showScore = true, youTag }: { team: string; owner: string; ownerId: string; score: number; accent: string; you?: boolean; bench?: number; showScore?: boolean; youTag?: boolean }) {
   const fs = useFinePrint();
