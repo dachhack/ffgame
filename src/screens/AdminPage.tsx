@@ -5,7 +5,7 @@ import {
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
   adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminSetPreseason, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
-  leagueKdst, setKdstMode, setTeamKdst, adminSetFeature,
+  leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
   rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
   setTransactionRules, commishMovePlayer, commishRemovePlayer, commishRuleTrade,
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
@@ -188,6 +188,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
       {tab === 'users' && (
         <>
           <FeatureFlags />
+          <SoloPasses />
           <Users />
           <Admins />
           <Overrides overrides={overrides} reload={load} />
@@ -1445,6 +1446,55 @@ function FeatureFlags() {
         <button className="mono" style={b} disabled={busy} onClick={() => set('native', false)}>− native</button>
       </div>
       {msg && <div className="mono" style={{ ...mono, fontSize: 10, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{msg}</div>}
+    </div>
+  );
+}
+
+// Auto-issued solo passes (0097): the weekly mint cap is the founder's supply
+// lever — the demo funnel mints against it; over quota falls back to waitlist.
+function SoloPasses() {
+  const [data, setData] = useState<SoloPassAdmin | null>(null);
+  const [quota, setQuota] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => adminSoloPasses().then((d) => { if (!('error' in d)) { setData(d); setQuota(String(d.weekly_quota)); } }).catch(() => {});
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const saveQuota = async () => {
+    const q = parseInt(quota, 10);
+    if (busy || isNaN(q)) return;
+    setBusy(true); setMsg(null);
+    const r = await adminSetSoloQuota(q).catch((x) => ({ ok: false, error: String(x) }));
+    setBusy(false);
+    setMsg(r.ok ? `✓ quota set to ${q}/week` : `⚠ ${(r as { error?: string }).error ?? 'failed'}`);
+    load();
+  };
+  return (
+    <div style={card}>
+      <div style={h}>SOLO PASSES</div>
+      <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
+        The demo funnel auto-mints a pass per solo request, capped per rolling 7 days; over the cap requesters land on the waitlist (their lead is still captured above). Redeeming a pass sets the account’s <b>solo</b> flag.
+      </div>
+      <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)', marginBottom: 8 }}>
+        minted last 7d: <b>{data?.minted_7d ?? '…'}</b> / {data?.weekly_quota ?? '…'} · claimed: <b>{data?.claimed_7d ?? '…'}</b>
+      </div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <input value={quota} onChange={(e) => { setQuota(e.target.value.replace(/\D/g, '')); setMsg(null); }} inputMode="numeric" placeholder="25"
+          style={{ fontFamily: 'inherit', fontSize: 12, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 10px', outline: 'none', width: 90 }} />
+        <button className="mono" disabled={busy || !quota.trim()} onClick={saveQuota}
+          style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.05em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 11px', cursor: 'pointer', fontFamily: 'inherit', opacity: busy || !quota.trim() ? 0.6 : 1 }}>set weekly cap</button>
+      </div>
+      {msg && <div className="mono" style={{ ...mono, fontSize: 10, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{msg}</div>}
+      {data && data.passes.length > 0 && (
+        <div style={{ marginTop: 10, maxHeight: 180, overflow: 'auto' }}>
+          {data.passes.map((p) => (
+            <div key={p.code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
+              <span className="mono" style={{ ...mono, fontSize: 10, color: p.claimed ? 'var(--faint)' : 'var(--you)' }}>{p.code}</span>
+              <span style={{ fontSize: 10.5, color: 'var(--dim)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.email}</span>
+              <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{p.claimed ? '✓ claimed' : 'unclaimed'} · {new Date(p.created_at).toLocaleDateString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

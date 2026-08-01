@@ -37,6 +37,8 @@ export const Ev = {
   codeRequestOpened: 'code_request_opened',   // {platform} — modal shown
   codeRequested: 'code_requested',            // {platform, has_league_ref} — lead submitted (no PII)
   codeRequestFailed: 'code_request_failed',   // {error} — submit rejected
+  soloPassIssued: 'solo_pass_issued',         // {waitlisted} — solo request auto-minted a pass (or hit the weekly cap)
+  soloPassRedeemed: 'solo_pass_redeemed',     // {via:'link'|'manual'} — signed-in user claimed a pass, solo unlocked
   // premium funnel (docs/premium-model.md; fire once the gating + entitlements ship)
   gatedFeatureAttempted: 'gated_feature_attempted', // tried K/DST/IDP/locked power-up → premium INTENT
   premiumTierViewed: 'premium_tier_viewed',         // {tier:'personal'|'league'}

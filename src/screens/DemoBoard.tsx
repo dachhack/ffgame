@@ -130,6 +130,8 @@ export function DemoBoard() {
   const [openSlots, setOpenSlots] = useState<Record<string, boolean>>({});
   const armedPu = POWER_OPTIONS.find((p) => p.id === chosenBuff);
 
+
+
   // Keep each window filled top-down (spot 2 never filled while spot 1 is empty).
   const compact = (p: Record<string, Pick>) => {
     const out: Record<string, Pick> = {};
@@ -156,6 +158,30 @@ export function DemoBoard() {
     }
     return compact(out);
   };
+
+  // ── Hero preview: an auto-playing TNF duel, ALREADY mid-drip on arrival ────
+  // The empty board was the first thing a cold visitor saw — the product at its
+  // worst moment. This resolves the default lineups once and loops the opening
+  // window's duel under the headline: score ticking, drips landing, before the
+  // visitor has touched anything. Tapping it runs their own week (quickRun).
+  const previewResolved = useMemo(() => {
+    if (!ready || !oppId || phase !== 'setup') return null;
+    return buildMatchup(youId, oppId, DEMO_WEEK, autoFill({}), oppPicks, {}, {}, {}, {}, { autoBackups: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- autoFill is a stable function of `defaults`
+  }, [ready, oppId, youId, oppPicks, defaults, phase]);
+  const previewSlot = useMemo(() => {
+    const slots = previewResolved?.windows[0]?.slots ?? [];
+    return slots.find((s) => s.you && s.their) ?? slots[0] ?? null;
+  }, [previewResolved]);
+  const previewMax = useMemo(() => (previewSlot ? previewSlot.events.reduce((m, e) => Math.max(m, e.clock), 0) : 0), [previewSlot]);
+  const [pClock, setPClock] = useState(0);
+  useEffect(() => {
+    if (!previewSlot || previewMax <= 0) return;
+    setPClock(Math.floor(previewMax * 0.45)); // land mid-game — banks already built, drips visibly ticking
+    const step = Math.max(20, Math.ceil(previewMax / 90)); // one full loop ≈ 45s
+    const id = setInterval(() => setPClock((c) => (c + step > previewMax ? 0 : c + step)), 500);
+    return () => clearInterval(id);
+  }, [previewSlot, previewMax]);
 
   const assignFromRoster = (playerId: string) => {
     if (phase !== 'setup') return;
@@ -592,6 +618,29 @@ export function DemoBoard() {
               FREE INTERACTIVE DEMO · NO SIGN-IN NEEDED
             </div>
           </div>
+
+          {/* live mid-drip preview — the payoff on screen before any interaction */}
+          {phase === 'setup' && previewSlot && previewResolved && (() => {
+            const b = banksAtClock(previewSlot.events, pClock);
+            return (
+              <div
+                onClick={quickRun}
+                role="button"
+                title="Run a full live week with auto-picks"
+                style={{ cursor: 'pointer', background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 10, padding: '9px 12px 4px', marginBottom: 10, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 12%, transparent)' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                  <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 3, background: 'var(--you)', animation: 'bpulse 1.2s infinite' }} />
+                  <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.14em', color: 'var(--you)' }}>
+                    LIVE PREVIEW · {previewResolved.windows[0]?.window.label ?? 'TNF'} · {fmtClock(pClock)}
+                  </span>
+                  <span style={{ flex: 1 }} />
+                  <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)' }}>▶ TAP TO RUN YOURS</span>
+                </div>
+                <SlotRow slot={previewSlot} state="live" you={b.you} their={b.their} clock={pClock} noBorder cards={cardHand} />
+              </div>
+            );
+          })()}
 
           {scoreHdr}
 

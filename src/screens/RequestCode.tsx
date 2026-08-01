@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { requestCode } from '../data/liveApi';
+import { requestCode, issueSoloPass } from '../data/liveApi';
 import { liveConfigured } from '../data/liveConfig';
 import { useStore } from '../app/store';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
@@ -50,6 +50,11 @@ export function RequestCodeModal({ initialPlatform, onClose }: { initialPlatform
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  // Solo requests mint a pass on the spot (0097): 'code' = instant grant shown
+  // in the done screen; 'waitlisted' = this week's cap is spent, lead captured.
+  const [soloPass, setSoloPass] = useState<string | null>(null);
+  const [waitlisted, setWaitlisted] = useState(false);
+  const { navigate } = useStore();
   const guide = REF_GUIDE[platform] ?? REF_GUIDE[''];
 
   // The demo's conversion funnel: opened → requested (or failed). No PII in
@@ -63,7 +68,18 @@ export function RequestCodeModal({ initialPlatform, onClose }: { initialPlatform
     setBusy(true); setErr(null);
     // `sleeper` on the API is the generic contact field; we send the platform there.
     const r = await requestCode({ email, sleeper: platform, league, leagueRef, note, attribution: attribution() });
-    if (r.ok) { track(Ev.codeRequested, { platform: platform || null, has_league_ref: !!leagueRef.trim() }); setDone(true); }
+    if (r.ok) {
+      track(Ev.codeRequested, { platform: platform || null, has_league_ref: !!leagueRef.trim() });
+      // Solo path: mint a capped pass right now — instant gratification instead
+      // of "wait for an email". Falls back to the waitlist copy over quota (the
+      // lead row above still captures them either way).
+      if (platform === SOLO) {
+        const p = await issueSoloPass(email).catch(() => null);
+        if (p?.ok && p.code) { setSoloPass(p.code); track(Ev.soloPassIssued, { waitlisted: false }); }
+        else if (p?.ok && p.waitlisted) { setWaitlisted(true); track(Ev.soloPassIssued, { waitlisted: true }); }
+      }
+      setDone(true);
+    }
     else { track(Ev.codeRequestFailed, { error: (r.error ?? 'unknown').slice(0, 120) }); setErr(r.error ?? 'Could not send — try again.'); setBusy(false); }
   };
 
@@ -71,11 +87,32 @@ export function RequestCodeModal({ initialPlatform, onClose }: { initialPlatform
     <div onClick={onClose} style={overlay}>
       <div onClick={(e) => e.stopPropagation()} style={sheet}>
         {done ? (
+          soloPass ? (
+            // Instant grant — the pass is theirs. One button carries the code
+            // through sign-up (stashed, auto-redeemed by LiveOnboard).
+            <div style={{ textAlign: 'center' }}>
+              <div className="grotesk" style={{ fontSize: 21, fontWeight: 700, color: 'var(--text)' }}>You’re in — here’s your solo pass.</div>
+              <div className="mono" style={{ fontSize: 24, fontWeight: 700, letterSpacing: '0.18em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, transparent)', border: '1px dashed color-mix(in srgb, var(--you) 55%, var(--bd))', borderRadius: 8, padding: '14px 0', marginTop: 14, userSelect: 'all' }}>{soloPass}</div>
+              <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 10, lineHeight: 1.55 }}>
+                We release a limited number of passes each week — this one’s yours. Tap the button and it redeems automatically when you create your account; solo pods and weekly showdowns unlock instantly. Doing it later? Save the code — it isn’t emailed.
+              </div>
+              <button
+                onClick={() => { try { localStorage.setItem('dripSoloPass', soloPass); } catch { /* ignore */ } onClose(); navigate({ name: 'live' }); }}
+                className="mono" style={{ ...primaryBtn, marginTop: 16 }}
+              >sign up &amp; redeem →</button>
+              <button onClick={onClose} className="mono" style={cancelBtn}>I saved the code — later</button>
+            </div>
+          ) : (
           <div style={{ textAlign: 'center' }}>
-            <div className="grotesk" style={{ fontSize: 21, fontWeight: 700, color: 'var(--text)' }}>You’re on the list.</div>
-            <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>We onboard new players every week — invites usually land within a few days. Keep playing the demo in the meantime.</div>
+            <div className="grotesk" style={{ fontSize: 21, fontWeight: 700, color: 'var(--text)' }}>{waitlisted ? 'This week’s passes are gone.' : 'You’re on the list.'}</div>
+            <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
+              {waitlisted
+                ? 'We release a limited number of solo passes each week and this week’s batch is claimed. You’re first in line for the next drop — we’ll email your pass.'
+                : 'We onboard new players every week — invites usually land within a few days. Keep playing the demo in the meantime.'}
+            </div>
             <button onClick={onClose} className="mono" style={{ ...primaryBtn, marginTop: 18 }}>done</button>
           </div>
+          )
         ) : (
           <>
             <div className="grotesk" style={{ fontSize: 21, fontWeight: 700, color: 'var(--text)' }}>Get in the pilot</div>

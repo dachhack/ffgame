@@ -5,7 +5,7 @@ import { liveConfigured } from '../data/liveConfig';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   getSession, onAuth, signOut, ensureAppUser,
-  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, myFeatures, myEnrollments, myLinkedSleeper, claimMyRosters,
+  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, myLinkedSleeper, claimMyRosters,
   redeemCommish, isAdmin, commishOverview, friendlyError, deleteMockDraft,
   myMatchup, matchupTeams, leagueResults, defaultOpenWeek,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
@@ -48,7 +48,7 @@ function GoogleG() {
   );
 }
 
-type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin' | 'add' | 'join' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate';
+type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin' | 'add' | 'join' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass';
 
 export function LiveOnboard() {
   const { navigate, route } = useStore();
@@ -421,6 +421,24 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     /* eslint-disable-next-line */
   }, [session.user.id]);
 
+  // Solo pass (0097): the request modal stashes the freshly-minted code before
+  // routing here — once signed in, redeem it automatically so solo unlocks
+  // without ever showing a code-entry form. On failure, open manual entry
+  // prefilled so the code isn't silently lost.
+  const [soloPassCode, setSoloPassCode] = useState<string | null>(null);
+  useEffect(() => {
+    let code: string | null = null;
+    try { code = localStorage.getItem('dripSoloPass'); localStorage.removeItem('dripSoloPass'); } catch { /* ignore */ }
+    if (!code) return;
+    redeemSoloPass(code)
+      .then((r) => {
+        if (r.ok) { track(Ev.soloPassRedeemed, { via: 'link' }); myFeatures().then(setFeatures).catch(() => {}); }
+        else { setSoloPassCode(code); setView('solopass'); }
+      })
+      .catch(() => { setSoloPassCode(code); setView('solopass'); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.user.id]);
+
   // DFS invite link (?dfs=CODE → dripDfsCode): once signed in, auto-join the
   // league — the link is the whole flow, no chooser card for normal users.
   // On failure, open the manual join form with the code prefilled.
@@ -460,7 +478,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     <>
       {/* "Start a fresh league" needs the founder-granted 'native' flag (0095;
           admins always pass — the create RPC enforces the same gate server-side). */}
-      <RoleChooser onPlayer={() => setView('join')} onCreate={admin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+      <RoleChooser onPlayer={() => setView('join')} onCreate={admin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </>
@@ -485,6 +503,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     </>
   );
   if (view === 'dfsjoin') return <DfsJoinForm initialCode={dfsCode ?? undefined} onJoined={() => { setDfsCode(null); setView('home'); refresh(); }} onBack={() => { setDfsCode(null); setView('home'); }} />;
+  if (view === 'solopass') return <SoloPassForm initialCode={soloPassCode ?? undefined} onRedeemed={() => { setSoloPassCode(null); myFeatures().then(setFeatures).catch(() => {}); setView('home'); }} onBack={() => { setSoloPassCode(null); setView('home'); }} />;
   if (view === 'dfscreate') return <DfsCreateForm onDone={() => { setView('home'); refresh(); }} onBack={() => setView('home')} />;
   if (view === 'podbuild' && target) return (
     <PodBuilder leagueId={target.leagueId} rosterId={target.rosterId} week={target.week} leagueName={target.name}
@@ -511,7 +530,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (enrollments.length === 0) return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={admin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={admin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
@@ -958,7 +977,7 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
   );
 }
 
-function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekly, onDfsJoin, onDfsCreate, soloBusy, soloErr }: { onPlayer: () => void; onCreate?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; onWeekly?: () => void; onDfsJoin?: () => void; onDfsCreate?: () => void; soloBusy?: 'pod' | 'weekly' | null; soloErr?: { mode: 'pod' | 'weekly'; msg: string } | null }) {
+function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekly, onDfsJoin, onDfsCreate, onSoloPass, soloBusy, soloErr }: { onPlayer: () => void; onCreate?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; onWeekly?: () => void; onDfsJoin?: () => void; onDfsCreate?: () => void; onSoloPass?: () => void; soloBusy?: 'pod' | 'weekly' | null; soloErr?: { mode: 'pod' | 'weekly'; msg: string } | null }) {
   const choice: React.CSSProperties = { width: '100%', textAlign: 'left', fontFamily: 'inherit', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, cursor: 'pointer' };
   // Everyone sees the platform-league paths; everything below the divider only
   // renders because THIS account holds a feature flag (or is admin) — the chip
@@ -1016,6 +1035,12 @@ function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekl
             <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Manual code entry — invitees normally just open the commissioner’s link and are seated automatically.</div>
           </button>
         )}
+        {onSoloPass && (
+          <button onClick={onSoloPass} style={choice}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>I have a solo pass →</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Redeem the SOLO-XXXXXX pass from the demo to unlock drop-in pods and weekly showdowns.</div>
+          </button>
+        )}
         {onDfsCreate && (
           <button onClick={onDfsCreate} style={{ ...choice, borderLeft: '3px solid var(--warn)' }}>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--warn)' }}>🏈 Start a DFS league →{gate('DFS COMMISH')}</div>
@@ -1030,6 +1055,41 @@ function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekl
         )}
       </div>
     </>
+  );
+}
+
+// Redeem a solo pass (0097) — normally auto-redeemed from the request modal's
+// stash; this manual form catches a saved/shared code or a failed auto-redeem.
+function SoloPassForm({ onRedeemed, onBack, initialCode }: { onRedeemed: () => void; onBack: () => void; initialCode?: string }) {
+  const [code, setCode] = useState(initialCode ?? '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const go = async () => {
+    if (busy || !code.trim()) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await redeemSoloPass(code);
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'Couldn’t redeem — check the code.')); return; }
+      track(Ev.soloPassRedeemed, { via: 'manual' });
+      onRedeemed();
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ maxWidth: 440, margin: '0 auto' }}>
+      <div style={card}>
+        <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>Redeem your solo pass</div>
+        <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Enter the SOLO-XXXXXX pass from the demo. It unlocks drop-in pods and weekly showdowns — no league needed.</div>
+        <label className="mono" style={{ ...label, display: 'block', marginTop: 14 }}>SOLO PASS</label>
+        <input value={code} autoFocus onChange={(e) => { setCode(e.target.value.toUpperCase()); setErr(null); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
+          placeholder="SOLO-1A2B3C" style={{ ...input, width: '100%', boxSizing: 'border-box', marginTop: 7, letterSpacing: '0.15em' }} />
+        <button onClick={go} disabled={busy || !code.trim()} className="mono"
+          style={{ ...btn, width: '100%', padding: '12px 0', marginTop: 14, opacity: busy || !code.trim() ? 0.6 : 1 }}>{busy ? '…' : 'UNLOCK SOLO PLAY →'}</button>
+        {err && <div className="mono" style={errStyle}>{err}</div>}
+      </div>
+      <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
+    </div>
   );
 }
 

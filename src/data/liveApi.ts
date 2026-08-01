@@ -54,7 +54,9 @@ function redirectTo(): string {
   try {
     const p = new URLSearchParams(window.location.search);
     const commish = p.get('commish') || localStorage.getItem('dripCommishCode');
-    const code = p.get('code') || localStorage.getItem('dripInviteCode');
+    // A pending solo pass (0097) rides the same &code= param — App.tsx routes
+    // SOLO-prefixed codes back to the dripSoloPass stash on landing.
+    const code = p.get('code') || localStorage.getItem('dripInviteCode') || localStorage.getItem('dripSoloPass');
     if (commish) extra = `&commish=${encodeURIComponent(commish)}`;
     else if (code) extra = `&code=${encodeURIComponent(code)}`;
   } catch { /* ignore */ }
@@ -557,6 +559,18 @@ export const adminSetDemoCardTheme = (on: boolean) =>
   rpc<{ ok: boolean; error?: string; card_theme?: boolean }>('admin_set_demo_card_theme', { p_on: on });
 export const adminSetCardTheme = (leagueId: string, on: boolean) =>
   rpc<{ ok: boolean; error?: string; card_theme?: boolean }>('admin_set_card_theme', { p_league: leagueId, p_on: on });
+
+// ── Solo passes (0097): auto-issued, capped, self-serve solo access ──────────
+/** Anonymous mint from the request funnel's solo path. Over quota → waitlisted. */
+export const issueSoloPass = (email: string) =>
+  rpc<{ ok: boolean; error?: string; code?: string; already?: boolean; waitlisted?: boolean }>('issue_solo_pass', { p_email: email });
+/** Signed-in redemption — claims the pass and unlocks the 'solo' feature. */
+export const redeemSoloPass = (code: string) =>
+  rpc<{ ok: boolean; error?: string; already?: boolean }>('redeem_solo_pass', { p_code: code });
+export interface SoloPassAdmin { weekly_quota: number; minted_7d: number; claimed_7d: number; passes: { code: string; created_at: string; email: string; claimed: boolean; claimed_at: string | null }[] }
+export const adminSoloPasses = () => rpc<SoloPassAdmin | { error: string }>('admin_solo_passes');
+export const adminSetSoloQuota = (quota: number) =>
+  rpc<{ ok: boolean; error?: string; weekly_quota?: number }>('admin_set_solo_quota', { p_quota: quota });
 
 export const adminOverview = () => rpc<AdminLeague[]>('admin_overview');
 export const adminMatchups = (leagueId: string) => rpc<AdminMatchup[]>('admin_matchups', { p_league_id: leagueId });
