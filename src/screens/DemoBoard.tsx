@@ -561,7 +561,7 @@ export function DemoBoard() {
             </div>
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
               {rslots.filter((s) => s.their).map((s, k) => (
-                <PlayerCard key={s.slotIndex} slug={s.their!.player.id} name={s.their!.player.name} pos={s.their!.player.pos} opp idx={k}
+                <PlayerCard key={s.slotIndex} slug={s.their!.player.id} name={s.their!.player.name} pos={s.their!.player.pos} team={s.their!.player.team} opp idx={k}
                   metric={(METRICS[s.their!.player.pos] ?? []).find((m) => m.id === s.their!.metricId)?.name ?? null} />
               ))}
             </div>
@@ -661,7 +661,7 @@ export function DemoBoard() {
                     <div className="mono" style={{ fontSize: fs(10), fontWeight: 800, letterSpacing: '0.22em', color: 'var(--warn)', textShadow: '0 0 12px color-mix(in srgb, var(--warn) 55%, transparent)' }}>
                       🔓 PICKS REVEALED
                     </div>
-                    <PlayerCard slug={theirPick.player.id} name={theirPick.player.name} pos={theirPick.player.pos} opp idx={0}
+                    <PlayerCard slug={theirPick.player.id} name={theirPick.player.name} pos={theirPick.player.pos} team={theirPick.player.team} opp idx={0}
                       metric={(METRICS[theirPick.player.pos] ?? []).find((m) => m.id === theirPick.metricId)?.name ?? null} />
                     <div className="mono" style={{ fontSize: fs(8.5), letterSpacing: '0.14em', color: 'var(--dim)' }}>THE HIDDEN PICK — SEALED UNTIL THIS MOMENT</div>
                   </div>

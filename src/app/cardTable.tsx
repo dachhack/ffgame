@@ -4,7 +4,8 @@
 // classic board uses. All CSS is scoped under .ctable so nothing leaks into
 // the rest of the app; suit colors come from the active theme's --pos-* vars.
 import { useEffect, useMemo, useState } from 'react';
-import { headshot } from '../data/media';
+import { headshot, teamLogo } from '../data/media';
+import { slugMeta } from '../data/slugMeta';
 import { DripCoin, FxIcon, PuIcon } from './gameIcons';
 import type { PbpEvent } from '../types';
 
@@ -140,6 +141,7 @@ const CSS = `
 .ctable .ct-art{align-self:center;margin-top:4px;width:72px;height:52px;border-radius:7px;border:2px solid;overflow:hidden;position:relative;
   background:radial-gradient(circle at 50% 20%,#FFF 0%,#E8E0C8 100%);display:flex;align-items:center;justify-content:center;}
 .ctable .ct-art img{width:100%;height:100%;object-fit:cover;object-position:top;display:block;}
+.ctable .ct-art img.ct-artlogo,.ctable .ct-lart img.ct-artlogo{object-fit:contain;object-position:center;padding:9%;box-sizing:border-box;}
 .ctable .ct-mono{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:17px;}
 .ctable .ct-name{text-align:center;font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-size:9.4px;letter-spacing:.04em;line-height:1.18;
   margin-top:5px;color:#2A2312;text-transform:uppercase;text-wrap:balance;}
@@ -539,13 +541,31 @@ const initials = (name: string) => name.split(/\s+/).map((w) => w[0]).filter(Boo
  *  post-wipe score). Picker use: pass `onClick` (+ `selected` for the current
  *  pick, `locked` for premium-gated), leave `metric` undefined to hide the
  *  metric row, and pass `badge` (e.g. an injury chip) to sit by the name. */
-export function PlayerCard({ slug, name, pos, slot, metric, bank, opp = false, hot = false, nuked = false, idx = 0, onClick, selected = false, locked = false, badge }: {
-  slug: string; name: string; pos: string; slot?: string; metric?: string | null;
+// Card-art resolution chain: ESPN headshot → NFL team logo → initials. The
+// team comes from the explicit prop when the caller has it, else the baked
+// slug registry (covers every demo/hero player incl. K/DST team slugs) — so a
+// missing or broken headshot degrades to the team crest, not straight to
+// initials. Mark-free mode nulls both URLs and lands on initials as before.
+function useCardArt(slug: string, team?: string | null) {
+  const url = useMemo(() => headshot(slug), [slug]);
+  const logo = useMemo(() => teamLogo(team || slugMeta(slug).team || null), [team, slug]);
+  const [stage, setStage] = useState<'head' | 'logo' | 'init'>(url ? 'head' : logo ? 'logo' : 'init');
+  useEffect(() => { setStage(url ? 'head' : logo ? 'logo' : 'init'); }, [url, logo]);
+  const fail = () => setStage((s) => (s === 'head' && logo ? 'logo' : 'init'));
+  return { url, logo, stage, fail };
+}
+/** Tiny team-logo chip for card headers; removes itself if the logo 404s. */
+function CornerLogo({ src, size = 11 }: { src: string; size?: number }) {
+  return <img src={src} alt="" draggable={false} width={size} height={size} style={{ width: size, height: size, objectFit: 'contain', display: 'inline-block' }}
+    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />;
+}
+
+export function PlayerCard({ slug, name, pos, team, slot, metric, bank, opp = false, hot = false, nuked = false, idx = 0, onClick, selected = false, locked = false, badge }: {
+  slug: string; name: string; pos: string; team?: string | null; slot?: string; metric?: string | null;
   bank?: number | null; opp?: boolean; hot?: boolean; nuked?: boolean; idx?: number;
   onClick?: () => void; selected?: boolean; locked?: boolean; badge?: React.ReactNode;
 }) {
-  const [imgOk, setImgOk] = useState(true);
-  const url = useMemo(() => headshot(slug), [slug]);
+  const art = useCardArt(slug, team);
   const suit = posVars(pos);
   const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
   return (
@@ -556,12 +576,18 @@ export function PlayerCard({ slug, name, pos, slot, metric, bank, opp = false, h
           <div className="ct-fill" style={{ height: `${fillPct}%` }} />
           <div className="ct-facehead">
             <span className="ct-suit" style={suit}>{pos === 'DEF' ? 'DST' : pos}</span>
-            {slot && <span className="ct-slot">{slot.toUpperCase()}</span>}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+              {/* header crest — skipped while the art box itself shows the logo */}
+              {art.logo && art.stage !== 'logo' && <CornerLogo src={art.logo} />}
+              {slot && <span className="ct-slot">{slot.toUpperCase()}</span>}
+            </span>
           </div>
           <div className="ct-art" style={{ borderColor: suit.color as string }}>
-            {url && imgOk
-              ? <img src={url} alt="" draggable={false} onError={() => setImgOk(false)} />
-              : <span className="ct-mono" style={{ color: suit.color as string }}>{initials(name)}</span>}
+            {art.stage === 'head'
+              ? <img src={art.url!} alt="" draggable={false} onError={art.fail} />
+              : art.stage === 'logo'
+                ? <img className="ct-artlogo" src={art.logo!} alt="" draggable={false} onError={art.fail} />
+                : <span className="ct-mono" style={{ color: suit.color as string }}>{initials(name)}</span>}
           </div>
           <div className="ct-name">{name}{badge && <span style={{ marginLeft: 3 }}>{badge}</span>}</div>
           {metric !== undefined && <div className="ct-metric">METRIC <b>{metric ?? '—'}</b></div>}
@@ -625,8 +651,7 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
   bank?: number | null; hot?: boolean; nuked?: boolean; frozen?: boolean;
   badge?: React.ReactNode; float?: boolean;
 }) {
-  const [imgOk, setImgOk] = useState(true);
-  const url = useMemo(() => headshot(slug), [slug]);
+  const art = useCardArt(slug, team);
   const suit = posVars(pos);
   const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
   const fmt = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
@@ -636,12 +661,19 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
       <div className="ct-fill" style={{ height: `${fillPct}%` }} />
       <div className="ct-lhead">
         <span className="ct-suit" style={suit}>{pos === 'DEF' ? 'DST' : pos}</span>
-        {team && <span className="ct-lteam">{team.toUpperCase()}</span>}
+        {team && (
+          <span className="ct-lteam" style={{ display: 'inline-flex', alignItems: 'center', gap: 2.5 }}>
+            {art.logo && art.stage !== 'logo' && <CornerLogo src={art.logo} size={9} />}
+            {team.toUpperCase()}
+          </span>
+        )}
       </div>
       <div className="ct-lart" style={{ borderColor: suit.color as string }}>
-        {url && imgOk
-          ? <img src={url} alt="" draggable={false} onError={() => setImgOk(false)} />
-          : <span className="ct-mono" style={{ color: suit.color as string }}>{initials(name)}</span>}
+        {art.stage === 'head'
+          ? <img src={art.url!} alt="" draggable={false} onError={art.fail} />
+          : art.stage === 'logo'
+            ? <img className="ct-artlogo" src={art.logo!} alt="" draggable={false} onError={art.fail} />
+            : <span className="ct-mono" style={{ color: suit.color as string }}>{initials(name)}</span>}
       </div>
       <div className="ct-lname">{name}{badge && <span style={{ marginLeft: 2 }}>{badge}</span>}</div>
       {nuked && (
