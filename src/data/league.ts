@@ -61,9 +61,11 @@ const RAW_TEAMS: RawTeam[] = [
       ['Ladd McConkey', 'WR'], ['Drake London', 'WR'], ['Ricky Pearsall', 'WR'], ['Harold Fannin', 'TE'],
       ['Ashton Jeanty', 'RB'], ['TreVeyon Henderson', 'RB'], ['Rashee Rice', 'WR'], ['Emeka Egbuka', 'WR'],
       ['J.J. McCarthy', 'QB'], ['Trey Benson', 'RB'], ['Isaiah Likely', 'TE'], ['Bhayshul Tuten', 'RB'],
-      // Doubs (GB) gives this team a TNF-eligible starter, so the demo's first
-      // window plays as a real head-to-head duel instead of an unopposed backup.
-      ['Brandon Aiyuk', 'WR'], ['Romeo Doubs', 'WR'],
+      // Daniels (WAS) gives this team a MARQUEE TNF-eligible starter, so the
+      // demo's first window plays as a real head-to-head duel — and from the
+      // OPPOSING team in the same game (WAS @ GB), so the drip visibly trades
+      // sides with possession. (Traded from Cookout Crew for Romeo Doubs.)
+      ['Brandon Aiyuk', 'WR'], ['Jayden Daniels', 'QB'],
     ],
   },
   {
@@ -72,7 +74,7 @@ const RAW_TEAMS: RawTeam[] = [
     roster: [
       ['Jacoby Brissett', 'QB'], ['C.J. Stroud', 'QB'], ['De\'Von Achane', 'RB'], ['Chase Brown', 'RB'],
       ['Nico Collins', 'WR'], ['Jauan Jennings', 'WR'], ['Chris Olave', 'WR'], ['Jake Tonges', 'TE'],
-      ['Bijan Robinson', 'RB'], ['Puka Nacua', 'WR'], ['Kyler Murray', 'QB'], ['Jayden Daniels', 'QB'],
+      ['Bijan Robinson', 'RB'], ['Puka Nacua', 'WR'], ['Kyler Murray', 'QB'], ['Romeo Doubs', 'WR'],
       ['Malik Nabers', 'WR'], ['Sam LaPorta', 'TE'], ['Isiah Pacheco', 'RB'], ['Brian Thomas', 'WR'],
       ['Rhamondre Stevenson', 'RB'], ['Pat Freiermuth', 'TE'], ['Quentin Johnston', 'WR'], ['Jaxson Dart', 'QB'],
     ],
