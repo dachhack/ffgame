@@ -103,6 +103,35 @@ function winMetaFor(ms: number): { id: string; label: string; sub: string } {
   }
 }
 
+/** Window id per kickoff (parallel array), via the same greedy clustering that
+ *  builds a week's lineup windows: kickoffs sort ascending, a game joins the
+ *  open cluster while it starts within an hour of the cluster's first kickoff,
+ *  and each cluster is named by winMetaFor — with a numeric suffix when a base
+ *  id repeats (two separate Thursday slates → tnf, tnf2). Exported for the
+ *  server's slate writer (server/src/poll/scoreboard.js): the `win` it stores
+ *  in nfl_slate keys per-window sealing (lock.js) AND the 0058 DB lock trigger,
+ *  so it must equal the id the client stamps on picks for the same game. */
+export function windowIdsFromKickoffs(kickoffs: number[]): string[] {
+  const order = kickoffs.map((k, i) => [k, i] as const).sort((a, b) => a[0] - b[0]);
+  const ids = new Array<string>(kickoffs.length);
+  const usedBase = new Map<string, number>();
+  let cluster: number[] = [];
+  let anchor = -Infinity;
+  const flush = () => {
+    if (!cluster.length) return;
+    const meta = winMetaFor(anchor);
+    const n = usedBase.get(meta.id) ?? 0; usedBase.set(meta.id, n + 1);
+    const id = n === 0 ? meta.id : `${meta.id}${n + 1}`; // disambiguate a repeated bucket
+    for (const i of cluster) ids[i] = id;
+  };
+  for (const [k, i] of order) {
+    if (!cluster.length || k - anchor <= WIN_HOUR) { if (!cluster.length) anchor = k; cluster.push(i); }
+    else { flush(); cluster = [i]; anchor = k; }
+  }
+  flush();
+  return ids;
+}
+
 /** Cluster a week's slate into its real game windows (memoized per week). Falls
  *  back to the fixed five when kickoffs aren't fully known. */
 function deriveWeek(week: number): DerivedWeek {
@@ -122,31 +151,23 @@ function deriveWeek(week: number): DerivedWeek {
     }
     result = { windows: WINDOWS, teamWin, gamesByWin };
   } else {
-    // Greedy cluster in kickoff order: a game joins the open window if it kicks
-    // within an hour of that window's anchor (first) kickoff, else starts its own.
+    // Group by the shared clustering (id order follows kickoff order).
     const sorted = [...kicks].sort((a, b) => a.kickoff - b.kickoff);
-    const clusters: (NflGame & { kickoff: number })[][] = [];
-    let cur: (NflGame & { kickoff: number })[] = [];
-    let anchor = -Infinity;
-    for (const g of sorted) {
-      if (!cur.length || g.kickoff - anchor <= WIN_HOUR) { if (!cur.length) anchor = g.kickoff; cur.push(g); }
-      else { clusters.push(cur); cur = [g]; anchor = g.kickoff; }
-    }
-    if (cur.length) clusters.push(cur);
-
+    const ids = windowIdsFromKickoffs(sorted.map((g) => g.kickoff));
     const windows: GameWindow[] = [];
     const teamWin = new Map<string, string>();
     const gamesByWin = new Map<string, NflGame[]>();
-    const usedBase = new Map<string, number>();
-    for (const games of clusters) {
-      const k0 = Math.min(...games.map((g) => g.kickoff));
+    sorted.forEach((g, i) => {
+      const id = ids[i];
+      const arr = gamesByWin.get(id) ?? gamesByWin.set(id, []).get(id)!;
+      arr.push(g);
+      teamWin.set(g.home, id); teamWin.set(g.away, id);
+    });
+    for (const [id, games] of gamesByWin) { // insertion order = kickoff order
+      const k0 = Math.min(...games.map((g) => g.kickoff ?? Infinity));
       const meta = winMetaFor(k0);
-      const n = usedBase.get(meta.id) ?? 0; usedBase.set(meta.id, n + 1);
-      const id = n === 0 ? meta.id : `${meta.id}${n + 1}`; // disambiguate a repeated bucket
       const slots = Math.min(3, Math.ceil(games.length / 3));
       windows.push({ id, label: meta.label, sub: meta.sub, slots, time: kickoffLabel(k0) });
-      gamesByWin.set(id, games);
-      for (const g of games) { teamWin.set(g.home, id); teamWin.set(g.away, id); }
     }
     result = { windows, teamWin, gamesByWin };
   }

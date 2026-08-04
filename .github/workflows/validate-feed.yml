@@ -16,6 +16,7 @@ on:
       - 'public/pbp/**'
       - 'src/engine/**'
       - 'src/data/realPbp.ts'
+      - 'src/data/nflSlate.ts'
       - '.github/workflows/validate-feed.yml'
   workflow_dispatch:
 
@@ -29,6 +30,9 @@ jobs:
       - name: Install worker deps
         working-directory: server
         run: npm ci
+      - name: Window-id parity — server slate vs client derivation
+        working-directory: server
+        run: npx tsx test/window-parity.mjs
       - name: Feed round-trip — every baked week
         working-directory: server
         run: |

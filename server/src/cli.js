@@ -12,7 +12,7 @@ import { config } from './config.js';
 import { importLeague, syncWeek, syncAllLeagues, cloneWeek } from './sync.js';
 import { buildPlayerIndex } from './playerIndex.js';
 import { pollInjuries } from './poll/injuries.js';
-import { gamesToPoll } from './poll/scoreboard.js';
+import { gamesToPoll, espnCurrentWeek } from './poll/scoreboard.js';
 import { pollGame } from './poll/plays.js';
 import { getState } from './sleeper.js';
 import { simulate } from './simulate.js';
@@ -57,11 +57,18 @@ async function main() {
     case 'poll-once': {
       const idx = await buildPlayerIndex();
       const s = await getState();
-      const week = Number(s.week) || 1;
-      const ids = await gamesToPoll(config.season, week, config.seasonType);
+      let espnWeek = Number(s.week) || 1;
+      // Preseason (weekOffset set): Sleeper's week is 0 all August — use ESPN's
+      // current preseason week, like the worker's tick does.
+      if (config.weekOffset) espnWeek = (await espnCurrentWeek(config.season, config.seasonType)) ?? espnWeek;
+      // ESPN is queried at the real week; DB writes land at the offset BOARD week
+      // (101-103 in preseason), matching the worker — writing at the raw week
+      // would drop preseason plays onto the loaded regular-season week.
+      const week = espnWeek + config.weekOffset;
+      const ids = await gamesToPoll(config.season, espnWeek, config.seasonType);
       let wrote = 0;
       for (const id of ids) wrote += await pollGame(id, week, idx);
-      console.log('polled', ids.length, 'games,', wrote, 'rows');
+      console.log('polled', ids.length, 'games,', wrote, 'rows at board week', week);
       break;
     }
     case 'leagues': {
