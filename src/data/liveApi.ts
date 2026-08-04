@@ -63,6 +63,15 @@ function redirectTo(): string {
   return `${window.location.origin}${window.location.pathname}?live=1${extra}`;
 }
 
+/** True when the current URL is a Supabase auth callback — an OAuth / magic-link /
+ *  recovery return carrying session tokens (or an auth error) in the hash. The SDK
+ *  loads lazily and reads the URL only when created (detectSessionInUrl), so boot
+ *  code must NOT rewrite the URL while this is true or the tokens are destroyed
+ *  and the user bounces back to the sign-in form. */
+export function hasAuthTokensInUrl(): boolean {
+  try { return /[#&](access_token|refresh_token|error_description|error_code|error)=/.test(window.location.hash); } catch { return false; }
+}
+
 export async function sendMagicLink(email: string): Promise<void> {
   const { error } = await (await client()).auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: redirectTo() } });
   if (error) throw error;
