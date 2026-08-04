@@ -3,6 +3,7 @@ import { useStore, PHOTO_SKINS } from './app/store';
 import { THEMES, themeVars } from './theme';
 import { DemoBoard } from './screens/DemoBoard';
 import { yahooExchange } from './data/providers/yahooClient';
+import { getSession, hasAuthTokensInUrl } from './data/liveApi';
 import { RequestCodeFab } from './screens/RequestCode';
 import { DEMO_WEEK } from './config';
 
@@ -77,10 +78,19 @@ export function App() {
       // after sign-in (0094 — the link IS the access; no card in the chooser).
       const dfs = p.get('dfs');
       if (dfs) { try { localStorage.setItem('dripDfsCode', dfs.toUpperCase()); } catch { /* ignore */ } }
-      navigate({ name: 'live' });
-      // Consume the params so a later refresh doesn't teleport back into Live (the
-      // route now lives in the hash). Keep the path + the just-set #/live hash.
-      try { window.history.replaceState(window.history.state, '', window.location.pathname + '#/live'); } catch { /* ignore */ }
+      const finish = () => {
+        navigate({ name: 'live' });
+        // Consume the params so a later refresh doesn't teleport back into Live (the
+        // route now lives in the hash). Keep the path + the just-set #/live hash.
+        try { window.history.replaceState(window.history.state, '', window.location.pathname + '#/live'); } catch { /* ignore */ }
+      };
+      // An OAuth / magic-link return carries the session in the URL hash
+      // (#access_token=…). The Supabase SDK loads lazily and reads the URL only
+      // once created — rewriting the URL first would destroy the tokens and bounce
+      // the user back to the sign-in form. getSession() awaits the SDK's URL
+      // detection, so the tokens are consumed before the hash is replaced.
+      if (hasAuthTokensInUrl()) getSession().then(finish, finish);
+      else finish();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

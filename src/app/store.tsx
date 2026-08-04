@@ -10,7 +10,7 @@ import { powerupById, isAmplifier, ampCapacity, capAmplifiers } from '../data/po
 import { DEMO_WEEK } from '../config';
 import { type ProviderUser, type ProviderId } from '../data/providers';
 import { track, identify, Ev } from './analytics';
-import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, type TargetedState } from '../data/liveApi';
+import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, hasAuthTokensInUrl, type TargetedState } from '../data/liveApi';
 
 import type { SlotSwap } from '../engine/matchup';
 export type { SlotSwap };
@@ -99,6 +99,9 @@ function hashToRoute(hash: string): Route | null {
  *  your place, screens are shareable), else the returning-user default — a
  *  signed-in live user to their pilot, everyone else to the playable demo. */
 function bootRoute(): Route {
+  // An auth callback (OAuth / magic link / recovery) lands with session tokens in
+  // the hash — that's a return into Live mode, not a route.
+  if (typeof window !== 'undefined' && hasAuthTokensInUrl()) return { name: 'live' };
   const r = hashToRoute(typeof window !== 'undefined' ? window.location.hash : '');
   if (r) return r;
   try { if (localStorage.getItem('dripLive') === '1') return { name: 'live' }; } catch { /* ignore */ }
@@ -281,7 +284,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Normalize the URL to the resolved boot route (a first visit, or a hash that
     // named a non-restorable board route, may differ from what's in the address).
-    try { window.history.replaceState({ __route: route }, '', routeToHash(route)); } catch { /* ignore */ }
+    // EXCEPT on an auth callback: the hash carries the session tokens the lazily
+    // loaded Supabase SDK hasn't read yet — App.tsx cleans the URL after it has.
+    try { if (!hasAuthTokensInUrl()) window.history.replaceState({ __route: route }, '', routeToHash(route)); } catch { /* ignore */ }
     // Back/forward: re-read the route from the (now-updated) hash; a hash that
     // doesn't name a restorable screen falls back to the demo landing.
     const onPop = () => { setRoute(hashToRoute(window.location.hash) ?? { name: 'demo' }); };
