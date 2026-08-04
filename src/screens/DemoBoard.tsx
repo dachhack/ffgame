@@ -608,7 +608,7 @@ export function DemoBoard() {
                 <SlotRow slot={s} state={st} you={b.you} their={b.their} clock={winClock} noBorder
                   frozen={isFeatured && frozen} armedPu={isFeatured ? armedPu : undefined} cards={cardHand} />
                 {canOpen && (
-                  <div style={{ padding: '0 12px 8px' }}>
+                  <div style={{ padding: '0 6px 8px' }}>
                     <div style={{ textAlign: 'center' }}>
                       <button onClick={() => setOpenSlots((o) => ({ ...o, [key]: !open }))} className="mono" style={{ background: 'none', border: 'none', fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.12em', color: open ? 'var(--you)' : 'var(--faint)', cursor: 'pointer', padding: '2px 8px' }}>
                         {open ? '▴ HIDE LOG & FIELD' : '▾ LOG & FIELD'}
@@ -1006,10 +1006,10 @@ function DuelLog({ slot, clock, live, armedPu }: { slot: ResolvedSlot; clock: nu
   const rows = slot.events.filter((e) => e.clock <= clock && (e.delta > 0 || e.effect || e.coin || e.sig || e.buffNote));
   useEffect(() => { if (live) logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' }); }, [rows.length, live]);
   return (
-    <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 7, padding: '8px 10px', marginTop: 4 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
+    <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 7, padding: '7px 7px', marginTop: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 6 }}>
         <span className="mono" style={{ flex: 1, fontSize: fs(8), fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.you?.player.name.toUpperCase() ?? ''}</span>
-        <span className="mono" style={{ minWidth: 34, textAlign: 'center', fontSize: fs(7.5), color: 'var(--faint)' }}>CLOCK</span>
+        <span className="mono" style={{ minWidth: 30, textAlign: 'center', fontSize: fs(7.5), color: 'var(--faint)' }}>CLOCK</span>
         <span className="mono" style={{ flex: 1, fontSize: fs(8), fontWeight: 700, letterSpacing: '0.06em', color: 'var(--opp)', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.their?.player.name.toUpperCase() ?? ''}</span>
       </div>
       <div ref={logRef} style={{ maxHeight: 140, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -1017,19 +1017,19 @@ function DuelLog({ slot, clock, live, armedPu }: { slot: ResolvedSlot; clock: nu
         {rows.map((e, ri) => {
           const mine = e.side === 'you';
           const cell = (
-            <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5, flexDirection: mine ? 'row-reverse' : 'row', maxWidth: '100%', overflow: 'hidden' }}>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: mine ? 'var(--you)' : 'var(--opp)' }}>{actionText(e.play)}</span>
-              {e.delta > 0 && <span style={{ color: 'var(--text)', fontWeight: 700 }}>+{e.delta.toFixed(1)}</span>}
-              {e.effect && <span style={{ color: FX_COLOR[e.effect.type] ?? 'var(--text)', fontWeight: 700 }}>{e.effect.type === 'streak' ? '🔥 ' : ''}{e.effect.type.toUpperCase()}</span>}
-              {e.buffNote && <span style={{ color: 'var(--fx-streak, #36D399)', fontWeight: 700 }}><PuIcon id={armedPu?.id} emoji={armedPu?.icon ?? '🗑️'} size="1.2em" />×2</span>}
-              {e.coin && <span style={{ color: 'var(--you)' }}><GameIcon name={COIN_GOLD} emoji="◇" size="1.2em" /></span>}
+            <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, flexDirection: mine ? 'row-reverse' : 'row', flexWrap: 'nowrap', whiteSpace: 'nowrap', maxWidth: '100%', overflow: 'hidden' }}>
+              <span style={{ flex: '0 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: mine ? 'var(--you)' : 'var(--opp)' }}>{actionText(e.play)}</span>
+              {e.delta > 0 && <span style={{ flex: 'none', color: 'var(--text)', fontWeight: 700 }}>+{e.delta.toFixed(1)}</span>}
+              {e.effect && <span style={{ flex: 'none', color: FX_COLOR[e.effect.type] ?? 'var(--text)', fontWeight: 700 }}>{e.effect.type === 'streak' ? '🔥 ' : ''}{e.effect.type.toUpperCase()}</span>}
+              {e.buffNote && <span style={{ flex: 'none', color: 'var(--fx-streak, #36D399)', fontWeight: 700 }}><PuIcon id={armedPu?.id} emoji={armedPu?.icon ?? '🗑️'} size="1.2em" />×2</span>}
+              {e.coin && <span style={{ flex: 'none', color: 'var(--you)' }}><GameIcon name={COIN_GOLD} emoji="◇" size="1.2em" /></span>}
             </span>
           );
           return (
-            <div key={ri} className="mono" style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: fs(9) }}>
-              <span style={{ flex: 1, minWidth: 0, textAlign: 'right' }}>{mine ? cell : ''}</span>
-              <span style={{ minWidth: 34, textAlign: 'center', color: 'var(--faint)' }}>{fmtClock(e.clock)}</span>
-              <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>{!mine ? cell : ''}</span>
+            <div key={ri} className="mono" style={{ display: 'flex', alignItems: 'baseline', gap: 4, fontSize: fs(9) }}>
+              <span style={{ flex: 1, minWidth: 0, textAlign: 'right', overflow: 'hidden' }}>{mine ? cell : ''}</span>
+              <span style={{ minWidth: 30, textAlign: 'center', color: 'var(--faint)' }}>{fmtClock(e.clock)}</span>
+              <span style={{ flex: 1, minWidth: 0, textAlign: 'left', overflow: 'hidden' }}>{!mine ? cell : ''}</span>
             </div>
           );
         })}
@@ -1192,9 +1192,12 @@ function SlotRow({ slot, state, you, their, clock, frozen, armedPu, noBorder, ca
             pattern) — the card's info column is too narrow and ellipsized
             names like "Receiving Yards". Yours left; theirs right once live. */}
         {(slot.you.metricId || (live && slot.their.metricId)) && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, padding: '7px 2px 0' }}>
-            <span style={{ minWidth: 0 }}>{slot.you.metricId && <MetricChip pos={slot.you.player.pos} metricId={slot.you.metricId} big />}</span>
-            <span style={{ minWidth: 0 }}>{live && slot.their.metricId && <MetricChip pos={slot.their.player.pos} metricId={slot.their.metricId} big />}</span>
+          // flexWrap + marginLeft:auto — on phones the chips can't share a row
+          // at full length (they were overlapping); theirs drops to its own
+          // right-aligned line instead of colliding or truncating.
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: '4px 10px', padding: '7px 2px 0' }}>
+            <span style={{ flex: 'none', maxWidth: '100%' }}>{slot.you.metricId && <MetricChip pos={slot.you.player.pos} metricId={slot.you.metricId} big />}</span>
+            <span style={{ flex: 'none', maxWidth: '100%', marginLeft: 'auto' }}>{live && slot.their.metricId && <MetricChip pos={slot.their.player.pos} metricId={slot.their.metricId} big />}</span>
           </div>
         )}
       </div>
