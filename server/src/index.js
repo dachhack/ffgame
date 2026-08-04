@@ -9,7 +9,7 @@
 import { config } from './config.js';
 import { getState } from './sleeper.js';
 import { buildPlayerIndex } from './playerIndex.js';
-import { getGames, gamesToPollFrom, slateFromGames } from './poll/scoreboard.js';
+import { getGames, gamesToPollFrom, slateFromGames, espnCurrentWeek } from './poll/scoreboard.js';
 import { pollGame } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt } from './lock.js';
@@ -50,9 +50,24 @@ async function syncTick() {
 
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
+// Preseason week from ESPN, cached — Sleeper's /state/nfl week sits at 0 all
+// August, so the `|| 1` fallback below would pin the worker to preseason week 1
+// through the Aug 13/20 slates. Refreshed every 30 min; a failed lookup keeps
+// the previous value (or the Sleeper fallback) until the next attempt.
+let espnWeekCache = { week: null, at: 0 };
+
 async function currentWeek() {
-  try { const s = await getState(); return { season: String(s.season), week: Number(s.week) || 1 }; }
-  catch { return { season: config.season, week: 1 }; }
+  let season = config.season, week = 1;
+  try { const s = await getState(); season = String(s.season); week = Number(s.week) || 1; }
+  catch { /* fall through to the config/ESPN values */ }
+  if (config.weekOffset) {
+    if (Date.now() - espnWeekCache.at > 30 * 60e3) {
+      const w = await espnCurrentWeek(season, config.seasonType);
+      espnWeekCache = { week: w ?? espnWeekCache.week, at: Date.now() };
+    }
+    if (espnWeekCache.week) week = espnWeekCache.week;
+  }
+  return { season, week };
 }
 
 /** Is any game in this week's slate live or within ~24h of kickoff? */
