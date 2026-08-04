@@ -1144,7 +1144,7 @@ function SlotRow({ slot, state, you, their, clock, frozen, armedPu, noBorder, ca
       ? <LiveCard side="their" slug={`sealed-${slot.slotIndex}`} sealed />
       : <LiveCard side={mine ? 'you' : 'their'} slug={pick.player.id} name={pick.player.name} pos={pick.player.pos} team={pick.player.team}
           chip="UNOPPOSED" bank={live ? (mine ? you : their) : null}
-          hot={flags?.hot} nuked={!!flags?.nuked} frozen={!mine && frozen} negated={backupStruck}
+          hot={flags?.hot} nuked={nuke?.victim === (mine ? 'you' : 'their')} frozen={!mine && frozen} negated={backupStruck}
           note={mine && armedPu ? <><PuIcon id={armedPu.id} emoji={armedPu.icon} size="1.4em" /> {armedPu.name.toUpperCase()}{note && <> · {note}</>}</> : note} />;
     const blank = (
       <div className="ct-liveempty">
@@ -1176,12 +1176,12 @@ function SlotRow({ slot, state, you, their, clock, frozen, armedPu, noBorder, ca
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'start' }}>
           <LiveCard side="you" slug={slot.you.player.id} name={slot.you.player.name} pos={slot.you.player.pos} team={slot.you.player.team}
             bank={live ? you : null}
-            hot={yf?.hot} nuked={!!yf?.nuked && !slot.youSub} negated={live && backupStruck}
+            hot={yf?.hot} nuked={nuke?.victim === 'you' && !slot.youSub} negated={live && backupStruck}
             note={armedPu ? <><PuIcon id={armedPu.id} emoji={armedPu.icon} size="1.4em" /> {armedPu.name.toUpperCase()}</>
               : state === 'final' && slot.youSub ? <>🛟 {slot.youSub.name} subbed in</> : undefined} />
           {live ? (
             <LiveCard side="their" slug={slot.their.player.id} name={slot.their.player.name} pos={slot.their.player.pos} team={slot.their.player.team}
-              bank={their} hot={tf?.hot} nuked={!!tf?.nuked && !slot.theirSub} frozen={frozen}
+              bank={their} hot={tf?.hot} nuked={nuke?.victim === 'their' && !slot.theirSub} frozen={frozen}
               negated={backupStruck}
               note={state === 'final' && slot.theirSub ? <>🛟 {slot.theirSub.name} subbed in</> : undefined} />
           ) : (
