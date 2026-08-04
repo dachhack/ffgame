@@ -47,7 +47,7 @@ const RAW_TEAMS: RawTeam[] = [
     seed: 2, wins: 10, losses: 4, pf: 2496.46, pa: 2116.14,
     roster: [
       ['Jared Goff', 'QB'], ['Matthew Stafford', 'QB'], ['Jonathan Taylor', 'RB'], ['Breece Hall', 'RB'],
-      ['Jakobi Meyers', 'WR'], ['Jaxon Smith-Njigba', 'WR'], ['Stefon Diggs', 'WR'], ['Trey McBride', 'TE'],
+      ['Jakobi Meyers', 'WR'], ['Jaxon Smith-Njigba', 'WR'], ['Stefon Diggs', 'WR'], ['Rashee Rice', 'WR'],
       ['Tyler Warren', 'TE'], ['Jayden Daniels', 'QB'], ['Travis Kelce', 'TE'], ['David Njoku', 'TE'],
       ['David Montgomery', 'RB'], ['Zach Ertz', 'TE'], ['Aaron Rodgers', 'QB'], ['Michael Penix', 'QB'],
       ['Braelon Allen', 'RB'], ['Ollie Gordon', 'RB'],
@@ -59,7 +59,12 @@ const RAW_TEAMS: RawTeam[] = [
     roster: [
       ['Bo Nix', 'QB'], ['Drake Maye', 'QB'], ['Jahmyr Gibbs', 'RB'], ['RJ Harvey', 'RB'],
       ['Ladd McConkey', 'WR'], ['Drake London', 'WR'], ['Ricky Pearsall', 'WR'], ['Harold Fannin', 'TE'],
-      ['Ashton Jeanty', 'RB'], ['TreVeyon Henderson', 'RB'], ['Rashee Rice', 'WR'], ['Emeka Egbuka', 'WR'],
+      // McBride (ARI) replaces Rashee Rice here: Rice was suspended for the
+      // demo week, so the AI's Sun-late slot showed a 0.0 dead card. McBride
+      // out-projects every other late-window option, actually produced that
+      // week, and gives the AI's Field General (Bo Nix) real drip to multiply.
+      // (Trade: McBride from the TE-rich Cheeseburger Chargers for Rice.)
+      ['Ashton Jeanty', 'RB'], ['TreVeyon Henderson', 'RB'], ['Trey McBride', 'TE'], ['Emeka Egbuka', 'WR'],
       ['J.J. McCarthy', 'QB'], ['Trey Benson', 'RB'], ['Isaiah Likely', 'TE'], ['Bhayshul Tuten', 'RB'],
       // Deebo (WAS) gives this team a MARQUEE TNF-eligible starter: the demo's
       // first window plays as a star-name head-to-head from the OPPOSING team

@@ -935,7 +935,10 @@ function RevealPair({ you, their, idx = 0, revealed = true, flipYou = false, arm
   const lab: React.CSSProperties = { fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.14em' };
   const col: React.CSSProperties = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, minWidth: 0 };
   return (
-    <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'center' }}>
+    // flex-start: the two cards sit FLUSH at the top (they share one fixed
+    // chassis size; center-alignment let the shorter label column drift and
+    // read as a size mismatch). The VS centers itself on the row.
+    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', justifyContent: 'center' }}>
       <div style={col}>
         {you
           ? <PlayerCard slug={you.player.id} name={you.player.name} pos={you.player.pos} team={you.player.team} flip={flipYou} idx={idx} metric={met(you)} />
@@ -947,7 +950,7 @@ function RevealPair({ you, their, idx = 0, revealed = true, flipYou = false, arm
           </span>
         )}
       </div>
-      <span className="mono" style={{ fontSize: fs(9), fontWeight: 800, letterSpacing: '0.1em', color: 'var(--faint)', flex: 'none' }}>VS</span>
+      <span className="mono" style={{ fontSize: fs(9), fontWeight: 800, letterSpacing: '0.1em', color: 'var(--faint)', flex: 'none', alignSelf: 'center' }}>VS</span>
       <div style={col}>
         {!revealed
           ? <SealedCard seed={their?.player.id ?? `mystery-${idx}`} idx={idx} mystery />
