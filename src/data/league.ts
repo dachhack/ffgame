@@ -48,7 +48,7 @@ const RAW_TEAMS: RawTeam[] = [
     roster: [
       ['Jared Goff', 'QB'], ['Matthew Stafford', 'QB'], ['Jonathan Taylor', 'RB'], ['Breece Hall', 'RB'],
       ['Jakobi Meyers', 'WR'], ['Jaxon Smith-Njigba', 'WR'], ['Stefon Diggs', 'WR'], ['Trey McBride', 'TE'],
-      ['Tyler Warren', 'TE'], ['Deebo Samuel', 'WR'], ['Travis Kelce', 'TE'], ['David Njoku', 'TE'],
+      ['Tyler Warren', 'TE'], ['Jayden Daniels', 'QB'], ['Travis Kelce', 'TE'], ['David Njoku', 'TE'],
       ['David Montgomery', 'RB'], ['Zach Ertz', 'TE'], ['Aaron Rodgers', 'QB'], ['Michael Penix', 'QB'],
       ['Braelon Allen', 'RB'], ['Ollie Gordon', 'RB'],
     ],
@@ -61,11 +61,14 @@ const RAW_TEAMS: RawTeam[] = [
       ['Ladd McConkey', 'WR'], ['Drake London', 'WR'], ['Ricky Pearsall', 'WR'], ['Harold Fannin', 'TE'],
       ['Ashton Jeanty', 'RB'], ['TreVeyon Henderson', 'RB'], ['Rashee Rice', 'WR'], ['Emeka Egbuka', 'WR'],
       ['J.J. McCarthy', 'QB'], ['Trey Benson', 'RB'], ['Isaiah Likely', 'TE'], ['Bhayshul Tuten', 'RB'],
-      // Daniels (WAS) gives this team a MARQUEE TNF-eligible starter, so the
-      // demo's first window plays as a real head-to-head duel — and from the
-      // OPPOSING team in the same game (WAS @ GB), so the drip visibly trades
-      // sides with possession. (Traded from Cookout Crew for Romeo Doubs.)
-      ['Brandon Aiyuk', 'WR'], ['Jayden Daniels', 'QB'],
+      // Deebo (WAS) gives this team a MARQUEE TNF-eligible starter: the demo's
+      // first window plays as a star-name head-to-head from the OPPOSING team
+      // in the same game (WAS @ GB), so the drip visibly trades sides with
+      // possession — and as a WR (not a QB, which reads as an auto-blowout to
+      // fantasy players) the duel lands close: ~14-17 with garbage-time armed.
+      // (Trade chain: Deebo from Cheeseburger Chargers for Jayden Daniels;
+      // Romeo Doubs went to Cookout Crew.)
+      ['Brandon Aiyuk', 'WR'], ['Deebo Samuel', 'WR'],
     ],
   },
   {
