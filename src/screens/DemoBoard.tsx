@@ -166,7 +166,11 @@ export function DemoBoard() {
   // visitor has touched anything. Tapping it runs their own week (quickRun).
   const previewResolved = useMemo(() => {
     if (!ready || !oppId || phase !== 'setup') return null;
-    return buildMatchup(youId, oppId, DEMO_WEEK, autoFill({}), oppPicks, {}, {}, {}, {}, { autoBackups: true });
+    // Garbage Time armed — same buff quickRun defaults to. The featured duel is
+    // an RB against a QB (a read-as-blowout to any fantasy player); the armed
+    // power-up's final-5-minute ×2 is what keeps the fight close, and the
+    // preview exists to SHOW that.
+    return buildMatchup(youId, oppId, DEMO_WEEK, autoFill({}), oppPicks, {}, {}, {}, { 'garbage-time': true }, { autoBackups: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- autoFill is a stable function of `defaults`
   }, [ready, oppId, youId, oppPicks, defaults, phase]);
   const previewSlot = useMemo(() => {
@@ -182,14 +186,16 @@ export function DemoBoard() {
   const [pClock, setPClock] = useState(0);
   useEffect(() => {
     if (!previewSlot || previewMax <= 0) return;
-    const YOURS = 6, REVEAL = 7, LIVE = 45; // ×400ms → 2.4s your flip, 2.8s their reveal, 18s of live drip per loop
+    // HOLD keeps the FINAL score on screen for a beat — the armed power-up's
+    // late ×2 surge is the story's payoff and shouldn't flash past.
+    const YOURS = 6, REVEAL = 7, LIVE = 45, HOLD = 6; // ×400ms → 2.4s flip, 2.8s reveal, 18s drip, 2.4s final
     let tick = 0;
     setPStage('yours'); setPClock(0);
     const id = setInterval(() => {
-      tick = (tick + 1) % (YOURS + REVEAL + LIVE);
+      tick = (tick + 1) % (YOURS + REVEAL + LIVE + HOLD);
       if (tick < YOURS) { setPStage('yours'); setPClock(0); }
       else if (tick < YOURS + REVEAL) { setPStage('reveal'); setPClock(0); }
-      else { setPStage('live'); setPClock(Math.round(((tick - YOURS - REVEAL + 1) / LIVE) * previewMax)); }
+      else { setPStage('live'); setPClock(Math.min(previewMax, Math.round(((tick - YOURS - REVEAL + 1) / LIVE) * previewMax))); }
     }, 400);
     return () => clearInterval(id);
   }, [previewSlot, previewMax]);
@@ -564,7 +570,8 @@ export function DemoBoard() {
                 reveal reads as THEIR sealed pick turning over, not yours */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {rslots.filter((s) => s.their || s.you).map((s, k) => (
-                <RevealPair key={s.slotIndex} you={s.you} their={s.their} idx={k} />
+                <RevealPair key={s.slotIndex} you={s.you} their={s.their} idx={k}
+                  armedPu={isFeatWin && s.slotIndex === featuredSlot?.slotIndex ? armedPu : undefined} />
               ))}
             </div>
             <div className="mono" style={{ fontSize: fs(8.5), letterSpacing: '0.14em', color: 'var(--dim)' }}>THE SEAL BREAKS · {w.label} IS LIVE</div>
@@ -665,20 +672,20 @@ export function DemoBoard() {
                     <div className="mono" style={{ fontSize: fs(10), fontWeight: 800, letterSpacing: '0.22em', color: revealAccent ? 'var(--warn)' : 'var(--you)', textShadow: `0 0 12px color-mix(in srgb, ${revealAccent ? 'var(--warn)' : 'var(--you)'} 55%, transparent)` }}>
                       {pStage === 'yours' ? '🃏 THE DUEL IS SET' : '🔓 PICKS REVEALED'}
                     </div>
-                    <RevealPair you={previewSlot.you} their={theirPick} revealed={pStage === 'reveal'} flipYou />
+                    <RevealPair you={previewSlot.you} their={theirPick} revealed={pStage === 'reveal'} flipYou armedPu={POWER_OPTIONS[0]} />
                     <div className="mono" style={{ fontSize: fs(8.5), letterSpacing: '0.14em', color: 'var(--dim)' }}>
                       {pStage === 'yours' ? 'WHO ARE THEY FIELDING? SEALED UNTIL KICKOFF…' : 'THEIR METRIC — SEALED UNTIL THIS MOMENT'}
                     </div>
                   </div>
                 ) : (
                   <>
-                    <SlotRow slot={previewSlot} state="live" you={b.you} their={b.their} clock={pClock} noBorder cards={cardHand} />
+                    <SlotRow slot={previewSlot} state="live" you={b.you} their={b.their} clock={pClock} noBorder cards={cardHand} armedPu={POWER_OPTIONS[0]} />
                     {/* WHY the numbers move: the play log + the real game field.
                         Without these the live stage reads as bare counters.
                         stopPropagation so scrolling the log / toggling the field
                         doesn't fire the container's tap-to-run. */}
                     <div onClick={(e) => e.stopPropagation()} style={{ cursor: 'default' }}>
-                      <DuelLog slot={previewSlot} clock={pClock} live />
+                      <DuelLog slot={previewSlot} clock={pClock} live armedPu={POWER_OPTIONS[0]} />
                       <SlotFieldViews week={DEMO_WEEK} youTeam={previewSlot.you?.player.team} theirTeam={previewSlot.their?.player.team} youClock={pClock} theirClock={pClock} />
                     </div>
                   </>
@@ -895,12 +902,15 @@ export function DemoBoard() {
 // you) while the opponent's flips in beside it — so it's unmistakable WHOSE
 // card is being revealed. Used by both the hero preview's reveal stage and the
 // real playout's kickoff reveal.
-function RevealPair({ you, their, idx = 0, revealed = true, flipYou = false }: {
+function RevealPair({ you, their, idx = 0, revealed = true, flipYou = false, armedPu }: {
   you: ResolvedSlot['you']; their: ResolvedSlot['their']; idx?: number;
   /** false = pre-kickoff: the opponent's side stays a face-down ? card. */
   revealed?: boolean;
   /** Your card enters with the flip animation (the preview's opening beat). */
   flipYou?: boolean;
+  /** Power-up armed on YOUR side — badged under your card so an outgunned
+   *  pick (RB vs QB) reads as a plan, not a blowout-in-waiting. */
+  armedPu?: { id?: string; icon: string; name: string; blurb?: string };
 }) {
   const fs = useFinePrint();
   const met = (p: NonNullable<ResolvedSlot['you']>) => (METRICS[p.player.pos] ?? []).find((m) => m.id === p.metricId)?.name ?? null;
@@ -913,6 +923,11 @@ function RevealPair({ you, their, idx = 0, revealed = true, flipYou = false }: {
           ? <PlayerCard slug={you.player.id} name={you.player.name} pos={you.player.pos} team={you.player.team} flip={flipYou} idx={idx} metric={met(you)} />
           : <span className="mono" style={{ ...lab, color: 'var(--faint)', padding: '20px 6px' }}>— NO PICK —</span>}
         <span className="mono" style={{ ...lab, color: 'var(--you)' }}>YOUR PICK</span>
+        {armedPu && (
+          <span className="mono" title={armedPu.blurb} style={{ fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-streak, #36D399)', border: '1px solid color-mix(in srgb, var(--fx-streak, #36D399) 45%, transparent)', background: 'color-mix(in srgb, var(--fx-streak, #36D399) 10%, transparent)', borderRadius: 3, padding: '2px 6px', whiteSpace: 'nowrap' }}>
+            <PuIcon id={armedPu.id} emoji={armedPu.icon} size="1.3em" /> {armedPu.name.toUpperCase()} ARMED
+          </span>
+        )}
       </div>
       <span className="mono" style={{ fontSize: fs(9), fontWeight: 800, letterSpacing: '0.1em', color: 'var(--faint)', flex: 'none' }}>VS</span>
       <div style={col}>
