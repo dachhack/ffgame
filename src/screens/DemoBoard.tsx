@@ -107,7 +107,18 @@ export function DemoBoard() {
     for (const w of Object.keys(youPools)) for (const p of youPools[w]) m.set(p.id, w);
     return m;
   }, [youPools]);
-  const defaults = useMemo(() => (ready ? defaultLineup(youId, DEMO_WEEK) : {}), [ready, youId]);
+  const defaults = useMemo(() => {
+    if (!ready) return {};
+    const d = { ...defaultLineup(youId, DEMO_WEEK) };
+    // Featured-duel drama: the demo's TNF pick carries the hidden TD NUKE —
+    // measured to WIN the Deebo duel 13.8-3.9, with the 💥 wipe landing about a
+    // third of the way into the playback (the signature mechanic, on screen).
+    // Flows into auto-fill and the preview alike, so what the preview shows is
+    // exactly what one tap of RUN produces.
+    const k = Object.keys(d).find((x) => x.startsWith('tnf'));
+    if (k && d[k]?.playerId === 'josh-jacobs') d[k] = { ...d[k], metricId: 'td' };
+    return d;
+  }, [ready, youId]);
   const oppPicks = useMemo(() => (ready && oppId ? aiLineup(oppId, youId, DEMO_WEEK) : {}), [ready, oppId, youId]);
 
   // ── Lineup building — the same semantics as the hero board ────────────────
@@ -186,16 +197,22 @@ export function DemoBoard() {
   const [pClock, setPClock] = useState(0);
   useEffect(() => {
     if (!previewSlot || previewMax <= 0) return;
-    // HOLD keeps the FINAL score on screen for a beat — the armed power-up's
-    // late ×2 surge is the story's payoff and shouldn't flash past.
-    const YOURS = 6, REVEAL = 7, LIVE = 45, HOLD = 6; // ×400ms → 2.4s flip, 2.8s reveal, 18s drip, 2.4s final
+    // Plays ONCE: flip → reveal → the drip plays out → parked on the FINAL
+    // frame (your duel won, the nuked card still scorched) until the visitor
+    // acts. A loop kept resetting the payoff; the ending IS the pitch.
+    const YOURS = 6, REVEAL = 7, LIVE = 45; // ×400ms → 2.4s flip, 2.8s reveal, 18s drip
     let tick = 0;
     setPStage('yours'); setPClock(0);
     const id = setInterval(() => {
-      tick = (tick + 1) % (YOURS + REVEAL + LIVE + HOLD);
+      tick += 1;
       if (tick < YOURS) { setPStage('yours'); setPClock(0); }
       else if (tick < YOURS + REVEAL) { setPStage('reveal'); setPClock(0); }
-      else { setPStage('live'); setPClock(Math.min(previewMax, Math.round(((tick - YOURS - REVEAL + 1) / LIVE) * previewMax))); }
+      else {
+        const li = tick - YOURS - REVEAL + 1;
+        setPStage('live');
+        setPClock(Math.min(previewMax, Math.round((li / LIVE) * previewMax)));
+        if (li >= LIVE) clearInterval(id); // played out — stay on FINAL
+      }
     }, 400);
     return () => clearInterval(id);
   }, [previewSlot, previewMax]);
@@ -657,6 +674,7 @@ export function DemoBoard() {
                   <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.14em', color: revealAccent ? 'var(--warn)' : 'var(--you)' }}>
                     {pStage === 'yours' ? `LIVE PREVIEW · ${winLabel} · YOUR PICK IS IN`
                       : pStage === 'reveal' ? '🔓 KICKOFF — THE SEAL BREAKS'
+                      : pClock >= previewMax ? `${winLabel} FINAL — YOU TAKE THE DUEL 🏆`
                       : `LIVE PREVIEW · ${winLabel} · ${fmtClock(pClock)}`}
                   </span>
                   <span style={{ flex: 1 }} />
