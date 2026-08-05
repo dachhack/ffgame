@@ -1,4 +1,6 @@
--- 0099: re-stamp the 2026 preseason slate (0056) with DERIVED window ids.
+-- 0100 (née 0099 — that file never applied: its run failed on the search_path
+-- issue below and workflow_dispatch is unavailable to the app; renamed so the
+-- on-push migrate run picks it up as a NEW file): re-stamp the 2026 preseason slate (0056) with DERIVED window ids.
 -- 0056 bucketed every non-Sun/Mon game as 'tnf' (the server's old fixed-five
 -- windowFromKickoff), but the client derives window ids from real kickoffs
 -- (nflSlate.ts windowIdsFromKickoffs): Friday games are 'fri', Saturday slates
