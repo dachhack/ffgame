@@ -24,9 +24,13 @@ export interface PoolRow {
 }
 
 /** One starters_json entry — the superset shape every consumer reads
- *  (player_slug for the resolver, slug+full for the client pool). */
+ *  (player_slug for the resolver, slug+full for the client pool). `team` is
+ *  REQUIRED here even though older lineup rows lack it: the board resolves a
+ *  missing team via the baked-2025 slug/stats maps (liveBoard poolToPlayer),
+ *  which know nothing about current rookies — without the carried team, the
+ *  entire rookie class silently drops off the board. */
 export interface PoolEntry {
-  slot: number; sleeper_id: string | null; player_slug: string; slug: string; full: string; pos: string;
+  slot: number; sleeper_id: string | null; player_slug: string; slug: string; full: string; pos: string; team: string;
 }
 
 const POS_ORDER: Record<string, number> = { QB: 0, RB: 1, WR: 2, TE: 3 };
@@ -37,11 +41,11 @@ export function poolFromRows(rows: PoolRow[], slateTeams: Set<string>): PoolEntr
   skill.sort((a, b) =>
     a.team.localeCompare(b.team) || POS_ORDER[a.pos] - POS_ORDER[b.pos] || a.depth - b.depth || a.full.localeCompare(b.full));
   const out: PoolEntry[] = skill.map((p, i) =>
-    ({ slot: i, sleeper_id: p.sid, player_slug: p.slug, slug: p.slug, full: p.full, pos: p.pos }));
+    ({ slot: i, sleeper_id: p.sid, player_slug: p.slug, slug: p.slug, full: p.full, pos: p.pos, team: p.team }));
   let slot = out.length;
   for (const t of [...slateTeams].sort()) {
-    out.push({ slot: slot++, sleeper_id: null, player_slug: `${t.toLowerCase()}-k`, slug: `${t.toLowerCase()}-k`, full: `${t} Kicker`, pos: 'K' });
-    out.push({ slot: slot++, sleeper_id: null, player_slug: `${t.toLowerCase()}-dst`, slug: `${t.toLowerCase()}-dst`, full: `${t} D/ST`, pos: 'DEF' });
+    out.push({ slot: slot++, sleeper_id: null, player_slug: `${t.toLowerCase()}-k`, slug: `${t.toLowerCase()}-k`, full: `${t} Kicker`, pos: 'K', team: t });
+    out.push({ slot: slot++, sleeper_id: null, player_slug: `${t.toLowerCase()}-dst`, slug: `${t.toLowerCase()}-dst`, full: `${t} D/ST`, pos: 'DEF', team: t });
   }
   return out;
 }
