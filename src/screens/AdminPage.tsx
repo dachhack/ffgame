@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminSetPreseason, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminSetPreseason, adminSeedPreseasonPool, friendlyError, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
   rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
@@ -769,6 +769,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
               <div style={subhead}>ADMIN MODES</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <PreseasonToggle on={!!l.preseason_at} leagueId={l.league_id} reload={reload} />
+                {!!l.preseason_at && <DeepPoolButton leagueId={l.league_id} />}
                 <TestLiveToggle on={!!l.test_live_at} leagueId={l.league_id} reload={reload} />
                 <CardThemeToggle leagueId={l.league_id} />
                 <span style={{ flex: 1 }} />
@@ -1331,6 +1332,40 @@ function PreseasonToggle({ on, leagueId, reload }: { on: boolean; leagueId: stri
       className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--you)', background: on ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--you)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
       {busy ? '…' : on ? '🏈 PRESEASON: ON' : '🏈 preseason'}
     </button>
+  );
+}
+
+// Super-admin only, shown while preseason mode is ON: replace every seat's pick
+// pool at the preseason weeks (101-103) with the DEEP slate-team pool — every
+// active skill player on each week's teams, depth-chart ordered, + team K/DST.
+// Preseason snaps go to the depth chart's back half, so the Week-1 clones the
+// 🏈 toggle seeds would field starters who sit. Safe to re-click; re-run after
+// any preseason re-toggle (the toggle wipes these with its clones).
+function DeepPoolButton({ leagueId }: { leagueId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const go = async () => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      let seats = 0, pool = 0;
+      for (const wk of [101, 102, 103]) {
+        const r = await adminSeedPreseasonPool(leagueId, wk);
+        if (!r.ok) throw new Error(r.error || `week ${wk} failed`);
+        seats = r.seats ?? seats; pool += r.pool ?? 0;
+      }
+      setNote(`✓ ${seats} seats · ${pool} pool entries across wks 101-103`);
+    } catch (e) { setNote(friendlyError(e)); }
+    setBusy(false);
+  };
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <button onClick={go} disabled={busy} title="Replace every seat's preseason pick pool (weeks 101-103) with the full depth charts of that week's slate teams — backups included, since they play the preseason snaps. Downloads the player directory on first click."
+        className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--you)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+        {busy ? 'seeding…' : '🧬 deep pool'}
+      </button>
+      {note && <span className="mono" style={{ fontSize: 9, color: note.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{note}</span>}
+    </span>
   );
 }
 
