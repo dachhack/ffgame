@@ -3,7 +3,13 @@
 // cached in IndexedDB so the season sim loads instantly on repeat visits.
 import type { Pos } from '../types';
 
-export interface PlayerMeta { id: string; full: string; pos: Pos; team: string | null; espnId?: string; rank?: number; }
+export interface PlayerMeta {
+  id: string; full: string; pos: Pos; team: string | null; espnId?: string; rank?: number;
+  /** Sleeper depth_chart_order (1 = starter); undefined when unknown. */
+  depth?: number;
+  /** False only when Sleeper marks the player inactive (retired/out of the league). */
+  active?: boolean;
+}
 
 const URL_ALL = 'https://api.sleeper.app/v1/players/nfl';
 const DB = 'gridiron-clash';
@@ -73,7 +79,12 @@ function parse(raw: Record<string, Record<string, unknown>>): Map<string, Player
     // notably it orders the current rookie class sensibly.
     const sr = Number(p.search_rank);
     const rank = Number.isFinite(sr) && sr > 0 && sr < 100000 ? sr : undefined;
-    out.set(id, { id, full, pos, team: (p.team as string) ?? (pos === 'DEF' ? id : null), espnId, rank });
+    const dc = Number(p.depth_chart_order);
+    out.set(id, {
+      id, full, pos, team: (p.team as string) ?? (pos === 'DEF' ? id : null), espnId, rank,
+      depth: Number.isFinite(dc) && dc > 0 ? dc : undefined,
+      active: p.active !== false,
+    });
   }
   return out;
 }

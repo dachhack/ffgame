@@ -13,6 +13,7 @@ import { weekKickoffMs, buildSlate } from './poll/scoreboard.js';
 import { buildPlayerIndex, slugOf } from './playerIndex.js';
 import { assignKdst } from '../../src/data/kdst.ts';
 import { setRuntimeSlate } from '../../src/data/nflSlate.ts';
+import { poolFromRows } from '../../src/data/preseasonPool.ts';
 
 /** Sync a week's schedule + lineups for many leagues, throttled to stay under
  *  Sleeper's rate limit. Returns { ok, total }. Shared by the CLI (`sync-week-all`)
@@ -191,30 +192,19 @@ export async function cloneWeek(sleeperLeagueId, fromWeek, toWeek, season = conf
   return { matchups: newM.length, lineups: newL.length };
 }
 
-/** PURE: a preseason "everyone dressed" pick pool from the Sleeper directory —
- *  every active skill player on a slate team, depth-chart ordered (starters
- *  first within team+pos), plus the engine's synthetic team K/DST. Unlike the
- *  DFS salary board there is deliberately NO projection floor: preseason games
- *  are played by the depth chart's back half, and the 3rd/4th stringers a
- *  projection floor would drop are exactly who scores on Thursday night. */
+/** A preseason "everyone dressed" pick pool from the raw Sleeper directory —
+ *  adapter over the shared pure builder (src/data/preseasonPool.ts, also used
+ *  by the admin console's deep-pool button): filters to active players and
+ *  normalizes to PoolRow; ordering/synthetics/floor policy live in the shared
+ *  module so CLI and button can never drift. */
 export function buildPreseasonPool(players, slateTeams) {
-  const skill = [];
+  const rows = [];
   for (const [sid, p] of Object.entries(players ?? {})) {
     const full = p.full_name || [p.first_name, p.last_name].filter(Boolean).join(' ');
-    if (!full || !p.team || !slateTeams.has(p.team)) continue;
-    if (!['QB', 'RB', 'WR', 'TE'].includes(p.position)) continue;
-    if (p.active === false) continue;
-    skill.push({ sid: String(sid), full, pos: p.position, team: p.team, depth: Number(p.depth_chart_order) || 99 });
+    if (!full || p.active === false) continue;
+    rows.push({ sid: String(sid), slug: slugOf(full), full, pos: p.position, team: p.team, depth: Number(p.depth_chart_order) || 99 });
   }
-  const POS = { QB: 0, RB: 1, WR: 2, TE: 3 };
-  skill.sort((a, b) => a.team.localeCompare(b.team) || POS[a.pos] - POS[b.pos] || a.depth - b.depth || a.full.localeCompare(b.full));
-  const out = skill.map((p, i) => ({ slot: i, sleeper_id: p.sid, player_slug: slugOf(p.full), slug: slugOf(p.full), full: p.full, pos: p.pos }));
-  let slot = out.length;
-  for (const t of [...slateTeams].sort()) {
-    out.push({ slot: slot++, sleeper_id: null, player_slug: `${t.toLowerCase()}-k`, slug: `${t.toLowerCase()}-k`, full: `${t} Kicker`, pos: 'K' });
-    out.push({ slot: slot++, sleeper_id: null, player_slug: `${t.toLowerCase()}-dst`, slug: `${t.toLowerCase()}-dst`, full: `${t} D/ST`, pos: 'DEF' });
-  }
-  return out;
+  return poolFromRows(rows, slateTeams);
 }
 
 /** Overwrite EVERY seat's lineup at a preseason board week with the deep slate-
@@ -224,10 +214,22 @@ export function buildPreseasonPool(players, slateTeams) {
  *  re-run any time before lock. Toggling preseason OFF deletes these rows along
  *  with the clones, so re-seed after any re-toggle. */
 export async function seedPreseasonPool(sleeperLeagueId, week, season = config.season) {
-  const { data: leagueRow } = await db().from('league').select('id')
-    .eq('sleeper_league_id', sleeperLeagueId).eq('season', season).maybeSingle();
-  if (!leagueRow) throw new Error(`no league for sleeper_league_id=${sleeperLeagueId} season=${season} — run cli sync first`);
-  const lid = leagueRow.id;
+  let lid;
+  if (sleeperLeagueId) {
+    const { data: leagueRow } = await db().from('league').select('id')
+      .eq('sleeper_league_id', sleeperLeagueId).eq('season', season).maybeSingle();
+    if (!leagueRow) throw new Error(`no league for sleeper_league_id=${sleeperLeagueId} season=${season} — run cli sync first`);
+    lid = leagueRow.id;
+  } else {
+    // No id → target the league(s) with the 🏈 preseason toggle ON. Exactly one
+    // is the common case; otherwise list them so the caller can pick.
+    const { data: cands } = await db().from('league').select('id, name, sleeper_league_id')
+      .eq('season', season).not('preseason_at', 'is', null);
+    if (!cands?.length) throw new Error('no league has the 🏈 preseason toggle on — flip it in the admin console first, or pass a league id');
+    if (cands.length > 1) throw new Error(`several leagues are in preseason mode — pass one id: ${cands.map((c) => `${c.sleeper_league_id} (${c.name})`).join(', ')}`);
+    lid = cands[0].id;
+    console.log(`(no id given — targeting the preseason league: ${cands[0].name})`);
+  }
   const { data: slateRows } = await db().from('nfl_slate').select('home, away').eq('season', season).eq('week', week);
   const slateTeams = new Set((slateRows ?? []).flatMap((g) => [g.home, g.away]).filter(Boolean));
   if (!slateTeams.size) throw new Error(`no nfl_slate rows at season ${season} week ${week} — preseason slate not loaded`);

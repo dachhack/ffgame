@@ -8,7 +8,7 @@
 //   node src/cli.js simulate --check [lg]      read-only DB connectivity probe
 //   node src/cli.js simulate --reset <lg> <wk> revert a sim'd week (scheduled, cleared)
 //   node src/cli.js leagues                    list leagues (id + sleeper id) + matchup weeks
-//   node src/cli.js seed-preseason-pool <lg> [wk=101]  deep slate-team pick pool for a preseason week
+//   node src/cli.js seed-preseason-pool [lg] [wk=101]  deep slate-team pick pool for a preseason week
 import { config } from './config.js';
 import { importLeague, syncWeek, syncAllLeagues, cloneWeek, seedPreseasonPool } from './sync.js';
 import { buildPlayerIndex } from './playerIndex.js';
@@ -120,10 +120,10 @@ async function main() {
       // chart ordered) + team K/DST. Preseason is played by the 3rd/4th string,
       // so the Week-1 clones would field starters who sit — this makes the
       // backups pickable. Run AFTER the 🏈 preseason toggle. Idempotent.
-      //   node src/cli.js seed-preseason-pool <sleeperLeagueId> [boardWeek=101]
+      // With no league id, targets the one league whose 🏈 preseason toggle is on.
+      //   node src/cli.js seed-preseason-pool [sleeperLeagueId] [boardWeek=101]
       const [leagueId, wk] = args;
-      if (!leagueId) { console.error('usage: seed-preseason-pool <sleeperLeagueId> [boardWeek=101]'); break; }
-      const r = await seedPreseasonPool(leagueId, Number(wk || 101));
+      const r = await seedPreseasonPool(leagueId || null, Number(wk || 101));
       console.log('seed-preseason-pool:', JSON.stringify(r, null, 1));
       break;
     }

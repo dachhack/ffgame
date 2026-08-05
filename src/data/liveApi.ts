@@ -713,6 +713,29 @@ export const adminSetTestLive = (leagueId: string, on: boolean) =>
  *  the preseason offset weeks (101-103) so it can play real 2026 preseason games. */
 export const adminSetPreseason = (leagueId: string, on: boolean) =>
   rpc<{ ok: boolean; error?: string; preseason_at?: string | null; matchups?: number }>('admin_set_preseason', { p_league_id: leagueId, p_on: on });
+/** Super-admin: replace every seat's pick pool at a preseason board week with the
+ *  DEEP slate-team pool — every active skill player on that week's teams from the
+ *  Sleeper directory, depth-chart ordered, plus team K/DST (preseason is played
+ *  by the backups the Week-1 clones don't carry). Builds the pool client-side
+ *  (shared builder, src/data/preseasonPool.ts) and writes via the 0101 RPC. */
+export async function adminSeedPreseasonPool(leagueId: string, week: number): Promise<{ ok: boolean; error?: string; seats?: number; pool?: number; teams?: number }> {
+  const sb = await client();
+  const { data: slateRows } = await sb.from('nfl_slate').select('season, home, away').eq('week', week);
+  const season = (slateRows ?? []).reduce((m, r) => (r.season > m ? r.season : m), '');
+  const teams = new Set((slateRows ?? []).filter((r) => r.season === season).flatMap((r) => [r.home, r.away]).filter(Boolean));
+  if (!teams.size) return { ok: false, error: `no slate loaded for week ${week}` };
+  const { loadPlayerDirectory } = await import('./sleeperPlayers');
+  const { poolFromRows } = await import('./preseasonPool');
+  const { normName } = await import('./players');
+  const dir = await loadPlayerDirectory();
+  const rows = [...dir.values()]
+    .filter((m) => m.active !== false && m.team)
+    .map((m) => ({ sid: m.id, slug: normName(m.full).replace(/\s+/g, '-'), full: m.full, pos: m.pos, team: m.team!, depth: m.depth ?? 99 }));
+  const pool = poolFromRows(rows, teams as Set<string>);
+  if (!pool.length) return { ok: false, error: 'empty pool — player directory had no one on the slate teams' };
+  const r = await rpc<{ ok: boolean; error?: string; seats?: number; pool?: number }>('admin_seed_preseason_pool', { p_league_id: leagueId, p_week: week, p_pool: pool });
+  return { ...r, teams: teams.size };
+}
 /** The league's live-test anchor (epoch ms) if test mode is on, else null. Any
  *  member can read it — the board compresses its window timeline from this. */
 export const leagueTestLiveAt = async (leagueId: string): Promise<number | null> => {
