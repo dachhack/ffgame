@@ -10,7 +10,7 @@ import { db } from './supabase.js';
 import { config } from './config.js';
 import * as sleeper from './sleeper.js';
 import { weekKickoffMs, buildSlate } from './poll/scoreboard.js';
-import { buildPlayerIndex } from './playerIndex.js';
+import { buildPlayerIndex, slugOf } from './playerIndex.js';
 import { assignKdst } from '../../src/data/kdst.ts';
 import { setRuntimeSlate } from '../../src/data/nflSlate.ts';
 
@@ -189,4 +189,57 @@ export async function cloneWeek(sleeperLeagueId, fromWeek, toWeek, season = conf
   if (newL.length) await db().from('sleeper_lineup').insert(newL);
 
   return { matchups: newM.length, lineups: newL.length };
+}
+
+/** PURE: a preseason "everyone dressed" pick pool from the Sleeper directory —
+ *  every active skill player on a slate team, depth-chart ordered (starters
+ *  first within team+pos), plus the engine's synthetic team K/DST. Unlike the
+ *  DFS salary board there is deliberately NO projection floor: preseason games
+ *  are played by the depth chart's back half, and the 3rd/4th stringers a
+ *  projection floor would drop are exactly who scores on Thursday night. */
+export function buildPreseasonPool(players, slateTeams) {
+  const skill = [];
+  for (const [sid, p] of Object.entries(players ?? {})) {
+    const full = p.full_name || [p.first_name, p.last_name].filter(Boolean).join(' ');
+    if (!full || !p.team || !slateTeams.has(p.team)) continue;
+    if (!['QB', 'RB', 'WR', 'TE'].includes(p.position)) continue;
+    if (p.active === false) continue;
+    skill.push({ sid: String(sid), full, pos: p.position, team: p.team, depth: Number(p.depth_chart_order) || 99 });
+  }
+  const POS = { QB: 0, RB: 1, WR: 2, TE: 3 };
+  skill.sort((a, b) => a.team.localeCompare(b.team) || POS[a.pos] - POS[b.pos] || a.depth - b.depth || a.full.localeCompare(b.full));
+  const out = skill.map((p, i) => ({ slot: i, sleeper_id: p.sid, player_slug: slugOf(p.full), slug: slugOf(p.full), full: p.full, pos: p.pos }));
+  let slot = out.length;
+  for (const t of [...slateTeams].sort()) {
+    out.push({ slot: slot++, sleeper_id: null, player_slug: `${t.toLowerCase()}-k`, slug: `${t.toLowerCase()}-k`, full: `${t} Kicker`, pos: 'K' });
+    out.push({ slot: slot++, sleeper_id: null, player_slug: `${t.toLowerCase()}-dst`, slug: `${t.toLowerCase()}-dst`, full: `${t} D/ST`, pos: 'DEF' });
+  }
+  return out;
+}
+
+/** Overwrite EVERY seat's lineup at a preseason board week with the deep slate-
+ *  team pool above, so any seat can field the backups who actually play. The
+ *  week's matchups must already exist (🏈 preseason toggle, or clone-week) —
+ *  this replaces only the pick pools the toggle cloned from Week 1. Idempotent;
+ *  re-run any time before lock. Toggling preseason OFF deletes these rows along
+ *  with the clones, so re-seed after any re-toggle. */
+export async function seedPreseasonPool(sleeperLeagueId, week, season = config.season) {
+  const { data: leagueRow } = await db().from('league').select('id')
+    .eq('sleeper_league_id', sleeperLeagueId).eq('season', season).maybeSingle();
+  if (!leagueRow) throw new Error(`no league for sleeper_league_id=${sleeperLeagueId} season=${season} — run cli sync first`);
+  const lid = leagueRow.id;
+  const { data: slateRows } = await db().from('nfl_slate').select('home, away').eq('season', season).eq('week', week);
+  const slateTeams = new Set((slateRows ?? []).flatMap((g) => [g.home, g.away]).filter(Boolean));
+  if (!slateTeams.size) throw new Error(`no nfl_slate rows at season ${season} week ${week} — preseason slate not loaded`);
+  const pool = buildPreseasonPool(await sleeper.getPlayers(), slateTeams);
+  if (!pool.length) throw new Error('empty pool — Sleeper directory returned no active players for the slate teams');
+  const { data: mems } = await db().from('league_membership').select('sleeper_roster_id').eq('league_id', lid);
+  if (!mems?.length) throw new Error('league has no seats — run cli sync first');
+  const rows = mems.map((m) => ({ league_id: lid, week, roster_id: m.sleeper_roster_id, starters_json: pool }));
+  await db().from('sleeper_lineup').upsert(rows, { onConflict: 'league_id,week,roster_id' });
+  const { data: ms } = await db().from('matchup').select('id').eq('league_id', lid).eq('week', week).limit(1);
+  return {
+    seats: rows.length, poolSize: pool.length, teams: [...slateTeams].sort(),
+    matchups: ms?.length ? 'present' : 'MISSING — hit the 🏈 preseason toggle (or clone-week) so the week has pairings',
+  };
 }
