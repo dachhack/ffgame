@@ -1857,7 +1857,6 @@ const POSITION_REFUND_BUFFS = new Set(['unlock-carries-wipe', 'hail-mary', 'pick
 
 // Short "how to use" hints for the non-armable powerups in the inventory card.
 const POWERUP_HINT: Record<string, string> = {
-  'extra-slot': 'Tap ➕ ADD SLOT on a window header.',
   'metric-swap': 'Tap ✦ APPLY, then a live spot.',
   'player-swap': 'Tap ✦ APPLY, then a live spot.',
   'unlock-return': 'Pick the ◈ metric on a spot.',
