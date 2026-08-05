@@ -88,6 +88,37 @@ Then take a seat: «invite link»
 
 ---
 
+## Sleeper chat template — plain text, paste-ready
+
+Plain text for Sleeper league chats / LFL channels: no markdown, links on their
+own lines so they unfurl. Placeholders: `[LEAGUE INVITE URL]`, `[DATE]`,
+`[VENMO/PAYPAL]`.
+
+```
+🏈 FREE league, real prize money — 1 seat could be yours
+
+10-team league on Drip Fantasy, a new head-to-head format: you seal a hidden
+metric on each player, then the week plays out LIVE on real NFL play-by-play —
+TDs nuke your opponent's banked points, catches erase their gains, hot streaks
+double your rate. Like a card battle that happens during the actual games.
+
+💰 Free entry, $75 prize pool — $50 champ / $25 season points leader
+(paid via [VENMO/PAYPAL] within 48h of the final)
+🗓 Slow draft starts [DATE] — hour-long pick clocks, draft from your phone
+🏆 Season starts Week 1 (Sep 9)
+
+Pilot season — I built the game and fund the prizes myself. I want managers
+who'll actually play it hard.
+
+Try the demo first (playable, no signup):
+https://dripfantasy.com
+
+Claim your seat:
+[LEAGUE INVITE URL]
+```
+
+---
+
 ## League 4 — "your league filled without you" overflow angle
 
 **Title:** League filled without you? Free seat, $75 on the line, drafts «date»
