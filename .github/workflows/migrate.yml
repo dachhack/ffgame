@@ -27,6 +27,12 @@ jobs:
       - name: Apply migrations
         env:
           PGURL: ${{ secrets.SUPABASE_DB_URL }}
+          # The connection's role resolves NO search_path, so any unqualified
+          # table reference fails with "relation does not exist" (see the
+          # 0096/0098 "qualified" re-do migrations, and 0099's failed first
+          # run). Pin search_path for the session so migrations can use plain
+          # public-schema names like every earlier migration does.
+          PGOPTIONS: -c search_path=public
         run: |
           set -euo pipefail
           if [ -z "${PGURL:-}" ]; then echo "::error::Set the SUPABASE_DB_URL repo secret (Settings → Secrets → Actions)."; exit 1; fi
