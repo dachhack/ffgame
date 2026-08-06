@@ -55,9 +55,10 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
         },
         {
           q: 'Is this a real game or just a demo?',
-          a: <>What you're looking at now is the <b>Drip Test League</b> — a fully playable demo that runs entirely in your browser on
-            real 2025 NFL data. There's no live opponent and no money involved; it's there to show how a week plays out. The live,
-            play-with-your-league version is in a limited pilot (see “Can I play with my own league?” below).</>,
+          a: <>Both exist. What you're looking at logged-out is the <b>Drip Test League</b> — a fully playable demo that runs entirely
+            in your browser on real 2025 NFL data, there to show how a week plays out. The <b>live game is real and running now</b>:
+            pilot leagues are playing the <b>2026 season</b> head-to-head on live NFL data as the games happen (see “Can I play with
+            my own league?” below to get in).</>,
         },
         {
           q: 'Do I need an account to try it?',
@@ -97,14 +98,17 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
         },
         {
           q: 'Is the NFL data real?',
-          a: <>Yes. The stats, schedule and scores come from genuine 2025 NFL data (nflverse / Sleeper sources via Stathead) — real
-            season box scores for around 250 skill players seed every simulated game. The data is real; the <i>league</i> wrapped
-            around the demo is sanitized.</>,
+          a: <>Yes — in two different ways. The <b>demo</b> replays genuine 2025 NFL data (nflverse / Sleeper sources via Stathead):
+            real season box scores seed every simulated game. <b>Live 2026 leagues run on live 2026 data</b> — real play-by-play
+            polled continuously while games are on, so your banks tick, nukes land and streaks go hot within moments of the real
+            play happening, plus live injury reports in the run-up to kickoff. The data is real; the <i>league</i> wrapped around
+            the demo is sanitized.</>,
         },
         {
           q: 'What NFL season and weeks does the demo cover?',
           a: <>The real 2025 NFL regular season — 14 weeks. The demo opens on <b>Week 2</b>: week 1 is already in the books, and
-            Week 2 is the live one you set a lineup for and watch resolve. Every stat, score and schedule entry is genuine 2025 data.</>,
+            Week 2 is the live one you set a lineup for and watch resolve. Every stat, score and schedule entry is genuine 2025 data.
+            Live pilot leagues aren't a replay — they play the <b>2026 season</b> week by week as it actually happens.</>,
         },
         {
           q: 'Whose league is the demo based on?',
@@ -143,6 +147,13 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
             the exact numbers.</>,
         },
         {
+          q: 'How live is “live” in a 2026 league?',
+          a: <>Genuinely live. While NFL games are on, we poll real play-by-play continuously and resolve every matchup on each new
+            play — banks tick, nukes wipe and hot streaks ignite moments after the real play happens, and updates push straight to
+            your screen. Each window locks at its own kickoff, so your Sunday picks stay editable while Thursday plays out. Injury
+            designations refresh hourly in the run-up to each slate so you're never sealing a lineup blind.</>,
+        },
+        {
           q: 'What are power-ups and drip-coin?',
           a: <>You earn <b>drip-coin</b> each week and spend it on <b>power-ups</b> — consumables like an Extra Slot, a live Metric Swap, a
             Spy peek, or Double-or-Nothing. Some arm before kickoff, others fire mid-game. The {rulebookLink('Rulebook')} lists the full
@@ -155,8 +166,9 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
       items: [
         {
           q: 'Can I play with my own league and friends?',
-          a: <>That's the goal. Live head-to-head play against your real leaguemates is currently in a limited <b>pilot</b>. If you're
-            interested, use the <b>request an invite</b> link on the splash screen (or the floating request button) and we'll be in touch.</>,
+          a: <>Yes — live head-to-head play is running for the <b>2026 season</b> in a limited <b>pilot</b>: real leaguemates, sealed
+            picks, live NFL data. Spots are limited while we tune it, so if you're interested, use the <b>request an invite</b> link on
+            the splash screen (or the floating request button) and we'll be in touch.</>,
         },
         {
           q: 'What if my league isn’t on Sleeper?',
