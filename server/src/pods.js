@@ -232,8 +232,9 @@ export async function ensurePods(week, season, idx) {
   if (!board.length) return { pods: pods.length, dealt: 0, matchups: 0, tossed, skipped: 'no board' };
 
   const lockMs = await weekKickoffMs(season, week, config.seasonType).catch(() => null);
-  const lockAt = lockMs ? new Date(lockMs).toISOString() : null;
-  const lockPassed = lockMs != null && lockMs <= Date.now();
+  // Same 1h-before-kickoff lead as league matchups (config.lockLeadMs).
+  const lockAt = lockMs ? new Date(lockMs - config.lockLeadMs).toISOString() : null;
+  const lockPassed = lockMs != null && lockMs - config.lockLeadMs <= Date.now();
 
   let dealt = 0, made = 0;
   for (const pod of pods) {

@@ -19,6 +19,10 @@ export const config = {
   // preseason weeks 1-3 land on board weeks 101-103 and never collide with the
   // regular-season slate/matchups. ESPN API calls still use the real (1-3) week.
   weekOffset: Number(process.env.PILOT_SEASON_TYPE || 2) === 1 ? 100 : 0,
+  // Lineups lock this long BEFORE kickoff (matchup lock_at = first kickoff − lead;
+  // the 0102 enforce_window_lock trigger applies the same lead per window). Must
+  // stay in lockstep with the client's LOCK_LEAD_MS (Matchup.tsx) and the trigger.
+  lockLeadMs: 3_600_000,
   leagueIds: (process.env.PILOT_LEAGUE_IDS || '').split(',').map((s) => s.trim()).filter(Boolean),
   // Premium paywall enforcement at resolve (docs/premium-model.md). OFF for the
   // 2026 pilot — the tier is built but deliberately not turned on until 2027.

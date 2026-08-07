@@ -82,7 +82,8 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
   const kdstMode = leagueRow.kdst_mode ?? 'off';
   const rows = await sleeper.getMatchups(leagueId, week); // one row per roster
   const lockMs = await weekKickoffMs(season, week, config.seasonType);
-  const lockAt = lockMs ? new Date(lockMs).toISOString() : null;
+  // Lineups lock 1h before the week's first kickoff (client shows the same lead).
+  const lockAt = lockMs ? new Date(lockMs - config.lockLeadMs).toISOString() : null;
 
   // Live NFL slate from ESPN → overrides the baked 2025 slate for this real
   // season, so slate-gating + the K/DST bye check below use the correct windows
