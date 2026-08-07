@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
-import { SiteSettings, VersionTag } from '../app/ui';
+import { SiteSettings, VersionTag, Img } from '../app/ui';
 import { liveConfigured } from '../data/liveConfig';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
@@ -678,7 +678,11 @@ function CommishOnlyCard({ l, onManage, onResults }: { l: AdminLeague; onManage:
     <div style={{ ...card2 }}>
       {/* identity row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div className="grotesk" style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>{l.name.slice(0, 1).toUpperCase()}</div>
+        {/* The league crest, with the initial as the fallback — the play card
+            above shows it too (next to the league name), so a commissioner sees
+            the same art whether or not they hold a roster here. */}
+        <Img src={l.avatar_url} size={38} radius={8} alt={l.name}
+          fallback={<div className="grotesk" style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>{l.name.slice(0, 1).toUpperCase()}</div>} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
             <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</span>
