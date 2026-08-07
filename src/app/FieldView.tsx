@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed } from '../data/gameFeed';
 import { isPreseasonWeek, preseasonWeekNum } from '../data/nflSlate';
 import { teamLogo } from '../data/media';
+import { teamColor } from '../data/teamColors';
 import { useIsMobile } from './ui';
 
 // Geometry (SVG user units). The 100-yd field spans FX..FX+FW; EZ = end zone.
@@ -279,29 +280,45 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
 
   const logo = ballTm ? teamLogo(ballTm) : null;
   const yardNums = [10, 20, 30, 40, 50, 40, 30, 20, 10];
+  // Brand paint: end zones + possession accents. Mixed toward the surface so
+  // both themes keep contrast; text uses each team's own secondary color.
+  const awayCol = teamColor(away), homeCol = teamColor(home);
+  const ballCol = ballTm ? teamColor(ballTm) : null;
+  const ezFill = (tc: ReturnType<typeof teamColor>) => tc ? `color-mix(in srgb, ${tc.c} 72%, var(--surface))` : 'color-mix(in srgb, var(--dim) 16%, var(--surface))';
+  const ezText = (tc: ReturnType<typeof teamColor>) => tc ? tc.t : 'var(--dim)';
+  const awayLogo = teamLogo(away), homeLogo = teamLogo(home);
+  const stripTeam = (abbr: string, lg: string | null, hasBall: boolean) => (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: hasBall ? 'var(--text)' : 'var(--dim)' }}>
+      {lg && <img src={lg} alt="" width={13} height={13} style={{ display: 'block' }} />}
+      {abbr}{hasBall && !over ? <span title="has the ball" style={{ fontSize: 8 }}>🏈</span> : null}
+    </span>
+  );
 
   return (
     <div style={{ marginTop: 5, background: 'var(--bg)', border: `1px solid ${accent ? `color-mix(in srgb, ${accent} 55%, var(--bd))` : 'var(--bd)'}`, boxShadow: accent ? `0 0 12px color-mix(in srgb, ${accent} 18%, transparent)` : undefined, borderRadius: 4, padding: '6px 8px 7px', transition: 'border-color .3s ease, box-shadow .3s ease' }}>
-      {/* score + clock strip */}
-      <div className="mono" style={{ display: 'flex', justifyContent: 'center', gap: 10, alignItems: 'baseline', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', marginBottom: 3 }}>
-        <span style={{ color: ballTm === away ? 'var(--text)' : 'var(--dim)' }}>{away} {score.a}</span>
+      {/* score + clock strip — logos + a football on the possession side */}
+      <div className="mono" style={{ display: 'flex', justifyContent: 'center', gap: 10, alignItems: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', marginBottom: 3 }}>
+        {stripTeam(away, awayLogo, ballTm === away)}
+        <span style={{ color: 'var(--text)' }}>{score.a}</span>
         <span style={{ color: 'var(--faint)', fontWeight: 400 }}>{over ? 'FINAL' : fmtQClock(Math.max(clock, cur?.c ?? 0))}</span>
-        <span style={{ color: ballTm === home ? 'var(--text)' : 'var(--dim)' }}>{score.h} {home}</span>
+        <span style={{ color: 'var(--text)' }}>{score.h}</span>
+        {stripTeam(home, homeLogo, ballTm === home)}
       </div>
       {/* the field, with a light perspective tilt */}
       <div style={{ perspective: 560, position: 'relative' }}>
         <svg viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', width: '100%', transform: 'rotateX(20deg)', transformOrigin: '50% 100%' }}>
           {/* turf + end zones */}
           <rect x={FX} y={TOP} width={FW} height={BOT - TOP} fill="color-mix(in srgb, var(--you) 5%, var(--surface))" />
-          <rect x={0} y={TOP} width={EZ} height={BOT - TOP} fill="color-mix(in srgb, var(--dim) 16%, var(--surface))" />
-          <rect x={W - EZ} y={TOP} width={EZ} height={BOT - TOP} fill="color-mix(in srgb, var(--dim) 16%, var(--surface))" />
+          {/* end zones in each team's brand paint */}
+          <rect x={0} y={TOP} width={EZ} height={BOT - TOP} fill={ezFill(awayCol)} />
+          <rect x={W - EZ} y={TOP} width={EZ} height={BOT - TOP} fill={ezFill(homeCol)} />
           {/* red-zone glow on the end zone under attack */}
           {redZone && (
             <rect x={attacksRight ? W - EZ : 0} y={TOP} width={EZ} height={BOT - TOP}
-              fill="color-mix(in srgb, var(--fx-nuke) 32%, var(--surface))" style={{ animation: 'bpulse 1.4s ease infinite' }} />
+              fill="color-mix(in srgb, var(--fx-nuke) 32%, transparent)" style={{ animation: 'bpulse 1.4s ease infinite' }} />
           )}
-          <text x={EZ / 2} y={midY} fill="var(--dim)" fontSize={9} fontWeight={700} textAnchor="middle" transform={`rotate(-90 ${EZ / 2} ${midY})`} style={{ letterSpacing: '0.2em' }}>{away}</text>
-          <text x={W - EZ / 2} y={midY} fill="var(--dim)" fontSize={9} fontWeight={700} textAnchor="middle" transform={`rotate(90 ${W - EZ / 2} ${midY})`} style={{ letterSpacing: '0.2em' }}>{home}</text>
+          <text x={EZ / 2} y={midY} fill={ezText(awayCol)} fontSize={9} fontWeight={700} textAnchor="middle" transform={`rotate(-90 ${EZ / 2} ${midY})`} style={{ letterSpacing: '0.2em' }}>{away}</text>
+          <text x={W - EZ / 2} y={midY} fill={ezText(homeCol)} fontSize={9} fontWeight={700} textAnchor="middle" transform={`rotate(90 ${W - EZ / 2} ${midY})`} style={{ letterSpacing: '0.2em' }}>{home}</text>
           {/* yard lines + numbers */}
           {Array.from({ length: 21 }, (_, i) => (
             <line key={i} x1={FX + (i / 20) * FW} y1={TOP} x2={FX + (i / 20) * FW} y2={BOT}
@@ -323,13 +340,14 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
           {/* line of scrimmage + ball marker (transitions to each new spot) */}
           {ballX != null && !over && (
             <g style={{ transform: `translateX(${ballX}px)`, transition: 'transform .55s ease' }}>
-              <line x1={0} y1={TOP} x2={0} y2={BOT} stroke={accent ?? 'var(--dimstrong)'} strokeWidth={1.1} />
+              {/* line of scrimmage carries the possession team's color */}
+              <line x1={0} y1={TOP} x2={0} y2={BOT} stroke={ballCol?.c ?? accent ?? 'var(--dimstrong)'} strokeWidth={1.4} />
               {/* abbr badge always drawn; the logo (when available) covers it */}
-              <circle cx={0} cy={midY} r={8.5} fill="var(--surface)" stroke={accent ?? 'var(--dimstrong)'} strokeWidth={1} />
+              <circle cx={0} cy={midY} r={10.5} fill={ballCol ? `color-mix(in srgb, ${ballCol.c} 30%, var(--surface))` : 'var(--surface)'} stroke={ballCol?.c ?? accent ?? 'var(--dimstrong)'} strokeWidth={1.4} />
               <text x={0} y={midY + 2.5} fill="var(--text)" fontSize={6} fontWeight={700} textAnchor="middle" className="mono">{ballTm}</text>
-              {logo && <image href={logo} x={-9} y={midY - 9} width={18} height={18} style={cur?.sc ? { animation: 'bpulse 1s ease 2' } : undefined} />}
-              {/* drive direction */}
-              <text x={attacksRight ? 13 : -13} y={midY + 2.5} fill="var(--faint)" fontSize={7} textAnchor="middle">{attacksRight ? '▶' : '◀'}</text>
+              {logo && <image href={logo} x={-10} y={midY - 10} width={20} height={20} style={cur?.sc ? { animation: 'bpulse 1s ease 2' } : undefined} />}
+              {/* drive direction in the possession color */}
+              <text x={attacksRight ? 15 : -15} y={midY + 2.5} fill={ballCol?.c ?? 'var(--faint)'} fontSize={8} fontWeight={700} textAnchor="middle">{attacksRight ? '▶' : '◀'}</text>
             </g>
           )}
         </svg>
