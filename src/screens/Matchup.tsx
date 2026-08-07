@@ -3,7 +3,7 @@ import { useStore } from '../app/store';
 import type { Phase } from '../app/store';
 import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile, ModalBackdrop } from '../app/ui';
 import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
-import { setLiveGameFeed, feedRowsToWeek, hasGameFeed } from '../data/gameFeed';
+import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGameFeed } from '../data/gameFeed';
 import { avatarUrl, teamLogo } from '../data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, preseasonWeekNum } from '../data/nflSlate';
 import { METRICS, metricById } from '../data/metrics';
@@ -462,10 +462,24 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     for (const rw of resolved.windows) {
       let mx = 0;
       for (const s of rw.slots) for (const e of s.events) if (e.clock > mx) mx = e.clock;
-      m[rw.window.id] = mx || GAME_SECONDS;
+      if (liveCtx) {
+        // Live board: anchor the window's "now" to the REAL game feed (every
+        // play of every game), not just the slotted players' events — a window
+        // whose picks haven't touched the ball yet must show the real game
+        // clock, not default to a finished game (the Q4-5:00-while-Q1 bug from
+        // the first preseason live-fire).
+        for (const g of gamesInWindow(week, rw.window.id)) {
+          const f = gameFeedFor(week, g.home);
+          for (const p of f?.plays ?? []) if (p.c > mx) mx = p.c;
+        }
+        m[rw.window.id] = mx; // 0 = nothing ingested yet → pre-snap clock, not full reveal
+      } else {
+        m[rw.window.id] = mx || GAME_SECONDS;
+      }
     }
     return m;
-  }, [resolved]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- livePbpVer keys the 15s feed refresh
+  }, [resolved, liveCtx, week, livePbpVer]);
 
   // Each window's real-time length: the latest real `t` (seconds since kickoff)
   // reached by any of its games — the wall-clock counterpart of winMax.
@@ -2316,6 +2330,11 @@ function WindowSectionInner(props: {
 
       {phase !== 'setup' && <WindowBattleBar rw={rw} week={week} clock={clock} wallClock={wallClock} done={done} />}
 
+      {/* Live board: the full game log — EVERY ingested play across this window's
+          games (from the worker's game_feed), regardless of who's slotted. The
+          per-duel logs below stay pick-scoped; this is the window's TV feed. */}
+      {(realtime === 'live' || realtime === 'final') && <WindowGameLog week={week} win={w.id} />}
+
       {/* Card theme, kicked window: the floating mini cards overhang each strip
           by ~12px — widen the row gap (and pad the top) so they never collide. */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: cards && phase !== 'setup' && !preKick && kicked ? 20 : 6, paddingTop: cards && phase !== 'setup' && !preKick && kicked ? 10 : 0 }}>
@@ -2403,6 +2422,51 @@ const WindowSection = memo(WindowSectionInner, (a, b) => {
   }
   return true;
 });
+
+// ── Window game log (live board) ─────────────────────────────────────────────
+// Every ingested play across the window's games — the whole game's story, not
+// just the slotted players'. Sourced from the worker's game_feed rows (already
+// polled every 15s for the field visuals), newest first, scoring plays flagged.
+function WindowGameLog({ week, win }: { week: number; win: WindowId }) {
+  const [open, setOpen] = useState(true);
+  const feeds = gamesInWindow(week, win)
+    .map((g) => gameFeedFor(week, g.home))
+    .filter((f): f is TeamGameFeed => !!f && f.plays.length > 0);
+  const rows = feeds
+    .flatMap((f) => f.plays.map((p) => ({ f, p })))
+    .sort((a, b) => b.p.c - a.p.c)
+    .slice(0, 250);
+  const qc = (c: number) => {
+    const q = Math.min(5, Math.floor(c / 900) + 1);
+    const r = Math.max(0, 900 - (c % 900));
+    return `${q > 4 ? 'OT' : `Q${q}`} ${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')}`;
+  };
+  return (
+    <div style={{ margin: '2px 0 9px', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '7px 10px' }}>
+      <button onClick={() => setOpen((o) => !o)} className="mono" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+        <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>📺 GAME LOG · every play, all games</span>
+        <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)' }}>{rows.length ? `${rows.length} PLAYS ${open ? '▾' : '▸'}` : ''}</span>
+      </button>
+      {open && (
+        <div style={{ maxHeight: 210, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5, marginTop: 6, paddingRight: 4, scrollbarWidth: 'thin' }}>
+          {rows.length === 0 && (
+            <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.08em', textAlign: 'center', padding: '8px 0' }}>— waiting on the first snap —</div>
+          )}
+          {rows.map(({ f, p }, i) => (
+            <div key={`${f.key}:${p.pid ?? p.c}:${i}`} style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+              <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: p.sc ? 'var(--warn)' : 'var(--faint)', flex: 'none', minWidth: 92 }}>
+                {feeds.length > 1 ? `${f.key} · ` : ''}{qc(p.c)}
+              </span>
+              <span style={{ fontSize: 11, color: p.sc ? 'var(--text)' : 'var(--dim)', lineHeight: 1.35, flex: 1, minWidth: 0 }}>
+                {p.txt}{p.sc ? <b style={{ color: 'var(--warn)' }}> — {f.away} {p.as}–{p.hs} {f.home}</b> : null}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Window Battle bar ──
 // Each window is its own head-to-head. During live play this shows the running
