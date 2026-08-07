@@ -323,7 +323,10 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
       <div className="mono" style={{ position: 'relative', display: 'flex', justifyContent: 'center', gap: 10, alignItems: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', marginBottom: 3 }}>
         {stripTeam(away, awayLogo, ballTm === away)}
         <span style={{ color: 'var(--text)' }}>{score.a}</span>
-        <span style={{ color: 'var(--faint)', fontWeight: 400 }}>{over ? 'FINAL' : fmtQClock(Math.max(clock, cur?.c ?? 0))}</span>
+        {/* the LAST PLAY's clock, not the playback clock — the live window clock
+            can overshoot the real game (slot bookkeeping past regulation), which
+            read a Q4 game as "OT" during the first live-fire. */}
+        <span style={{ color: 'var(--faint)', fontWeight: 400 }}>{over ? 'FINAL' : fmtQClock(cur ? cur.c : clock)}</span>
         <span style={{ color: 'var(--text)' }}>{score.h}</span>
         {stripTeam(home, homeLogo, ballTm === home)}
         {/* mirror the field to match your TV broadcast (remembered per game) */}
