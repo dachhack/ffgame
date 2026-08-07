@@ -297,6 +297,16 @@ export function gameToFeed(summary) {
       // Yards after catch (receptions only) — lets the field visual split a
       // completed pass into its air arc + the flat run-after segment.
       ...(p?.yardsAfterCatch != null && Number.isFinite(Number(p.yardsAfterCatch)) ? { yac: Number(p.yardsAfterCatch) } : {}),
+      // Return yards on kicks/punts (same clause the retyd metric parses: the
+      // lone "for N yards" is the return — kick DISTANCE is "yards from/to").
+      // Lets the field split the kick arc from the runback line.
+      ...(() => {
+        if (ty === 'Kickoff' || ty === 'Punt' || ty === 'Punt Return Touchdown' || ty === 'Kickoff Return Touchdown') {
+          const rm = /\bfor (\d+) yards?/.exec(p?.text ?? '');
+          if (rm) return { ret: Number(rm[1]) || 0 };
+        }
+        return {};
+      })(),
       ...(p?.scoringPlay ? { sc: 1 } : {}),
       ...(p?.isPenalty ? { pen: 1 } : {}),
       ...(p?.isTurnover ? { to: 1 } : {}),

@@ -287,11 +287,19 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
       : mx(xOf(cur.yl2, cur.tm2 ?? cur.tm)),
     color: accent ?? (cur.sc ? 'var(--warn)' : cur.to ? 'var(--fx-nuke)' : 'var(--dimstrong)'),
   } : null;
-  // Completed pass with YAC: the catch point splits the play into the air arc
-  // (snap → catch) and the flat run-after segment (catch → end spot).
-  const catchX = arc && completedPass && cur!.yac != null && cur!.yl !== cur!.yl2
+  // Split point: where the ball stopped FLYING and started being CARRIED.
+  // Completed pass with YAC → the catch point (air arc, then run-after line).
+  // Kick/punt with a return → the field/catch spot (kick arc, then runback
+  // line — the returner ends at yl2 having run `ret` yards, so the catch sits
+  // ret yards behind it in the return team's coordinates; a catch inside the
+  // end zone maps past 100 and renders there naturally).
+  const yacX = arc && completedPass && cur!.yac != null && cur!.yl !== cur!.yl2
     ? mx(xOf(Math.min(100, Math.max(0, cur!.yl2 + cur!.yac)), cur!.tm2 ?? cur!.tm))
     : null;
+  const retX = arc && cur!.ret != null && /Kickoff|Punt/.test(cur!.ty)
+    ? mx(xOf(Math.min(108, cur!.yl2 + cur!.ret), cur!.tm2 ?? cur!.tm))
+    : null;
+  const catchX = yacX ?? retX;
   const offLogo = cur ? teamLogo(cur.tm) : null;
   const midY = (TOP + BOT) / 2;
 
