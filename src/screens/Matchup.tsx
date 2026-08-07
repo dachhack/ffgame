@@ -2521,6 +2521,14 @@ function WindowBattleBar({ rw, week, clock, wallClock, done }: {
           ⭐ WINDOW MVP · {mvp.name} {mvp.score.toFixed(1)} <span style={{ color: 'var(--warn)' }}>◈{mvp.coin}</span>
         </div>
       )}
+      {/* Spell the win bonus out — "40 up top, 35 down here" was the first
+          question the first live final produced. The equation is window-scoped,
+          so it stays accurate when the week total spans five windows. */}
+      {done && !even && (
+        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: leadYou ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>
+          ★ window {(leadYou ? yTot : tTot).toFixed(1)} + win bonus {bonus} = {((leadYou ? yTot : tTot) + bonus).toFixed(1)} toward {leadYou ? 'your' : 'their'} week total
+        </div>
+      )}
     </div>
   );
 }
