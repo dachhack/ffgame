@@ -407,9 +407,16 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       setLoadErr(true); setCommishLoaded(true); return;
     }
     commishOverview().then((l) => setCommishLeagues(l ?? [])).catch(() => setCommishLeagues([])).finally(() => setCommishLoaded(true));
-    // Each league's next matchup + opponent, for the home cards.
+    // Each league's next matchup + opponent, for the home cards. Week-less
+    // myMatchup returns the LOWEST week (Week 1) — wrong whenever a later week
+    // is the live one (preseason weeks sort at 101+), so resolve the board's
+    // default-open week first and show THAT matchup.
     for (const e of rows) {
-      myMatchup(e.league_id, e.sleeper_roster_id).then(async (m) => {
+      defaultOpenWeek(e.league_id, e.league?.season ?? '2026', !!e.league?.preseason_at)
+        .catch(() => undefined)
+        .then((wk) => myMatchup(e.league_id, e.sleeper_roster_id, wk)
+          .then((m) => m ?? myMatchup(e.league_id, e.sleeper_roster_id)))
+        .then(async (m) => {
         if (!m) return;
         const teams = await matchupTeams(e.league_id, [m.home_roster_id, m.away_roster_id]).catch(() => ({}));
         setCards((c) => ({ ...c, [enrollKey(e)]: { matchup: m, teams } }));
@@ -846,7 +853,7 @@ function LeagueCard({ e, card, commish, userId, onBoard, onPodBuild, onResults, 
           live 2026 slate once the week is synced). The 2025 full-board sim is an
           optional "see it play" demo until the season starts. */}
       <button onClick={playHeroBoard} disabled={building} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: building ? 'default' : 'pointer', marginTop: 12, opacity: building ? 0.7 : 1, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
-        {building ? (buildNote || 'LOADING…') : <><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> SET YOUR LINEUP →</>}
+        {building ? (buildNote || 'LOADING…') : <><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> {live || final ? 'GO TO MATCHUP →' : 'SET YOUR LINEUP →'}</>}
       </button>
       {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{buildErr}</div>}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>

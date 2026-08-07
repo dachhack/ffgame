@@ -111,7 +111,8 @@ async function tick() {
   // whose kickoff already passed seals this same tick.
   const kicks = games.map((g) => g.kickoffMs).filter(Number.isFinite);
   if (kicks.length) {
-    const filled = await backfillLockAt(week, Math.min(...kicks));
+    // Lineups lock 1h before the week's first kickoff (client shows the same lead).
+    const filled = await backfillLockAt(week, Math.min(...kicks) - config.lockLeadMs);
     if (filled) log('backfilled lock_at on', filled, 'matchups');
   }
 

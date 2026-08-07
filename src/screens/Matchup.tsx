@@ -133,7 +133,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         if (!r.player_slug) continue;
         lineup[`${r.game_window}#${r.roster_slot}`] = { playerId: r.player_slug, metricId: r.metric_id };
       }
-      if (Object.keys(lineup).length) setPicks((prev) => (Object.keys(prev).length ? prev : lineup));
+      // Server picks WIN over the local store cache: the cache is per-browser
+      // (shared across accounts/leagues), so a stale or cross-account lineup
+      // could shadow the sealed reality — and the auto-saver below would then
+      // write that stale cache back over any still-unlocked windows.
+      if (Object.keys(lineup).length) setPicks(lineup);
     }).catch(() => {}).finally(() => setHeroHydrated(true));
   }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
   // Live board: auto-save the working lineup (debounced) so each window's picks
