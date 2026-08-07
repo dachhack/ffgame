@@ -29,8 +29,9 @@ export interface GamePlay {
 export interface WeekGameFeed {
   games: Record<string, GamePlay[]>; // "AWAY@HOME" -> plays
   teams: Record<string, string>;     // team abbr -> "AWAY@HOME"
+  states?: Record<string, string>;   // "AWAY@HOME" -> real game state (pre|in|post), live rows only
 }
-export interface TeamGameFeed { key: string; away: string; home: string; plays: GamePlay[]; }
+export interface TeamGameFeed { key: string; away: string; home: string; plays: GamePlay[]; st?: string | null; }
 
 const cache = new Map<number, WeekGameFeed>();
 const inflight = new Map<number, Promise<void>>();
@@ -42,14 +43,16 @@ const inflight = new Map<number, Promise<void>>();
 const liveFeeds = new Map<number, WeekGameFeed>();
 
 /** game_feed DB rows → a week's {games, teams} (mirrors the baker's shape). */
-export function feedRowsToWeek(rows: { key: string; away: string; home: string; plays: GamePlay[] }[]): WeekGameFeed {
+export function feedRowsToWeek(rows: { key: string; away: string; home: string; plays: GamePlay[]; state?: string | null }[]): WeekGameFeed {
   const games: Record<string, GamePlay[]> = {};
   const teams: Record<string, string> = {};
+  const states: Record<string, string> = {};
   for (const r of rows) {
     games[r.key] = r.plays ?? [];
     teams[r.away] = r.key; teams[r.home] = r.key;
+    if (r.state) states[r.key] = r.state;
   }
-  return { games, teams };
+  return { games, teams, states };
 }
 /** Install the week's live game feeds; makes that week resolve live-only. */
 export function setLiveGameFeed(week: number, feed: WeekGameFeed): void { liveFeeds.set(week, feed); }
@@ -89,5 +92,5 @@ export function gameFeedFor(week: number, team?: string | null): TeamGameFeed | 
   const plays = key ? wk?.games[key] : undefined;
   if (!key || !plays) return null;
   const [away, home] = key.split('@');
-  return { key, away, home, plays };
+  return { key, away, home, plays, st: wk?.states?.[key] ?? null };
 }

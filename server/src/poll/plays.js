@@ -57,8 +57,11 @@ export async function pollGame(eventId, week, playerIndex) {
   const feed = gameToFeed(sum);
   if (feed) {
     const [key, [away, home], plays] = feed;
+    // Real game state (pre|in|post) so clients never have to infer FINAL from
+    // "no next play yet" — which reads halftime as game over (0103).
+    const state = sum?.header?.competitions?.[0]?.status?.type?.state ?? null;
     await db().from('game_feed').upsert(
-      { week, game_id: String(eventId), key, away, home, plays, updated_at: new Date().toISOString() },
+      { week, game_id: String(eventId), key, away, home, plays, state, updated_at: new Date().toISOString() },
       { onConflict: 'week,game_id' },
     );
   }

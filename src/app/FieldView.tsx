@@ -236,7 +236,10 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
   }, [plays, clock]);
   const cur: GamePlay | null = idx >= 0 ? plays[idx] : null;
   const nxt: GamePlay | null = idx + 1 < plays.length ? plays[idx + 1] : null;
-  const over = cur != null && !nxt; // final play shown
+  // Final play shown. "No next play yet" alone reads a live halftime as game
+  // over — trust the real game state when the live feed carries it, else
+  // require the shown play to sit in late Q4 (baked replays always do).
+  const over = cur != null && !nxt && (feed.st ? feed.st === 'post' : cur.c >= 3300);
 
   // x position of a yards-to-endzone spot for a possession team. The away team
   // always attacks right, home attacks left, so the spot is continuous across
