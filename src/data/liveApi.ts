@@ -500,10 +500,10 @@ export async function weekLivePlays(week: number): Promise<LivePlayRow[]> {
 
 /** The week's per-game field-visual feeds (game_feed, readable by any authed
  *  user) — drives FieldView/FieldBoard on the live board. */
-export interface GameFeedRow { key: string; away: string; home: string; plays: import('./gameFeed').GamePlay[]; }
+export interface GameFeedRow { key: string; away: string; home: string; plays: import('./gameFeed').GamePlay[]; state?: string | null; }
 export async function weekGameFeeds(week: number): Promise<GameFeedRow[]> {
   const { data } = await (await client()).from('game_feed')
-    .select('key, away, home, plays').eq('week', week);
+    .select('key, away, home, plays, state').eq('week', week);
   return (data ?? []) as GameFeedRow[];
 }
 

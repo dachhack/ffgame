@@ -2918,7 +2918,13 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // weeks / not yet loaded), so a window's shared clock running into another
   // game's OT doesn't read "OT" on a game that already ended in regulation.
   const gEnd = realGameEndClock(week, player.team);
-  const gameOver = gEnd > 0 ? clock >= gEnd - 1 : clock >= 3595;
+  // On a live feed the latest ingested play IS the current clock, so "clock
+  // reached the last play" would read halftime as FINAL — trust the feed's
+  // real game state when present, and never call a pre-late-Q4 clock final.
+  const gSt = gameFeedFor(week, player.team)?.st;
+  const gameOver = gSt != null
+    ? gSt === 'post'
+    : gEnd > 0 ? clock >= gEnd - 1 && gEnd >= 3300 : clock >= 3595;
   // Card-table theme: the SAME dense strip, but the physical mini card (image,
   // name, team — with the bank fill, HOT glow, NUKE scorch) floats over it in
   // the headshot's place; the name row keeps only its chips.

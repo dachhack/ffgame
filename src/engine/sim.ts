@@ -171,7 +171,10 @@ function playText(p: Player, play: RawPlay): string {
     if (play.kind === 'return') return `${t}: ${play.yards}yd return TD`;
     return `${t}: ${play.yards}yd TD`;
   }
-  if (play.kind === 'pass') return `${t}: ${play.yards}yd pass`;
+  // A QB's incompletion lands as a 0-yard 'pass' event (espnAdapter row shape),
+  // so a yardless pass reads "incomplete pass" — not the baffling "0yd pass".
+  // (The rare genuine 0-yard completion is indistinguishable in the data.)
+  if (play.kind === 'pass') return play.yards === 0 ? `${t}: incomplete pass` : `${t}: ${play.yards}yd pass`;
   if (play.kind === 'rush') return `${t}: +${play.yards} rush`;
   if (play.kind === 'rec') return `${t}: +${play.yards} catch`;
   if (play.kind === 'return') return `${t}: +${play.yards} return`;
