@@ -7,7 +7,7 @@ import {
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
   rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
-  setTransactionRules, commishMovePlayer, commishRemovePlayer, commishRuleTrade,
+  setTransactionRules, commishMovePlayer, commishRemovePlayer, commishRuleTrade, setLeagueAvatar,
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
   playoffState, setPlayoffRules, generatePlayoffs, advancePlayoffs,
   type WaiverMode, type TradeReview, type TradeRow, type LeaguePoolPlayer, type NativeRosterRow,
@@ -19,6 +19,8 @@ import { importLeague, syncWeek } from '../data/sleeperAdmin';
 import { importEspnSeason, syncEspnSeason, stripProvider } from '../data/providerAdmin';
 import { forceResolve } from '../data/forceResolve';
 import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
+import { Avatar } from '../app/ui';
+import { AvatarPicker } from '../app/AvatarPicker';
 import { FeedSheet } from './FeedSheet';
 import { WINDOWS, defaultMetric } from '../data/metrics';
 import { NFL_CODES } from '../data/kdst';
@@ -665,6 +667,24 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
     if (r.ok) reload();
   };
 
+  // League crest. set_league_avatar (0066) allows admin OR the league's own
+  // commissioner and doesn't care about provider, so imported Sleeper/ESPN
+  // leagues get the same picker native ones have had. `crest` is an optimistic
+  // overlay: undefined = "no local change, show the loaded value", so a reload
+  // that returns the same URL doesn't flicker.
+  const canCrest = admin || l.commissioner;
+  const [crestOpen, setCrestOpen] = useState(false);
+  const [crest, setCrest] = useState<string | null | undefined>(undefined);
+  const crestUrl = crest !== undefined ? crest : l.avatar_url ?? null;
+  const pickCrest = async (url: string | null) => {
+    setCrestOpen(false);
+    const prev = crestUrl;
+    setCrest(url);
+    const r = await setLeagueAvatar(l.league_id, url);
+    if (!r.ok) { setCrest(prev); setBusy(r.error ?? 'crest update failed'); return; }
+    reload();
+  };
+
   const statusChip = (color: string): React.CSSProperties => ({ ...mono, fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color, border: `1px solid ${color}`, borderRadius: 4, padding: '2px 5px', whiteSpace: 'nowrap' });
   const leagueTabs: TabDef<LeagueTab>[] = [
     { id: 'overview', label: 'SETUP' },
@@ -686,11 +706,25 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
       {watch && <AdminMatchupBoard matchupId={watch} onClose={() => setWatch(null)} />}
       {sheet && <FeedSheet matchupId={sheet} week={Number(srcWeek) || 1} onClose={() => setSheet(null)} />}
 
+      {crestOpen && <AvatarPicker title="Pick the league crest" onPick={pickCrest} onClose={() => setCrestOpen(false)} />}
+
       {/* League identity + the one always-on action: share the invite link.
           When collapsible (CommishDash with several leagues), the header row
           doubles as the expand/collapse toggle. */}
       <div onClick={collapsible ? () => setOpen((o) => !o) : undefined} role={collapsible ? 'button' : undefined} aria-expanded={collapsible ? open : undefined}
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', cursor: collapsible ? 'pointer' : undefined }}>
+        {/* The crest. Click-to-change for a commissioner (stopPropagation so it
+            doesn't also collapse the card in the multi-league dash); for anyone
+            else it stays a plain image, so the click still hits the toggle
+            instead of dying on a disabled button. */}
+        {canCrest ? (
+          <button onClick={(e) => { e.stopPropagation(); setCrestOpen(true); }} title="change the league crest"
+            style={{ background: 'none', border: 'none', padding: 0, lineHeight: 0, flexShrink: 0, cursor: 'pointer' }}>
+            <Avatar name={l.name} accent="var(--warn)" src={crestUrl} size={34} />
+          </button>
+        ) : (
+          <span style={{ lineHeight: 0, flexShrink: 0 }}><Avatar name={l.name} accent="var(--warn)" src={crestUrl} size={34} /></span>
+        )}
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {collapsible && <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--dim)', flexShrink: 0 }}>{open ? '▾' : '▸'}</span>}

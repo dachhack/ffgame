@@ -9,6 +9,12 @@ primary_region = "iad"
 
 [env]
   PILOT_SEASON = "2026"
+  # Sleeper league ids the worker's weekly auto-sync loop mirrors (syncTick →
+  # syncAllLeagues, server/src/index.js). Not a secret, so it lives here rather
+  # than in `fly secrets` — the list stays reviewable in git. A same-named Fly
+  # secret would OVERRIDE this, so keep it unset (`fly secrets unset
+  # PILOT_LEAGUE_IDS`) or the stale secret silently wins. Comma-separated.
+  PILOT_LEAGUE_IDS = "1390853155960389632"  # Turf Warriors (12-team SF redraft)
 
 [[vm]]
   size = "shared-cpu-1x"
