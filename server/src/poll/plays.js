@@ -34,7 +34,17 @@ export async function pollGame(eventId, week, playerIndex) {
       });
     }
   }
-  if (rows.length) {
+  // ESPN sometimes lists the SAME play under two drives (observed live at the
+  // 2026 preseason opener when it restructured drives at halftime): duplicate
+  // conflict keys make Postgres reject the WHOLE upsert batch ("ON CONFLICT DO
+  // UPDATE command cannot affect row a second time") — which froze play
+  // ingestion for the rest of the game while the game_feed write kept landing.
+  // De-dupe on the conflict key, keeping the last occurrence (the re-listed
+  // copy carries any revision).
+  const byKey = new Map();
+  for (const r of rows) byKey.set(`${r.pid}|${r.player_slug}|${r.k}`, r);
+  const uniq = [...byKey.values()];
+  if (uniq.length) {
     // RECONCILE — each poll carries the game's FULL current play set, and ESPN
     // revises plays mid-game (yardage corrections, a TD overturned on review, a
     // fumble added, a catch ruled incomplete). So:
@@ -43,11 +53,18 @@ export async function pollGame(eventId, week, playerIndex) {
     //   2) delete any rows for this game no longer in the current set — a play
     //      reclassified to a different kind, or removed, so it can't double-count.
     // Re-polling unchanged plays is still a no-op (same key + same values).
-    await db().from('live_play').upsert(rows, { onConflict: 'week,game_id,pid,player_slug,k' });
-    const present = new Set(rows.map((r) => `${r.pid}|${r.player_slug}|${r.k}`));
-    const { data: existing } = await db().from('live_play').select('id,pid,player_slug,k').eq('week', week).eq('game_id', eventId);
+    // supabase-js does NOT throw on write errors — surface them so the tick's
+    // per-game catch logs the real failure instead of a healthy-looking count.
+    const { error: upErr } = await db().from('live_play').upsert(uniq, { onConflict: 'week,game_id,pid,player_slug,k' });
+    if (upErr) throw new Error(`live_play upsert (${uniq.length} rows): ${upErr.message}`);
+    const present = new Set(uniq.map((r) => `${r.pid}|${r.player_slug}|${r.k}`));
+    const { data: existing, error: exErr } = await db().from('live_play').select('id,pid,player_slug,k').eq('week', week).eq('game_id', eventId);
+    if (exErr) throw new Error(`live_play stale scan: ${exErr.message}`);
     const staleIds = (existing ?? []).filter((e) => !present.has(`${e.pid}|${e.player_slug}|${e.k}`)).map((e) => e.id);
-    if (staleIds.length) await db().from('live_play').delete().in('id', staleIds);
+    if (staleIds.length) {
+      const { error: delErr } = await db().from('live_play').delete().in('id', staleIds);
+      if (delErr) throw new Error(`live_play stale delete (${staleIds.length}): ${delErr.message}`);
+    }
   }
 
   // Game feed for the field visuals (FieldView/FieldBoard) — the SAME summary,
@@ -60,10 +77,11 @@ export async function pollGame(eventId, week, playerIndex) {
     // Real game state (pre|in|post) so clients never have to infer FINAL from
     // "no next play yet" — which reads halftime as game over (0103).
     const state = sum?.header?.competitions?.[0]?.status?.type?.state ?? null;
-    await db().from('game_feed').upsert(
+    const { error: feedErr } = await db().from('game_feed').upsert(
       { week, game_id: String(eventId), key, away, home, plays, state, updated_at: new Date().toISOString() },
       { onConflict: 'week,game_id' },
     );
+    if (feedErr) console.error(`[plays] game_feed upsert ${eventId}:`, feedErr.message);
   }
-  return rows.length;
+  return uniq.length;
 }
