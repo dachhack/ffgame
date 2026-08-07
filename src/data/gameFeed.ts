@@ -20,6 +20,7 @@ export interface GamePlay {
   ty: string;       // ESPN play type text ("Pass Reception", "Punt", …)
   txt: string;      // full play description
   yac?: number;     // yards after catch (receptions) — splits the pass arc from the run-after
+  ret?: number;     // return yards (kickoffs/punts) — splits the kick arc from the runback
   sc?: number;      // 1 = scoring play
   pen?: number;     // 1 = penalty
   to?: number;      // 1 = turnover
