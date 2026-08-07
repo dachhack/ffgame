@@ -221,6 +221,12 @@ export function FieldBoard({ week, entries, onClose }: { week: number; entries: 
 
 function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pidSide?: (pid?: number) => PlaySide | null }) {
   const { away, home, plays } = feed;
+  // ↔ mirror this game's field to match the viewer's TV broadcast — the feed
+  // carries no camera orientation, so the default (away attacks right) is a
+  // convention; the flip is remembered per game.
+  const [flip, setFlip] = useState(() => { try { return localStorage.getItem(`fvflip:${feed.key}`) === '1'; } catch { return false; } });
+  const toggleFlip = () => setFlip((f) => { const n = !f; try { localStorage.setItem(`fvflip:${feed.key}`, n ? '1' : '0'); } catch { /* ignore */ } return n; });
+  const mx = (x: number) => (flip ? W - x : x); // mirror an x coordinate
   // Latest play at/under the feed clock = the play being shown; the next one
   // (regardless of clock) carries the authoritative resulting down & spot.
   const idx = useMemo(() => {
@@ -266,10 +272,24 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
   const accent = side === 'you' ? 'var(--you)' : side === 'their' ? 'var(--opp)' : side === 'both' ? 'var(--warn)' : null;
 
   const isPassy = cur ? /Pass|Interception|Punt|Kickoff|Field Goal/.test(cur.ty) : false;
-  const arc = cur && cur.yl !== cur.yl2 ? {
-    x1: xOf(cur.yl, cur.tm), x2: xOf(cur.yl2, cur.tm2 ?? cur.tm),
+  const incomplete = cur ? /Incompletion/.test(cur.ty) : false;
+  const completedPass = cur ? /Pass Reception|Passing Touchdown/.test(cur.ty) : false;
+  // Incompletions never move the spot (yl === yl2), so draw a stylized throw:
+  // a fixed-depth arc toward the attacked end zone, ending in an ✕.
+  const INCOMPLETE_DEPTH = 12;
+  const arc = cur && (cur.yl !== cur.yl2 || incomplete) ? {
+    x1: mx(xOf(cur.yl, cur.tm)),
+    x2: incomplete
+      ? mx(xOf(Math.max(0, cur.yl - INCOMPLETE_DEPTH), cur.tm))
+      : mx(xOf(cur.yl2, cur.tm2 ?? cur.tm)),
     color: accent ?? (cur.sc ? 'var(--warn)' : cur.to ? 'var(--fx-nuke)' : 'var(--dimstrong)'),
   } : null;
+  // Completed pass with YAC: the catch point splits the play into the air arc
+  // (snap → catch) and the flat run-after segment (catch → end spot).
+  const catchX = arc && completedPass && cur!.yac != null && cur!.yl !== cur!.yl2
+    ? mx(xOf(Math.min(100, Math.max(0, cur!.yl2 + cur!.yac)), cur!.tm2 ?? cur!.tm))
+    : null;
+  const offLogo = cur ? teamLogo(cur.tm) : null;
   const midY = (TOP + BOT) / 2;
 
   const situation = over ? 'FINAL'
@@ -297,28 +317,41 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
   return (
     <div style={{ marginTop: 5, background: 'var(--bg)', border: `1px solid ${accent ? `color-mix(in srgb, ${accent} 55%, var(--bd))` : 'var(--bd)'}`, boxShadow: accent ? `0 0 12px color-mix(in srgb, ${accent} 18%, transparent)` : undefined, borderRadius: 4, padding: '6px 8px 7px', transition: 'border-color .3s ease, box-shadow .3s ease' }}>
       {/* score + clock strip — logos + a football on the possession side */}
-      <div className="mono" style={{ display: 'flex', justifyContent: 'center', gap: 10, alignItems: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', marginBottom: 3 }}>
+      <div className="mono" style={{ position: 'relative', display: 'flex', justifyContent: 'center', gap: 10, alignItems: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', marginBottom: 3 }}>
         {stripTeam(away, awayLogo, ballTm === away)}
         <span style={{ color: 'var(--text)' }}>{score.a}</span>
         <span style={{ color: 'var(--faint)', fontWeight: 400 }}>{over ? 'FINAL' : fmtQClock(Math.max(clock, cur?.c ?? 0))}</span>
         <span style={{ color: 'var(--text)' }}>{score.h}</span>
         {stripTeam(home, homeLogo, ballTm === home)}
+        {/* mirror the field to match your TV broadcast (remembered per game) */}
+        <button onClick={toggleFlip} title="flip the field to match your TV" aria-pressed={flip}
+          style={{ position: 'absolute', right: 0, top: -2, fontSize: 9, fontWeight: 700, color: flip ? 'var(--you)' : 'var(--faint)', background: 'none', border: `1px solid ${flip ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 3, padding: '1px 5px', cursor: 'pointer', lineHeight: 1.4 }}>↔</button>
       </div>
       {/* the field, with a light perspective tilt */}
       <div style={{ perspective: 560, position: 'relative' }}>
         <svg viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', width: '100%', transform: 'rotateX(20deg)', transformOrigin: '50% 100%' }}>
           {/* turf + end zones */}
           <rect x={FX} y={TOP} width={FW} height={BOT - TOP} fill="color-mix(in srgb, var(--you) 5%, var(--surface))" />
-          {/* end zones in each team's brand paint */}
-          <rect x={0} y={TOP} width={EZ} height={BOT - TOP} fill={ezFill(awayCol)} />
-          <rect x={W - EZ} y={TOP} width={EZ} height={BOT - TOP} fill={ezFill(homeCol)} />
-          {/* red-zone glow on the end zone under attack */}
-          {redZone && (
-            <rect x={attacksRight ? W - EZ : 0} y={TOP} width={EZ} height={BOT - TOP}
-              fill="color-mix(in srgb, var(--fx-nuke) 32%, transparent)" style={{ animation: 'bpulse 1.4s ease infinite' }} />
-          )}
-          <text x={EZ / 2} y={midY} fill={ezText(awayCol)} fontSize={9} fontWeight={700} textAnchor="middle" transform={`rotate(-90 ${EZ / 2} ${midY})`} style={{ letterSpacing: '0.2em' }}>{away}</text>
-          <text x={W - EZ / 2} y={midY} fill={ezText(homeCol)} fontSize={9} fontWeight={700} textAnchor="middle" transform={`rotate(90 ${W - EZ / 2} ${midY})`} style={{ letterSpacing: '0.2em' }}>{home}</text>
+          {/* end zones in each team's brand paint (sides swap with ↔ flip) */}
+          {(() => {
+            const ezAwayX = flip ? W - EZ : 0, ezHomeX = flip ? 0 : W - EZ;
+            const label = (x: number, tc: ReturnType<typeof teamColor>, abbr: string) => (
+              <text x={x + EZ / 2} y={midY} fill={ezText(tc)} fontSize={9} fontWeight={700} textAnchor="middle"
+                transform={`rotate(${x < W / 2 ? -90 : 90} ${x + EZ / 2} ${midY})`} style={{ letterSpacing: '0.2em' }}>{abbr}</text>
+            );
+            return (
+              <>
+                <rect x={ezAwayX} y={TOP} width={EZ} height={BOT - TOP} fill={ezFill(awayCol)} />
+                <rect x={ezHomeX} y={TOP} width={EZ} height={BOT - TOP} fill={ezFill(homeCol)} />
+                {redZone && (
+                  <rect x={(flip ? !attacksRight : attacksRight) ? W - EZ : 0} y={TOP} width={EZ} height={BOT - TOP}
+                    fill="color-mix(in srgb, var(--fx-nuke) 32%, transparent)" style={{ animation: 'bpulse 1.4s ease infinite' }} />
+                )}
+                {label(ezAwayX, awayCol, away)}
+                {label(ezHomeX, homeCol, home)}
+              </>
+            );
+          })()}
           {/* yard lines + numbers */}
           {Array.from({ length: 21 }, (_, i) => (
             <line key={i} x1={FX + (i / 20) * FW} y1={TOP} x2={FX + (i / 20) * FW} y2={BOT}
@@ -328,18 +361,34 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
             <text key={i} x={FX + ((i + 1) / 10) * FW} y={BOT - 4} fill="var(--faint)" fontSize={6.5} textAnchor="middle" className="mono">{n}</text>
           ))}
           {/* first-down line */}
-          {!over && fdX != null && <line x1={fdX} y1={TOP} x2={fdX} y2={BOT} stroke="var(--warn)" strokeWidth={1.4} opacity={0.9} />}
-          {/* last-play arc (re-mounts per play → draw animation) */}
+          {!over && fdX != null && <line x1={mx(fdX)} y1={TOP} x2={mx(fdX)} y2={BOT} stroke="var(--warn)" strokeWidth={1.4} opacity={0.9} />}
+          {/* last-play arc (re-mounts per play → draw animation). A completed
+              pass with YAC splits at the catch point: air arc, then a flat
+              run-after line. The offense logo marks the snap; the play ends in
+              a football — or an ✕ for an incompletion. */}
           {arc && (
-            <path key={cur!.pid ?? cur!.c} d={isPassy
-              ? `M ${arc.x1} ${midY} Q ${(arc.x1 + arc.x2) / 2} ${TOP - 6} ${arc.x2} ${midY}`
-              : `M ${arc.x1} ${midY} L ${arc.x2} ${midY}`}
-              fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round"
-              pathLength={1} strokeDasharray={1} style={{ animation: 'fvdraw .55s ease both' }} />
+            <g key={cur!.pid ?? cur!.c}>
+              <path d={isPassy
+                ? `M ${arc.x1} ${midY} Q ${(arc.x1 + (catchX ?? arc.x2)) / 2} ${TOP - 6} ${catchX ?? arc.x2} ${midY}`
+                : `M ${arc.x1} ${midY} L ${arc.x2} ${midY}`}
+                fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round"
+                pathLength={1} strokeDasharray={1} style={{ animation: 'fvdraw .55s ease both' }} />
+              {catchX != null && catchX !== arc.x2 && (
+                <path d={`M ${catchX} ${midY} L ${arc.x2} ${midY}`}
+                  fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round"
+                  pathLength={1} strokeDasharray={1} style={{ animation: 'fvdraw .35s ease .5s both' }} />
+              )}
+              {offLogo
+                ? <image href={offLogo} x={arc.x1 - 5.5} y={midY - 5.5} width={11} height={11} />
+                : <circle cx={arc.x1} cy={midY} r={3} fill={arc.color} />}
+              {incomplete
+                ? <text x={arc.x2} y={midY + 3} fill="var(--fx-nuke)" fontSize={9} fontWeight={800} textAnchor="middle" style={{ animation: 'fvtxt .3s ease .5s both' }}>✕</text>
+                : <text x={arc.x2} y={midY + 2.5} fontSize={7} textAnchor="middle" style={{ animation: 'fvtxt .3s ease .5s both' }}>🏈</text>}
+            </g>
           )}
           {/* line of scrimmage + ball marker (transitions to each new spot) */}
           {ballX != null && !over && (
-            <g style={{ transform: `translateX(${ballX}px)`, transition: 'transform .55s ease' }}>
+            <g style={{ transform: `translateX(${mx(ballX)}px)`, transition: 'transform .55s ease' }}>
               {/* line of scrimmage carries the possession team's color */}
               <line x1={0} y1={TOP} x2={0} y2={BOT} stroke={ballCol?.c ?? accent ?? 'var(--dimstrong)'} strokeWidth={1.4} />
               {/* abbr badge always drawn; the logo (when available) covers it */}
@@ -347,7 +396,9 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
               <text x={0} y={midY + 2.5} fill="var(--text)" fontSize={6} fontWeight={700} textAnchor="middle" className="mono">{ballTm}</text>
               {logo && <image href={logo} x={-10} y={midY - 10} width={20} height={20} style={cur?.sc ? { animation: 'bpulse 1s ease 2' } : undefined} />}
               {/* drive direction in the possession color */}
-              <text x={attacksRight ? 15 : -15} y={midY + 2.5} fill={ballCol?.c ?? 'var(--faint)'} fontSize={8} fontWeight={700} textAnchor="middle">{attacksRight ? '▶' : '◀'}</text>
+              {(() => { const right = flip ? !attacksRight : attacksRight; return (
+                <text x={right ? 15 : -15} y={midY + 2.5} fill={ballCol?.c ?? 'var(--faint)'} fontSize={8} fontWeight={700} textAnchor="middle">{right ? '▶' : '◀'}</text>
+              ); })()}
             </g>
           )}
         </svg>
