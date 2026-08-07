@@ -7,11 +7,10 @@
 //     seats (any client's poll advances it via draft_tick), searchable board.
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PosPill, PlayerImg, Avatar, Img } from '../app/ui';
+import { PosPill, PlayerImg, Avatar } from '../app/ui';
+import { AvatarPicker } from '../app/AvatarPicker';
 import type { Pos } from '../types';
 import { buildDraftPool } from '../data/nativeLeague';
-import { NFL_CODES } from '../data/kdst';
-import { DRIP_AVATARS, dripAvatarUrl } from '../data/dripAvatars';
 import { ADP_2026, ADP_AS_OF } from '../data/adp2026';
 import { PROJ_2026, PROJ_AS_OF } from '../data/proj2026';
 import { statsForSlug } from '../data/players';
@@ -57,43 +56,6 @@ function fmtCountdown(secs: number): string {
   if (secs >= 86400) return `${Math.floor(secs / 86400)}d ${Math.floor((secs % 86400) / 3600)}h`;
   if (secs >= 3600) return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
-}
-
-// ── Avatar picker: a preset gallery (no uploads to host) ─────────────────────
-// First-party Drip art (72 tiles cut from the owner's avatar sheets, served
-// from public/avatars/ on our own domain — no third-party avatar CDN) + the
-// 32 NFL team logos.
-function avatarOptions(): string[] {
-  return [
-    ...DRIP_AVATARS.map(dripAvatarUrl),
-    ...NFL_CODES.map((code) => `https://a.espncdn.com/i/teamlogos/nfl/500/${code}.png`),
-  ];
-}
-
-function AvatarPicker({ title, onPick, onClose }: {
-  title: string; onPick: (url: string | null) => void; onClose: () => void;
-}) {
-  const options = useMemo(() => avatarOptions(), []);
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 420, maxHeight: '75vh', overflowY: 'auto' }}>
-        <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{title}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(52px, 1fr))', gap: 8, marginTop: 12 }}>
-          {options.map((url) => (
-            <button key={url} onClick={() => onPick(url)} title="use this avatar"
-              style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 8, padding: 4, cursor: 'pointer', lineHeight: 0 }}>
-              {/* a CDN that can't be reached shows a dim placeholder, not a broken image */}
-              <Img src={url} size={44} radius={6} fallback={<div style={{ width: 44, height: 44, borderRadius: 6, background: 'var(--surface)', border: '1px dashed var(--bd)' }} />} />
-            </button>
-          ))}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
-          <button onClick={() => onPick(null)} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>remove avatar</button>
-          <button onClick={onClose} className="mono" style={linkBtn}>cancel</button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function Chip({ on, children, onClick }: { on?: boolean; children: React.ReactNode; onClick: () => void }) {
