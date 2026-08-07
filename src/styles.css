@@ -22,6 +22,7 @@ a { color: inherit; }
 @keyframes mburst { 0% { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(0.92); } 100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
 @keyframes nukeburst { 0% { opacity: 0; transform: scale(0.25); } 45% { opacity: 1; transform: scale(1.45); } 70% { transform: scale(0.94); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes fvdraw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes fvtxt { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fvtakeover { 0% { opacity: 0; transform: scale(0.6); } 12% { opacity: 1; transform: scale(1.1); } 20% { transform: scale(1); } 78% { opacity: 1; } 100% { opacity: 0; transform: scale(1); } }
 .fv-txt { animation: slidein .3s ease; }
 

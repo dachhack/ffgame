@@ -294,6 +294,9 @@ export function gameToFeed(summary) {
       yl: yteOf(p?.start, abbrsOf.get(String(p?.start?.team?.id ?? '')) ?? new Set()),
       yl2: yteOf(p?.end ?? p?.start, abbrsOf.get(String(p?.end?.team?.id ?? p?.start?.team?.id ?? '')) ?? new Set()),
       ty, txt: p?.text ?? '',
+      // Yards after catch (receptions only) — lets the field visual split a
+      // completed pass into its air arc + the flat run-after segment.
+      ...(p?.yardsAfterCatch != null && Number.isFinite(Number(p.yardsAfterCatch)) ? { yac: Number(p.yardsAfterCatch) } : {}),
       ...(p?.scoringPlay ? { sc: 1 } : {}),
       ...(p?.isPenalty ? { pen: 1 } : {}),
       ...(p?.isTurnover ? { to: 1 } : {}),
