@@ -2921,10 +2921,14 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // On a live feed the latest ingested play IS the current clock, so "clock
   // reached the last play" would read halftime as FINAL — trust the feed's
   // real game state when present, and never call a pre-late-Q4 clock final.
-  const gSt = gameFeedFor(week, player.team)?.st;
+  const gFeed = gameFeedFor(week, player.team);
+  const gSt = gFeed?.st;
   const gameOver = gSt != null
     ? gSt === 'post'
     : gEnd > 0 ? clock >= gEnd - 1 && gEnd >= 3300 : clock >= 3595;
+  // Chip clock = the game's LAST REAL PLAY, not the window playback clock —
+  // which can overshoot the real game on the live board (read Q4 as "OT").
+  const gClk = gFeed && gFeed.plays.length ? Math.min(clock, gFeed.plays[gFeed.plays.length - 1].c) : clock;
   // Card-table theme: the SAME dense strip, but the physical mini card (image,
   // name, team — with the bank fill, HOT glow, NUKE scorch) floats over it in
   // the headshot's place; the name row keeps only its chips.
@@ -2941,7 +2945,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
       <span style={{ fontWeight: 700, color: 'var(--dimstrong)' }}>{g.away}@{g.home}</span>
       <Img src={teamLogo(g.home)} size={12} radius={2} fallback={<span />} />
       <span style={{ color: 'var(--faint)' }}>·</span>
-      <span style={{ color: 'var(--faint)', fontWeight: 700 }}>{gameOver ? 'FINAL' : fmtGameClock(clock)}</span>
+      <span style={{ color: 'var(--faint)', fontWeight: 700 }}>{gameOver ? 'FINAL' : fmtGameClock(gClk)}</span>
     </div>
   ) : null;
   // On mobile the chip is anchored to two lines (name over tag) so it's always
@@ -3005,7 +3009,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
           {(chip || twin) && nameRow}
           {g && (
             <div className="mono" title="real NFL game · real game clock" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: fs(8.5), fontWeight: 700, color: 'var(--dimstrong)', letterSpacing: '0.02em' }}>
-              {g.away}@{g.home} · {gameOver ? 'FINAL' : fmtGameClock(clock)}
+              {g.away}@{g.home} · {gameOver ? 'FINAL' : fmtGameClock(gClk)}
             </div>
           )}
           {metricChip}
