@@ -463,16 +463,19 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       let mx = 0;
       for (const s of rw.slots) for (const e of s.events) if (e.clock > mx) mx = e.clock;
       if (liveCtx) {
-        // Live board: anchor the window's "now" to the REAL game feed (every
-        // play of every game), not just the slotted players' events — a window
-        // whose picks haven't touched the ball yet must show the real game
-        // clock, not default to a finished game (the Q4-5:00-while-Q1 bug from
-        // the first preseason live-fire).
+        // Live board: the window's "now" is the REAL game feed's progress (every
+        // play of every game) — and ONLY that. Slot events can't anchor it: a
+        // benched lineup has none (the Q4-5:00-while-Q1 bug), and engine
+        // bookkeeping events stamp past regulation, which overshot the clock and
+        // made the battle bar count end-of-window accounting into its live
+        // totals (opponent 18.0 on the bar vs the true 15.0). Slot events are
+        // only the fallback while a window has no feed rows yet.
+        let fm = 0;
         for (const g of gamesInWindow(week, rw.window.id)) {
           const f = gameFeedFor(week, g.home);
-          for (const p of f?.plays ?? []) if (p.c > mx) mx = p.c;
+          for (const p of f?.plays ?? []) if (p.c > fm) fm = p.c;
         }
-        m[rw.window.id] = mx; // 0 = nothing ingested yet → pre-snap clock, not full reveal
+        m[rw.window.id] = fm || Math.min(mx, GAME_SECONDS); // 0 = pre-snap clock, not full reveal
       } else {
         m[rw.window.id] = mx || GAME_SECONDS;
       }
