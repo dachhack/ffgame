@@ -16,17 +16,21 @@ Pre-season pilot hardening + acquisition: engine and league infra are launch-rea
 
 Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function).
 
-## Last worked
+## Last worked (superseded entries below)
+
+2026-08-07 — **First live-fire complete** (preseason CAR@ARI): the full loop — seal, 1h-lead lock, per-window reveal, live ESPN ingest, resolve, effects, window bonus, coin payout — ran end to end on a real NFL game, final 40.0–23.0. Nine live-found defects fixed the same night (PRs #254–#263; the standouts: the pick-cache clobber that could overwrite sealed picks, and ESPN's halftime drive restructuring silently freezing `live_play` via duplicate-key batch rejection — full detail in HANDOFF "First live-fire"). Field visuals overhauled (team-colored end zones, possession logos, TV-flip, YAC + return-split play rendering, window game log). Yahoo developer app APPROVED and `yahoo-oauth` deployed — remaining: `VITE_YAHOO_CLIENT_ID` repo variable + redirect-URI fix, then a first real league connect. New feature spec'd and ready to build: **the Window Pot** (`docs/window-pot.md` + kickoff prompt), v1 behind a per-league flag.
+
+## Previous
 
 2026-07-28 — Access model shipped (0094/0095): standalone solo play (pods/showdowns) is a per-account feature the founder flips (AdminPage FEATURE FLAGS); DFS leagues are commissioner-run — founder approves commissioners (`dfs_commish` flag), they found private DFS leagues (kind='dfs', same salary-board machinery) and distribute invite codes (the invite is the access); drafted-on-site native leagues (incl. mocks) moved off the admin-only "closed testing" gate onto the same model (`native` flag). Earlier: DFS-style team building shipped for pods + showdowns (0092): players build a 9-man squad under a $50k salary cap from a weekly-frozen salary board (weekly projections → salaries; source chain StatHead-weekly-bake → Sleeper live weekly → StatHead season → 2025 actuals); AI seats and no-show humans get a seeded auto-build; random deal removed. Per-game late swap (0093): each player locks 1h before HIS kickoff — frozen picks can't leave the entry, locked games can't be added, everything else swaps through Monday night. Earlier same day: Yahoo live-ready (PR #215), lead alerting (0091, needs one-click function deploy), proj2026.ts re-baked at 416-player depth with Sleeper-id exact joins (StatHead MCP shipped our feedback incl. injury-aware weekly + K/DST). Engagement strategy reframed: ads sell solo play; league adoption is the expansion step.
 
 ## Current blockers
 
-- Fly worker redeploy pending — pod/showdown roster dealing and league tossing don't run until the founder redeploys `server/` (sandbox can't reach Fly or Supabase).
-- Live smoke test of `join_pod` / `join_weekly` needs a real signed-in session on prod (same sandbox egress limitation).
+- `fly deploy` of the worker pending (picks up #262's `ret` emission for live game feeds) — do before the Aug 13 preseason slate, which is the validation run for all the live-fire fixes.
+- Yahoo activation: set the `VITE_YAHOO_CLIENT_ID` repo VARIABLE (+ site rebuild) and fix the Yahoo console redirect URI (`https://dripfantasy.com/` + www — currently the httpbin placeholder); then the first real league connect (JSON mapping unvalidated against live Fantasy data).
 
 ## Next 3 tasks
 
-1. Founder ops pass: redeploy the Fly worker + one-click deploy `lead-alert`, then smoke-test live — solo paths (fresh account → Play solo / This week's showdown → BUILD YOUR SQUAD under the $50k cap → entry saves), one lead end-to-end, and the first real Yahoo league connect (the JSON mapping has never seen live Fantasy data). Also: start a fresh Claude session to bake StatHead weekly projections (this session's tool registry predates get_weekly_projections) — the worker auto-consumes server/data/statheadWeekly2026.json once it lands.
-2. Weekly showdown re-engagement email ("Week N is open — defend your crown") — the recruit→crown→toss loop has no delivery channel yet; can reuse lead-alert's Gmail machinery.
-3. Approve the first DFS commissioners (AdminPage → USERS → FEATURE FLAGS: `dfs_commish`) and flag early solo testers (`solo`) — solo play + DFS creation are now invite-only (0094). Demo CTA stays request-a-code (public solo funnel is gated, so no repoint needed).
+1. **Build the Window Pot v1** (fresh session — `docs/window-pot-kickoff-prompt.md`): ante + blind street + standing auto-call policy + settlement, feature-flagged OFF per league (`pot_ante = 0`); flip on for the test league before Aug 13 and live-fire it on that slate.
+2. Aug 13 preseason slate = regression run for the nine live-fire fixes (lock lead, dedupe ingest, state-driven FINAL, feed-anchored clocks) + first `ret`/`yac` splits on live data. Watch `fly logs` for the new loud `poll game` errors.
+3. Yahoo end-to-end (variable + redirect URI + first league connect), then update the FAQ's "Yahoo landing next" line to fully supported. Carried: showdown re-engagement email; DFS commissioner + solo flag approvals.

@@ -1,6 +1,97 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-07-13 · Build `v0.133.0`_
+_Last updated: 2026-08-07 · Build `v0.139.0`_
+
+## First live-fire — preseason CAR@ARI (v0.139.0, 2026-08-06/07)
+
+The system's first night on a real NFL feed: the full loop (seal → 1h-lead
+lock → per-window reveal → live resolve → effects → window bonus → payout)
+ran end to end on the Hall-of-Fame game, watched live and debugged live.
+**Nine real defects found and fixed the same night** — nearly all at the seam
+between replay assumptions (full game always present; playback clock = truth)
+and live reality (feeds pause, data arrives incrementally, bookkeeping isn't
+gameplay). PRs #254–#263, in found order:
+
+1. **Lock-lead mismatch** — client promises "locks 1h before kickoff", worker
+   locked AT kickoff. Worker now writes `lock_at = first kickoff −
+   config.lockLeadMs` (tick backfill / sync / pods) and migration `0102` moves
+   the `enforce_window_lock` edit gate to kickoff−1h per window. Reveal
+   unchanged (still at each window's own kickoff).
+2. **Hub card showed the wrong matchup** — week-less `myMatchup` returns the
+   LOWEST week, so the card said "PICKS OPEN · WK 1" while week-101 was live.
+   Card now resolves `defaultOpenWeek` first; CTA reads GO TO MATCHUP when
+   live/final.
+3. **Pick-cache clobber (the bad one)** — the board seeded picks from the
+   per-browser store cache and only used server picks when the cache was
+   empty; a stale/cross-account cache could shadow sealed picks AND get
+   auto-saved back over unlocked windows (it ate the founder's lineup;
+   restored by SQL surgery — service role bypasses the lock trigger since
+   `auth.uid()` is null). **Server picks now always win on hydration**
+   (Matchup.tsx). Related trap hit during repair: `enforce_slot_cap` counts
+   10 rows/lineup, and the clobbered save had strewn rows across
+   nonexistent-in-preseason windows (early/late/snf/mnf), eating the cap.
+4. **Live window clock anchored to slotted players' plays** — a benched
+   lineup produced `winMax=0 → GAME_SECONDS`, reading Q1 as "Q4 5:00" with
+   empty logs. Then the inverse: slot BOOKKEEPING events stamp past
+   regulation, overshooting the clock (Q4 read "OT 5:00", and the battle bar
+   aggregated end-of-window accounting into live totals — 18.0 shown vs true
+   15.0). Final form: **the live window clock is the game feed's max play
+   clock, only** (slot events are the pre-feed fallback, capped at
+   regulation); chips/field strip format the last real play's clock.
+5. **FINAL at halftime** — field + slot chips inferred game-over from "shown
+   play has no successor", true whenever a live feed pauses. Migration `0103`
+   adds `game_feed.state` (ESPN `pre|in|post`, written each poll); clients
+   trust it, falling back to a late-Q4 heuristic (`c ≥ 3300`) for baked/old
+   rows.
+6. **Silent live_play freeze at halftime (the best find)** — ESPN
+   restructured drives at the half and listed 5 plays under TWO drives each;
+   duplicate conflict keys make Postgres reject the WHOLE upsert ("cannot
+   affect row a second time") and supabase-js returns errors without
+   throwing, so ingestion froze while game_feed (whole-doc upsert) kept
+   landing and worker logs looked healthy. `pollGame` now **de-dupes on the
+   conflict key** (keeps the last/revised copy) and **checks every write
+   result** (throws → tick logs the real error). Mid-game `fly deploy`
+   backfilled the whole missing half in one tick.
+7. **"0yd pass" log rows** — a QB incompletion lands as a 0-yard `pass` event
+   (adapter row shape); a yardless pass now reads "incomplete pass".
+8. **GAME LOG (window-level)** — new `WindowGameLog`: every ingested play
+   across the window's games from game_feed (already polled 15s for the
+   field), newest first, scoring plays flagged with the running score.
+9. **Window-win bonus confusion** — "40 up top, 35 below" is the +5 bonus;
+   a won window now spells it out under the battle bar:
+   `★ window 35.0 + win bonus 5 = 40.0 toward your week total`.
+
+**Field-visual suite (same night, #256/#257/#260/#262):** team-colored end
+zones + brand text (`src/data/teamColors.ts`, 32 teams + feed-abbr aliases;
+colors stay in mark-free mode, logos don't); score strip logos + 🏈 possession
+marker; bigger team-ringed ball badge, possession-colored LOS + drive arrow;
+per-game **↔ TV-flip** (localStorage, mirrors everything); play-line grammar —
+**offense logo at the snap, arc = ball in the air, flat line = carried, 🏈 at
+the end, red ✕ for incompletions**; completed passes split at the catch via
+ESPN's `yardsAfterCatch` (`GamePlay.yac`), kicks/punts split at the catch via
+the return clause (`GamePlay.ret`, same "for N yards" parse as the retyd
+metric). Week-2 baked feed re-baked with both (`genGameFeed.mjs 2`); other
+baked weeks fall back to plain arcs until re-baked (`1-14`).
+
+**Yahoo:** developer application APPROVED. `yahoo-oauth` function deployed
+(after a 401 hunt: the CLI needs a personal access token `sbp_…` from
+supabase.com/dashboard/account/tokens — project keys 401; a wrong paste also
+overwrote the `SUPABASE_SERVICE_ROLE_KEY` repo secret, since restored).
+Remaining: `VITE_YAHOO_CLIENT_ID` repo VARIABLE + site rebuild activates the
+connect screen; Yahoo console redirect URI must be exactly
+`https://dripfantasy.com/` (+ www variant) — was still the httpbin
+placeholder at last check. First real league connect will shake out the
+never-seen-live-data JSON mapping (`src/data/yahoo.ts`).
+
+**Deploy state:** worker deployed mid-game with #254–#259 (lock lead, yac,
+state column, dedupe). **#262's `ret` emission needs the next `fly deploy`**
+— do it before the Aug 13 preseason slate, which is the validation run for
+everything above.
+
+**Next build: the Window Pot** — ante/raise/call betting on windows, spec'd
+with 15 played-out scenarios in `docs/window-pot.md`; kickoff prompt in
+`docs/window-pot-kickoff-prompt.md`. v1 ships feature-flagged OFF
+(`league.pot_ante = 0`).
 
 ## Floating strip cards (v0.133.0, owner round 3)
 The mini-card ROWS still read airy on wide screens, so the live layout went
