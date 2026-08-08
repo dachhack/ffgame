@@ -44,16 +44,38 @@ create function @extschema@.http_get(uri text) returns @extschema@.http_response
 EOF
 }
 
+# Same story for pg_net (0091's lead-alert poke): not packaged locally, and the
+# probes never exercise an outbound call. Stub net.http_post with pg_net's real
+# signature — 0091 calls it with named arguments, so the names matter.
+stub_pg_net_ext() {
+  local extdir=/usr/share/postgresql/16/extension
+  [ -w "$extdir" ] || { echo "warn: cannot write $extdir — 0091 will fail without pg_net"; return 0; }
+  cat > "$extdir/pg_net.control" <<'EOF'
+comment = 'stub pg_net for scratch probes'
+default_version = '0'
+relocatable = false
+schema = 'net'
+EOF
+  cat > "$extdir/pg_net--0.sql" <<'EOF'
+create function @extschema@.http_post(
+  url text, body jsonb default '{}'::jsonb, params jsonb default '{}'::jsonb,
+  headers jsonb default '{}'::jsonb, timeout_milliseconds int default 5000
+) returns bigint language sql as 'select 0::bigint';
+EOF
+}
+
 $PSQL -d postgres -c 'select 1' >/dev/null 2>&1 || start_cluster
 stub_http_ext
+stub_pg_net_ext
 $PSQL -d postgres -q -c "drop database if exists scratch" -c "create database scratch"
 
 RUN="$PSQL -d scratch -v ON_ERROR_STOP=1 -q"
 $RUN -f scripts/db/supabase-shim.sql 2>/dev/null
-$RUN -c "create schema if not exists extensions;"
+$RUN -c "create schema if not exists extensions;" -c "create schema if not exists net;"
 for f in supabase/migrations/*.sql; do
   $RUN -f "$f" >/dev/null || { echo "MIGRATION FAILED: $f"; exit 1; }
 done
 echo "all migrations applied"
 
 $RUN -f scripts/db/native-league-probes.sql | grep -E "PROBE FAIL|ALL PROBES" || { echo "PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/window-pot-probes.sql | grep -E "PROBE FAIL|ALL POT PROBES" || { echo "POT PROBES FAILED"; exit 1; }

@@ -1,11 +1,14 @@
 # The Window Pot — ante / raise / call on every window
 
-> **Status: SPEC — not built.** Written 2026-08-07, the morning after the first
-> live-fire (preseason CAR@ARI). Pairs with `docs/powerups.md` (the Bets family
-> this extends), `docs/premium-model.md` (the never-pay-to-win line), and the
-> slow-auction machinery in `docs/native-league-plan.md` §3 (0068/0069), which
-> this reuses for async turn-taking. Argue with the scenarios in §6 before
-> anyone writes code.
+> **Status: v1 BUILT — flagged off.** Spec written 2026-08-07, the morning after
+> the first live-fire (preseason CAR@ARI); v1 built 2026-08-08 in migration
+> `0106_window_pot.sql` and shipped with `league.pot_ante = 0` everywhere (see
+> §12 for what shipped and how to flip it on). Pairs with `docs/powerups.md`
+> (the Bets family this extends), `docs/premium-model.md` (the never-pay-to-win
+> line), and the slow-auction machinery in `docs/native-league-plan.md` §3
+> (0068/0069), which this reuses for async turn-taking. §6's scenarios are the
+> acceptance criteria and are asserted one-for-one in
+> `scripts/db/window-pot-probes.sql`.
 
 ## 1. The idea
 
@@ -288,3 +291,63 @@ Deterministic per (league, roster, week) seed, like every other AI behavior.
 - Live-street close at halftime vs end-of-window: halftime chosen so late
   garbage-time can't turn settled pots into coin flips; playtest may disagree.
 - Does the pot cap scale with premium leagues (bigger wallets) or stay flat?
+
+## 12. What v1 shipped (2026-08-08, `v0.140.0`)
+
+**In scope and built:** ante + blind street + standing auto-call policy +
+settlement — S1–S9 and S11–S15. **Not built (deliberately):** the reveal streets
+and the live street (S10, §3.2–3.3) and the AI bidding personality (§8). The
+seams for both are in place: `window_pot.street` already carries the
+`reveal`/`live` domain and the per-street raise counters, but v1 only ever moves
+a pot `blind → closed`.
+
+### The pieces
+
+| Piece | Where |
+|---|---|
+| Schema + every RPC | `supabase/migrations/0106_window_pot.sql` |
+| Scenario probes (S1–S9, S11–S15) | `scripts/db/window-pot-probes.sql`, run by `scripts/db/run-scratch-probes.sh` |
+| Worker hooks (ante at lock, sweep each tick) | `server/src/pot.js`, called from `server/src/lock.js` + `server/src/index.js` |
+| Pot chip, action sheet, standing-policy slider | `src/screens/WindowPot.tsx` (mounted by `WindowBattleBar` in `src/screens/Matchup.tsx`) |
+| Client API bindings | `src/data/liveApi.ts` (`potState` / `potRaise` / `potRespond` / `potSweep` / `setPotAutoCall`) |
+
+### Two implementation notes worth knowing
+
+- **Matched-only is one rule, not four.** A pot's real size is
+  `2 × least(home_in, away_in)`; everything above it is unmatched and returns to
+  whoever bet it. That single line of arithmetic *is* S3's uncalled-bet refund,
+  S5's cap on the cost of sleeping through a clock, S7's short ante, and S12's
+  tie split (2 × matched is always even, so a tie hands each side its own chips
+  back). There is no separate refund path anywhere in the code.
+- **The standing policy lives in its own table**, `pot_policy`, not as
+  `league_membership.pot_auto_call`. It has to be owner-only read — that's the
+  entire point of a hidden number — and `league_membership` carries a
+  league-wide read policy. Postgres has no column-level RLS, and revoking table
+  `SELECT` to re-grant per column would break every existing membership read. A
+  separate table with RLS on and *no* select policy is this repo's established
+  pattern for hidden numbers (`lot_proxy`, `draft_queue`).
+
+### Flipping the flag
+
+The feature is per-league and OFF by default (`league.pot_ante = 0`). There is
+no client write path to `league`, so turn it on from the Supabase SQL editor:
+
+```sql
+-- ON: ◎5 ante per window (the spec default). Takes effect at the NEXT matchup
+-- lock — pots are created by the worker's lock pass, not retroactively.
+update league set pot_ante = 5 where name = 'Your Test League';
+
+-- Optional tunables (defaults shown):
+--   pot_cap 60              -- total coin allowed in one window's pot (◎30 a side)
+--   pot_night_start_min     -- response-clock quiet hours, minutes since midnight ET;
+--   pot_night_end_min       -- NULL falls back to the league's draft quiet hours,
+--                              then to 22:00 → 08:00 ET
+
+-- OFF again: existing pots keep settling (coin already committed must come
+-- back), but no NEW pots are created and no new bets are accepted.
+update league set pot_ante = 0 where name = 'Your Test League';
+```
+
+Worker changes need a `fly deploy`; the migration applies itself on merge to
+`main` (`migrate.yml`). A league left at `pot_ante = 0` sees no trace of any of
+this: no rows, no chip, no coin.

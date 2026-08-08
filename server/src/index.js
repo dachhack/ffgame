@@ -16,6 +16,7 @@ import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt } fro
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues } from './sync.js';
 import { sweepNative } from './native.js';
+import { sweepPots } from './pot.js';
 import { db } from './supabase.js';
 import { ensurePods } from './pods.js';
 import { setRuntimeSlate } from '../../src/data/nflSlate.ts';
@@ -169,6 +170,13 @@ async function tick() {
     }
     log('resolved', done, '/', live.length, 'matchups');
   }
+
+  // Window Pot (0106): expire response clocks, force street closes at kickoff,
+  // and settle finished windows. Runs AFTER resolve so a window settling this
+  // tick pays out of the matchup_state rows resolve just published — the same
+  // scores the +5 window bonus is paid off. Idempotent; a no-op while every
+  // league sits at pot_ante = 0.
+  try { await sweepPots(log); } catch (e) { log('window pot sweep error', e.message); }
 
   // Finalize when the slate is complete.
   if (games.length && games.every((g) => g.completed)) {

@@ -50,7 +50,7 @@ declare r jsonb; lid uuid;
 begin
   -- closed-testing gate: a non-admin may not create a native league
   perform probe_as('b');
-  perform assert_err(create_native_league('X', '2026', 4), 'closed testing', '1a0 non-admin create gated');
+  perform assert_err(create_native_league('X', '2026', 4), 'invite-only', '1a0 non-admin create gated');
   perform probe_as('a');
   perform assert_err(create_native_league('X', '2026', 1), 'team count', '1a team-count gate');
   perform assert_err(create_native_league('X', '2026', 4, 3), 'roster size', '1b rounds gate');
@@ -739,7 +739,7 @@ declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text;
 begin
   -- same closed-testing gate as real native leagues
   perform probe_as('b');
-  perform assert_err(create_mock_draft(4), 'closed testing', '18a non-admin gated');
+  perform assert_err(create_mock_draft(4), 'invite-only', '18a non-admin gated');
 
   -- SNAKE mock: creator + 3 named bots
   perform probe_as('a');
