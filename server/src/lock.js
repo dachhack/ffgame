@@ -8,7 +8,6 @@
 // into an already-kicked-off window, so the sweep's tick cadence is never an
 // integrity window.
 import { db } from './supabase.js';
-import { anteDueMatchups } from './pot.js';
 import { autoLineup } from './engine.js';
 import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS } from '../../src/data/aiLineup.ts';
 import { powerupById } from '../../src/data/powerups.ts';
@@ -170,12 +169,6 @@ export async function lockDueMatchups(now = new Date(), winKicks = null) {
   if (!dueWins || dueWins.size) await q;
   await db().from('matchup').update({ status: 'live' }).in('id', ids);
   try { await materializeAutoLineups(ids, iso, dueWins); } catch (e) { console.error('[lock] materialize auto-lineups', e?.message ?? e); }
-  // Window Pot (0106): ante both sides into every window, AFTER the auto-lineup
-  // pass — that's where an AI seat's wallet gets seeded, and anteing first would
-  // short-ante (S7) a seat that is about to be funded. A no-op for every league
-  // with pot_ante = 0, which is all of them until the flag is flipped by hand.
-  try { await anteDueMatchups(ids, (...a) => console.log('[lock]', ...a)); }
-  catch (e) { console.error('[lock] window pot ante', e?.message ?? e); }
   return ids.length;
 }
 

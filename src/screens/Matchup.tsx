@@ -1444,7 +1444,6 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 rw={rw}
                 week={week}
                 potMatchupId={liveCtx?.matchupId ?? null}
-                potLeagueId={liveCtx?.leagueId ?? null}
                 phase={winPhaseFor(rw.window.id)}
                 realtime={winRt(rw.window.id)}
                 clock={effWinClock(rw.window.id)}
@@ -2126,14 +2125,23 @@ function WindowSectionInner(props: {
   /** Card-table theme: live/final slots stay face-up LiveCards on the felt
    *  instead of dropping to the compact score strips at kickoff. */
   cards?: boolean;
-  /** Window Pot (0106): the LIVE matchup + league this section belongs to, or
-   *  null on the demo/sim boards, which have no pots. Plain strings, so the
-   *  memo comparison below still short-circuits idle windows. */
+  /** Window Pot (0106): the LIVE matchup this section belongs to, or null on the
+   *  demo/sim boards, which have no pots. A plain string, so the memo comparison
+   *  below still short-circuits idle windows. */
   potMatchupId?: string | null;
-  potLeagueId?: string | null;
 }) {
-  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch, preKick, cards, potMatchupId, potLeagueId } = props;
+  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch, preKick, cards, potMatchupId } = props;
   const w = rw.window;
+  // Null unless this is a LIVE matchup in a league with the pot flag on. Every
+  // window's chip shares one poll (the store in WindowPot.tsx).
+  const pot = usePot(potMatchupId ?? null);
+  // Betting closes the instant this window's picks do — kickoff − 1h, the same
+  // lead the lock countdown above uses and the same instant enforce_window_lock
+  // (0102) enforces server-side.
+  const potLockAtMs = (() => {
+    const k = windowKickoffMs(week, w.id);
+    return k == null ? null : k - (testTimelineOn() ? TEST_LOCK_LEAD_MS : 3_600_000);
+  })();
   // Twin Generals: with the buff armed and ≥2 of your Field General QBs in this
   // window, the top two multipliers stack — link those QB spots so you can see
   // which two are paired.
@@ -2339,9 +2347,17 @@ function WindowSectionInner(props: {
         </button>
       )}
 
+      {/* Window Pot (0106): the wager ladder is played BEFORE picks lock, so the
+          chip rides the window section in every phase — not the battle bar,
+          which only exists once something has kicked off. */}
+      {pot && potMatchupId && (
+        <WindowPotChip pot={pot} matchupId={potMatchupId} win={w.id} winLabel={w.label}
+          lockAtMs={potLockAtMs} cards={cards} />
+      )}
+
       {phase !== 'setup' && (
         <WindowBattleBar rw={rw} week={week} clock={clock} wallClock={wallClock} done={done}
-          potMatchupId={potMatchupId} potLeagueId={potLeagueId} cards={cards} />
+          potMatchupId={potMatchupId} />
       )}
 
       {/* Live board: the full game log — EVERY ingested play across this window's
@@ -2487,15 +2503,19 @@ function WindowGameLog({ week, win }: { week: number; win: WindowId }) {
 // aggregate (who's winning the window) as a battle meter; at FINAL it locks to
 // the settled result — WON/LOST, the +bonus points, and the window MVP (the
 // single top-scoring slot, which earns a drip-coin bounty).
-function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId, potLeagueId, cards }: {
+function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId }: {
   rw: ReturnType<typeof buildMatchup>['windows'][number]; week: number; clock: number; wallClock: boolean; done: boolean;
-  potMatchupId?: string | null; potLeagueId?: string | null; cards?: boolean;
+  potMatchupId?: string | null;
 }) {
   const battle = rw.battle;
-  // Window Pot: null unless this is a LIVE matchup in a league with the flag on.
-  // All five bars share one poll (the store in WindowPot.tsx).
+  // Window Pot: the CLOSED pot, rendered next to the window's own equation. The
+  // ladder itself lives on the window section (it's played before picks lock);
+  // all that belongs here is how it ended. Shares the same poll.
   const pot = usePot(potMatchupId ?? null);
   const potWin = pot?.windows.find((x) => x.win === rw.window.id) ?? null;
+  const potOutcome = potWin ? potOutcomeLine(potWin) : null;
+  const potTone = potWin?.winner === 'you' || potWin?.state === 'folded_them' ? 'var(--you)'
+    : potWin?.state === 'split' || potWin?.state === 'void' ? 'var(--dim)' : 'var(--opp)';
   // Live aggregate at the current window clock — sum each slot's running bank.
   let liveYou = 0, liveTheir = 0;
   for (const s of rw.slots) {
@@ -2516,10 +2536,6 @@ function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId, potLe
   const status = done ? (even ? 'EVEN' : leadYou ? '★ WON' : 'LOST') : (even ? 'DEAD EVEN' : leadYou ? 'YOU LEAD' : 'THEY LEAD');
   return (
     <div style={{ margin: '2px 0 9px', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '7px 10px' }}>
-      {pot && potMatchupId && (
-        <WindowPotChip pot={pot} matchupId={potMatchupId} win={rw.window.id}
-          winLabel={rw.window.label} leagueId={potLeagueId ?? null} cards={cards} />
-      )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
         <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', display: 'flex', alignItems: 'center', gap: 5 }}>
           ⚔ WINDOW BATTLE
@@ -2551,9 +2567,9 @@ function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId, potLe
       )}
       {/* The pot rides alongside that equation but is deliberately NOT in it:
           coin in, coin out — a pot never moves a single point. */}
-      {potWin && potWin.state !== 'open' && (
-        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: potWin.winner === 'you' || potWin.state === 'folded_them' ? 'var(--you)' : potWin.state === 'split' ? 'var(--dim)' : 'var(--opp)', marginTop: 4 }}>
-          ◎ {potOutcomeLine(potWin)} — drip-coin only, no points either way
+      {potOutcome && (
+        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: potTone, marginTop: 4 }}>
+          ◎ {potOutcome} — drip-coin only, no points either way
         </div>
       )}
     </div>

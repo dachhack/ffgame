@@ -1,34 +1,43 @@
-# The Window Pot — ante / raise / call on every window
+# The Window Pot — an optional wager ladder on any game window
 
 > **Status: v1 BUILT — flagged off.** Spec written 2026-08-07, the morning after
-> the first live-fire (preseason CAR@ARI); v1 built 2026-08-08 in migration
-> `0106_window_pot.sql` and shipped with `league.pot_ante = 0` everywhere (see
-> §12 for what shipped and how to flip it on). Pairs with `docs/powerups.md`
-> (the Bets family this extends), `docs/premium-model.md` (the never-pay-to-win
-> line), and the slow-auction machinery in `docs/native-league-plan.md` §3
-> (0068/0069), which this reuses for async turn-taking. §6's scenarios are the
+> the first live-fire (preseason CAR@ARI); **redesigned and built 2026-08-08**
+> in migration `0106_window_pot.sql`, shipped with `league.pot_ante = 0`
+> everywhere (see §12 for what shipped and how to flip it on).
+>
+> The redesign, in one line: betting went from **automatic and post-lock** to
+> **opt-in and pre-lock**. Both managers now choose a window and put ◎10 up
+> before it locks, instead of every window being anted for them at lock. That
+> change removed the standing auto-call policy and the quiet-hours response
+> clocks the first draft needed — with an explicit turn and a hard deadline at
+> picks lock, there is nothing left to answer on your behalf.
+>
+> Pairs with `docs/powerups.md` (the Bets family this extends) and
+> `docs/premium-model.md` (the never-pay-to-win line). §6's scenarios are the
 > acceptance criteria and are asserted one-for-one in
 > `scripts/db/window-pot-probes.sql`.
 
 ## 1. The idea
 
-Poker-style betting on each game window, between the two managers of a matchup.
-Both sides **ante** drip-coin into a per-window pot; either side may **raise**;
-the other **calls** or **folds**; the window's winner takes the pot.
+Poker-style betting on a game window, between the two managers of a matchup —
+but only when both of them want it. One puts **◎10** on a window; the other
+**matches** it or ignores it. If it's matched, they trade **wagers** back and
+forth until that window's **picks lock**, and the window's winner takes the pot.
 
-Why this belongs in Drip specifically: betting rounds are an *information*
-game, and this product already has poker's two ingredients — **hidden hands**
-(sealed lineups) and **staged reveals** (each window flips at its own kickoff).
-A raise on SNF is a claim about a sealed slot the opponent can't see… or a
+Why this belongs in Drip specifically: betting rounds are an *information* game,
+and this product already has poker's load-bearing ingredient — **hidden hands**
+(sealed lineups). The entire ladder is played before a single pick is revealed.
+A wager on SNF is a claim about a sealed slot the opponent can't see… or a
 bluff. No other fantasy product can offer that, because no other product has
 sealed picks.
 
 ### Design goals
-1. Every window has stakes by default (the ante), replacing "the +5 bonus
-   isn't exciting" with chips physically on the felt.
-2. Betting deepens the hidden-information core — signaling, bluffing, reading.
-3. Zero new pressure on passive managers: standing policies answer for you.
-4. The fantasy layer is untouched: **folding concedes coin, never points.**
+1. **Opt-in, always.** A manager who never taps never bets, is never charged,
+   and never sees a pot. Nothing is automatic.
+2. Betting deepens the hidden-information core — signalling, bluffing, reading.
+3. Turn-taking is explicit, so nobody has to sit watching the app: your move is
+   waiting for you whenever you open it, and the only deadline is picks lock.
+4. The fantasy layer is untouched: **backing out concedes coin, never points.**
 
 ### Hard guardrails
 - **Coin in, coin out.** Pots pay drip-coin only — never points, never roster
@@ -44,288 +53,285 @@ sealed picks.
 
 | Term | Meaning |
 |---|---|
-| **Pot** | Per (matchup, window) coin pool. Winner of the window takes it at window final. |
-| **Ante** | Auto-contribution from both wallets when the matchup locks. Default **◎5** per window (league-tunable; `0` disables the feature for a league). |
-| **Street** | A phase in which raising is open. Streets follow the reveal structure (§3). |
-| **Raise** | Add ◎N to the pot; the opponent owes a response. Min step ◎5. |
-| **Call** | Match the outstanding raise. Pot grows symmetrically. |
-| **Fold** | Concede the pot immediately. Your window still scores points normally. |
-| **Check** | Do nothing. Perfectly fine; ante-only pots are the default outcome. |
-| **Standing policy** | A hidden per-manager number: "auto-call raises up to ◎N per window." The async answer (§4). |
-| **Effective stack** | `min(your bank, their bank, pot cap − pot)` — the most any raise can demand (§6, All-in). |
+| **Pot** | Per (matchup, window) coin pool. Exists only because both managers anted into it. |
+| **Ante** | The ◎10 entry fee. One manager leads it, the other matches — and matching is what makes the pot real. League-tunable; `0` disables the feature for a league. |
+| **Leader** | Whoever put the ◎10 up first. They get first action once it's matched. |
+| **Wager** | Put ◎N up on your turn; the opponent owes a response. Min step ◎5. |
+| **Call** | Match the outstanding wager. |
+| **Raise** | Call, then open a new wager in the same move. |
+| **Check** | Pass your turn without committing anything. Perfectly fine — an ante-only ◎20 pot is a real outcome. |
+| **Back out** | Concede the pot. Costs you **exactly your ante**; every wagered chip goes back to whoever bet it. Your window still scores normally. |
+| **Effective stack** | `min(your bank, their bank, side cap − the larger side's total)` — the most any wager can put up (§6, table stakes). |
 
 ### Economy sizing (defaults, all league-tunable)
-- Ante **◎5** × 5 windows = ◎25/week committed automatically — half the weekly
-  stipend (◎50), before signature-play (+5s), MVP (◎15), and unopposed (◎15)
-  income. Meaningful, not ruinous.
-- **Pot cap ◎60 per window** (each side ≤ ◎30 in) — a maxed pot swings about
-  one power-up's worth of coin. Keeps bankroll oppression impossible.
-- Max **2 raises per side per street** — betting stays punchy, not a grind.
+- Ante **◎10** — a fifth of the weekly stipend (◎50), and only on windows you
+  chose. A manager who plays every window of a five-window week has committed
+  ◎50 of antes, which is why it has to be opt-in rather than automatic.
+- **Pot cap ◎120 per window** (each side ≤ ◎60 in, of which ◎10 is the ante) —
+  ◎50 of ladder a side. Keeps bankroll oppression impossible.
 
-## 3. Streets — when betting is open
+## 3. Timing — when betting is open
 
-Betting on window **W** maps onto the existing lock/reveal timeline:
+Betting on window **W** runs from the moment the matchup exists until **W's
+picks lock**, which is `W's first kickoff − 1h` — the same instant
+`enforce_window_lock` (0102) stops accepting lineup edits, and deliberately the
+same expression, so the two can never drift apart.
 
-1. **Blind street** — from matchup lock (first kickoff − 1h) until W's first
-   kickoff − 30 min. You know only your own lineup. Classic bluff country.
-2. **Reveal streets** — re-opened for 1h each time an *earlier* window kicks
-   off (its picks flip face-up). Thursday's reveal is the flop: you've seen
-   part of their hand and can re-price your SNF confidence.
-3. **The live street** — while W itself is live, until the earlier of W's last
-   game reaching halftime or the pot capping. Raising with the board showing:
-   your drip bank is fat and visible, and so is your nerve.
-4. **Close** — betting on W ends at W's halftime. Settlement at window final.
+That means the whole ladder is played **blind**: nothing has kicked off, nothing
+has been revealed, and neither manager has seen a single one of the other's
+picks. It also means a late-week window (SNF, MNF) has days of betting while a
+Thursday window has only until Wednesday night — which is honest, because that's
+exactly how much time each manager has to think about that lineup.
 
-**Last-raise cutoff:** no new raise may be OPENED in the final 30 min before a
-street's hard close (kickoff or halftime) unless the opponent's standing
-policy already covers it. A raise your opponent has no realistic window to
-answer is a snipe, not a bet — the cutoff makes it structurally impossible.
+**At the close, three things can happen:**
+- An offer nobody matched → **voids**. The ◎10 goes home. No contest, no winner.
+- A live ladder → **freezes**. Any unmatched chips (one side's unanswered wager)
+  go home, so the pot that rides into the window is exactly symmetric and every
+  chip left in it is genuinely at risk.
+- A pot already ended by a back-out → already settled, nothing to do.
 
-**Response clocks:** a raise starts a response clock — **2h, quiet-hours
-aware** (reuses the slow-auction `awake_deadline` arithmetic: clocks skip the
-configured overnight hours, so nothing expires while a league sleeps). On the
-live street the clock is **10 min** (both parties are presumed watching; the
-standing policy answers for anyone who isn't). Clock expiry → standing policy
-answers; policy insufficient → **auto-fold** (§6).
+**No clocks.** Letting a wager sit unanswered is a legal answer, not a
+forfeit — it simply returns at the close. Silence is never punished, so there is
+nothing to auto-fold and nothing to schedule around quiet hours.
 
-## 4. Standing policy — the async backbone
+## 4. Turn order — the async backbone
 
-Every manager has `pot_auto_call` (default **◎10**): "call raises for me up to
-this much per window." Set in the same UI family as the slow-auction hidden
-max bids, and works identically — a hidden number the opponent never sees.
+Once the ante is matched the pot is **live** and the **leader acts first**. Only
+the manager whose turn it is may act, and the turn passes on every move:
 
-- Raise ≤ remaining policy allowance → **instant auto-call**. Feels live even
-  when the opponent is asleep.
-- Raise beyond allowance → response clock starts; the manager gets the push/
-  UI prompt to call, re-raise, or fold by hand.
-- Clock expires unanswered → auto-fold (the raiser takes the pot as it stood
-  BEFORE the unanswered raise — see §6, "expired clock").
+| Facing | You may |
+|---|---|
+| Nothing owed | **check** (pass) · **wager ◎N** · **back out** |
+| A wager of ◎N | **call ◎N** · **raise** (call ◎N, then open ◎M) · **back out** |
 
-**Fair-play rule:** if the opponent seat is AI-controlled with no bidding
-policy, or an unenrolled/no-show manager, the window is **ante-only** — raises
-are disabled. You cannot farm an empty chair. (AI seats WITH the bidding
-personality enabled — §8 — count as having a policy.)
+Rinse and repeat until picks lock. Two checks in a row don't end anything — the
+ladder stays open, and either of you can still open a wager later in the week.
+
+The strict turn is also the concurrency answer: every mutation takes the
+per-matchup advisory lock (the same serialization as draft picks), so two
+managers tapping at once serialize and the second one finds the turn already
+passed. No corrupted pots, no double-counts.
+
+**Fair-play rule:** if the opponent seat is AI-controlled or an unenrolled
+no-show, the ante is refused outright — nobody could ever answer it, so there is
+no point tying up ◎10 on an offer that could only void. You cannot farm an empty
+chair. (AI seats graduate to full participation when the bidding personality
+ships — §8.)
 
 ## 5. Settlement
 
-At window final (the same resolve pass that pays the +5 bonus and MVP coin):
-- Win → pot credits the winner's wallet (`credit_wallet`, idempotent key
-  `pot:<matchup>:<window>`; re-resolves can never double-pay).
-- **Dead-even window → split**; odd chip goes to the away/lower roster id
-  (deterministic, documented, boring on purpose).
-- A fold settles **immediately** (pot to the non-folder) — no waiting for the
-  window to finish. The battle bar shows `POT ◎20 → taken (they folded)`.
-- Every ante/raise/call is **debited at commit time** (`spend_from_wallet`,
-  idempotent per action id) — committed money leaves the bank the moment it
-  enters the pot, exactly like parallel-auction committed budgets (0069), so
-  you can never promise coin you've since spent in the shop.
+There are exactly three ways a pot ends.
+
+**Backing out** settles immediately — no waiting for the games. The folder hands
+over **exactly their ◎10 ante**, and both managers get every wagered chip back,
+however deep the ladder went. The battle bar shows `THEY BACKED OUT → +◎10`.
+
+**Void** — nobody matched the offer by picks lock. Every chip goes home; nobody
+wins anything.
+
+**The window's final** (the same resolve pass that pays the +5 bonus and MVP
+coin) — the winner's wallet takes the whole frozen pot (`credit_wallet`,
+idempotent, so re-resolves can never double-pay). A **dead-even window splits**:
+each side gets its own half back.
+
+Every ante, wager and call is **debited at commit time** (`spend_from_wallet`,
+idempotent per action) — committed money leaves the bank the moment it enters
+the pot, exactly like parallel-auction committed budgets (0069), so you can
+never promise coin you've since spent in the shop.
+
+### The consequence worth stating out loud
+
+Because backing out costs a flat ◎10, **the wagers are only truly at risk after
+picks lock.** Before then, a call is reversible for the price of the ante. That
+makes the ladder a *commitment ratchet* rather than a bluff-caller: the live
+question isn't "are you bluffing?" so much as "will you still be here at lock?",
+and the coin at stake is a running statement of how much each of you believes in
+a lineup neither can see. Founder's explicit call (2026-08-08) over the
+poker-standard alternative of forfeiting everything you had matched.
 
 ## 6. Scenarios, played out
 
-The heart of the spec. Every rule above earns its keep here.
+The heart of the spec. Every rule above earns its keep here. All of these are
+asserted in `scripts/db/window-pot-probes.sql`.
 
 **S1 · Nobody does anything (the default week).**
-Both ante ◎5 at lock. No raises. Window finals → winner +◎10 (net +5).
-A tie splits it back. The feature never demanded a single tap.
+No taps, no pots, no rows, no coin. The feature is invisible to a manager who
+isn't interested, and to a whole league that isn't.
 
-**S2 · The bluff.**
-A raises ◎15 on SNF during the blind street; A's SNF slot is actually weak.
-B's policy (◎10) doesn't cover it → B is prompted. B folds → A takes the
-◎10+◎15 pot* immediately, and B never learns whether it was a bluff — the
-sealed pick reveals at kickoff, but by then the coin has moved. (*See S3 for
-what "the pot" contains mid-raise.)
+**S2 · The offer nobody picks up.**
+A puts ◎10 on SNF. B never answers. At SNF's picks lock the pot **voids** and
+A's ◎10 goes straight back. Ignoring an offer is free and costs B nothing — the
+ante only becomes a stake when somebody agrees it is one.
 
-**S3 · What's in the pot when someone folds mid-raise?**
-Antes ◎5+◎5. A raises ◎15 (A has now committed ◎20). B folds. B loses only
-the ante; A's raise **returns to A** and A takes both antes → A nets +◎5, B
-nets −◎5. Rationale: in heads-up poker an uncalled bet is returned — you win
-what was *matched*, not what you merely offered. Prevents "raise huge, win
-huge from a fold" farming; a fold always costs the folder exactly their
-matched contribution (usually just the ante).
+**S3 · The handshake.**
+A puts ◎10 on SNF; B matches. The pot is live at ◎20 and **A acts first**,
+because A led. B cannot act until A does — not even to check.
 
-**S4 · Auto-call, exactly on the line.**
-B's policy is ◎10. A raises ◎10 → instant auto-call, pot ◎30, B's remaining
-policy for this window is ◎0. A raises ◎10 again (street allows 2 raises) →
-policy exhausted → B prompted; clock runs. Policy is a per-window allowance,
-not per-raise — otherwise two ◎10 raises would sneak past a "◎10 max" intent.
+**S4 · The ladder.**
+A wagers ◎20. B calls and raises ◎20 in one move. A calls. Either may keep
+going; the ◎120 cap (◎60 a side) is what eventually stops them, and the UI's
+slider stops there too.
 
-**S5 · Expired clock.**
-A raises ◎20 beyond B's policy. B never responds (2h quiet-hours-aware clock
-expires). **Auto-fold**: per S3, B loses their matched contribution to that
-point, A's unanswered ◎20 returns, A takes the matched pot. The prompt UI and
-push notification make silence a choice, and the S3 refund rule caps the
-damage of sleeping through it at the already-matched amount.
+**S5 · The bluff.**
+A wagers ◎20 on SNF; A's SNF slot is actually weak. B backs out → A takes B's
+◎10 ante, both sides' wagered chips return, and B never learns whether it was a
+bluff. The sealed pick reveals at kickoff, but by then the coin has moved.
 
-**S6 · All-in (one side is nearly broke).**
-A has ◎200 banked; B has ◎12 (spent big in the shop). Effective stack =
-min(bank, bank, cap−pot) → **no raise may demand more than B can match**
-(heads-up table-stakes: bet only what the shorter stack can call — no side
-pots, ever). A "raise all-in ◎12" is legal and dramatic; a ◎50 raise against
-B simply isn't offerable. The UI shows the raise slider maxing at the
-effective stack, unexplained bankroll privacy preserved (B's exact balance
-isn't shown — the slider just stops; "table stakes" is the tooltip).
+**S6 · Backing out, deep in.**
+Antes ◎10+◎10. A wagers ◎20, B calls, A wagers ◎20 more. B backs out. **B is out
+exactly ◎10** — their called ◎20 comes back — and A is up exactly ◎10, with
+their ◎40 of wagers returned. However tall the ladder, backing out costs the
+ante and nothing else.
 
-**S7 · Can't afford the ante.**
-Wallet < ◎5 at matchup lock (possible after a shop spree — the AI budget pass
-seeds wallets, but humans can zero out). Options considered:
-- ~~Skip the ante, window has no pot~~ — punishes the opponent, invites
-  strategic poverty ("spend to zero so my windows are ante-free").
-- ~~Debt / negative wallet~~ — new failure states everywhere, no.
-- **Chosen: short ante.** You ante what you have (◎0 is legal). The pot is
-  asymmetric; if you WIN the window you take only *matched* coin (your ◎0
-  matches ◎0 of theirs — their unmatched ante returns), if you lose they take
-  your short ante. Raising requires a positive effective stack, so a broke
-  manager can check/fold but not raise. Poverty is survivable, never
-  advantageous, and self-heals at next week's stipend.
+**S7 · The unanswered wager.**
+A wagers ◎30 forty minutes before picks lock. B doesn't get to it. At the close
+the ◎30 goes back to A and the ◎20 of antes rides to the final. Nobody folded,
+so nobody forfeits — a wager the opponent had no realistic window to answer
+simply doesn't happen.
 
-**S8 · Both raise "simultaneously."**
-A and B tap raise within the same second. All pot mutations take the
-per-matchup advisory lock (same serialization as draft picks): first write
-wins and becomes the raise; the second arrives against a changed pot and
-comes back to its author as "pot changed — your raise is now a re-raise of
-◎N, confirm?" No corrupted pots, no double-counts.
+**S8 · Both act "simultaneously."**
+A and B tap within the same second. All pot mutations take the per-matchup
+advisory lock: the first write wins and passes the turn; the second arrives
+against a pot where it is no longer that manager's move and is refused cleanly.
 
-**S9 · Raise pending when the street hard-closes.**
-A raises 40 min before kickoff (legal — before the 30-min cutoff); B's clock
-would run past kickoff. The street's hard close **forces resolution at
-close**: policy covers it → auto-call; else → auto-fold per S5/S3. A raise
-can never straddle the reveal (nobody gets to answer a blind-street raise
-with post-reveal information).
+**S9 · Table stakes (one side is nearly broke).**
+A has ◎190 banked; B has ◎12 after the ante. Effective stack =
+`min(bank, bank, side cap − in)` → **no wager may put up more than B can
+cover** (heads-up table stakes: no side pots, ever). A "wager all-in ◎12" is
+legal and dramatic; a ◎50 wager against B simply isn't offerable. The slider
+maxes at the effective stack, unexplained — bankroll privacy preserved (B's
+exact balance isn't shown; "table stakes" is the tooltip).
 
-**S10 · The live-street hero call.**
-W is live; A's drip bank visibly leads 22–9. A raises ◎20 ("pay to see the
-ending"). B has watched their own SNF stud warming up for a 4th-quarter
-comeback script and CALLS. Everything settles at window final as usual. This
-is the moment the feature exists for — chips moving while the board burns.
-Live raises ride the existing Realtime channel; the 10-min clock + standing
-policy covers a manager who put the phone down.
+**S10 · Can't afford the ante.**
+Wallet under ◎10 at the moment you tap → the ante is refused, plainly, before
+anything is charged. There is no short ante and no debt: an opt-in entry fee you
+can't cover is simply an offer you don't make this week. It self-heals at next
+week's stipend.
 
 **S11 · The empty chair.**
-B's seat is AI-without-personality or an unenrolled no-show. Ante-only (§4
-fair-play): pots exist (the ambient stakes stay) but no raising. Prevents
-ante/fold farming against nobody. When the AI bidding personality ships (§8),
-AI seats graduate to full participation and this rule applies only to
-unenrolled humans.
+B's seat is AI or an unenrolled no-show. The ante is refused up front — nobody
+could answer it. Prevents ante/fold farming against nobody, and doesn't strand
+A's ◎10 on an offer that could only ever void.
 
 **S12 · Tie window.**
-DEAD EVEN happens (it did in the very first live final's battle bar copy).
-Pot splits; odd chip to the away side. With S3's matched-only rule the pot is
-always even unless a short ante (S7) made it asymmetric — a tie there returns
-each side's own contribution.
+DEAD EVEN happens (it did in the very first live final's battle bar copy). The
+pot was frozen symmetric at picks lock, so a tie hands each side its own half
+back — nobody gains, nobody loses.
 
 **S13 · Resolve re-runs / worker restarts.**
-The worker re-resolves matchups every tick and after restarts. All pot debits
-and credits carry idempotency keys (`pot:<matchup>:<window>:<action-seq>`), so
-replays are no-ops — same posture as every other wallet mutation in 0025/0035.
+The worker re-resolves matchups every tick and after restarts. Every debit and
+payout carries an idempotency key, so replays are no-ops — same posture as every
+other wallet mutation in 0025/0035.
 
 **S14 · Mulligan'd / edited lineups.**
-Lineup edits before a window's lock don't touch the pot — you bet on the
+Lineup edits before the window's lock don't touch the pot — you bet on the
 window, not on a specific slot. Nothing to reconcile.
 
 **S15 · Preseason (one-window weeks).**
-Everything works at n=1 window; the ante is a single ◎5 and streets 2 (reveal)
-don't exist. Good first live-fire target — the mechanic's smallest honest form.
+Everything works at n=1 window: one optional ◎10 offer, one ladder, one
+settlement. Good first live-fire target — the mechanic's smallest honest form.
 
-## 7. Data model + RPCs (sketch)
+## 7. Data model + RPCs
 
 ```
-window_pot        matchup_id · game_window · pot_you int · pot_them int ·
-                  state (open|folded_you|folded_them|settled|split) ·
-                  street (blind|reveal|live|closed) · raise_pending jsonb ·
-                  raise_deadline timestamptz · updated_at
-pot_action        id · matchup_id · game_window · app_user_id · seq int ·
-                  kind (ante|raise|call|fold|auto_call|auto_fold|settle) ·
-                  amount int · created_at        -- the audit log the UI renders
-league_membership.pot_auto_call int default 10   -- standing policy (hidden)
-league.pot_ante int default 5                    -- 0 disables per league
+window_pot   matchup_id · game_window · leader (home|away) ·
+             home_ante · away_ante · home_bet · away_bet ·
+             state (offered|live|locked|void|folded_home|folded_away|settled|split) ·
+             turn (home|away) · owed int · seq int · winner · settled_at
+pot_action   id · matchup_id · game_window · seq · side · roster_id ·
+             app_user_id · kind · amount · created_at   -- the log the UI renders
+league.pot_ante int default 0    -- 0 disables per league; 10 = the entry fee
+league.pot_cap  int default 120  -- ◎60 a side
 ```
 
-RPCs (all `security definer`, advisory-locked per matchup, wallet mutations
-via existing `spend_from_wallet` / `credit_wallet` with idem keys):
-- `pot_ante_all(matchup)` — worker calls at lock; short-antes per S7.
-- `pot_raise(matchup, win, amount)` — validates street window, cutoff, raise
-  count, effective stack (S6); starts the response clock; instant-resolves
-  against the opponent's policy when covered.
-- `pot_respond(matchup, win, action)` — call / re-raise / fold.
-- `pot_sweep()` — worker tick: expire clocks (S5), force street closes (S9),
-  settle finals (S13). Client polls can call it too (any-member-advances,
-  like `draft_tick`).
+The ante is banked apart from the wagers because backing out forfeits only the
+ante — the two can never be added together at rest.
 
-RLS: both participants read `window_pot` and `pot_action`; `pot_auto_call` is
-owner-only (the hidden number). Writes RPC-only.
+RPCs (all `security definer`, advisory-locked per matchup, wallet mutations via
+the existing `spend_from_wallet` / `credit_wallet` with idem keys):
+- `pot_ante(matchup, win)` — lead the offer, or match the one sitting there.
+- `pot_act(matchup, win, action, amount)` — check · wager · call · raise · fold.
+- `pot_sweep(matchup)` — void unmatched offers and freeze live ladders at picks
+  lock, settle finished windows. The worker's tick and any participant's poll
+  both call it (any-member-advances, like `draft_tick`).
+- `pot_state(matchup)` — one-shot poll, oriented to the caller.
+
+RLS: both participants read `window_pot` and `pot_action`; writes are RPC-only.
 
 ## 8. AI bidding personality (v3)
 
 The slow-auction value model (0068) already prices players; a window version
-prices lineups: AI raises when its projected window total comfortably leads,
-calls proportionally to closeness, folds heavy dogs — **plus a seeded bluff
-rate (~15% of blind streets)** so its raises can't be read as pure signal.
-Deterministic per (league, roster, week) seed, like every other AI behavior.
+prices lineups: AI antes when it likes a window, wagers when its projected total
+comfortably leads, calls proportionally to closeness, backs out of heavy
+dogs — **plus a seeded bluff rate (~15%)** so its wagers can't be read as pure
+signal. Deterministic per (league, roster, week) seed, like every other AI
+behavior.
 
 ## 9. UI
 
-- **Battle bar** grows a pot chip: `POT ◎20` with the felt-chip art in card
-  theme; tapping opens the action sheet (raise slider capped at effective
-  stack / call / fold, street + clock shown).
-- Raises land as felt animations (chips slide in) + a log line in the duel
-  feed: `“They raised ◎15 on SNF”` — public by design; amounts are the signal.
-- Settlement rides the existing final-state presentation: pot chips slide to
-  the winner next to the `★ window + bonus = week` equation line.
-- Standing policy lives next to the slow-auction max-bid setting.
+- Each window section grows a **pot chip** — on the window itself, not the
+  battle bar, because the ladder is played while lineups are still being built.
+  Untouched windows read `WINDOW POT · PUT ◎10 ON THIS WINDOW →`; a live one
+  reads `POT ◎50 · YOUR MOVE →` and pulses when the ball is in your court.
+- Tapping opens the action sheet: the pot, whose move it is, the countdown to
+  picks lock, and the moves available right now (ante / match / check / wager /
+  call / raise / back out). The wager slider maxes at the effective stack.
+- Backing out asks for confirmation and spells out the cost: your ante, and
+  nothing else.
+- Wagers land as a log line in the duel feed: `"They wagered ◎15 on SNF"` —
+  public by design; amounts are the signal.
+- Settlement rides the existing final-state presentation, next to the
+  `★ window + bonus = week` equation line and explicitly not part of it.
 
 ## 10. Rollout
 
 1. Feature-flag per league (`pot_ante > 0`), default OFF; pilot leagues opt in.
-2. **v1** = ante + blind street + standing policy + settlement (S1–S9, S12–S15).
-3. **v2** = reveal streets + live street (S10) over Realtime.
-4. **v3** = AI personality (§8) → retire the S11 ante-only restriction for AI.
-5. Analytics: `pot_raise`, `pot_fold`, `pot_auto_call`, pot sizes, fold rates —
-   the tuning loop for ante size, caps, and the bluff meta.
+2. **v1** = the opt-in ante + the wager ladder + settlement (S1–S15).
+3. **v2** = live-street betting after kickoff, over Realtime, if playtesting
+   wants it — v1 deliberately closes everything at picks lock.
+4. **v3** = AI personality (§8) → retire the S11 empty-chair restriction for AI.
+5. Analytics: offers made / matched / ignored, ladder depth, back-out rate, pot
+   sizes — the tuning loop for the ante, the cap, and the bluff meta.
 
 ## 11. Open questions (argue here)
 
-- Ante ◎5 vs ◎10 — is 10% of stipend per window ambient enough, or timid?
-- Should fold reveal ANYTHING (e.g. "folded pre-reveal") in the season stats?
-  Bluff economies need memory: a `folds forced / bluffs shown` tally per rival
-  could be the best trash-talk surface in the game — or too much bookkeeping.
-- Live-street close at halftime vs end-of-window: halftime chosen so late
-  garbage-time can't turn settled pots into coin flips; playtest may disagree.
+- **The flat back-out cost is the one to watch.** Because it's fixed at the
+  ante, a call is reversible until picks lock, so the ladder measures conviction
+  rather than pricing risk. If playtesting finds managers calling everything and
+  bailing, the fix is to make backing out forfeit what you'd matched (the
+  poker-standard rule) — a change confined to `pot_close`'s `'fold'` branch.
+- Ante ◎10 vs ◎5 — is a fifth of the stipend the right price of entry?
+- Should backing out leave a trace in season stats? Bluff economies need memory:
+  a `back-outs forced / bluffs shown` tally per rival could be the best
+  trash-talk surface in the game — or too much bookkeeping.
+- Should betting reopen once a window is live, with the board showing (the old
+  §3 "live street")? Cut from v1 to keep the whole ladder blind.
 - Does the pot cap scale with premium leagues (bigger wallets) or stay flat?
 
 ## 12. What v1 shipped (2026-08-08, `v0.140.0`)
 
-**In scope and built:** ante + blind street + standing auto-call policy +
-settlement — S1–S9 and S11–S15. **Not built (deliberately):** the reveal streets
-and the live street (S10, §3.2–3.3) and the AI bidding personality (§8). The
-seams for both are in place: `window_pot.street` already carries the
-`reveal`/`live` domain and the per-street raise counters, but v1 only ever moves
-a pot `blind → closed`.
-
-### The pieces
+**Built:** the opt-in ◎10 ante, the turn-based wager ladder, the picks-lock
+close, and settlement — every scenario in §6. **Not built:** live-street betting
+after kickoff (§10.3) and the AI bidding personality (§8).
 
 | Piece | Where |
 |---|---|
 | Schema + every RPC | `supabase/migrations/0106_window_pot.sql` |
-| Scenario probes (S1–S9, S11–S15) | `scripts/db/window-pot-probes.sql`, run by `scripts/db/run-scratch-probes.sh` |
-| Worker hooks (ante at lock, sweep each tick) | `server/src/pot.js`, called from `server/src/lock.js` + `server/src/index.js` |
-| Pot chip, action sheet, standing-policy slider | `src/screens/WindowPot.tsx` (mounted by `WindowBattleBar` in `src/screens/Matchup.tsx`) |
-| Client API bindings | `src/data/liveApi.ts` (`potState` / `potRaise` / `potRespond` / `potSweep` / `setPotAutoCall`) |
+| Scenario probes | `scripts/db/window-pot-probes.sql`, run by `scripts/db/run-scratch-probes.sh` |
+| Worker sweep (close at lock, settle at final) | `server/src/pot.js`, called from `server/src/index.js` |
+| Pot chip + action sheet | `src/screens/WindowPot.tsx`, mounted per window by `src/screens/Matchup.tsx` |
+| Client API bindings | `src/data/liveApi.ts` (`potState` / `potAnte` / `potAct` / `potSweep`) |
 
 ### Two implementation notes worth knowing
 
-- **Matched-only is one rule, not four.** A pot's real size is
-  `2 × least(home_in, away_in)`; everything above it is unmatched and returns to
-  whoever bet it. That single line of arithmetic *is* S3's uncalled-bet refund,
-  S5's cap on the cost of sleeping through a clock, S7's short ante, and S12's
-  tie split (2 × matched is always even, so a tie hands each side its own chips
-  back). There is no separate refund path anywhere in the code.
-- **The standing policy lives in its own table**, `pot_policy`, not as
-  `league_membership.pot_auto_call`. It has to be owner-only read — that's the
-  entire point of a hidden number — and `league_membership` carries a
-  league-wide read policy. Postgres has no column-level RLS, and revoking table
-  `SELECT` to re-grant per column would break every existing membership read. A
-  separate table with RLS on and *no* select policy is this repo's established
-  pattern for hidden numbers (`lot_proxy`, `draft_queue`).
+- **The deadline is not a copy of the pick-lock rule, it IS the pick-lock rule.**
+  `pot_lock_at()` is literally `window_kickoff(week, win) - interval '1 hour'`,
+  the same expression `enforce_window_lock` enforces. A future change to the lock
+  lead moves both at once, and there is no second place to remember.
+- **The ante is stored apart from the wagers** (`home_ante` / `home_bet`) purely
+  because backing out forfeits only the ante. Keeping them separate at rest means
+  the fold payout is arithmetic rather than reconstruction, and the flat-cost rule
+  can't drift if the ladder logic changes around it.
 
 ### Flipping the flag
 
@@ -333,18 +339,14 @@ The feature is per-league and OFF by default (`league.pot_ante = 0`). There is
 no client write path to `league`, so turn it on from the Supabase SQL editor:
 
 ```sql
--- ON: ◎5 ante per window (the spec default). Takes effect at the NEXT matchup
--- lock — pots are created by the worker's lock pass, not retroactively.
-update league set pot_ante = 5 where name = 'Your Test League';
+-- ON: ◎10 entry fee. Takes effect immediately — pots are created by managers
+-- tapping, not by any scheduled pass, so there is nothing to wait for.
+update league set pot_ante = 10 where name = 'Your Test League';
 
--- Optional tunables (defaults shown):
---   pot_cap 60              -- total coin allowed in one window's pot (◎30 a side)
---   pot_night_start_min     -- response-clock quiet hours, minutes since midnight ET;
---   pot_night_end_min       -- NULL falls back to the league's draft quiet hours,
---                              then to 22:00 → 08:00 ET
+-- Optional: pot_cap 120 by default (◎60 a side).
 
--- OFF again: existing pots keep settling (coin already committed must come
--- back), but no NEW pots are created and no new bets are accepted.
+-- OFF again: existing pots keep closing and settling (coin already committed
+-- must come back), but no new offers can be made and no new moves accepted.
 update league set pot_ante = 0 where name = 'Your Test League';
 ```
 

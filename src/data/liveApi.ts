@@ -1134,39 +1134,48 @@ export function subscribeMatchup(matchupId: string, onChange: () => void): () =>
 }
 
 // ── The Window Pot (migration 0106 · docs/window-pot.md) ─────────────────────
-// Poker-style drip-coin betting on each game window. Everything here is a no-op
-// for a league with `pot_ante = 0` (the shipping default): pot_state comes back
-// `{ off: true }` and the UI renders nothing at all.
+// An OPT-IN wager ladder on a game window: one manager puts ◎10 up, the other
+// matches it, and they trade check / wager / call / raise until that window's
+// PICKS lock. Everything here is a no-op for a league with `pot_ante = 0` (the
+// shipping default): pot_state comes back `{ off: true }` and the UI renders
+// nothing at all.
+
+export type PotWindowState =
+  | 'offered'      // one ◎10 down, waiting on the other side
+  | 'live'         // both in; the ladder is open
+  | 'locked'       // picks locked; frozen, riding to the window's final
+  | 'void'         // nobody matched the offer; the ante went home
+  | 'folded_you' | 'folded_them'
+  | 'settled' | 'split';
+export type PotActionKind =
+  'ante' | 'match' | 'check' | 'wager' | 'call' | 'fold' | 'settle' | 'refund' | 'void';
 
 /** One window's pot, already oriented to the CALLER by the RPC — `you_in` is
  *  always your own committed coin, never the home team's. */
 export interface PotWindow {
   win: string;
-  /** open · folded_you · folded_them · settled · split */
-  state: 'open' | 'folded_you' | 'folded_them' | 'settled' | 'split';
-  /** v1 only ever reports blind or closed; reveal/live are the v2 seam. */
-  street: 'blind' | 'reveal' | 'live' | 'closed';
-  /** Everything committed by both sides — including chips that will refund. */
+  state: PotWindowState;
+  /** Who put the first ◎10 up. They also get first action once it's matched. */
+  leader: 'you' | 'them';
+  /** Whose move it is. Null unless the pot is live. */
+  turn: 'you' | 'them' | null;
+  /** The outstanding wager the turn-holder must answer. 0 ⇒ they may check or open. */
+  owed: number;
+  /** Everything both sides have committed. */
   pot: number;
   you_in: number;
   them_in: number;
-  /** The MATCHED pot: `2 × min(you_in, them_in)`, i.e. what actually changes
-   *  hands. Anything above it returns to whoever put it in. */
-  matched: number;
-  /** What the raise slider maxes at — table stakes (S6). 0 ⇒ no raise offerable. */
+  /** The entry fee alone — the ONLY thing backing out forfeits. */
+  you_ante: number;
+  them_ante: number;
+  /** What the wager slider maxes at — table stakes. 0 ⇒ nothing offerable. */
   effective_stack: number;
-  raises_left: number;
-  /** Your own standing-policy allowance left on this window (hidden number). */
-  policy_left: number;
-  pending: { by: 'you' | 'them'; amount: number; deadline: string } | null;
-  kickoff: string | null;
-  /** No new raise may be OPENED after this unless their policy already covers it. */
-  cutoff_at: string | null;
+  /** When betting closes: the instant this window's picks lock (kickoff − 1h). */
+  lock_at: string | null;
   winner: 'you' | 'them' | 'split' | null;
   settled_at: string | null;
   log: { seq: number; kind: PotActionKind; amount: number; at: string; side: 'you' | 'them' | null }[];
 }
-export type PotActionKind = 'ante' | 'raise' | 'call' | 'fold' | 'auto_call' | 'auto_fold' | 'settle' | 'refund';
 export interface PotState {
   ok: boolean;
   error?: string;
@@ -1175,42 +1184,39 @@ export interface PotState {
   ante: number;
   cap: number;
   side_cap: number;
-  min_raise: number;
-  max_raises: number;
+  min_wager: number;
   my_side: 'home' | 'away';
   my_roster_id: number;
   my_bank: number;
-  /** My standing policy — mine only; the opponent's is never disclosed. */
-  my_auto_call: number;
-  /** False ⇒ ante-only: the other seat is AI/unenrolled, so raising is off (S11). */
+  /** False ⇒ the other seat is AI/unenrolled, so nobody could answer an offer. */
   both_live: boolean;
   server_now: string;
+  /** Only windows somebody actually anted on. The client offers the ◎10 on the
+   *  rest from the slate it already has. */
   windows: PotWindow[];
 }
 export const potState = (matchupId: string) => rpc<PotState>('pot_state', { p_matchup_id: matchupId });
-/** Advance this matchup's pots (expire clocks, close streets, settle finals).
- *  Idempotent and advisory-locked — any participant's poll may call it, exactly
- *  like draft_tick; the worker sweeps every league on its own tick too. */
+/** Advance this matchup's pots (void unmatched offers and freeze live ladders at
+ *  picks lock, settle finished windows). Idempotent and advisory-locked — any
+ *  participant's poll may call it, exactly like draft_tick; the worker sweeps
+ *  every league on its own tick too. */
 export const potSweep = (matchupId: string) =>
-  rpc<{ ok: boolean; error?: string; resolved_clocks?: number; streets_closed?: number; settled?: number }>(
+  rpc<{ ok: boolean; error?: string; voided?: number; frozen?: number; settled?: number }>(
     'pot_sweep', { p_matchup_id: matchupId });
 export interface PotActionResult {
   ok: boolean; error?: string;
-  /** Their standing policy covered it — matched instantly, no clock. */
-  auto_called?: boolean;
-  /** S8: the pot changed under an in-flight raise; re-offer it as a re-raise. */
-  re_raise?: boolean; pending_amount?: number;
-  amount?: number; called?: number; raised?: number; pot?: number; deadline?: string;
-  effective_stack?: number; cutoff_at?: string;
-  winner?: string; home_paid?: number; away_paid?: number;
+  /** pot_ante: which half of the handshake this was. */
+  led?: boolean; matched?: boolean; ante?: number; state?: string;
+  checked?: boolean; wagered?: number; called?: number; pot?: number;
+  /** pot_close: how it ended. */
+  cause?: string; winner?: string; home_paid?: number; away_paid?: number;
+  effective_stack?: number;
 }
-export const potRaise = (matchupId: string, win: string, amount: number) =>
-  rpc<PotActionResult>('pot_raise', { p_matchup_id: matchupId, p_win: win, p_amount: amount });
-/** Answer the outstanding raise. 'raise' is a re-raise (call + open), and is
- *  all-or-nothing: an illegal raise rolls the call back with it. */
-export const potRespond = (matchupId: string, win: string, action: 'call' | 'fold' | 'raise', amount?: number) =>
-  rpc<PotActionResult>('pot_respond', { p_matchup_id: matchupId, p_win: win, p_action: action, p_amount: amount ?? null });
-/** "Auto-call raises for me up to ◎N per window" — a hidden number, same shape
- *  as a slow-auction max bid. */
-export const setPotAutoCall = (leagueId: string, max: number) =>
-  rpc<{ ok: boolean; error?: string; auto_call?: number }>('set_pot_auto_call', { p_league_id: leagueId, p_max: max });
+/** Put the ◎10 up: leads the offer on an untouched window, or matches the offer
+ *  already sitting there (which is what makes the pot real). */
+export const potAnte = (matchupId: string, win: string) =>
+  rpc<PotActionResult>('pot_ante', { p_matchup_id: matchupId, p_win: win });
+/** Take your turn. 'raise' is call + open, and is all-or-nothing: an illegal
+ *  open rolls the call back with it. 'fold' backs out for exactly your ante. */
+export const potAct = (matchupId: string, win: string, action: 'check' | 'wager' | 'call' | 'raise' | 'fold', amount?: number) =>
+  rpc<PotActionResult>('pot_act', { p_matchup_id: matchupId, p_win: win, p_action: action, p_amount: amount ?? null });
