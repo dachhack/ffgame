@@ -618,10 +618,14 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
   };
 
   const loadM = async () => setMatchups(await adminMatchups(l.league_id));
+  // Returns the rows as well as storing them, so a caller (the member refresh)
+  // can report on what came back without racing the state update.
   const loadMembers = async () => {
-    setMembers(await adminLeagueMembers(l.league_id));
+    const rows = await adminLeagueMembers(l.league_id);
+    setMembers(rows);
     adminLeagueJoiners(l.league_id).then(setJoiners).catch(() => setJoiners([]));
     adminLeagueWallets(l.league_id).then((ws) => setWallets(Object.fromEntries((ws ?? []).map((w) => [w.roster_id, w.coins])))).catch(() => setWallets({}));
+    return rows;
   };
   // Commissioner grants drip coin to a team; refresh balances after.
   const seedCoin = async (rosterId: number, amount: number) => {
@@ -670,8 +674,11 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
     setBusy('members');
     try {
       const r = await syncMembers(l.league_id, l.sleeper_league_id);
-      setBusy(`✓ ${r.seats} seats refreshed`);
-      if (members) await loadMembers();
+      // Refresh never unseats anyone (0105's enrolled guard). Report the seats
+      // that drifted out of sync instead, so the commissioner can decide —
+      // ✕ unassign on the Members tab is the one-click fix.
+      const drift = (await loadMembers()).filter((m) => m.drifted).length;
+      setBusy(`✓ ${r.seats} seats refreshed${drift ? ` · ⚠ ${drift} no longer match Sleeper — see MEMBERS` : ''}`);
       reload();
     } catch (e) { setBusy(errMsg(e, 'member refresh failed')); }
   };
@@ -859,11 +866,17 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
       {tab === 'members' && members && (
         <div style={{ marginTop: 12 }}>
           <WeeklyBudget l={l} onGranted={() => loadMembers()} />
-          {(() => { const nj = members.filter((m) => !m.enrolled).length; return (
+          {(() => { const nj = members.filter((m) => !m.enrolled).length; const nd = members.filter((m) => m.drifted).length; return (<>
             <div className="mono" style={{ ...mono, fontSize: 9.5, color: nj ? 'var(--dim)' : 'var(--you)', marginBottom: 6 }}>
               {members.length - nj}/{members.length} joined{nj ? ` · ${nj} not yet` : ''}
             </div>
-          ); })()}
+            {/* Drift is advisory — refresh never unseats anyone, so say what to do. */}
+            {!!nd && (
+              <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--warn)', marginBottom: 6, lineHeight: 1.5 }}>
+                ⚠ {nd} seat{nd > 1 ? 's' : ''} no longer match Sleeper — the manager isn’t the roster’s owner there any more. ✕ unassign frees the seat.
+              </div>
+            )}
+          </>); })()}
           {members.map((m) => (
             <div key={m.roster_id} style={{ padding: '6px 0', borderTop: '1px solid var(--bd)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -880,6 +893,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
                   {m.email && <SendLink email={m.email} />}
                   <button onClick={() => toggleMemberAi(m.roster_id, m.controller)} className="mono" title={m.controller === 'ai' ? 'hand back to manager' : 'set team to AI auto-pilot'}
                     style={{ fontSize: 8.5, fontWeight: 700, color: m.controller === 'ai' ? 'var(--on-accent)' : 'var(--dim)', background: m.controller === 'ai' ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}>🤖 {m.controller === 'ai' ? 'AI' : 'off'}</button>
+                  {m.drifted && <span className="mono" title="Not the Sleeper owner of this roster any more — they left the league, it changed hands, or they unlinked their account. ✕ unassign frees the seat." style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px', whiteSpace: 'nowrap' }}>⚠ MISMATCH</span>}
                   <span className="mono" style={{ fontSize: 8.5, color: m.enrolled ? 'var(--you)' : m.claim_email ? 'var(--dim)' : 'var(--faint)', border: `1px solid ${m.enrolled ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '2px 6px' }}>{m.enrolled ? 'JOINED' : m.claim_email ? 'PENDING' : '—'}</span>
                 </div>
               </div>
