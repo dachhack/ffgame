@@ -601,7 +601,7 @@ export const adminUpsertLeague = (sleeperId: string, season: string, name: strin
     p_avatar: avatar ?? null,
   });
 export const adminUpsertMemberships = (leagueId: string, members: MemberRow[]) =>
-  rpc<{ ok: boolean; count?: number }>('admin_upsert_memberships', { p_league_id: leagueId, p_members: members });
+  rpc<{ ok: boolean; count?: number; error?: string }>('admin_upsert_memberships', { p_league_id: leagueId, p_members: members });
 export const adminUpsertMatchups = (leagueId: string, week: number, matchups: MatchupRow[], lockAt: string | null) =>
   rpc<{ ok: boolean; count?: number }>('admin_upsert_matchups', { p_league_id: leagueId, p_week: week, p_matchups: matchups, p_lock_at: lockAt });
 export const adminUpsertLineups = (leagueId: string, week: number, lineups: LineupRow[]) =>
