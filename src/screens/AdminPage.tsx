@@ -873,7 +873,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
             {/* Drift is advisory — refresh never unseats anyone, so say what to do. */}
             {!!nd && (
               <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--warn)', marginBottom: 6, lineHeight: 1.5 }}>
-                ⚠ {nd} seat{nd > 1 ? 's' : ''} no longer match Sleeper — the manager isn’t the roster’s owner there any more. ✕ unassign frees the seat.
+                ⚠ {nd} seat{nd > 1 ? 's' : ''} no longer match{nd > 1 ? '' : 'es'} Sleeper — the account holding {nd > 1 ? 'them isn’t' : 'it isn’t'} the roster’s owner there any more, so the real owner can’t claim it. ✕ unassign frees {nd > 1 ? 'them' : 'it'}.
               </div>
             )}
           </>); })()}
@@ -883,9 +883,18 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                   {m.avatar && <img src={m.avatar} alt="" width={24} height={24} style={{ borderRadius: 5, flexShrink: 0 }} />}
                   <div style={{ minWidth: 0 }}>
+                    {/* team_name comes from the platform, so on a drifted row it
+                        names the CURRENT Sleeper owner while the line below names
+                        whoever still holds the Drip seat — two different people.
+                        Say "seat held by" there so the row can't be misread as one
+                        person who is somehow mismatched with themselves. */}
                     <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{m.team}</div>
-                    <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>
-                      {m.enrolled ? (m.email ?? m.sleeper ?? 'enrolled') : m.claim_email ? `pending · ${m.claim_email}` : 'not assigned'}
+                    <div className="mono" style={{ ...mono, fontSize: 9, color: m.drifted ? 'var(--warn)' : 'var(--faint)' }}>
+                      {m.enrolled
+                        ? m.drifted
+                          ? `seat held by ${m.sleeper ? `@${m.sleeper}` : m.email ?? 'another account'}${m.sleeper && m.email ? ` · ${m.email}` : ''}`
+                          : (m.email ?? m.sleeper ?? 'enrolled')
+                        : m.claim_email ? `pending · ${m.claim_email}` : 'not assigned'}
                     </div>
                   </div>
                 </div>
