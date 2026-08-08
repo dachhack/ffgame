@@ -883,7 +883,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
                   <span className="mono" style={{ fontSize: 8.5, color: m.enrolled ? 'var(--you)' : m.claim_email ? 'var(--dim)' : 'var(--faint)', border: `1px solid ${m.enrolled ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '2px 6px' }}>{m.enrolled ? 'JOINED' : m.claim_email ? 'PENDING' : '—'}</span>
                 </div>
               </div>
-              <AssignRoster initial={m.email ?? m.claim_email ?? ''} joiners={joiners} onAssign={(a) => assign(m.roster_id, a)} onClaimSelf={() => claimSelf(m.roster_id)} />
+              <AssignRoster initial={m.email ?? m.claim_email ?? ''} seated={m.enrolled || !!m.claim_email} stillOnPlatform={!!m.owner} joiners={joiners} onAssign={(a) => assign(m.roster_id, a)} onClaimSelf={() => claimSelf(m.roster_id)} />
               <SeedCoin balance={wallets[m.roster_id] ?? 0} onSeed={(amt) => seedCoin(m.roster_id, amt)} />
             </div>
           ))}
@@ -1231,7 +1231,7 @@ function CodeRequestRow({ r, leagues, onToggle, reloadLeagues }: { r: CodeReques
 
 // Admin/commish-map a roster to a person by email. Enrolls now if they've signed
 // in, otherwise records a pending claim that auto-links on their next sign-in.
-function AssignRoster({ initial, joiners = [], onAssign, onClaimSelf }: { initial: string; joiners?: LeagueJoiner[]; onAssign: (a: { email?: string; appUserId?: string }) => Promise<{ ok: boolean; error?: string; status?: string }>; onClaimSelf?: () => Promise<{ ok: boolean; error?: string; status?: string }> }) {
+function AssignRoster({ initial, seated, stillOnPlatform, joiners = [], onAssign, onClaimSelf }: { initial: string; seated?: boolean; stillOnPlatform?: boolean; joiners?: LeagueJoiner[]; onAssign: (a: { email?: string; appUserId?: string }) => Promise<{ ok: boolean; error?: string; status?: string }>; onClaimSelf?: () => Promise<{ ok: boolean; error?: string; status?: string }> }) {
   const [email, setEmail] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -1242,6 +1242,22 @@ function AssignRoster({ initial, joiners = [], onAssign, onClaimSelf }: { initia
     setBusy(true); setMsg(null);
     const r = await onAssign({ email: email.trim() });
     setBusy(false); result(r);
+  };
+  // Free the seat: an empty email is admin_assign_roster's clear branch (0042) —
+  // app_user_id, enrolled and claim_email all drop, and the team is claimable
+  // again. The extra warning matters: while this roster still has an owner on
+  // the source platform, "refresh members" re-joins them by sleeper_user_id and
+  // re-seats the person, because admin_upsert_memberships only moves `enrolled`
+  // false→true. Removing them upstream is what makes the clear stick.
+  const unassign = async () => {
+    if (busy) return;
+    if (!confirm(stillOnPlatform
+      ? 'Unassign this team? It becomes claimable again — but this roster still has an owner on the source platform, so “refresh members” will re-seat them. Remove them there first to make it stick.'
+      : 'Unassign this team? The manager loses their seat and it becomes claimable again.')) return;
+    setBusy(true); setMsg(null);
+    const r = await onAssign({ email: '' });
+    setBusy(false); result(r);
+    if (r.ok) setEmail('');
   };
   // Commissioner claims this team for themselves (to play, not just manage).
   const claim = async () => {
@@ -1274,6 +1290,7 @@ function AssignRoster({ initial, joiners = [], onAssign, onClaimSelf }: { initia
         style={{ ...inp, fontSize: 10, padding: '5px 7px', flex: 1, minWidth: 0 }} />
       <button onClick={go} disabled={busy} className="mono" style={{ ...btn(false), opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'assign'}</button>
       {onClaimSelf && <button onClick={claim} disabled={busy} className="mono" title="claim this team for yourself" style={{ ...btn(true), opacity: busy ? 0.6 : 1 }}>＋ me</button>}
+      {seated && <button onClick={unassign} disabled={busy} className="mono" title="free this seat — the manager loses the team and it becomes claimable again" style={{ ...btn(false), color: 'var(--opp)', opacity: busy ? 0.6 : 1 }}>✕ unassign</button>}
       {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp, #e5484d)' }}>{msg}</span>}
     </div>
   );
