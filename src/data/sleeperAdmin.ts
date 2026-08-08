@@ -29,12 +29,39 @@ interface SleeperUser { user_id: string; display_name?: string; metadata?: { tea
 interface SleeperRoster { roster_id: number; owner_id?: string | null; players?: string[] }
 interface SleeperMatchup { roster_id: number; matchup_id: number | null }
 
-/** Import / refresh a Sleeper league → league + memberships. Returns league_id. */
-export async function importLeague(sleeperId: string, season: string): Promise<string> {
-  const [lg, users, rosters] = await Promise.all([
-    sj<{ name?: string; avatar?: string | null; settings?: unknown; scoring_settings?: unknown; roster_positions?: unknown }>(`/league/${sleeperId}`),
+/** One seat per Sleeper roster, named by its owner. Shared by the import and the
+ *  standalone member refresh so the two can't map owners differently. */
+async function fetchMembers(sleeperId: string): Promise<MemberRow[]> {
+  const [users, rosters] = await Promise.all([
     sj<SleeperUser[]>(`/league/${sleeperId}/users`),
     sj<SleeperRoster[]>(`/league/${sleeperId}/rosters`),
+  ]);
+  const byId = new Map(users.map((u) => [String(u.user_id), u]));
+  return rosters.map((ro) => {
+    const owner = ro.owner_id != null ? String(ro.owner_id) : null;
+    const u = owner ? byId.get(owner) : undefined;
+    return { roster_id: ro.roster_id, owner_id: owner, team_name: u?.metadata?.team_name || u?.display_name || `Roster ${ro.roster_id}` };
+  });
+}
+
+/** Re-pull ONLY the seats (owners + team names) for an already-imported league —
+ *  the Setup tab's "refresh members", for when someone joins the Sleeper league
+ *  after the import. Deliberately skips adminUpsertLeague: nothing about the
+ *  league row needs re-writing here, and that RPC is super-admin only, whereas
+ *  admin_upsert_memberships allows the league's commissioner (0105).
+ *  Safe to re-run — the RPC keeps existing links and never un-enrolls. */
+export async function syncMembers(leagueId: string, sleeperId: string): Promise<{ seats: number }> {
+  const members = await fetchMembers(sleeperId);
+  const r = await adminUpsertMemberships(leagueId, members);
+  if (!r.ok) throw new Error(r.error ?? 'member refresh failed');
+  return { seats: members.length };
+}
+
+/** Import / refresh a Sleeper league → league + memberships. Returns league_id. */
+export async function importLeague(sleeperId: string, season: string): Promise<string> {
+  const [lg, members] = await Promise.all([
+    sj<{ name?: string; avatar?: string | null; settings?: unknown; scoring_settings?: unknown; roster_positions?: unknown }>(`/league/${sleeperId}`),
+    fetchMembers(sleeperId),
   ]);
   // The league's Sleeper crest travels with the import (stored only while the
   // league has no crest yet; a league without one gets random site art).
@@ -43,12 +70,6 @@ export async function importLeague(sleeperId: string, season: string): Promise<s
     'sleeper', sleeperAvatarUrl(lg.avatar ?? null));
   if (!res.ok || !res.league_id) throw new Error(res.error ?? 'import failed');
 
-  const byId = new Map(users.map((u) => [String(u.user_id), u]));
-  const members: MemberRow[] = rosters.map((ro) => {
-    const owner = ro.owner_id != null ? String(ro.owner_id) : null;
-    const u = owner ? byId.get(owner) : undefined;
-    return { roster_id: ro.roster_id, owner_id: owner, team_name: u?.metadata?.team_name || u?.display_name || `Roster ${ro.roster_id}` };
-  });
   await adminUpsertMemberships(res.league_id, members);
   return res.league_id;
 }

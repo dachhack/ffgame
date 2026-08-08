@@ -15,7 +15,7 @@ import {
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
   type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy, type LeagueKdst, type KdstMode,
 } from '../data/liveApi';
-import { importLeague, syncWeek } from '../data/sleeperAdmin';
+import { importLeague, syncWeek, syncMembers } from '../data/sleeperAdmin';
 import { importEspnSeason, syncEspnSeason, stripProvider } from '../data/providerAdmin';
 import { forceResolve } from '../data/forceResolve';
 import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
@@ -661,6 +661,20 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
       setBusy(`✓ ${r.weeks} weeks · ${r.pairs} matchups`); setTab('matchups'); await loadM();
     } catch (e) { setBusy(errMsg(e, 'sync failed')); }
   };
+  // Re-pull the seats from Sleeper — for when a manager joins (or a team gets
+  // renamed) after the import. Separate from `sync` above: syncWeek writes
+  // matchups + pick pools and never touches league_membership, so the schedule
+  // sync alone leaves a newly-joined manager invisible.
+  const refreshMembers = async () => {
+    if (busy === 'members') return;
+    setBusy('members');
+    try {
+      const r = await syncMembers(l.league_id, l.sleeper_league_id);
+      setBusy(`✓ ${r.seats} seats refreshed`);
+      if (members) await loadMembers();
+      reload();
+    } catch (e) { setBusy(errMsg(e, 'member refresh failed')); }
+  };
   const regen = async (which: 'invite' | 'commish') => {
     if (!confirm(`Regenerate the ${which} code? The old one stops working.`)) return;
     const r = await adminRegenCode(l.league_id, which);
@@ -743,7 +757,8 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
 
       {open && <>
 
-      {busy && busy !== 'sync' && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{busy}</div>}
+      {/* 'sync' / 'members' are in-progress sentinels shown on their own buttons. */}
+      {busy && busy !== 'sync' && busy !== 'members' && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{busy}</div>}
 
       <TabBar tabs={leagueTabs} active={tab} onSelect={showTab} style={{ margin: '10px -14px 0', padding: '0 8px' }} />
 
@@ -795,6 +810,17 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <button onClick={sync} disabled={busy === 'sync'} className="mono" style={btn(true)} title="schedule every week's matchups">{busy === 'sync' ? 'scheduling…' : '⟳ sync season'}</button>
               <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>pulls the whole season's matchups + lineups from {l.provider === 'espn' ? 'ESPN' : 'Sleeper'}</span>
+            </div>
+          </div>
+          )}
+          {/* Seats are a separate pull from the schedule — someone who joins the
+              Sleeper league after the import needs this, not "sync season". */}
+          {(!l.provider || l.provider === 'sleeper') && (
+          <div>
+            <div style={subhead}>MEMBERS</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button onClick={refreshMembers} disabled={busy === 'members'} className="mono" style={btn(false)} title="re-pull each roster's owner + team name from Sleeper">{busy === 'members' ? 'refreshing…' : '⟳ refresh members'}</button>
+              <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>re-pulls owners + team names from Sleeper; never un-enrolls anyone who already joined</span>
             </div>
           </div>
           )}
