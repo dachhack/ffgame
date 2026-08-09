@@ -51,7 +51,7 @@ function GoogleG() {
 type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin' | 'add' | 'join' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass';
 
 export function LiveOnboard() {
-  const { navigate, route } = useStore();
+  const { navigate, route, viewAs, setViewAs } = useStore();
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [recovery, setRecovery] = useState(false);
@@ -124,6 +124,18 @@ export function LiveOnboard() {
           <SiteSettings superAdmin={session && admin ? () => setView('admin') : undefined} />
         </div>
       </header>
+
+      {/* Unmissable while browsing as someone else. Sticky rather than inline:
+          the whole point is that it can't scroll away and leave an admin unsure
+          whose screen they're looking at. */}
+      {viewAs && (
+        <div style={{ position: 'sticky', top: 0, zIndex: 60, background: 'var(--warn)', color: '#000', padding: '7px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em' }}>👁 BROWSING AS {viewAs.label} — READ ONLY</span>
+          <span className="mono" style={{ fontSize: 9, opacity: 0.75 }}>you are still signed in as yourself; nothing can be written in their name</span>
+          <span style={{ flex: 1 }} />
+          <button onClick={() => setViewAs(null)} className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: '#000', background: 'transparent', border: '1px solid rgba(0,0,0,0.45)', borderRadius: 4, padding: '4px 9px', cursor: 'pointer', flexShrink: 0 }}>✕ exit</button>
+        </div>
+      )}
 
       <main style={{ flex: 1, display: 'flex', alignItems: wide ? 'flex-start' : 'center', justifyContent: 'center', padding: '24px 16px' }}>
         <div style={{ width: '100%', maxWidth: pageMax }}>
@@ -358,6 +370,9 @@ function SetPassword({ onDone }: { onDone: () => void }) {
 interface MatchupCard { matchup: LiveMatchup; teams: Record<number, TeamInfo>; }
 
 function Enroll({ session, view, setView, commishCode, admin }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void; commishCode?: string | null; admin?: boolean }) {
+  // Super-admin support mode: every read below resolves against this user
+  // instead of the signed-in one, and the write CTAs are hidden.
+  const { viewAs } = useStore();
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
   const [loadErr, setLoadErr] = useState(false);
   const [commishLeagues, setCommishLeagues] = useState<AdminLeague[]>([]);
@@ -396,10 +411,13 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     let rows: Enrollment[] = [];
     try {
       await ensureAppUser(session);
-      // Pick up any rosters an admin/commish pre-assigned to my email (non-Sleeper
-      // leagues are enrolled this way, since there's no username to self-claim by).
-      await claimMyRosters().catch(() => {});
-      rows = await myEnrollments(session.user.id); setEnrollments(rows);
+      // Browsing as someone else (super-admin support): read THEIR enrollments.
+      // 0108 widened the SELECT policies for is_admin() so these player-path
+      // reads resolve; the write policies are untouched, so nothing below can
+      // act in their name. Skip claimMyRosters — that writes, and it would
+      // claim pending seats for the ADMIN, not the user being viewed.
+      if (!viewAs) await claimMyRosters().catch(() => {});
+      rows = await myEnrollments(viewAs?.userId ?? session.user.id); setEnrollments(rows);
     } catch {
       // Don't fake an empty enrollment on failure — that shows an already-enrolled
       // user the "how are you joining?" form. Surface a retry instead (see below).
@@ -426,7 +444,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   useEffect(() => {
     refresh();
     /* eslint-disable-next-line */
-  }, [session.user.id]);
+  }, [session.user.id, viewAs?.userId]);
 
   // Solo pass (0097): the request modal stashes the freshly-minted code before
   // routing here — once signed in, redeem it automatically so solo unlocks
@@ -546,20 +564,31 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     </div>
   );
 
+  // While browsing as someone else, the screens that WRITE are refused rather
+  // than opened. The database already stops anything landing in their name
+  // (every write policy is `app_user_id = auth.uid()`), but an admin poking the
+  // board would still create sealed_pick rows under their own id on a matchup
+  // they aren't in — junk, and confusing to debug later. Read-only screens
+  // (scores, the commish dashboard) stay reachable.
+  const guard = (fn: () => void) => () => {
+    if (viewAs) { alert(`Read-only: you're browsing as ${viewAs.label}. Exit view-as to use this.`); return; }
+    fn();
+  };
+
   return (
     <LeagueHome
       enrollments={enrollments}
       commishLeagues={commishLeagues}
       cards={cards}
       commishIds={commishIds}
-      userId={session.user.id}
-      onBoard={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('board'); }}
-      onPodBuild={(leagueId, rosterId, week, name) => { setTarget({ leagueId, rosterId, week, name }); setView('podbuild'); }}
+      userId={viewAs?.userId ?? session.user.id}
+      onBoard={(leagueId, rosterId) => guard(() => { setTarget({ leagueId, rosterId }); setView('board'); })()}
+      onPodBuild={(leagueId, rosterId, week, name) => guard(() => { setTarget({ leagueId, rosterId, week, name }); setView('podbuild'); })()}
       onResults={(leagueId) => { setTarget({ leagueId, rosterId: 0 }); setView('results'); }}
       onManage={(id) => { setManageId(id); setManageTab(undefined); setView('commishdash'); }}
-      onDraft={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('draft'); }}
-      onTeam={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('team'); }}
-      onAdd={() => setView('add')}
+      onDraft={(leagueId, rosterId) => guard(() => { setTarget({ leagueId, rosterId }); setView('draft'); })()}
+      onTeam={(leagueId, rosterId) => guard(() => { setTarget({ leagueId, rosterId }); setView('team'); })()}
+      onAdd={guard(() => setView('add'))}
       onDeleted={refresh}
       isCommish={isCommish}
     />
