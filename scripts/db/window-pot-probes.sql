@@ -56,6 +56,13 @@ insert into app_user (id, email) values
   ('00000000-0000-0000-0000-000000000008', '8@test.dev')
 on conflict (id) do nothing;
 
+-- A super admin, for the AdminPage levers.
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-000000000006', '6@test.dev')
+on conflict (id) do nothing;
+insert into app_user (id, email) values ('00000000-0000-0000-0000-000000000006', '6@test.dev')
+on conflict (id) do nothing;
+insert into app_admin (email, note) values ('6@test.dev', 'pot probe admin') on conflict (email) do nothing;
+
 create sequence if not exists pot_probe_week start 900;
 
 /** A fresh league + matchup + slate + wallets on its own week. Windows are named
@@ -517,6 +524,95 @@ begin
   perform assert_err(pot_state(mid), 'forbidden', '12t a stranger may not read the pot');
   perform assert_err(pot_sweep(mid), 'forbidden', '12u …nor advance it');
   perform assert_err(pot_ante(mid, 'w1'), 'forbidden', '12v …nor join it');
+end $$;
+
+-- ── 14. the super-admin flag: on/off per league, from the admin page ────────
+do $$
+declare mid uuid; lid uuid; r jsonb; st jsonb;
+begin
+  perform pot_as_worker();
+  mid := pot_fixture('flag', 200, 200, 0);          -- ships OFF
+  lid := pot_league(mid);
+
+  perform pot_as('7');
+  perform assert_err(pot_ante(mid, 'w1'), 'pots are off', '14a off by default');
+  perform assert_err(admin_set_pot(lid, true), 'forbidden', '14b only a super admin may flip it');
+
+  perform pot_as('6');
+  r := admin_set_pot(lid, true);
+  perform assert_ok(r, '14c admin turns it on');
+  perform assert_true((r ->> 'on')::boolean, '14d …reported on');
+  perform assert_eq((r ->> 'pot_ante')::int, 10, '14e with the default ◎10 entry fee');
+  perform assert_eq((r ->> 'pot_cap')::int, 120, '14f and the league cap');
+  perform assert_eq((r ->> 'open_pots')::int, 0, '14g nothing in flight');
+
+  -- The numbers are tunable, and guarded.
+  perform assert_err(admin_set_pot(lid, true, 25, 40), 'cap must cover both antes', '14h a cap under 2 antes is refused');
+  perform assert_err(admin_set_pot(lid, true, 500), 'capped at 100', '14i and the ante has a ceiling');
+  perform assert_ok(admin_set_pot(lid, true, 25, 200), '14j a custom ante + cap');
+  perform assert_eq((select pot_ante from league where id = lid), 25, '14k stored');
+  perform assert_eq((select pot_cap from league where id = lid), 200, '14l …both');
+
+  -- On means on: the managers can play immediately, no scheduled pass to wait for.
+  perform pot_as('7');
+  perform assert_ok(pot_ante(mid, 'w1'), '14m a manager can open a pot the moment it flips');
+  perform assert_eq(pot_bank_of(mid, 1), 175, '14n at the ante the admin set');
+
+  -- The admin list carries the flag, so the toggle renders from the overview.
+  perform pot_as('6');
+  perform assert_true(exists (
+    select 1 from jsonb_array_elements(admin_overview()) e
+    where (e ->> 'league_id')::uuid = lid and (e ->> 'pot_ante')::int = 25 and (e ->> 'pot_open')::int = 1
+  ), '14o admin_overview surfaces the flag + what is in flight');
+
+  -- Turning it OFF stops new play but never strands coin already committed.
+  r := admin_set_pot(lid, false);
+  perform assert_ok(r, '14p admin turns it off');
+  perform assert_true(not (r ->> 'on')::boolean, '14q …reported off');
+  perform assert_eq((r ->> 'open_pots')::int, 1, '14r and tells the admin what it leaves behind');
+  perform pot_as('8');
+  perform assert_err(pot_ante(mid, 'w1'), 'pots are off', '14s no new play');
+  st := pot_state(mid);
+  perform assert_true((st ->> 'off')::boolean, '14t the UI is locked read-only');
+  perform assert_eq(jsonb_array_length(st -> 'windows'), 1,
+    '14u …but the in-flight pot is still VISIBLE — coin must never just vanish');
+
+  -- …and the sweep still unwinds it, flag or no flag.
+  perform pot_as_worker();
+  perform pot_move_kickoff(mid, 'w1', interval '30 minutes');
+  perform assert_ok(pot_sweep(), '14v the sweep ignores the flag');
+  perform assert_txt((pot_row(mid, 'w1')).state, 'void', '14w the unmatched offer voided');
+  perform assert_eq(pot_bank_of(mid, 1), 200, '14x every committed chip came home');
+  perform pot_as('7');
+  perform assert_true((pot_state(mid) ->> 'off')::boolean, '14y still off');
+end $$;
+
+-- ── 15. the escape hatch: unwind a league's pots on the spot ────────────────
+do $$
+declare mid uuid; lid uuid; r jsonb;
+begin
+  perform pot_as_worker();
+  mid := pot_fixture('unwind', 200, 200);
+  lid := pot_league(mid);
+  perform pot_as('7'); perform assert_ok(pot_ante(mid, 'w1'), '15a home leads w1');
+  perform pot_as('8'); perform assert_ok(pot_ante(mid, 'w1'), '15b away matches');
+  perform pot_as('7'); perform assert_ok(pot_act(mid, 'w1', 'wager', 30), '15c a real ladder');
+  perform pot_as('8'); perform assert_ok(pot_act(mid, 'w1', 'call'), '15d …called');
+  perform pot_as('8'); perform assert_ok(pot_ante(mid, 'w2'), '15e and an unmatched offer on w2');
+  perform assert_eq(pot_bank_of(mid, 1), 160, '15f coin is committed');
+  perform assert_eq(pot_bank_of(mid, 2), 150, '15g …on both sides');
+
+  perform pot_as('7');
+  perform assert_err(admin_close_pots(lid), 'forbidden', '15h managers can''t unwind their own bets');
+  perform pot_as('6');
+  r := admin_close_pots(lid);
+  perform assert_ok(r, '15i the admin can');
+  perform assert_eq((r ->> 'closed')::int, 2, '15j both pots');
+  perform assert_txt((pot_row(mid, 'w1')).state, 'void', '15k voided, not settled');
+  perform assert_eq(pot_bank_of(mid, 1), 200, '15l every chip back to whoever put it in');
+  perform assert_eq(pot_bank_of(mid, 2), 200, '15m nobody won, nobody lost');
+  perform assert_ok(admin_close_pots(lid), '15n running it again is a no-op');
+  perform assert_eq(pot_bank_of(mid, 1), 200, '15o …and pays nothing twice');
 end $$;
 
 -- ── 13. coin in, coin out — a pot is a transfer, never a faucet or a sink ───

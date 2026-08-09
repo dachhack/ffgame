@@ -285,7 +285,8 @@ behavior.
 
 ## 10. Rollout
 
-1. Feature-flag per league (`pot_ante > 0`), default OFF; pilot leagues opt in.
+1. Feature-flag per league (`pot_ante > 0`), default OFF, flipped by the super
+   admin from the AdminPage (§12); pilot leagues opt in one at a time.
 2. **v1** = the opt-in ante + the wager ladder + settlement (S1–S15).
 3. **v2** = live-street betting after kickoff, over Realtime, if playtesting
    wants it — v1 deliberately closes everything at picks lock.
@@ -335,19 +336,37 @@ after kickoff (§10.3) and the AI bidding personality (§8).
 
 ### Flipping the flag
 
-The feature is per-league and OFF by default (`league.pot_ante = 0`). There is
-no client write path to `league`, so turn it on from the Supabase SQL editor:
+The feature is **per league** and OFF by default (`league.pot_ante = 0`). The
+super admin owns the switch, in the app:
+
+> **AdminPage → LEAGUES → (a league) → ADMIN MODES → `🪙 window pot`**
+
+sitting beside the preseason, live-test and card-theme toggles. On, it reads
+`🪙 POT: ON ◎10`. **`tune`** exposes the two numbers (ante and pot cap); the cap
+is validated to always cover both antes. It takes effect immediately — pots are
+created by managers tapping, not by any scheduled pass, so there is nothing to
+wait for.
+
+**Turning it off never strands coin.** Pots already under way are deliberately
+left alone: `pot_sweep` doesn't consult the flag, so every one still voids,
+freezes or settles on its own schedule and every committed chip finds its way
+home or to a winner. The toggle reports how many are still in flight, and those
+managers keep seeing them (read-only) rather than watching coin vanish from
+their bank. Once they've all closed, the feature is invisible again.
+
+To unwind a league on the spot instead — a test league that needs resetting, or
+killing the feature mid-week without leaving bets hanging over a slate — the
+**`⟲ void N open`** button (which only appears when there are open pots) voids
+every one of them and refunds every chip. Nobody wins, nobody loses.
+Already-settled pots are untouched; their coin has moved.
+
+The SQL equivalents, if you'd rather:
 
 ```sql
--- ON: ◎10 entry fee. Takes effect immediately — pots are created by managers
--- tapping, not by any scheduled pass, so there is nothing to wait for.
-update league set pot_ante = 10 where name = 'Your Test League';
-
--- Optional: pot_cap 120 by default (◎60 a side).
-
--- OFF again: existing pots keep closing and settling (coin already committed
--- must come back), but no new offers can be made and no new moves accepted.
-update league set pot_ante = 0 where name = 'Your Test League';
+select admin_set_pot('<league-id>', true);          -- on at the ◎10 default
+select admin_set_pot('<league-id>', true, 25, 200); -- on, custom ante + cap
+select admin_set_pot('<league-id>', false);         -- off
+select admin_close_pots('<league-id>');             -- void + refund everything open
 ```
 
 Worker changes need a `fly deploy`; the migration applies itself on merge to

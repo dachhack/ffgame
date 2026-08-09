@@ -34,10 +34,18 @@
 --   • No reveal/live streets. Betting is over before a single pick is revealed,
 --     so the whole ladder is played blind, which is the point.
 --
--- SHIPS OFF. `league.pot_ante` defaults to 0, which disables the feature end to
--- end: pot_ante refuses, pot_state returns `off`, and the client renders no
--- trace. Flip it per league by hand:
+-- SHIPS OFF, PER LEAGUE. `league.pot_ante` defaults to 0, which disables the
+-- feature end to end: pot_ante and pot_act refuse, and the client renders no
+-- trace. The super admin flips it from the AdminPage's ADMIN MODES row
+-- (admin_set_pot below); the raw SQL equivalent is
 --   update league set pot_ante = 10 where id = '…';
+--
+-- Turning it OFF never strands coin. Existing pots keep closing and settling —
+-- pot_sweep doesn't consult the flag — so every committed chip still finds its
+-- way home or to a winner, and pot_state keeps returning those in-flight pots
+-- (read-only) so their managers can see them finish rather than watching coin
+-- vanish from their bank with no explanation. To unwind a league's pots on the
+-- spot instead, admin_close_pots() voids every open one and refunds every chip.
 --
 -- HARD GUARDRAIL — coin in, coin out. A pot moves drip-coin between two team
 -- wallets and nothing else: never points, never roster advantage. The +5
@@ -140,6 +148,9 @@ create policy pot_action_read on pot_action for select using (is_matchup_partici
 -- ─────────────────────────────────────────────────────────────────────────────
 
 create or replace function pot_min_wager() returns int language sql immutable as $$ select 5 $$;
+/** The entry fee a league gets when the super admin flips the feature ON without
+ *  naming one. Here so the DB and the admin UI can't drift. */
+create or replace function pot_default_ante() returns int language sql immutable as $$ select 10 $$;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Read helpers
@@ -653,7 +664,14 @@ begin
     return jsonb_build_object('ok', false, 'error', 'forbidden');
   end if;
   select * into lg from league where id = m.league_id;
-  if coalesce(lg.pot_ante, 0) <= 0 then return jsonb_build_object('ok', true, 'off', true, 'windows', '[]'::jsonb); end if;
+  -- A flagged-off league still reports any pot that was already under way when
+  -- the flag flipped: `off` locks the UI read-only, but hiding a pot that is
+  -- holding a manager's coin would just look like the coin disappeared. Once
+  -- they've all closed this comes back empty and the feature is invisible again.
+  if coalesce(lg.pot_ante, 0) <= 0
+     and not exists (select 1 from window_pot wp where wp.matchup_id = p_matchup_id) then
+    return jsonb_build_object('ok', true, 'off', true, 'windows', '[]'::jsonb);
+  end if;
   sd := coalesce(pot_my_side(m), 'home');
   osd := pot_other(sd);
   rid := pot_roster(m, sd);
@@ -687,14 +705,109 @@ begin
   ) q;
 
   return jsonb_build_object(
-    'ok', true, 'off', false,
-    'ante', lg.pot_ante, 'cap', lg.pot_cap, 'side_cap', lg.pot_cap / 2,
+    'ok', true, 'off', coalesce(lg.pot_ante, 0) <= 0,
+    'ante', greatest(coalesce(lg.pot_ante, 0), 0), 'cap', lg.pot_cap, 'side_cap', lg.pot_cap / 2,
     'min_wager', pot_min_wager(),
     'my_side', sd, 'my_roster_id', rid,
     'my_bank', pot_bank(m.league_id, rid),
     'both_live', pot_both_live(m),   -- false ⇒ nobody can answer an offer; no anteing
     'server_now', now(),
     'windows', wins);
+end $$;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Super-admin levers (the AdminPage ADMIN MODES row)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+/** Turn the Window Pot on or off for ONE league, and tune its two numbers.
+ *  p_on = false parks pot_ante at 0 (the shipping default); p_on = true uses the
+ *  ante the admin named, or pot_default_ante(). Turning it off forgets the
+ *  previous number rather than stashing it in a second column — the toggle
+ *  always shows the ante it is about to use, so there is nothing to remember.
+ *  Existing pots are deliberately left alone either way — see admin_close_pots
+ *  to unwind them.
+ *  Reports how many pots are still in flight so the admin can see what turning
+ *  it off leaves behind. */
+create or replace function admin_set_pot(p_league_id uuid, p_on boolean,
+                                         p_ante int default null, p_cap int default null)
+  returns jsonb language plpgsql security definer set search_path = public as $$
+declare lg league%rowtype; ante int; cap int; open_pots int;
+begin
+  if not is_admin() then return jsonb_build_object('ok', false, 'error', 'forbidden'); end if;
+  select * into lg from league where id = p_league_id;
+  if not found then return jsonb_build_object('ok', false, 'error', 'no league'); end if;
+
+  if p_on is false then
+    ante := 0;
+  else
+    ante := coalesce(p_ante, nullif(lg.pot_ante, 0), pot_default_ante());
+    if ante <= 0 then return jsonb_build_object('ok', false, 'error', 'ante must be above 0 to turn it on'); end if;
+  end if;
+  if ante > 100 then return jsonb_build_object('ok', false, 'error', 'ante is capped at 100'); end if;
+
+  cap := coalesce(p_cap, lg.pot_cap, 120);
+  if cap < ante * 2 then
+    return jsonb_build_object('ok', false, 'error', 'the pot cap must cover both antes (at least ' || (ante * 2) || ')');
+  end if;
+  if cap > 1000 then return jsonb_build_object('ok', false, 'error', 'the pot cap is capped at 1000'); end if;
+
+  update league set pot_ante = ante, pot_cap = cap where id = p_league_id;
+
+  select count(*) into open_pots from window_pot wp join matchup m on m.id = wp.matchup_id
+    where m.league_id = p_league_id and wp.state in ('offered', 'live', 'locked');
+  return jsonb_build_object('ok', true, 'on', ante > 0, 'pot_ante', ante, 'pot_cap', cap,
+    'open_pots', open_pots);
+end $$;
+
+/** Unwind a league's pots on the spot: every offer, ladder and frozen pot is
+ *  VOIDED and every chip goes back to whoever put it in. Nobody wins, nobody
+ *  loses. The escape hatch for a test league that needs resetting, or for
+ *  killing the feature mid-week without leaving bets hanging over a slate.
+ *  Already-closed pots are untouched — their coin has moved. */
+create or replace function admin_close_pots(p_league_id uuid)
+  returns jsonb language plpgsql security definer set search_path = public as $$
+declare r record; m matchup%rowtype; n int := 0;
+begin
+  if not is_admin() then return jsonb_build_object('ok', false, 'error', 'forbidden'); end if;
+  for r in select wp.matchup_id, wp.game_window from window_pot wp
+           join matchup mm on mm.id = wp.matchup_id
+           where mm.league_id = p_league_id and wp.state in ('offered', 'live', 'locked')
+           order by wp.matchup_id, wp.game_window
+  loop
+    perform pg_advisory_xact_lock(hashtext(r.matchup_id::text));
+    select * into m from matchup where id = r.matchup_id;
+    continue when not found;
+    perform pot_close(m, r.game_window, 'void');
+    n := n + 1;
+  end loop;
+  return jsonb_build_object('ok', true, 'closed', n);
+end $$;
+
+-- Surface the flag (and any in-flight pots) on the admin league list, so the
+-- toggle renders from the overview the page already loads.
+create or replace function admin_overview() returns jsonb
+  language plpgsql security definer set search_path = public as $$
+declare result jsonb;
+begin
+  if not is_admin() then return jsonb_build_object('error', 'forbidden'); end if;
+  select coalesce(jsonb_agg(r), '[]'::jsonb) into result from (
+    select jsonb_build_object(
+      'league_id', l.id, 'sleeper_league_id', l.sleeper_league_id, 'name', l.name, 'season', l.season,
+      'provider', l.provider, 'avatar_url', l.avatar_url,
+      'commish_code', l.commish_code, 'invite_code', l.invite_code,
+      'commissioner', l.commissioner_id is not null, 'lineup_policy', l.lineup_policy,
+      'weekly_budget', l.weekly_budget,
+      'test_live_at', l.test_live_at,
+      'preseason_at', l.preseason_at,
+      'pot_ante', l.pot_ante, 'pot_cap', l.pot_cap,
+      'pot_open', (select count(*) from window_pot wp join matchup mm on mm.id = wp.matchup_id
+                   where mm.league_id = l.id and wp.state in ('offered', 'live', 'locked')),
+      'rosters', (select count(*) from league_membership m where m.league_id = l.id),
+      'enrolled', (select count(*) from league_membership m where m.league_id = l.id and m.enrolled),
+      'ai_teams', (select count(*) from league_membership m where m.league_id = l.id and m.controller = 'ai')
+    ) as r from league l order by l.created_at desc
+  ) t;
+  return result;
 end $$;
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -712,3 +825,7 @@ grant execute on function pot_act(uuid, text, text, int) to authenticated;
 grant execute on function pot_state(uuid) to authenticated;
 grant execute on function pot_sweep(uuid) to authenticated;
 grant execute on function pot_min_wager() to authenticated;
+grant execute on function pot_default_ante() to authenticated;
+grant execute on function admin_set_pot(uuid, boolean, int, int) to authenticated;
+grant execute on function admin_close_pots(uuid) to authenticated;
+grant execute on function admin_overview() to authenticated;

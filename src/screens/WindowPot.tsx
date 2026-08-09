@@ -8,9 +8,13 @@
 // instant that window's picks do.
 //
 // v1 renders on the LIVE board only (`liveCtx` non-null) — the demo/sim boards
-// never mount it. A league with `pot_ante = 0` gets `{ off: true }` from
-// pot_state and everything below returns null, so the feature leaves no trace
-// until the flag is flipped.
+// never mount it. The feature is a per-league flag the super admin owns
+// (AdminPage → ADMIN MODES → 🪙 window pot): with it off, pot_state returns
+// `{ off: true }` with no windows and every component here renders nothing, so
+// the feature leaves no trace. Switching it off mid-week is the one nuance —
+// pots already under way keep being reported so they can be watched closing
+// out, but `off` locks every control, and once they've all closed the state
+// comes back empty and the feature is invisible again.
 //
 // One poll for the whole matchup: every window's chip subscribes to the shared
 // store below rather than each fetching its own pot_state. The poll also calls
@@ -71,7 +75,12 @@ export function usePot(matchupId: string | null): PotState | null {
     };
   }, [matchupId]);
   if (!matchupId || s.matchupId !== matchupId) return null;
-  return s.pot && !s.pot.off ? s.pot : null;
+  // A league with the flag off still reports pots that were already under way
+  // when the admin flipped it — `off` locks them read-only, but hiding coin a
+  // manager has committed would just look like it disappeared. Once they've all
+  // closed, `windows` comes back empty and the feature is invisible again.
+  if (!s.pot) return null;
+  return s.pot.off && s.pot.windows.length === 0 ? null : s.pot;
 }
 
 // ── formatting ───────────────────────────────────────────────────────────────
@@ -133,13 +142,15 @@ export function WindowPotChip({ pot, matchupId, win, winLabel, lockAtMs, cards }
 }) {
   const [open, setOpen] = useState(false);
   const w = pot.windows.find((x) => x.win === win) ?? null;
-  const openable = pot.both_live && lockAtMs != null && Date.now() < lockAtMs;
+  // `pot.off` ⇒ the super admin has the feature switched off for this league; no
+  // new offers, and any pot already running is read-only until it closes itself.
+  const openable = !pot.off && pot.both_live && lockAtMs != null && Date.now() < lockAtMs;
 
   // Nothing to show: no pot here, and no way to start one.
   if (!w && !openable) return null;
 
   // Is the ball in your court? Drives the pulse.
-  const yours = w
+  const yours = w && !pot.off
     ? (w.state === 'offered' && w.leader === 'them') || (w.state === 'live' && w.turn === 'you')
     : false;
   const closed = w ? isClosed(w.state) : false;
@@ -157,6 +168,7 @@ export function WindowPotChip({ pot, matchupId, win, winLabel, lockAtMs, cards }
   const status = (): string => {
     if (!w) return `PUT ◎${pot.ante} ON THIS WINDOW →`;
     if (closed) return potOutcomeLine(w) ?? 'CLOSED';
+    if (pot.off) return 'PAUSED — CLOSING OUT';
     if (w.state === 'locked') return 'RIDING TO THE FINAL';
     if (w.state === 'offered') {
       return w.leader === 'them'
@@ -226,7 +238,7 @@ function PotSheet({ pot, matchupId, win, w, winLabel, lockAtMs, onClose }: {
 
   useEffect(() => { setAmount((a) => snapAmt(a)); }, [eff]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const bettingOpen = lockAtMs != null && Date.now() < lockAtMs;
+  const bettingOpen = !pot.off && lockAtMs != null && Date.now() < lockAtMs;
   const closed = w ? isClosed(w.state) : false;
   const myTurn = w?.state === 'live' && w.turn === 'you';
   const owed = myTurn ? w!.owed : 0;
@@ -282,7 +294,14 @@ function PotSheet({ pot, matchupId, win, w, winLabel, lockAtMs, onClose }: {
           {w?.state === 'live' && <span>{myTurn ? 'YOUR MOVE' : 'WITH THEM'}</span>}
         </div>
 
-        {!pot.both_live && (
+        {pot.off && (
+          <Notice tone="warn">
+            Window pots are switched off for this league. {w
+              ? 'This one is closing out on its own — every chip either finds a winner or comes back to whoever put it in.'
+              : 'Nothing to bet here.'}
+          </Notice>
+        )}
+        {!pot.off && !pot.both_live && (
           <Notice tone="dim">There’s no manager on the other seat, so nobody could answer an offer. Nothing to bet here.</Notice>
         )}
         {w?.state === 'locked' && (
@@ -293,13 +312,13 @@ function PotSheet({ pot, matchupId, win, w, winLabel, lockAtMs, onClose }: {
         {note && <Notice tone="good">{note}</Notice>}
 
         {/* ── the ◎10 handshake ── */}
-        {!w && pot.both_live && bettingOpen && (
+        {!w && !pot.off && pot.both_live && bettingOpen && (
           <button disabled={busy || pot.my_bank < pot.ante} style={btn('var(--warn)')}
             onClick={() => run(() => potAnte(matchupId, win), `◎${pot.ante} is on the table — it’s with them now.`)}>
             {pot.my_bank < pot.ante ? `NOT ENOUGH COIN — NEED ◎${pot.ante}` : `PUT ◎${pot.ante} UP`}
           </button>
         )}
-        {w?.state === 'offered' && w.leader === 'them' && bettingOpen && (
+        {w?.state === 'offered' && w.leader === 'them' && !pot.off && bettingOpen && (
           <>
             <button disabled={busy || pot.my_bank < pot.ante} style={btn('var(--warn)')}
               onClick={() => run(() => potAnte(matchupId, win), 'Matched — they open the betting.')}>
@@ -311,14 +330,14 @@ function PotSheet({ pot, matchupId, win, w, winLabel, lockAtMs, onClose }: {
             </div>
           </>
         )}
-        {w?.state === 'offered' && w.leader === 'you' && (
+        {w?.state === 'offered' && w.leader === 'you' && !pot.off && (
           <Notice tone="dim">
             Your ◎{w.you_ante} is on the table. If they never match it, it voids at picks lock and comes straight back.
           </Notice>
         )}
 
         {/* ── your turn ── */}
-        {myTurn && bettingOpen && (
+        {myTurn && !pot.off && bettingOpen && (
           <>
             {owed > 0 ? (
               <div style={{ display: 'flex', gap: 8 }}>
@@ -370,7 +389,7 @@ function PotSheet({ pot, matchupId, win, w, winLabel, lockAtMs, onClose }: {
             )}
           </>
         )}
-        {w?.state === 'live' && !myTurn && bettingOpen && (
+        {w?.state === 'live' && !myTurn && !pot.off && bettingOpen && (
           <Notice tone="dim">Waiting on them. You’ll get the move back as soon as they act.</Notice>
         )}
 

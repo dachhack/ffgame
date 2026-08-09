@@ -521,7 +521,7 @@ export async function revealedOppBuffs(matchupId: string, userId: string): Promi
 // ── Super admin ─────────────────────────────────────────────────────────────────
 export type Controller = 'human' | 'ai';
 export type LineupPolicy = 'best_lineup' | 'ai' | 'empty';
-export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; provider?: string; avatar_url?: string | null; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; weekly_budget?: number; test_live_at?: string | null; preseason_at?: string | null; }
+export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; provider?: string; avatar_url?: string | null; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; weekly_budget?: number; test_live_at?: string | null; preseason_at?: string | null; /** Window Pot: the per-league flag (0 = off) + its ceiling, and how many pots are in flight right now. */ pot_ante?: number; pot_cap?: number; pot_open?: number; }
 export interface AdminUser { id: string; email: string | null; sleeper_username: string | null; sleeper_user_id: string | null; enrolled: number; created_at: string; }
 export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; claim_email?: string | null; }
 export interface AdminAdmin { email: string; note: string | null; }
@@ -1220,3 +1220,15 @@ export const potAnte = (matchupId: string, win: string) =>
  *  open rolls the call back with it. 'fold' backs out for exactly your ante. */
 export const potAct = (matchupId: string, win: string, action: 'check' | 'wager' | 'call' | 'raise' | 'fold', amount?: number) =>
   rpc<PotActionResult>('pot_act', { p_matchup_id: matchupId, p_win: win, p_action: action, p_amount: amount ?? null });
+
+/** Super admin: turn the Window Pot on or off for ONE league, and tune its two
+ *  numbers. Turning it off stops new play but deliberately leaves pots already
+ *  under way to close and settle themselves — `open_pots` reports how many that
+ *  is. Omit the numbers to keep/restore the defaults. */
+export const adminSetPot = (leagueId: string, on: boolean, ante?: number, cap?: number) =>
+  rpc<{ ok: boolean; error?: string; on?: boolean; pot_ante?: number; pot_cap?: number; open_pots?: number }>(
+    'admin_set_pot', { p_league_id: leagueId, p_on: on, p_ante: ante ?? null, p_cap: cap ?? null });
+/** Super admin: unwind a league's pots on the spot — every offer, ladder and
+ *  frozen pot is voided and every chip goes back to whoever put it in. */
+export const adminClosePots = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; closed?: number }>('admin_close_pots', { p_league_id: leagueId });

@@ -22,12 +22,27 @@ so had never applied anywhere; a 0107 that undid half of an unreleased 0106 woul
 be permanent noise in the migration history for no benefit. If 0106 has since
 merged when you read this, that reasoning expires — patch forward.
 
-**It ships OFF.** `league.pot_ante` defaults to **0**, which disables the feature
-end to end: the RPCs refuse, `pot_state` returns `{off:true}`, and the client
-renders nothing. Flip it per league from the SQL editor (`update league set
-pot_ante = 10 where name = '…'`). Unlike the first design there is nothing to
-wait for — pots are created by managers tapping, not by a scheduled pass, so it
-is live the moment the flag flips.
+**It ships OFF, per league, behind a switch you own.** `league.pot_ante` defaults
+to **0**, which disables the feature end to end: the RPCs refuse, `pot_state`
+returns `{off:true}` with no windows, and the client renders nothing. The switch
+is in the app — **AdminPage → LEAGUES → a league → ADMIN MODES → `🪙 window
+pot`**, beside the preseason / live-test / card-theme toggles — with a `tune`
+affordance for the ante and the pot cap (validated so the cap always covers both
+antes). There is nothing to wait for: pots are created by managers tapping, not
+by a scheduled pass, so it's live the moment you flip it.
+
+**Turning it off never strands coin, by design.** `pot_sweep` doesn't consult
+the flag, so pots already under way still void / freeze / settle on their own
+schedule and every committed chip finds its way home or to a winner. The toggle
+tells you how many are still in flight, and `pot_state` keeps reporting them
+(read-only, every control locked) so their managers watch them finish instead of
+seeing coin vanish from their bank. Once they've all closed, the state comes back
+empty and the feature is invisible again. To unwind a league on the spot instead
+— a test league that needs resetting, or killing the feature mid-week without
+leaving bets hanging over a slate — the **`⟲ void N open`** button (only present
+when there are open pots) voids every one and refunds every chip: nobody wins,
+nobody loses. SQL equivalents are `admin_set_pot(league, on, ante, cap)` and
+`admin_close_pots(league)`; both are `is_admin()`-gated.
 
 ### The four things worth knowing
 
@@ -85,15 +100,24 @@ reconciliation UI.
   log. Backing out asks for confirmation and states the cost. One shared poll for
   every window; it calls `pot_sweep` first (any-member-advances, like
   `draft_tick`). Demo/sim boards (`liveCtx == null`) never mount it.
+- **Admin levers** — `admin_set_pot` / `admin_close_pots` (both `is_admin()`
+  gated), and `admin_overview` now carries `pot_ante` / `pot_cap` / `pot_open`
+  so the toggle renders from the league list the admin page already loads
+  instead of a per-league fetch. `WindowPotToggle` in `src/screens/AdminPage.tsx`.
 - **Probes (`scripts/db/window-pot-probes.sql`)** — every §6 scenario against the
   real RPCs and wallets: opt-in (no taps ⇒ no rows, no coin), the void, the
   handshake and leader-acts-first, out-of-turn refusal, the full ladder to the
   ◎120 cap, backing out costing exactly ◎10 both deep and shallow, table stakes
   + all-in, the deadline being the pick-lock instant, the unanswered wager going
   home, settlement, the dead-even split, the empty chair, replay idempotency,
-  the ledger invariant, and the zero-sum check. Each fixture gets its own WEEK,
-  not just its own season — `window_kickoff` resolves the newest season carrying
-  a week number, so fixtures sharing a week would resolve each other's kickoffs.
+  the ledger invariant, and the zero-sum check — plus the admin flag itself: only
+  a super admin can flip it, the numbers are range-guarded, flipping it ON lets a
+  manager open a pot immediately, flipping it OFF blocks new play while the
+  in-flight pot stays visible AND the sweep still unwinds it, and
+  `admin_close_pots` refunds every chip and is a no-op on the second run. Each
+  fixture gets its own WEEK, not just its own season — `window_kickoff` resolves
+  the newest season carrying a week number, so fixtures sharing a week would
+  resolve each other's kickoffs.
 
 **Harness repairs made on the way** (`run-scratch-probes.sh` was red before this
 session): it now stubs `pg_net` the way it already stubbed `http`, so 0091
@@ -108,8 +132,8 @@ anyone with the board open (the client poll sweeps its own matchup); what's lost
 is the safety net for matchups nobody is watching at the deadline, which at a
 3am lock is most of them.
 
-**Live-fire plan (Aug 13):** flip `pot_ante = 10` on the two-account test league,
-then from account A put ◎10 on a window and watch B's board offer the match;
+**Live-fire plan (Aug 13):** flip the league on from the admin page, then from
+account A put ◎10 on a window and watch B's board offer the match;
 match it, confirm A gets first action, run a wager/call/raise ladder to the cap,
 back out of one window and see it settle for exactly ◎10, leave a wager
 unanswered on another and confirm it returns at picks lock, leave a third offer
