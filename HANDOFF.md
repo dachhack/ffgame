@@ -64,6 +64,25 @@ preseason, the regular season and pods coexist in one process — is deferred;
 the tick body is mostly week-parameterised already, but `espnWeekCache` is a
 single cache and the injury poll would need hoisting out of the loop.
 
+**Practice grants the extra slots (0111).** The lineup cap is a hard
+`base_slot_count() = 8`, mirroring the REGULAR season's fixed five-window board.
+Preseason boards are derived from the real slate instead, and are shaped nothing
+like it — the loaded 2026 preseason derives `wk 101: 1 window / 1 slot`,
+`wk 102: 6 windows / 7 slots`, `wk 103: 9 windows / 10 slots`. So at preseason
+week 3 the board renders ten slots and the trigger refused the ninth; worse,
+NINE windows against eight slots meant a player couldn't field one player per
+window, handing the opponent an unopposed +5 window-win bonus. Practice weeks
+now grant `extra_slot_cap()` outright in `enforce_slot_cap` — the same ceiling a
+paying team could reach in the regular season, free, nothing to buy or place.
+Additive to purchases (still free in practice), and bounded, since
+`buy_extra_slot` caps purchases at the same number → practice ceiling is
+base + 2 + 2. NOT derived from the week's real window count: SQL can't read the
+TS derivation, and 0100 exists precisely because a second drifting copy of it
+caused a live bug. No client change — the board already renders the derived
+slots; only the cap was in the way. `my_extra()` still reports what was actually
+bought (it drives the shop count and `buy_extra_slot`'s own cap check; folding
+the grant in would read as "you already own 2" and block placing any).
+
 **Hardening found on the way:** `_clone_preseason_weeks` (0054) is SECURITY
 DEFINER and was EXECUTE-to-PUBLIC by default — any signed-in user could clone or
 wipe weeks 101-103 of any league. Revoked, along with the new `_set_preseason`.

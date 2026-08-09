@@ -213,6 +213,46 @@ begin
   perform assert_eq(q, 1, '8g real arm consumed inventory');
 end $$;
 
+-- ── 8b. practice grants the extra slots for free (0111) ──────────────────────
+-- Preseason week 3 derives 10 slots across 9 windows against a base cap of 8, so
+-- without the grant a player can't fill their own board — and can't even field
+-- one player per window, handing the opponent a free +5 window-win bonus.
+do $$
+declare mid_practice uuid; mid_real uuid; i int;
+begin
+  select id into mid_practice from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 103;
+  select id into mid_real from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 1;
+  perform probe_as('1');
+
+  -- 10 filled picks land on a practice week (8 base + the 2 granted).
+  for i in 1..10 loop
+    insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
+      values (mid_practice, '00000000-0000-0000-0000-000000000101', 'w' || i, 's' || i, 'player-' || i);
+  end loop;
+  perform assert_eq((select count(*) from sealed_pick where matchup_id = mid_practice), 10, '8h ten practice picks accepted');
+
+  -- The 11th is still refused — the grant is a ceiling, not an opt-out.
+  begin
+    insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
+      values (mid_practice, '00000000-0000-0000-0000-000000000101', 'w11', 's11', 'player-11');
+    raise exception 'PROBE FAIL 8i — an 11th practice pick was accepted';
+  exception when check_violation then null;
+  end;
+
+  -- A REAL week is untouched: 8 in, the 9th refused.
+  for i in 1..8 loop
+    insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
+      values (mid_real, '00000000-0000-0000-0000-000000000101', 'w' || i, 's' || i, 'player-' || i);
+  end loop;
+  perform assert_eq((select count(*) from sealed_pick where matchup_id = mid_real), 8, '8j eight real picks accepted');
+  begin
+    insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
+      values (mid_real, '00000000-0000-0000-0000-000000000101', 'w9', 's9', 'player-9');
+    raise exception 'PROBE FAIL 8k — a 9th real-week pick was accepted without an extra slot';
+  exception when check_violation then null;
+  end;
+end $$;
+
 -- ── 9. turning practice off removes the weeks entirely ───────────────────────
 do $$
 declare n int; bal numeric;
