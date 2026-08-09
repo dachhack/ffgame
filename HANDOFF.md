@@ -100,6 +100,31 @@ place per side: `preseason_week_count()` / `preseason_board_weeks()` in SQL,
 `PRESEASON_WEEKS` in TS (mirror convention, bump together), and the probes
 assert off the helper so extending it can't silently under-assert.
 
+**Distinct pairings + skipping played weeks (0113).** 0054's clone copied WEEK 1
+into every preseason board week, so a playtester faced the same opponent three
+(then four) times running — fine for the one-night live-fire it was built for,
+poor for a month of practice. Board week 100+i now clones regular-season week i,
+falling back to Week 1 for any week the league hasn't scheduled. It also cloned
+regardless of the calendar: turning practice on today seeded week 101, the Hall
+of Fame game played back on Aug 6, as a live-looking matchup that will never
+receive another snap. Weeks whose last kickoff is >4h past are skipped (the same
+allowance `defaultOpenWeek`/`join_weekly` use), the clone reports which weeks it
+seeded and which it skipped, and `enablePreseasonPractice` seeds deep pools for
+exactly the seeded ones. If EVERY preseason week is past, the on-switch refuses
+and un-stamps rather than handing back a league with nothing playable.
+
+**Pool filters (`boardParts.tsx`).** A normal fantasy roster is 8-20 players, so
+both pool views rendered whole and unfiltered. Deep practice pools are ~1,000
+players a week — and up to ~400 inside ONE window (wk104 `fri2`: 12 teams across
+6 games, 2 slots) — in a 440px scroll with a headshot and injury badge per row.
+Above `FILTER_AT` (25) a filter bar appears: name search (matches short OR full
+name), position chips, and game / team selects, where choosing a game narrows the
+team list to that game's two sides so the selects compose. `RosterAside` adds a
+WINDOW select, since the rail is the all-windows view; `PlayerPicker` doesn't
+need one (it belongs to a single slot, so its window is already fixed). Below the
+threshold nothing renders at all — a regular-season board is untouched. Filters
+are pure view state and never change what's pickable.
+
 **Hardening found on the way:** `_clone_preseason_weeks` (0054) is SECURITY
 DEFINER and was EXECUTE-to-PUBLIC by default — any signed-in user could clone or
 wipe weeks 101-103 of any league. Revoked, along with the new `_set_preseason`.

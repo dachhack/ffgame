@@ -2,9 +2,11 @@
 -- raises. Companion suite to native-league-probes.sql, driven by the same
 -- scratch-DB harness (scripts/db/run-scratch-probes.sh).
 --
--- What this pins down: preseason board weeks (101-103) are THROWAWAY — they never
--- move real coin, real inventory, or a real record — and a league's commissioner
--- (not just a super-admin) can open and close practice.
+-- What this pins down: the preseason board weeks (101 … 100 + preseason_week_
+-- count()) are THROWAWAY — they never move real coin, real inventory, or a real
+-- record — a league's commissioner (not just a super-admin) can open and close
+-- practice, each week clones a DIFFERENT regular-season pairing, already-played
+-- weeks are skipped, and practice grants the extra lineup slots for free.
 \set QUIET on
 \pset pager off
 
@@ -56,9 +58,24 @@ insert into league_membership (league_id, sleeper_roster_id, app_user_id, enroll
 -- The Week-1 pairing the practice clone copies.
 insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
 values ('00000000-0000-0000-0000-0000000009f1', 1, 1, 2, 'scheduled');
--- A preseason slate row so the pool seeder has teams (week 101).
-insert into nfl_slate (season, week, home, away, win, kickoff)
-values ('2026', 101, 'ARI', 'CAR', 'tnf', '2026-08-07T00:00Z') on conflict do nothing;
+-- Week-2/3/4 pairings, so the clone has DISTINCT sources to copy (0113 maps board
+-- week 100+i to regular week i). Home/away flip each week — that flip is what the
+-- probes assert on, since it's what a playtester actually experiences as "a
+-- different matchup".
+insert into matchup (league_id, week, home_roster_id, away_roster_id, status) values
+  ('00000000-0000-0000-0000-0000000009f1', 2, 2, 1, 'scheduled'),
+  ('00000000-0000-0000-0000-0000000009f1', 3, 1, 2, 'scheduled'),
+  ('00000000-0000-0000-0000-0000000009f1', 4, 2, 1, 'scheduled');
+
+-- Preseason slate rows so the pool seeder has teams. Week 101's kickoff is in the
+-- PAST (the real Hall of Fame game, Aug 2026) — 0113 must skip it; the rest are
+-- pushed far enough out that these probes keep passing after the real preseason.
+insert into nfl_slate (season, week, home, away, win, kickoff) values
+  ('2026', 101, 'ARI', 'CAR', 'tnf', '2026-08-07T00:00Z'),
+  ('2026', 102, 'CIN', 'DET', 'tnf', (now() + interval '30 days')::timestamptz),
+  ('2026', 103, 'HOU', 'LV',  'tnf', (now() + interval '37 days')::timestamptz),
+  ('2026', 104, 'BUF', 'PIT', 'tnf', (now() + interval '44 days')::timestamptz)
+on conflict do nothing;
 
 -- ── 1. the predicate ─────────────────────────────────────────────────────────
 do $$
@@ -84,12 +101,49 @@ begin
   r := set_preseason_practice('00000000-0000-0000-0000-0000000009f1', true);
   perform assert_ok(r, '2c commish opens practice');
   perform assert_true((r ->> 'preseason_at') is not null, '2d stamped');
-  -- One per preseason board week — four of them for 2026 (0112), read from the
-  -- helper so extending the preseason never silently under-asserts here.
+  -- Four board weeks for 2026 (0112), but week 101 is already played, so 0113
+  -- seeds only 102-104. Read from the helper so extending the preseason can't
+  -- silently under-assert here.
+  perform assert_true(101 = any(preseason_board_weeks()) and 104 = any(preseason_board_weeks()), '2f weeks 101-104 in range');
   select count(*) into n from matchup
     where league_id = '00000000-0000-0000-0000-0000000009f1' and week = any(preseason_board_weeks());
-  perform assert_eq(n, array_length(preseason_board_weeks(), 1), '2e one cloned matchup per preseason week');
-  perform assert_true(101 = any(preseason_board_weeks()) and 104 = any(preseason_board_weeks()), '2f weeks 101-104 in range');
+  perform assert_eq(n, 3, '2g one cloned matchup per PLAYABLE preseason week');
+  perform assert_eq((select count(*) from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 101),
+    0, '2h the already-played week was skipped');
+  perform assert_true((r -> 'skipped') @> '101'::jsonb, '2i skip reported to the caller');
+  perform assert_true((r -> 'weeks') @> '102'::jsonb and (r -> 'weeks') @> '104'::jsonb, '2j seeded weeks reported');
+end $$;
+
+-- ── 2b. each practice week clones a DIFFERENT regular-season week ────────────
+-- Board week 100+i mirrors week i, so a playtester gets a different matchup each
+-- time instead of the same Week-1 opponent four weeks running.
+do $$
+declare h102 int; h103 int; h104 int;
+begin
+  select home_roster_id into h102 from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 102;
+  select home_roster_id into h103 from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 103;
+  select home_roster_id into h104 from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 104;
+  perform assert_eq(h102, 2, '2k wk102 cloned regular week 2 (roster 2 hosts)');
+  perform assert_eq(h103, 1, '2l wk103 cloned regular week 3 (roster 1 hosts)');
+  perform assert_eq(h104, 2, '2m wk104 cloned regular week 4 (roster 2 hosts)');
+  perform assert_true(h102 is distinct from h103, '2n practice weeks are not all the same pairing');
+end $$;
+
+-- ── 2c. a league with only Week 1 scheduled falls back to it ─────────────────
+do $$
+declare lid uuid := '00000000-0000-0000-0000-0000000009f3'; n int;
+begin
+  insert into league (id, sleeper_league_id, season, name, commissioner_id)
+  values (lid, 'PRESEASON-PROBE-3', '2026', 'Week-1-only League', '00000000-0000-0000-0000-000000000101');
+  insert into league_membership (league_id, sleeper_roster_id, app_user_id, enrolled, team_name)
+  values (lid, 1, '00000000-0000-0000-0000-000000000101', true, 'Solo');
+  insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
+  values (lid, 1, 1, 1, 'scheduled');
+  perform probe_as('1');
+  perform assert_ok(set_preseason_practice(lid, true), '2o week-1-only league still opens');
+  select count(*) into n from matchup where league_id = lid and week = any(preseason_board_weeks());
+  perform assert_eq(n, 3, '2p fell back to Week 1 for every playable week');
+  perform assert_ok(set_preseason_practice(lid, false), '2q cleanup');
 end $$;
 
 -- ── 3. the deep pool, seeded by the commissioner ─────────────────────────────
@@ -101,17 +155,17 @@ begin
     'preseason board weeks only', '3a regular week refused');
   perform assert_err(seed_preseason_pool('00000000-0000-0000-0000-0000000009f1', 100 + preseason_week_count() + 1, '[{"slot":0}]'::jsonb),
     'preseason board weeks only', '3a2 past the last preseason week refused');
-  perform assert_err(seed_preseason_pool('00000000-0000-0000-0000-0000000009f1', 101, '[]'::jsonb),
+  perform assert_err(seed_preseason_pool('00000000-0000-0000-0000-0000000009f1', 102, '[]'::jsonb),
     'non-empty array', '3b empty pool refused');
-  r := seed_preseason_pool('00000000-0000-0000-0000-0000000009f1', 101,
+  r := seed_preseason_pool('00000000-0000-0000-0000-0000000009f1', 102,
     '[{"slot":0,"player_slug":"kyler-murray","pos":"QB","team":"ARI"}]'::jsonb);
   perform assert_ok(r, '3c commish seeds the pool');
   perform assert_eq((r ->> 'seats')::numeric, 2, '3d every seat got the pool');
-  select count(*) into n from sleeper_lineup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 101;
-  perform assert_eq(n, 2, '3e two lineup rows at week 101');
+  select count(*) into n from sleeper_lineup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 102;
+  perform assert_eq(n, 2, '3e two lineup rows at week 102');
 
   perform probe_as('3');
-  perform assert_err(seed_preseason_pool('00000000-0000-0000-0000-0000000009f1', 101, '[{"slot":0}]'::jsonb),
+  perform assert_err(seed_preseason_pool('00000000-0000-0000-0000-0000000009f1', 102, '[{"slot":0}]'::jsonb),
     'forbidden', '3f outsider cannot seed');
 end $$;
 
@@ -176,7 +230,7 @@ begin
   update matchup set status = 'final', home_final = 80, away_final = 120
     where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 1;
   update matchup set status = 'final', home_final = 200, away_final = 10
-    where league_id = '00000000-0000-0000-0000-0000000009f1' and week in (101, 102);
+    where league_id = '00000000-0000-0000-0000-0000000009f1' and week in (102, 104);
 
   perform probe_as('1');
   st := league_standings('00000000-0000-0000-0000-0000000009f1');
@@ -191,7 +245,7 @@ end $$;
 do $$
 declare mid_practice uuid; mid_real uuid; r jsonb; q int;
 begin
-  select id into mid_practice from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 101;
+  select id into mid_practice from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 103;
   select id into mid_real from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 1;
   perform probe_as('1');  -- home seat, a participant in both
 

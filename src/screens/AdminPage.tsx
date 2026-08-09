@@ -1445,7 +1445,11 @@ function PreseasonPractice({ on, leagueId, season, admin, reload }: { on: boolea
     if (busy) return;
     setBusy('on'); setNote(null);
     const r = await enablePreseasonPractice(leagueId).catch((e: unknown) => ({ ok: false as const, error: friendlyError(e) }));
-    setNote(r.ok ? `✓ ${r.matchups ?? 0} matchups per week · deep pool on ${'weeks' in r ? (r.weeks ?? []).join(', ') : ''}` : (r.error ?? 'failed'));
+    const skipped = ('skipped' in r ? r.skipped ?? [] : []).map((w) => `PRE ${w - 100}`);
+    setNote(r.ok
+      ? `✓ ${r.matchups ?? 0} matchups per week · deep pool on ${('weeks' in r ? r.weeks ?? [] : []).map((w) => `PRE ${w - 100}`).join(', ')}`
+        + (skipped.length ? ` · skipped ${skipped.join(', ')} (already played)` : '')
+      : (r.error ?? 'failed'));
     setBusy(null);
     reload();
   };

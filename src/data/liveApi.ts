@@ -723,7 +723,8 @@ export const adminSetPreseason = (leagueId: string, on: boolean) =>
  *  as adminSetPreseason — the 0110 twin that accepts the league's commissioner,
  *  so opening practice isn't a super-admin errand. */
 export const setPreseasonPractice = (leagueId: string, on: boolean) =>
-  rpc<{ ok: boolean; error?: string; preseason_at?: string | null; matchups?: number }>('set_preseason_practice', { p_league_id: leagueId, p_on: on });
+  rpc<{ ok: boolean; error?: string; preseason_at?: string | null; matchups?: number; weeks?: number[]; skipped?: number[] }>(
+    'set_preseason_practice', { p_league_id: leagueId, p_on: on });
 
 export interface PreseasonWindow {
   /** The preseason slate is loaded for this season (weeks 101-103 have games). */
@@ -769,12 +770,15 @@ export async function preseasonWindow(season: string): Promise<PreseasonWindow> 
  *  preseason snaps. Partial failure is reported, not swallowed: the mode is on
  *  and the weeks that seeded are listed, so a retry is safe (both halves are
  *  idempotent). */
-export async function enablePreseasonPractice(leagueId: string): Promise<{ ok: boolean; error?: string; matchups?: number; weeks?: number[]; pool?: number }> {
+export async function enablePreseasonPractice(leagueId: string): Promise<{ ok: boolean; error?: string; matchups?: number; weeks?: number[]; skipped?: number[]; pool?: number }> {
   const on = await setPreseasonPractice(leagueId, true);
   if (!on.ok) return { ok: false, error: on.error ?? 'could not turn practice on' };
   const weeks: number[] = [];
   let pool = 0, firstErr: string | null = null;
-  for (const wk of PRESEASON_BOARD_WEEKS) {
+  // Seed pools for exactly the weeks the clone seeded — 0113 skips preseason
+  // weeks that have already been played, and reporting a "failure" for a week it
+  // deliberately left alone would be noise.
+  for (const wk of on.weeks?.length ? on.weeks : PRESEASON_BOARD_WEEKS) {
     // A week whose slate hasn't loaded yet isn't fatal — the others still seed,
     // and the worker writes that slate on its first preseason tick (re-seed then).
     const r = await seedPreseasonPool(leagueId, wk).catch((e: unknown) => ({ ok: false, error: friendlyError(e), pool: 0 }));
@@ -784,7 +788,7 @@ export async function enablePreseasonPractice(leagueId: string): Promise<{ ok: b
   if (!weeks.length) {
     return { ok: false, matchups: on.matchups, error: `practice is on, but no week got a deep pool — ${firstErr}` };
   }
-  return { ok: true, matchups: on.matchups, weeks, pool };
+  return { ok: true, matchups: on.matchups, weeks, skipped: on.skipped, pool };
 }
 
 /** Commissioner/admin: replace every seat's pick pool at a preseason board week

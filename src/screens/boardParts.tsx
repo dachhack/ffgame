@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { useStore, PHOTO_SKINS } from '../app/store';
 import type { Phase } from '../app/store';
 import { PlayerImg, InjuryBadge, useIsMobile, ModalBackdrop } from '../app/ui';
-import { windowsForWeek } from '../data/nflSlate';
+import { windowsForWeek, gamesInWindow } from '../data/nflSlate';
 import { METRICS, metricById } from '../data/metrics';
 import { powerupById } from '../data/powerups';
 import { getPlayer } from '../data/league';
@@ -15,6 +15,103 @@ import { PlayerCard } from '../app/cardTable';
 import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
 import { FX_COLOR } from '../data/demoNarration';
 import type { Pick, Player, Pos, WindowId, Metric } from '../types';
+
+// ── Pool filtering ───────────────────────────────────────────────────────────
+// A normal fantasy roster is 8-20 players, so every pool list here used to render
+// whole and unfiltered. PRESEASON PRACTICE pools are a different animal: the deep
+// pool is every active skill player on the week's slate teams (backups included —
+// they're the ones taking the snaps), which is ~1,000 players a week, and up to
+// ~400 inside a single busy window. Scrolling that to find one name is hopeless.
+//
+// So: below FILTER_AT the lists behave exactly as they always have (no controls,
+// no clutter on a regular-season board); above it a filter bar appears. Filters
+// are pure view state — nothing here changes what's pickable.
+const FILTER_AT = 25;
+
+interface PoolFilter { q: string; pos: string; team: string; game: string }
+const EMPTY_FILTER: PoolFilter = { q: '', pos: '', team: '', game: '' };
+
+/** A game's key/label from a slate row — the pair of teams, away-first, as the
+ *  board shows it everywhere else. */
+const gameKey = (g: { home: string; away: string }) => `${g.away}@${g.home}`;
+
+function applyPoolFilter(players: Player[], f: PoolFilter, teamsOfGame: Map<string, Set<string>>): Player[] {
+  const q = f.q.trim().toLowerCase();
+  const gameTeams = f.game ? teamsOfGame.get(f.game) : null;
+  return players.filter((p) => {
+    if (f.pos && p.pos !== f.pos) return false;
+    if (f.team && p.team !== f.team) return false;
+    if (gameTeams && !gameTeams.has(p.team)) return false;
+    if (!q) return true;
+    // Match either display or full name, so "hardman" finds "M. Hardman" and
+    // "mecole" finds it too.
+    return p.name.toLowerCase().includes(q) || (p.full ?? '').toLowerCase().includes(q);
+  });
+}
+
+const filterChip = (on: boolean): React.CSSProperties => ({
+  fontFamily: 'inherit', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+  color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)',
+  border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '3px 7px', cursor: 'pointer',
+});
+const filterInput: React.CSSProperties = {
+  fontFamily: 'inherit', fontSize: 12, color: 'var(--text)', background: 'var(--bg)',
+  border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 8px', width: '100%', minWidth: 0,
+};
+const filterSelect: React.CSSProperties = { ...filterInput, fontSize: 10, padding: '4px 6px', width: 'auto' };
+
+/** The filter bar: name search, position chips, and game / team selects. Rendered
+ *  only when a pool is big enough to need it (see FILTER_AT). `games` is the
+ *  window's slate, so the game list is exactly what's playable in this slot. */
+function PoolFilterBar({ filter, setFilter, players, shown, games, compact }: {
+  filter: PoolFilter; setFilter: (f: PoolFilter) => void; players: Player[]; shown: number;
+  games: { home: string; away: string }[]; compact?: boolean;
+}) {
+  // Only offer positions/teams that actually appear, in the board's usual order.
+  const posOrder = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
+  const positions = posOrder.filter((p) => players.some((x) => x.pos === p));
+  const gameTeams = filter.game ? new Set([filter.game.split('@')[0], filter.game.split('@')[1]]) : null;
+  const teams = [...new Set(players.map((p) => p.team))]
+    .filter((t) => !gameTeams || gameTeams.has(t)).sort();
+  const set = (patch: Partial<PoolFilter>) => setFilter({ ...filter, ...patch });
+  const dirty = !!(filter.q || filter.pos || filter.team || filter.game);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: compact ? '0 0 6px' : '10px 12px 8px', borderBottom: compact ? 'none' : '1px solid var(--bd)' }}>
+      <input value={filter.q} onChange={(e) => set({ q: e.target.value })} placeholder="search players…"
+        aria-label="Search players by name" style={filterInput} />
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button onClick={() => set({ pos: '' })} className="mono" style={filterChip(!filter.pos)}>ALL</button>
+        {positions.map((p) => (
+          <button key={p} onClick={() => set({ pos: filter.pos === p ? '' : p })} className="mono" style={filterChip(filter.pos === p)}>{p}</button>
+        ))}
+      </div>
+      {(games.length > 1 || teams.length > 2) && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          {games.length > 1 && (
+            // Picking a game narrows the team list to that game's two sides, so
+            // the two selects compose instead of fighting.
+            <select value={filter.game} onChange={(e) => set({ game: e.target.value, team: '' })} aria-label="Filter by game" className="mono" style={filterSelect}>
+              <option value="">all games ({games.length})</option>
+              {games.map((g) => <option key={gameKey(g)} value={gameKey(g)}>{g.away} @ {g.home}</option>)}
+            </select>
+          )}
+          {teams.length > 1 && (
+            <select value={filter.team} onChange={(e) => set({ team: e.target.value })} aria-label="Filter by team" className="mono" style={filterSelect}>
+              <option value="">all teams ({teams.length})</option>
+              {teams.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          )}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', letterSpacing: '0.06em' }}>
+          {shown === players.length ? `${players.length} players` : `${shown} of ${players.length}`}
+        </span>
+        {dirty && <button onClick={() => setFilter(EMPTY_FILTER)} className="mono" style={{ background: 'none', border: 'none', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', cursor: 'pointer', padding: 0 }}>✕ clear</button>}
+      </div>
+    </div>
+  );
+}
 
 export function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, onToggle, bye = [], week, fluid }: {
   side: 'you' | 'their';
@@ -32,6 +129,22 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, sealed, colla
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
   const assignedIds = new Set(Object.values(picks).map((p) => p.playerId));
   const total = (Object.values(pools) as Player[][]).reduce((n, a) => n + a.length, 0);
+  // The rail lists EVERY window at once, so on a deep preseason pool it's the
+  // ~1,000-player view. Filters here therefore add a window axis the modal
+  // picker doesn't need (that one is already scoped to a single slot's window).
+  const [filter, setFilter] = useState<PoolFilter>(EMPTY_FILTER);
+  const [winFilter, setWinFilter] = useState<string>('');
+  const railWindows = windowsForWeek(week).filter((w) => !winFilter || w.id === winFilter);
+  const needsFilter = total > FILTER_AT;
+  const railGames = railWindows.flatMap((w) => gamesInWindow(week, w.id));
+  const railTeamsOfGame = new Map(railGames.map((g) => [gameKey(g), new Set([g.home, g.away])]));
+  const poolFor = (id: WindowId): Player[] => {
+    const all = pools[id] ?? [];
+    return needsFilter ? applyPoolFilter(all, filter, railTeamsOfGame) : all;
+  };
+  const shownTotal = needsFilter
+    ? railWindows.reduce((n, w) => n + poolFor(w.id).length, 0)
+    : total;
 
   if (collapsed && !fluid) {
     return (
@@ -55,14 +168,24 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, sealed, colla
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.2em', color: accent, fontWeight: 700 }}>{side === 'you' ? '◂' : '▸'} {side === 'you' ? 'YOUR' : 'OPPONENT'} ROSTER</span>
         <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{total}</span>
       </button>
-      {windowsForWeek(week).map((w) => (
+      {needsFilter && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <select value={winFilter} onChange={(e) => setWinFilter(e.target.value)} aria-label="Filter by window" className="mono" style={{ ...filterSelect, width: '100%' }}>
+            <option value="">all windows ({windowsForWeek(week).length})</option>
+            {windowsForWeek(week).map((w) => <option key={w.id} value={w.id}>{w.label} · {w.time}</option>)}
+          </select>
+          <PoolFilterBar filter={filter} setFilter={setFilter} players={railWindows.flatMap((w) => pools[w.id] ?? [])}
+            shown={shownTotal} games={railGames} compact />
+        </div>
+      )}
+      {railWindows.map((w) => (
         <div key={w.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
             <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{w.label}</span>
             <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{w.time}</span>
           </div>
-          {(pools[w.id] ?? []).length === 0 && <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', padding: '0 4px' }}>— none playing —</span>}
-          {(pools[w.id] ?? []).map((p) => {
+          {poolFor(w.id).length === 0 && <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', padding: '0 4px' }}>{(pools[w.id] ?? []).length ? '— none match —' : '— none playing —'}</span>}
+          {poolFor(w.id).map((p) => {
             // Never reveal which players the opponent has selected during setup.
             const assigned = assignedIds.has(p.id) && (side === 'you' || phase !== 'setup');
             const interactive = side === 'you' && phase === 'setup';
@@ -387,6 +510,15 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
   const label = windowsForWeek(week).find((w) => w.id === win)?.label ?? win.toUpperCase();
   const { bigText } = useStore();
   const fs = (n: number) => bigText ? Math.round(n * 1.3 * 10) / 10 : n; // larger-text mode bumps the list's fine print
+  // Deep preseason pools put ~400 candidates in this one modal; filter them.
+  // The window is already fixed (this picker belongs to one slot), so the axes
+  // that matter here are name, position, and which of the window's games.
+  const [filter, setFilter] = useState<PoolFilter>(EMPTY_FILTER);
+  const games = gamesInWindow(week, win);
+  const teamsOfGame = new Map(games.map((g) => [gameKey(g), new Set([g.home, g.away])]));
+  const needsFilter = players.length > FILTER_AT;
+  const shownPlayers = needsFilter ? applyPoolFilter(players, filter, teamsOfGame) : players;
+  const emptyNote = players.length === 0 ? '— no eligible players in this window —' : '— nothing matches those filters —';
   return (
     <ModalBackdrop onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
@@ -397,12 +529,13 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
         </div>
+        {needsFilter && <PoolFilterBar filter={filter} setFilter={setFilter} players={players} shown={shownPlayers.length} games={games} />}
         {cards ? (
           // The felt spread: candidates dealt as tappable player cards.
           <div className="ctable" style={{ maxHeight: 440, overflowY: 'auto', overflowX: 'hidden', borderRadius: 0 }}>
-            {players.length === 0 && <div className="mono" style={{ fontSize: fs(10), color: '#93A594', textAlign: 'center', padding: '16px 0' }}>— no eligible players in this window —</div>}
+            {shownPlayers.length === 0 && <div className="mono" style={{ fontSize: fs(10), color: '#93A594', textAlign: 'center', padding: '16px 0' }}>{emptyNote}</div>}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 12, justifyContent: 'center', justifyItems: 'center', padding: '8px 4px' }}>
-              {players.map((p, i) => {
+              {shownPlayers.map((p, i) => {
                 const sel = p.id === currentId;
                 const isGated = !sel && !!gated?.(p);
                 return (
@@ -416,8 +549,8 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
           </div>
         ) : (
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 440, overflow: 'auto' }}>
-          {players.length === 0 && <div className="mono" style={{ fontSize: fs(10), color: 'var(--faint)', textAlign: 'center', padding: '16px 0' }}>— no eligible players in this window —</div>}
-          {players.map((p) => {
+          {shownPlayers.length === 0 && <div className="mono" style={{ fontSize: fs(10), color: 'var(--faint)', textAlign: 'center', padding: '16px 0' }}>{emptyNote}</div>}
+          {shownPlayers.map((p) => {
             const sel = p.id === currentId;
             const isGated = !sel && !!gated?.(p); // premium position → locked
             return (
