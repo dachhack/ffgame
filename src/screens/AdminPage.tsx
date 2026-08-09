@@ -21,6 +21,7 @@ import { importEspnSeason, syncEspnSeason, stripProvider } from '../data/provide
 import { forceResolve } from '../data/forceResolve';
 import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
 import { Avatar } from '../app/ui';
+import { useStore } from '../app/store';
 import { AvatarPicker } from '../app/AvatarPicker';
 import { FeedSheet } from './FeedSheet';
 import { WINDOWS, defaultMetric } from '../data/metrics';
@@ -192,7 +193,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
         <>
           <FeatureFlags />
           <SoloPasses />
-          <Users />
+          <Users onLeaveAdmin={onBack} />
           <Admins />
           <Overrides overrides={overrides} reload={load} />
         </>
@@ -1640,7 +1641,8 @@ function SoloPasses() {
 // diagnose "why can't I set my lineup" without gaining the ability to act as
 // somebody. The banner says so, because a panel that mirrors a user's screen is
 // easy to mistake for being logged in as them.
-function ViewAs({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+function ViewAs({ user, onClose, onLeaveAdmin }: { user: AdminUser; onClose: () => void; onLeaveAdmin?: () => void }) {
+  const { setViewAs } = useStore();
   const [week, setWeek] = useState('1');
   const [state, setState] = useState<ViewAsState | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -1668,6 +1670,10 @@ function ViewAs({ user, onClose }: { user: AdminUser; onClose: () => void }) {
             style={{ ...inp, width: 52, padding: '5px 6px', textAlign: 'center' }} />
           <button onClick={() => load(Number(week) || 1)} className="mono" style={btn(false)}>load</button>
           <span style={{ flex: 1 }} />
+          {onLeaveAdmin && (
+            <button onClick={() => { setViewAs({ userId: user.id, label: user.email ?? user.sleeper_username ?? user.id.slice(0, 8) }); onClose(); onLeaveAdmin(); }}
+              className="mono" style={btn(true)} title="render the real site against this user's data, read-only">🌐 browse as them</button>
+          )}
           <button onClick={onClose} className="mono" style={linkBtn}>close</button>
         </div>
 
@@ -1732,7 +1738,7 @@ function ViewAs({ user, onClose }: { user: AdminUser; onClose: () => void }) {
   );
 }
 
-function Users() {
+function Users({ onLeaveAdmin }: { onLeaveAdmin?: () => void }) {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [viewing, setViewing] = useState<AdminUser | null>(null);
   const [q, setQ] = useState('');
@@ -1743,7 +1749,7 @@ function Users() {
     || (u.sleeper_username ?? '').toLowerCase().includes(needle));
   return (
     <div style={card}>
-      {viewing && <ViewAs user={viewing} onClose={() => setViewing(null)} />}
+      {viewing && <ViewAs user={viewing} onClose={() => setViewing(null)} onLeaveAdmin={onLeaveAdmin} />}
       <div style={h}>USERS ({users?.length ?? '…'})</div>
       {!!users?.length && (
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="filter by email or Sleeper handle…"
