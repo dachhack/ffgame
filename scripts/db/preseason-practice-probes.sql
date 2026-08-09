@@ -84,8 +84,12 @@ begin
   r := set_preseason_practice('00000000-0000-0000-0000-0000000009f1', true);
   perform assert_ok(r, '2c commish opens practice');
   perform assert_true((r ->> 'preseason_at') is not null, '2d stamped');
-  select count(*) into n from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week in (101,102,103);
-  perform assert_eq(n, 3, '2e one cloned matchup per preseason week');
+  -- One per preseason board week — four of them for 2026 (0112), read from the
+  -- helper so extending the preseason never silently under-asserts here.
+  select count(*) into n from matchup
+    where league_id = '00000000-0000-0000-0000-0000000009f1' and week = any(preseason_board_weeks());
+  perform assert_eq(n, array_length(preseason_board_weeks(), 1), '2e one cloned matchup per preseason week');
+  perform assert_true(101 = any(preseason_board_weeks()) and 104 = any(preseason_board_weeks()), '2f weeks 101-104 in range');
 end $$;
 
 -- ── 3. the deep pool, seeded by the commissioner ─────────────────────────────
@@ -95,6 +99,8 @@ begin
   perform probe_as('1');
   perform assert_err(seed_preseason_pool('00000000-0000-0000-0000-0000000009f1', 5, '[{"slot":0}]'::jsonb),
     'preseason board weeks only', '3a regular week refused');
+  perform assert_err(seed_preseason_pool('00000000-0000-0000-0000-0000000009f1', 100 + preseason_week_count() + 1, '[{"slot":0}]'::jsonb),
+    'preseason board weeks only', '3a2 past the last preseason week refused');
   perform assert_err(seed_preseason_pool('00000000-0000-0000-0000-0000000009f1', 101, '[]'::jsonb),
     'non-empty array', '3b empty pool refused');
   r := seed_preseason_pool('00000000-0000-0000-0000-0000000009f1', 101,
@@ -259,9 +265,11 @@ declare n int; bal numeric;
 begin
   perform probe_as('1');
   perform assert_ok(set_preseason_practice('00000000-0000-0000-0000-0000000009f1', false), '9a commish closes practice');
-  select count(*) into n from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week in (101,102,103);
+  select count(*) into n from matchup
+    where league_id = '00000000-0000-0000-0000-0000000009f1' and week = any(preseason_board_weeks());
   perform assert_eq(n, 0, '9b practice matchups gone');
-  select count(*) into n from sleeper_lineup where league_id = '00000000-0000-0000-0000-0000000009f1' and week in (101,102,103);
+  select count(*) into n from sleeper_lineup
+    where league_id = '00000000-0000-0000-0000-0000000009f1' and week = any(preseason_board_weeks());
   perform assert_eq(n, 0, '9c practice lineups gone');
   perform assert_true((select preseason_at from league where id = '00000000-0000-0000-0000-0000000009f1') is null, '9d stamp cleared');
   -- Nothing the practice weeks did survived them.

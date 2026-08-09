@@ -295,8 +295,11 @@ export const PRESEASON_BASE = 100;
 export const isPreseasonWeek = (week: number): boolean => week > PRESEASON_BASE;
 /** The 1-based preseason week number for an offset board week (101 → 1). */
 export const preseasonWeekNum = (week: number): number => week - PRESEASON_BASE;
-/** How many preseason weeks a preseason league carries (P1-P3). */
-export const PRESEASON_WEEKS = 3;
+/** How many preseason weeks a preseason league carries. FOUR for 2026: ESPN's
+ *  preseason is the Hall of Fame game (week 1) plus each team's three outings
+ *  (weeks 2-4). Mirrored by preseason_week_count() in SQL (migration 0112) —
+ *  bump together. */
+export const PRESEASON_WEEKS = 4;
 /** The preseason BOARD weeks a practice league is seeded at — [101, 102, 103].
  *  Everything that has to touch all three (the clone, the deep-pool seed, the
  *  0110 RPC guards) counts from here rather than re-typing the literals. */

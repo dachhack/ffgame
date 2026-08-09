@@ -83,6 +83,23 @@ slots; only the cap was in the way. `my_extra()` still reports what was actually
 bought (it drives the shop count and `buy_extra_slot`'s own cap check; folding
 the grant in would read as "you already own 2" and block placing any).
 
+**The 2026 preseason has FOUR ESPN weeks, not three (0112).** 0056/0100 loaded
+board weeks 101-103 and the range was then hardcoded in four places (the clone's
+literal array, the off-switch's `week in (…)`, the pool seeder's `p_week > 103`,
+and `PRESEASON_WEEKS = 3`). ESPN's actual 2026 preseason: week 1 = the Hall of
+Fame game (1), weeks 2-4 = 16 each — 49 games, of which weeks 2-4's 48 are
+32 teams × 3 ÷ 2. Every team's THIRD outing lived at board week 104, which
+nothing knew about. The worker needed no change (it already computes
+`espnWeek + 100`); it simply had no slate, pairings or pool there. Week 104
+(Aug 27-29) derives 7 windows / 8 slots / 16 games — the same slot count as the
+regular season and the closest of the four to its shape. Slate rows generated
+through the SHARED derivation (`slateFromGames` → `windowIdsFromKickoffs`) over
+ESPN's real scoreboard, the same path 0100 used; regenerating 101-103 the same
+way reproduced 0100's rows exactly, so no drift. The range now lives in ONE
+place per side: `preseason_week_count()` / `preseason_board_weeks()` in SQL,
+`PRESEASON_WEEKS` in TS (mirror convention, bump together), and the probes
+assert off the helper so extending it can't silently under-assert.
+
 **Hardening found on the way:** `_clone_preseason_weeks` (0054) is SECURITY
 DEFINER and was EXECUTE-to-PUBLIC by default — any signed-in user could clone or
 wipe weeks 101-103 of any league. Revoked, along with the new `_set_preseason`.
