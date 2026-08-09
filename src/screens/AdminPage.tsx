@@ -8,6 +8,7 @@ import {
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
   rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
   setTransactionRules, commishMovePlayer, commishRemovePlayer, commishRuleTrade, setLeagueAvatar,
+  adminUserState, type ViewAsState,
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
   playoffState, setPlayoffRules, generatePlayoffs, advancePlayoffs,
   type WaiverMode, type TradeReview, type TradeRow, type LeaguePoolPlayer, type NativeRosterRow,
@@ -1634,21 +1635,133 @@ function SoloPasses() {
   );
 }
 
+// Read-only "view as": everything a user sees, for support + QA. Explicitly NOT
+// impersonation — no session is minted and nothing here writes, so an admin can
+// diagnose "why can't I set my lineup" without gaining the ability to act as
+// somebody. The banner says so, because a panel that mirrors a user's screen is
+// easy to mistake for being logged in as them.
+function ViewAs({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+  const [week, setWeek] = useState('1');
+  const [state, setState] = useState<ViewAsState | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const load = async (w: number) => {
+    setState(null); setErr(null);
+    try {
+      const s = await adminUserState(user.id, w);
+      if (s.error) setErr(s.error); else setState(s);
+    } catch (e) { setErr(errMsg(e, 'load failed')); }
+  };
+  useEffect(() => { load(Number(week) || 1); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  const label: React.CSSProperties = { ...mono, fontSize: 9, color: 'var(--faint)' };
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 75, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 560, marginTop: 24 }}>
+        <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 5, padding: '7px 9px', lineHeight: 1.5 }}>
+          👁 VIEWING AS {user.email ?? user.id.slice(0, 8)} — READ ONLY<br />
+          <span style={{ fontWeight: 400, color: 'var(--dim)' }}>You are still signed in as yourself. Nothing here can change their data or act in their name.</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '12px 0', flexWrap: 'wrap' }}>
+          <span className="mono" style={label}>week</span>
+          <input value={week} onChange={(e) => setWeek(e.target.value.replace(/\D/g, ''))} inputMode="numeric"
+            onKeyDown={(e) => { if (e.key === 'Enter') load(Number(week) || 1); }}
+            style={{ ...inp, width: 52, padding: '5px 6px', textAlign: 'center' }} />
+          <button onClick={() => load(Number(week) || 1)} className="mono" style={btn(false)}>load</button>
+          <span style={{ flex: 1 }} />
+          <button onClick={onClose} className="mono" style={linkBtn}>close</button>
+        </div>
+
+        {err && <div className="mono" style={{ ...mono, fontSize: 10, color: 'var(--opp)' }}>⚠ {err}</div>}
+        {!err && !state && <Muted text="Loading…" />}
+        {state && (
+          <>
+            <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginBottom: 10 }}>
+              {state.user.sleeper_username ? `@${state.user.sleeper_username}` : 'no Sleeper account linked'}
+              {state.user.sleeper_user_id ? ` · ${state.user.sleeper_user_id}` : ''} · joined {new Date(state.user.created_at).toLocaleDateString()}
+            </div>
+            {state.leagues.length === 0 && <Muted text="Not enrolled in any league — this user would see an empty leagues page." />}
+            {state.leagues.map((lg) => {
+              const m = lg.matchup;
+              // The two questions support actually gets asked: can they build a
+              // lineup at all (pool), and did their picks land (count vs pool).
+              const pool = lg.pool_size ?? 0;
+              return (
+                <div key={`${lg.league_id}-${lg.roster_id}`} style={{ borderTop: '1px solid var(--bd)', padding: '9px 0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Avatar name={lg.name} accent="var(--warn)" src={lg.avatar_url} size={26} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{lg.team_name} <span className="mono" style={label}>· {lg.name} {lg.season}</span></div>
+                      <div className="mono" style={label}>
+                        roster {lg.roster_id} · {lg.provider}
+                        {lg.is_commish ? ' · commissioner' : ''}
+                        {lg.controller === 'ai' ? ' · 🤖 AI control' : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mono" style={{ ...mono, fontSize: 9.5, marginTop: 6, lineHeight: 1.6, color: 'var(--dim)' }}>
+                    <div style={{ color: pool ? 'var(--dim)' : 'var(--warn)' }}>
+                      pick pool: {pool ? `${pool} players` : '⚠ empty — nothing to build a lineup from this week'}
+                    </div>
+                    {!m && <div style={{ color: 'var(--warn)' }}>no matchup at week {state.week} — this user sees no board</div>}
+                    {m && (
+                      <>
+                        <div>vs {m.opponent ?? '—'} · {m.status}{m.lock_at ? ` · locks ${new Date(m.lock_at).toLocaleString()}` : ''}</div>
+                        <div style={{ color: m.picks.length ? 'var(--you)' : 'var(--warn)' }}>
+                          {m.picks.length ? `${m.picks.length} picks sealed${m.picks.some((p) => p.locked) ? ' · locked' : ''}` : '⚠ no picks set'}
+                        </div>
+                        {!!m.picks.length && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 3 }}>
+                            {m.picks.map((p, i) => (
+                              <span key={i} className="mono" title={`${p.game_window} ${p.roster_slot}${p.metric_id ? ` · ${p.metric_id}` : ''}`}
+                                style={{ ...mono, fontSize: 8, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }}>
+                                {p.player_slug ? fmtSlug(p.player_slug) : '—'}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Users() {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
+  const [viewing, setViewing] = useState<AdminUser | null>(null);
+  const [q, setQ] = useState('');
   useEffect(() => { adminUsers().then(setUsers).catch(() => setUsers([])); }, []);
+  const needle = q.trim().toLowerCase();
+  const shown = (users ?? []).filter((u) => !needle
+    || (u.email ?? '').toLowerCase().includes(needle)
+    || (u.sleeper_username ?? '').toLowerCase().includes(needle));
   return (
     <div style={card}>
+      {viewing && <ViewAs user={viewing} onClose={() => setViewing(null)} />}
       <div style={h}>USERS ({users?.length ?? '…'})</div>
-      {users === null ? <Muted text="Loading…" /> : users.length === 0 ? <Muted text="No users yet." /> : users.map((u) => (
-        <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
-          <div>
+      {!!users?.length && (
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="filter by email or Sleeper handle…"
+          style={{ ...inp, width: '100%', boxSizing: 'border-box', fontSize: 10, padding: '5px 7px', marginBottom: 6 }} />
+      )}
+      {users === null ? <Muted text="Loading…" /> : users.length === 0 ? <Muted text="No users yet." /> : shown.map((u) => (
+        <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{u.email ?? '—'}</div>
             <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{u.sleeper_username ? `@${u.sleeper_username}` : 'no Sleeper link'} · {u.enrolled} enrolled</div>
           </div>
-          <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{new Date(u.created_at).toLocaleDateString()}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <button onClick={() => setViewing(u)} className="mono" style={{ ...linkBtn, color: 'var(--you)' }} title="see what this user sees — read-only">👁 view as</button>
+            <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{new Date(u.created_at).toLocaleDateString()}</span>
+          </div>
         </div>
       ))}
+      {users !== null && users.length > 0 && shown.length === 0 && <Muted text="No match." />}
     </div>
   );
 }

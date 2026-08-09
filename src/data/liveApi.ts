@@ -776,6 +776,26 @@ export const commishOverview = () => rpc<AdminLeague[]>('commish_overview');
 export interface MatchupPicks { home_roster_id: number; away_roster_id: number; home_app_user: string | null; away_app_user: string | null; picks: { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null }[]; home_lineup: { player_slug: string | null; pos: string | null }[]; away_lineup: { player_slug: string | null; pos: string | null }[]; home_buffs: string[]; away_buffs: string[]; home_unlocks?: string[]; away_unlocks?: string[]; home_extra?: number; away_extra?: number; }
 export const adminMatchupPicks = (matchupId: string) => rpc<MatchupPicks>('admin_matchup_picks', { p_matchup_id: matchupId });
 
+// ── Read-only "view as" (0107): what a given user sees, for support + QA ────────
+export interface ViewAsPick { game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null; locked: boolean }
+export interface ViewAsMatchup { id: string; status: string; lock_at: string | null; opponent: string | null; picks: ViewAsPick[] }
+export interface ViewAsLeague {
+  league_id: string; name: string; season: string; provider: string; avatar_url: string | null;
+  roster_id: number; team_name: string; team_avatar: string | null; controller?: Controller;
+  is_commish: boolean; pool_size: number | null; matchup: ViewAsMatchup | null;
+}
+export interface ViewAsState {
+  error?: string;
+  user: { id: string; email: string | null; sleeper_username: string | null; sleeper_user_id: string | null; created_at: string };
+  week: number | null;
+  leagues: ViewAsLeague[];
+}
+/** Super-admin only. Reads; never writes and never mints a session — the caller
+ *  stays themselves. Admin-gated rather than commish-gated because it can surface
+ *  an opponent's still-unlocked picks. */
+export const adminUserState = (appUserId: string, week: number) =>
+  rpc<ViewAsState>('admin_user_state', { p_app_user_id: appUserId, p_week: week });
+
 // ── Live power-up loadout (M1): arm/disarm in-slot team buffs, pre-lock ──────────
 export const LIVE_BUFFS = ['overtime', 'ot-shield', 'momentum', 'garbage-time', 'amp-2', 'amp-3', 'floodgates', 'counter-nuke', 'insurance', 'fg-stack'] as const;
 export const armBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; detail?: string; buffs?: string[] }>('arm_buff', { p_matchup_id: matchupId, p_buff: buff });
