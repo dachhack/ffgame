@@ -566,6 +566,15 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // so it would show the admin's own leagues under the viewed user's banner.
   if (enrollments.length === 0 && isCommish && !viewAs) return <CommishDash onBack={() => setView('home')} />;
 
+  // Browsing as someone with no leagues: the role chooser below is entirely
+  // write actions (join, create, redeem a solo pass) and every one of them would
+  // run as the ADMIN, not the viewed user. Report the empty state instead.
+  if (enrollments.length === 0 && viewAs) return (
+    <div style={{ textAlign: 'center', padding: '24px 0' }}>
+      <Muted text={`${viewAs.label} is not enrolled in any league and commissions none — this is the whole of what they see.`} />
+    </div>
+  );
+
   // Genuinely new (no leagues at all) → fork by role.
   if (enrollments.length === 0) return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
@@ -600,7 +609,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       onBoard={(leagueId, rosterId) => guard(() => { setTarget({ leagueId, rosterId }); setView('board'); })()}
       onPodBuild={(leagueId, rosterId, week, name) => guard(() => { setTarget({ leagueId, rosterId, week, name }); setView('podbuild'); })()}
       onResults={(leagueId) => { setTarget({ leagueId, rosterId: 0 }); setView('results'); }}
-      onManage={(id) => { setManageId(id); setManageTab(undefined); setView('commishdash'); }}
+      onManage={(id) => guard(() => { setManageId(id); setManageTab(undefined); setView('commishdash'); })()}
       onDraft={(leagueId, rosterId) => guard(() => { setTarget({ leagueId, rosterId }); setView('draft'); })()}
       onTeam={(leagueId, rosterId) => guard(() => { setTarget({ leagueId, rosterId }); setView('team'); })()}
       onAdd={guard(() => setView('add'))}
