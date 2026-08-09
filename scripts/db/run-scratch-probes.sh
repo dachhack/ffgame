@@ -44,8 +44,28 @@ create function @extschema@.http_get(uri text) returns @extschema@.http_response
 EOF
 }
 
+# Same story for pg_net (0091's lead-alert poke): not packaged locally, and the
+# probes never fire an HTTP call. Stub net.http_post so the migration applies —
+# without it the run dies at 0091 and every later migration goes unchecked.
+stub_pg_net_ext() {
+  local extdir=/usr/share/postgresql/16/extension
+  [ -w "$extdir" ] || { echo "warn: cannot write $extdir — 0091 will fail without pg_net"; return 0; }
+  cat > "$extdir/pg_net.control" <<'EOF'
+comment = 'stub pg_net for scratch probes'
+default_version = '0'
+relocatable = false
+schema = 'net'
+EOF
+  cat > "$extdir/pg_net--0.sql" <<'EOF'
+create function @extschema@.http_post(url text, body jsonb default '{}'::jsonb,
+    params jsonb default '{}'::jsonb, headers jsonb default '{}'::jsonb, timeout_milliseconds int default 5000)
+  returns bigint language sql as 'select 0::bigint';
+EOF
+}
+
 $PSQL -d postgres -c 'select 1' >/dev/null 2>&1 || start_cluster
 stub_http_ext
+stub_pg_net_ext
 $PSQL -d postgres -q -c "drop database if exists scratch" -c "create database scratch"
 
 RUN="$PSQL -d scratch -v ON_ERROR_STOP=1 -q"
@@ -57,3 +77,4 @@ done
 echo "all migrations applied"
 
 $RUN -f scripts/db/native-league-probes.sql | grep -E "PROBE FAIL|ALL PROBES" || { echo "PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/preseason-practice-probes.sql | grep -E "PROBE FAIL|PROBES PASS" || { echo "PRESEASON PROBES FAILED"; exit 1; }

@@ -2,6 +2,71 @@
 
 _Last updated: 2026-08-07 · Build `v0.139.0`_
 
+## Preseason practice — throwaway weeks + the commish one-click (0110)
+
+Preseason play existed since 0054/0101 (board weeks 101-103, deep pool) and was
+proven on the CAR@ARI live-fire below — but it was **super-admin only** and
+**not actually throwaway**. Everything the practice games produced landed in the
+real season. Migration `0110_preseason_practice.sql` closes both gaps.
+
+**The rule now enforced server-side: a practice week never moves real coin, real
+inventory, or a real record.** Practice = board week > 100 (`is_practice_week` /
+`matchup_is_practice`, mirroring `PRESEASON_BASE`), and every guard routes
+through those two so the definition lives in one place.
+
+Four leaks, all sealed:
+
+1. **Standings + playoff seeding** — `league_standings` (0073) counted every
+   final non-playoff matchup, so practice W/L and PF sat in the standings *and*
+   in the bracket seeded from them. Week filter added to both halves of the
+   union; `LeagueResults` (LiveOnboard) applies the same rule client-side and
+   now labels those sections `PRESEASON WK N · PRACTICE, DOESN'T COUNT`.
+2. **Coin** — resolve banked each side's weekly drip-coin regardless of week, so
+   three weeks of rehearsal funded real Week-1 power-ups. Guarded at
+   `adjust_wallet` (the single choke point every credit/debit runs through) and
+   again in `credit_wallet`; the worker skips the call outright
+   (`resolve.js`). The engine's coin is still written to the matchup row — it's
+   the "what you'd have earned" readout, it just never reaches a wallet.
+3. **Power-ups** — spending is now **free in practice**, short-circuited in
+   `spend_from_wallet` *before* the balance guard, so a broke team can still
+   exercise the whole board. `team_inventory` is keyed (league, roster) with no
+   week, so `wallet_buy_powerup` / `consume_inventory` / `refund_inventory` skip
+   it entirely in practice: a free buy can't mint a real item, and arming one
+   can't burn something bought for the season. The client mirrors inventory
+   optimistically, so the board still behaves normally mid-session.
+4. **Weekly budget** — `commish_grant_weekly_budget` refuses a practice week out
+   loud instead of reporting the silent "0 credited" `adjust_wallet` would give.
+
+**The one-click.** `set_preseason_practice` and `seed_preseason_pool` are
+commish-or-admin twins of the 0054/0101 admin RPCs, and `enablePreseasonPractice`
+(liveApi) drives both as one action — turn on, then seed all three weeks' deep
+pools. That ordering used to be two admin buttons pressed in sequence, with the
+pool needing a re-press after *every* re-toggle (the toggle wipes lineups with
+its clones); miss it and seats field Week-1 starters who don't take preseason
+snaps. One `PRESEASON PRACTICE` panel in `LeagueRow` replaces both buttons for
+commissioners and admins alike; `commish_overview` now carries `preseason_at` /
+`test_live_at` so the commish card can show the 🏈 chip and read its own state.
+Opening practice on an unsynced league now says *"sync the season first"*
+instead of cloning nothing.
+
+**Hardening found on the way:** `_clone_preseason_weeks` (0054) is SECURITY
+DEFINER and was EXECUTE-to-PUBLIC by default — any signed-in user could clone or
+wipe weeks 101-103 of any league. Revoked, along with the new `_set_preseason`.
+
+**Verification:** `scripts/db/preseason-practice-probes.sql` — 10 probe groups
+(predicate, commish auth, pool seeding, revoked internals, wallet, budget,
+standings, inventory, off-wipes-everything, unsynced league) green on a clean
+scratch DB, wired into `run-scratch-probes.sh`. Two pre-existing snags fixed to
+get there: the runner died at 0091 for want of `pg_net` (now stubbed like
+`http`, so nothing after it was ever checked), and two native probes still
+asserted the pre-0095 "closed testing" wording.
+
+**Still true and worth remembering:** the worker's preseason mode is a GLOBAL
+env switch (`PILOT_SEASON_TYPE=1` → `weekOffset=100`), not per-league — while
+it's on, the Sleeper weekly sync and the pod/showdown tick are both skipped
+(`index.js`). Practice pairings are the Week-1 clone, so it's the same opponent
+all three weeks.
+
 ## First live-fire — preseason CAR@ARI (v0.139.0, 2026-08-06/07)
 
 The system's first night on a real NFL feed: the full loop (seal → 1h-lead

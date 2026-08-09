@@ -18,6 +18,8 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+2026-08-09 — **Preseason practice for playtesters** (0110). Preseason play existed since 0054/0101 but was super-admin-only and not actually throwaway: practice results counted in the standings AND the playoff seeding, practice coin banked into the real wallet, practice power-ups charged that wallet and moved real inventory, and the weekly budget could be granted for a preseason week. All four sealed server-side behind one rule — *a practice week never moves real coin, real inventory, or a real record* — with power-ups made free (not refused) so a broke team can still exercise the board. Opening practice is now a commissioner's ONE click (`enablePreseasonPractice` = turn on + seed all three weeks' deep pools), replacing two admin buttons that had to be pressed in order and re-pressed after every re-toggle. Also revoked `_clone_preseason_weeks` from PUBLIC (SECURITY DEFINER, any signed-in user could wipe another league's preseason weeks). New probe suite green on a clean scratch DB; the probe runner itself was dying at 0091 for want of `pg_net`, so everything after it had gone unchecked.
+
 2026-08-07 — **First live-fire complete** (preseason CAR@ARI): the full loop — seal, 1h-lead lock, per-window reveal, live ESPN ingest, resolve, effects, window bonus, coin payout — ran end to end on a real NFL game, final 40.0–23.0. Nine live-found defects fixed the same night (PRs #254–#263; the standouts: the pick-cache clobber that could overwrite sealed picks, and ESPN's halftime drive restructuring silently freezing `live_play` via duplicate-key batch rejection — full detail in HANDOFF "First live-fire"). Field visuals overhauled (team-colored end zones, possession logos, TV-flip, YAC + return-split play rendering, window game log). Yahoo developer app APPROVED and `yahoo-oauth` deployed — remaining: `VITE_YAHOO_CLIENT_ID` repo variable + redirect-URI fix, then a first real league connect. New feature spec'd and ready to build: **the Window Pot** (`docs/window-pot.md` + kickoff prompt), v1 behind a per-league flag.
 
 ## Previous
@@ -26,6 +28,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Current blockers
 
+- Preseason practice (0110) is on the branch, not live: the migrate workflow only runs on push to `main` (`paths: supabase/migrations/**`), and the same `fly deploy` below carries `resolve.js`'s practice-week coin skip. Until both land, the RPC guards aren't in the DB and practice coin would still bank.
 - `fly deploy` of the worker pending (picks up #262's `ret` emission for live game feeds) — do before the Aug 13 preseason slate, which is the validation run for all the live-fire fixes.
 - Yahoo activation: set the `VITE_YAHOO_CLIENT_ID` repo VARIABLE (+ site rebuild) and fix the Yahoo console redirect URI (`https://dripfantasy.com/` + www — currently the httpbin placeholder); then the first real league connect (JSON mapping unvalidated against live Fantasy data).
 

@@ -297,6 +297,11 @@ export const isPreseasonWeek = (week: number): boolean => week > PRESEASON_BASE;
 export const preseasonWeekNum = (week: number): number => week - PRESEASON_BASE;
 /** How many preseason weeks a preseason league carries (P1-P3). */
 export const PRESEASON_WEEKS = 3;
+/** The preseason BOARD weeks a practice league is seeded at — [101, 102, 103].
+ *  Everything that has to touch all three (the clone, the deep-pool seed, the
+ *  0110 RPC guards) counts from here rather than re-typing the literals. */
+export const PRESEASON_BOARD_WEEKS: number[] =
+  Array.from({ length: PRESEASON_WEEKS }, (_, i) => PRESEASON_BASE + i + 1);
 
 // ── Live-test timeline (super-admin preseason testing) ───────────────────────
 // When a league flips on live-test mode, the board anchors its window schedule to

@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminSetPreseason, adminSeedPreseasonPool, friendlyError, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, friendlyError, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
   rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
@@ -16,6 +16,7 @@ import {
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
   type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy, type LeagueKdst, type KdstMode,
 } from '../data/liveApi';
+import { PRESEASON_BOARD_WEEKS } from '../data/nflSlate';
 import { importLeague, syncWeek, syncMembers } from '../data/sleeperAdmin';
 import { importEspnSeason, syncEspnSeason, stripProvider } from '../data/providerAdmin';
 import { forceResolve } from '../data/forceResolve';
@@ -833,12 +834,13 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
             </div>
           </div>
           )}
+          {/* Practice is a commissioner tool, not an admin errand — it's how a
+              league's players get to rehearse the live loop before Week 1. */}
+          <PreseasonPractice on={!!l.preseason_at} leagueId={l.league_id} reload={reload} />
           {admin && (
             <div>
               <div style={subhead}>ADMIN MODES</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <PreseasonToggle on={!!l.preseason_at} leagueId={l.league_id} reload={reload} />
-                {!!l.preseason_at && <DeepPoolButton leagueId={l.league_id} />}
                 <TestLiveToggle on={!!l.test_live_at} leagueId={l.league_id} reload={reload} />
                 <CardThemeToggle leagueId={l.league_id} />
                 <span style={{ flex: 1 }} />
@@ -1416,58 +1418,88 @@ function TestLiveToggle({ on, leagueId, reload }: { on: boolean; leagueId: strin
   );
 }
 
-// Super-admin only: flip a league into preseason mode. Clones its Week-1 pairings
-// + lineups into the preseason offset weeks (101-103) so the league can create and
-// play real 2026 NFL preseason matchups (on real PBP, once the worker runs with
-// seasonType=1). Toggling off clears the stamp and drops the preseason clones.
-function PreseasonToggle({ on, leagueId, reload }: { on: boolean; leagueId: string; reload: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const go = async () => {
+// PRESEASON PRACTICE — the commissioner's one click (migration 0110). Turning it
+// on clones the league's Week-1 pairings into the preseason board weeks (101-103)
+// AND replaces every seat's pick pool at those weeks with the DEEP slate-team pool
+// (every active skill player on that week's teams, depth-chart ordered, + team
+// K/DST). Both halves matter and the order is fixed: preseason snaps go to the
+// depth chart's back half, so without the deep pool seats field Week-1 starters
+// who sit. These used to be two separate super-admin buttons you had to press in
+// sequence — and re-press the second after every re-toggle, since turning
+// preseason off wipes the lineups along with the clones.
+//
+// Practice games are throwaway by construction: no standings, no playoff seeding,
+// no coin, no inventory (all enforced server-side in 0110). Off removes the weeks.
+function PreseasonPractice({ on, leagueId, reload }: { on: boolean; leagueId: string; reload: () => void }) {
+  const [busy, setBusy] = useState<'on' | 'off' | 'pool' | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const turnOn = async () => {
     if (busy) return;
-    setBusy(true);
-    await adminSetPreseason(leagueId, !on).catch(() => {});
-    setBusy(false);
+    setBusy('on'); setNote(null);
+    const r = await enablePreseasonPractice(leagueId).catch((e: unknown) => ({ ok: false as const, error: friendlyError(e) }));
+    setNote(r.ok ? `✓ ${r.matchups ?? 0} matchups per week · deep pool on ${'weeks' in r ? (r.weeks ?? []).join(', ') : ''}` : (r.error ?? 'failed'));
+    setBusy(null);
     reload();
   };
-  return (
-    <button onClick={go} disabled={busy} title={on ? 'Preseason mode is ON — this league has real 2026 preseason matchups (weeks 101-103). Click to turn off and remove them.' : 'Turn on preseason mode: seed this league with real 2026 preseason matchups so it can play live on real PBP before the season starts.'}
-      className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--you)', background: on ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--you)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
-      {busy ? '…' : on ? '🏈 PRESEASON: ON' : '🏈 preseason'}
-    </button>
-  );
-}
-
-// Super-admin only, shown while preseason mode is ON: replace every seat's pick
-// pool at the preseason weeks (101-103) with the DEEP slate-team pool — every
-// active skill player on each week's teams, depth-chart ordered, + team K/DST.
-// Preseason snaps go to the depth chart's back half, so the Week-1 clones the
-// 🏈 toggle seeds would field starters who sit. Safe to re-click; re-run after
-// any preseason re-toggle (the toggle wipes these with its clones).
-function DeepPoolButton({ leagueId }: { leagueId: string }) {
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const go = async () => {
+  const turnOff = async () => {
     if (busy) return;
-    setBusy(true); setNote(null);
+    setBusy('off'); setNote(null);
+    const r = await setPreseasonPractice(leagueId, false).catch((e: unknown) => ({ ok: false as const, error: friendlyError(e) }));
+    if (!r.ok) setNote(r.error ?? 'failed');
+    setBusy(null);
+    reload();
+  };
+  // Re-seed on demand: rosters move all preseason, and a week whose slate hadn't
+  // loaded when practice opened gets its pool on the next press.
+  const reseed = async () => {
+    if (busy) return;
+    setBusy('pool'); setNote(null);
     try {
       let seats = 0, pool = 0;
-      for (const wk of [101, 102, 103]) {
-        const r = await adminSeedPreseasonPool(leagueId, wk);
+      for (const wk of PRESEASON_BOARD_WEEKS) {
+        const r = await seedPreseasonPool(leagueId, wk);
         if (!r.ok) throw new Error(r.error || `week ${wk} failed`);
         seats = r.seats ?? seats; pool += r.pool ?? 0;
       }
-      setNote(`✓ ${seats} seats · ${pool} pool entries across wks 101-103`);
+      setNote(`✓ ${seats} seats · ${pool} pool entries across the preseason weeks`);
     } catch (e) { setNote(friendlyError(e)); }
-    setBusy(false);
+    setBusy(null);
   };
+
+  const bs = (fill: boolean): React.CSSProperties => ({
+    fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: fill ? 'var(--on-accent)' : 'var(--you)',
+    background: fill ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--you)', borderRadius: 4,
+    padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
+  });
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <button onClick={go} disabled={busy} title="Replace every seat's preseason pick pool (weeks 101-103) with the full depth charts of that week's slate teams — backups included, since they play the preseason snaps. Downloads the player directory on first click."
-        className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--you)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
-        {busy ? 'seeding…' : '🧬 deep pool'}
-      </button>
-      {note && <span className="mono" style={{ fontSize: 9, color: note.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{note}</span>}
-    </span>
+    <div>
+      <div style={subhead}>PRESEASON PRACTICE</div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        {on ? (
+          <>
+            <span className="mono" style={bs(true)}>🏈 PRACTICE: ON</span>
+            <button onClick={reseed} disabled={!!busy} className="mono" style={bs(false)}
+              title="Re-seed every seat's preseason pick pool from the current depth charts. Safe to re-press.">
+              {busy === 'pool' ? 'seeding…' : '🧬 re-seed rosters'}
+            </button>
+            <button onClick={turnOff} disabled={!!busy} className="mono" style={{ ...bs(false), color: 'var(--opp)', borderColor: 'var(--opp)' }}
+              title="Turn practice off and delete the preseason weeks — picks, lineups and results all go with them.">
+              {busy === 'off' ? '…' : '✕ turn off'}
+            </button>
+          </>
+        ) : (
+          <button onClick={turnOn} disabled={!!busy} className="mono" style={bs(false)}
+            title="Open preseason practice: real 2026 preseason matchups on real play-by-play, with throwaway deep rosters so backups who actually play are pickable.">
+            {busy === 'on' ? 'opening…' : '🏈 open preseason practice'}
+          </button>
+        )}
+      </div>
+      <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+        Real 2026 preseason games on live play-by-play, with throwaway deep rosters — every backup on the slate is pickable, since they take the snaps. Nothing carries over: no standings, no seeding, no coin, no power-up inventory. Turning it off removes the practice weeks entirely.
+      </div>
+      {note && <div className="mono" style={{ ...mono, fontSize: 9, marginTop: 6, color: note.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{note}</div>}
+    </div>
   );
 }
 
