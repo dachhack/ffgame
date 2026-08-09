@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, friendlyError, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, type PreseasonWindow, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
   rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
@@ -836,7 +836,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
           )}
           {/* Practice is a commissioner tool, not an admin errand — it's how a
               league's players get to rehearse the live loop before Week 1. */}
-          <PreseasonPractice on={!!l.preseason_at} leagueId={l.league_id} reload={reload} />
+          <PreseasonPractice on={!!l.preseason_at} leagueId={l.league_id} season={l.season} admin={admin} reload={reload} />
           {admin && (
             <div>
               <div style={subhead}>ADMIN MODES</div>
@@ -1430,9 +1430,16 @@ function TestLiveToggle({ on, leagueId, reload }: { on: boolean; leagueId: strin
 //
 // Practice games are throwaway by construction: no standings, no playoff seeding,
 // no coin, no inventory (all enforced server-side in 0110). Off removes the weeks.
-function PreseasonPractice({ on, leagueId, reload }: { on: boolean; leagueId: string; reload: () => void }) {
+//
+// GATED on the preseason window (see liveApi preseasonWindow): the worker picks
+// what it polls from process-wide config, not per league, so outside that window
+// turning practice on would hand the commissioner three weeks nothing will ever
+// feed. Admins see the control regardless, so off-window testing still works.
+function PreseasonPractice({ on, leagueId, season, admin, reload }: { on: boolean; leagueId: string; season: string; admin: boolean; reload: () => void }) {
   const [busy, setBusy] = useState<'on' | 'off' | 'pool' | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [win, setWin] = useState<PreseasonWindow | null>(null);
+  useEffect(() => { let ok = true; preseasonWindow(season).then((w) => { if (ok) setWin(w); }).catch(() => {}); return () => { ok = false; }; }, [season]);
 
   const turnOn = async () => {
     if (busy) return;
@@ -1472,11 +1479,22 @@ function PreseasonPractice({ on, leagueId, reload }: { on: boolean; leagueId: st
     background: fill ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--you)', borderRadius: 4,
     padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
   });
+  // Closed = the preseason is over (or was never loaded) for this season, so no
+  // worker tick will ever feed these weeks. A league already IN practice always
+  // keeps its controls — closing the window must never strand someone with weeks
+  // they can't turn off.
+  const closed = win !== null && !win.open && !on && !admin;
+  const closedWhy = win?.loaded
+    ? `The ${season} preseason is over — its last game kicked off ${new Date(win.lastKickoff!).toLocaleDateString()}. Practice weeks opened now would never receive play-by-play.`
+    : `No ${season} preseason slate is loaded, so there are no games to practise on.`;
+
   return (
     <div>
       <div style={subhead}>PRESEASON PRACTICE</div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        {on ? (
+        {closed ? (
+          <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5 }}>{closedWhy}</span>
+        ) : on ? (
           <>
             <span className="mono" style={bs(true)}>🏈 PRACTICE: ON</span>
             <button onClick={reseed} disabled={!!busy} className="mono" style={bs(false)}
@@ -1489,15 +1507,22 @@ function PreseasonPractice({ on, leagueId, reload }: { on: boolean; leagueId: st
             </button>
           </>
         ) : (
-          <button onClick={turnOn} disabled={!!busy} className="mono" style={bs(false)}
-            title="Open preseason practice: real 2026 preseason matchups on real play-by-play, with throwaway deep rosters so backups who actually play are pickable.">
-            {busy === 'on' ? 'opening…' : '🏈 open preseason practice'}
+          <button onClick={turnOn} disabled={!!busy || win === null} className="mono" style={bs(false)}
+            title={`Open preseason practice: real ${season} preseason matchups on real play-by-play, with throwaway deep rosters so backups who actually play are pickable.`}>
+            {busy === 'on' ? 'opening…' : win === null ? 'checking…' : '🏈 open preseason practice'}
           </button>
         )}
+        {/* An admin acting outside the window is doing it deliberately — say so
+            rather than silently letting them create weeks nothing will feed. */}
+        {admin && win && !win.open && !on && (
+          <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--warn)' }}>⚠ outside the preseason window — nothing will feed these weeks</span>
+        )}
       </div>
-      <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
-        Real 2026 preseason games on live play-by-play, with throwaway deep rosters — every backup on the slate is pickable, since they take the snaps. Nothing carries over: no standings, no seeding, no coin, no power-up inventory. Turning it off removes the practice weeks entirely.
-      </div>
+      {!closed && (
+        <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+          Real {season} preseason games on live play-by-play, with throwaway deep rosters — every backup on the slate is pickable, since they take the snaps. Nothing carries over: no standings, no seeding, no coin, no power-up inventory. Turning it off removes the practice weeks entirely.
+        </div>
+      )}
       {note && <div className="mono" style={{ ...mono, fontSize: 9, marginTop: 6, color: note.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{note}</div>}
     </div>
   );

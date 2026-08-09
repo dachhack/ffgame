@@ -725,6 +725,42 @@ export const adminSetPreseason = (leagueId: string, on: boolean) =>
 export const setPreseasonPractice = (leagueId: string, on: boolean) =>
   rpc<{ ok: boolean; error?: string; preseason_at?: string | null; matchups?: number }>('set_preseason_practice', { p_league_id: leagueId, p_on: on });
 
+export interface PreseasonWindow {
+  /** The preseason slate is loaded for this season (weeks 101-103 have games). */
+  loaded: boolean;
+  /** Practice can still be fed: the last preseason game hasn't finished yet. */
+  open: boolean;
+  firstKickoff: number | null;
+  lastKickoff: number | null;
+}
+/** Can preseason practice still produce real games for this season?
+ *
+ *  Worth being blunt about why this check exists: the WORKER decides what it
+ *  polls from process-wide config (`PILOT_SEASON_TYPE=1` → seasonType 1 +
+ *  weekOffset 100), not per league. A league can therefore be flipped into
+ *  practice at a moment when nothing will ever feed those weeks — three weeks of
+ *  matchups that sit at 0-0 forever. The commissioner has no way to know that
+ *  and no way to fix it.
+ *
+ *  The honest proxy is the calendar: while the preseason slate's last kickoff is
+ *  still ahead of us, opening practice is a live proposition (the worker either
+ *  is or will be pointed at preseason for this window); once it's passed, it
+ *  isn't, and the button should say so instead of handing over a dead league.
+ *  Admins bypass this in the UI so off-window testing stays possible. */
+export async function preseasonWindow(season: string): Promise<PreseasonWindow> {
+  const sb = await getSupabase();
+  if (!sb) return { loaded: false, open: false, firstKickoff: null, lastKickoff: null };
+  const { data } = await sb.from('nfl_slate').select('week, kickoff')
+    .eq('season', season).in('week', PRESEASON_BOARD_WEEKS);
+  const kicks = ((data ?? []) as { kickoff: string | null }[])
+    .map((r) => (r.kickoff ? Date.parse(r.kickoff) : NaN)).filter(Number.isFinite);
+  if (!kicks.length) return { loaded: false, open: false, firstKickoff: null, lastKickoff: null };
+  const first = Math.min(...kicks), last = Math.max(...kicks);
+  // ~4h pads the last kickoff to that game's end, same allowance defaultOpenWeek
+  // and join_weekly use for "this week isn't over yet".
+  return { loaded: true, open: Date.now() <= last + 4 * 3_600_000, firstKickoff: first, lastKickoff: last };
+}
+
 /** The ONE-CLICK a commissioner actually wants: turn preseason practice on AND
  *  give every preseason week its deep (backups-included) pool, in one action.
  *  These were two separate super-admin buttons in the required order, and the

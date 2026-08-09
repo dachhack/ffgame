@@ -49,6 +49,21 @@ commissioners and admins alike; `commish_overview` now carries `preseason_at` /
 Opening practice on an unsynced league now says *"sync the season first"*
 instead of cloning nothing.
 
+**The one-click is gated on the preseason window** (`preseasonWindow` in liveApi
+→ the `nfl_slate` rows at weeks 101-103, open until the last kickoff + 4h).
+Reason: the worker picks what it polls from PROCESS-WIDE config
+(`PILOT_SEASON_TYPE=1` → seasonType 1 + weekOffset 100), not per league — so
+without the gate a commissioner could open practice in September and get three
+weeks of matchups nothing will ever feed, with no way to know why. Outside the
+window the panel explains instead of offering the button. Admins still see it
+(off-window testing) with a ⚠ saying nothing will feed those weeks, and a league
+already in practice always keeps its controls, so closing the window can never
+strand someone with weeks they can't turn off. The real fix — a tick that loops
+over active week contexts instead of computing a single current week, letting
+preseason, the regular season and pods coexist in one process — is deferred;
+the tick body is mostly week-parameterised already, but `espnWeekCache` is a
+single cache and the injury poll would need hoisting out of the loop.
+
 **Hardening found on the way:** `_clone_preseason_weeks` (0054) is SECURITY
 DEFINER and was EXECUTE-to-PUBLIC by default — any signed-in user could clone or
 wipe weeks 101-103 of any league. Revoked, along with the new `_set_preseason`.
