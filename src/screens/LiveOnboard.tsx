@@ -866,8 +866,14 @@ function LeagueCard({ e, card, commish, userId, onBoard, onPodBuild, onResults, 
   const status = m?.status ?? 'scheduled';
   const live = status === 'live';
   const final = status === 'final';
-  const statusColor = live ? '#FF4F62' : final ? 'var(--dim)' : 'var(--warn)';
-  const statusLabel = live ? '● LIVE' : final ? 'FINAL' : 'PICKS OPEN';
+  // No matchup for this week yet — the platform hasn't published a schedule (a
+  // Sleeper league returns no pairings until it drafts). Picks are keyed to a
+  // matchup (sealed_pick.matchup_id is NOT NULL), so there is nowhere to store a
+  // lineup yet: playHeroBoard would open with ctx null and silently discard
+  // everything the manager built. Say "pending" and hold the CTA instead.
+  const pending = !m;
+  const statusColor = live ? '#FF4F62' : final ? 'var(--dim)' : pending ? 'var(--faint)' : 'var(--warn)';
+  const statusLabel = live ? '● LIVE' : final ? 'FINAL' : pending ? 'SCHEDULE PENDING' : 'PICKS OPEN';
   return (
     <div style={{ ...card2 }}>
       {/* identity row */}
@@ -909,12 +915,17 @@ function LeagueCard({ e, card, commish, userId, onBoard, onPodBuild, onResults, 
       {/* actions — default goes to the REAL board for this league's season (the
           live 2026 slate once the week is synced). The 2025 full-board sim is an
           optional "see it play" demo until the season starts. */}
-      <button onClick={playHeroBoard} disabled={building} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: building ? 'default' : 'pointer', marginTop: 12, opacity: building ? 0.7 : 1, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
-        {building ? (buildNote || 'LOADING…') : <><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> {live || final ? 'GO TO MATCHUP →' : 'SET YOUR LINEUP →'}</>}
+      <button onClick={playHeroBoard} disabled={building || pending} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: pending ? 'var(--dim)' : 'var(--on-accent)', background: pending ? 'var(--bg)' : 'var(--you)', border: pending ? '1px solid var(--bd)' : 'none', borderRadius: 6, padding: '13px 0', cursor: building || pending ? 'default' : 'pointer', marginTop: 12, opacity: building ? 0.7 : 1, boxShadow: pending ? 'none' : '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
+        {building ? (buildNote || 'LOADING…') : pending ? 'LINEUP OPENS WITH THE SCHEDULE' : <><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> {live || final ? 'GO TO MATCHUP →' : 'SET YOUR LINEUP →'}</>}
       </button>
+      {pending && (
+        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5, textAlign: 'center' }}>
+          No opponent yet — {e.league?.provider === 'native' ? 'the schedule is generated once the league drafts' : `${e.league?.provider === 'espn' ? 'ESPN' : 'Sleeper'} publishes pairings once the league drafts`}. Try ▷ demo (2025) meanwhile.
+        </div>
+      )}
       {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{buildErr}</div>}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>
-        <button onClick={onBoard} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board</button>
+        {!pending && <button onClick={onBoard} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board</button>}
         {e.league?.provider === 'native' && <button onClick={onDraft} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>⛏ draft</button>}
         {e.league?.provider === 'native' && <button onClick={onTeam} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>⇄ team</button>}
         <button onClick={onResults} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>▦ scores</button>
