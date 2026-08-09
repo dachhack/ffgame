@@ -6,7 +6,7 @@ import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   getSession, onAuth, signOut, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, myLinkedSleeper, claimMyRosters,
-  redeemCommish, isAdmin, commishOverview, friendlyError, deleteMockDraft,
+  redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft,
   myMatchup, matchupTeams, leagueResults, defaultOpenWeek,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
 } from '../data/liveApi';
@@ -400,9 +400,18 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // Per-account gates (0094): 'solo' shows the standalone cards; 'dfs_commish'
   // shows "start a DFS league". Admins see everything.
   const [features, setFeatures] = useState<Record<string, boolean>>({});
-  useEffect(() => { myFeatures().then(setFeatures).catch(() => setFeatures({})); }, [session.user.id]);
-  const showSolo = admin || !!features.solo;
-  const showDfsCreate = admin || !!features.dfs_commish;
+  // Feature flags gate which CTAs render, so a browse-as session must read the
+  // VIEWED user's flags — my_features() keys on auth.uid() and would otherwise
+  // show them the admin's surface.
+  useEffect(() => {
+    const p = viewAs ? adminUserFeatures(viewAs.userId) : myFeatures();
+    p.then(setFeatures).catch(() => setFeatures({}));
+  }, [session.user.id, viewAs?.userId]);
+  // Your own super-admin flag must not leak into a browse-as session — it gates
+  // CTAs (create a league, solo play) the viewed user may not have.
+  const effAdmin = viewAs ? false : !!admin;
+  const showSolo = effAdmin || !!features.solo;
+  const showDfsCreate = effAdmin || !!features.dfs_commish;
   const commishIds = new Set(commishLeagues.map((l) => l.league_id));
   const isCommish = commishIds.size > 0;
 
@@ -424,7 +433,11 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       // commishLoaded is flipped so the loading gate clears and the error renders.
       setLoadErr(true); setCommishLoaded(true); return;
     }
-    commishOverview().then((l) => setCommishLeagues(l ?? [])).catch(() => setCommishLeagues([])).finally(() => setCommishLoaded(true));
+    // commish_overview() is `where commissioner_id = auth.uid()`, so browsing as
+    // someone else has to go through the admin twin or the page fills with the
+    // ADMIN's own commissioner cards.
+    (viewAs ? adminUserCommishLeagues(viewAs.userId) : commishOverview())
+      .then((l) => setCommishLeagues(l ?? [])).catch(() => setCommishLeagues([])).finally(() => setCommishLoaded(true));
     // Each league's next matchup + opponent, for the home cards. Week-less
     // myMatchup returns the LOWEST week (Week 1) — wrong whenever a later week
     // is the live one (preseason weeks sort at 101+), so resolve the board's
@@ -503,7 +516,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     <>
       {/* "Start a fresh league" needs the founder-granted 'native' flag (0095;
           admins always pass — the create RPC enforces the same gate server-side). */}
-      <RoleChooser onPlayer={() => setView('join')} onCreate={admin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+      <RoleChooser onPlayer={() => setView('join')} onCreate={effAdmin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </>
@@ -549,13 +562,15 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
 
   // A signed-in commissioner with no player roster of their own → straight to
   // league management instead of the "how are you joining?" chooser.
-  if (enrollments.length === 0 && isCommish) return <CommishDash onBack={() => setView('home')} />;
+  // Not while browsing as someone: CommishDash reads commish_overview() itself,
+  // so it would show the admin's own leagues under the viewed user's banner.
+  if (enrollments.length === 0 && isCommish && !viewAs) return <CommishDash onBack={() => setView('home')} />;
 
   // Genuinely new (no leagues at all) → fork by role.
   if (enrollments.length === 0) return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={admin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={effAdmin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}

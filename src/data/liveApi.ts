@@ -796,6 +796,14 @@ export interface ViewAsState {
 export const adminUserState = (appUserId: string, week: number) =>
   rpc<ViewAsState>('admin_user_state', { p_app_user_id: appUserId, p_week: week });
 
+/** Browse-as twins of the per-caller reads (0109). commish_overview() and
+ *  my_features() key on auth.uid(), so without these a browse-as session shows
+ *  the ADMIN's commissioner leagues and is gated by the ADMIN's feature flags. */
+export const adminUserCommishLeagues = (appUserId: string) =>
+  rpc<AdminLeague[]>('admin_user_commish_leagues', { p_app_user_id: appUserId });
+export const adminUserFeatures = (appUserId: string) =>
+  rpc<Record<string, boolean>>('admin_user_features', { p_app_user_id: appUserId });
+
 // ── Live power-up loadout (M1): arm/disarm in-slot team buffs, pre-lock ──────────
 export const LIVE_BUFFS = ['overtime', 'ot-shield', 'momentum', 'garbage-time', 'amp-2', 'amp-3', 'floodgates', 'counter-nuke', 'insurance', 'fg-stack'] as const;
 export const armBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; detail?: string; buffs?: string[] }>('arm_buff', { p_matchup_id: matchupId, p_buff: buff });
