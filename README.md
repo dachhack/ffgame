@@ -49,8 +49,16 @@ The live scoring is a **deterministic simulation**: each player's real season av
 
 ## Tech
 
-- **Vite + React + TypeScript**, no UI framework — design tokens applied as CSS custom properties (`src/theme.ts`).
-- Zero runtime data fetching; the league + stats are bundled, so it deploys as static files.
+This is an **npm workspace** with three consumers of one shared game engine:
+
+| Package | What it is |
+|---|---|
+| `packages/core` | `@drip/core` — engine, data layer, types, design tokens. Platform-agnostic: no `window`, `document`, `localStorage` or `import.meta`. Hosts install an adapter via `packages/core/src/platform.ts`. |
+| *(repo root)* | The web app — Vite + React + TypeScript, no UI framework, tokens applied as CSS custom properties. Also an installable PWA. |
+| `apps/mobile` | The Expo / React Native app (in progress — see `docs/native-port-plan.md`). |
+| `server` | The 2026 pilot worker; imports `@drip/core` for the engine. |
+
+- Zero runtime data fetching in the web app; the league + stats are bundled, so it deploys as static files.
 
 ```bash
 npm install
@@ -62,20 +70,32 @@ npm run preview    # preview the production build
 ### Project layout
 
 ```
-src/
-  theme.ts            design tokens (3 themes, position pills, effect colors)
-  types.ts            shared types
-  config.ts           DEMO_WEEK and demo constants
+packages/core/src/     @drip/core — shared by web, mobile and the worker
+  platform.ts          the ONE seam to a host (storage / env / URL / openUrl)
+  theme.ts             design tokens (7 themes, position pills, effect colors)
+  types.ts             shared types
+  config.ts            DEMO_WEEK and demo constants
+  analytics.ts         vendor-agnostic event layer (host registers the sink)
   data/
-    statsRaw.ts       real 2025 box scores (CSV from Stathead)
-    players.ts        stats parser + name matching + seeding hash
-    metrics.ts        the 5 windows + per-position metric catalog
-    league.ts         real teams, rosters, standings, 14-week schedule
+    statsRaw.ts        real 2025 box scores (CSV from Stathead)
+    players.ts         stats parser + name matching + seeding hash
+    metrics.ts         the 5 windows + per-position metric catalog
+    league.ts          real teams, rosters, standings, 14-week schedule
+    liveApi.ts         the pilot's Supabase client API
   engine/
-    sim.ts            per-week box lines + slot resolution (NUKE/ERASE/STREAK)
-    matchup.ts        window assignment, default lineups, week resolution
-  app/                store (theme + routing) + shared UI
-  screens/            LeagueHub, LeagueOverview, Matchup, MatchupFinal
+    sim.ts             per-week box lines + slot resolution (NUKE/ERASE/STREAK)
+    matchup.ts         window assignment, default lineups, week resolution
+    liveResolve.ts     server-parity live resolution
+
+src/                   the web app
+  platform.web.ts      installs the browser adapter — MUST be main.tsx's 1st import
+  app/                 store (theme + routing), shared UI, PWA install prompt
+  screens/             LeagueHub, LeagueOverview, Matchup, MatchupFinal, Live*, Admin…
+
+apps/mobile/           the Expo app
+  src/platform.native.ts   MMKV / expo-constants / Linking adapter
+  src/theme.native.ts      core's tokens for RN + the color-mix replacement
+  src/screens/             ported screens (LivePicks so far)
 ```
 
 ---
@@ -93,7 +113,7 @@ The site is served from the custom domain **dripfantasy.com** (`public/CNAME`), 
 This demo is phase 1. The original ask runs further:
 
 - **Phase 2 — the real website.** Replace the simulation with a live data layer: pull lineups from the Sleeper league API, and drive scoring from a real-time NFL play-by-play feed (websocket/poll) with banks computed server-side. Add auth and persisted picks/locks.
-- **Phase 3 — iOS & Android.** The site is already an installable PWA (home-screen icon, standalone launch, works offline — `public/manifest.webmanifest` + `public/sw.js`). Store apps come next: a **Capacitor** shell around the same build, plus native push. Plan, work list and store-policy gates in **`docs/mobile-app-plan.md`** — which also explains why the React Native port this line used to propose is the wrong trade.
+- **Phase 3 — iOS & Android.** The site is already an installable PWA (home-screen icon, standalone launch, works offline — `public/manifest.webmanifest` + `public/sw.js`), and it stays. Alongside it, a native **Expo / React Native** app is being built off the shared `@drip/core` package, so both hosts run the same engine. Product plan and store-policy gates in **`docs/mobile-app-plan.md`**; the port's engineering detail in **`docs/native-port-plan.md`**.
 
 ---
 

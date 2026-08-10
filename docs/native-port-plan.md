@@ -1,5 +1,11 @@
 # Native port plan
 
+The **engineering** detail for the Expo/React Native app: package boundary,
+platform contract, screen-by-screen scope, sequencing. The **product** plan
+around it — how it sits next to the shipped PWA, and the store-policy gates —
+is `docs/mobile-app-plan.md`, which is the plan of record. Its §4 is the risk
+register for everything below; read it before committing to the next screen.
+
 How Drip Fantasy gets an iOS/Android app without pausing the web product, and
 how playtesters move from one to the other mid-season.
 

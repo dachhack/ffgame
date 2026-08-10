@@ -1,12 +1,20 @@
-# Mobile — the PWA now, native shells next season
+# Mobile — the PWA now, an Expo/React Native app next
 
-_The plan of record for iOS/Android. Supersedes README "Phase 3" (which proposed an
-Expo/React Native port) and the one-line native-apps note in
-`scale-2026-2027-plan.md` §3._
+_The plan of record for iOS/Android. Supersedes the one-line native-apps note in
+`scale-2026-2027-plan.md` §3. The port's engineering detail — package boundary,
+platform contract, screen-by-screen scope — lives in
+**`docs/native-port-plan.md`**; this file is the product plan around it._
 
-**The shape of it:** ship the installable PWA before the 2026 season (done — §1),
-build the Capacitor shells *during* the season, submit for the 2027 season. Do not
-rewrite the UI in React Native (§4 says why).
+**The shape of it:** the installable PWA shipped before the 2026 season (§1) and
+stays — it is how most people will first use this on a phone, and it costs
+nothing to keep. Alongside it, build an **Expo/React Native** app off the shared
+`@drip/core` package (§2), starting with the live-picks loop during the season
+and moving playtesters onto it part-way through. Store submission is gated on §3.
+
+> **This reverses an earlier version of this document**, which proposed Capacitor
+> shells and argued against React Native. §4 keeps that argument, because the
+> costs it names are real and now measured — it is the risk register for this
+> plan, not a rejection of it. Read it before committing to the next screen.
 
 ---
 
@@ -77,10 +85,10 @@ switch drops everything and unregisters.
 ### Not done, deliberately
 - **Push notifications.** Web push would reach Android and installed-PWA iOS
   16.4+ only, and the server half is the same work either way — so it's scheduled
-  once, with the native shells (§2).
+  once, with the native app (§2, step 7).
 - **iOS launch images.** Without `apple-touch-startup-image` the standalone app
   shows a blank frame for a beat on cold start. It's ~10 device-specific PNGs;
-  worth doing when the native shells land, not before.
+  worth doing when the native app lands, not before.
 - **`screenshots` in the manifest**, which would give Android the richer install
   dialog. Needs real captures.
 - **Orientation lock.** Left as `any`. The board is a mobile column and portrait
@@ -88,38 +96,54 @@ switch drops everything and unregisters.
 
 ---
 
-## 2. Next season: Capacitor shells
+## 2. The native app: Expo / React Native
 
-Wrap the same `dist/` in a native WebView. Same codebase, same deploys, two store
-listings. The engineering is small; the store work is not.
+Not a WebView wrapper. A second UI shell over the same game engine, sharing
+`packages/core` with the web app so a rules change lands once and both hosts get
+it. Scope, sequencing and the per-screen cost estimates are in
+`docs/native-port-plan.md`; the short version:
 
-**Code changes needed:**
-1. **Base.** Native serves from `capacitor://localhost`, so the native build needs
-   `VITE_BASE=/`. Routing is already hash-based, which works unmodified.
-2. **Auth redirects.** `redirectTo()` in `src/data/liveApi.ts` builds off
-   `window.location.origin`. Magic links, OAuth and password reset all need a
-   custom scheme (`com.dripfantasy.app://auth`) in the Supabase allowlist, plus an
-   `appUrlOpen` listener that hands the token back to supabase-js. Universal
-   Links / App Links for `dripfantasy.com/?live=1&code=…` so invite links open the
-   app — invites *are* the access model, so this one matters.
-3. **Session storage.** supabase-js defaults to localStorage, which iOS can evict.
-   Use a Capacitor Preferences storage adapter so nobody gets signed out mid-season.
-4. **Foreground/background.** Every live surface polls on `setInterval`
-   (`Matchup.tsx`, `NativeLeague.tsx`, `WindowPot.tsx`) and iOS suspends WebView
-   timers on background; the Supabase realtime channel dies silently too. Needs a
-   resume handler that refetches and reconnects, wired to `appStateChange`.
-5. **Safe areas.** `viewport-fit=cover` is set and `cardTable.tsx` already uses
-   `env(safe-area-inset-bottom)`, but the sticky header in `src/app/ui.tsx` doesn't.
-6. **OTA updates — not optional.** Store review is 24–48h; we hotfix during games.
-   Capacitor Live Updates (or Capgo) pushes new web assets to installed apps
-   without review. Both stores allow it as long as the app's purpose is unchanged.
+**Done and on `main`:**
+1. **`@drip/core` extracted** (~11k lines: engine, data, types, tokens,
+   analytics). No `window`, `document`, `localStorage` or `import.meta` left in
+   it, so Metro and `tsx` consume it unchanged — the pilot worker now imports it
+   as a package instead of through `../../src` deep paths.
+2. **The platform shim** (`packages/core/src/platform.ts`) — storage, env,
+   assetUrl, URL, openUrl. This is what the Capacitor plan's old work list
+   called for in items 2 and 3, solved once for every host:
+   - `redirectTo()` no longer builds off `window.location.origin`; it asks
+     `platform().url.redirectBase()`, which is the web origin on web and the
+     `dripfantasy://` deep link on native.
+   - **supabase-js was defaulting to `localStorage` with no adapter** — which
+     does not exist in React Native, so sessions died on every app restart, and
+     which iOS can evict even on web. It now takes the host's storage
+     explicitly.
+3. **The Expo app** (`apps/mobile/`) with `LivePicks` ported — the smallest
+   screen that exercises auth, the slate, lock rules, the metric catalogue, the
+   premium gate and the wallet. Typechecks and bundles (706 modules); **not yet
+   run on a device.**
 
-**The genuinely new backend work is push:** a `device_tokens` table with RLS,
-registration on login, and worker/edge hooks firing APNs+FCM on the moments that
-matter — lock at T-60, window reveal, you got nuked, a pot offer, matchup final.
-Budget most of the time here, not on the shell.
+**Next, in order:**
+4. **Run it on a device.** `npm run apk` (free Expo account, no Mac) or
+   `npm run ios` on a Mac. Expect more web-shaped assumptions like the supabase
+   one — they only surface when a second host reads the same code.
+5. **Sign-in.** `LiveOnboard` is 1,541 lines covering magic link, invite codes,
+   commish codes and solo passes. Until it lands, sign in on the web; it is the
+   same account and the same session.
+6. **The live board**, which is where §4's animation cost gets paid and where
+   this plan is genuinely tested.
+7. **Push notifications** — the one thing native buys a live game that the PWA
+   cannot on iOS. A `device_tokens` table with RLS, registration on login, and
+   worker/edge hooks on the moments that matter: lock at T-60, window reveal,
+   you got nuked, a pot offer, matchup final. **Budget most of the time here,
+   not on screens.**
 
----
+**Keep the PWA.** It is shipped, it costs nothing to maintain, and it stays the
+zero-friction path for cold traffic and for anyone who never installs an app.
+The native app is for the people who play every week.
+
+**What does NOT carry over:** the guided demo (`DemoBoard`), the admin console
+and the commissioner tools stay web-only. See `native-port-plan.md` §4.
 
 ## 3. The two things that can block a store release
 
@@ -147,13 +171,38 @@ before production — open that track early or it's a hard two-week wall.
 
 ---
 
-## 4. Why not React Native
+## 4. The risk register — what this port actually costs
 
-`src/engine` and `src/data` would port cleanly — pure TS, and supabase-js runs in
-RN. Every screen would not. The styling is inline style objects full of DOM-only
-values (`boxShadow` strings, gradients, `position: fixed`, `color-mix`), and the
-things that *are* the product — `FieldView`, `cardTable.tsx`, the pixel sprites,
+Kept verbatim in substance from the version of this document that argued
+*against* the port, because none of it stopped being true. It is the honest
+list of what can go wrong, and the measurements so far.
+
+**The UI does not port; it gets rewritten.** `src/engine` and `src/data` moved
+cleanly — pure TS, and supabase-js runs in RN. Every screen has to be rebuilt.
+The styling is inline style objects full of DOM-only values (`boxShadow`
+strings, gradients, `position: fixed`, `color-mix`), and the things that *are*
+the product — `FieldView`, `cardTable.tsx`, the pixel sprites,
 `@keyframes nukeburst`, the SVG field draw — are DOM and CSS to their bones.
-That's a months-long rewrite that forks the codebase, in exchange for native
-rendering we have no evidence we need. Revisit only if the WebView demonstrably
-can't hold frame rate on low-end Android during a live board.
+
+**Measured since:** ~17.5k lines of web UI, cut to ~7.7k for mobile by dropping
+the demo, admin and commissioner surfaces. 133 `color-mix()` calls (97 are plain
+alpha, handled by `theme.native.ts`), 13 CSS keyframes, 29 `gridTemplateColumns`,
+11 `position: sticky`. The first ported screen came in *smaller* than its web
+counterpart because it used shared components in a degenerate mode — one data
+point that the estimate may be pessimistic, not proof.
+
+**The unpaid bill is the live board.** Nothing ported so far animates. The
+nuke/flip/field-draw moments are the product's signature and they are the real
+test of Reanimated versus `@keyframes`. If this plan fails, it fails there —
+so build that screen before committing to the remaining six.
+
+**The fork risk is real.** Two UI shells means every new player-facing surface
+ships twice. That is the standing tax, and it is why the demo, admin and
+commissioner tools are explicitly web-only. Watch for it: if a feature starts
+landing on one host and lagging on the other, that is the signal to reconsider.
+
+**The bail-out, if it comes to that:** the extraction and the platform shim are
+not wasted under any alternative. A Capacitor shell around the same `dist/`
+would need exactly the auth-redirect and session-storage fixes already made, and
+would keep `@drip/core` for the worker. Reversing course costs `apps/mobile/`
+and nothing else.
