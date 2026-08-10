@@ -144,10 +144,17 @@ export function WindowPotChip({ pot, matchupId, win, winLabel, lockAtMs, cards }
   const w = pot.windows.find((x) => x.win === win) ?? null;
   // `pot.off` ⇒ the super admin has the feature switched off for this league; no
   // new offers, and any pot already running is read-only until it closes itself.
-  const openable = !pot.off && pot.both_live && lockAtMs != null && Date.now() < lockAtMs;
+  const bettingOpen = lockAtMs != null && Date.now() < lockAtMs;
+  const openable = !pot.off && pot.both_live && bettingOpen;
 
-  // Nothing to show: no pot here, and no way to start one.
-  if (!w && !openable) return null;
+  // The empty-chair rule (S11) is the one refusal a manager can't see the reason
+  // for: with an unenrolled or AI opponent there is simply no chip, which reads
+  // as "the feature I just switched on is broken". So while betting COULD still
+  // be open on this window, say why it isn't instead of rendering nothing. Once
+  // the window's picks lock, silence is the right answer again — a row of
+  // explanations on every past window is noise.
+  const explain = !w && !pot.off && bettingOpen && !pot.both_live;
+  if (!w && !openable && !explain) return null;
 
   // Is the ball in your court? Drives the pulse.
   const yours = w && !pot.off
@@ -166,7 +173,7 @@ export function WindowPotChip({ pot, matchupId, win, winLabel, lockAtMs, cards }
     : { background: 'var(--surface)', border: '1px solid var(--bd)', color: 'var(--text)' };
 
   const status = (): string => {
-    if (!w) return `PUT ◎${pot.ante} ON THIS WINDOW →`;
+    if (!w) return openable ? `PUT ◎${pot.ante} ON THIS WINDOW →` : 'ANTE ONLY · NO MANAGER ON THE OTHER SEAT';
     if (closed) return potOutcomeLine(w) ?? 'CLOSED';
     if (pot.off) return 'PAUSED — CLOSING OUT';
     if (w.state === 'locked') return 'RIDING TO THE FINAL';
@@ -188,12 +195,14 @@ export function WindowPotChip({ pot, matchupId, win, winLabel, lockAtMs, cards }
       <button
         onClick={() => setOpen(true)}
         className="mono"
-        title={w ? 'The window pot — ante, wager, call' : `Put ◎${pot.ante} up and see if they take it`}
+        title={w ? 'The window pot — ante, wager, call'
+          : explain ? 'Both seats need a real manager before anything can be wagered here'
+            : `Put ◎${pot.ante} up and see if they take it`}
         style={{
           display: 'flex', alignItems: 'center', gap: 6, width: '100%', justifyContent: 'space-between',
           fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: cards ? 999 : 5,
           padding: cards ? '6px 12px' : '5px 9px', margin: '2px 0 6px', cursor: 'pointer',
-          opacity: w ? 1 : 0.72, ...chipArt,
+          opacity: w ? 1 : explain ? 0.5 : 0.72, ...chipArt,
           ...(yours ? { borderColor: 'var(--warn)', boxShadow: '0 0 12px color-mix(in srgb, var(--warn) 45%, transparent)', animation: 'bpulse 1.6s ease infinite' } : {}),
         }}
       >
