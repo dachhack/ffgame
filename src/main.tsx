@@ -8,6 +8,7 @@ import { createRoot } from 'react-dom/client';
 import { StoreProvider } from './app/store';
 import { App } from './App';
 import { initAnalytics, registerSink } from '@drip/core/analytics';
+import { initPwa } from './app/pwa';
 import './styles.css';
 
 // Wire PostHog as the analytics sink IF a project token is configured (VITE_POSTHOG_KEY,
@@ -21,7 +22,14 @@ if (PH_KEY) {
   }).catch(() => { /* analytics is best-effort */ });
 }
 
-initAnalytics();
+// Before initAnalytics: registers the beforeinstallprompt listener, which
+// Chromium can fire as early as first paint.
+initPwa();
+// `standalone` = launched from the home screen rather than a browser tab, so
+// installs can be read as a retention cohort. Answered here rather than inside
+// core, which carries no browser globals. Read inline rather than imported from
+// ./pwa, which imports the analytics module.
+initAnalytics({ standalone: (() => { try { return window.matchMedia('(display-mode: standalone)').matches; } catch { return false; } })() });
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

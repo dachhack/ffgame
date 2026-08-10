@@ -1,0 +1,31 @@
+{
+  "name": "Drip Fantasy",
+  "short_name": "Drip",
+  "description": "Head-to-head fantasy football of hidden picks and live effects, resolved over real NFL play-by-play.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#142A2E",
+  "background_color": "#1C1A13",
+  "categories": ["games", "sports"],
+  "icons": [
+    { "src": "./icons/pwa/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/pwa/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/pwa/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "My matchup",
+      "short_name": "Matchup",
+      "url": "./#/live",
+      "icons": [{ "src": "./icons/pwa/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Play the demo",
+      "short_name": "Demo",
+      "url": "./#/demo",
+      "icons": [{ "src": "./icons/pwa/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

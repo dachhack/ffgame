@@ -49,6 +49,12 @@ export const Ev = {
   splitContributed: 'split_contributed',            // {amount}
   splitCompleted: 'split_completed',                // pool reached $30 → league unlocked
   commishPremiumToggled: 'commish_premium_toggled', // {on}
+  // install funnel (the PWA "add to home screen" banner — src/app/pwa.ts)
+  pwaInstallShown: 'pwa_install_shown',         // {ios} — banner rendered
+  pwaInstallAccepted: 'pwa_install_accepted',   // took the native install dialog
+  pwaInstallDeclined: 'pwa_install_declined',   // opened the dialog, said no
+  pwaInstallDismissed: 'pwa_install_dismissed', // closed the banner (snoozed)
+  pwaInstalled: 'pwa_installed',                // the browser confirmed the install
 } as const;
 
 // ── First-touch attribution ──────────────────────────────────────────────────
@@ -111,7 +117,15 @@ export function identify(id: string, traits?: Props): void {
   } catch { /* never throw */ }
 }
 
-/** Call once at app boot. */
-export function initAnalytics(): void {
-  track(Ev.appOpen, { version: APP_VERSION });
+/** Call once at app boot.
+ *
+ *  `launch` carries host-specific launch context merged into the app_open
+ *  event — the web shell passes `{ standalone }` (launched from the home
+ *  screen rather than a browser tab, so installs can be read as a retention
+ *  cohort), and a native shell can pass its own equivalents. It's a parameter
+ *  rather than something read here because the check is `window.matchMedia`,
+ *  and core carries no browser globals; the host that knows how to answer is
+ *  the host that should. */
+export function initAnalytics(launch: Props = {}): void {
+  track(Ev.appOpen, { version: APP_VERSION, ...launch });
 }
