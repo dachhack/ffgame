@@ -13,7 +13,7 @@ import {
 import { buildDripTestLeague } from '../data/dripTest';
 import { track, Ev } from '../app/analytics';
 import { buildLiveLeague } from '../data/liveBoard';
-import { PRESEASON_BASE, isPreseasonWeek, preseasonWeekNum, clearRuntimeSlate } from '../data/nflSlate';
+import { PRESEASON_BASE, isPreseasonWeek, preseasonWeekNum, weekLabel, clearRuntimeSlate } from '../data/nflSlate';
 import { LiveBoard } from './LiveBoard';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { AdminPage, type LeagueTab } from './AdminPage';
@@ -886,6 +886,9 @@ function LeagueCard({ e, card, commish, userId, onBoard, onPodBuild, onResults, 
   // lineup yet: playHeroBoard would open with ctx null and silently discard
   // everything the manager built. Say "pending" and hold the CTA instead.
   const pending = !m;
+  // Preseason PRACTICE (migration 0110): board weeks above PRESEASON_BASE. Drives
+  // the badge and turns the meaningless "WK 102" into the board's own "PRE 2".
+  const practice = !!m && isPreseasonWeek(m.week);
   const statusColor = live ? '#FF4F62' : final ? 'var(--dim)' : pending ? 'var(--faint)' : 'var(--warn)';
   const statusLabel = live ? '● LIVE' : final ? 'FINAL' : pending ? 'SCHEDULE PENDING' : 'PICKS OPEN';
   return (
@@ -901,6 +904,11 @@ function LeagueCard({ e, card, commish, userId, onBoard, onPodBuild, onResults, 
             {commish && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', borderRadius: 4, padding: '2px 6px' }}>⚑ COMMISSIONER</span>}
             {e.league?.kind === 'weekly' && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>🏆 WK {e.league.contest_week ?? '—'} SHOWDOWN</span>}
             {e.league?.kind === 'dfs' && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>⚔ DFS LEAGUE</span>}
+            {/* Keyed to the week THIS CARD is showing, not to league.preseason_at:
+                a practice league rolls into WK 1 while the stamp is still set, and
+                badging a real matchup "practice" would be a lie about a game that
+                counts. In August the two agree; at the rollover only this is right. */}
+            {practice && <span className="mono" title="Preseason practice — a real preseason game on live play-by-play. Nothing carries over: no standings, no seeding, no coin, no power-up inventory." style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--you)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', borderRadius: 4, padding: '2px 6px' }}>🏈 PRACTICE</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, minWidth: 0 }}>
             {e.league?.avatar_url && <img src={e.league.avatar_url} alt="" width={14} height={14} style={{ borderRadius: 3, flexShrink: 0 }} />}
@@ -912,7 +920,9 @@ function LeagueCard({ e, card, commish, userId, onBoard, onPodBuild, onResults, 
 
       {/* matchup row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '10px 12px', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6 }}>
-        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)', flexShrink: 0 }}>WK {m?.week ?? '—'}</span>
+        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)', flexShrink: 0 }}>
+          {m ? weekLabel(m.week) : 'WK —'}
+        </span>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.team_name}</span>
         <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', flexShrink: 0 }}>vs</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{opp?.team_name ?? (m ? `Roster ${oppRoster}` : 'schedule pending')}</span>

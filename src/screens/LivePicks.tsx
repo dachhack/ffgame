@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { WINDOWS, METRICS, LOCKED_METRIC_UNLOCK } from '../data/metrics';
-import { windowForTeam, hasSlate, setRuntimeSlate } from '../data/nflSlate';
+import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel } from '../data/nflSlate';
 import { slugMeta } from '../data/slugMeta';
 import type { Pos, WindowId } from '../types';
 import {
@@ -338,7 +338,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
   const weekNav = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
       <button onClick={() => setWeekSel(Math.max(1, curWeek - 1))} disabled={curWeek <= 1} className="mono" title="previous week" style={{ ...linkBtn, fontSize: 13, padding: '0 4px', opacity: curWeek <= 1 ? 0.35 : 1 }}>‹</button>
-      <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)' }}>WK {curWeek}</span>
+      <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)' }}>{weekLabel(curWeek)}</span>
       <button onClick={() => setWeekSel(Math.min(REG_SEASON_WEEKS, curWeek + 1))} disabled={curWeek >= REG_SEASON_WEEKS} className="mono" title="next week" style={{ ...linkBtn, fontSize: 13, padding: '0 4px', opacity: curWeek >= REG_SEASON_WEEKS ? 0.35 : 1 }}>›</button>
     </div>
   );
@@ -379,7 +379,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
             {myTeam?.avatar && <img src={myTeam.avatar} alt="" width={32} height={32} style={{ borderRadius: 6, flexShrink: 0 }} />}
             <div style={{ minWidth: 0 }}>
               {myTeam?.team_name && <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{myTeam.team_name}</div>}
-              <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Week {matchup!.week} lineup</div>
+              <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{weekLabel(matchup!.week)} lineup</div>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
