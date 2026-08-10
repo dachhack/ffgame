@@ -9,6 +9,12 @@ primary_region = "iad"
 
 [env]
   PILOT_SEASON = "2026"
+  # PILOT_SEASON_TYPE is deliberately UNSET. The scheduler runs every week context
+  # that currently has games (server/src/index.js activeContexts), so preseason and
+  # the regular season poll together and neither needs a flag. Setting it PINS the
+  # worker to that one ESPN season type — useful for a one-off debug, dangerous to
+  # leave behind: pinned to 1, the regular season never locks or resolves, and the
+  # logs look healthy the whole time.
   # Sleeper league ids the worker's weekly auto-sync loop mirrors (syncTick →
   # syncAllLeagues, server/src/index.js). Not a secret, so it lives here rather
   # than in `fly secrets` — the list stays reviewable in git. A same-named Fly

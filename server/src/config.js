@@ -13,11 +13,19 @@ export const config = {
   supabaseUrl: process.env.SUPABASE_URL || '',
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   season: process.env.PILOT_SEASON || '2026',
-  // ESPN seasontype the pollers query: 1=preseason, 2=regular (default), 3=postseason.
+  // OPTIONAL override — pin the worker to ONE ESPN seasontype (1=preseason,
+  // 2=regular, 3=postseason). Leave it UNSET in normal operation: the scheduler
+  // now runs every context that currently has games (index.js activeContexts),
+  // so preseason and the regular season coexist and neither needs a flag.
+  //
+  // This exists for one-off debugging and for cli.js, which operates on a single
+  // week by definition. It used to be the only way to reach preseason at all,
+  // and forgetting to unset it would have silently stopped the regular season
+  // from ever locking or resolving — which is precisely why it stopped being
+  // load-bearing.
+  forcedSeasonType: process.env.PILOT_SEASON_TYPE ? Number(process.env.PILOT_SEASON_TYPE) : null,
+  // Legacy single-mode values, still read by cli.js (one week, one mode).
   seasonType: Number(process.env.PILOT_SEASON_TYPE || 2),
-  // Board-week offset applied to every DB read/write while polling preseason, so
-  // preseason weeks 1-3 land on board weeks 101-103 and never collide with the
-  // regular-season slate/matchups. ESPN API calls still use the real (1-3) week.
   weekOffset: Number(process.env.PILOT_SEASON_TYPE || 2) === 1 ? 100 : 0,
   // Lineups lock this long BEFORE kickoff (matchup lock_at = first kickoff − lead;
   // the 0102 enforce_window_lock trigger applies the same lead per window). Must
