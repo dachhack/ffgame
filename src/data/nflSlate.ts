@@ -166,7 +166,16 @@ function deriveWeek(week: number): DerivedWeek {
     for (const [id, games] of gamesByWin) { // insertion order = kickoff order
       const k0 = Math.min(...games.map((g) => g.kickoff ?? Infinity));
       const meta = winMetaFor(k0);
-      const slots = Math.min(3, Math.ceil(games.length / 3));
+      // Slots per window. The regular season keeps ceil(games/3) capped at 3,
+      // which reproduces the classic 1/3/2/1/1 board on a normal Sunday.
+      // PRESEASON is shaped differently — its games bunch into a few dense
+      // Thursday/Friday/Saturday clusters — so it's more generous: 3+ games in a
+      // window earns 2 slots, 5+ earns 3. That deliberately puts MORE slots on
+      // the board than the 8 a manager can fill, which is the practice-week
+      // decision: not "fill everything", but which windows to contest.
+      const slots = isPreseasonWeek(week)
+        ? (games.length >= 5 ? 3 : games.length >= 3 ? 2 : 1)
+        : Math.min(3, Math.ceil(games.length / 3));
       windows.push({ id, label: meta.label, sub: meta.sub, slots, time: kickoffLabel(k0) });
     }
     result = { windows, teamWin, gamesByWin };

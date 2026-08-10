@@ -101,7 +101,18 @@ preseason, the regular season and pods coexist in one process — is deferred;
 the tick body is mostly week-parameterised already, but `espnWeekCache` is a
 single cache and the injury poll would need hoisting out of the loop.
 
-**Practice grants the extra slots (0111).** The lineup cap is a hard
+**Preseason slot rule + the grant taken back (0116).** Preseason windows are
+allocated more generously than the regular season's `min(3, ceil(games/3))`:
+**2 slots at 3+ games, 3 at 5+** (`nflSlate` deriveWeek), because preseason games
+bunch into a few dense Thu/Fri/Sat clusters rather than spreading over a Sunday.
+The loaded 2026 preseason now derives **PRE 2: 6 windows / 10 slots · PRE 3: 9 /
+11 · PRE 4: 7 / 11**. That is deliberately MORE than the 8 a manager can fill:
+choosing which windows to contest — and whether to spend 80 of the 120-coin
+practice budget on a ninth slot — IS the practice-week exercise. So 0111's free
+grant is gone and `enforce_slot_cap` is 0027's rule verbatim, base + purchased,
+identical in practice and in the season. (Superseded reasoning below.)
+
+**Practice grants the extra slots (0111, SUPERSEDED by 0116).** The lineup cap is a hard
 `base_slot_count() = 8`, mirroring the REGULAR season's fixed five-window board.
 Preseason boards are derived from the real slate instead, and are shaped nothing
 like it — the loaded 2026 preseason derives `wk 101: 1 window / 1 slot`,
