@@ -393,6 +393,10 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   const [target, setTarget] = useState<{ leagueId: string; rosterId: number; week?: number; name?: string } | null>(null);
   // "My league isn't in the pilot yet" → the request-a-code capture sheet.
   const [requesting, setRequesting] = useState(false);
+  // A commissioner with no seat LANDS on the dashboard; this flips once they ask
+  // to leave it, so the player side is reachable instead of being redirected away
+  // on every render. Reset by the "⚑ my leagues (commissioner)" link below.
+  const [leftDash, setLeftDash] = useState(false);
   // Solo paths: one tap into a season pod (0089) or this week's showdown (0090)
   // — no invite, no Sleeper league. soloBusy remembers WHICH card is working.
   const [soloBusy, setSoloBusy] = useState<'pod' | 'weekly' | null>(null);
@@ -560,11 +564,17 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   );
   if (enrollments === null || !commishLoaded) return <Muted text="Loading your leagues…" />;
 
-  // A signed-in commissioner with no player roster of their own → straight to
-  // league management instead of the "how are you joining?" chooser.
+  // A signed-in commissioner with no player roster of their own LANDS on league
+  // management instead of the "how are you joining?" chooser — but it's a
+  // landing, not a lock. This used to return CommishDash unconditionally from
+  // the 'home' render, so its own "← all leagues" (which sets view to 'home')
+  // re-rendered the very same redirect: a dead button, and no way to reach the
+  // player side at all. `leftDash` remembers that they asked to leave.
   // Not while browsing as someone: CommishDash reads commish_overview() itself,
   // so it would show the admin's own leagues under the viewed user's banner.
-  if (enrollments.length === 0 && isCommish && !viewAs) return <CommishDash onBack={() => setView('home')} />;
+  if (enrollments.length === 0 && isCommish && !viewAs && !leftDash) {
+    return <CommishDash onBack={() => setLeftDash(true)} />;
+  }
 
   // Browsing as someone with no leagues: the role chooser below is entirely
   // write actions (join, create, redeem a solo pass) and every one of them would
@@ -583,6 +593,10 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
+        {/* The only route back to the dashboard for a commissioner who holds no
+            seat: with no enrollments there's no league card to carry a "manage"
+            button, so without this the player side is a one-way door. */}
+        {isCommish && <button onClick={() => setLeftDash(false)} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>⚑ my leagues (commissioner)</button>}
       </div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </div>
