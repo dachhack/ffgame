@@ -1475,7 +1475,7 @@ function PreseasonPractice({ on, leagueId, season, admin, reload }: { on: boolea
   // the harmless roster re-seed below.
   const rebuild = async () => {
     if (busy) return;
-    if (!window.confirm('Rebuild the practice weeks?\n\nAdds any preseason week that is missing (e.g. PRE 4) and re-pairs each week against its own regular-season matchup.\n\nAlready-played weeks are left alone, but any picks already sealed in an UPCOMING practice week will be cleared.')) return;
+    if (!window.confirm('Rebuild the practice weeks?\n\nAdds any preseason week that is missing (e.g. PRE 4) and re-draws each week\u2019s random pairings.\n\nAlready-played weeks are left alone, but any picks already sealed in an UPCOMING practice week will be cleared.')) return;
     setBusy('rebuild'); setNote(null);
     const r = await enablePreseasonPractice(leagueId).catch((e: unknown) => ({ ok: false as const, error: friendlyError(e) }));
     const skipped = ('skipped' in r ? r.skipped ?? [] : []).map((w) => `PRE ${w - 100}`);
@@ -1527,7 +1527,7 @@ function PreseasonPractice({ on, leagueId, season, admin, reload }: { on: boolea
           <>
             <span className="mono" style={bs(true)}>🏈 PRACTICE: ON</span>
             <button onClick={rebuild} disabled={!!busy} className="mono" style={bs(false)}
-              title="Rebuild the practice weeks: adds any preseason week this league is missing and re-pairs each week against its own regular-season matchup. Already-played weeks are left untouched; picks sealed in an upcoming practice week are cleared.">
+              title="Rebuild the practice weeks: adds any preseason week this league is missing and re-draws each week's random pairings. Already-played weeks are left untouched; picks sealed in an upcoming practice week are cleared.">
               {busy === 'rebuild' ? 'rebuilding…' : '⟳ rebuild weeks'}
             </button>
             <button onClick={reseed} disabled={!!busy} className="mono" style={bs(false)}
@@ -1553,7 +1553,7 @@ function PreseasonPractice({ on, leagueId, season, admin, reload }: { on: boolea
       </div>
       {!closed && (
         <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
-          Real {season} preseason games on live play-by-play, with throwaway deep rosters — every backup on the slate is pickable, since they take the snaps. Nothing carries over: no standings, no seeding, no coin, no power-up inventory. Turning it off removes the practice weeks entirely.
+          Real {season} preseason games on live play-by-play, with throwaway deep rosters — every backup on the slate is pickable, since they take the snaps. Opponents are drawn at random each practice week, so this works before the draft finishes — no schedule needed. Nothing carries over: no standings, no seeding, no coin, no power-up inventory. Turning it off removes the practice weeks entirely.
         </div>
       )}
       {note && <div className="mono" style={{ ...mono, fontSize: 9, marginTop: 6, color: note.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{note}</div>}

@@ -100,7 +100,26 @@ place per side: `preseason_week_count()` / `preseason_board_weeks()` in SQL,
 `PRESEASON_WEEKS` in TS (mirror convention, bump together), and the probes
 assert off the helper so extending it can't silently under-assert.
 
-**Distinct pairings + skipping played weeks (0113).** 0054's clone copied WEEK 1
+**Random pairings, no schedule required (0114).** Practice built its weeks by
+CLONING the league's regular-season schedule — Week 1 four times (0054), then
+week i per board week (0113) — which carried a hard dependency on the league
+already HAVING a schedule. Turf Warriors hit it head-on: mid-draft, no matchups
+at all, so opening practice failed with *"no Week-1 matchups to clone — sync the
+season first"*. Backwards for what practice is for; the moment it's most wanted
+is exactly when a league hasn't drafted. And the real schedule was never
+meaningful here anyway — a practice game against your true Week-3 opponent isn't
+that matchup, it's a scrimmage that counts for nothing. Practice now pairs seats
+itself: a deterministic shuffle per (league, board week) — `md5(league|week|
+roster)`, the same trick as pods' `pairPodSeats`, needing no `setseed()` session
+state — with adjacent seats paired off. Different opponent each week, works with
+zero schedule, and the same league+week always redraws identically so a rebuild
+is idempotent rather than reshuffling under people. Odd seat count → one seat
+sits, and which one moves with the shuffle. The only precondition left is TWO
+SEATS. Regular-season lineups are still copied when they exist, purely as a
+fallback the deep-pool seed overwrites moments later.
+
+**Distinct pairings + skipping played weeks (0113, superseded by 0114's random
+draw for the pairing half).** 0054's clone copied WEEK 1
 into every preseason board week, so a playtester faced the same opponent three
 (then four) times running — fine for the one-night live-fire it was built for,
 poor for a month of practice. Board week 100+i now clones regular-season week i,
