@@ -174,12 +174,12 @@ export function LeagueOverview() {
   );
 }
 
-// `practice` = a preseason PRACTICE week (migration 0110). Power-ups there are
-// free and never touch the real wallet or inventory — but the shop's own
-// affordability gate is client-side, so without this flag a team with a low
-// balance simply couldn't press BUY, and the server's "free even at zero
-// balance" would be unreachable through the UI. It also stops the unchanging
-// balance from reading as a bug: the price is shown as FREE, not deducted.
+// `practice` = a preseason PRACTICE week. Power-ups there cost REAL prices out of
+// a separate weekly PRACTICE BUDGET (migration 0115) that never touches the season
+// wallet — so affordability, prices and the running balance all behave exactly as
+// they will in Week 1, which is the point: free power-ups taught "arm everything",
+// the one habit that bankrupts a manager in the real season. The flag only changes
+// what the header SAYS, so nobody reads their unfamiliar balance as a bug.
 export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practice = false }: {
   onClose: () => void; coinsOverride?: number; onBuy?: (id: string) => Promise<boolean>; cards?: boolean; practice?: boolean;
 }) {
@@ -202,9 +202,9 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practi
   const bal = coinsOverride ?? coins;
   // Shown under the title. In practice it has to say why the balance won't move.
   const subLine = practice
-    ? <><GameIcon name={COIN_GOLD} emoji="◈" size="1.4em" /> {bal} DRIP COIN · 🏈 PRACTICE — power-ups are FREE and don&rsquo;t touch your wallet</>
+    ? <><GameIcon name={COIN_GOLD} emoji="◈" size="1.4em" /> {bal} PRACTICE COIN · 🏈 this week&rsquo;s practice budget — your season wallet is untouched</>
     : <><GameIcon name={COIN_GOLD} emoji="◈" size="1.4em" /> {bal} DRIP COIN · +5 per signature play</>;
-  const canAfford = (price: number) => practice || bal >= price;
+  const canAfford = (price: number) => bal >= price;
   async function buy(id: string) {
     const ok = onBuy ? await onBuy(id) : buyPowerup(id);
     if (ok) { setFlash(id); setTimeout(() => setFlash((f) => (f === id ? null : f)), 600); }
@@ -223,8 +223,8 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practi
               return (
                 <PowerupCard key={p.id} id={p.id} name={p.name} icon={p.icon} blurb={p.blurb} idx={i}
                   timingLabel={p.kind === 'metric' ? 'METRIC · 1 WK' : p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME'} live={p.timing !== 'pre'}
-                  cost={practice ? 0 : p.price} owned={have} disabled={!afford} flashed={flash === p.id}
-                  note={practice ? 'free in practice' : afford ? undefined : `need ◈${p.price}`}
+                  cost={p.price} owned={have} disabled={!afford} flashed={flash === p.id}
+                  note={afford ? undefined : `need ◈${p.price}`}
                   onClick={() => buy(p.id)} />
               );
             })}
@@ -262,7 +262,7 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practi
                 className="mono"
                 style={{ flex: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', borderRadius: 4, padding: '8px 11px', border: 'none', cursor: afford ? 'pointer' : 'default', color: afford ? 'var(--bg)' : 'var(--faint)', background: afford ? 'var(--you)' : 'var(--surface)', opacity: afford ? 1 : 0.6 }}
               >
-                {practice ? 'FREE' : <><GameIcon name={COIN_GOLD} emoji="◈" size="1.2em" /> {p.price}</>}
+                <GameIcon name={COIN_GOLD} emoji="◈" size="1.2em" /> {p.price}
               </button>
             </div>
           );

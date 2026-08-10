@@ -169,14 +169,32 @@ seeded and which it skipped, and `enablePreseasonPractice` seeds deep pools for
 exactly the seeded ones. If EVERY preseason week is past, the on-switch refuses
 and un-stamps rather than handing back a league with nothing playable.
 
+**Practice has its own weekly budget: 120 coin (0115).** 0110 made practice
+spending FREE, which protected the real wallet but taught the wrong game — with
+everything free the right move is always "arm everything", the exact habit that
+bankrupts a manager in Week 1. The economy is the thing the pilot most needs
+playtested, and free practice skipped it. So practice now runs a parallel,
+throwaway economy: `practice_wallet`, keyed (league, roster, BOARD WEEK), seeded
+at `practice_budget()` = 120 on first touch, spent at REAL prices, and dropped
+with the practice weeks (both the rebuild and the off-switch delete it). The
+0110 invariant is untouched — a practice week still never moves `team_wallet` —
+the two economies simply don't meet. Per WEEK, not per league: each practice week
+starts fresh, so overspending PRE 2 doesn't cripple PRE 3 and nothing accumulates
+into a stockpile the real season never grants. Practice EARNINGS stay unbanked
+(they'd land after the week they could be spent in); only refunds return to the
+purse, capped at the budget so a refund can't mint coin. `my_wallet`/
+`ensure_wallet` return the purse on a practice matchup, so the header chip and
+shop show 120 with no client plumbing.
+
 **The shop is practice-aware (`ShopModal`).** 0110 makes power-ups free on a
 practice week server-side, but the shop's affordability gate is CLIENT-side
 (`afford = bal >= p.price`), so a low-balance team simply couldn't press BUY and
 the server's deliberate "free even at zero balance" was unreachable through the
-UI. `ShopModal` now takes `practice`: affordability always passes, the price
-reads FREE (card variant: `free in practice`), and the subtitle says *"🏈
-PRACTICE — power-ups are FREE and don't touch your wallet"* so the unchanging
-balance stops reading as a bug. Passed from the board as `!!liveCtx && preseason`.
+UI. `ShopModal` takes `practice`, which since 0115 changes only what the HEADER says
+— *"N PRACTICE COIN · 🏈 this week's practice budget — your season wallet is
+untouched"*. Prices, affordability and the running balance all behave exactly as
+they will in Week 1, because they're now the same mechanics on a different purse.
+Passed from the board as `!!liveCtx && preseason`.
 
 **Pool filters (`boardParts.tsx`).** A normal fantasy roster is 8-20 players, so
 both pool views rendered whole and unfiltered. Deep practice pools are ~1,000
