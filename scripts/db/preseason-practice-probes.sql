@@ -5,8 +5,8 @@
 -- What this pins down: the preseason board weeks (101 … 100 + preseason_week_
 -- count()) are THROWAWAY — they never move real coin, real inventory, or a real
 -- record — a league's commissioner (not just a super-admin) can open and close
--- practice, each week clones a DIFFERENT regular-season pairing, already-played
--- weeks are skipped, and practice grants the extra lineup slots for free.
+-- practice, pairings are drawn at random per week (no schedule needed),
+-- already-played weeks are skipped, and practice grants the extra slots free.
 \set QUIET on
 \pset pager off
 
@@ -55,13 +55,12 @@ values ('00000000-0000-0000-0000-0000000009f1', 'PRESEASON-PROBE', '2026', 'Prac
 insert into league_membership (league_id, sleeper_roster_id, app_user_id, enrolled, team_name) values
   ('00000000-0000-0000-0000-0000000009f1', 1, '00000000-0000-0000-0000-000000000101', true, 'Home'),
   ('00000000-0000-0000-0000-0000000009f1', 2, '00000000-0000-0000-0000-000000000102', true, 'Away');
--- The Week-1 pairing the practice clone copies.
+-- A Week-1 pairing (no longer required to open practice — see 2c/2b1).
 insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
 values ('00000000-0000-0000-0000-0000000009f1', 1, 1, 2, 'scheduled');
--- Week-2/3/4 pairings, so the clone has DISTINCT sources to copy (0113 maps board
--- week 100+i to regular week i). Home/away flip each week — that flip is what the
--- probes assert on, since it's what a playtester actually experiences as "a
--- different matchup".
+-- A couple more regular-season weeks. Since 0114 these no longer drive the
+-- practice pairings (those are drawn at random) — they only stand in as the
+-- lineup fallback, and prove a synced league still behaves.
 insert into matchup (league_id, week, home_roster_id, away_roster_id, status) values
   ('00000000-0000-0000-0000-0000000009f1', 2, 2, 1, 'scheduled'),
   ('00000000-0000-0000-0000-0000000009f1', 3, 1, 2, 'scheduled'),
@@ -101,49 +100,81 @@ begin
   r := set_preseason_practice('00000000-0000-0000-0000-0000000009f1', true);
   perform assert_ok(r, '2c commish opens practice');
   perform assert_true((r ->> 'preseason_at') is not null, '2d stamped');
-  -- Four board weeks for 2026 (0112), but week 101 is already played, so 0113
-  -- seeds only 102-104. Read from the helper so extending the preseason can't
+  -- Four board weeks for 2026 (0112), but week 101 is already played, so only
+  -- 102-104 are built. Read from the helper so extending the preseason can't
   -- silently under-assert here.
   perform assert_true(101 = any(preseason_board_weeks()) and 104 = any(preseason_board_weeks()), '2f weeks 101-104 in range');
   select count(*) into n from matchup
     where league_id = '00000000-0000-0000-0000-0000000009f1' and week = any(preseason_board_weeks());
-  perform assert_eq(n, 3, '2g one cloned matchup per PLAYABLE preseason week');
+  perform assert_eq(n, 3, '2g one matchup per PLAYABLE preseason week');
   perform assert_eq((select count(*) from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 101),
     0, '2h the already-played week was skipped');
   perform assert_true((r -> 'skipped') @> '101'::jsonb, '2i skip reported to the caller');
   perform assert_true((r -> 'weeks') @> '102'::jsonb and (r -> 'weeks') @> '104'::jsonb, '2j seeded weeks reported');
 end $$;
 
--- ── 2b. each practice week clones a DIFFERENT regular-season week ────────────
--- Board week 100+i mirrors week i, so a playtester gets a different matchup each
--- time instead of the same Week-1 opponent four weeks running.
+-- ── 2b. pairings are RANDOM, and differ week to week (0114) ─────────────────
+-- Practice no longer clones the league's schedule: seats are shuffled
+-- deterministically per (league, board week) and paired off. Uses a 6-seat league
+-- so "the pairings actually differ" is a real assertion rather than a coin flip
+-- on two teams.
 do $$
-declare h102 int; h103 int; h104 int;
-begin
-  select home_roster_id into h102 from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 102;
-  select home_roster_id into h103 from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 103;
-  select home_roster_id into h104 from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 104;
-  perform assert_eq(h102, 2, '2k wk102 cloned regular week 2 (roster 2 hosts)');
-  perform assert_eq(h103, 1, '2l wk103 cloned regular week 3 (roster 1 hosts)');
-  perform assert_eq(h104, 2, '2m wk104 cloned regular week 4 (roster 2 hosts)');
-  perform assert_true(h102 is distinct from h103, '2n practice weeks are not all the same pairing');
-end $$;
-
--- ── 2c. a league with only Week 1 scheduled falls back to it ─────────────────
-do $$
-declare lid uuid := '00000000-0000-0000-0000-0000000009f3'; n int;
+declare lid uuid := '00000000-0000-0000-0000-0000000009f4'; r jsonb; n int; k102 text; k103 text; k104 text;
 begin
   insert into league (id, sleeper_league_id, season, name, commissioner_id)
-  values (lid, 'PRESEASON-PROBE-3', '2026', 'Week-1-only League', '00000000-0000-0000-0000-000000000101');
+  values (lid, 'PRESEASON-PROBE-4', '2026', 'Six Seat League', '00000000-0000-0000-0000-000000000101');
+  insert into league_membership (league_id, sleeper_roster_id, app_user_id, enrolled, team_name)
+    select lid, g, null, false, 'Team ' || g from generate_series(1, 6) g;
+  -- Deliberately NO matchup rows at all: this league has never been synced.
+  perform probe_as('1');
+  r := set_preseason_practice(lid, true);
+  perform assert_ok(r, '2b1 opens with no schedule at all');
+
+  select count(*) into n from matchup where league_id = lid and week = 102;
+  perform assert_eq(n, 3, '2b2 six seats paired into three matchups');
+
+  -- The pairing SET per week, order-independent, as a comparable string.
+  select string_agg(k, ',' order by k) into k102 from (
+    select least(home_roster_id, away_roster_id) || '-' || greatest(home_roster_id, away_roster_id) as k
+      from matchup where league_id = lid and week = 102) t;
+  select string_agg(k, ',' order by k) into k103 from (
+    select least(home_roster_id, away_roster_id) || '-' || greatest(home_roster_id, away_roster_id) as k
+      from matchup where league_id = lid and week = 103) t;
+  select string_agg(k, ',' order by k) into k104 from (
+    select least(home_roster_id, away_roster_id) || '-' || greatest(home_roster_id, away_roster_id) as k
+      from matchup where league_id = lid and week = 104) t;
+  perform assert_true(k102 is distinct from k103 or k103 is distinct from k104,
+    '2b3 practice weeks are not all the same pairing');
+  perform assert_true(k102 is not null and k103 is not null and k104 is not null, '2b4 every playable week paired');
+
+  -- Deterministic: rebuilding reproduces the same draw rather than reshuffling.
+  perform assert_ok(set_preseason_practice(lid, true), '2b5 rebuild while already on');
+  perform assert_eq((select count(*) from matchup where league_id = lid and week = 102), 3, '2b6 still three matchups');
+  perform assert_true(k102 = (select string_agg(k, ',' order by k) from (
+      select least(home_roster_id, away_roster_id) || '-' || greatest(home_roster_id, away_roster_id) as k
+        from matchup where league_id = lid and week = 102) t),
+    '2b7 rebuild is idempotent — same pairing, not a reshuffle');
+
+  -- Every seat plays exactly once per week (6 seats, no byes).
+  select count(*) into n from (
+    select home_roster_id rid from matchup where league_id = lid and week = 102
+    union all select away_roster_id from matchup where league_id = lid and week = 102) t;
+  perform assert_eq(n, 6, '2b8 every seat is paired exactly once');
+
+  perform assert_ok(set_preseason_practice(lid, false), '2b9 cleanup');
+end $$;
+
+-- ── 2c. a league with fewer than two seats can't be paired ──────────────────
+do $$
+declare lid uuid := '00000000-0000-0000-0000-0000000009f3';
+begin
+  insert into league (id, sleeper_league_id, season, name, commissioner_id)
+  values (lid, 'PRESEASON-PROBE-3', '2026', 'One Seat League', '00000000-0000-0000-0000-000000000101');
   insert into league_membership (league_id, sleeper_roster_id, app_user_id, enrolled, team_name)
   values (lid, 1, '00000000-0000-0000-0000-000000000101', true, 'Solo');
-  insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
-  values (lid, 1, 1, 1, 'scheduled');
   perform probe_as('1');
-  perform assert_ok(set_preseason_practice(lid, true), '2o week-1-only league still opens');
-  select count(*) into n from matchup where league_id = lid and week = any(preseason_board_weeks());
-  perform assert_eq(n, 3, '2p fell back to Week 1 for every playable week');
-  perform assert_ok(set_preseason_practice(lid, false), '2q cleanup');
+  perform assert_err(set_preseason_practice(lid, true), 'at least two seats', '2o one-seat league refused');
+  perform assert_true((select preseason_at from league where id = lid) is null, '2p refusal left no stamp');
 end $$;
 
 -- ── 3. the deep pool, seeded by the commissioner ─────────────────────────────
@@ -331,15 +362,25 @@ begin
   perform assert_eq(bal, 65, '9e wallet holds only real-week coin (40 earned + 25 budget)');
 end $$;
 
--- ── 10. a league with no Week 1 can't be cloned into silence ─────────────────
+-- ── 10. an UNSYNCED league opens practice fine (0114) ───────────────────────
+-- The headline of 0114: practice used to demand a schedule, which is exactly what
+-- a league mid-draft doesn't have — the moment practice is most wanted. Seats are
+-- the only requirement now.
 do $$
+declare lid uuid := '00000000-0000-0000-0000-0000000009f2'; r jsonb; n int;
 begin
   insert into league (id, sleeper_league_id, season, name, commissioner_id)
-  values ('00000000-0000-0000-0000-0000000009f2', 'PRESEASON-PROBE-2', '2026', 'Unsynced League',
-          '00000000-0000-0000-0000-000000000101');
+  values (lid, 'PRESEASON-PROBE-2', '2026', 'Mid-draft League', '00000000-0000-0000-0000-000000000101');
+  insert into league_membership (league_id, sleeper_roster_id, app_user_id, enrolled, team_name)
+    select lid, g, null, false, 'Team ' || g from generate_series(1, 12) g;
+  -- No matchup rows, no sleeper_lineup rows: nothing has been synced or drafted.
   perform probe_as('1');
-  perform assert_err(set_preseason_practice('00000000-0000-0000-0000-0000000009f2', true),
-    'sync the season first', '10a unsynced league told why');
+  r := set_preseason_practice(lid, true);
+  perform assert_ok(r, '10a unsynced league opens practice');
+  select count(*) into n from matchup where league_id = lid and week = 102;
+  perform assert_eq(n, 6, '10b twelve seats paired into six matchups');
+  perform assert_true((r -> 'weeks') @> '104'::jsonb, '10c week 104 built too');
+  perform assert_ok(set_preseason_practice(lid, false), '10d cleanup');
 end $$;
 
 select 'ALL PRESEASON PRACTICE PROBES PASS' as result;
