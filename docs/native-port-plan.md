@@ -209,6 +209,37 @@ that.
   whether the app ships with coin purchases at all, or earned-only. (2) Whether
   a logged-out visitor gets anything playable (see the demo note above).
 
+### Getting a build into hands
+
+`apps/mobile/eas.json` carries four profiles; `apps/mobile/README.md` has the
+commands. The two that matter early:
+
+- **`preview`** → the playtester build. `distribution: internal` gives an
+  install link instead of a store submission, and `buildType: apk` makes the
+  Android artifact directly sideloadable. The `production` profile emits a
+  `.aab` — required by Play, **impossible to sideload** — so don't reach for it
+  when you just want something on a phone.
+- **`preview-simulator`** → iOS in the Xcode Simulator with no paid Apple
+  account, for reviewing screens on a Mac before enrolling.
+
+An Android APK needs only a free Expo account. iOS needs macOS + Xcode for the
+Simulator, and the $99/yr enrollment for TestFlight — which is the gate on the
+playtester transition, so start it early rather than at cutover.
+
+### A bug the port surfaced
+
+`supabaseClient.ts` created its client with `persistSession: true` and **no
+storage adapter**. On web that silently means `localStorage`; React Native has
+no `localStorage`, so supabase-js falls back to an in-memory store and the user
+is signed out on every app restart. `detectSessionInUrl: true` was equally
+web-shaped — native gets its callback as a deep link, not an address bar.
+
+Both now route through the platform shim (`authStorage()` and
+`platform().detectSessionInUrl`), so web gets localStorage + URL detection and
+native gets MMKV + deep links, with no branch in core. Worth noting as the
+pattern to expect: the web app's assumptions are invisible until a second host
+reads the same code.
+
 **Push notifications** are the one thing native genuinely buys a live game
 ("your window locks in 15 minutes", "you just got nuked"). Worth prototyping via
 web push first — it covers Android and installed iOS 16.4+ PWAs, and it's days

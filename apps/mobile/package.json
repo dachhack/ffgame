@@ -5,10 +5,15 @@
   "main": "index.ts",
   "description": "Drip Fantasy native app (Expo). Player surfaces only — admin and commissioner tools stay on the web.",
   "scripts": {
-    "start": "expo start",
-    "ios": "expo start --ios",
-    "android": "expo start --android",
-    "typecheck": "tsc --noEmit"
+    "start": "expo start --dev-client",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "prebuild": "expo prebuild --clean",
+    "bundle": "expo export --platform all --output-dir dist",
+    "typecheck": "tsc --noEmit",
+    "apk": "eas build --profile preview --platform android",
+    "apk:local": "eas build --profile preview --platform android --local",
+    "ios:simulator": "eas build --profile preview-simulator --platform ios"
   },
   "//": "Native module versions are the ones Expo SDK 57 pins in its bundledNativeModules.json. `npx expo install` normally resolves these; it needs api.expo.dev, so if that is unreachable read that file instead of guessing.",
   "dependencies": {

@@ -50,6 +50,11 @@ export interface Platform {
   url: PlatformUrl;
   /** Leave the app for an external URL (OAuth consent, mail links). */
   openUrl(url: string): void;
+  /** Whether the auth SDK should read the session out of the current URL
+   *  itself. True on web, where a magic-link callback lands in the address bar.
+   *  False on native, where the callback arrives as a deep link the app routes
+   *  — letting the SDK scan there produces false positives on cold start. */
+  detectSessionInUrl: boolean;
 }
 
 /** In-memory storage — the default until a host installs its own, and the
@@ -77,6 +82,7 @@ const NEUTRAL: Platform = {
     referrer: () => '',
   },
   openUrl: () => {},
+  detectSessionInUrl: false,
 };
 
 let current: Platform = NEUTRAL;

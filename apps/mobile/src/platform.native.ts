@@ -97,4 +97,9 @@ setPlatform({
   // Stripe checkout both need to hand control back to us, and a system-browser
   // round trip loses the session on iOS.
   openUrl: (url) => { void WebBrowser.openAuthSessionAsync(url, Linking.createURL('/auth')); },
+
+  // False on native: the callback arrives as a deep link this module tracks,
+  // not as a page URL. Left true, the SDK scans whatever `currentUrl` happens
+  // to be on cold start and can mis-fire.
+  detectSessionInUrl: false,
 });

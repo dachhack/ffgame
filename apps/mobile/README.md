@@ -16,21 +16,53 @@ build, which needs an Apple/EAS account.
 
 ## Running it
 
+First: set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `app.json` →
+`expo.extra`. Same key names as the web build, because core reads them through
+the same shim. Without them the app opens on a "Live mode isn't configured"
+placeholder.
+
 ```bash
-npm install            # from the repo root — this is an npm workspace
+npm install            # from the REPO ROOT — this is an npm workspace
 cd apps/mobile
-npx expo run:ios       # or run:android
 ```
 
 **Expo Go will not work.** `react-native-mmkv` v4 is a Nitro module with native
-code, so this needs a development build (`expo run:*` or EAS). That's a
-deliberate trade: MMKV's synchronous storage is what lets core's 51
-read-during-render call sites work unchanged — see the note in
-`src/platform.native.ts`.
+code, so every path below produces a real build. That's a deliberate trade:
+MMKV's synchronous storage is what lets core's ~51 read-during-render call sites
+work unchanged — see the note in `src/platform.native.ts`.
 
-Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `app.json` →
-`expo.extra` before signing in. Same key names as the web build, because core
-reads them through the same shim.
+### An Android APK (no Mac needed)
+
+```bash
+npx eas login          # a free Expo account
+npm run apk            # eas build --profile preview --platform android
+```
+
+Builds in Expo's cloud and hands back an install link plus a downloadable
+`.apk`. The `preview` profile sets `buildType: apk` on purpose — the
+`production` profile emits a `.aab`, which Play requires but which **cannot be
+sideloaded**. Use `npm run apk:local` to build on your own machine instead;
+that one needs the Android SDK + NDK installed locally.
+
+### iOS
+
+Needs macOS with Xcode — there is no way to run or emulate iOS elsewhere.
+
+```bash
+npm run ios            # expo run:ios — builds and boots the Simulator
+```
+
+No paid Apple Developer account is needed for the Simulator. For a build you
+can put on a real iPhone, `npm run ios:simulator` covers Simulator-only via EAS,
+and TestFlight distribution needs the $99/yr enrollment.
+
+### First-run gotchas
+
+- Run `npm install` from the repo root, not from `apps/mobile` — npm workspaces
+  hoists most packages to the root and a local install will half-resolve.
+- `npx expo install` needs `api.expo.dev`. If it's unreachable, read the pinned
+  versions out of `node_modules/expo/bundledNativeModules.json` instead of
+  guessing — that's where the ones in `package.json` came from.
 
 ## Layout
 

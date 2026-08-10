@@ -49,4 +49,8 @@ setPlatform({
   },
 
   openUrl: (url) => { window.location.href = url; },
+
+  // The magic-link / OAuth callback lands in this tab's address bar, so the
+  // auth SDK can pick the session out of the URL itself.
+  detectSessionInUrl: true,
 });
