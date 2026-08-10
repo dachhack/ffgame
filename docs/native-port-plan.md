@@ -132,23 +132,54 @@ Three things to settle before you actually move them:
 ## 4. Mobile scope
 
 The full web UI is ~17.5k lines. **Do not port all of it.** The admin and
-commissioner surfaces are desktop tools and should stay web-only:
+commissioner surfaces are desktop tools, and the guided demo is a web
+cold-traffic funnel that shouldn't be carried over at all:
 
 | Screen | Lines | Mobile? |
 |---|---|---|
 | `AdminPage` | 2,453 | ❌ web-only — founder tool |
+| `DemoBoard` | 1,242 | ❌ not ported — see below |
+| `DemoOverlay` | 90 | ❌ not ported |
 | `CommishDash`, `adminUi` | 123 | ❌ web-only |
 | `LeagueOverview` | 422 | ⏳ later — mostly reading |
 | `Faq`, `Rulebook` | 390 | ⏳ later — or a webview |
-| **`DemoBoard`** | 1,242 | ✅ the acquisition surface |
 | **`Matchup`** | 3,308 | ✅ the product |
 | **`LivePicks`, `boardParts`, `FieldView`, `WindowPot`** | 2,125 | ✅ the live loop |
 | **`LiveOnboard`, `Leagues`, `LeagueHub`** | 1,969 | ✅ sign-in + league entry |
 | **`MatchupFinal`, `FeedSheet`** | 504 | ✅ the payoff |
 
-That's roughly **9k lines to write**, not 17.5k — the phone app does
-demo → sign in → picks → live board → final, and sends everything else to the
-web.
+That's roughly **7.7k lines to write**, not 17.5k — the phone app does
+sign in → picks → live board → final, and sends everything else to the web.
+
+### Dropping the demo
+
+The narrated demo exists to convert cold web traffic (the `demo_step` /
+`demo_run` / `demo_quickrun` funnel, the request-a-code FAB). None of that
+applies to someone who already has the app installed. If an in-app demo is
+wanted later, build a purpose-built one against core — porting 1,332 lines of
+web funnel to reach it would be the expensive way round.
+
+Three knock-on effects, all simplifications:
+
+- **`Matchup.tsx` gets smaller.** It imports `DemoOverlay` and `DemoViewToggle`
+  and renders them inline; the mobile port strips both.
+- **The boot route changes.** Web defaults logged-out users to
+  `{ name: 'demo' }`; mobile defaults to sign-in.
+- **`markBootSessionChecked` is misplaced.** It lives in `DemoBoard.tsx` but is
+  imported by `app/ui.tsx` and `LiveOnboard.tsx` — a boot-session helper stranded
+  in a screen the mobile app won't have. Move it to the store when convenient;
+  the web app doesn't care either way.
+
+⚠️ **`data/demoNarration.ts` is not demo-only, despite the name.** `Matchup.tsx`
+uses `buildBeats`/`Beat` and `boardParts.tsx` uses `FX_COLOR` — it's real-board
+machinery. It stays in core and mobile needs it. Worth renaming so nobody
+deletes it on the strength of the filename.
+
+**Store-review note, for later not now.** An app that opens on a login wall with
+nothing playable behind it draws App Store minimum-functionality scrutiny. That
+only bites at *public* submission — the playtester release goes out over
+TestFlight, where it's a non-issue. Decide on an in-app demo when you decide on
+public launch, not before.
 
 The genuinely hard parts, in order:
 - **Animations.** 13 CSS keyframes (`nukeburst`, `flipin`, `fvdraw`, `guidepulse`)
@@ -171,10 +202,12 @@ that.
   committing to the other eight.
 - **Oct–Nov:** the remaining player screens, TestFlight to the same playtesters.
   They can move whenever, because there's nothing to migrate.
-- **Gate before store submission:** the coin economy. Purchasable coin is IAP at
-  30%, and Apple applies gambling-adjacent scrutiny far harder than the web does
-  — `docs/scale-2026-2027-plan.md` already flags this for the web product. Decide
-  whether the app ships with coin purchases at all, or earned-only.
+- **Gate before store submission:** two decisions, both deferrable until public
+  launch. (1) The coin economy — purchasable coin is IAP at 30%, and Apple
+  applies gambling-adjacent scrutiny far harder than the web does;
+  `docs/scale-2026-2027-plan.md` already flags this for the web product. Decide
+  whether the app ships with coin purchases at all, or earned-only. (2) Whether
+  a logged-out visitor gets anything playable (see the demo note above).
 
 **Push notifications** are the one thing native genuinely buys a live game
 ("your window locks in 15 minutes", "you just got nuked"). Worth prototyping via
