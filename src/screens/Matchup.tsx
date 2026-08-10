@@ -18,7 +18,7 @@ import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndCloc
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '@drip/core/data/demoNarration';
 import { slotMoments, MOMENT_COLOR, type Moment } from '@drip/core/engine/moments';
-import { myPicks, savePicks, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, type PickRow } from '@drip/core/data/liveApi';
+import { myPicks, savePicks, friendlyError, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, type PickRow } from '@drip/core/data/liveApi';
 import { CardTableCss, PowerupHand, PowerupCard, LiveCard, MiniCard, liveCardFlags } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import { Rulebook } from './Rulebook';
@@ -154,10 +154,19 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         if (win == null || slot == null) continue;
         rows.push({ game_window: win, roster_slot: slot, player_slug: p.playerId, metric_id: p.metricId ?? null });
       }
-      savePicks(liveCtx.matchupId, liveCtx.userId, rows).catch(() => {});
+      // A swallowed failure here is the worst kind: the board keeps showing the
+      // lineup you built while the server has an older one, and you only find out
+      // on reload. The slot-cap trigger rejects the WHOLE upsert, so one pick past
+      // the cap silently discards every later edit too — which is exactly how an
+      // 11-slot practice board "only kept 8".
+      savePicks(liveCtx.matchupId, liveCtx.userId, rows)
+        .then(() => setSaveErr(null))
+        .catch((e: unknown) => setSaveErr(friendlyError(e)));
     }, 1500);
     return () => clearTimeout(t);
   }, [picks, liveCtx, heroHydrated]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Last autosave failure, surfaced on the board. Null while saves are landing.
+  const [saveErr, setSaveErr] = useState<string | null>(null);
   const [selSlot, setSelSlot] = useState<string | null>(null);
   // Per-window playback: each window runs its own clock + play/pause. The clock
   // is game-elapsed seconds by default, or REAL wall-clock seconds since kickoff
@@ -1381,6 +1390,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>{phase === 'setup' ? 'SLOTS SET' : phase.toUpperCase()}</span>
                 {phase === 'setup' && <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{filledCount}/{totalSlots}</span>}
                 {phase === 'setup' && metriclessCount > 0 && <span className="mono" title="Each placed player needs a hidden metric to score." style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--warn)', letterSpacing: '0.04em' }}>· {metriclessCount} need a metric</span>}
+                {/* An autosave that failed leaves the BOARD showing a lineup the
+                    server doesn't have — the one state a manager must never be
+                    left guessing about. */}
+                {saveErr && <span className="mono" title={saveErr} style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--opp)', letterSpacing: '0.04em' }}>· ⚠ NOT SAVED — {saveErr}</span>}
               </div>
             </div>
             {/* Headline + subhead on the left; power-ups fill the right instead of
