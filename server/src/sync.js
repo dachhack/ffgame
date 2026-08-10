@@ -10,6 +10,7 @@ import { db } from './supabase.js';
 import { config } from './config.js';
 import * as sleeper from './sleeper.js';
 import { weekKickoffMs, buildSlate } from './poll/scoreboard.js';
+import { REGULAR_SEASON } from './seasonType.js';
 import { buildPlayerIndex, slugOf } from './playerIndex.js';
 import { assignKdst } from '../../src/data/kdst.ts';
 import { setRuntimeSlate } from '../../src/data/nflSlate.ts';
@@ -81,7 +82,12 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
   const lid = leagueRow.id;
   const kdstMode = leagueRow.kdst_mode ?? 'off';
   const rows = await sleeper.getMatchups(leagueId, week); // one row per roster
-  const lockMs = await weekKickoffMs(season, week, config.seasonType);
+  // REGULAR season explicitly: this mirrors Sleeper's schedule, which only ever
+  // describes regular-season weeks. It used to read config.seasonType, which was
+  // harmless only because the sync was skipped entirely in preseason mode — now
+  // that both contexts run together (index.js), that would fetch preseason
+  // kickoffs for a regular-season week.
+  const lockMs = await weekKickoffMs(season, week, REGULAR_SEASON);
   // Lineups lock 1h before the week's first kickoff (client shows the same lead).
   const lockAt = lockMs ? new Date(lockMs - config.lockLeadMs).toISOString() : null;
 
@@ -89,7 +95,7 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
   // season, so slate-gating + the K/DST bye check below use the correct windows
   // and byes. Stored in nfl_slate so the client can load it too.
   try {
-    const slate = await buildSlate(season, week, config.seasonType);
+    const slate = await buildSlate(season, week, REGULAR_SEASON);
     if (slate.length) {
       setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
       await db().from('nfl_slate').upsert(

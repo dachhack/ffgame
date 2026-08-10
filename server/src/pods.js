@@ -16,6 +16,7 @@ import { db } from './supabase.js';
 import { config } from './config.js';
 import { getWeekProjections } from './sleeper.js';
 import { weekKickoffMs, buildSlate } from './poll/scoreboard.js';
+import { REGULAR_SEASON } from './seasonType.js';
 import { statsForSlug, hasStatsForSlug } from '../../src/data/players.ts';
 import { PROJ_2026, PROJ_2026_SID } from '../../src/data/proj2026.ts';
 
@@ -204,7 +205,7 @@ export async function ensurePods(week, season, idx) {
   let { data: slateRows } = await db().from('nfl_slate').select('home, away').eq('season', season).eq('week', week);
   if (!slateRows?.length) {
     try {
-      const slate = await buildSlate(season, week, config.seasonType);
+      const slate = await buildSlate(season, week, REGULAR_SEASON);
       slateRows = slate.map((g) => ({ home: g.home, away: g.away }));
     } catch { slateRows = []; }
   }
@@ -231,7 +232,7 @@ export async function ensurePods(week, season, idx) {
   }
   if (!board.length) return { pods: pods.length, dealt: 0, matchups: 0, tossed, skipped: 'no board' };
 
-  const lockMs = await weekKickoffMs(season, week, config.seasonType).catch(() => null);
+  const lockMs = await weekKickoffMs(season, week, REGULAR_SEASON).catch(() => null);
   // Same 1h-before-kickoff lead as league matchups (config.lockLeadMs).
   const lockAt = lockMs ? new Date(lockMs - config.lockLeadMs).toISOString() : null;
   const lockPassed = lockMs != null && lockMs - config.lockLeadMs <= Date.now();

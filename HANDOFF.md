@@ -2,6 +2,43 @@
 
 _Last updated: 2026-08-07 · Build `v0.139.0`_
 
+## The worker runs WEEK CONTEXTS, not a season mode
+
+The scheduler held exactly ONE current week, with preseason bolted on as a
+process-wide MODE of it (`PILOT_SEASON_TYPE=1` → `weekOffset=100`, every DB
+read/write shifted). That made the two seasons mutually exclusive, and the
+collateral wasn't preseason's fault — it was the single-week tick's:
+
+- `syncTick` returned early in preseason, so a league that DRAFTED during
+  preseason never got its rosters until someone pressed "sync season" by hand.
+- `podTick` returned early, so pods and showdowns simply stopped being dealt.
+- Worst: leaving the flag set past the opener would have stopped Week 1 ever
+  locking or resolving, with the logs looking perfectly healthy the whole time —
+  the same silent shape as the halftime `live_play` freeze from the live-fire.
+
+A CONTEXT is `{ seasonType, offset, espnWeek }`: which ESPN scoreboard to ask
+for, and what to add to its week to get the BOARD week. `tickContext` runs the
+whole lock → poll → resolve → finalize pass for one of them; `tick` fans out over
+every active context and then does the week-agnostic work (injuries, native
+sweep) ONCE. Preseason keeps its +100 namespace, so the two can never collide.
+
+Which contexts are active is a pure function — `contextsFor(forced, regWeek,
+preWeek)`, exported and tested (`server/test/week-contexts.mjs`) because ESPN is
+unreachable from CI. The regular season is ALWAYS present (it needs `lock_at`
+backfill and pod pairing long before its first kickoff); preseason joins while
+ESPN reports a preseason week in range, and a context whose games are all
+complete quietly does no work — so the set narrows by itself as August ends.
+Nothing to switch off, no deadline to remember.
+
+`PILOT_SEASON_TYPE` survives as `config.forcedSeasonType`: unset in normal
+operation (fly.toml says so), set only to pin the worker to one season type for a
+debug. Two related fixes fell out: `lockDueMatchups` takes a `week` (unscoped, a
+preseason tick would have sealed regular-season windows against preseason
+kickoffs), and `syncWeek`/`pods` now say `REGULAR_SEASON` explicitly instead of
+reading the global — previously harmless only because they were skipped whenever
+it differed. Importing `index.js` no longer starts a scheduler, so the test can
+load it.
+
 ## Preseason practice — throwaway weeks + the commish one-click (0110)
 
 Preseason play existed since 0054/0101 (board weeks 101-103, deep pool) and was
