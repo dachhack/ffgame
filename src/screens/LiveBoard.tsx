@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { weekLabel } from '../data/nflSlate';
 import { WINDOWS, metricById } from '../data/metrics';
 import { GameIcon, COIN_GOLD } from '../app/gameIcons';
 import type { Pos } from '../types';
@@ -84,7 +85,7 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
   const weekNav = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
       <button onClick={() => setWeekSel(Math.max(1, curWeek - 1))} disabled={curWeek <= 1} className="mono" title="previous week" style={{ ...linkBtn, fontSize: 13, padding: '0 4px', opacity: curWeek <= 1 ? 0.35 : 1 }}>‹</button>
-      <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)' }}>WK {curWeek}</span>
+      <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)' }}>{weekLabel(curWeek)}</span>
       <button onClick={() => setWeekSel(Math.min(REG_SEASON_WEEKS, curWeek + 1))} disabled={curWeek >= REG_SEASON_WEEKS} className="mono" title="next week" style={{ ...linkBtn, fontSize: 13, padding: '0 4px', opacity: curWeek >= REG_SEASON_WEEKS ? 0.35 : 1 }}>›</button>
     </div>
   );
@@ -125,7 +126,7 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: { userId: stri
     <>
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Week {matchup!.week} · live board</div>
+          <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{weekLabel(matchup!.week)} · live board</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             {weekNav}
             <span className="mono" style={{ fontSize: 9, color: status === 'final' ? 'var(--dim)' : status === 'scheduled' ? 'var(--faint)' : 'var(--you)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 7px' }}>{status.toUpperCase()}</span>

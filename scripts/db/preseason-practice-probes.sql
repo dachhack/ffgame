@@ -6,7 +6,9 @@
 -- count()) are THROWAWAY — they never move real coin, real inventory, or a real
 -- record — a league's commissioner (not just a super-admin) can open and close
 -- practice, pairings are drawn at random per week (no schedule needed),
--- already-played weeks are skipped, and practice grants the extra slots free.
+-- already-played weeks are skipped,
+-- practice spending runs on its own weekly 120-coin purse (0115), and the
+-- lineup cap is the same 8 + purchased it is in the season (0116).
 \set QUIET on
 \pset pager off
 
@@ -231,13 +233,23 @@ begin
   select coins into bal from team_wallet where league_id = '00000000-0000-0000-0000-0000000009f1' and roster_id = 1;
   perform assert_eq(bal, 40, '5h balance untouched by practice');
 
-  -- Spending is FREE in practice, and free even at zero balance — a broke team
-  -- must still be able to exercise the whole board.
-  r := spend_from_wallet('00000000-0000-0000-0000-0000000009f1', 2, 85, null, 101, 'spend:floodgates', null);
-  perform assert_ok(r, '5i practice spend allowed at 0 balance');
-  perform assert_eq((r ->> 'charged')::numeric, 0, '5j practice spend charged nothing');
+  -- Spending draws on the PRACTICE BUDGET (0115), not the season wallet: real
+  -- prices, real scarcity, and a purse that starts at 120 every practice week
+  -- regardless of what the team actually has.
+  r := spend_from_wallet('00000000-0000-0000-0000-0000000009f1', 2, 85, null, 103, 'spend:floodgates', null);
+  perform assert_ok(r, '5i practice spend allowed with an empty season wallet');
+  perform assert_eq((r ->> 'charged')::numeric, 85, '5j practice spend charged the real price');
   perform assert_true((select coins from team_wallet where league_id = '00000000-0000-0000-0000-0000000009f1' and roster_id = 2) is null,
-    '5k practice spend never opened a wallet');
+    '5k practice spend never opened a SEASON wallet');
+  perform assert_eq((select coins from practice_wallet
+      where league_id = '00000000-0000-0000-0000-0000000009f1' and roster_id = 2 and week = 103),
+    practice_budget() - 85, '5m the practice purse carries the debit');
+  -- And the budget BITES: 120 - 85 = 35 left, so an 85 buy is refused.
+  perform assert_err(spend_from_wallet('00000000-0000-0000-0000-0000000009f1', 2, 85, null, 103, 'spend:floodgates', null),
+    'insufficient', '5n practice budget runs out');
+  -- Each week is its own purse — overspending PRE 3 can't cripple PRE 4.
+  perform assert_ok(spend_from_wallet('00000000-0000-0000-0000-0000000009f1', 2, 85, null, 104, 'spend:floodgates', null),
+    '5o a different practice week starts fresh');
   -- The same spend on a real week still enforces the balance guard.
   perform assert_err(spend_from_wallet('00000000-0000-0000-0000-0000000009f1', 2, 85, null, 1, 'spend:floodgates', null),
     'insufficient', '5l real spend still guarded');
@@ -286,10 +298,15 @@ begin
   -- Two items bought for the real season.
   perform bump_inventory('00000000-0000-0000-0000-0000000009f1', 1, 'floodgates', 2);
 
-  -- A free practice buy mints nothing…
+  -- A practice buy is charged to the PRACTICE purse (0115) and mints nothing real…
   r := wallet_buy_powerup(mid_practice, 'floodgates');
   perform assert_ok(r, '8c practice buy allowed');
-  perform assert_eq((r ->> 'charged')::numeric, 0, '8d practice buy free');
+  perform assert_eq((r ->> 'charged')::numeric, powerup_price('floodgates'), '8d practice buy costs real price');
+  perform assert_true((r ->> 'practice')::boolean, '8d2 flagged as practice');
+  perform assert_eq((r ->> 'balance')::numeric, practice_budget() - powerup_price('floodgates'),
+    '8d3 balance reported is the practice purse');
+  perform assert_true((select coins from team_wallet where league_id = '00000000-0000-0000-0000-0000000009f1' and roster_id = 1) = 65,
+    '8d4 the SEASON wallet is untouched by a practice buy');
   select qty into q from team_inventory where league_id = '00000000-0000-0000-0000-0000000009f1' and roster_id = 1 and powerup_id = 'floodgates';
   perform assert_eq(q, 2, '8e practice buy added no real inventory');
 
@@ -304,10 +321,13 @@ begin
   perform assert_eq(q, 1, '8g real arm consumed inventory');
 end $$;
 
--- ── 8b. practice grants the extra slots for free (0111) ──────────────────────
--- Preseason week 3 derives 10 slots across 9 windows against a base cap of 8, so
--- without the grant a player can't fill their own board — and can't even field
--- one player per window, handing the opponent a free +5 window-win bonus.
+-- ── 8b. the slot cap is the SAME in practice as in the season (0116) ────────
+-- 0111 granted the extra slots free on a practice week; 0116 took that back once
+-- the board's own preseason slot rule changed (2 slots at 3+ games, 3 at 5+, so
+-- 10-11 slots a week). More slots than the base 8 is now DELIBERATE: choosing
+-- which windows to contest, and whether to spend 80 of the 120 practice budget on
+-- a ninth, is the exercise. A free grant would decide that for the manager and
+-- teach a purchase that costs real coin in Week 1 as if it were free.
 do $$
 declare mid_practice uuid; mid_real uuid; i int;
 begin
@@ -315,22 +335,21 @@ begin
   select id into mid_real from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 1;
   perform probe_as('1');
 
-  -- 10 filled picks land on a practice week (8 base + the 2 granted).
-  for i in 1..10 loop
+  -- 8 in on a practice week…
+  for i in 1..8 loop
     insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
       values (mid_practice, '00000000-0000-0000-0000-000000000101', 'w' || i, 's' || i, 'player-' || i);
   end loop;
-  perform assert_eq((select count(*) from sealed_pick where matchup_id = mid_practice), 10, '8h ten practice picks accepted');
-
-  -- The 11th is still refused — the grant is a ceiling, not an opt-out.
+  perform assert_eq((select count(*) from sealed_pick where matchup_id = mid_practice), 8, '8h eight practice picks accepted');
+  -- …and the 9th refused, exactly as in the regular season.
   begin
     insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
-      values (mid_practice, '00000000-0000-0000-0000-000000000101', 'w11', 's11', 'player-11');
-    raise exception 'PROBE FAIL 8i — an 11th practice pick was accepted';
+      values (mid_practice, '00000000-0000-0000-0000-000000000101', 'w9', 's9', 'player-9');
+    raise exception 'PROBE FAIL 8i — a 9th practice pick was accepted without an extra slot';
   exception when check_violation then null;
   end;
 
-  -- A REAL week is untouched: 8 in, the 9th refused.
+  -- A REAL week behaves identically: 8 in, the 9th refused.
   for i in 1..8 loop
     insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
       values (mid_real, '00000000-0000-0000-0000-000000000101', 'w' || i, 's' || i, 'player-' || i);
@@ -357,6 +376,10 @@ begin
     where league_id = '00000000-0000-0000-0000-0000000009f1' and week = any(preseason_board_weeks());
   perform assert_eq(n, 0, '9c practice lineups gone');
   perform assert_true((select preseason_at from league where id = '00000000-0000-0000-0000-0000000009f1') is null, '9d stamp cleared');
+  -- The practice purse is throwaway too: it dies with the weeks it belonged to,
+  -- so no practice balance can outlive its week into the season.
+  select count(*) into n from practice_wallet where league_id = '00000000-0000-0000-0000-0000000009f1';
+  perform assert_eq(n, 0, '9f practice purse wiped with the weeks');
   -- Nothing the practice weeks did survived them.
   select coins into bal from team_wallet where league_id = '00000000-0000-0000-0000-0000000009f1' and roster_id = 1;
   perform assert_eq(bal, 65, '9e wallet holds only real-week coin (40 earned + 25 budget)');

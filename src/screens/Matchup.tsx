@@ -5,7 +5,7 @@ import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile, 
 import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGameFeed } from '../data/gameFeed';
 import { avatarUrl, teamLogo } from '../data/media';
-import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, preseasonWeekNum } from '../data/nflSlate';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, weekLabel } from '../data/nflSlate';
 import { METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '../data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '../data/league';
@@ -1188,7 +1188,6 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const livePreseasonChip = preseason ? (
     <span className="mono" title="Preseason: this league is playing a real 2026 NFL preseason matchup (super-admin toggle)." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, var(--surface))', border: '1px solid var(--you)', borderRadius: 4, padding: '5px 7px', whiteSpace: 'nowrap', flexShrink: 0 }}>🏈 PRESEASON</span>
   ) : null;
-  const weekLabel = (w: number) => (isPreseasonWeek(w) ? `PRE ${preseasonWeekNum(w)}` : `WK ${w}`);
   const liveWeekSel = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
       <button onClick={() => goToWeek(prevWeek)} disabled={prevWeek == null || switchingWeek != null} title="previous week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: prevWeek == null || switchingWeek != null ? 'default' : 'pointer', opacity: prevWeek == null ? 0.35 : 1 }}>‹</button>
