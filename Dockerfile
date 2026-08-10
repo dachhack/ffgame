@@ -1,7 +1,8 @@
 # Worker image for the 2026 pilot (server/). NOT the static site — the Vite/Pages
-# build ignores this. The worker runs the shared TS engine (src/) via tsx, so the
-# image bundles src/ + scripts/espn/ alongside server/. The engine's TS graph has
-# no external npm deps, so only server/'s packages (supabase-js, dotenv, tsx) install.
+# build ignores this. The worker runs the shared TS engine (packages/core/) via
+# tsx, so the image bundles packages/core/ + scripts/espn/ alongside server/. The
+# engine's TS graph has no external npm deps beyond supabase-js, so only server/'s
+# packages (supabase-js, dotenv, tsx) install.
 FROM node:20-slim
 WORKDIR /app
 
@@ -10,7 +11,7 @@ COPY server/package.json server/package-lock.json ./server/
 RUN cd server && npm ci
 
 # Shared engine + ESPN adapters (imported by the worker through tsx).
-COPY src ./src
+COPY packages/core ./packages/core
 COPY scripts/espn ./scripts/espn
 # Baked play-by-play — needed by the on-worker dress rehearsal (`fly ssh … simulate`)
 # and the scale re-run (`scripts/loadtest.mjs`); the live tick reads plays from the DB.

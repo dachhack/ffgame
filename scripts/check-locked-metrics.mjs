@@ -7,7 +7,7 @@
 // a player could pick a locked metric the trigger doesn't gate, or vice versa.
 // Run: npx tsx scripts/check-locked-metrics.mjs
 import { readFileSync, readdirSync } from 'node:fs';
-import { LOCKED_METRIC_UNLOCK } from '../src/data/metrics.ts';
+import { LOCKED_METRIC_UNLOCK } from '../packages/core/src/data/metrics.ts';
 
 const dir = new URL('../supabase/migrations/', import.meta.url);
 const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();

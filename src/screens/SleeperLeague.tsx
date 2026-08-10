@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../app/store';
 import { SiteSettings, VersionTag } from '../app/ui';
-import { getProvider, type ProviderStanding } from '../data/providers';
-import type { BuiltLeague } from '../data/league';
+import { getProvider, type ProviderStanding } from '@drip/core/data/providers';
+import type { BuiltLeague } from '@drip/core/data/league';
 
 // A background build either resolves to the engine-ready league or carries its
 // error — it never rejects, so a prefetch the user never triggers can't warn.

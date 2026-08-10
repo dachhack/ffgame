@@ -4,9 +4,9 @@
 //   3. WINDOW BATTLE + MVP — resolveLiveMatchup awards the window bonus + MVP coin.
 import { readFileSync } from 'node:fs';
 import { makePlayer, injectWeek, EMPTY } from '../src/engine.js';
-import { resolveSlot, windowShield, defEarnScore, defSuppressScore } from '../../src/engine/sim.ts';
-import { resolveLiveMatchup } from '../../src/engine/liveResolve.ts';
-import { clutchOffers, RIVALRY_SIPHON } from '../../src/engine/matchup.ts';
+import { resolveSlot, windowShield, defEarnScore, defSuppressScore } from '../../packages/core/src/engine/sim.ts';
+import { resolveLiveMatchup } from '../../packages/core/src/engine/liveResolve.ts';
+import { clutchOffers, RIVALRY_SIPHON } from '../../packages/core/src/engine/matchup.ts';
 
 const WEEK = 1;
 const w = JSON.parse(readFileSync(new URL(`../../public/pbp/w${WEEK}.json`, import.meta.url)));

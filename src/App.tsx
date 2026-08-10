@@ -1,11 +1,11 @@
 import { useEffect, lazy, Suspense } from 'react';
 import { useStore, PHOTO_SKINS } from './app/store';
-import { THEMES, themeVars } from './theme';
+import { THEMES, themeVars } from '@drip/core/theme';
 import { DemoBoard } from './screens/DemoBoard';
-import { yahooExchange } from './data/providers/yahooClient';
-import { getSession, hasAuthTokensInUrl } from './data/liveApi';
+import { yahooExchange } from '@drip/core/data/providers/yahooClient';
+import { getSession, hasAuthTokensInUrl } from '@drip/core/data/liveApi';
 import { RequestCodeFab } from './screens/RequestCode';
-import { DEMO_WEEK } from './config';
+import { DEMO_WEEK } from '@drip/core/config';
 
 // Route screens are code-split: only the active screen's chunk loads, keeping the
 // landing payload small. DemoBoard (the landing) + the request-code FAB stay eager

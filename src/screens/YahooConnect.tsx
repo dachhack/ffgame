@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
 import { SiteSettings, VersionTag } from '../app/ui';
-import { getProvider, type ProviderLeague } from '../data/providers';
-import { yahooConfigured, yahooConnected, startYahooAuth, yahooDisconnect } from '../data/providers/yahooClient';
+import { getProvider, type ProviderLeague } from '@drip/core/data/providers';
+import { yahooConfigured, yahooConnected, startYahooAuth, yahooDisconnect } from '@drip/core/data/providers/yahooClient';
 
 // Yahoo connect: the only OAuth provider. Sign in with Yahoo (redirect), then
 // pick from the user's leagues. Token handling lives in yahooClient; the OAuth
@@ -56,7 +56,7 @@ export function YahooConnect() {
     </div>
   );
 
-  if (!yahooConfigured) return wrap(
+  if (!yahooConfigured()) return wrap(
     <div className="mono" style={{ fontSize: 12, color: 'var(--dim)', lineHeight: 1.6, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 }}>
       Yahoo sign-in isn’t configured for this site yet. It needs a registered Yahoo app
       (<b>VITE_YAHOO_CLIENT_ID</b> in the build) and the <b>yahoo-oauth</b> Edge Function

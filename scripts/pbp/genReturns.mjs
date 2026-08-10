@@ -87,5 +87,5 @@ const body =
   '  return RETURN_PLAYS[slug]?.[week] ?? [];\n' +
   '}\n';
 
-writeFileSync(new URL('../../src/data/returns.ts', here), body);
+writeFileSync(new URL('../../packages/core/src/data/returns.ts', here), body);
 console.log(`returns.ts written: ${Object.keys(out).length} returners with exact-timed plays`);

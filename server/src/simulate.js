@@ -20,8 +20,8 @@
 //   npm run cli -- simulate --dry [--week=1] [--speed=900]
 import { readFileSync } from 'node:fs';
 import { injectWeek, rowsToPbp, resolveWindow, makePlayer } from './engine.js';
-import { WINDOWS } from '../../src/data/metrics.ts';
-import { DEFAULT_AI_METRIC } from '../../src/data/aiLineup.ts';
+import { WINDOWS } from '../../packages/core/src/data/metrics.ts';
+import { DEFAULT_AI_METRIC } from '../../packages/core/src/data/aiLineup.ts';
 
 // The lineup spots in window order (tnf, early×3, late×2, snf, mnf).
 const SLOTS = WINDOWS.flatMap((w) => Array.from({ length: w.slots }, (_, j) => ({ win: w.id, slot: String(j) })));

@@ -7,6 +7,7 @@
 // The event taxonomy + the freemium funnel this is built to measure live in
 // docs/analytics-plan.md — keep the two in sync. Add events via the Ev constants.
 import { APP_VERSION } from './version';
+import { platform, storeGet, storeSet } from './platform';
 
 export type Props = Record<string, string | number | boolean | null | undefined>;
 
@@ -63,14 +64,17 @@ let attr: Props | null = null;
 export function attribution(): Props {
   if (attr) return attr;
   try {
-    const saved = localStorage.getItem(ATTR_STORE);
+    const saved = storeGet(ATTR_STORE);
     if (saved) { attr = JSON.parse(saved); return attr!; }
-    const q = new URLSearchParams(window.location.search);
+    const q = platform().url.query();
     const a: Props = {};
     for (const k of UTM_KEYS) { const v = q.get(k); if (v) a[k] = v.slice(0, 200); }
-    const ref = document.referrer;
-    if (ref && !ref.includes(window.location.hostname)) a.first_referrer = ref.slice(0, 300);
-    if (Object.keys(a).length) { a.first_touch_at = new Date().toISOString(); localStorage.setItem(ATTR_STORE, JSON.stringify(a)); }
+    // `referrer()` is contracted to return EXTERNAL referrers only — each host
+    // filters its own self-referrals, so an in-app navigation never overwrites
+    // the ad that found the user.
+    const ref = platform().url.referrer();
+    if (ref) a.first_referrer = ref.slice(0, 300);
+    if (Object.keys(a).length) { a.first_touch_at = new Date().toISOString(); storeSet(ATTR_STORE, JSON.stringify(a)); }
     attr = a;
   } catch { attr = {}; }
   return attr;
@@ -79,7 +83,7 @@ export function attribution(): Props {
 let sink: AnalyticsSink | null = null;
 type Buffered = { kind: 'track'; event: string; props?: Props } | { kind: 'identify'; id: string; traits?: Props };
 const buffer: Buffered[] = [];
-const isDev = !!import.meta.env?.DEV;
+const isDev = () => platform().isDev;
 
 /** Register the real provider (e.g. a PostHog adapter). Flushes any buffered events. */
 export function registerSink(s: AnalyticsSink): void {
@@ -94,7 +98,7 @@ export function track(event: string, props?: Props): void {
     const a = attribution();
     const merged = Object.keys(a).length ? { ...a, ...props } : props;
     if (sink) { sink.track(event, merged); return; }
-    if (isDev) console.debug('[analytics]', event, merged ?? {});
+    if (isDev()) console.debug('[analytics]', event, merged ?? {});
     if (buffer.length < 100) buffer.push({ kind: 'track', event, props: merged });
   } catch { /* never throw */ }
 }
@@ -102,7 +106,7 @@ export function track(event: string, props?: Props): void {
 export function identify(id: string, traits?: Props): void {
   try {
     if (sink) { sink.identify(id, traits); return; }
-    if (isDev) console.debug('[analytics] identify', id, traits ?? {});
+    if (isDev()) console.debug('[analytics] identify', id, traits ?? {});
     if (buffer.length < 100) buffer.push({ kind: 'identify', id, traits });
   } catch { /* never throw */ }
 }

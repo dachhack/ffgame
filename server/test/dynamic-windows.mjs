@@ -1,9 +1,9 @@
 // Verify dynamic lineup windows: demo (baked) week = fixed 8 slots; a live 2026
 // week-1 slate (Wed opener) = 9 slots across 6 windows, and the engine + AI place
 // split-window players on the derived ids consistently.
-import { windowsForWeek, windowForTeam, setRuntimeSlate, clearRuntimeSlate } from '../../src/data/nflSlate.ts';
-import { slotsFor, totalSlotsWith } from '../../src/engine/matchup.ts';
-import { aiLineup } from '../../src/data/aiLineup.ts';
+import { windowsForWeek, windowForTeam, setRuntimeSlate, clearRuntimeSlate } from '../../packages/core/src/data/nflSlate.ts';
+import { slotsFor, totalSlotsWith } from '../../packages/core/src/engine/matchup.ts';
+import { aiLineup } from '../../packages/core/src/data/aiLineup.ts';
 
 let fails = 0;
 const ok = (cond, msg) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${msg}`); if (!cond) fails++; };

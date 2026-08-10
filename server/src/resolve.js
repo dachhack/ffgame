@@ -21,10 +21,10 @@ import { db } from './supabase.js';
 import { config } from './config.js';
 import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY } from './engine.js';
 import { matchupPremium, premiumTier, hasPremiumContent, gateSide, hasPremiumTargeted, gateTargeted } from './premium.js';
-import { slugMeta } from '../../src/data/slugMeta.ts';
+import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
 // Shared with the client and migration 0110: board weeks above PRESEASON_BASE
 // are throwaway practice and never move real coin.
-import { isPreseasonWeek as isPracticeWeek } from '../../src/data/nflSlate.ts';
+import { isPreseasonWeek as isPracticeWeek } from '../../packages/core/src/data/nflSlate.ts';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
 export function baseScore(plays) {

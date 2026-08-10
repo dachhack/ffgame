@@ -1,10 +1,10 @@
 import { useStore } from '../app/store';
 import { Brand, Header, SiteSettings, UserChip, Avatar, DemoControls, fonts } from '../app/ui';
-import { getTeam, gameForTeam } from '../data/league';
-import { avatarUrl } from '../data/media';
-import { TOTAL_SLOTS } from '../data/metrics';
-import { SLEEPER_HANDLE } from '../config';
-import { weekLockLabel } from '../data/nflSlate';
+import { getTeam, gameForTeam } from '@drip/core/data/league';
+import { avatarUrl } from '@drip/core/data/media';
+import { TOTAL_SLOTS } from '@drip/core/data/metrics';
+import { SLEEPER_HANDLE } from '@drip/core/config';
+import { weekLockLabel } from '@drip/core/data/nflSlate';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 
 const { MONO, GROTESK } = fonts;

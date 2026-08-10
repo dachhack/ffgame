@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { commishOverview, type AdminLeague } from '../data/liveApi';
+import { commishOverview, type AdminLeague } from '@drip/core/data/liveApi';
 import { LeagueRow, type LeagueTab } from './AdminPage';
 import { card, linkBtn, mono, Muted, errMsg } from './adminUi';
 

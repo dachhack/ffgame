@@ -4,19 +4,21 @@
 // refresh_token is kept in localStorage (it grants only read access to the user's
 // own Yahoo fantasy data, scoped by the app's permissions).
 import { getSupabase } from '../supabaseClient';
+import { platform, storeGet, storeSet, storeRemove, env } from '../../platform';
 
 const KEY = 'gc-yahoo-tok';
 const AUTH = 'https://api.login.yahoo.com/oauth2/request_auth';
 // Public Consumer Key (safe in the browser); the secret stays server-side.
-const CLIENT_ID = (import.meta.env.VITE_YAHOO_CLIENT_ID as string | undefined) || '';
+const clientId = () => env('VITE_YAHOO_CLIENT_ID') || '';
 
-export const yahooConfigured = !!CLIENT_ID;
-/** Yahoo requires the redirect URI to match the registered app exactly. */
-export const yahooRedirectUri = () => `${window.location.origin}/`;
+export const yahooConfigured = () => !!clientId();
+/** Yahoo requires the redirect URI to match the registered app exactly. Each
+ *  host registers its own: the web origin, and the app's deep-link scheme. */
+export const yahooRedirectUri = () => platform().url.redirectBase();
 
 interface Tokens { accessToken: string; refreshToken: string; expiresAt: number }
-function load(): Tokens | null { try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
-function save(t: Tokens | null) { try { t ? localStorage.setItem(KEY, JSON.stringify(t)) : localStorage.removeItem(KEY); } catch { /* ignore */ } }
+function load(): Tokens | null { const s = storeGet(KEY); try { return s ? JSON.parse(s) : null; } catch { return null; } }
+function save(t: Tokens | null) { t ? storeSet(KEY, JSON.stringify(t)) : storeRemove(KEY); }
 export const yahooConnected = () => !!load();
 export function yahooDisconnect() { save(null); }
 
@@ -31,8 +33,8 @@ async function invoke(body: Record<string, unknown>): Promise<any> {
 
 /** Send the user to Yahoo to authorize (state carries our provider marker). */
 export function startYahooAuth() {
-  const p = new URLSearchParams({ client_id: CLIENT_ID, redirect_uri: yahooRedirectUri(), response_type: 'code', language: 'en-us', state: 'yahoo' });
-  window.location.href = `${AUTH}?${p.toString()}`;
+  const p = new URLSearchParams({ client_id: clientId(), redirect_uri: yahooRedirectUri(), response_type: 'code', language: 'en-us', state: 'yahoo' });
+  platform().openUrl(`${AUTH}?${p.toString()}`);
 }
 
 /** Exchange the ?code from Yahoo's redirect for tokens and cache them. */

@@ -10,13 +10,19 @@
 // auth.dripfantasy.com is the project's Custom Domain — Supabase routes Auth,
 // REST, Realtime, Storage all through it, so this single change moves the whole
 // API surface off supabase.co.
+import { env } from '../platform';
 const DEFAULT_URL = 'https://auth.dripfantasy.com';
 const DEFAULT_ANON = 'sb_publishable_bEjQC0i5aZ36WFlBisxhbQ_9MwLo8d2';
 
-// Optional-chained so the module also loads outside Vite (e.g. Node test
-// harnesses), where `import.meta.env` is undefined.
-const ENV = (import.meta as { env?: Record<string, string | undefined> }).env;
-export const SUPABASE_URL = ENV?.VITE_SUPABASE_URL || DEFAULT_URL;
-export const SUPABASE_ANON = ENV?.VITE_SUPABASE_ANON_KEY || DEFAULT_ANON;
+// Read through the platform shim so this module loads under Vite, Metro and
+// plain Node alike; hosts that set nothing fall through to the defaults above.
+//
+// FUNCTIONS, not constants, and deliberately so: a `const` here is evaluated
+// when this module is first imported, which under ES module hoisting can happen
+// before the host installs its platform adapter. That would silently latch the
+// defaults and ignore a configured VITE_SUPABASE_URL — a failure that looks
+// like "live mode points at the wrong project" and nothing else.
+export const supabaseUrl = () => env('VITE_SUPABASE_URL') || DEFAULT_URL;
+export const supabaseAnon = () => env('VITE_SUPABASE_ANON_KEY') || DEFAULT_ANON;
 
-export const liveConfigured = !!(SUPABASE_URL && SUPABASE_ANON);
+export const liveConfigured = () => !!(supabaseUrl() && supabaseAnon());

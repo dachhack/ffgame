@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../app/store';
 import { SiteSettings, VersionTag } from '../app/ui';
-import { getProvider, espnAuth, type ProviderId } from '../data/providers';
+import { getProvider, espnAuth, type ProviderId } from '@drip/core/data/providers';
 
 // Generic "connect a league by id" screen for providers that aren't Sleeper
 // (ESPN, Fleaflicker, MFL). These have no public username lookup, so the flow is

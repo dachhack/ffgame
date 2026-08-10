@@ -2,6 +2,7 @@
 // Supabase client. All table access is RLS-guarded; enrollment goes through the
 // redeem_invite RPC (migration 0002), never a direct membership write.
 import { getSupabase } from './supabaseClient';
+import { platform, storeGet } from '../platform';
 import { resolveUser } from './sleeper';
 import { PRESEASON_BOARD_WEEKS } from './nflSlate';
 import type { Session } from '@supabase/supabase-js';
@@ -53,15 +54,15 @@ export function friendlyError(x: unknown): string {
 function redirectTo(): string {
   let extra = '';
   try {
-    const p = new URLSearchParams(window.location.search);
-    const commish = p.get('commish') || localStorage.getItem('dripCommishCode');
+    const p = platform().url.query();
+    const commish = p.get('commish') || storeGet('dripCommishCode');
     // A pending solo pass (0097) rides the same &code= param — App.tsx routes
     // SOLO-prefixed codes back to the dripSoloPass stash on landing.
-    const code = p.get('code') || localStorage.getItem('dripInviteCode') || localStorage.getItem('dripSoloPass');
+    const code = p.get('code') || storeGet('dripInviteCode') || storeGet('dripSoloPass');
     if (commish) extra = `&commish=${encodeURIComponent(commish)}`;
     else if (code) extra = `&code=${encodeURIComponent(code)}`;
   } catch { /* ignore */ }
-  return `${window.location.origin}${window.location.pathname}?live=1${extra}`;
+  return `${platform().url.redirectBase()}?live=1${extra}`;
 }
 
 /** True when the current URL is a Supabase auth callback — an OAuth / magic-link /
@@ -70,7 +71,7 @@ function redirectTo(): string {
  *  code must NOT rewrite the URL while this is true or the tokens are destroyed
  *  and the user bounces back to the sign-in form. */
 export function hasAuthTokensInUrl(): boolean {
-  try { return /[#&](access_token|refresh_token|error_description|error_code|error)=/.test(window.location.hash); } catch { return false; }
+  try { return /[#&](access_token|refresh_token|error_description|error_code|error)=/.test(platform().url.hash()); } catch { return false; }
 }
 
 export async function sendMagicLink(email: string): Promise<void> {
@@ -556,7 +557,7 @@ export async function startCheckout(kind: 'personal' | 'league' | 'split', leagu
   const { data, error } = await (await client()).functions.invoke('stripe-checkout', { body: { kind, leagueId, amountCents } });
   if (error) throw error;
   const url = (data as { url?: string } | null)?.url;
-  if (url) window.location.href = url;
+  if (url) platform().openUrl(url);
 }
 export const adminSetPremiumTier = (freePositions: string[], freePowerups: string[]) =>
   rpc<{ ok: boolean; error?: string }>('admin_set_premium_tier', { p_free_positions: freePositions, p_free_powerups: freePowerups });

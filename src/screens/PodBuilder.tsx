@@ -7,8 +7,8 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   podSalaries, savePodEntry, myPool, defaultOpenWeek, weekGameLocks, friendlyError,
   POD_SALARY_CAP, type PodSalaryRow,
-} from '../data/liveApi';
-import { track, Ev } from '../app/analytics';
+} from '@drip/core/data/liveApi';
+import { track, Ev } from '@drip/core/analytics';
 
 const SLOTS: { pos: string; label: string }[] = [
   { pos: 'QB', label: 'QB' },

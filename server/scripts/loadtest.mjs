@@ -30,7 +30,7 @@ import { readFileSync } from 'node:fs';
 import { db } from '../src/supabase.js';
 import { buildPlayerIndex } from '../src/playerIndex.js';
 import { injectWeekPlays, resolveMatchup, prefetchTick } from '../src/resolve.js';
-import { NFL_SLATE, setRuntimeSlate } from '../../src/data/nflSlate.ts';
+import { NFL_SLATE, setRuntimeSlate } from '../../packages/core/src/data/nflSlate.ts';
 
 const PREFIX = 'LOADTEST-';     // every seeded league id starts with this
 const GAME_ID = 'LOADTEST';     // live_play tag → reset deletes only our feed

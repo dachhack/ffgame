@@ -12,30 +12,36 @@
 //   2. setMarkFree(bool)          — the explicit admin toggle (persists).
 //   3. VITE_MARK_FREE=true        — build-time env: the production "ship mark-free" switch.
 // Default OFF (full imagery), so nothing changes until you flip a switch.
+import { platform, storeGet, storeSet, storeRemove, env } from '../platform';
 const KEY = 'drip:markFree';
 
 function readInitial(): boolean {
-  try {
-    const q = new URLSearchParams(window.location.search).get('markfree');
-    if (q != null) {
-      const on = q !== '0' && q.toLowerCase() !== 'false';
-      // ?markfree=0 is the antidote: also clear a previously-persisted flag.
-      if (!on) { try { localStorage.removeItem(KEY); } catch { /* ignore */ } }
-      return on;
-    }
-    const ls = localStorage.getItem(KEY);
-    if (ls != null) return ls === 'true';
-  } catch { /* no window/storage (SSR/tests) */ }
-  return import.meta.env?.VITE_MARK_FREE === 'true';
+  const q = platform().url.query().get('markfree');
+  if (q != null) {
+    const on = q !== '0' && q.toLowerCase() !== 'false';
+    // ?markfree=0 is the antidote: also clear a previously-persisted flag.
+    if (!on) storeRemove(KEY);
+    return on;
+  }
+  const ls = storeGet(KEY);
+  if (ls != null) return ls === 'true';
+  return env('VITE_MARK_FREE') === 'true';
 }
 
-let markFree = readInitial();
+// Resolved LAZILY on first read, not at module scope: a host installs its
+// platform adapter during boot, and this module can be pulled in by an import
+// chain that runs before that. Reading eagerly would latch the neutral
+// platform's answer (always false) and quietly disable the build-time switch.
+let markFree: boolean | null = null;
 
 /** Whether NFL marks/likeness should be hidden (imagery suppressed → generic fallbacks). */
-export function isMarkFree(): boolean { return markFree; }
+export function isMarkFree(): boolean {
+  if (markFree === null) markFree = readInitial();
+  return markFree;
+}
 
 /** Flip mark-free mode at runtime (persists across reloads). */
 export function setMarkFree(on: boolean): void {
   markFree = on;
-  try { localStorage.setItem(KEY, String(on)); } catch { /* ignore */ }
+  storeSet(KEY, String(on));
 }

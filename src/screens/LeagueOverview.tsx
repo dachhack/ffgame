@@ -1,16 +1,16 @@
 import { useState, type ReactNode } from 'react';
 import { useStore } from '../app/store';
 import { Brand, Header, SiteSettings, UserChip, Avatar, PlayerImg, DemoControls } from '../app/ui';
-import { getTeam, teamRoster, gameForTeam, teamResults } from '../data/league';
-import { TOTAL_SLOTS } from '../data/metrics';
-import { POWERUPS, powerupCategory, POWERUP_CATEGORIES } from '../data/powerups';
-import { avatarUrl } from '../data/media';
-import { SLEEPER_HANDLE } from '../config';
-import { weekLockLabel } from '../data/nflSlate';
-import { APP_VERSION, DATA_SOURCE } from '../app/version';
+import { getTeam, teamRoster, gameForTeam, teamResults } from '@drip/core/data/league';
+import { TOTAL_SLOTS } from '@drip/core/data/metrics';
+import { POWERUPS, powerupCategory, POWERUP_CATEGORIES } from '@drip/core/data/powerups';
+import { avatarUrl } from '@drip/core/data/media';
+import { SLEEPER_HANDLE } from '@drip/core/config';
+import { weekLockLabel } from '@drip/core/data/nflSlate';
+import { APP_VERSION, DATA_SOURCE } from '@drip/core/version';
 import { PuIcon, GameIcon, Emoji, COIN_GOLD } from '../app/gameIcons';
 import { PowerupCard } from '../app/cardTable';
-import type { FantasyTeam } from '../types';
+import type { FantasyTeam } from '@drip/core/types';
 
 type ModalState =
   | null

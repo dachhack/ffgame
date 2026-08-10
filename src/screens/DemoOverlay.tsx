@@ -1,4 +1,4 @@
-import { FX_COLOR, fmtClock, type Beat } from '../data/demoNarration';
+import { FX_COLOR, fmtClock, type Beat } from '@drip/core/data/demoNarration';
 import { FxIcon } from '../app/gameIcons';
 import { SleeperHandoff } from './SleeperHandoff';
 

@@ -22,6 +22,13 @@ function spaFallback(): Plugin {
 export default defineConfig({
   base: process.env.VITE_BASE ?? '/ffgame/',
   plugins: [react(), spaFallback()],
+  resolve: {
+    // @drip/core is a SOURCE-ONLY workspace package — no build step, so Vite
+    // compiles its TypeScript as part of this app and HMR works across the
+    // package boundary. Aliased explicitly rather than relying on the
+    // node_modules symlink so the resolution matches tsconfig `paths` exactly.
+    alias: [{ find: /^@drip\/core\/(.*)$/, replacement: resolve(__dirname, 'packages/core/src/$1') }],
+  },
   build: {
     outDir: 'dist',
     sourcemap: false,

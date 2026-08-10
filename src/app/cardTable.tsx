@@ -4,10 +4,10 @@
 // classic board uses. All CSS is scoped under .ctable so nothing leaks into
 // the rest of the app; suit colors come from the active theme's --pos-* vars.
 import { useEffect, useMemo, useState } from 'react';
-import { headshot, teamLogo } from '../data/media';
-import { slugMeta } from '../data/slugMeta';
+import { headshot, teamLogo } from '@drip/core/data/media';
+import { slugMeta } from '@drip/core/data/slugMeta';
 import { DripCoin, FxIcon, PuIcon } from './gameIcons';
-import type { PbpEvent } from '../types';
+import type { PbpEvent } from '@drip/core/types';
 
 const FONT_URL = `${import.meta.env.BASE_URL}fonts/lilita-one.woff2`;
 

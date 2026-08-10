@@ -9,8 +9,8 @@
 // integrity window.
 import { db } from './supabase.js';
 import { autoLineup } from './engine.js';
-import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS } from '../../src/data/aiLineup.ts';
-import { powerupById } from '../../src/data/powerups.ts';
+import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS } from '../../packages/core/src/data/aiLineup.ts';
+import { powerupById } from '../../packages/core/src/data/powerups.ts';
 
 /** A team's armed loadout (applied_state) — what it already OWNS coming into the
  *  lock. Returns { buffs:Set, unlocks:Set, extra:int, payload }. */

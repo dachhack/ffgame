@@ -24,7 +24,7 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ModalBackdrop } from '../app/ui';
 import { DripCoin } from '../app/gameIcons';
-import { potState, potSweep, potAnte, potAct, friendlyError, type PotState, type PotWindow, type PotActionResult } from '../data/liveApi';
+import { potState, potSweep, potAnte, potAct, friendlyError, type PotState, type PotWindow, type PotActionResult } from '@drip/core/data/liveApi';
 
 const POLL_MS = 20_000;
 

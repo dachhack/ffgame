@@ -11,7 +11,7 @@
 // is false, so the static vs-AI demo and the Pages build keep working with no
 // backend.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_ANON, liveConfigured } from './liveConfig';
+import { supabaseUrl, supabaseAnon, liveConfigured } from './liveConfig';
 
 export { liveConfigured };
 
@@ -19,9 +19,9 @@ let clientPromise: Promise<SupabaseClient | null> | null = null;
 
 export function getSupabase(): Promise<SupabaseClient | null> {
   if (!clientPromise) {
-    clientPromise = liveConfigured
+    clientPromise = liveConfigured()
       ? import('@supabase/supabase-js').then(({ createClient }) =>
-          createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }))
+          createClient(supabaseUrl(), supabaseAnon(), { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }))
       : Promise.resolve(null);
   }
   return clientPromise;

@@ -26,7 +26,7 @@ function normName(raw) {
 const slugOf = (name) => normName(name).replace(/\s+/g, '-');
 
 // ── Parse league rosters from league.ts (handles escaped apostrophes) ──
-const leagueSrc = readFileSync(new URL('../../src/data/league.ts', here), 'utf8');
+const leagueSrc = readFileSync(new URL('../../packages/core/src/data/league.ts', here), 'utf8');
 const rosterRe = /\[\s*'((?:[^'\\]|\\.)*)'\s*,\s*'(QB|RB|WR|TE|K|DEF)'\s*\]/g;
 const leaguePlayers = [];
 let m;

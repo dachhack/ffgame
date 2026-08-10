@@ -1,8 +1,13 @@
+// FIRST import, and it must stay first: this installs the browser platform
+// adapter as an import side effect, and everything below reaches into
+// @drip/core, which reads storage/env/URL through it.
+import './platform.web';
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { StoreProvider } from './app/store';
 import { App } from './App';
-import { initAnalytics, registerSink } from './app/analytics';
+import { initAnalytics, registerSink } from '@drip/core/analytics';
 import './styles.css';
 
 // Wire PostHog as the analytics sink IF a project token is configured (VITE_POSTHOG_KEY,
