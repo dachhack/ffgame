@@ -113,17 +113,34 @@ seeded and which it skipped, and `enablePreseasonPractice` seeds deep pools for
 exactly the seeded ones. If EVERY preseason week is past, the on-switch refuses
 and un-stamps rather than handing back a league with nothing playable.
 
+**The shop is practice-aware (`ShopModal`).** 0110 makes power-ups free on a
+practice week server-side, but the shop's affordability gate is CLIENT-side
+(`afford = bal >= p.price`), so a low-balance team simply couldn't press BUY and
+the server's deliberate "free even at zero balance" was unreachable through the
+UI. `ShopModal` now takes `practice`: affordability always passes, the price
+reads FREE (card variant: `free in practice`), and the subtitle says *"🏈
+PRACTICE — power-ups are FREE and don't touch your wallet"* so the unchanging
+balance stops reading as a bug. Passed from the board as `!!liveCtx && preseason`.
+
 **Pool filters (`boardParts.tsx`).** A normal fantasy roster is 8-20 players, so
 both pool views rendered whole and unfiltered. Deep practice pools are ~1,000
 players a week — and up to ~400 inside ONE window (wk104 `fri2`: 12 teams across
 6 games, 2 slots) — in a 440px scroll with a headshot and injury badge per row.
-Above `FILTER_AT` (25) a filter bar appears: name search (matches short OR full
+Above the threshold a filter bar appears: name search (matches short OR full
 name), position chips, and game / team selects, where choosing a game narrows the
 team list to that game's two sides so the selects compose. `RosterAside` adds a
 WINDOW select, since the rail is the all-windows view; `PlayerPicker` doesn't
-need one (it belongs to a single slot, so its window is already fixed). Below the
-threshold nothing renders at all — a regular-season board is untouched. Filters
+need one (it belongs to a single slot, so its window is already fixed). Filters
 are pure view state and never change what's pickable.
+
+TWO thresholds, because the surfaces count different things — found by actually
+looking at the demo board in a browser, where a single shared 25 put a filter bar
+on the LANDING page's 28-player roster rail while leaving the 21-player opponent
+rail bare. `FILTER_AT = 25` gates the picker (one window: regular season ≈ 5-8,
+smallest practice window is 32 — a wide gap); `RAIL_FILTER_AT = 60` gates the
+rail (whole roster: a deep dynasty roster reaches ~40, a practice pool is
+~1,000). Verified in Chromium: the landing board renders exactly as before, and
+the picker's search/chips/count/clear work on a filtered pool.
 
 **Hardening found on the way:** `_clone_preseason_weeks` (0054) is SECURITY
 DEFINER and was EXECUTE-to-PUBLIC by default — any signed-in user could clone or

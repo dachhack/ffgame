@@ -23,10 +23,21 @@ import type { Pick, Player, Pos, WindowId, Metric } from '../types';
 // they're the ones taking the snaps), which is ~1,000 players a week, and up to
 // ~400 inside a single busy window. Scrolling that to find one name is hopeless.
 //
-// So: below FILTER_AT the lists behave exactly as they always have (no controls,
-// no clutter on a regular-season board); above it a filter bar appears. Filters
-// are pure view state — nothing here changes what's pickable.
+// So: below the threshold the lists behave exactly as they always have (no
+// controls, no clutter on a regular-season board); above it a filter bar
+// appears. Filters are pure view state — nothing here changes what's pickable.
+//
+// TWO thresholds, because the two surfaces count different things and a single
+// number can't sit in both gaps (found by looking at the real demo board — at a
+// shared 25 the landing page's 28-player roster rail sprouted a filter bar while
+// the 21-player opponent rail didn't):
+//   • PlayerPicker counts ONE WINDOW's pool. Regular season ≈ 5-8; the smallest
+//     practice window is 32 (wk104 tnf2, one game). Wide gap — 25 sits in it.
+//   • RosterAside counts the WHOLE roster across every window. A deep dynasty
+//     roster reaches ~40; a practice pool is ~1,000. So its line has to be well
+//     clear of a real roster, not of a window.
 const FILTER_AT = 25;
+const RAIL_FILTER_AT = 60;
 
 interface PoolFilter { q: string; pos: string; team: string; game: string }
 const EMPTY_FILTER: PoolFilter = { q: '', pos: '', team: '', game: '' };
@@ -135,7 +146,7 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, sealed, colla
   const [filter, setFilter] = useState<PoolFilter>(EMPTY_FILTER);
   const [winFilter, setWinFilter] = useState<string>('');
   const railWindows = windowsForWeek(week).filter((w) => !winFilter || w.id === winFilter);
-  const needsFilter = total > FILTER_AT;
+  const needsFilter = total > RAIL_FILTER_AT;
   const railGames = railWindows.flatMap((w) => gamesInWindow(week, w.id));
   const railTeamsOfGame = new Map(railGames.map((g) => [gameKey(g), new Set([g.home, g.away])]));
   const poolFor = (id: WindowId): Player[] => {
