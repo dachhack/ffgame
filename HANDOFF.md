@@ -1,6 +1,150 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-08-07 · Build `v0.139.0`_
+_Last updated: 2026-08-08 · Build `v0.140.0`_
+
+## Window Pot v1 — an OPT-IN wager ladder, flagged OFF (v0.140.0, 2026-08-08)
+
+Two managers, one game window, one pool of drip-coin — and **nothing is
+automatic**. One puts ◎10 up on a window; the other matches it or ignores it. If
+it's matched they trade check / wager / call / raise, strictly alternating, until
+that window's **picks lock**. Winner of the window takes the pot.
+
+**This is a redesign of what was built earlier the same day.** The first pass
+followed the original spec: every window auto-anted ◎5 at matchup lock, betting
+ran from lock to kickoff, and a hidden standing auto-call policy plus
+quiet-hours response clocks kept it moving async. The founder inverted it —
+opt-in, ◎10, pre-lock, explicit turns — which is a better mechanic and a simpler
+one: with a real turn and a hard deadline at picks lock there is nothing left to
+answer on anyone's behalf, so the policy, the clocks, the `awake_deadline`
+arithmetic and the last-raise cutoff all came out. The migration was **rewritten
+in place** across that redesign rather than patched by a follow-up, because it
+had never merged and so had never applied anywhere; a second migration undoing
+half of an unreleased one would be permanent noise in the history for no
+benefit. Now that it HAS merged, that reasoning has expired — patch forward.
+
+**It is `0117_window_pot.sql`, not 0106.** It was written as 0106 and renumbered
+when merging `main`, which had taken 0106–0116 in the meantime (the practice /
+view-as / week-context work). Nothing but the filename changed. Worth knowing if
+you go looking for it by the number in an older commit message.
+
+**It ships OFF, per league, behind a switch you own.** `league.pot_ante` defaults
+to **0**, which disables the feature end to end: the RPCs refuse, `pot_state`
+returns `{off:true}` with no windows, and the client renders nothing. The switch
+is in the app — **AdminPage → LEAGUES → a league → ADMIN MODES → `🪙 window
+pot`**, beside the preseason / live-test / card-theme toggles — with a `tune`
+affordance for the ante and the pot cap (validated so the cap always covers both
+antes). There is nothing to wait for: pots are created by managers tapping, not
+by a scheduled pass, so it's live the moment you flip it.
+
+**Turning it off never strands coin, by design.** `pot_sweep` doesn't consult
+the flag, so pots already under way still void / freeze / settle on their own
+schedule and every committed chip finds its way home or to a winner. The toggle
+tells you how many are still in flight, and `pot_state` keeps reporting them
+(read-only, every control locked) so their managers watch them finish instead of
+seeing coin vanish from their bank. Once they've all closed, the state comes back
+empty and the feature is invisible again. To unwind a league on the spot instead
+— a test league that needs resetting, or killing the feature mid-week without
+leaving bets hanging over a slate — the **`⟲ void N open`** button (only present
+when there are open pots) voids every one and refunds every chip: nobody wins,
+nobody loses. SQL equivalents are `admin_set_pot(league, on, ante, cap)` and
+`admin_close_pots(league)`; both are `is_admin()`-gated.
+
+### The four things worth knowing
+
+**The deadline isn't a copy of the pick-lock rule, it IS the pick-lock rule.**
+`pot_lock_at()` is literally `window_kickoff(week, win) - interval '1 hour'` —
+the same expression `enforce_window_lock` (0102) enforces. Move the lock lead
+and both move together; there is no second place to remember. It also means the
+entire ladder is played blind, before a single pick is revealed, which is the
+whole reason the mechanic belongs in this product.
+
+**Backing out costs exactly the ante — the founder's explicit call.** A fold
+hands over your ◎10 and returns every wagered chip to whoever bet it, however
+deep the ladder went. The consequence, raised before building and chosen anyway:
+a call is *reversible* until picks lock, so the ladder is a commitment ratchet
+rather than a bluff-caller — the live question is "will you still be here at
+lock?" rather than "are you bluffing?". If playtesting shows managers calling
+everything and bailing, the fix is confined to `pot_close`'s `'fold'` branch
+(forfeit what you'd matched instead). That's why the ante is stored apart from
+the wagers (`home_ante` / `home_bet`): the fold payout is arithmetic, not
+reconstruction.
+
+**Silence is never punished.** No clocks, no auto-anything. An offer nobody
+matches VOIDS at picks lock and the ◎10 goes home; a wager nobody answers is
+returned at the close and the antes ride on. The only way to lose coin without
+choosing to is to lose the window.
+
+**Every move is turn-gated**, which is also the concurrency answer: the
+per-matchup advisory lock serializes two managers tapping at once and the second
+finds the turn already passed. No corrupted pots, no double-counts, no
+reconciliation UI.
+
+### What landed
+
+- **`supabase/migrations/0117_window_pot.sql`** — `window_pot` (leader, turn,
+  owed, ante/bet split, state machine), `pot_action`, `league.pot_ante` /
+  `pot_cap`; RPCs `pot_ante`, `pot_act`, `pot_state`, `pot_sweep`. Advisory
+  xact lock on every mutation, RLS member-read + RPC-only writes, wallet moves
+  only through `spend_from_wallet` / `credit_wallet` with idem keys. Debits key
+  off the action seq; the three payout causes (`void` / `fold` / `settle`) key
+  off the CAUSE with no seq — each fires at most once per pot, and a seq-bearing
+  key would double-pay if a replay allocated a fresh seq.
+- **Worker (`server/src/pot.js`)** — just `sweepPots`, on the tick after the
+  resolve loop: void unmatched offers and freeze live ladders at picks lock,
+  settle finished windows out of the `matchup_state` rows resolve just published
+  (the same scores the +5 bonus is paid off). The ante-at-lock hook is gone
+  entirely — there is no automatic ante any more. Every supabase-js result is
+  checked and thrown; it returns errors, it does not throw.
+- **Client (`src/screens/WindowPot.tsx`)** — the pot chip moved OFF the battle
+  bar and onto the window section, because the ladder is played during setup and
+  the battle bar doesn't exist until something has kicked off. Untouched windows
+  read `WINDOW POT · PUT ◎10 ON THIS WINDOW →`; a live one pulses `YOUR MOVE →`.
+  The sheet carries the whole ladder (ante / match / check / wager / call /
+  raise / back out), the wager slider capped at the effective stack with "table
+  stakes" as the entire explanation, the countdown to picks lock, and the action
+  log. Backing out asks for confirmation and states the cost. One shared poll for
+  every window; it calls `pot_sweep` first (any-member-advances, like
+  `draft_tick`). Demo/sim boards (`liveCtx == null`) never mount it.
+- **Admin levers** — `admin_set_pot` / `admin_close_pots` (both `is_admin()`
+  gated), and `admin_overview` now carries `pot_ante` / `pot_cap` / `pot_open`
+  so the toggle renders from the league list the admin page already loads
+  instead of a per-league fetch. `WindowPotToggle` in `src/screens/AdminPage.tsx`.
+- **Probes (`scripts/db/window-pot-probes.sql`)** — every §6 scenario against the
+  real RPCs and wallets: opt-in (no taps ⇒ no rows, no coin), the void, the
+  handshake and leader-acts-first, out-of-turn refusal, the full ladder to the
+  ◎120 cap, backing out costing exactly ◎10 both deep and shallow, table stakes
+  + all-in, the deadline being the pick-lock instant, the unanswered wager going
+  home, settlement, the dead-even split, the empty chair, replay idempotency,
+  the ledger invariant, and the zero-sum check — plus the admin flag itself: only
+  a super admin can flip it, the numbers are range-guarded, flipping it ON lets a
+  manager open a pot immediately, flipping it OFF blocks new play while the
+  in-flight pot stays visible AND the sweep still unwinds it, and
+  `admin_close_pots` refunds every chip and is a no-op on the second run. Each
+  fixture gets its own WEEK, not just its own season — `window_kickoff` resolves
+  the newest season carrying a week number, so fixtures sharing a week would
+  resolve each other's kickoffs.
+
+**Harness repairs made on the way** (`run-scratch-probes.sh` was red before this
+session): it now stubs `pg_net` the way it already stubbed `http`, so 0091
+applies locally; and two `native-league-probes.sql` assertions still expected the
+pre-0095 "closed testing" gate message. All migrations apply and both suites
+pass.
+
+**Deploy state:** the migration auto-applies on merge (`migrate.yml`). **The
+worker sweep needs a `fly deploy`** — batch it with the still-pending #262 `ret`
+emission before the Aug 13 preseason slate. Without it pots still work for
+anyone with the board open (the client poll sweeps its own matchup); what's lost
+is the safety net for matchups nobody is watching at the deadline, which at a
+3am lock is most of them.
+
+**Live-fire plan (Aug 13):** flip the league on from the admin page, then from
+account A put ◎10 on a window and watch B's board offer the match;
+match it, confirm A gets first action, run a wager/call/raise ladder to the cap,
+back out of one window and see it settle for exactly ◎10, leave a wager
+unanswered on another and confirm it returns at picks lock, leave a third offer
+unmatched and confirm it voids, then let a window finish and re-resolve twice to
+prove the pot pays once. Preseason week 102 is a six-window slate, so there is
+plenty of room to run all five outcomes in one night.
 
 ## The worker runs WEEK CONTEXTS, not a season mode
 

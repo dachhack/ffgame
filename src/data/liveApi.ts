@@ -522,9 +522,9 @@ export async function revealedOppBuffs(matchupId: string, userId: string): Promi
 // ── Super admin ─────────────────────────────────────────────────────────────────
 export type Controller = 'human' | 'ai';
 export type LineupPolicy = 'best_lineup' | 'ai' | 'empty';
-export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; provider?: string; avatar_url?: string | null; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; weekly_budget?: number; test_live_at?: string | null; preseason_at?: string | null; }
+export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; provider?: string; avatar_url?: string | null; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; weekly_budget?: number; test_live_at?: string | null; preseason_at?: string | null; /** Window Pot: the per-league flag (0 = off) + its ceiling, and how many pots are in flight right now. */ pot_ante?: number; pot_cap?: number; pot_open?: number; }
 export interface AdminUser { id: string; email: string | null; sleeper_username: string | null; sleeper_user_id: string | null; enrolled: number; created_at: string; }
-/** `drifted` (0106): this seat's occupant is no longer the roster's Sleeper owner
+/** `drifted` (0117): this seat's occupant is no longer the roster's Sleeper owner
  *  — they left the league, it changed hands, or they unlinked. Sleeper leagues
  *  only, and never set for hand-assigned seats (those carry claim_email and are
  *  deliberately independent of Sleeper). Advisory: a refresh flags it, it never
@@ -1239,3 +1239,103 @@ export function subscribeMatchup(matchupId: string, onChange: () => void): () =>
   }).catch(() => {});
   return () => { dead = true; cleanup?.(); };
 }
+
+// ── The Window Pot (migration 0117 · docs/window-pot.md) ─────────────────────
+// An OPT-IN wager ladder on a game window: one manager puts ◎10 up, the other
+// matches it, and they trade check / wager / call / raise until that window's
+// PICKS lock. Everything here is a no-op for a league with `pot_ante = 0` (the
+// shipping default): pot_state comes back `{ off: true }` and the UI renders
+// nothing at all.
+
+export type PotWindowState =
+  | 'offered'      // one ◎10 down, waiting on the other side
+  | 'live'         // both in; the ladder is open
+  | 'locked'       // picks locked; frozen, riding to the window's final
+  | 'void'         // nobody matched the offer; the ante went home
+  | 'folded_you' | 'folded_them'
+  | 'settled' | 'split';
+export type PotActionKind =
+  'ante' | 'match' | 'check' | 'wager' | 'call' | 'fold' | 'settle' | 'refund' | 'void';
+
+/** One window's pot, already oriented to the CALLER by the RPC — `you_in` is
+ *  always your own committed coin, never the home team's. */
+export interface PotWindow {
+  win: string;
+  state: PotWindowState;
+  /** Who put the first ◎10 up. They also get first action once it's matched. */
+  leader: 'you' | 'them';
+  /** Whose move it is. Null unless the pot is live. */
+  turn: 'you' | 'them' | null;
+  /** The outstanding wager the turn-holder must answer. 0 ⇒ they may check or open. */
+  owed: number;
+  /** Everything both sides have committed. */
+  pot: number;
+  you_in: number;
+  them_in: number;
+  /** The entry fee alone — the ONLY thing backing out forfeits. */
+  you_ante: number;
+  them_ante: number;
+  /** What the wager slider maxes at — table stakes. 0 ⇒ nothing offerable. */
+  effective_stack: number;
+  /** When betting closes: the instant this window's picks lock (kickoff − 1h). */
+  lock_at: string | null;
+  winner: 'you' | 'them' | 'split' | null;
+  settled_at: string | null;
+  log: { seq: number; kind: PotActionKind; amount: number; at: string; side: 'you' | 'them' | null }[];
+}
+export interface PotState {
+  ok: boolean;
+  error?: string;
+  /** True ⇒ this league has pots disabled (`pot_ante = 0`). Render nothing. */
+  off: boolean;
+  ante: number;
+  cap: number;
+  side_cap: number;
+  min_wager: number;
+  my_side: 'home' | 'away';
+  my_roster_id: number;
+  my_bank: number;
+  /** False ⇒ the other seat is AI/unenrolled, so nobody could answer an offer. */
+  both_live: boolean;
+  server_now: string;
+  /** Only windows somebody actually anted on. The client offers the ◎10 on the
+   *  rest from the slate it already has. */
+  windows: PotWindow[];
+}
+export const potState = (matchupId: string) => rpc<PotState>('pot_state', { p_matchup_id: matchupId });
+/** Advance this matchup's pots (void unmatched offers and freeze live ladders at
+ *  picks lock, settle finished windows). Idempotent and advisory-locked — any
+ *  participant's poll may call it, exactly like draft_tick; the worker sweeps
+ *  every league on its own tick too. */
+export const potSweep = (matchupId: string) =>
+  rpc<{ ok: boolean; error?: string; voided?: number; frozen?: number; settled?: number }>(
+    'pot_sweep', { p_matchup_id: matchupId });
+export interface PotActionResult {
+  ok: boolean; error?: string;
+  /** pot_ante: which half of the handshake this was. */
+  led?: boolean; matched?: boolean; ante?: number; state?: string;
+  checked?: boolean; wagered?: number; called?: number; pot?: number;
+  /** pot_close: how it ended. */
+  cause?: string; winner?: string; home_paid?: number; away_paid?: number;
+  effective_stack?: number;
+}
+/** Put the ◎10 up: leads the offer on an untouched window, or matches the offer
+ *  already sitting there (which is what makes the pot real). */
+export const potAnte = (matchupId: string, win: string) =>
+  rpc<PotActionResult>('pot_ante', { p_matchup_id: matchupId, p_win: win });
+/** Take your turn. 'raise' is call + open, and is all-or-nothing: an illegal
+ *  open rolls the call back with it. 'fold' backs out for exactly your ante. */
+export const potAct = (matchupId: string, win: string, action: 'check' | 'wager' | 'call' | 'raise' | 'fold', amount?: number) =>
+  rpc<PotActionResult>('pot_act', { p_matchup_id: matchupId, p_win: win, p_action: action, p_amount: amount ?? null });
+
+/** Super admin: turn the Window Pot on or off for ONE league, and tune its two
+ *  numbers. Turning it off stops new play but deliberately leaves pots already
+ *  under way to close and settle themselves — `open_pots` reports how many that
+ *  is. Omit the numbers to keep/restore the defaults. */
+export const adminSetPot = (leagueId: string, on: boolean, ante?: number, cap?: number) =>
+  rpc<{ ok: boolean; error?: string; on?: boolean; pot_ante?: number; pot_cap?: number; open_pots?: number }>(
+    'admin_set_pot', { p_league_id: leagueId, p_on: on, p_ante: ante ?? null, p_cap: cap ?? null });
+/** Super admin: unwind a league's pots on the spot — every offer, ladder and
+ *  frozen pot is voided and every chip goes back to whoever put it in. */
+export const adminClosePots = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; closed?: number }>('admin_close_pots', { p_league_id: leagueId });

@@ -47,6 +47,7 @@ EOF
 # Same story for pg_net (0091's lead-alert poke): not packaged locally, and the
 # probes never fire an HTTP call. Stub net.http_post so the migration applies —
 # without it the run dies at 0091 and every later migration goes unchecked.
+# (Signature matches pg_net's real one: 0091 calls it with named arguments.)
 stub_pg_net_ext() {
   local extdir=/usr/share/postgresql/16/extension
   [ -w "$extdir" ] || { echo "warn: cannot write $extdir — 0091 will fail without pg_net"; return 0; }
@@ -70,7 +71,7 @@ $PSQL -d postgres -q -c "drop database if exists scratch" -c "create database sc
 
 RUN="$PSQL -d scratch -v ON_ERROR_STOP=1 -q"
 $RUN -f scripts/db/supabase-shim.sql 2>/dev/null
-$RUN -c "create schema if not exists extensions;"
+$RUN -c "create schema if not exists extensions;" -c "create schema if not exists net;"
 for f in supabase/migrations/*.sql; do
   $RUN -f "$f" >/dev/null || { echo "MIGRATION FAILED: $f"; exit 1; }
 done
@@ -78,3 +79,4 @@ echo "all migrations applied"
 
 $RUN -f scripts/db/native-league-probes.sql | grep -E "PROBE FAIL|ALL PROBES" || { echo "PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/preseason-practice-probes.sql | grep -E "PROBE FAIL|PROBES PASS" || { echo "PRESEASON PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/window-pot-probes.sql | grep -E "PROBE FAIL|ALL POT PROBES" || { echo "POT PROBES FAILED"; exit 1; }

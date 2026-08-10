@@ -5,6 +5,7 @@ import {
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
   adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, type PreseasonWindow, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
+  adminSetPot, adminClosePots,
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
   rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
   setTransactionRules, commishMovePlayer, commishRemovePlayer, commishRuleTrade, setLeagueAvatar,
@@ -843,6 +844,7 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <TestLiveToggle on={!!l.test_live_at} leagueId={l.league_id} reload={reload} />
                 <CardThemeToggle leagueId={l.league_id} />
+                <WindowPotToggle l={l} reload={reload} />
                 <span style={{ flex: 1 }} />
                 <DeleteLeague name={l.name} onDelete={async () => { const r = await adminDeleteLeague(l.league_id); if (r.ok) reload(); return r; }} />
               </div>
@@ -1580,6 +1582,83 @@ function CardThemeToggle({ leagueId }: { leagueId: string }) {
       className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '4px 8px', cursor: on == null ? 'default' : 'pointer', opacity: on == null ? 0.6 : 1 }}>
       {on == null ? '…' : on ? '🃏 CARDS' : '▤ SIMPLE VIEW'}
     </button>
+  );
+}
+
+// Window Pot (0117): the per-league feature flag. `pot_ante` doubles as the
+// switch — 0 is off and the feature leaves no trace at all. Turning it off
+// deliberately does NOT touch pots already under way: they close and settle
+// themselves so no manager loses coin they committed in good faith, and the
+// button reports how many are still in flight. `unwind` is the separate,
+// explicit escape hatch that voids them all and refunds every chip.
+function WindowPotToggle({ l, reload }: { l: AdminLeague; reload: () => void }) {
+  const on = (l.pot_ante ?? 0) > 0;
+  const openPots = l.pot_open ?? 0;
+  const [busy, setBusy] = useState(false);
+  const [tune, setTune] = useState(false);
+  const [ante, setAnte] = useState(String(l.pot_ante || 10));
+  const [cap, setCap] = useState(String(l.pot_cap || 120));
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const apply = async (next: boolean, a?: number, c?: number) => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await adminSetPot(l.league_id, next, a, c);
+      if (!r.ok) setMsg(r.error ?? 'failed');
+      else {
+        setMsg(r.on
+          ? `✓ on · ◎${r.pot_ante} ante, ◎${r.pot_cap} cap`
+          : `✓ off${r.open_pots ? ` · ${r.open_pots} pot${r.open_pots === 1 ? '' : 's'} still in flight — they'll close themselves` : ''}`);
+        reload();
+      }
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); }
+  };
+
+  const unwind = async () => {
+    if (busy) return;
+    if (!confirm(`Void all ${openPots} open pot${openPots === 1 ? '' : 's'} in ${l.name}? Every chip goes back to whoever put it in — nobody wins, nobody loses.`)) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await adminClosePots(l.league_id);
+      setMsg(r.ok ? `✓ voided ${r.closed} pot${r.closed === 1 ? '' : 's'}, all coin refunded` : (r.error ?? 'failed'));
+      if (r.ok) reload();
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+      <button onClick={() => apply(!on)} disabled={busy}
+        title={on
+          ? `Window Pot is ON for this league — ◎${l.pot_ante} ante, ◎${l.pot_cap} cap. Managers can put coin on any window until its picks lock. Click to turn off (pots already running will still close themselves).`
+          : 'Turn on the Window Pot: managers can put ◎10 on any window and wager against each other until that window\u2019s picks lock. Off by default; nothing appears in the app until this is on.'}
+        className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--warn)' : 'var(--bg)', border: `1px solid ${on ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+        {busy ? '…' : on ? `🪙 POT: ON ◎${l.pot_ante}` : '🪙 window pot'}
+      </button>
+      {on && (
+        <button onClick={() => setTune((t) => !t)} className="mono" style={{ ...linkBtn, fontSize: 9 }}>
+          {tune ? 'done' : 'tune'}
+        </button>
+      )}
+      {openPots > 0 && (
+        <button onClick={unwind} disabled={busy} title="Void every open pot in this league and refund every chip. Already-settled pots are untouched."
+          className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--opp)', background: 'var(--bg)', border: '1px solid var(--opp)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+          ⟲ void {openPots} open
+        </button>
+      )}
+      {tune && on && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>ante ◎</span>
+          <input value={ante} onChange={(e) => setAnte(e.target.value.replace(/\D/g, ''))} inputMode="numeric" style={{ ...inp, width: 44, padding: '3px 5px', textAlign: 'center' }} />
+          <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>cap ◎</span>
+          <input value={cap} onChange={(e) => setCap(e.target.value.replace(/\D/g, ''))} inputMode="numeric" style={{ ...inp, width: 52, padding: '3px 5px', textAlign: 'center' }} />
+          <button onClick={() => apply(true, Number(ante) || 10, Number(cap) || 120)} disabled={busy} className="mono" style={{ ...linkBtn, fontSize: 9 }}>save</button>
+        </span>
+      )}
+      {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</span>}
+    </div>
   );
 }
 

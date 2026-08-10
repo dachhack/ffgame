@@ -17,6 +17,7 @@ import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt } fro
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues } from './sync.js';
 import { sweepNative } from './native.js';
+import { sweepPots } from './pot.js';
 import { db } from './supabase.js';
 import { ensurePods } from './pods.js';
 import { PRESEASON, REGULAR_SEASON } from './seasonType.js';
@@ -207,6 +208,14 @@ async function tick() {
       log('native sweep:', nat.autopicks, 'autopicks,', nat.claimsWon, 'claims won,', nat.claimsLost, 'lost');
     }
   } catch (e) { log('native sweep error', e.message); }
+
+  // Window Pot (0117): void offers nobody matched and freeze live ladders at
+  // picks lock, then settle windows that have gone final. Week-agnostic like the
+  // native sweep — pot_sweep(null) walks every open pot — and it runs after the
+  // context loop above, so a window settling this tick pays out of the
+  // matchup_state rows resolve just published. Idempotent; a no-op while every
+  // league sits at pot_ante = 0, which is all of them until the flag is flipped.
+  try { await sweepPots(log); } catch (e) { log('window pot sweep error', e.message); }
 }
 
 async function main() {

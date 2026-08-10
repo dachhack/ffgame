@@ -25,6 +25,7 @@ import { Rulebook } from './Rulebook';
 import { PuIcon, Emoji, DripCoin } from '../app/gameIcons';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx } from '../types';
 import { RosterAside, SetupRow, PlayerPicker, ScoutModal, buffAppliesToSpot, TwinChip } from './boardParts';
+import { usePot, WindowPotChip, potOutcomeLine } from './WindowPot';
 
 const TICK_MS = 700;
 const TICK_SECONDS = 20;
@@ -1441,6 +1442,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 key={rw.window.id}
                 rw={rw}
                 week={week}
+                potMatchupId={liveCtx?.matchupId ?? null}
                 phase={winPhaseFor(rw.window.id)}
                 realtime={winRt(rw.window.id)}
                 clock={effWinClock(rw.window.id)}
@@ -2124,9 +2126,23 @@ function WindowSectionInner(props: {
   /** Card-table theme: live/final slots stay face-up LiveCards on the felt
    *  instead of dropping to the compact score strips at kickoff. */
   cards?: boolean;
+  /** Window Pot (0117): the LIVE matchup this section belongs to, or null on the
+   *  demo/sim boards, which have no pots. A plain string, so the memo comparison
+   *  below still short-circuits idle windows. */
+  potMatchupId?: string | null;
 }) {
-  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch, preKick, cards } = props;
+  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch, preKick, cards, potMatchupId } = props;
   const w = rw.window;
+  // Null unless this is a LIVE matchup in a league with the pot flag on. Every
+  // window's chip shares one poll (the store in WindowPot.tsx).
+  const pot = usePot(potMatchupId ?? null);
+  // Betting closes the instant this window's picks do — kickoff − 1h, the same
+  // lead the lock countdown above uses and the same instant enforce_window_lock
+  // (0102) enforces server-side.
+  const potLockAtMs = (() => {
+    const k = windowKickoffMs(week, w.id);
+    return k == null ? null : k - (testTimelineOn() ? TEST_LOCK_LEAD_MS : 3_600_000);
+  })();
   // Twin Generals: with the buff armed and ≥2 of your Field General QBs in this
   // window, the top two multipliers stack — link those QB spots so you can see
   // which two are paired.
@@ -2332,7 +2348,18 @@ function WindowSectionInner(props: {
         </button>
       )}
 
-      {phase !== 'setup' && <WindowBattleBar rw={rw} week={week} clock={clock} wallClock={wallClock} done={done} />}
+      {/* Window Pot (0117): the wager ladder is played BEFORE picks lock, so the
+          chip rides the window section in every phase — not the battle bar,
+          which only exists once something has kicked off. */}
+      {pot && potMatchupId && (
+        <WindowPotChip pot={pot} matchupId={potMatchupId} win={w.id} winLabel={w.label}
+          lockAtMs={potLockAtMs} cards={cards} />
+      )}
+
+      {phase !== 'setup' && (
+        <WindowBattleBar rw={rw} week={week} clock={clock} wallClock={wallClock} done={done}
+          potMatchupId={potMatchupId} />
+      )}
 
       {/* Live board: the full game log — EVERY ingested play across this window's
           games (from the worker's game_feed), regardless of who's slotted. The
@@ -2477,10 +2504,19 @@ function WindowGameLog({ week, win }: { week: number; win: WindowId }) {
 // aggregate (who's winning the window) as a battle meter; at FINAL it locks to
 // the settled result — WON/LOST, the +bonus points, and the window MVP (the
 // single top-scoring slot, which earns a drip-coin bounty).
-function WindowBattleBar({ rw, week, clock, wallClock, done }: {
+function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId }: {
   rw: ReturnType<typeof buildMatchup>['windows'][number]; week: number; clock: number; wallClock: boolean; done: boolean;
+  potMatchupId?: string | null;
 }) {
   const battle = rw.battle;
+  // Window Pot: the CLOSED pot, rendered next to the window's own equation. The
+  // ladder itself lives on the window section (it's played before picks lock);
+  // all that belongs here is how it ended. Shares the same poll.
+  const pot = usePot(potMatchupId ?? null);
+  const potWin = pot?.windows.find((x) => x.win === rw.window.id) ?? null;
+  const potOutcome = potWin ? potOutcomeLine(potWin) : null;
+  const potTone = potWin?.winner === 'you' || potWin?.state === 'folded_them' ? 'var(--you)'
+    : potWin?.state === 'split' || potWin?.state === 'void' ? 'var(--dim)' : 'var(--opp)';
   // Live aggregate at the current window clock — sum each slot's running bank.
   let liveYou = 0, liveTheir = 0;
   for (const s of rw.slots) {
@@ -2528,6 +2564,13 @@ function WindowBattleBar({ rw, week, clock, wallClock, done }: {
       {done && !even && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: leadYou ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>
           ★ window {(leadYou ? yTot : tTot).toFixed(1)} + win bonus {bonus} = {((leadYou ? yTot : tTot) + bonus).toFixed(1)} toward {leadYou ? 'your' : 'their'} week total
+        </div>
+      )}
+      {/* The pot rides alongside that equation but is deliberately NOT in it:
+          coin in, coin out — a pot never moves a single point. */}
+      {potOutcome && (
+        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: potTone, marginTop: 4 }}>
+          ◎ {potOutcome} — drip-coin only, no points either way
         </div>
       )}
     </div>
