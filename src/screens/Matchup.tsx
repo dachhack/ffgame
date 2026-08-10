@@ -5,7 +5,7 @@ import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile, 
 import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGameFeed } from '../data/gameFeed';
 import { avatarUrl, teamLogo } from '../data/media';
-import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, preseasonWeekNum } from '../data/nflSlate';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, weekLabel } from '../data/nflSlate';
 import { METRICS, metricById } from '../data/metrics';
 import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '../data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '../data/league';
@@ -372,7 +372,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const preseason = isPreseasonWeek(week);
   // The selector pages the league's whole matchup timeline as ONE continuous
   // range — preseason (offset) weeks first, then the regular season — so a
-  // preseason-enabled league flips PRE 1 → … → PRE 3 → WK 1 → … in one stride.
+  // preseason-enabled league flips PRE 1 → … → PRE 4 → WK 1 → … in one stride.
   // Driven by the schedule the league actually has, so it only offers real weeks.
   const orderedWeeks = (() => {
     const ws = new Set(getActiveLeague().schedule.map((g) => g.week));
@@ -1189,7 +1189,6 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const livePreseasonChip = preseason ? (
     <span className="mono" title="Preseason: this league is playing a real 2026 NFL preseason matchup (super-admin toggle)." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, var(--surface))', border: '1px solid var(--you)', borderRadius: 4, padding: '5px 7px', whiteSpace: 'nowrap', flexShrink: 0 }}>🏈 PRESEASON</span>
   ) : null;
-  const weekLabel = (w: number) => (isPreseasonWeek(w) ? `PRE ${preseasonWeekNum(w)}` : `WK ${w}`);
   const liveWeekSel = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
       <button onClick={() => goToWeek(prevWeek)} disabled={prevWeek == null || switchingWeek != null} title="previous week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: prevWeek == null || switchingWeek != null ? 'default' : 'pointer', opacity: prevWeek == null ? 0.35 : 1 }}>‹</button>
@@ -1621,7 +1620,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
       {puView === 'active' && <ActivePowerupsModal effects={activeEffects} onClose={() => setPuView(null)} />}
       {puView === 'apply' && <ApplyPowerupsModal items={appliable} inventory={inventory} cards={cardHand} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); setPuView(null); }} onClose={() => setPuView(null)} />}
-      {shopOpen && <ShopModal onClose={() => setShopOpen(false)} coinsOverride={liveCtx ? Math.round(coinBal) : undefined} onBuy={liveCtx ? buyFromWallet : undefined} cards={cardHand} />}
+      {/* practice: preseason board weeks charge nothing (0110), so the shop must
+          neither gate on the balance nor imply one will be deducted. */}
+      {shopOpen && <ShopModal onClose={() => setShopOpen(false)} coinsOverride={liveCtx ? Math.round(coinBal) : undefined} onBuy={liveCtx ? buyFromWallet : undefined} cards={cardHand} practice={!!liveCtx && preseason} />}
       {/* Card-table hand: the same owned/usable power-ups as the Apply modal,
           fanned at the bottom. Tap a card → tip → ARM fires the buff, APPLY
           enters the existing tap-a-target flow (pendingApply); tapping the
@@ -2125,7 +2126,7 @@ function WindowSectionInner(props: {
   /** Card-table theme: live/final slots stay face-up LiveCards on the felt
    *  instead of dropping to the compact score strips at kickoff. */
   cards?: boolean;
-  /** Window Pot (0106): the LIVE matchup this section belongs to, or null on the
+  /** Window Pot (0117): the LIVE matchup this section belongs to, or null on the
    *  demo/sim boards, which have no pots. A plain string, so the memo comparison
    *  below still short-circuits idle windows. */
   potMatchupId?: string | null;
@@ -2347,7 +2348,7 @@ function WindowSectionInner(props: {
         </button>
       )}
 
-      {/* Window Pot (0106): the wager ladder is played BEFORE picks lock, so the
+      {/* Window Pot (0117): the wager ladder is played BEFORE picks lock, so the
           chip rides the window section in every phase — not the battle bar,
           which only exists once something has kicked off. */}
       {pot && potMatchupId && (

@@ -1,4 +1,4 @@
--- 0106 Window Pot probes. Run with ON_ERROR_STOP; every failed assertion raises.
+-- 0117 Window Pot probes. Run with ON_ERROR_STOP; every failed assertion raises.
 --
 -- One probe per scenario in docs/window-pot.md §6. Same style as
 -- native-league-probes.sql: build a throwaway fixture, drive the real RPCs,
@@ -63,7 +63,15 @@ insert into app_user (id, email) values ('00000000-0000-0000-0000-000000000006',
 on conflict (id) do nothing;
 insert into app_admin (email, note) values ('6@test.dev', 'pot probe admin') on conflict (email) do nothing;
 
-create sequence if not exists pot_probe_week start 900;
+-- Weeks matter twice over. window_kickoff() (0058) resolves the newest SEASON
+-- carrying a week number, and 'potprobe' sorts after '2026', so any week these
+-- fixtures claim would hijack that week for the other suites too — hence a band
+-- of our own, clear of native-league (1, 14-15) and preseason-practice (101-104).
+-- And board week > 100 is a PRACTICE week (0110): no real coin moves there. The
+-- default band is therefore BELOW 100 so the scenarios exercise the real wallet;
+-- the practice band above it is used only by the practice block at the end.
+create sequence if not exists pot_probe_week start 40;
+create sequence if not exists pot_probe_practice_week start 150;
 
 /** A fresh league + matchup + slate + wallets on its own week. Windows are named
  *  w1…wN and kick off p_hours from now, six hours apart — so with the default
@@ -72,11 +80,12 @@ create sequence if not exists pot_probe_week start 900;
 create or replace function pot_fixture(
   p_tag text, p_home_coins int, p_away_coins int,
   p_ante int default 10, p_hours numeric default 3, p_windows int default 2,
-  p_away_controller text default 'human', p_away_enrolled boolean default true
+  p_away_controller text default 'human', p_away_enrolled boolean default true,
+  p_practice boolean default false
 ) returns uuid language plpgsql as $$
 declare lid uuid; mid uuid; wk int; i int;
 begin
-  wk := nextval('pot_probe_week')::int;
+  wk := nextval(case when p_practice then 'pot_probe_practice_week' else 'pot_probe_week' end)::int;
   insert into league (sleeper_league_id, season, name, pot_ante, pot_cap)
     values ('potprobe-' || p_tag, 'potprobe', 'Pot ' || p_tag, p_ante, 120) returning id into lid;
   insert into league_membership (league_id, sleeper_roster_id, app_user_id, enrolled, controller, team_name)
@@ -128,7 +137,7 @@ begin
 end $$;
 
 create or replace function pot_bank_of(p_mid uuid, p_roster int) returns int language sql as $$
-  select pot_bank(m.league_id, p_roster) from matchup m where m.id = p_mid;
+  select pot_bank(m.league_id, p_roster, m.week) from matchup m where m.id = p_mid;
 $$;
 create or replace function pot_row(p_mid uuid, p_win text) returns window_pot language sql as $$
   select * from window_pot where matchup_id = p_mid and game_window = p_win;
@@ -615,12 +624,58 @@ begin
   perform assert_eq(pot_bank_of(mid, 1), 200, '15o …and pays nothing twice');
 end $$;
 
+-- ── 16. preseason PRACTICE weeks: the throwaway purse, never the real wallet ─
+-- Every preseason week is a practice week (board week > 100). 0110/0115 rule:
+-- a practice week never moves real coin — it spends a parallel ◎120 purse that
+-- is thrown away with the week. A pot has to play entirely inside that purse.
+do $$
+declare mid uuid; lid uuid; wk int; st jsonb;
+begin
+  perform pot_as_worker();
+  mid := pot_fixture('practice', 500, 500, 10, 3, 1, 'human', true, true);
+  lid := pot_league(mid);
+  select week into wk from matchup where id = mid;
+  perform assert_true(is_practice_week(wk), '16a the fixture really is a practice week');
+
+  -- Table stakes must be read off the PURSE, not the season wallet: these teams
+  -- have ◎500 banked but only ◎120 to actually play with.
+  perform assert_eq(pot_bank(lid, 1, wk), 120, '16b the pot reads the practice purse, not the ◎500 bank');
+
+  perform pot_as('7'); perform assert_ok(pot_ante(mid, 'w1'), '16c home leads');
+  perform pot_as('8'); perform assert_ok(pot_ante(mid, 'w1'), '16d away matches');
+  perform assert_eq(pot_bank(lid, 1, wk), 110, '16e the ante came out of the purse');
+  perform assert_eq((select coins from team_wallet where league_id = lid and roster_id = 1)::int, 500,
+    '16f …and the REAL wallet never moved');
+
+  perform pot_as('7'); perform assert_ok(pot_act(mid, 'w1', 'wager', 40), '16g a real ladder');
+  perform pot_as('8'); perform assert_ok(pot_act(mid, 'w1', 'call'), '16h …called');
+  perform assert_eq(pot_bank(lid, 1, wk), 70, '16i wagers come out of the purse too');
+  -- least(purse 70, purse 70, side cap 60 − 50 in) = 10 — the cap still bites.
+  perform assert_eq(pot_effective_stack(mid, 'w1', 'home'), 10, '16j table stakes reads the purse');
+
+  perform pot_as_worker();
+  perform pot_move_kickoff(mid, 'w1', interval '30 minutes');
+  perform pot_finish(mid, 'w1', 30, 12);
+  perform assert_ok(pot_sweep(), '16k settle');
+  perform assert_txt((pot_row(mid, 'w1')).state, 'settled', '16l settled');
+  perform assert_eq(pot_bank(lid, 1, wk), 170, '16m the winner is PAID — back into the purse');
+  perform assert_eq(pot_bank(lid, 2, wk), 70, '16n and the loser is out its ◎50');
+  perform assert_eq(pot_bank(lid, 1, wk) + pot_bank(lid, 2, wk), 240,
+    '16o zero-sum inside the week: two ◎120 purses, still ◎240 between them');
+  perform assert_true(not exists (
+    select 1 from team_wallet where league_id = lid and coins <> 500),
+    '16p the season wallet is untouched from start to finish');
+  perform assert_eq((select count(*)::int from coin_ledger where league_id = lid and reason like 'pot:%'), 0,
+    '16q and nothing hit the real ledger');
+end $$;
+
 -- ── 13. coin in, coin out — a pot is a transfer, never a faucet or a sink ───
 do $$
 begin
   perform assert_true(not exists (
     select 1 from league lg
-    where lg.season = 'potprobe'
+    join matchup m2 on m2.league_id = lg.id
+    where lg.season = 'potprobe' and not is_practice_week(m2.week)
       and coalesce((select sum(l.delta) from coin_ledger l
                     where l.league_id = lg.id and l.reason like 'pot:%'), 0)
         + coalesce((select sum(wp.home_ante + wp.home_bet + wp.away_ante + wp.away_bet)
@@ -632,7 +687,8 @@ begin
   ), '13b every pot mutation carries an idempotency key');
   perform assert_true(not exists (
     select 1 from team_wallet w join league lg on lg.id = w.league_id
-    where lg.season = 'potprobe'
+    join matchup m2 on m2.league_id = lg.id
+    where lg.season = 'potprobe' and not is_practice_week(m2.week)
       and w.coins <> (select coalesce(sum(delta), 0) from coin_ledger l
                       where l.league_id = w.league_id and l.roster_id = w.roster_id)
   ), '13c wallet == ledger sum across every fixture');

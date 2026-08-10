@@ -6,14 +6,14 @@ import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   getSession, onAuth, signOut, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, myLinkedSleeper, claimMyRosters,
-  redeemCommish, isAdmin, commishOverview, friendlyError, deleteMockDraft,
+  redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft,
   myMatchup, matchupTeams, leagueResults, defaultOpenWeek,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
 } from '../data/liveApi';
 import { buildDripTestLeague } from '../data/dripTest';
 import { track, Ev } from '../app/analytics';
 import { buildLiveLeague } from '../data/liveBoard';
-import { PRESEASON_BASE, clearRuntimeSlate } from '../data/nflSlate';
+import { PRESEASON_BASE, isPreseasonWeek, preseasonWeekNum, weekLabel, clearRuntimeSlate } from '../data/nflSlate';
 import { LiveBoard } from './LiveBoard';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { AdminPage, type LeagueTab } from './AdminPage';
@@ -51,7 +51,7 @@ function GoogleG() {
 type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin' | 'add' | 'join' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass';
 
 export function LiveOnboard() {
-  const { navigate, route } = useStore();
+  const { navigate, route, viewAs, setViewAs } = useStore();
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [recovery, setRecovery] = useState(false);
@@ -124,6 +124,18 @@ export function LiveOnboard() {
           <SiteSettings superAdmin={session && admin ? () => setView('admin') : undefined} />
         </div>
       </header>
+
+      {/* Unmissable while browsing as someone else. Sticky rather than inline:
+          the whole point is that it can't scroll away and leave an admin unsure
+          whose screen they're looking at. */}
+      {viewAs && (
+        <div style={{ position: 'sticky', top: 0, zIndex: 60, background: 'var(--warn)', color: '#000', padding: '7px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em' }}>👁 BROWSING AS {viewAs.label} — READ ONLY</span>
+          <span className="mono" style={{ fontSize: 9, opacity: 0.75 }}>you are still signed in as yourself; nothing can be written in their name</span>
+          <span style={{ flex: 1 }} />
+          <button onClick={() => setViewAs(null)} className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: '#000', background: 'transparent', border: '1px solid rgba(0,0,0,0.45)', borderRadius: 4, padding: '4px 9px', cursor: 'pointer', flexShrink: 0 }}>✕ exit</button>
+        </div>
+      )}
 
       <main style={{ flex: 1, display: 'flex', alignItems: wide ? 'flex-start' : 'center', justifyContent: 'center', padding: '24px 16px' }}>
         <div style={{ width: '100%', maxWidth: pageMax }}>
@@ -358,6 +370,9 @@ function SetPassword({ onDone }: { onDone: () => void }) {
 interface MatchupCard { matchup: LiveMatchup; teams: Record<number, TeamInfo>; }
 
 function Enroll({ session, view, setView, commishCode, admin }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void; commishCode?: string | null; admin?: boolean }) {
+  // Super-admin support mode: every read below resolves against this user
+  // instead of the signed-in one, and the write CTAs are hidden.
+  const { viewAs } = useStore();
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
   const [loadErr, setLoadErr] = useState(false);
   const [commishLeagues, setCommishLeagues] = useState<AdminLeague[]>([]);
@@ -378,6 +393,10 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   const [target, setTarget] = useState<{ leagueId: string; rosterId: number; week?: number; name?: string } | null>(null);
   // "My league isn't in the pilot yet" → the request-a-code capture sheet.
   const [requesting, setRequesting] = useState(false);
+  // A commissioner with no seat LANDS on the dashboard; this flips once they ask
+  // to leave it, so the player side is reachable instead of being redirected away
+  // on every render. Reset by the "⚑ my leagues (commissioner)" link below.
+  const [leftDash, setLeftDash] = useState(false);
   // Solo paths: one tap into a season pod (0089) or this week's showdown (0090)
   // — no invite, no Sleeper league. soloBusy remembers WHICH card is working.
   const [soloBusy, setSoloBusy] = useState<'pod' | 'weekly' | null>(null);
@@ -385,9 +404,18 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // Per-account gates (0094): 'solo' shows the standalone cards; 'dfs_commish'
   // shows "start a DFS league". Admins see everything.
   const [features, setFeatures] = useState<Record<string, boolean>>({});
-  useEffect(() => { myFeatures().then(setFeatures).catch(() => setFeatures({})); }, [session.user.id]);
-  const showSolo = admin || !!features.solo;
-  const showDfsCreate = admin || !!features.dfs_commish;
+  // Feature flags gate which CTAs render, so a browse-as session must read the
+  // VIEWED user's flags — my_features() keys on auth.uid() and would otherwise
+  // show them the admin's surface.
+  useEffect(() => {
+    const p = viewAs ? adminUserFeatures(viewAs.userId) : myFeatures();
+    p.then(setFeatures).catch(() => setFeatures({}));
+  }, [session.user.id, viewAs?.userId]);
+  // Your own super-admin flag must not leak into a browse-as session — it gates
+  // CTAs (create a league, solo play) the viewed user may not have.
+  const effAdmin = viewAs ? false : !!admin;
+  const showSolo = effAdmin || !!features.solo;
+  const showDfsCreate = effAdmin || !!features.dfs_commish;
   const commishIds = new Set(commishLeagues.map((l) => l.league_id));
   const isCommish = commishIds.size > 0;
 
@@ -396,17 +424,24 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     let rows: Enrollment[] = [];
     try {
       await ensureAppUser(session);
-      // Pick up any rosters an admin/commish pre-assigned to my email (non-Sleeper
-      // leagues are enrolled this way, since there's no username to self-claim by).
-      await claimMyRosters().catch(() => {});
-      rows = await myEnrollments(session.user.id); setEnrollments(rows);
+      // Browsing as someone else (super-admin support): read THEIR enrollments.
+      // 0108 widened the SELECT policies for is_admin() so these player-path
+      // reads resolve; the write policies are untouched, so nothing below can
+      // act in their name. Skip claimMyRosters — that writes, and it would
+      // claim pending seats for the ADMIN, not the user being viewed.
+      if (!viewAs) await claimMyRosters().catch(() => {});
+      rows = await myEnrollments(viewAs?.userId ?? session.user.id); setEnrollments(rows);
     } catch {
       // Don't fake an empty enrollment on failure — that shows an already-enrolled
       // user the "how are you joining?" form. Surface a retry instead (see below).
       // commishLoaded is flipped so the loading gate clears and the error renders.
       setLoadErr(true); setCommishLoaded(true); return;
     }
-    commishOverview().then((l) => setCommishLeagues(l ?? [])).catch(() => setCommishLeagues([])).finally(() => setCommishLoaded(true));
+    // commish_overview() is `where commissioner_id = auth.uid()`, so browsing as
+    // someone else has to go through the admin twin or the page fills with the
+    // ADMIN's own commissioner cards.
+    (viewAs ? adminUserCommishLeagues(viewAs.userId) : commishOverview())
+      .then((l) => setCommishLeagues(l ?? [])).catch(() => setCommishLeagues([])).finally(() => setCommishLoaded(true));
     // Each league's next matchup + opponent, for the home cards. Week-less
     // myMatchup returns the LOWEST week (Week 1) — wrong whenever a later week
     // is the live one (preseason weeks sort at 101+), so resolve the board's
@@ -426,7 +461,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   useEffect(() => {
     refresh();
     /* eslint-disable-next-line */
-  }, [session.user.id]);
+  }, [session.user.id, viewAs?.userId]);
 
   // Solo pass (0097): the request modal stashes the freshly-minted code before
   // routing here — once signed in, redeem it automatically so solo unlocks
@@ -485,7 +520,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     <>
       {/* "Start a fresh league" needs the founder-granted 'native' flag (0095;
           admins always pass — the create RPC enforces the same gate server-side). */}
-      <RoleChooser onPlayer={() => setView('join')} onCreate={admin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+      <RoleChooser onPlayer={() => setView('join')} onCreate={effAdmin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </>
@@ -529,22 +564,54 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   );
   if (enrollments === null || !commishLoaded) return <Muted text="Loading your leagues…" />;
 
-  // A signed-in commissioner with no player roster of their own → straight to
-  // league management instead of the "how are you joining?" chooser.
-  if (enrollments.length === 0 && isCommish) return <CommishDash onBack={() => setView('home')} />;
+  // A signed-in commissioner with no player roster of their own LANDS on league
+  // management instead of the "how are you joining?" chooser — but it's a
+  // landing, not a lock. This used to return CommishDash unconditionally from
+  // the 'home' render, so its own "← all leagues" (which sets view to 'home')
+  // re-rendered the very same redirect: a dead button, and no way to reach the
+  // player side at all. `leftDash` remembers that they asked to leave.
+  // Not while browsing as someone: CommishDash reads commish_overview() itself,
+  // so it would show the admin's own leagues under the viewed user's banner.
+  if (enrollments.length === 0 && isCommish && !viewAs && !leftDash) {
+    return <CommishDash onBack={() => setLeftDash(true)} />;
+  }
+
+  // Browsing as someone with no leagues: the role chooser below is entirely
+  // write actions (join, create, redeem a solo pass) and every one of them would
+  // run as the ADMIN, not the viewed user. Report the empty state instead.
+  if (enrollments.length === 0 && viewAs) return (
+    <div style={{ textAlign: 'center', padding: '24px 0' }}>
+      <Muted text={`${viewAs.label} is not enrolled in any league and commissions none — this is the whole of what they see.`} />
+    </div>
+  );
 
   // Genuinely new (no leagues at all) → fork by role.
   if (enrollments.length === 0) return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={admin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={effAdmin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
+        {/* The only route back to the dashboard for a commissioner who holds no
+            seat: with no enrollments there's no league card to carry a "manage"
+            button, so without this the player side is a one-way door. */}
+        {isCommish && <button onClick={() => setLeftDash(false)} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>⚑ my leagues (commissioner)</button>}
       </div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </div>
   );
+
+  // While browsing as someone else, the screens that WRITE are refused rather
+  // than opened. The database already stops anything landing in their name
+  // (every write policy is `app_user_id = auth.uid()`), but an admin poking the
+  // board would still create sealed_pick rows under their own id on a matchup
+  // they aren't in — junk, and confusing to debug later. Read-only screens
+  // (scores, the commish dashboard) stay reachable.
+  const guard = (fn: () => void) => () => {
+    if (viewAs) { alert(`Read-only: you're browsing as ${viewAs.label}. Exit view-as to use this.`); return; }
+    fn();
+  };
 
   return (
     <LeagueHome
@@ -552,14 +619,14 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       commishLeagues={commishLeagues}
       cards={cards}
       commishIds={commishIds}
-      userId={session.user.id}
-      onBoard={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('board'); }}
-      onPodBuild={(leagueId, rosterId, week, name) => { setTarget({ leagueId, rosterId, week, name }); setView('podbuild'); }}
+      userId={viewAs?.userId ?? session.user.id}
+      onBoard={(leagueId, rosterId) => guard(() => { setTarget({ leagueId, rosterId }); setView('board'); })()}
+      onPodBuild={(leagueId, rosterId, week, name) => guard(() => { setTarget({ leagueId, rosterId, week, name }); setView('podbuild'); })()}
       onResults={(leagueId) => { setTarget({ leagueId, rosterId: 0 }); setView('results'); }}
-      onManage={(id) => { setManageId(id); setManageTab(undefined); setView('commishdash'); }}
-      onDraft={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('draft'); }}
-      onTeam={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); setView('team'); }}
-      onAdd={() => setView('add')}
+      onManage={(id) => guard(() => { setManageId(id); setManageTab(undefined); setView('commishdash'); })()}
+      onDraft={(leagueId, rosterId) => guard(() => { setTarget({ leagueId, rosterId }); setView('draft'); })()}
+      onTeam={(leagueId, rosterId) => guard(() => { setTarget({ leagueId, rosterId }); setView('team'); })()}
+      onAdd={guard(() => setView('add'))}
       onDeleted={refresh}
       isCommish={isCommish}
     />
@@ -813,8 +880,17 @@ function LeagueCard({ e, card, commish, userId, onBoard, onPodBuild, onResults, 
   const status = m?.status ?? 'scheduled';
   const live = status === 'live';
   const final = status === 'final';
-  const statusColor = live ? '#FF4F62' : final ? 'var(--dim)' : 'var(--warn)';
-  const statusLabel = live ? '● LIVE' : final ? 'FINAL' : 'PICKS OPEN';
+  // No matchup for this week yet — the platform hasn't published a schedule (a
+  // Sleeper league returns no pairings until it drafts). Picks are keyed to a
+  // matchup (sealed_pick.matchup_id is NOT NULL), so there is nowhere to store a
+  // lineup yet: playHeroBoard would open with ctx null and silently discard
+  // everything the manager built. Say "pending" and hold the CTA instead.
+  const pending = !m;
+  // Preseason PRACTICE (migration 0110): board weeks above PRESEASON_BASE. Drives
+  // the badge and turns the meaningless "WK 102" into the board's own "PRE 2".
+  const practice = !!m && isPreseasonWeek(m.week);
+  const statusColor = live ? '#FF4F62' : final ? 'var(--dim)' : pending ? 'var(--faint)' : 'var(--warn)';
+  const statusLabel = live ? '● LIVE' : final ? 'FINAL' : pending ? 'SCHEDULE PENDING' : 'PICKS OPEN';
   return (
     <div style={{ ...card2 }}>
       {/* identity row */}
@@ -828,6 +904,11 @@ function LeagueCard({ e, card, commish, userId, onBoard, onPodBuild, onResults, 
             {commish && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', borderRadius: 4, padding: '2px 6px' }}>⚑ COMMISSIONER</span>}
             {e.league?.kind === 'weekly' && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>🏆 WK {e.league.contest_week ?? '—'} SHOWDOWN</span>}
             {e.league?.kind === 'dfs' && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>⚔ DFS LEAGUE</span>}
+            {/* Keyed to the week THIS CARD is showing, not to league.preseason_at:
+                a practice league rolls into WK 1 while the stamp is still set, and
+                badging a real matchup "practice" would be a lie about a game that
+                counts. In August the two agree; at the rollover only this is right. */}
+            {practice && <span className="mono" title="Preseason practice — a real preseason game on live play-by-play. Nothing carries over: no standings, no seeding, no coin, no power-up inventory." style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--you)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', borderRadius: 4, padding: '2px 6px' }}>🏈 PRACTICE</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, minWidth: 0 }}>
             {e.league?.avatar_url && <img src={e.league.avatar_url} alt="" width={14} height={14} style={{ borderRadius: 3, flexShrink: 0 }} />}
@@ -839,7 +920,9 @@ function LeagueCard({ e, card, commish, userId, onBoard, onPodBuild, onResults, 
 
       {/* matchup row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '10px 12px', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6 }}>
-        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)', flexShrink: 0 }}>WK {m?.week ?? '—'}</span>
+        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)', flexShrink: 0 }}>
+          {m ? weekLabel(m.week) : 'WK —'}
+        </span>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.team_name}</span>
         <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', flexShrink: 0 }}>vs</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{opp?.team_name ?? (m ? `Roster ${oppRoster}` : 'schedule pending')}</span>
@@ -856,12 +939,17 @@ function LeagueCard({ e, card, commish, userId, onBoard, onPodBuild, onResults, 
       {/* actions — default goes to the REAL board for this league's season (the
           live 2026 slate once the week is synced). The 2025 full-board sim is an
           optional "see it play" demo until the season starts. */}
-      <button onClick={playHeroBoard} disabled={building} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: building ? 'default' : 'pointer', marginTop: 12, opacity: building ? 0.7 : 1, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
-        {building ? (buildNote || 'LOADING…') : <><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> {live || final ? 'GO TO MATCHUP →' : 'SET YOUR LINEUP →'}</>}
+      <button onClick={playHeroBoard} disabled={building || pending} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: pending ? 'var(--dim)' : 'var(--on-accent)', background: pending ? 'var(--bg)' : 'var(--you)', border: pending ? '1px solid var(--bd)' : 'none', borderRadius: 6, padding: '13px 0', cursor: building || pending ? 'default' : 'pointer', marginTop: 12, opacity: building ? 0.7 : 1, boxShadow: pending ? 'none' : '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
+        {building ? (buildNote || 'LOADING…') : pending ? 'LINEUP OPENS WITH THE SCHEDULE' : <><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> {live || final ? 'GO TO MATCHUP →' : 'SET YOUR LINEUP →'}</>}
       </button>
+      {pending && (
+        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5, textAlign: 'center' }}>
+          No opponent yet — {e.league?.provider === 'native' ? 'the schedule is generated once the league drafts' : `${e.league?.provider === 'espn' ? 'ESPN' : 'Sleeper'} publishes pairings once the league drafts`}. Try ▷ demo (2025) meanwhile.
+        </div>
+      )}
       {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{buildErr}</div>}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>
-        <button onClick={onBoard} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board</button>
+        {!pending && <button onClick={onBoard} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board</button>}
         {e.league?.provider === 'native' && <button onClick={onDraft} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>⛏ draft</button>}
         {e.league?.provider === 'native' && <button onClick={onTeam} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>⇄ team</button>}
         <button onClick={onResults} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>▦ scores</button>
@@ -925,6 +1013,10 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
     const s: Record<number, { rid: number; w: number; l: number; t: number; pf: number }> = {};
     const get = (rid: number) => (s[rid] ??= { rid, w: 0, l: 0, t: 0, pf: 0 });
     for (const r of rows ?? []) {
+      // Preseason practice (board weeks 101-103) is throwaway — its results show
+      // in the week list below, but never in a record. Mirrors league_standings
+      // (migration 0110), which seeds the playoff bracket from the same rule.
+      if (isPreseasonWeek(r.week)) continue;
       if (r.status !== 'final' || r.home_final == null || r.away_final == null) continue;
       const h = get(r.home_roster_id), a = get(r.away_roster_id);
       h.pf += Number(r.home_final); a.pf += Number(r.away_final);
@@ -963,7 +1055,10 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
             )}
             {weeks.map(([wk, ms]) => (
               <div key={wk} style={{ ...card, marginBottom: 10 }}>
-                <div style={hdr}>WEEK {wk}</div>
+                <div style={hdr}>
+                  {isPreseasonWeek(wk) ? `PRESEASON WK ${preseasonWeekNum(wk)}` : `WEEK ${wk}`}
+                  {isPreseasonWeek(wk) && <span style={{ color: 'var(--faint)', fontWeight: 400, letterSpacing: '0.06em' }}> · PRACTICE, DOESN'T COUNT</span>}
+                </div>
                 {ms.map((r, i) => {
                   const fin = r.status === 'final' && r.home_final != null && r.away_final != null;
                   const homeWon = fin && Number(r.home_final) > Number(r.away_final);

@@ -174,7 +174,15 @@ export function LeagueOverview() {
   );
 }
 
-export function ShopModal({ onClose, coinsOverride, onBuy, cards = false }: { onClose: () => void; coinsOverride?: number; onBuy?: (id: string) => Promise<boolean>; cards?: boolean }) {
+// `practice` = a preseason PRACTICE week. Power-ups there cost REAL prices out of
+// a separate weekly PRACTICE BUDGET (migration 0115) that never touches the season
+// wallet — so affordability, prices and the running balance all behave exactly as
+// they will in Week 1, which is the point: free power-ups taught "arm everything",
+// the one habit that bankrupts a manager in the real season. The flag only changes
+// what the header SAYS, so nobody reads their unfamiliar balance as a bug.
+export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practice = false }: {
+  onClose: () => void; coinsOverride?: number; onBuy?: (id: string) => Promise<boolean>; cards?: boolean; practice?: boolean;
+}) {
   const { coins, inventory, buyPowerup } = useStore();
   const [flash, setFlash] = useState<string | null>(null);
   const [tab, setTab] = useState<'all' | string>('all');
@@ -192,6 +200,11 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false }: { on
   // Hero board passes the real wallet balance + a wallet-charged buy; otherwise
   // the demo store ledger drives affordability + purchase.
   const bal = coinsOverride ?? coins;
+  // Shown under the title. In practice it has to say why the balance won't move.
+  const subLine = practice
+    ? <><GameIcon name={COIN_GOLD} emoji="◈" size="1.4em" /> {bal} PRACTICE COIN · 🏈 this week&rsquo;s practice budget — your season wallet is untouched</>
+    : <><GameIcon name={COIN_GOLD} emoji="◈" size="1.4em" /> {bal} DRIP COIN · +5 per signature play</>;
+  const canAfford = (price: number) => bal >= price;
   async function buy(id: string) {
     const ok = onBuy ? await onBuy(id) : buyPowerup(id);
     if (ok) { setFlash(id); setTimeout(() => setFlash((f) => (f === id ? null : f)), 600); }
@@ -200,13 +213,13 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false }: { on
     // Card-table leagues: the shop is a deck spread on the felt — tap a card to
     // buy it into your hand. Same buy/afford/flash semantics as the classic list.
     return (
-      <Modal title="Power-Up Shop" sub={<><GameIcon name={COIN_GOLD} emoji="◈" size="1.4em" /> {bal} DRIP COIN · +5 per signature play</>} onClose={onClose} maxWidth={560}>
+      <Modal title="Power-Up Shop" sub={subLine} onClose={onClose} maxWidth={560}>
         {tabBar}
         <div className="ctable" style={{ maxHeight: 440, overflowY: 'auto', overflowX: 'hidden' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, 150px)', gap: 12, justifyContent: 'center', justifyItems: 'center', padding: '4px 2px' }}>
             {shownPu.map((p, i) => {
               const have = inventory[p.id] ?? 0;
-              const afford = bal >= p.price;
+              const afford = canAfford(p.price);
               return (
                 <PowerupCard key={p.id} id={p.id} name={p.name} icon={p.icon} blurb={p.blurb} idx={i}
                   timingLabel={p.kind === 'metric' ? 'METRIC · 1 WK' : p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME'} live={p.timing !== 'pre'}
@@ -224,12 +237,12 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false }: { on
     );
   }
   return (
-    <Modal title="Power-Up Shop" sub={<><GameIcon name={COIN_GOLD} emoji="◈" size="1.4em" /> {bal} DRIP COIN · +5 per signature play</>} onClose={onClose} maxWidth={560}>
+    <Modal title="Power-Up Shop" sub={subLine} onClose={onClose} maxWidth={560}>
       {tabBar}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 440, overflow: 'auto' }}>
         {shownPu.map((p) => {
           const have = inventory[p.id] ?? 0;
-          const afford = bal >= p.price;
+          const afford = canAfford(p.price);
           const timingTag = p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME';
           return (
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: 'var(--bg)', border: `1px solid ${flash === p.id ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, padding: '10px 12px', transition: 'border-color .3s' }}>

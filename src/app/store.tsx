@@ -135,6 +135,13 @@ interface Store {
   setBigText: (v: boolean) => void;
   fullStats: boolean;
   setFullStats: (v: boolean) => void;
+  /** Super-admin "browse as" (0108): render the player surfaces against another
+   *  user's id for support. READ ONLY — every write policy is
+   *  `app_user_id = auth.uid()`, so nothing can be written in their name; the
+   *  UI additionally hides the write CTAs. Deliberately NOT persisted, so it
+   *  can't survive a reload and quietly stay on. */
+  viewAs: { userId: string; label: string } | null;
+  setViewAs: (v: { userId: string; label: string } | null) => void;
   route: Route;
   navigate: (r: Route) => void;
   /** The Sleeper account whose leagues we're browsing (null → welcome splash). */
@@ -360,6 +367,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setFullStatsState(v);
     try { localStorage.setItem(FULLSTATS_KEY, v ? '1' : '0'); } catch { /* ignore */ }
   };
+  // Not persisted, on purpose — a support session shouldn't outlive the tab.
+  const [viewAs, setViewAs] = useState<{ userId: string; label: string } | null>(null);
 
   const initial = useRef(loadState());
   const [coins, setCoins] = useState<number>(initial.current.coins);
@@ -664,8 +673,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, fullStats, setFullStats, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
-    [theme, iconSet, cardSkin, bigText, fullStats, route, sleeperUser, activeLeague, isSimLeague, liveCtx, youTeamId, demoWeek, coins, inventory, applied],
+    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, fullStats, setFullStats, viewAs, setViewAs, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    [theme, iconSet, cardSkin, bigText, fullStats, viewAs, route, sleeperUser, activeLeague, isSimLeague, liveCtx, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

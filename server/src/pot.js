@@ -1,4 +1,4 @@
-// Window Pot worker hook (migration 0106 · docs/window-pot.md).
+// Window Pot worker hook (migration 0117 · docs/window-pot.md).
 //
 // One touch point now that the ante is opt-in: there is nothing to do at lock,
 // because nothing is automatic — a pot exists only because two managers put

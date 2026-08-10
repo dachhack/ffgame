@@ -1,4 +1,4 @@
--- 0106: THE WINDOW POT v1 — an OPT-IN wager ladder on any game window.
+-- 0117: THE WINDOW POT v1 — an OPT-IN wager ladder on any game window.
 --
 -- Two managers, one game window, one pool of drip-coin. Nothing is automatic:
 -- a pot only exists because somebody put ◎10 on the table and the other side
@@ -47,9 +47,20 @@
 -- vanish from their bank with no explanation. To unwind a league's pots on the
 -- spot instead, admin_close_pots() voids every open one and refunds every chip.
 --
--- HARD GUARDRAIL — coin in, coin out. A pot moves drip-coin between two team
--- wallets and nothing else: never points, never roster advantage. The +5
--- window-win POINTS bonus is untouched and independent.
+-- HARD GUARDRAIL — coin in, coin out. A pot moves drip-coin between two wallets
+-- and nothing else: never points, never roster advantage. The +5 window-win
+-- POINTS bonus is untouched and independent.
+--
+-- PRACTICE WEEKS. Every preseason week is a practice week (board week > 100), and
+-- 0110/0115 established that one never moves REAL coin: it runs a parallel ◎120
+-- throwaway purse per (league, roster, week) instead. Pots honour that rule for
+-- free by going through spend_from_wallet, which already routes there — but two
+-- places had to be taught about it explicitly: pot_bank reads the purse it is
+-- about to spend from (or table stakes is computed against a balance nobody is
+-- drawing down), and pot_pay returns winnings to that same purse (or every payout
+-- would silently vanish and the pot would be a coin sink). So a preseason pot is
+-- fully playable with throwaway coin, zero-sum inside the week, and the season
+-- wallet is never touched.
 --
 -- Concurrency + replay: every mutation takes the per-matchup advisory xact lock
 -- (the same serialization as draft picks), and the strict turn field means two
@@ -156,11 +167,24 @@ create or replace function pot_default_ante() returns int language sql immutable
 -- Read helpers
 -- ─────────────────────────────────────────────────────────────────────────────
 
-/** A side's banked coin, floored to whole coin (pots are integral). */
-create or replace function pot_bank(p_league_id uuid, p_roster_id int) returns int
+/** A side's banked coin for THIS week, floored to whole coin (pots are integral).
+ *
+ *  Practice weeks (board week > 100 — every preseason week) run a parallel,
+ *  throwaway purse: 0115 gives each (league, roster, week) its own ◎120 budget,
+ *  and spend_from_wallet debits THAT rather than the season wallet. So the pot
+ *  has to read the same purse it is about to spend from, or table stakes would
+ *  be computed against a balance nobody is actually drawing down — a manager
+ *  with ◎400 banked could offer a wager their ◎120 practice purse can't cover.
+ *  An un-seeded practice wallet reads as the full budget, matching my_wallet. */
+create or replace function pot_bank(p_league_id uuid, p_roster_id int, p_week int) returns int
   language sql stable security definer set search_path = public as $$
-  select greatest(0, floor(coalesce(
-    (select w.coins from team_wallet w where w.league_id = p_league_id and w.roster_id = p_roster_id), 0)))::int;
+  select greatest(0, floor(case when is_practice_week(p_week)
+    then coalesce((select pw.coins from practice_wallet pw
+                   where pw.league_id = p_league_id and pw.roster_id = p_roster_id and pw.week = p_week),
+                  practice_budget())
+    else coalesce((select w.coins from team_wallet w
+                   where w.league_id = p_league_id and w.roster_id = p_roster_id), 0)
+  end))::int;
 $$;
 
 create or replace function pot_roster(p_m matchup, p_side text) returns int
@@ -249,8 +273,8 @@ begin
   if not found then return 0; end if;
   side_cap := coalesce(cap, 120) / 2;
   return greatest(0, least(
-    pot_bank(m.league_id, pot_roster(m, p_side)),
-    pot_bank(m.league_id, pot_roster(m, pot_other(p_side))),
+    pot_bank(m.league_id, pot_roster(m, p_side), m.week),
+    pot_bank(m.league_id, pot_roster(m, pot_other(p_side)), m.week),
     side_cap - greatest(wp.home_ante + wp.home_bet, wp.away_ante + wp.away_bet)));
 end $$;
 
@@ -270,7 +294,7 @@ create or replace function pot_commit(p_m matchup, p_win text, p_side text, p_am
 declare rid int; uid uuid; amt int; sq int; sp jsonb;
 begin
   rid := pot_roster(p_m, p_side);
-  amt := greatest(0, least(p_amount, pot_bank(p_m.league_id, rid)));
+  amt := greatest(0, least(p_amount, pot_bank(p_m.league_id, rid, p_m.week)));
   select lm.app_user_id into uid from league_membership lm
     where lm.league_id = p_m.league_id and lm.sleeper_roster_id = rid;
 
@@ -317,14 +341,34 @@ begin
             auth.uid(), p_kind, p_amount);
 end $$;
 
-/** Pay a side out of the pot. Credits carry NO seq in their idem key: each
- *  cause fires at most once per pot, and a seq-bearing key would double-pay if
- *  a replay ever allocated a fresh seq. */
+/** Pay a side out of the pot, back into whichever purse funded it.
+ *
+ *  Season weeks: credit_wallet, whose idem key is the cause with NO seq — each
+ *  cause fires at most once per pot, and a seq-bearing key would double-pay if a
+ *  replay ever allocated a fresh seq.
+ *
+ *  Practice weeks: straight back to the throwaway practice purse (0115), which
+ *  is where the ante and every wager were debited from. Deliberately NOT through
+ *  credit_wallet's practice branch — that one only handles `refund:%` and caps
+ *  the result at the weekly budget, which is right for a disarm refund but wrong
+ *  here: a pot payout is a TRANSFER of coin that came out of these very two
+ *  purses, so capping it would quietly destroy practice coin and make the pot's
+ *  own displayed numbers a lie. There is no idem key on this path, but there
+ *  doesn't need to be: every caller is inside the advisory lock and guarded on a
+ *  terminal state, so a replay can never reach it twice. */
 create or replace function pot_pay(p_m matchup, p_win text, p_side text, p_amount int, p_cause text)
   returns void language plpgsql security definer set search_path = public as $$
+declare rid int;
 begin
   if coalesce(p_amount, 0) <= 0 then return; end if;
-  perform credit_wallet(p_m.league_id, pot_roster(p_m, p_side), p_m.id, p_m.week, p_amount,
+  rid := pot_roster(p_m, p_side);
+  if is_practice_week(p_m.week) then
+    perform ensure_practice_wallet(p_m.league_id, rid, p_m.week);
+    update practice_wallet set coins = coins + p_amount, updated_at = now()
+      where league_id = p_m.league_id and roster_id = rid and week = p_m.week;
+    return;
+  end if;
+  perform credit_wallet(p_m.league_id, rid, p_m.id, p_m.week, p_amount,
                         'pot:' || p_win || ':' || p_cause);
 end $$;
 
@@ -474,7 +518,7 @@ begin
   lock_at := pot_lock_at(p_matchup_id, p_win);
   if lock_at is null then return jsonb_build_object('ok', false, 'error', 'no kickoff known for this window'); end if;
   if now() >= lock_at then return jsonb_build_object('ok', false, 'error', 'picks are locked — betting is closed on this window'); end if;
-  if pot_bank(m.league_id, pot_roster(m, sd)) < lg.pot_ante then
+  if pot_bank(m.league_id, pot_roster(m, sd), m.week) < lg.pot_ante then
     return jsonb_build_object('ok', false, 'error', 'not enough coin for the ◎' || lg.pot_ante || ' ante');
   end if;
 
@@ -709,7 +753,7 @@ begin
     'ante', greatest(coalesce(lg.pot_ante, 0), 0), 'cap', lg.pot_cap, 'side_cap', lg.pot_cap / 2,
     'min_wager', pot_min_wager(),
     'my_side', sd, 'my_roster_id', rid,
-    'my_bank', pot_bank(m.league_id, rid),
+    'my_bank', pot_bank(m.league_id, rid, m.week),
     'both_live', pot_both_live(m),   -- false ⇒ nobody can answer an offer; no anteing
     'server_now', now(),
     'windows', wins);

@@ -6,6 +6,7 @@
 //   • plays      — live PBP during game windows → resolve live matchups
 //
 // Run: `node src/index.js` (needs server/.env with the Supabase service key).
+import { pathToFileURL } from 'node:url';
 import { config } from './config.js';
 import { getState } from './sleeper.js';
 import { buildPlayerIndex } from './playerIndex.js';
@@ -19,7 +20,8 @@ import { sweepNative } from './native.js';
 import { sweepPots } from './pot.js';
 import { db } from './supabase.js';
 import { ensurePods } from './pods.js';
-import { setRuntimeSlate } from '../../src/data/nflSlate.ts';
+import { PRESEASON, REGULAR_SEASON } from './seasonType.js';
+import { setRuntimeSlate, PRESEASON_BASE, PRESEASON_WEEKS } from '../../src/data/nflSlate.ts';
 
 let playerIndex = null;
 let lastInjuryPoll = 0;
@@ -27,98 +29,117 @@ let lastSyncedWeek = null;
 let lastSyncAt = 0;
 let syncing = false;
 
-/** Auto weekly sync: mirror every configured league's schedule + lineups. Fires on
- *  boot, on NFL week rollover, and every config.weeklySyncRefreshMs (to catch lineup
- *  changes before lock). Guarded against overlap — at ~100 leagues a sync can run
- *  longer than one play tick, so it lives on its own (slower) interval. */
-async function syncTick() {
-  if (syncing || !config.leagueIds.length) return;
-  // Preseason matchups are seeded by the admin preseason toggle (cloned into board
-  // weeks 101-103), not from Sleeper — which has no preseason pairings. Skip the
-  // Sleeper weekly sync so it can't write lineups/slate at the wrong (un-offset) week.
-  if (config.weekOffset) return;
-  const { season, week } = await currentWeek();
-  const due = week !== lastSyncedWeek || Date.now() - lastSyncAt >= config.weeklySyncRefreshMs;
-  if (!due) return;
-  syncing = true;
-  try {
-    const r = await syncAllLeagues(week, season, playerIndex, config.leagueIds);
-    lastSyncedWeek = week; lastSyncAt = Date.now();
-    log('weekly sync: week', week, '—', `${r.ok}/${r.total} leagues`);
-  } catch (e) { log('weekly sync error', e.message); }
-  finally { syncing = false; }
+// ── Week contexts ────────────────────────────────────────────────────────────
+// The scheduler used to hold exactly ONE current week, with preseason bolted on
+// as a process-wide MODE of it (PILOT_SEASON_TYPE=1 → every DB read/write shifted
+// by 100). That made the two seasons mutually exclusive: turning preseason on
+// silently stopped the Sleeper sync and the pod tick, and leaving the flag set
+// past the opener would have stopped Week 1 from ever locking or resolving —
+// while the logs looked perfectly healthy.
+//
+// A CONTEXT is now { seasonType, offset, espnWeek }: which ESPN scoreboard to
+// ask for, and what to add to its week number to get the BOARD week. Preseason
+// keeps its +100 namespace so it can never collide with the loaded regular
+// season. Each tick runs every context that currently has games, so no flag —
+// and no deadline to remember — is involved.
+const OFFSET_OF = { [PRESEASON]: PRESEASON_BASE, [REGULAR_SEASON]: 0, 3: 0 };
+
+// ESPN's current week per season type, cached 30 min. Sleeper's /state/nfl week
+// sits at 0 all August, so it can't drive preseason rollover; keyed by type
+// because the two seasons advance independently.
+const espnWeekCache = new Map();
+async function espnWeekFor(season, seasonType) {
+  const hit = espnWeekCache.get(seasonType);
+  if (hit && Date.now() - hit.at < 30 * 60e3) return hit.week;
+  const week = await espnCurrentWeek(season, seasonType).catch(() => null);
+  // A failed lookup keeps the previous value rather than dropping the context.
+  const next = week ?? hit?.week ?? null;
+  espnWeekCache.set(seasonType, { week: next, at: Date.now() });
+  return next;
 }
 
-const log = (...a) => console.log(new Date().toISOString(), ...a);
+/** The regular-season week everything non-preseason keys off: Sleeper's own
+ *  notion when it has one (it's authoritative in season), else ESPN's, else 1. */
+async function regularWeek(season) {
+  try { const s = await getState(); const w = Number(s.week); if (w >= 1) return w; } catch { /* fall through */ }
+  return (await espnWeekFor(season, REGULAR_SEASON)) ?? 1;
+}
 
-// Preseason week from ESPN, cached — Sleeper's /state/nfl week sits at 0 all
-// August, so the `|| 1` fallback below would pin the worker to preseason week 1
-// through the Aug 13/20 slates. Refreshed every 30 min; a failed lookup keeps
-// the previous value (or the Sleeper fallback) until the next attempt.
-let espnWeekCache = { week: null, at: 0 };
-
-async function currentWeek() {
-  let season = config.season, week = 1;
-  try { const s = await getState(); season = String(s.season); week = Number(s.week) || 1; }
-  catch { /* fall through to the config/ESPN values */ }
-  if (config.weekOffset) {
-    if (Date.now() - espnWeekCache.at > 30 * 60e3) {
-      const w = await espnCurrentWeek(season, config.seasonType);
-      espnWeekCache = { week: w ?? espnWeekCache.week, at: Date.now() };
-    }
-    if (espnWeekCache.week) week = espnWeekCache.week;
+/** PURE: which contexts to run, given the two week numbers already looked up.
+ *  Split out from the I/O so the policy is testable without a network — the
+ *  scheduler's whole "which season am I in" decision lives here.
+ *
+ *  The regular season is always in (it needs lock_at backfill and pod pairing
+ *  long before its first kickoff). Preseason joins while ESPN reports a preseason
+ *  week in range, and is listed FIRST because in August it's the one with live
+ *  games. A forced season type collapses to exactly that one context. */
+export function contextsFor(forcedSeasonType, regWeek, preWeek) {
+  if (forcedSeasonType != null) {
+    const st = forcedSeasonType;
+    const week = st === REGULAR_SEASON ? regWeek : preWeek ?? 1;
+    return [{ seasonType: st, offset: OFFSET_OF[st] ?? 0, espnWeek: week }];
   }
-  return { season, week };
+  const ctxs = [{ seasonType: REGULAR_SEASON, offset: 0, espnWeek: regWeek }];
+  if (preWeek != null && preWeek >= 1 && preWeek <= PRESEASON_WEEKS) {
+    ctxs.unshift({ seasonType: PRESEASON, offset: PRESEASON_BASE, espnWeek: preWeek });
+  }
+  return ctxs;
 }
 
-/** Is any game in this week's slate live or within ~24h of kickoff? */
-function gameDay(games, now = Date.now()) {
-  return games.some((g) => g.state === 'in' || (g.kickoffMs && g.kickoffMs - now < 24 * 3600e3 && g.kickoffMs - now > -6 * 3600e3));
+/** Every week context worth polling right now. A context whose games are all
+ *  complete does no work inside the tick, so the set narrows on its own as
+ *  August ends — there is nothing to switch off. */
+async function activeContexts(season) {
+  const forced = config.forcedSeasonType;
+  const [regW, preW] = await Promise.all([
+    forced != null && forced !== REGULAR_SEASON ? Promise.resolve(1) : regularWeek(season),
+    forced === REGULAR_SEASON ? Promise.resolve(null) : espnWeekFor(season, forced ?? PRESEASON),
+  ]);
+  return contextsFor(forced, regW, preW);
 }
 
-async function tick() {
-  const { season, week: espnWeek } = await currentWeek();
-  // ESPN API calls use the real week (1-3 in preseason); every DB read/write uses
-  // the offset BOARD week (101-103 in preseason) so preseason never collides with
-  // the loaded regular-season data. Offset is 0 outside preseason — no-op.
-  const week = espnWeek + config.weekOffset;
-  const games = await getGames(season, espnWeek, config.seasonType);
+/** One context's pass: fetch its scoreboard, then lock → poll → resolve →
+ *  finalize at its BOARD week. Returns the games it saw (the caller pools them
+ *  for the injury cadence) — or null when the context has nothing live. */
+async function tickContext(ctx, season) {
+  const week = ctx.espnWeek + ctx.offset;
+  const games = await getGames(season, ctx.espnWeek, ctx.seasonType);
+  // A context whose week is over contributes nothing and is skipped rather than
+  // switched off: once the last preseason game finishes, preseason simply stops
+  // doing work, and it resumes by itself if ESPN rolls to another week.
+  if (!games.length || games.every((g) => g.completed)) {
+    // Still finalize once — a week that completed between ticks needs its close.
+    if (games.length) {
+      const f = await finalizeMatchups(week, true);
+      if (f) log(`[${ctx.tag}] finalized`, f, 'matchups');
+    }
+    return games;
+  }
+
   // Keep the live slate fresh (overrides baked 2025) so lock/resolve slate-gate
-  // the AI lineup against the real current-season windows + byes.
+  // the AI lineup against the real current windows + byes.
   const slate = slateFromGames(games);
   setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
-  // Persist the preseason slate at the offset week so the client can load it (the
-  // regular-season slate is loaded once via migration; the weekly sync writes it
-  // in-season, but that sync is skipped for preseason — see syncTick).
-  if (config.weekOffset && slate.length) {
+  // Persist the preseason slate at the offset week so the client can load it. The
+  // regular-season slate arrives via migration + the weekly sync instead.
+  if (ctx.offset && slate.length) {
     try {
       await db().from('nfl_slate').upsert(
         slate.map((g) => ({ season, week, home: g.home, away: g.away, win: g.win, kickoff: g.kickoff })),
         { onConflict: 'season,week,home' },
       );
-    } catch (e) { log('preseason slate upsert', e.message); }
+    } catch (e) { log(`[${ctx.tag}] slate upsert`, e.message); }
   }
 
-  // Injuries: daily, or hourly on game days.
-  const injEvery = gameDay(games) ? config.injuryPollGamedayMs : config.injuryPollDailyMs;
-  if (Date.now() - lastInjuryPoll >= injEvery) {
-    try { const r = await pollInjuries(playerIndex); lastInjuryPoll = Date.now(); log('injuries', r.count, '@', r.feedTimestamp); }
-    catch (e) { log('injury poll error', e.message); }
-  }
-
-  // Fill lock_at on any scheduled matchups created without it (in-app "sync week"
-  // and clone pass null) using this week's first kickoff — already in `games`, no
-  // extra fetch — so they auto-lock too. Runs before the lock check so a matchup
-  // whose kickoff already passed seals this same tick.
+  // Fill lock_at on scheduled matchups created without it (in-app "sync week",
+  // the practice build) from this week's first kickoff — already in `games`.
   const kicks = games.map((g) => g.kickoffMs).filter(Number.isFinite);
   if (kicks.length) {
-    // Lineups lock 1h before the week's first kickoff (client shows the same lead).
     const filled = await backfillLockAt(week, Math.min(...kicks) - config.lockLeadMs);
-    if (filled) log('backfilled lock_at on', filled, 'matchups');
+    if (filled) log(`[${ctx.tag}] backfilled lock_at on`, filled, 'matchups');
   }
 
-  // First kickoff per window (ms) — drives per-window pick sealing. Null when the
-  // slate carries no kickoffs, which falls back to sealing everything at lock_at.
+  // First kickoff per window (ms) — drives per-window pick sealing.
   const winKicks = {};
   for (const g of slate) {
     const ms = g.kickoff ? Date.parse(g.kickoff) : NaN;
@@ -126,9 +147,61 @@ async function tick() {
   }
   const wk = Object.keys(winKicks).length ? winKicks : null;
 
-  // Native leagues: advance live draft clocks (autopick overdue/vacant seats)
-  // and clear due waiver claims. Client polls do this too; the sweep covers
-  // leagues nobody has open.
+  const locked = await lockDueMatchups(new Date(), wk, week);
+  if (locked) log(`[${ctx.tag}] locked`, locked, 'matchups');
+  const sealed = await lockDueWindows(week, wk);
+  if (sealed) log(`[${ctx.tag}] sealed`, sealed, 'window picks');
+
+  // Poll live games → plays, keyed at the board week. Reuses the scoreboard above.
+  const toPoll = gamesToPollFrom(games);
+  let wrote = 0;
+  for (const eventId of toPoll) { try { wrote += await pollGame(eventId, week, playerIndex); } catch (e) { log(`[${ctx.tag}] poll game`, eventId, e.message); } }
+  if (toPoll.length) log(`[${ctx.tag}] polled`, toPoll.length, 'games,', wrote, 'play rows');
+
+  const { data: live } = await db().from('matchup').select('*').eq('week', week).in('status', ['live', 'final']);
+  if (live?.length) {
+    await injectWeekPlays(week);
+    const rctx = await prefetchTick(live, week);
+    const nowMs = Date.now();
+    const startedWins = wk ? new Set(Object.keys(wk).filter((w) => wk[w] <= nowMs)) : null;
+    let done = 0;
+    for (let i = 0; i < live.length; i += 20) {
+      await Promise.all(live.slice(i, i + 20).map((m) =>
+        resolveMatchup(m, playerIndex, undefined, { playsInjected: true, ctx: rctx, startedWins }).then(() => { done++; }).catch((e) => log(`[${ctx.tag}] resolve`, m.id, e.message))));
+    }
+    log(`[${ctx.tag}] resolved`, done, '/', live.length, 'matchups');
+  }
+
+  if (games.every((g) => g.completed)) {
+    const f = await finalizeMatchups(week, true);
+    if (f) log(`[${ctx.tag}] finalized`, f, 'matchups');
+  }
+  return games;
+}
+
+async function tick() {
+  const season = config.season;
+  const contexts = (await activeContexts(season)).map((c) => ({
+    ...c, tag: c.seasonType === PRESEASON ? `pre ${c.espnWeek}` : `wk ${c.espnWeek}`,
+  }));
+
+  // Every active context, in order (preseason first — it's the one with live
+  // games in August). Sequential rather than parallel: they share the player
+  // index and the ESPN budget, and a tick has seconds of headroom.
+  const seen = [];
+  for (const c of contexts) {
+    try { const games = await tickContext(c, season); if (games) seen.push(...games); }
+    catch (e) { log(`[${c.tag}] tick error`, e.message); }
+  }
+
+  // Week-agnostic work, once per tick regardless of how many contexts ran.
+  const injEvery = gameDay(seen) ? config.injuryPollGamedayMs : config.injuryPollDailyMs;
+  if (Date.now() - lastInjuryPoll >= injEvery) {
+    try { const r = await pollInjuries(playerIndex); lastInjuryPoll = Date.now(); log('injuries', r.count, '@', r.feedTimestamp); }
+    catch (e) { log('injury poll error', e.message); }
+  }
+
+  // Native leagues: advance live draft clocks, clear due waiver claims.
   try {
     const nat = await sweepNative(log);
     if (nat.autopicks || nat.claimsWon || nat.claimsLost) {
@@ -136,53 +209,13 @@ async function tick() {
     }
   } catch (e) { log('native sweep error', e.message); }
 
-  // Lock any matchups whose first kickoff has passed (status → live; seals the
-  // windows already underway), then sweep this week's later windows — each one's
-  // picks seal (and reveal to the opponent) at its OWN kickoff.
-  const locked = await lockDueMatchups(new Date(), wk);
-  if (locked) log('locked', locked, 'matchups');
-  const sealed = await lockDueWindows(week, wk);
-  if (sealed) log('sealed', sealed, 'window picks');
-
-  // Poll live games → persist plays (keyed at the board week). Reuse the scoreboard
-  // already fetched above (same espnWeek) instead of fetching the identical URL again.
-  const toPoll = gamesToPollFrom(games);
-  let wrote = 0;
-  for (const eventId of toPoll) { try { wrote += await pollGame(eventId, week, playerIndex); } catch (e) { log('poll game', eventId, e.message); } }
-  if (toPoll.length) log('polled', toPoll.length, 'games,', wrote, 'play rows');
-
-  // Resolve every live matchup for the week. Plays are fetched ONCE per tick (shared
-  // across all matchups), then matchups resolve in parallel chunks so the loop stays
-  // well under the tick interval even at ~100 leagues (~600 matchups).
-  const { data: live } = await db().from('matchup').select('*').eq('week', week).in('status', ['live', 'final']);
-  if (live?.length) {
-    await injectWeekPlays(week);
-    const ctx = await prefetchTick(live, week); // ~5 bulk reads instead of ~6/matchup
-    // Windows already kicked off — resolve only publishes slot_scores for these,
-    // mirroring the per-window pick sealing above (null = no slate → publish all,
-    // matching lockDueMatchups' seal-everything fallback).
-    const nowMs = Date.now();
-    const startedWins = wk ? new Set(Object.keys(wk).filter((w) => wk[w] <= nowMs)) : null;
-    let done = 0;
-    for (let i = 0; i < live.length; i += 20) {
-      await Promise.all(live.slice(i, i + 20).map((m) =>
-        resolveMatchup(m, playerIndex, undefined, { playsInjected: true, ctx, startedWins }).then(() => { done++; }).catch((e) => log('resolve', m.id, e.message))));
-    }
-    log('resolved', done, '/', live.length, 'matchups');
-  }
-
-  // Window Pot (0106): expire response clocks, force street closes at kickoff,
-  // and settle finished windows. Runs AFTER resolve so a window settling this
-  // tick pays out of the matchup_state rows resolve just published — the same
-  // scores the +5 window bonus is paid off. Idempotent; a no-op while every
-  // league sits at pot_ante = 0.
+  // Window Pot (0117): void offers nobody matched and freeze live ladders at
+  // picks lock, then settle windows that have gone final. Week-agnostic like the
+  // native sweep — pot_sweep(null) walks every open pot — and it runs after the
+  // context loop above, so a window settling this tick pays out of the
+  // matchup_state rows resolve just published. Idempotent; a no-op while every
+  // league sits at pot_ante = 0, which is all of them until the flag is flipped.
   try { await sweepPots(log); } catch (e) { log('window pot sweep error', e.message); }
-
-  // Finalize when the slate is complete.
-  if (games.length && games.every((g) => g.completed)) {
-    const f = await finalizeMatchups(week, true);
-    if (f) log('finalized', f, 'matchups');
-  }
 }
 
 async function main() {
@@ -201,11 +234,12 @@ async function main() {
     await syncTick().catch((e) => log('sync tick error', e.message));
     setInterval(() => syncTick().catch((e) => log('sync tick error', e.message)), config.syncCheckMs);
     // Public pods (0089): deal rosters + pair matchups for the current week.
-    // Own cadence, independent of PILOT_LEAGUE_IDS; skipped in preseason-offset
-    // mode (the offset weeks are seeded by the admin toggle, not dealt).
+    // Own cadence, independent of PILOT_LEAGUE_IDS. Always the REGULAR-season
+    // week — pods are a regular-season product, and preseason no longer switches
+    // them off (it used to, purely because both keyed off the same single week).
     const podTick = async () => {
-      if (config.weekOffset) return;
-      const { season, week } = await currentWeek();
+      const season = config.season;
+      const week = await regularWeek(season);
       const r = await ensurePods(week, season, playerIndex);
       if (r.dealt || r.matchups || r.tossed) log('pods:', JSON.stringify(r), 'week', week);
     };
@@ -216,4 +250,8 @@ async function main() {
   }
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+// Only when run as the entrypoint. `contextsFor` is exported for its test, and
+// importing this module must not start a scheduler that polls ESPN and writes to
+// Supabase as a side effect of loading it.
+const entry = process.argv[1] ? pathToFileURL(process.argv[1]).href : null;
+if (import.meta.url === entry) main().catch((e) => { console.error(e); process.exit(1); });

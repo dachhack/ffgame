@@ -156,11 +156,18 @@ function dueWindows(winKicks, now) {
 /** Lock any scheduled matchups whose lock_at has passed: flip status → 'live' and
  *  seal the picks of windows already kicked off (all picks when `winKicks` is
  *  unknown). Later windows stay unlocked — lockDueWindows seals each at its own
- *  kickoff. Returns count of matchups locked. */
-export async function lockDueMatchups(now = new Date(), winKicks = null) {
+ *  kickoff. Returns count of matchups locked.
+ *
+ *  `week` scopes it to ONE board week, and matters now that the scheduler runs
+ *  several week contexts per tick (index.js): `winKicks` describes that context's
+ *  slate only, so an unscoped sweep would seal a regular-season matchup's windows
+ *  against preseason kickoff times. Null = every week, the pre-context behavior. */
+export async function lockDueMatchups(now = new Date(), winKicks = null, week = null) {
   const iso = now.toISOString();
-  const { data: due } = await db().from('matchup').select('id')
+  let dq = db().from('matchup').select('id')
     .eq('status', 'scheduled').not('lock_at', 'is', null).lte('lock_at', iso);
+  if (week != null) dq = dq.eq('week', week);
+  const { data: due } = await dq;
   if (!due || !due.length) return 0;
   const ids = due.map((m) => m.id);
   const dueWins = dueWindows(winKicks, now);

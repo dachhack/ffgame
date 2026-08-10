@@ -3,6 +3,7 @@
 // redeem_invite RPC (migration 0002), never a direct membership write.
 import { getSupabase } from './supabaseClient';
 import { resolveUser } from './sleeper';
+import { PRESEASON_BOARD_WEEKS } from './nflSlate';
 import type { Session } from '@supabase/supabase-js';
 
 async function client() {
@@ -523,7 +524,12 @@ export type Controller = 'human' | 'ai';
 export type LineupPolicy = 'best_lineup' | 'ai' | 'empty';
 export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; provider?: string; avatar_url?: string | null; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; weekly_budget?: number; test_live_at?: string | null; preseason_at?: string | null; /** Window Pot: the per-league flag (0 = off) + its ceiling, and how many pots are in flight right now. */ pot_ante?: number; pot_cap?: number; pot_open?: number; }
 export interface AdminUser { id: string; email: string | null; sleeper_username: string | null; sleeper_user_id: string | null; enrolled: number; created_at: string; }
-export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; claim_email?: string | null; }
+/** `drifted` (0117): this seat's occupant is no longer the roster's Sleeper owner
+ *  — they left the league, it changed hands, or they unlinked. Sleeper leagues
+ *  only, and never set for hand-assigned seats (those carry claim_email and are
+ *  deliberately independent of Sleeper). Advisory: a refresh flags it, it never
+ *  clears the seat on its own. */
+export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; claim_email?: string | null; drifted?: boolean; }
 export interface AdminAdmin { email: string; note: string | null; }
 export interface MemberRow { roster_id: number; owner_id: string | null; team_name: string; }
 export interface MatchupRow { sleeper_matchup_id: number | null; home_roster_id: number; away_roster_id: number; }
@@ -713,12 +719,85 @@ export const adminSetTestLive = (leagueId: string, on: boolean) =>
  *  the preseason offset weeks (101-103) so it can play real 2026 preseason games. */
 export const adminSetPreseason = (leagueId: string, on: boolean) =>
   rpc<{ ok: boolean; error?: string; preseason_at?: string | null; matchups?: number }>('admin_set_preseason', { p_league_id: leagueId, p_on: on });
-/** Super-admin: replace every seat's pick pool at a preseason board week with the
- *  DEEP slate-team pool — every active skill player on that week's teams from the
- *  Sleeper directory, depth-chart ordered, plus team K/DST (preseason is played
- *  by the backups the Week-1 clones don't carry). Builds the pool client-side
- *  (shared builder, src/data/preseasonPool.ts) and writes via the 0101 RPC. */
-export async function adminSeedPreseasonPool(leagueId: string, week: number): Promise<{ ok: boolean; error?: string; seats?: number; pool?: number; teams?: number }> {
+/** Commissioner (or admin): flip a league's preseason PRACTICE mode. Same clone
+ *  as adminSetPreseason — the 0110 twin that accepts the league's commissioner,
+ *  so opening practice isn't a super-admin errand. */
+export const setPreseasonPractice = (leagueId: string, on: boolean) =>
+  rpc<{ ok: boolean; error?: string; preseason_at?: string | null; matchups?: number; weeks?: number[]; skipped?: number[] }>(
+    'set_preseason_practice', { p_league_id: leagueId, p_on: on });
+
+export interface PreseasonWindow {
+  /** The preseason slate is loaded for this season (weeks 101-103 have games). */
+  loaded: boolean;
+  /** Practice can still be fed: the last preseason game hasn't finished yet. */
+  open: boolean;
+  firstKickoff: number | null;
+  lastKickoff: number | null;
+}
+/** Can preseason practice still produce real games for this season?
+ *
+ *  Worth being blunt about why this check exists: the WORKER decides what it
+ *  polls from process-wide config (`PILOT_SEASON_TYPE=1` → seasonType 1 +
+ *  weekOffset 100), not per league. A league can therefore be flipped into
+ *  practice at a moment when nothing will ever feed those weeks — three weeks of
+ *  matchups that sit at 0-0 forever. The commissioner has no way to know that
+ *  and no way to fix it.
+ *
+ *  The honest proxy is the calendar: while the preseason slate's last kickoff is
+ *  still ahead of us, opening practice is a live proposition (the worker either
+ *  is or will be pointed at preseason for this window); once it's passed, it
+ *  isn't, and the button should say so instead of handing over a dead league.
+ *  Admins bypass this in the UI so off-window testing stays possible. */
+export async function preseasonWindow(season: string): Promise<PreseasonWindow> {
+  const sb = await getSupabase();
+  if (!sb) return { loaded: false, open: false, firstKickoff: null, lastKickoff: null };
+  const { data } = await sb.from('nfl_slate').select('week, kickoff')
+    .eq('season', season).in('week', PRESEASON_BOARD_WEEKS);
+  const kicks = ((data ?? []) as { kickoff: string | null }[])
+    .map((r) => (r.kickoff ? Date.parse(r.kickoff) : NaN)).filter(Number.isFinite);
+  if (!kicks.length) return { loaded: false, open: false, firstKickoff: null, lastKickoff: null };
+  const first = Math.min(...kicks), last = Math.max(...kicks);
+  // ~4h pads the last kickoff to that game's end, same allowance defaultOpenWeek
+  // and join_weekly use for "this week isn't over yet".
+  return { loaded: true, open: Date.now() <= last + 4 * 3_600_000, firstKickoff: first, lastKickoff: last };
+}
+
+/** The ONE-CLICK a commissioner actually wants: turn preseason practice on AND
+ *  give every preseason week its deep (backups-included) pool, in one action.
+ *  These were two separate super-admin buttons in the required order, and the
+ *  pool had to be re-seeded after every re-toggle (the toggle wipes lineups with
+ *  its clones) — forget it and seats field Week-1 starters who don't take
+ *  preseason snaps. Partial failure is reported, not swallowed: the mode is on
+ *  and the weeks that seeded are listed, so a retry is safe (both halves are
+ *  idempotent). */
+export async function enablePreseasonPractice(leagueId: string): Promise<{ ok: boolean; error?: string; matchups?: number; weeks?: number[]; skipped?: number[]; pool?: number }> {
+  const on = await setPreseasonPractice(leagueId, true);
+  if (!on.ok) return { ok: false, error: on.error ?? 'could not turn practice on' };
+  const weeks: number[] = [];
+  let pool = 0, firstErr: string | null = null;
+  // Seed pools for exactly the weeks the clone seeded — 0113 skips preseason
+  // weeks that have already been played, and reporting a "failure" for a week it
+  // deliberately left alone would be noise.
+  for (const wk of on.weeks?.length ? on.weeks : PRESEASON_BOARD_WEEKS) {
+    // A week whose slate hasn't loaded yet isn't fatal — the others still seed,
+    // and the worker writes that slate on its first preseason tick (re-seed then).
+    const r = await seedPreseasonPool(leagueId, wk).catch((e: unknown) => ({ ok: false, error: friendlyError(e), pool: 0 }));
+    if (r.ok) { weeks.push(wk); pool += r.pool ?? 0; }
+    else firstErr ??= r.error ?? `week ${wk} failed`;
+  }
+  if (!weeks.length) {
+    return { ok: false, matchups: on.matchups, error: `practice is on, but no week got a deep pool — ${firstErr}` };
+  }
+  return { ok: true, matchups: on.matchups, weeks, skipped: on.skipped, pool };
+}
+
+/** Commissioner/admin: replace every seat's pick pool at a preseason board week
+ *  with the DEEP slate-team pool — every active skill player on that week's teams
+ *  from the Sleeper directory, depth-chart ordered, plus team K/DST (preseason is
+ *  played by the backups the Week-1 clones don't carry). Builds the pool
+ *  client-side (shared builder, src/data/preseasonPool.ts) and writes via the
+ *  0110 RPC (the commish-capable twin of 0101's admin-only one). */
+export async function seedPreseasonPool(leagueId: string, week: number): Promise<{ ok: boolean; error?: string; seats?: number; pool?: number; teams?: number }> {
   const sb = await client();
   const { data: slateRows } = await sb.from('nfl_slate').select('season, home, away').eq('week', week);
   const season = (slateRows ?? []).reduce((m, r) => (r.season > m ? r.season : m), '');
@@ -733,7 +812,7 @@ export async function adminSeedPreseasonPool(leagueId: string, week: number): Pr
     .map((m) => ({ sid: m.id, slug: normName(m.full).replace(/\s+/g, '-'), full: m.full, pos: m.pos, team: m.team!, depth: m.depth ?? 99 }));
   const pool = poolFromRows(rows, teams as Set<string>);
   if (!pool.length) return { ok: false, error: 'empty pool — player directory had no one on the slate teams' };
-  const r = await rpc<{ ok: boolean; error?: string; seats?: number; pool?: number }>('admin_seed_preseason_pool', { p_league_id: leagueId, p_week: week, p_pool: pool });
+  const r = await rpc<{ ok: boolean; error?: string; seats?: number; pool?: number }>('seed_preseason_pool', { p_league_id: leagueId, p_week: week, p_pool: pool });
   return { ...r, teams: teams.size };
 }
 /** The league's live-test anchor (epoch ms) if test mode is on, else null. Any
@@ -770,6 +849,34 @@ export const adminLeagueJoiners = (leagueId: string) => rpc<LeagueJoiner[]>('adm
 export const commishOverview = () => rpc<AdminLeague[]>('commish_overview');
 export interface MatchupPicks { home_roster_id: number; away_roster_id: number; home_app_user: string | null; away_app_user: string | null; picks: { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null }[]; home_lineup: { player_slug: string | null; pos: string | null }[]; away_lineup: { player_slug: string | null; pos: string | null }[]; home_buffs: string[]; away_buffs: string[]; home_unlocks?: string[]; away_unlocks?: string[]; home_extra?: number; away_extra?: number; }
 export const adminMatchupPicks = (matchupId: string) => rpc<MatchupPicks>('admin_matchup_picks', { p_matchup_id: matchupId });
+
+// ── Read-only "view as" (0107): what a given user sees, for support + QA ────────
+export interface ViewAsPick { game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null; locked: boolean }
+export interface ViewAsMatchup { id: string; status: string; lock_at: string | null; opponent: string | null; picks: ViewAsPick[] }
+export interface ViewAsLeague {
+  league_id: string; name: string; season: string; provider: string; avatar_url: string | null;
+  roster_id: number; team_name: string; team_avatar: string | null; controller?: Controller;
+  is_commish: boolean; pool_size: number | null; matchup: ViewAsMatchup | null;
+}
+export interface ViewAsState {
+  error?: string;
+  user: { id: string; email: string | null; sleeper_username: string | null; sleeper_user_id: string | null; created_at: string };
+  week: number | null;
+  leagues: ViewAsLeague[];
+}
+/** Super-admin only. Reads; never writes and never mints a session — the caller
+ *  stays themselves. Admin-gated rather than commish-gated because it can surface
+ *  an opponent's still-unlocked picks. */
+export const adminUserState = (appUserId: string, week: number) =>
+  rpc<ViewAsState>('admin_user_state', { p_app_user_id: appUserId, p_week: week });
+
+/** Browse-as twins of the per-caller reads (0109). commish_overview() and
+ *  my_features() key on auth.uid(), so without these a browse-as session shows
+ *  the ADMIN's commissioner leagues and is gated by the ADMIN's feature flags. */
+export const adminUserCommishLeagues = (appUserId: string) =>
+  rpc<AdminLeague[]>('admin_user_commish_leagues', { p_app_user_id: appUserId });
+export const adminUserFeatures = (appUserId: string) =>
+  rpc<Record<string, boolean>>('admin_user_features', { p_app_user_id: appUserId });
 
 // ── Live power-up loadout (M1): arm/disarm in-slot team buffs, pre-lock ──────────
 export const LIVE_BUFFS = ['overtime', 'ot-shield', 'momentum', 'garbage-time', 'amp-2', 'amp-3', 'floodgates', 'counter-nuke', 'insurance', 'fg-stack'] as const;
@@ -1133,7 +1240,7 @@ export function subscribeMatchup(matchupId: string, onChange: () => void): () =>
   return () => { dead = true; cleanup?.(); };
 }
 
-// ── The Window Pot (migration 0106 · docs/window-pot.md) ─────────────────────
+// ── The Window Pot (migration 0117 · docs/window-pot.md) ─────────────────────
 // An OPT-IN wager ladder on a game window: one manager puts ◎10 up, the other
 // matches it, and they trade check / wager / call / raise until that window's
 // PICKS lock. Everything here is a no-op for a league with `pot_ante = 0` (the

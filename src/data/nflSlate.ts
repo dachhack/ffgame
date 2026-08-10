@@ -166,7 +166,16 @@ function deriveWeek(week: number): DerivedWeek {
     for (const [id, games] of gamesByWin) { // insertion order = kickoff order
       const k0 = Math.min(...games.map((g) => g.kickoff ?? Infinity));
       const meta = winMetaFor(k0);
-      const slots = Math.min(3, Math.ceil(games.length / 3));
+      // Slots per window. The regular season keeps ceil(games/3) capped at 3,
+      // which reproduces the classic 1/3/2/1/1 board on a normal Sunday.
+      // PRESEASON is shaped differently — its games bunch into a few dense
+      // Thursday/Friday/Saturday clusters — so it's more generous: 3+ games in a
+      // window earns 2 slots, 5+ earns 3. That deliberately puts MORE slots on
+      // the board than the 8 a manager can fill, which is the practice-week
+      // decision: not "fill everything", but which windows to contest.
+      const slots = isPreseasonWeek(week)
+        ? (games.length >= 5 ? 3 : games.length >= 3 ? 2 : 1)
+        : Math.min(3, Math.ceil(games.length / 3));
       windows.push({ id, label: meta.label, sub: meta.sub, slots, time: kickoffLabel(k0) });
     }
     result = { windows, teamWin, gamesByWin };
@@ -295,8 +304,22 @@ export const PRESEASON_BASE = 100;
 export const isPreseasonWeek = (week: number): boolean => week > PRESEASON_BASE;
 /** The 1-based preseason week number for an offset board week (101 → 1). */
 export const preseasonWeekNum = (week: number): number => week - PRESEASON_BASE;
-/** How many preseason weeks a preseason league carries (P1-P3). */
-export const PRESEASON_WEEKS = 3;
+/** A board week as a PLAYER should read it: "PRE 2" for the preseason offset
+ *  weeks, "WK 5" otherwise. Raw board weeks leak the +100 namespace — "WK 102"
+ *  means nothing to anyone outside this file. */
+export const weekLabel = (week: number): string =>
+  (isPreseasonWeek(week) ? `PRE ${preseasonWeekNum(week)}` : `WK ${week}`);
+
+/** How many preseason weeks a preseason league carries. FOUR for 2026: ESPN's
+ *  preseason is the Hall of Fame game (week 1) plus each team's three outings
+ *  (weeks 2-4). Mirrored by preseason_week_count() in SQL (migration 0112) —
+ *  bump together. */
+export const PRESEASON_WEEKS = 4;
+/** The preseason BOARD weeks a practice league is seeded at — [101, 102, 103].
+ *  Everything that has to touch all three (the clone, the deep-pool seed, the
+ *  0110 RPC guards) counts from here rather than re-typing the literals. */
+export const PRESEASON_BOARD_WEEKS: number[] =
+  Array.from({ length: PRESEASON_WEEKS }, (_, i) => PRESEASON_BASE + i + 1);
 
 // ── Live-test timeline (super-admin preseason testing) ───────────────────────
 // When a league flips on live-test mode, the board anchors its window schedule to

@@ -116,7 +116,11 @@ const page = `<!DOCTYPE html>
 <meta property="og:title" content="Scoring Rulebook — Drip Fantasy" />
 <meta property="og:description" content="The complete scoring rulebook for Drip Fantasy — drips, metrics, effects, power-ups." />
 <meta property="og:url" content="https://dripfantasy.com/rulebook/" />
-<meta property="og:image" content="https://dripfantasy.com/drip_fantasy_logo3.png" />
+<meta property="og:image" content="https://dripfantasy.com/og-card-wide.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="400" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="https://dripfantasy.com/og-card.png" />
 <style>
   :root { color-scheme: light dark; }
   body { max-width: 46rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; font: 16px/1.6 system-ui, -apple-system, Segoe UI, sans-serif; color: #1a1a1a; background: #fff; }

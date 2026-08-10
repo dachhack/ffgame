@@ -2,7 +2,7 @@
 
 > **Status: v1 BUILT — flagged off.** Spec written 2026-08-07, the morning after
 > the first live-fire (preseason CAR@ARI); **redesigned and built 2026-08-08**
-> in migration `0106_window_pot.sql`, shipped with `league.pot_ante = 0`
+> in migration `0117_window_pot.sql`, shipped with `league.pot_ante = 0`
 > everywhere (see §12 for what shipped and how to flip it on).
 >
 > The redesign, in one line: betting went from **automatic and post-lock** to
@@ -317,7 +317,7 @@ after kickoff (§10.3) and the AI bidding personality (§8).
 
 | Piece | Where |
 |---|---|
-| Schema + every RPC | `supabase/migrations/0106_window_pot.sql` |
+| Schema + every RPC | `supabase/migrations/0117_window_pot.sql` |
 | Scenario probes | `scripts/db/window-pot-probes.sql`, run by `scripts/db/run-scratch-probes.sh` |
 | Worker sweep (close at lock, settle at final) | `server/src/pot.js`, called from `server/src/index.js` |
 | Pot chip + action sheet | `src/screens/WindowPot.tsx`, mounted per window by `src/screens/Matchup.tsx` |

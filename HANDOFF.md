@@ -16,11 +16,16 @@ quiet-hours response clocks kept it moving async. The founder inverted it —
 opt-in, ◎10, pre-lock, explicit turns — which is a better mechanic and a simpler
 one: with a real turn and a hard deadline at picks lock there is nothing left to
 answer on anyone's behalf, so the policy, the clocks, the `awake_deadline`
-arithmetic and the last-raise cutoff all came out. **Migration 0106 was rewritten
-in place rather than patched by an 0107**, because it had never been merged and
-so had never applied anywhere; a 0107 that undid half of an unreleased 0106 would
-be permanent noise in the migration history for no benefit. If 0106 has since
-merged when you read this, that reasoning expires — patch forward.
+arithmetic and the last-raise cutoff all came out. The migration was **rewritten
+in place** across that redesign rather than patched by a follow-up, because it
+had never merged and so had never applied anywhere; a second migration undoing
+half of an unreleased one would be permanent noise in the history for no
+benefit. Now that it HAS merged, that reasoning has expired — patch forward.
+
+**It is `0117_window_pot.sql`, not 0106.** It was written as 0106 and renumbered
+when merging `main`, which had taken 0106–0116 in the meantime (the practice /
+view-as / week-context work). Nothing but the filename changed. Worth knowing if
+you go looking for it by the number in an older commit message.
 
 **It ships OFF, per league, behind a switch you own.** `league.pot_ante` defaults
 to **0**, which disables the feature end to end: the RPCs refuse, `pot_state`
@@ -76,7 +81,7 @@ reconciliation UI.
 
 ### What landed
 
-- **`supabase/migrations/0106_window_pot.sql`** — `window_pot` (leader, turn,
+- **`supabase/migrations/0117_window_pot.sql`** — `window_pot` (leader, turn,
   owed, ante/bet split, state machine), `pot_action`, `league.pot_ante` /
   `pot_cap`; RPCs `pot_ante`, `pot_act`, `pot_state`, `pot_sweep`. Advisory
   xact lock on every mutation, RLS member-read + RPC-only writes, wallet moves
@@ -140,6 +145,249 @@ unanswered on another and confirm it returns at picks lock, leave a third offer
 unmatched and confirm it voids, then let a window finish and re-resolve twice to
 prove the pot pays once. Preseason week 102 is a six-window slate, so there is
 plenty of room to run all five outcomes in one night.
+
+## The worker runs WEEK CONTEXTS, not a season mode
+
+The scheduler held exactly ONE current week, with preseason bolted on as a
+process-wide MODE of it (`PILOT_SEASON_TYPE=1` → `weekOffset=100`, every DB
+read/write shifted). That made the two seasons mutually exclusive, and the
+collateral wasn't preseason's fault — it was the single-week tick's:
+
+- `syncTick` returned early in preseason, so a league that DRAFTED during
+  preseason never got its rosters until someone pressed "sync season" by hand.
+- `podTick` returned early, so pods and showdowns simply stopped being dealt.
+- Worst: leaving the flag set past the opener would have stopped Week 1 ever
+  locking or resolving, with the logs looking perfectly healthy the whole time —
+  the same silent shape as the halftime `live_play` freeze from the live-fire.
+
+A CONTEXT is `{ seasonType, offset, espnWeek }`: which ESPN scoreboard to ask
+for, and what to add to its week to get the BOARD week. `tickContext` runs the
+whole lock → poll → resolve → finalize pass for one of them; `tick` fans out over
+every active context and then does the week-agnostic work (injuries, native
+sweep) ONCE. Preseason keeps its +100 namespace, so the two can never collide.
+
+Which contexts are active is a pure function — `contextsFor(forced, regWeek,
+preWeek)`, exported and tested (`server/test/week-contexts.mjs`) because ESPN is
+unreachable from CI. The regular season is ALWAYS present (it needs `lock_at`
+backfill and pod pairing long before its first kickoff); preseason joins while
+ESPN reports a preseason week in range, and a context whose games are all
+complete quietly does no work — so the set narrows by itself as August ends.
+Nothing to switch off, no deadline to remember.
+
+`PILOT_SEASON_TYPE` survives as `config.forcedSeasonType`: unset in normal
+operation (fly.toml says so), set only to pin the worker to one season type for a
+debug. Two related fixes fell out: `lockDueMatchups` takes a `week` (unscoped, a
+preseason tick would have sealed regular-season windows against preseason
+kickoffs), and `syncWeek`/`pods` now say `REGULAR_SEASON` explicitly instead of
+reading the global — previously harmless only because they were skipped whenever
+it differed. Importing `index.js` no longer starts a scheduler, so the test can
+load it.
+
+## Preseason practice — throwaway weeks + the commish one-click (0110)
+
+Preseason play existed since 0054/0101 (board weeks 101-103, deep pool) and was
+proven on the CAR@ARI live-fire below — but it was **super-admin only** and
+**not actually throwaway**. Everything the practice games produced landed in the
+real season. Migration `0110_preseason_practice.sql` closes both gaps.
+
+**The rule now enforced server-side: a practice week never moves real coin, real
+inventory, or a real record.** Practice = board week > 100 (`is_practice_week` /
+`matchup_is_practice`, mirroring `PRESEASON_BASE`), and every guard routes
+through those two so the definition lives in one place.
+
+Four leaks, all sealed:
+
+1. **Standings + playoff seeding** — `league_standings` (0073) counted every
+   final non-playoff matchup, so practice W/L and PF sat in the standings *and*
+   in the bracket seeded from them. Week filter added to both halves of the
+   union; `LeagueResults` (LiveOnboard) applies the same rule client-side and
+   now labels those sections `PRESEASON WK N · PRACTICE, DOESN'T COUNT`.
+2. **Coin** — resolve banked each side's weekly drip-coin regardless of week, so
+   three weeks of rehearsal funded real Week-1 power-ups. Guarded at
+   `adjust_wallet` (the single choke point every credit/debit runs through) and
+   again in `credit_wallet`; the worker skips the call outright
+   (`resolve.js`). The engine's coin is still written to the matchup row — it's
+   the "what you'd have earned" readout, it just never reaches a wallet.
+3. **Power-ups** — spending is now **free in practice**, short-circuited in
+   `spend_from_wallet` *before* the balance guard, so a broke team can still
+   exercise the whole board. `team_inventory` is keyed (league, roster) with no
+   week, so `wallet_buy_powerup` / `consume_inventory` / `refund_inventory` skip
+   it entirely in practice: a free buy can't mint a real item, and arming one
+   can't burn something bought for the season. The client mirrors inventory
+   optimistically, so the board still behaves normally mid-session.
+4. **Weekly budget** — `commish_grant_weekly_budget` refuses a practice week out
+   loud instead of reporting the silent "0 credited" `adjust_wallet` would give.
+
+**The one-click.** `set_preseason_practice` and `seed_preseason_pool` are
+commish-or-admin twins of the 0054/0101 admin RPCs, and `enablePreseasonPractice`
+(liveApi) drives both as one action — turn on, then seed all three weeks' deep
+pools. That ordering used to be two admin buttons pressed in sequence, with the
+pool needing a re-press after *every* re-toggle (the toggle wipes lineups with
+its clones); miss it and seats field Week-1 starters who don't take preseason
+snaps. One `PRESEASON PRACTICE` panel in `LeagueRow` replaces both buttons for
+commissioners and admins alike; `commish_overview` now carries `preseason_at` /
+`test_live_at` so the commish card can show the 🏈 chip and read its own state.
+Opening practice on an unsynced league now says *"sync the season first"*
+instead of cloning nothing.
+
+**The one-click is gated on the preseason window** (`preseasonWindow` in liveApi
+→ the `nfl_slate` rows at weeks 101-103, open until the last kickoff + 4h).
+Reason: the worker picks what it polls from PROCESS-WIDE config
+(`PILOT_SEASON_TYPE=1` → seasonType 1 + weekOffset 100), not per league — so
+without the gate a commissioner could open practice in September and get three
+weeks of matchups nothing will ever feed, with no way to know why. Outside the
+window the panel explains instead of offering the button. Admins still see it
+(off-window testing) with a ⚠ saying nothing will feed those weeks, and a league
+already in practice always keeps its controls, so closing the window can never
+strand someone with weeks they can't turn off. The real fix — a tick that loops
+over active week contexts instead of computing a single current week, letting
+preseason, the regular season and pods coexist in one process — is deferred;
+the tick body is mostly week-parameterised already, but `espnWeekCache` is a
+single cache and the injury poll would need hoisting out of the loop.
+
+**Preseason slot rule + the grant taken back (0116).** Preseason windows are
+allocated more generously than the regular season's `min(3, ceil(games/3))`:
+**2 slots at 3+ games, 3 at 5+** (`nflSlate` deriveWeek), because preseason games
+bunch into a few dense Thu/Fri/Sat clusters rather than spreading over a Sunday.
+The loaded 2026 preseason now derives **PRE 2: 6 windows / 10 slots · PRE 3: 9 /
+11 · PRE 4: 7 / 11**. That is deliberately MORE than the 8 a manager can fill:
+choosing which windows to contest — and whether to spend 80 of the 120-coin
+practice budget on a ninth slot — IS the practice-week exercise. So 0111's free
+grant is gone and `enforce_slot_cap` is 0027's rule verbatim, base + purchased,
+identical in practice and in the season. (Superseded reasoning below.)
+
+**Practice grants the extra slots (0111, SUPERSEDED by 0116).** The lineup cap is a hard
+`base_slot_count() = 8`, mirroring the REGULAR season's fixed five-window board.
+Preseason boards are derived from the real slate instead, and are shaped nothing
+like it — the loaded 2026 preseason derives `wk 101: 1 window / 1 slot`,
+`wk 102: 6 windows / 7 slots`, `wk 103: 9 windows / 10 slots`. So at preseason
+week 3 the board renders ten slots and the trigger refused the ninth; worse,
+NINE windows against eight slots meant a player couldn't field one player per
+window, handing the opponent an unopposed +5 window-win bonus. Practice weeks
+now grant `extra_slot_cap()` outright in `enforce_slot_cap` — the same ceiling a
+paying team could reach in the regular season, free, nothing to buy or place.
+Additive to purchases (still free in practice), and bounded, since
+`buy_extra_slot` caps purchases at the same number → practice ceiling is
+base + 2 + 2. NOT derived from the week's real window count: SQL can't read the
+TS derivation, and 0100 exists precisely because a second drifting copy of it
+caused a live bug. No client change — the board already renders the derived
+slots; only the cap was in the way. `my_extra()` still reports what was actually
+bought (it drives the shop count and `buy_extra_slot`'s own cap check; folding
+the grant in would read as "you already own 2" and block placing any).
+
+**The 2026 preseason has FOUR ESPN weeks, not three (0112).** 0056/0100 loaded
+board weeks 101-103 and the range was then hardcoded in four places (the clone's
+literal array, the off-switch's `week in (…)`, the pool seeder's `p_week > 103`,
+and `PRESEASON_WEEKS = 3`). ESPN's actual 2026 preseason: week 1 = the Hall of
+Fame game (1), weeks 2-4 = 16 each — 49 games, of which weeks 2-4's 48 are
+32 teams × 3 ÷ 2. Every team's THIRD outing lived at board week 104, which
+nothing knew about. The worker needed no change (it already computes
+`espnWeek + 100`); it simply had no slate, pairings or pool there. Week 104
+(Aug 27-29) derives 7 windows / 8 slots / 16 games — the same slot count as the
+regular season and the closest of the four to its shape. Slate rows generated
+through the SHARED derivation (`slateFromGames` → `windowIdsFromKickoffs`) over
+ESPN's real scoreboard, the same path 0100 used; regenerating 101-103 the same
+way reproduced 0100's rows exactly, so no drift. The range now lives in ONE
+place per side: `preseason_week_count()` / `preseason_board_weeks()` in SQL,
+`PRESEASON_WEEKS` in TS (mirror convention, bump together), and the probes
+assert off the helper so extending it can't silently under-assert.
+
+**Random pairings, no schedule required (0114).** Practice built its weeks by
+CLONING the league's regular-season schedule — Week 1 four times (0054), then
+week i per board week (0113) — which carried a hard dependency on the league
+already HAVING a schedule. Turf Warriors hit it head-on: mid-draft, no matchups
+at all, so opening practice failed with *"no Week-1 matchups to clone — sync the
+season first"*. Backwards for what practice is for; the moment it's most wanted
+is exactly when a league hasn't drafted. And the real schedule was never
+meaningful here anyway — a practice game against your true Week-3 opponent isn't
+that matchup, it's a scrimmage that counts for nothing. Practice now pairs seats
+itself: a deterministic shuffle per (league, board week) — `md5(league|week|
+roster)`, the same trick as pods' `pairPodSeats`, needing no `setseed()` session
+state — with adjacent seats paired off. Different opponent each week, works with
+zero schedule, and the same league+week always redraws identically so a rebuild
+is idempotent rather than reshuffling under people. Odd seat count → one seat
+sits, and which one moves with the shuffle. The only precondition left is TWO
+SEATS. Regular-season lineups are still copied when they exist, purely as a
+fallback the deep-pool seed overwrites moments later.
+
+**Distinct pairings + skipping played weeks (0113, superseded by 0114's random
+draw for the pairing half).** 0054's clone copied WEEK 1
+into every preseason board week, so a playtester faced the same opponent three
+(then four) times running — fine for the one-night live-fire it was built for,
+poor for a month of practice. Board week 100+i now clones regular-season week i,
+falling back to Week 1 for any week the league hasn't scheduled. It also cloned
+regardless of the calendar: turning practice on today seeded week 101, the Hall
+of Fame game played back on Aug 6, as a live-looking matchup that will never
+receive another snap. Weeks whose last kickoff is >4h past are skipped (the same
+allowance `defaultOpenWeek`/`join_weekly` use), the clone reports which weeks it
+seeded and which it skipped, and `enablePreseasonPractice` seeds deep pools for
+exactly the seeded ones. If EVERY preseason week is past, the on-switch refuses
+and un-stamps rather than handing back a league with nothing playable.
+
+**Practice has its own weekly budget: 120 coin (0115).** 0110 made practice
+spending FREE, which protected the real wallet but taught the wrong game — with
+everything free the right move is always "arm everything", the exact habit that
+bankrupts a manager in Week 1. The economy is the thing the pilot most needs
+playtested, and free practice skipped it. So practice now runs a parallel,
+throwaway economy: `practice_wallet`, keyed (league, roster, BOARD WEEK), seeded
+at `practice_budget()` = 120 on first touch, spent at REAL prices, and dropped
+with the practice weeks (both the rebuild and the off-switch delete it). The
+0110 invariant is untouched — a practice week still never moves `team_wallet` —
+the two economies simply don't meet. Per WEEK, not per league: each practice week
+starts fresh, so overspending PRE 2 doesn't cripple PRE 3 and nothing accumulates
+into a stockpile the real season never grants. Practice EARNINGS stay unbanked
+(they'd land after the week they could be spent in); only refunds return to the
+purse, capped at the budget so a refund can't mint coin. `my_wallet`/
+`ensure_wallet` return the purse on a practice matchup, so the header chip and
+shop show 120 with no client plumbing.
+
+**The shop is practice-aware (`ShopModal`).** 0110 makes power-ups free on a
+practice week server-side, but the shop's affordability gate is CLIENT-side
+(`afford = bal >= p.price`), so a low-balance team simply couldn't press BUY and
+the server's deliberate "free even at zero balance" was unreachable through the
+UI. `ShopModal` takes `practice`, which since 0115 changes only what the HEADER says
+— *"N PRACTICE COIN · 🏈 this week's practice budget — your season wallet is
+untouched"*. Prices, affordability and the running balance all behave exactly as
+they will in Week 1, because they're now the same mechanics on a different purse.
+Passed from the board as `!!liveCtx && preseason`.
+
+**Pool filters (`boardParts.tsx`).** A normal fantasy roster is 8-20 players, so
+both pool views rendered whole and unfiltered. Deep practice pools are ~1,000
+players a week — and up to ~400 inside ONE window (wk104 `fri2`: 12 teams across
+6 games, 2 slots) — in a 440px scroll with a headshot and injury badge per row.
+Above the threshold a filter bar appears: name search (matches short OR full
+name), position chips, and game / team selects, where choosing a game narrows the
+team list to that game's two sides so the selects compose. `RosterAside` adds a
+WINDOW select, since the rail is the all-windows view; `PlayerPicker` doesn't
+need one (it belongs to a single slot, so its window is already fixed). Filters
+are pure view state and never change what's pickable.
+
+TWO thresholds, because the surfaces count different things — found by actually
+looking at the demo board in a browser, where a single shared 25 put a filter bar
+on the LANDING page's 28-player roster rail while leaving the 21-player opponent
+rail bare. `FILTER_AT = 25` gates the picker (one window: regular season ≈ 5-8,
+smallest practice window is 32 — a wide gap); `RAIL_FILTER_AT = 60` gates the
+rail (whole roster: a deep dynasty roster reaches ~40, a practice pool is
+~1,000). Verified in Chromium: the landing board renders exactly as before, and
+the picker's search/chips/count/clear work on a filtered pool.
+
+**Hardening found on the way:** `_clone_preseason_weeks` (0054) is SECURITY
+DEFINER and was EXECUTE-to-PUBLIC by default — any signed-in user could clone or
+wipe weeks 101-103 of any league. Revoked, along with the new `_set_preseason`.
+
+**Verification:** `scripts/db/preseason-practice-probes.sql` — 10 probe groups
+(predicate, commish auth, pool seeding, revoked internals, wallet, budget,
+standings, inventory, off-wipes-everything, unsynced league) green on a clean
+scratch DB, wired into `run-scratch-probes.sh`. Two pre-existing snags fixed to
+get there: the runner died at 0091 for want of `pg_net` (now stubbed like
+`http`, so nothing after it was ever checked), and two native probes still
+asserted the pre-0095 "closed testing" wording.
+
+**Still true and worth remembering:** the worker's preseason mode is a GLOBAL
+env switch (`PILOT_SEASON_TYPE=1` → `weekOffset=100`), not per-league — while
+it's on, the Sleeper weekly sync and the pod/showdown tick are both skipped
+(`index.js`). Practice pairings are the Week-1 clone, so it's the same opponent
+all three weeks.
 
 ## First live-fire — preseason CAR@ARI (v0.139.0, 2026-08-06/07)
 

@@ -1,5 +1,5 @@
 // The Window Pot — chips on the felt for any window the two of you agree to
-// play for. Spec: docs/window-pot.md. Migration 0106 is the authority; nothing
+// play for. Spec: docs/window-pot.md. Migration 0117 is the authority; nothing
 // here decides anything, it only shows the pot and offers the moves.
 //
 // Wagering is OPT-IN and happens BEFORE picks lock, which is why the chip lives

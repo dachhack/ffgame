@@ -3,12 +3,13 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminSetPreseason, adminSeedPreseasonPool, friendlyError, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, type PreseasonWindow, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   adminSetPot, adminClosePots,
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
   rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
   setTransactionRules, commishMovePlayer, commishRemovePlayer, commishRuleTrade, setLeagueAvatar,
+  adminUserState, type ViewAsState,
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
   playoffState, setPlayoffRules, generatePlayoffs, advancePlayoffs,
   type WaiverMode, type TradeReview, type TradeRow, type LeaguePoolPlayer, type NativeRosterRow,
@@ -16,11 +17,13 @@ import {
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
   type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy, type LeagueKdst, type KdstMode,
 } from '../data/liveApi';
+import { PRESEASON_BOARD_WEEKS } from '../data/nflSlate';
 import { importLeague, syncWeek, syncMembers } from '../data/sleeperAdmin';
 import { importEspnSeason, syncEspnSeason, stripProvider } from '../data/providerAdmin';
 import { forceResolve } from '../data/forceResolve';
 import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
 import { Avatar } from '../app/ui';
+import { useStore } from '../app/store';
 import { AvatarPicker } from '../app/AvatarPicker';
 import { FeedSheet } from './FeedSheet';
 import { WINDOWS, defaultMetric } from '../data/metrics';
@@ -192,7 +195,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
         <>
           <FeatureFlags />
           <SoloPasses />
-          <Users />
+          <Users onLeaveAdmin={onBack} />
           <Admins />
           <Overrides overrides={overrides} reload={load} />
         </>
@@ -619,10 +622,14 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
   };
 
   const loadM = async () => setMatchups(await adminMatchups(l.league_id));
+  // Returns the rows as well as storing them, so a caller (the member refresh)
+  // can report on what came back without racing the state update.
   const loadMembers = async () => {
-    setMembers(await adminLeagueMembers(l.league_id));
+    const rows = await adminLeagueMembers(l.league_id);
+    setMembers(rows);
     adminLeagueJoiners(l.league_id).then(setJoiners).catch(() => setJoiners([]));
     adminLeagueWallets(l.league_id).then((ws) => setWallets(Object.fromEntries((ws ?? []).map((w) => [w.roster_id, w.coins])))).catch(() => setWallets({}));
+    return rows;
   };
   // Commissioner grants drip coin to a team; refresh balances after.
   const seedCoin = async (rosterId: number, amount: number) => {
@@ -671,8 +678,11 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
     setBusy('members');
     try {
       const r = await syncMembers(l.league_id, l.sleeper_league_id);
-      setBusy(`✓ ${r.seats} seats refreshed`);
-      if (members) await loadMembers();
+      // Refresh never unseats anyone (0105's enrolled guard). Report the seats
+      // that drifted out of sync instead, so the commissioner can decide —
+      // ✕ unassign on the Members tab is the one-click fix.
+      const drift = (await loadMembers()).filter((m) => m.drifted).length;
+      setBusy(`✓ ${r.seats} seats refreshed${drift ? ` · ⚠ ${drift} no longer match Sleeper — see MEMBERS` : ''}`);
       reload();
     } catch (e) { setBusy(errMsg(e, 'member refresh failed')); }
   };
@@ -825,12 +835,13 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
             </div>
           </div>
           )}
+          {/* Practice is a commissioner tool, not an admin errand — it's how a
+              league's players get to rehearse the live loop before Week 1. */}
+          <PreseasonPractice on={!!l.preseason_at} leagueId={l.league_id} season={l.season} admin={admin} reload={reload} />
           {admin && (
             <div>
               <div style={subhead}>ADMIN MODES</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <PreseasonToggle on={!!l.preseason_at} leagueId={l.league_id} reload={reload} />
-                {!!l.preseason_at && <DeepPoolButton leagueId={l.league_id} />}
                 <TestLiveToggle on={!!l.test_live_at} leagueId={l.league_id} reload={reload} />
                 <CardThemeToggle leagueId={l.league_id} />
                 <WindowPotToggle l={l} reload={reload} />
@@ -861,20 +872,35 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
       {tab === 'members' && members && (
         <div style={{ marginTop: 12 }}>
           <WeeklyBudget l={l} onGranted={() => loadMembers()} />
-          {(() => { const nj = members.filter((m) => !m.enrolled).length; return (
+          {(() => { const nj = members.filter((m) => !m.enrolled).length; const nd = members.filter((m) => m.drifted).length; return (<>
             <div className="mono" style={{ ...mono, fontSize: 9.5, color: nj ? 'var(--dim)' : 'var(--you)', marginBottom: 6 }}>
               {members.length - nj}/{members.length} joined{nj ? ` · ${nj} not yet` : ''}
             </div>
-          ); })()}
+            {/* Drift is advisory — refresh never unseats anyone, so say what to do. */}
+            {!!nd && (
+              <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--warn)', marginBottom: 6, lineHeight: 1.5 }}>
+                ⚠ {nd} seat{nd > 1 ? 's' : ''} no longer match{nd > 1 ? '' : 'es'} Sleeper — the account holding {nd > 1 ? 'them isn’t' : 'it isn’t'} the roster’s owner there any more, so the real owner can’t claim it. ✕ unassign frees {nd > 1 ? 'them' : 'it'}.
+              </div>
+            )}
+          </>); })()}
           {members.map((m) => (
             <div key={m.roster_id} style={{ padding: '6px 0', borderTop: '1px solid var(--bd)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                   {m.avatar && <img src={m.avatar} alt="" width={24} height={24} style={{ borderRadius: 5, flexShrink: 0 }} />}
                   <div style={{ minWidth: 0 }}>
+                    {/* team_name comes from the platform, so on a drifted row it
+                        names the CURRENT Sleeper owner while the line below names
+                        whoever still holds the Drip seat — two different people.
+                        Say "seat held by" there so the row can't be misread as one
+                        person who is somehow mismatched with themselves. */}
                     <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{m.team}</div>
-                    <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>
-                      {m.enrolled ? (m.email ?? m.sleeper ?? 'enrolled') : m.claim_email ? `pending · ${m.claim_email}` : 'not assigned'}
+                    <div className="mono" style={{ ...mono, fontSize: 9, color: m.drifted ? 'var(--warn)' : 'var(--faint)' }}>
+                      {m.enrolled
+                        ? m.drifted
+                          ? `seat held by ${m.sleeper ? `@${m.sleeper}` : m.email ?? 'another account'}${m.sleeper && m.email ? ` · ${m.email}` : ''}`
+                          : (m.email ?? m.sleeper ?? 'enrolled')
+                        : m.claim_email ? `pending · ${m.claim_email}` : 'not assigned'}
                     </div>
                   </div>
                 </div>
@@ -882,10 +908,11 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
                   {m.email && <SendLink email={m.email} />}
                   <button onClick={() => toggleMemberAi(m.roster_id, m.controller)} className="mono" title={m.controller === 'ai' ? 'hand back to manager' : 'set team to AI auto-pilot'}
                     style={{ fontSize: 8.5, fontWeight: 700, color: m.controller === 'ai' ? 'var(--on-accent)' : 'var(--dim)', background: m.controller === 'ai' ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}>🤖 {m.controller === 'ai' ? 'AI' : 'off'}</button>
+                  {m.drifted && <span className="mono" title="Not the Sleeper owner of this roster any more — they left the league, it changed hands, or they unlinked their account. ✕ unassign frees the seat." style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px', whiteSpace: 'nowrap' }}>⚠ MISMATCH</span>}
                   <span className="mono" style={{ fontSize: 8.5, color: m.enrolled ? 'var(--you)' : m.claim_email ? 'var(--dim)' : 'var(--faint)', border: `1px solid ${m.enrolled ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '2px 6px' }}>{m.enrolled ? 'JOINED' : m.claim_email ? 'PENDING' : '—'}</span>
                 </div>
               </div>
-              <AssignRoster initial={m.email ?? m.claim_email ?? ''} joiners={joiners} onAssign={(a) => assign(m.roster_id, a)} onClaimSelf={() => claimSelf(m.roster_id)} />
+              <AssignRoster initial={m.email ?? m.claim_email ?? ''} seated={m.enrolled || !!m.claim_email} stillOnPlatform={!!m.owner} joiners={joiners} onAssign={(a) => assign(m.roster_id, a)} onClaimSelf={() => claimSelf(m.roster_id)} />
               <SeedCoin balance={wallets[m.roster_id] ?? 0} onSeed={(amt) => seedCoin(m.roster_id, amt)} />
             </div>
           ))}
@@ -1233,7 +1260,7 @@ function CodeRequestRow({ r, leagues, onToggle, reloadLeagues }: { r: CodeReques
 
 // Admin/commish-map a roster to a person by email. Enrolls now if they've signed
 // in, otherwise records a pending claim that auto-links on their next sign-in.
-function AssignRoster({ initial, joiners = [], onAssign, onClaimSelf }: { initial: string; joiners?: LeagueJoiner[]; onAssign: (a: { email?: string; appUserId?: string }) => Promise<{ ok: boolean; error?: string; status?: string }>; onClaimSelf?: () => Promise<{ ok: boolean; error?: string; status?: string }> }) {
+function AssignRoster({ initial, seated, stillOnPlatform, joiners = [], onAssign, onClaimSelf }: { initial: string; seated?: boolean; stillOnPlatform?: boolean; joiners?: LeagueJoiner[]; onAssign: (a: { email?: string; appUserId?: string }) => Promise<{ ok: boolean; error?: string; status?: string }>; onClaimSelf?: () => Promise<{ ok: boolean; error?: string; status?: string }> }) {
   const [email, setEmail] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -1244,6 +1271,22 @@ function AssignRoster({ initial, joiners = [], onAssign, onClaimSelf }: { initia
     setBusy(true); setMsg(null);
     const r = await onAssign({ email: email.trim() });
     setBusy(false); result(r);
+  };
+  // Free the seat: an empty email is admin_assign_roster's clear branch (0042) —
+  // app_user_id, enrolled and claim_email all drop, and the team is claimable
+  // again. The extra warning matters: while this roster still has an owner on
+  // the source platform, "refresh members" re-joins them by sleeper_user_id and
+  // re-seats the person, because admin_upsert_memberships only moves `enrolled`
+  // false→true. Removing them upstream is what makes the clear stick.
+  const unassign = async () => {
+    if (busy) return;
+    if (!confirm(stillOnPlatform
+      ? 'Unassign this team? It becomes claimable again — but this roster still has an owner on the source platform, so “refresh members” will re-seat them. Remove them there first to make it stick.'
+      : 'Unassign this team? The manager loses their seat and it becomes claimable again.')) return;
+    setBusy(true); setMsg(null);
+    const r = await onAssign({ email: '' });
+    setBusy(false); result(r);
+    if (r.ok) setEmail('');
   };
   // Commissioner claims this team for themselves (to play, not just manage).
   const claim = async () => {
@@ -1276,6 +1319,7 @@ function AssignRoster({ initial, joiners = [], onAssign, onClaimSelf }: { initia
         style={{ ...inp, fontSize: 10, padding: '5px 7px', flex: 1, minWidth: 0 }} />
       <button onClick={go} disabled={busy} className="mono" style={{ ...btn(false), opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'assign'}</button>
       {onClaimSelf && <button onClick={claim} disabled={busy} className="mono" title="claim this team for yourself" style={{ ...btn(true), opacity: busy ? 0.6 : 1 }}>＋ me</button>}
+      {seated && <button onClick={unassign} disabled={busy} className="mono" title="free this seat — the manager loses the team and it becomes claimable again" style={{ ...btn(false), color: 'var(--opp)', opacity: busy ? 0.6 : 1 }}>✕ unassign</button>}
       {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp, #e5484d)' }}>{msg}</span>}
     </div>
   );
@@ -1376,58 +1420,146 @@ function TestLiveToggle({ on, leagueId, reload }: { on: boolean; leagueId: strin
   );
 }
 
-// Super-admin only: flip a league into preseason mode. Clones its Week-1 pairings
-// + lineups into the preseason offset weeks (101-103) so the league can create and
-// play real 2026 NFL preseason matchups (on real PBP, once the worker runs with
-// seasonType=1). Toggling off clears the stamp and drops the preseason clones.
-function PreseasonToggle({ on, leagueId, reload }: { on: boolean; leagueId: string; reload: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const go = async () => {
+// PRESEASON PRACTICE — the commissioner's one click (migration 0110). Turning it
+// on clones the league's Week-1 pairings into the preseason board weeks (101-103)
+// AND replaces every seat's pick pool at those weeks with the DEEP slate-team pool
+// (every active skill player on that week's teams, depth-chart ordered, + team
+// K/DST). Both halves matter and the order is fixed: preseason snaps go to the
+// depth chart's back half, so without the deep pool seats field Week-1 starters
+// who sit. These used to be two separate super-admin buttons you had to press in
+// sequence — and re-press the second after every re-toggle, since turning
+// preseason off wipes the lineups along with the clones.
+//
+// Practice games are throwaway by construction: no standings, no playoff seeding,
+// no coin, no inventory (all enforced server-side in 0110). Off removes the weeks.
+//
+// GATED on the preseason window (see liveApi preseasonWindow): the worker picks
+// what it polls from process-wide config, not per league, so outside that window
+// turning practice on would hand the commissioner three weeks nothing will ever
+// feed. Admins see the control regardless, so off-window testing still works.
+function PreseasonPractice({ on, leagueId, season, admin, reload }: { on: boolean; leagueId: string; season: string; admin: boolean; reload: () => void }) {
+  const [busy, setBusy] = useState<'on' | 'off' | 'pool' | 'rebuild' | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [win, setWin] = useState<PreseasonWindow | null>(null);
+  useEffect(() => { let ok = true; preseasonWindow(season).then((w) => { if (ok) setWin(w); }).catch(() => {}); return () => { ok = false; }; }, [season]);
+
+  const turnOn = async () => {
     if (busy) return;
-    setBusy(true);
-    await adminSetPreseason(leagueId, !on).catch(() => {});
-    setBusy(false);
+    setBusy('on'); setNote(null);
+    const r = await enablePreseasonPractice(leagueId).catch((e: unknown) => ({ ok: false as const, error: friendlyError(e) }));
+    const skipped = ('skipped' in r ? r.skipped ?? [] : []).map((w) => `PRE ${w - 100}`);
+    setNote(r.ok
+      ? `✓ ${r.matchups ?? 0} matchups per week · deep pool on ${('weeks' in r ? r.weeks ?? [] : []).map((w) => `PRE ${w - 100}`).join(', ')}`
+        + (skipped.length ? ` · skipped ${skipped.join(', ')} (already played)` : '')
+      : (r.error ?? 'failed'));
+    setBusy(null);
     reload();
   };
-  return (
-    <button onClick={go} disabled={busy} title={on ? 'Preseason mode is ON — this league has real 2026 preseason matchups (weeks 101-103). Click to turn off and remove them.' : 'Turn on preseason mode: seed this league with real 2026 preseason matchups so it can play live on real PBP before the season starts.'}
-      className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--you)', background: on ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--you)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
-      {busy ? '…' : on ? '🏈 PRESEASON: ON' : '🏈 preseason'}
-    </button>
-  );
-}
-
-// Super-admin only, shown while preseason mode is ON: replace every seat's pick
-// pool at the preseason weeks (101-103) with the DEEP slate-team pool — every
-// active skill player on each week's teams, depth-chart ordered, + team K/DST.
-// Preseason snaps go to the depth chart's back half, so the Week-1 clones the
-// 🏈 toggle seeds would field starters who sit. Safe to re-click; re-run after
-// any preseason re-toggle (the toggle wipes these with its clones).
-function DeepPoolButton({ leagueId }: { leagueId: string }) {
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const go = async () => {
+  const turnOff = async () => {
     if (busy) return;
-    setBusy(true); setNote(null);
+    setBusy('off'); setNote(null);
+    const r = await setPreseasonPractice(leagueId, false).catch((e: unknown) => ({ ok: false as const, error: friendlyError(e) }));
+    if (!r.ok) setNote(r.error ?? 'failed');
+    setBusy(null);
+    reload();
+  };
+  // Re-run the CLONE on a league that's already ON. Needed because the week set
+  // is built once, when practice is opened: a league opened before 0112/0113
+  // still has the old three Week-1 clones and will never grow week 104 or gain
+  // distinct pairings, and pressing "open" isn't offered while it's already on.
+  // Turning practice off and on again would work but is worse — OFF deletes every
+  // practice week including already-played ones (it would take the Hall-of-Fame
+  // matchup and its scores with it), whereas the clone skips a played week before
+  // it wipes anything, so a rebuild leaves finished weeks untouched.
+  //
+  // DESTRUCTIVE for unplayed practice weeks: the clone wipes each week it rebuilds,
+  // so sealed picks there go. Hence the confirm, and hence it stays separate from
+  // the harmless roster re-seed below.
+  const rebuild = async () => {
+    if (busy) return;
+    if (!window.confirm('Rebuild the practice weeks?\n\nAdds any preseason week that is missing (e.g. PRE 4) and re-draws each week\u2019s random pairings.\n\nAlready-played weeks are left alone, but any picks already sealed in an UPCOMING practice week will be cleared.')) return;
+    setBusy('rebuild'); setNote(null);
+    const r = await enablePreseasonPractice(leagueId).catch((e: unknown) => ({ ok: false as const, error: friendlyError(e) }));
+    const skipped = ('skipped' in r ? r.skipped ?? [] : []).map((w) => `PRE ${w - 100}`);
+    setNote(r.ok
+      ? `✓ rebuilt ${('weeks' in r ? r.weeks ?? [] : []).map((w) => `PRE ${w - 100}`).join(', ')}`
+        + (skipped.length ? ` · left ${skipped.join(', ')} alone (already played)` : '')
+      : (r.error ?? 'failed'));
+    setBusy(null);
+    reload();
+  };
+  // Re-seed on demand: rosters move all preseason, and a week whose slate hadn't
+  // loaded when practice opened gets its pool on the next press.
+  const reseed = async () => {
+    if (busy) return;
+    setBusy('pool'); setNote(null);
     try {
       let seats = 0, pool = 0;
-      for (const wk of [101, 102, 103]) {
-        const r = await adminSeedPreseasonPool(leagueId, wk);
+      for (const wk of PRESEASON_BOARD_WEEKS) {
+        const r = await seedPreseasonPool(leagueId, wk);
         if (!r.ok) throw new Error(r.error || `week ${wk} failed`);
         seats = r.seats ?? seats; pool += r.pool ?? 0;
       }
-      setNote(`✓ ${seats} seats · ${pool} pool entries across wks 101-103`);
+      setNote(`✓ ${seats} seats · ${pool} pool entries across the preseason weeks`);
     } catch (e) { setNote(friendlyError(e)); }
-    setBusy(false);
+    setBusy(null);
   };
+
+  const bs = (fill: boolean): React.CSSProperties => ({
+    fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: fill ? 'var(--on-accent)' : 'var(--you)',
+    background: fill ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--you)', borderRadius: 4,
+    padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
+  });
+  // Closed = the preseason is over (or was never loaded) for this season, so no
+  // worker tick will ever feed these weeks. A league already IN practice always
+  // keeps its controls — closing the window must never strand someone with weeks
+  // they can't turn off.
+  const closed = win !== null && !win.open && !on && !admin;
+  const closedWhy = win?.loaded
+    ? `The ${season} preseason is over — its last game kicked off ${new Date(win.lastKickoff!).toLocaleDateString()}. Practice weeks opened now would never receive play-by-play.`
+    : `No ${season} preseason slate is loaded, so there are no games to practise on.`;
+
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <button onClick={go} disabled={busy} title="Replace every seat's preseason pick pool (weeks 101-103) with the full depth charts of that week's slate teams — backups included, since they play the preseason snaps. Downloads the player directory on first click."
-        className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--you)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
-        {busy ? 'seeding…' : '🧬 deep pool'}
-      </button>
-      {note && <span className="mono" style={{ fontSize: 9, color: note.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{note}</span>}
-    </span>
+    <div>
+      <div style={subhead}>PRESEASON PRACTICE</div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        {closed ? (
+          <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5 }}>{closedWhy}</span>
+        ) : on ? (
+          <>
+            <span className="mono" style={bs(true)}>🏈 PRACTICE: ON</span>
+            <button onClick={rebuild} disabled={!!busy} className="mono" style={bs(false)}
+              title="Rebuild the practice weeks: adds any preseason week this league is missing and re-draws each week's random pairings. Already-played weeks are left untouched; picks sealed in an upcoming practice week are cleared.">
+              {busy === 'rebuild' ? 'rebuilding…' : '⟳ rebuild weeks'}
+            </button>
+            <button onClick={reseed} disabled={!!busy} className="mono" style={bs(false)}
+              title="Re-seed every seat's preseason pick pool from the current depth charts. Safe to re-press — this never touches matchups or picks.">
+              {busy === 'pool' ? 'seeding…' : '🧬 re-seed rosters'}
+            </button>
+            <button onClick={turnOff} disabled={!!busy} className="mono" style={{ ...bs(false), color: 'var(--opp)', borderColor: 'var(--opp)' }}
+              title="Turn practice off and delete the preseason weeks — picks, lineups and results all go with them.">
+              {busy === 'off' ? '…' : '✕ turn off'}
+            </button>
+          </>
+        ) : (
+          <button onClick={turnOn} disabled={!!busy || win === null} className="mono" style={bs(false)}
+            title={`Open preseason practice: real ${season} preseason matchups on real play-by-play, with throwaway deep rosters so backups who actually play are pickable.`}>
+            {busy === 'on' ? 'opening…' : win === null ? 'checking…' : '🏈 open preseason practice'}
+          </button>
+        )}
+        {/* An admin acting outside the window is doing it deliberately — say so
+            rather than silently letting them create weeks nothing will feed. */}
+        {admin && win && !win.open && !on && (
+          <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--warn)' }}>⚠ outside the preseason window — nothing will feed these weeks</span>
+        )}
+      </div>
+      {!closed && (
+        <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+          Real {season} preseason games on live play-by-play, with throwaway deep rosters — every backup on the slate is pickable, since they take the snaps. Opponents are drawn at random each practice week, so this works before the draft finishes — no schedule needed. Nothing carries over: no standings, no seeding, no coin, no power-up inventory. Turning it off removes the practice weeks entirely.
+        </div>
+      )}
+      {note && <div className="mono" style={{ ...mono, fontSize: 9, marginTop: 6, color: note.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{note}</div>}
+    </div>
   );
 }
 
@@ -1453,7 +1585,7 @@ function CardThemeToggle({ leagueId }: { leagueId: string }) {
   );
 }
 
-// Window Pot (0106): the per-league feature flag. `pot_ante` doubles as the
+// Window Pot (0117): the per-league feature flag. `pot_ante` doubles as the
 // switch — 0 is off and the feature leaves no trace at all. Turning it off
 // deliberately does NOT touch pots already under way: they close and settle
 // themselves so no manager loses coin they committed in good faith, and the
@@ -1673,21 +1805,138 @@ function SoloPasses() {
   );
 }
 
-function Users() {
+// Read-only "view as": everything a user sees, for support + QA. Explicitly NOT
+// impersonation — no session is minted and nothing here writes, so an admin can
+// diagnose "why can't I set my lineup" without gaining the ability to act as
+// somebody. The banner says so, because a panel that mirrors a user's screen is
+// easy to mistake for being logged in as them.
+function ViewAs({ user, onClose, onLeaveAdmin }: { user: AdminUser; onClose: () => void; onLeaveAdmin?: () => void }) {
+  const { setViewAs } = useStore();
+  const [week, setWeek] = useState('1');
+  const [state, setState] = useState<ViewAsState | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const load = async (w: number) => {
+    setState(null); setErr(null);
+    try {
+      const s = await adminUserState(user.id, w);
+      if (s.error) setErr(s.error); else setState(s);
+    } catch (e) { setErr(errMsg(e, 'load failed')); }
+  };
+  useEffect(() => { load(Number(week) || 1); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  const label: React.CSSProperties = { ...mono, fontSize: 9, color: 'var(--faint)' };
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 75, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 560, marginTop: 24 }}>
+        <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 5, padding: '7px 9px', lineHeight: 1.5 }}>
+          👁 VIEWING AS {user.email ?? user.id.slice(0, 8)} — READ ONLY<br />
+          <span style={{ fontWeight: 400, color: 'var(--dim)' }}>You are still signed in as yourself. Nothing here can change their data or act in their name.</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '12px 0', flexWrap: 'wrap' }}>
+          <span className="mono" style={label}>week</span>
+          <input value={week} onChange={(e) => setWeek(e.target.value.replace(/\D/g, ''))} inputMode="numeric"
+            onKeyDown={(e) => { if (e.key === 'Enter') load(Number(week) || 1); }}
+            style={{ ...inp, width: 52, padding: '5px 6px', textAlign: 'center' }} />
+          <button onClick={() => load(Number(week) || 1)} className="mono" style={btn(false)}>load</button>
+          <span style={{ flex: 1 }} />
+          {onLeaveAdmin && (
+            <button onClick={() => { setViewAs({ userId: user.id, label: user.email ?? user.sleeper_username ?? user.id.slice(0, 8) }); onClose(); onLeaveAdmin(); }}
+              className="mono" style={btn(true)} title="render the real site against this user's data, read-only">🌐 browse as them</button>
+          )}
+          <button onClick={onClose} className="mono" style={linkBtn}>close</button>
+        </div>
+
+        {err && <div className="mono" style={{ ...mono, fontSize: 10, color: 'var(--opp)' }}>⚠ {err}</div>}
+        {!err && !state && <Muted text="Loading…" />}
+        {state && (
+          <>
+            <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginBottom: 10 }}>
+              {state.user.sleeper_username ? `@${state.user.sleeper_username}` : 'no Sleeper account linked'}
+              {state.user.sleeper_user_id ? ` · ${state.user.sleeper_user_id}` : ''} · joined {new Date(state.user.created_at).toLocaleDateString()}
+            </div>
+            {state.leagues.length === 0 && <Muted text="Not enrolled in any league — this user would see an empty leagues page." />}
+            {state.leagues.map((lg) => {
+              const m = lg.matchup;
+              // The two questions support actually gets asked: can they build a
+              // lineup at all (pool), and did their picks land (count vs pool).
+              const pool = lg.pool_size ?? 0;
+              return (
+                <div key={`${lg.league_id}-${lg.roster_id}`} style={{ borderTop: '1px solid var(--bd)', padding: '9px 0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Avatar name={lg.name} accent="var(--warn)" src={lg.avatar_url} size={26} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{lg.team_name} <span className="mono" style={label}>· {lg.name} {lg.season}</span></div>
+                      <div className="mono" style={label}>
+                        roster {lg.roster_id} · {lg.provider}
+                        {lg.is_commish ? ' · commissioner' : ''}
+                        {lg.controller === 'ai' ? ' · 🤖 AI control' : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mono" style={{ ...mono, fontSize: 9.5, marginTop: 6, lineHeight: 1.6, color: 'var(--dim)' }}>
+                    <div style={{ color: pool ? 'var(--dim)' : 'var(--warn)' }}>
+                      pick pool: {pool ? `${pool} players` : '⚠ empty — nothing to build a lineup from this week'}
+                    </div>
+                    {!m && <div style={{ color: 'var(--warn)' }}>no matchup at week {state.week} — this user sees no board</div>}
+                    {m && (
+                      <>
+                        <div>vs {m.opponent ?? '—'} · {m.status}{m.lock_at ? ` · locks ${new Date(m.lock_at).toLocaleString()}` : ''}</div>
+                        <div style={{ color: m.picks.length ? 'var(--you)' : 'var(--warn)' }}>
+                          {m.picks.length ? `${m.picks.length} picks sealed${m.picks.some((p) => p.locked) ? ' · locked' : ''}` : '⚠ no picks set'}
+                        </div>
+                        {!!m.picks.length && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 3 }}>
+                            {m.picks.map((p, i) => (
+                              <span key={i} className="mono" title={`${p.game_window} ${p.roster_slot}${p.metric_id ? ` · ${p.metric_id}` : ''}`}
+                                style={{ ...mono, fontSize: 8, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }}>
+                                {p.player_slug ? fmtSlug(p.player_slug) : '—'}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Users({ onLeaveAdmin }: { onLeaveAdmin?: () => void }) {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
+  const [viewing, setViewing] = useState<AdminUser | null>(null);
+  const [q, setQ] = useState('');
   useEffect(() => { adminUsers().then(setUsers).catch(() => setUsers([])); }, []);
+  const needle = q.trim().toLowerCase();
+  const shown = (users ?? []).filter((u) => !needle
+    || (u.email ?? '').toLowerCase().includes(needle)
+    || (u.sleeper_username ?? '').toLowerCase().includes(needle));
   return (
     <div style={card}>
+      {viewing && <ViewAs user={viewing} onClose={() => setViewing(null)} onLeaveAdmin={onLeaveAdmin} />}
       <div style={h}>USERS ({users?.length ?? '…'})</div>
-      {users === null ? <Muted text="Loading…" /> : users.length === 0 ? <Muted text="No users yet." /> : users.map((u) => (
-        <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
-          <div>
+      {!!users?.length && (
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="filter by email or Sleeper handle…"
+          style={{ ...inp, width: '100%', boxSizing: 'border-box', fontSize: 10, padding: '5px 7px', marginBottom: 6 }} />
+      )}
+      {users === null ? <Muted text="Loading…" /> : users.length === 0 ? <Muted text="No users yet." /> : shown.map((u) => (
+        <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{u.email ?? '—'}</div>
             <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{u.sleeper_username ? `@${u.sleeper_username}` : 'no Sleeper link'} · {u.enrolled} enrolled</div>
           </div>
-          <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{new Date(u.created_at).toLocaleDateString()}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <button onClick={() => setViewing(u)} className="mono" style={{ ...linkBtn, color: 'var(--you)' }} title="see what this user sees — read-only">👁 view as</button>
+            <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{new Date(u.created_at).toLocaleDateString()}</span>
+          </div>
         </div>
       ))}
+      {users !== null && users.length > 0 && shown.length === 0 && <Muted text="No match." />}
     </div>
   );
 }
