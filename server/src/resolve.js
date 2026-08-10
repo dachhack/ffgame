@@ -22,6 +22,9 @@ import { config } from './config.js';
 import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY } from './engine.js';
 import { matchupPremium, premiumTier, hasPremiumContent, gateSide, hasPremiumTargeted, gateTargeted } from './premium.js';
 import { slugMeta } from '../../src/data/slugMeta.ts';
+// Shared with the client and migration 0110: board weeks above PRESEASON_BASE
+// are throwaway practice and never move real coin.
+import { isPreseasonWeek as isPracticeWeek } from '../../src/data/nflSlate.ts';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
 export function baseScore(plays) {
@@ -352,7 +355,14 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   // Bank each side's weekly drip-coin into its persistent wallet, once, when the
   // week settles. Idempotent (credit_wallet guards on an idem_key), so the repeated
   // resolves of a final matchup don't double-credit. Roster-keyed → AI teams bank too.
-  if (matchup.status === 'final' && coin && !override) {
+  //
+  // PRACTICE weeks bank nothing: the preseason board weeks (101-103) are
+  // throwaway, so three weeks of rehearsal can't fund real Week-1 power-ups. The
+  // coin the engine computed is still written to the matchup row above — it's the
+  // "what you'd have earned" readout — it just never reaches a wallet. Migration
+  // 0110 enforces the same rule inside credit_wallet; skipping the call here
+  // keeps the tick from making a round trip per side that can only no-op.
+  if (matchup.status === 'final' && coin && !override && !isPracticeWeek(matchup.week)) {
     await creditWallet(matchup, matchup.home_roster_id, coin.home);
     await creditWallet(matchup, matchup.away_roster_id, coin.away);
   }

@@ -1619,7 +1619,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
       {puView === 'active' && <ActivePowerupsModal effects={activeEffects} onClose={() => setPuView(null)} />}
       {puView === 'apply' && <ApplyPowerupsModal items={appliable} inventory={inventory} cards={cardHand} onArm={(id) => armBuff(week, id)} onApply={(id) => { setPendingApply(id); setPuView(null); }} onClose={() => setPuView(null)} />}
-      {shopOpen && <ShopModal onClose={() => setShopOpen(false)} coinsOverride={liveCtx ? Math.round(coinBal) : undefined} onBuy={liveCtx ? buyFromWallet : undefined} cards={cardHand} />}
+      {/* practice: preseason board weeks charge nothing (0110), so the shop must
+          neither gate on the balance nor imply one will be deducted. */}
+      {shopOpen && <ShopModal onClose={() => setShopOpen(false)} coinsOverride={liveCtx ? Math.round(coinBal) : undefined} onBuy={liveCtx ? buyFromWallet : undefined} cards={cardHand} practice={!!liveCtx && preseason} />}
       {/* Card-table hand: the same owned/usable power-ups as the Apply modal,
           fanned at the bottom. Tap a card → tip → ARM fires the buff, APPLY
           enters the existing tap-a-target flow (pendingApply); tapping the

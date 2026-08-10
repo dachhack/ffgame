@@ -13,7 +13,7 @@ import {
 import { buildDripTestLeague } from '../data/dripTest';
 import { track, Ev } from '../app/analytics';
 import { buildLiveLeague } from '../data/liveBoard';
-import { PRESEASON_BASE, clearRuntimeSlate } from '../data/nflSlate';
+import { PRESEASON_BASE, isPreseasonWeek, preseasonWeekNum, clearRuntimeSlate } from '../data/nflSlate';
 import { LiveBoard } from './LiveBoard';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { AdminPage, type LeagueTab } from './AdminPage';
@@ -989,6 +989,10 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
     const s: Record<number, { rid: number; w: number; l: number; t: number; pf: number }> = {};
     const get = (rid: number) => (s[rid] ??= { rid, w: 0, l: 0, t: 0, pf: 0 });
     for (const r of rows ?? []) {
+      // Preseason practice (board weeks 101-103) is throwaway — its results show
+      // in the week list below, but never in a record. Mirrors league_standings
+      // (migration 0110), which seeds the playoff bracket from the same rule.
+      if (isPreseasonWeek(r.week)) continue;
       if (r.status !== 'final' || r.home_final == null || r.away_final == null) continue;
       const h = get(r.home_roster_id), a = get(r.away_roster_id);
       h.pf += Number(r.home_final); a.pf += Number(r.away_final);
@@ -1027,7 +1031,10 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
             )}
             {weeks.map(([wk, ms]) => (
               <div key={wk} style={{ ...card, marginBottom: 10 }}>
-                <div style={hdr}>WEEK {wk}</div>
+                <div style={hdr}>
+                  {isPreseasonWeek(wk) ? `PRESEASON WK ${preseasonWeekNum(wk)}` : `WEEK ${wk}`}
+                  {isPreseasonWeek(wk) && <span style={{ color: 'var(--faint)', fontWeight: 400, letterSpacing: '0.06em' }}> · PRACTICE, DOESN'T COUNT</span>}
+                </div>
                 {ms.map((r, i) => {
                   const fin = r.status === 'final' && r.home_final != null && r.away_final != null;
                   const homeWon = fin && Number(r.home_final) > Number(r.away_final);
