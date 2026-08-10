@@ -1436,7 +1436,7 @@ function TestLiveToggle({ on, leagueId, reload }: { on: boolean; leagueId: strin
 // turning practice on would hand the commissioner three weeks nothing will ever
 // feed. Admins see the control regardless, so off-window testing still works.
 function PreseasonPractice({ on, leagueId, season, admin, reload }: { on: boolean; leagueId: string; season: string; admin: boolean; reload: () => void }) {
-  const [busy, setBusy] = useState<'on' | 'off' | 'pool' | null>(null);
+  const [busy, setBusy] = useState<'on' | 'off' | 'pool' | 'rebuild' | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [win, setWin] = useState<PreseasonWindow | null>(null);
   useEffect(() => { let ok = true; preseasonWindow(season).then((w) => { if (ok) setWin(w); }).catch(() => {}); return () => { ok = false; }; }, [season]);
@@ -1458,6 +1458,31 @@ function PreseasonPractice({ on, leagueId, season, admin, reload }: { on: boolea
     setBusy('off'); setNote(null);
     const r = await setPreseasonPractice(leagueId, false).catch((e: unknown) => ({ ok: false as const, error: friendlyError(e) }));
     if (!r.ok) setNote(r.error ?? 'failed');
+    setBusy(null);
+    reload();
+  };
+  // Re-run the CLONE on a league that's already ON. Needed because the week set
+  // is built once, when practice is opened: a league opened before 0112/0113
+  // still has the old three Week-1 clones and will never grow week 104 or gain
+  // distinct pairings, and pressing "open" isn't offered while it's already on.
+  // Turning practice off and on again would work but is worse — OFF deletes every
+  // practice week including already-played ones (it would take the Hall-of-Fame
+  // matchup and its scores with it), whereas the clone skips a played week before
+  // it wipes anything, so a rebuild leaves finished weeks untouched.
+  //
+  // DESTRUCTIVE for unplayed practice weeks: the clone wipes each week it rebuilds,
+  // so sealed picks there go. Hence the confirm, and hence it stays separate from
+  // the harmless roster re-seed below.
+  const rebuild = async () => {
+    if (busy) return;
+    if (!window.confirm('Rebuild the practice weeks?\n\nAdds any preseason week that is missing (e.g. PRE 4) and re-pairs each week against its own regular-season matchup.\n\nAlready-played weeks are left alone, but any picks already sealed in an UPCOMING practice week will be cleared.')) return;
+    setBusy('rebuild'); setNote(null);
+    const r = await enablePreseasonPractice(leagueId).catch((e: unknown) => ({ ok: false as const, error: friendlyError(e) }));
+    const skipped = ('skipped' in r ? r.skipped ?? [] : []).map((w) => `PRE ${w - 100}`);
+    setNote(r.ok
+      ? `✓ rebuilt ${('weeks' in r ? r.weeks ?? [] : []).map((w) => `PRE ${w - 100}`).join(', ')}`
+        + (skipped.length ? ` · left ${skipped.join(', ')} alone (already played)` : '')
+      : (r.error ?? 'failed'));
     setBusy(null);
     reload();
   };
@@ -1501,8 +1526,12 @@ function PreseasonPractice({ on, leagueId, season, admin, reload }: { on: boolea
         ) : on ? (
           <>
             <span className="mono" style={bs(true)}>🏈 PRACTICE: ON</span>
+            <button onClick={rebuild} disabled={!!busy} className="mono" style={bs(false)}
+              title="Rebuild the practice weeks: adds any preseason week this league is missing and re-pairs each week against its own regular-season matchup. Already-played weeks are left untouched; picks sealed in an upcoming practice week are cleared.">
+              {busy === 'rebuild' ? 'rebuilding…' : '⟳ rebuild weeks'}
+            </button>
             <button onClick={reseed} disabled={!!busy} className="mono" style={bs(false)}
-              title="Re-seed every seat's preseason pick pool from the current depth charts. Safe to re-press.">
+              title="Re-seed every seat's preseason pick pool from the current depth charts. Safe to re-press — this never touches matchups or picks.">
               {busy === 'pool' ? 'seeding…' : '🧬 re-seed rosters'}
             </button>
             <button onClick={turnOff} disabled={!!busy} className="mono" style={{ ...bs(false), color: 'var(--opp)', borderColor: 'var(--opp)' }}

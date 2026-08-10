@@ -371,7 +371,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const preseason = isPreseasonWeek(week);
   // The selector pages the league's whole matchup timeline as ONE continuous
   // range — preseason (offset) weeks first, then the regular season — so a
-  // preseason-enabled league flips PRE 1 → … → PRE 3 → WK 1 → … in one stride.
+  // preseason-enabled league flips PRE 1 → … → PRE 4 → WK 1 → … in one stride.
   // Driven by the schedule the league actually has, so it only offers real weeks.
   const orderedWeeks = (() => {
     const ws = new Set(getActiveLeague().schedule.map((g) => g.week));
