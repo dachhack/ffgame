@@ -1,0 +1,15 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "jsx": "react-jsx",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "baseUrl": ".",
+    "paths": {
+      "@drip/core/*": ["../../packages/core/src/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", "../../packages/core/src/**/*.ts"],
+  "exclude": ["node_modules"]
+}

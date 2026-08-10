@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Drip League FF — a real-time fantasy football game. Web demo seeded with the PeakedInDynasty 2025 season.",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
     "dev": "vite",

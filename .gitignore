@@ -18,3 +18,9 @@ scripts/pbp/espn-cache/
 
 # Supabase CLI local scratch (linked project ref, version cache) — not for VCS.
 supabase/.temp/
+
+# Expo / React Native (apps/mobile)
+apps/mobile/.expo/
+apps/mobile/dist/
+apps/mobile/ios/
+apps/mobile/android/
