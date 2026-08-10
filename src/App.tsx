@@ -5,6 +5,7 @@ import { DemoBoard } from './screens/DemoBoard';
 import { yahooExchange } from './data/providers/yahooClient';
 import { getSession, hasAuthTokensInUrl } from './data/liveApi';
 import { RequestCodeFab } from './screens/RequestCode';
+import { InstallPrompt } from './app/InstallPrompt';
 import { DEMO_WEEK } from './config';
 
 // Route screens are code-split: only the active screen's chunk loads, keeping the
@@ -95,6 +96,10 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Is the request-a-code FAB on screen? It owns the bottom-left corner, so the
+  // install banner has to sit above it (see the comment on the FAB below).
+  const fab = !['live', 'splash', 'demo', 'matchup', 'final'].includes(route.name) && !liveCtx && !loggedIn;
+
   return (
     <div
       style={{
@@ -129,7 +134,11 @@ export function App() {
           demo landing (their own request-a-code CTA), and on the board/final
           screens where its fixed bottom-left corner overlaps the playback and
           lineup controls; also hidden for a signed-in live user. */}
-      {!['live', 'splash', 'demo', 'matchup', 'final'].includes(route.name) && !liveCtx && !loggedIn && <RequestCodeFab />}
+      {fab && <RequestCodeFab />}
+      {/* "Add to home screen" — everywhere except the board and the final, where a
+          bottom banner would sit on top of the live playout. Self-gating: renders
+          nothing unless the browser can install and the visitor is warmed up. */}
+      {!['matchup', 'final'].includes(route.name) && <InstallPrompt raised={fab} />}
     </div>
   );
 }

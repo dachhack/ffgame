@@ -64,7 +64,7 @@ Implemented now (`src/app/analytics.ts`, `Ev.*`, wired in `src/app/store.tsx`):
 
 | Event | Where | Funnel stage |
 |---|---|---|
-| `app_open` | `main.tsx` boot | acquisition |
+| `app_open {version, standalone}` | `main.tsx` boot — `standalone` = launched from an installed home-screen icon rather than a browser tab | acquisition |
 | `sleeper_connected` + `identify(userId)` | `setSleeperUser` | acquisition |
 | `screen_view {screen}` | `navigate` | (whole funnel) |
 | `league_opened {live, teams}` | `loadSimLeague` | activation |
@@ -81,6 +81,10 @@ Implemented now (`src/app/analytics.ts`, `Ev.*`, wired in `src/app/store.tsx`):
 | `pod_entry_saved {week, spent}` | `PodBuilder` — saved a salary-cap entry (DFS builder, 0092) | **activation** |
 | `dfs_created {teams}` | `LiveOnboard` — approved commish founded a DFS league (0094) | acquisition |
 | `dfs_joined {already}` | `LiveOnboard` — joined a DFS league by invite code (0094) | **activation** |
+| `pwa_install_shown {ios}` | `InstallPrompt` — the add-to-home-screen banner rendered | retention |
+| `pwa_install_accepted` / `pwa_install_declined` | the native install dialog's outcome (Chromium only) | retention |
+| `pwa_install_dismissed` | banner closed — snoozed 45 days | retention |
+| `pwa_installed` | the browser confirmed an install (`appinstalled`) | **retention** |
 
 Every event also carries the visitor's **first-touch attribution** (`utm_source` /
 `utm_medium` / `utm_campaign` / `utm_content` / `utm_term` + `first_referrer` +

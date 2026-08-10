@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { StoreProvider } from './app/store';
 import { App } from './App';
 import { initAnalytics, registerSink } from './app/analytics';
+import { initPwa } from './app/pwa';
 import './styles.css';
 
 // Wire PostHog as the analytics sink IF a project token is configured (VITE_POSTHOG_KEY,
@@ -16,6 +17,9 @@ if (PH_KEY) {
   }).catch(() => { /* analytics is best-effort */ });
 }
 
+// Before initAnalytics: registers the beforeinstallprompt listener, which
+// Chromium can fire as early as first paint.
+initPwa();
 initAnalytics();
 
 createRoot(document.getElementById('root')!).render(

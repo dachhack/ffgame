@@ -93,7 +93,7 @@ The site is served from the custom domain **dripfantasy.com** (`public/CNAME`), 
 This demo is phase 1. The original ask runs further:
 
 - **Phase 2 — the real website.** Replace the simulation with a live data layer: pull lineups from the Sleeper league API, and drive scoring from a real-time NFL play-by-play feed (websocket/poll) with banks computed server-side. Add auth and persisted picks/locks.
-- **Phase 3 — native iOS & Android.** The data layer (`src/data`) and game engine (`src/engine`) are deliberately UI-agnostic and portable. Wrap them in **Expo / React Native** to ship the same SETUP/LIVE/FINAL loop to phones, sharing engine code with the web app.
+- **Phase 3 — iOS & Android.** The site is already an installable PWA (home-screen icon, standalone launch, works offline — `public/manifest.webmanifest` + `public/sw.js`). Store apps come next: a **Capacitor** shell around the same build, plus native push. Plan, work list and store-policy gates in **`docs/mobile-app-plan.md`** — which also explains why the React Native port this line used to propose is the wrong trade.
 
 ---
 

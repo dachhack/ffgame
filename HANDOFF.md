@@ -1,6 +1,75 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-08-08 · Build `v0.140.0`_
+_Last updated: 2026-08-10 · Build `v0.141.0`_
+
+## The site is an installable app now (v0.141.0, 2026-08-10)
+
+Home-screen icon, standalone launch, works offline. No hosting change — same
+GitHub Pages deploy, same `dist/`. **The plan this is step one of lives in
+`docs/mobile-app-plan.md`**: PWA now, Capacitor shells built during the season,
+store submission for 2027. That doc also supersedes README "Phase 3" and explains
+why the React Native port it proposed is the wrong trade (the engine ports; the
+screens — `FieldView`, the card table, the pixel sprites, `@keyframes nukeburst` —
+are DOM and CSS to their bones).
+
+**The manifest uses relative URLs on purpose.** `public/manifest.webmanifest` says
+`./` and `./icons/...`, never `/…`, so one file serves all three bases we build
+at: dripfantasy.com (`/`), the `/ffgame/` Pages preview, `/ffgame-staging/`. Vite
+rewrites the `<link rel=manifest>` href per base and everything inside resolves
+against wherever the manifest landed. Icons are in `public/icons/pwa/`, baked from
+the Instagram profile art by `scripts/gen-pwa-icons.py` — mascot only, cropped
+above the wordmark (unreadable at 192px) and opaque (iOS composites alpha onto
+black). Outputs are committed; the script needs Pillow and only runs when the
+brand mark changes.
+
+**Every caching rule in `public/sw.js` follows from one fear** — a cache pinning
+somebody to an old build on a Sunday while we hotfix:
+- **Navigations are network-first.** A reload always gets the freshly deployed
+  `index.html`. A stale build cannot outlive one reload.
+- **`/assets/` is cache-first**, safe only because Vite content-hashes those
+  names. Matched by *directory*, not by the running worker's precache list, so a
+  tab can always find the chunks of the build it actually loaded.
+- **Two shell generations retained.** This fixes a bug that predates the PWA:
+  Pages drops the previous deploy's files, so deploying mid-session broke
+  `React.lazy()` chunk loads in open tabs — a blank screen on any screen the user
+  hadn't opened yet. Verified: a tab open across a deploy now keeps working.
+- **No `skipWaiting()`.** A new worker waits for old tabs to close. Costs one
+  session of lag before a new build is precached; buys the guarantee that assets
+  never swap under a live board. Given nine fixes shipped during one live-fire
+  night, that's the right side of the trade.
+- **Nothing dynamic cached.** Same-origin GET only → Supabase and PostHog fall
+  through untouched. `/pbp/` and `/gamefeed/` excluded by name (megabytes of JSON
+  the HTTP cache already handles).
+
+**If it ever misbehaves: `KILL = true` at the top of `public/sw.js`, deploy.**
+Clients drop every cache and unregister on next load, reverting to a plain
+website. Registered with `updateViaCache:'none'` so the kill lands on the next
+navigation, not ten minutes later. Tested — it works.
+
+**The precache list is injected at build time** by `pwaServiceWorker()` in
+`vite.config.ts` (replaces `"__PRECACHE__"` and `__VERSION__` in the copied
+`dist/sw.js`). The cache name is `APP_VERSION` + a digest of the asset list, so a
+forgotten version bump can't leave two builds sharing one cache. No Workbox, no
+vite-plugin-pwa — the dependency tree stays at four.
+
+**The banner** (`src/app/InstallPrompt.tsx`, state in `src/app/pwa.ts`) waits 60s
+on a first visit, immediately for a returning or signed-in visitor; snoozes 45
+days on dismiss; never returns after an install; hidden on `matchup`/`final` so it
+can't cover a live playout, and lifted above the request-a-code FAB's lane on the
+screens that show one. Chromium gets the real install dialog, iOS Safari gets the
+Share → Add to Home Screen instructions (there is no API). New events:
+`pwa_install_shown/_accepted/_declined/_dismissed`, `pwa_installed`, and
+`app_open` now carries `standalone` so installs read as a retention cohort.
+
+**Testing note for whoever touches this next:** `vite preview` is useless for
+service-worker work — it keeps serving files it has already deleted, so rebuilding
+`dist/` does not simulate a deploy and you will chase ghosts. Use a static server
+that reads from disk per request.
+
+**Deliberately not done:** push (the server half is the same work for web and
+native, so it's scheduled once, with the shells), iOS `apple-touch-startup-image`
+launch frames, manifest `screenshots`, and an orientation lock — see
+`docs/mobile-app-plan.md` §1.
 
 ## Window Pot v1 — an OPT-IN wager ladder, flagged OFF (v0.140.0, 2026-08-08)
 

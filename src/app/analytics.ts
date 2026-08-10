@@ -48,6 +48,12 @@ export const Ev = {
   splitContributed: 'split_contributed',            // {amount}
   splitCompleted: 'split_completed',                // pool reached $30 → league unlocked
   commishPremiumToggled: 'commish_premium_toggled', // {on}
+  // install funnel (the PWA "add to home screen" banner — src/app/pwa.ts)
+  pwaInstallShown: 'pwa_install_shown',         // {ios} — banner rendered
+  pwaInstallAccepted: 'pwa_install_accepted',   // took the native install dialog
+  pwaInstallDeclined: 'pwa_install_declined',   // opened the dialog, said no
+  pwaInstallDismissed: 'pwa_install_dismissed', // closed the banner (snoozed)
+  pwaInstalled: 'pwa_installed',                // the browser confirmed the install
 } as const;
 
 // ── First-touch attribution ──────────────────────────────────────────────────
@@ -109,5 +115,10 @@ export function identify(id: string, traits?: Props): void {
 
 /** Call once at app boot. */
 export function initAnalytics(): void {
-  track(Ev.appOpen, { version: APP_VERSION });
+  // `standalone` = launched from the home screen rather than a browser tab, so
+  // installs can be read as a retention cohort. Checked inline rather than
+  // imported from ./pwa, which imports this module.
+  let standalone = false;
+  try { standalone = window.matchMedia('(display-mode: standalone)').matches; } catch { /* ignore */ }
+  track(Ev.appOpen, { version: APP_VERSION, standalone });
 }
