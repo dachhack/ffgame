@@ -139,7 +139,7 @@ for (const s of slugsForPts) {
 
 // ── Returns cross-check vs src/data/returns.ts (joined on slug,pid) ──
 function loadReturns() {
-  const src = readFileSync(new URL('../../src/data/returns.ts', import.meta.url), 'utf8');
+  const src = readFileSync(new URL('../../packages/core/src/data/returns.ts', import.meta.url), 'utf8');
   const i = src.indexOf('= {', src.indexOf('RETURN_PLAYS'));
   const j = src.lastIndexOf('};');
   return JSON.parse(src.slice(i + 2, j + 1)); // slug -> { week: [[c,y,td?,t?,pid?]] }

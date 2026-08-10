@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
 import { SiteSettings, VersionTag, Img } from '../app/ui';
-import { liveConfigured } from '../data/liveConfig';
+import { liveConfigured } from '@drip/core/data/liveConfig';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   getSession, onAuth, signOut, ensureAppUser,
@@ -9,11 +9,11 @@ import {
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft,
   myMatchup, matchupTeams, leagueResults, defaultOpenWeek,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
-} from '../data/liveApi';
-import { buildDripTestLeague } from '../data/dripTest';
-import { track, Ev } from '../app/analytics';
-import { buildLiveLeague } from '../data/liveBoard';
-import { PRESEASON_BASE, isPreseasonWeek, preseasonWeekNum, weekLabel, clearRuntimeSlate } from '../data/nflSlate';
+} from '@drip/core/data/liveApi';
+import { buildDripTestLeague } from '@drip/core/data/dripTest';
+import { track, Ev } from '@drip/core/analytics';
+import { buildLiveLeague } from '@drip/core/data/liveBoard';
+import { PRESEASON_BASE, isPreseasonWeek, preseasonWeekNum, weekLabel, clearRuntimeSlate } from '@drip/core/data/nflSlate';
 import { LiveBoard } from './LiveBoard';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { AdminPage, type LeagueTab } from './AdminPage';
@@ -63,7 +63,7 @@ export function LiveOnboard() {
   const [view, setView] = useState<OnboardView>(() => (route.name === 'live' && route.view === 'admin' ? 'admin' : 'home'));
 
   useEffect(() => {
-    if (!liveConfigured) { setReady(true); return; }
+    if (!liveConfigured()) { setReady(true); return; }
     getSession().then((s) => { setSession(s); setReady(true); });
     return onAuth((s, ev) => { setSession(s); if (ev === 'PASSWORD_RECOVERY') setRecovery(true); });
   }, []);
@@ -139,7 +139,7 @@ export function LiveOnboard() {
 
       <main style={{ flex: 1, display: 'flex', alignItems: wide ? 'flex-start' : 'center', justifyContent: 'center', padding: '24px 16px' }}>
         <div style={{ width: '100%', maxWidth: pageMax }}>
-          {!liveConfigured ? <NotConfigured />
+          {!liveConfigured() ? <NotConfigured />
             : !ready ? <Muted text="Loading…" />
             : recovery ? <SetPassword onDone={() => setRecovery(false)} />
             : !session ? <AuthForm />

@@ -41,7 +41,7 @@ function pwaServiceWorker(): Plugin {
       // — it changes whenever the build does, so a forgotten APP_VERSION bump
       // can't leave two different builds sharing one cache name.
       const version = /APP_VERSION\s*=\s*'([^']+)'/.exec(
-        readFileSync(resolve(__dirname, 'src/app/version.ts'), 'utf8'),
+        readFileSync(resolve(__dirname, 'packages/core/src/version.ts'), 'utf8'),
       )?.[1] ?? 'dev';
       const digest = createHash('sha256').update(assets.join('\n')).digest('hex').slice(0, 8);
       writeFileSync(sw, readFileSync(sw, 'utf8')
@@ -56,6 +56,13 @@ function pwaServiceWorker(): Plugin {
 export default defineConfig({
   base: process.env.VITE_BASE ?? '/ffgame/',
   plugins: [react(), spaFallback(), pwaServiceWorker()],
+  resolve: {
+    // @drip/core is a SOURCE-ONLY workspace package — no build step, so Vite
+    // compiles its TypeScript as part of this app and HMR works across the
+    // package boundary. Aliased explicitly rather than relying on the
+    // node_modules symlink so the resolution matches tsconfig `paths` exactly.
+    alias: [{ find: /^@drip\/core\/(.*)$/, replacement: resolve(__dirname, 'packages/core/src/$1') }],
+  },
   build: {
     outDir: 'dist',
     sourcemap: false,

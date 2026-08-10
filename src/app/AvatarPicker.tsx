@@ -8,8 +8,8 @@
 // check requires (migration 0066).
 import { useMemo } from 'react';
 import { Img } from './ui';
-import { NFL_CODES } from '../data/kdst';
-import { DRIP_AVATARS, dripAvatarUrl } from '../data/dripAvatars';
+import { NFL_CODES } from '@drip/core/data/kdst';
+import { DRIP_AVATARS, dripAvatarUrl } from '@drip/core/data/dripAvatars';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
 const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };

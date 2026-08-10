@@ -1,8 +1,13 @@
+// FIRST import, and it must stay first: this installs the browser platform
+// adapter as an import side effect, and everything below reaches into
+// @drip/core, which reads storage/env/URL through it.
+import './platform.web';
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { StoreProvider } from './app/store';
 import { App } from './App';
-import { initAnalytics, registerSink } from './app/analytics';
+import { initAnalytics, registerSink } from '@drip/core/analytics';
 import { initPwa } from './app/pwa';
 import './styles.css';
 
@@ -20,7 +25,11 @@ if (PH_KEY) {
 // Before initAnalytics: registers the beforeinstallprompt listener, which
 // Chromium can fire as early as first paint.
 initPwa();
-initAnalytics();
+// `standalone` = launched from the home screen rather than a browser tab, so
+// installs can be read as a retention cohort. Answered here rather than inside
+// core, which carries no browser globals. Read inline rather than imported from
+// ./pwa, which imports the analytics module.
+initAnalytics({ standalone: (() => { try { return window.matchMedia('(display-mode: standalone)').matches; } catch { return false; } })() });
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

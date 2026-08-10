@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
 import { Brand, SiteSettings, PosPill, useIsMobile } from '../app/ui';
-import { getTeam, gameForTeam } from '../data/league';
-import { buildMatchup, defaultLineup, aiLineup, slotKey, WINDOW_WIN_BONUS } from '../engine/matchup';
-import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '../data/realPbp';
-import { metricById } from '../data/metrics';
-import { powerupById } from '../data/powerups';
-import { slotMoments, topMoments, MOMENT_COLOR, type Moment } from '../engine/moments';
-import { fmtClock } from '../engine/sim';
+import { getTeam, gameForTeam } from '@drip/core/data/league';
+import { buildMatchup, defaultLineup, aiLineup, slotKey, WINDOW_WIN_BONUS } from '@drip/core/engine/matchup';
+import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '@drip/core/data/realPbp';
+import { metricById } from '@drip/core/data/metrics';
+import { powerupById } from '@drip/core/data/powerups';
+import { slotMoments, topMoments, MOMENT_COLOR, type Moment } from '@drip/core/engine/moments';
+import { fmtClock } from '@drip/core/engine/sim';
 import { PuIcon } from '../app/gameIcons';
 
 export function MatchupFinal({ week }: { week: number }) {

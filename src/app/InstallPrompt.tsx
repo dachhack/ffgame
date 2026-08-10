@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { canPromptInstall, dismissInstall, isIosSafari, onInstallStateChange, promptInstall } from './pwa';
-import { track, Ev } from './analytics';
+import { track, Ev } from '@drip/core/analytics';
 
 /** "Add to home screen" — a dismissible bottom banner.
  *

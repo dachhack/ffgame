@@ -4,8 +4,8 @@
 // engines have real keyword-rich content to index (the SPA itself is one URL).
 // Run: npm run gen:rulebook
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { METRICS } from '../src/data/metrics.ts';
-import { POWERUPS } from '../src/data/powerups.ts';
+import { METRICS } from '../packages/core/src/data/metrics.ts';
+import { POWERUPS } from '../packages/core/src/data/powerups.ts';
 
 const POS = [
   ['QB', 'Quarterback'], ['RB', 'Running Back'], ['WR', 'Wide Receiver'], ['TE', 'Tight End'],

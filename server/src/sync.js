@@ -12,9 +12,9 @@ import * as sleeper from './sleeper.js';
 import { weekKickoffMs, buildSlate } from './poll/scoreboard.js';
 import { REGULAR_SEASON } from './seasonType.js';
 import { buildPlayerIndex, slugOf } from './playerIndex.js';
-import { assignKdst } from '../../src/data/kdst.ts';
-import { setRuntimeSlate } from '../../src/data/nflSlate.ts';
-import { poolFromRows } from '../../src/data/preseasonPool.ts';
+import { assignKdst } from '../../packages/core/src/data/kdst.ts';
+import { setRuntimeSlate } from '../../packages/core/src/data/nflSlate.ts';
+import { poolFromRows } from '../../packages/core/src/data/preseasonPool.ts';
 
 /** Sync a week's schedule + lineups for many leagues, throttled to stay under
  *  Sleeper's rate limit. Returns { ok, total }. Shared by the CLI (`sync-week-all`)

@@ -4,11 +4,11 @@
 // order the live sim drips into live_play. Data is the baked source week (the
 // React twin of scripts/feedlog.mjs). Pure read; reuses admin_matchup_picks.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { adminMatchupPicks, type MatchupPicks } from '../data/liveApi';
-import { loadRealWeek, realPbpFor, realPointsFor, type RealPlay } from '../data/realPbp';
-import { slugMeta } from '../data/slugMeta';
+import { adminMatchupPicks, type MatchupPicks } from '@drip/core/data/liveApi';
+import { loadRealWeek, realPbpFor, realPointsFor, type RealPlay } from '@drip/core/data/realPbp';
+import { slugMeta } from '@drip/core/data/slugMeta';
 import { PlayerImg } from '../app/ui';
-import type { Pos } from '../types';
+import type { Pos } from '@drip/core/types';
 
 const mono: React.CSSProperties = { fontFamily: 'var(--mono, monospace)' };
 const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };

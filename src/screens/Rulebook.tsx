@@ -1,7 +1,7 @@
-import { METRICS, WINDOWS } from '../data/metrics';
-import { POWERUPS } from '../data/powerups';
+import { METRICS, WINDOWS } from '@drip/core/data/metrics';
+import { POWERUPS } from '@drip/core/data/powerups';
 import { PuIcon, GameIcon, COIN_SILVER } from '../app/gameIcons';
-import type { Pos } from '../types';
+import type { Pos } from '@drip/core/types';
 
 // In-app scoring rulebook. The metric catalog + power-up list are rendered straight
 // from src/data/metrics.ts and src/data/powerups.ts, so they can never drift from

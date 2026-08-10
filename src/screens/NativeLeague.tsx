@@ -9,11 +9,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PosPill, PlayerImg, Avatar } from '../app/ui';
 import { AvatarPicker } from '../app/AvatarPicker';
-import type { Pos } from '../types';
-import { buildDraftPool } from '../data/nativeLeague';
-import { ADP_2026, ADP_AS_OF } from '../data/adp2026';
-import { PROJ_2026, PROJ_AS_OF } from '../data/proj2026';
-import { statsForSlug } from '../data/players';
+import type { Pos } from '@drip/core/types';
+import { buildDraftPool } from '@drip/core/data/nativeLeague';
+import { ADP_2026, ADP_AS_OF } from '@drip/core/data/adp2026';
+import { PROJ_2026, PROJ_AS_OF } from '@drip/core/data/proj2026';
+import { statsForSlug } from '@drip/core/data/players';
 import {
   createNativeLeague, createMockDraft, deleteMockDraft, seedLeaguePool, nativeGenerateSchedule,
   startDraft, draftState, makeDraftPick, draftTick,
@@ -26,7 +26,7 @@ import {
   nominate, placeBid, setLotProxy,
   leagueTrades, proposeTrade, respondTrade, cancelTrade,
   type DraftState, type LeaguePoolPlayer, type NativeTeamState, type TradeRow,
-} from '../data/liveApi';
+} from '@drip/core/data/liveApi';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
 const label: React.CSSProperties = { fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)', fontWeight: 700 };

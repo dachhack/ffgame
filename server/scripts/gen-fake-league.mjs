@@ -7,9 +7,9 @@
 import { buildPlayerIndex } from '../src/playerIndex.js';
 import * as sleeper from '../src/sleeper.js';
 import { buildSlate } from '../src/poll/scoreboard.js';
-import { setRuntimeSlate } from '../../src/data/nflSlate.ts';
-import { assignKdst } from '../../src/data/kdst.ts';
-import { slugMeta } from '../../src/data/slugMeta.ts';
+import { setRuntimeSlate } from '../../packages/core/src/data/nflSlate.ts';
+import { assignKdst } from '../../packages/core/src/data/kdst.ts';
+import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
 
 const SRC = '1313930509658652672';          // Console Warriors (roster/schedule source)
 const FAKE_SLEEPER_ID = 'DRIPTEST-2026';    // synthetic id for the fake league

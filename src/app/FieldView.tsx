@@ -10,10 +10,10 @@
 // two games, collapsible), FieldBoard (full-screen grid of EVERY slotted game,
 // with plays tinted by whose roster made them — you vs opponent).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed } from '../data/gameFeed';
-import { isPreseasonWeek, preseasonWeekNum } from '../data/nflSlate';
-import { teamLogo } from '../data/media';
-import { teamColor } from '../data/teamColors';
+import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
+import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
+import { teamLogo } from '@drip/core/data/media';
+import { teamColor } from '@drip/core/data/teamColors';
 import { useIsMobile } from './ui';
 
 // Geometry (SVG user units). The 100-yd field spans FX..FX+FW; EZ = end zone.

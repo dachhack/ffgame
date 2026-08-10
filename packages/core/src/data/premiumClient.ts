@@ -3,7 +3,7 @@
 // this is for UX and for measuring demand. Fail-OPEN: if the tier isn't loaded we treat
 // everything as free, so we never show a false lock — the server still enforces.
 import { getPremiumTier } from './liveApi';
-import { track, Ev } from '../app/analytics';
+import { track, Ev } from '../analytics';
 
 let tier: { positions: string[]; powerups: string[] } | null = null;
 let loading: Promise<void> | null = null;

@@ -21,7 +21,7 @@ import { sweepPots } from './pot.js';
 import { db } from './supabase.js';
 import { ensurePods } from './pods.js';
 import { PRESEASON, REGULAR_SEASON } from './seasonType.js';
-import { setRuntimeSlate, PRESEASON_BASE, PRESEASON_WEEKS } from '../../src/data/nflSlate.ts';
+import { setRuntimeSlate, PRESEASON_BASE, PRESEASON_WEEKS } from '../../packages/core/src/data/nflSlate.ts';
 
 let playerIndex = null;
 let lastInjuryPoll = 0;

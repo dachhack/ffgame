@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { requestCode, issueSoloPass } from '../data/liveApi';
-import { liveConfigured } from '../data/liveConfig';
+import { requestCode, issueSoloPass } from '@drip/core/data/liveApi';
+import { liveConfigured } from '@drip/core/data/liveConfig';
 import { useStore } from '../app/store';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
-import { track, Ev, attribution } from '../app/analytics';
+import { track, Ev, attribution } from '@drip/core/analytics';
 
 // A persistent "out" present across the whole funnel: any visitor — wowed by the
 // demo, browsing leagues, mid-sim — can ask us to set their league up in the
@@ -12,7 +12,7 @@ import { track, Ev, attribution } from '../app/analytics';
 export function RequestCodeFab() {
   const [open, setOpen] = useState(false);
   const { sleeperUser } = useStore();
-  if (!liveConfigured) return null;
+  if (!liveConfigured()) return null;
   return (
     <>
       <button onClick={() => setOpen(true)} className="mono" style={fab} title="Request a pilot code for your league">

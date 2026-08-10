@@ -1,18 +1,18 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { ThemeName } from '../theme';
-import type { WindowId, Pick } from '../types';
-import { LEAGUE, YOU_TEAM_ID, setActiveLeague, resetToDemoLeague, type BuiltLeague } from '../data/league';
-import { clearSyntheticWeeks, clearLivePlays } from '../data/realPbp';
-import { clearLiveGameFeeds } from '../data/gameFeed';
-import { clearRuntimeHeadshots } from '../data/media';
-import type { League } from '../types';
-import { powerupById, isAmplifier, ampCapacity, capAmplifiers } from '../data/powerups';
-import { DEMO_WEEK } from '../config';
-import { type ProviderUser, type ProviderId } from '../data/providers';
-import { track, identify, Ev } from './analytics';
-import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, hasAuthTokensInUrl, type TargetedState } from '../data/liveApi';
+import type { ThemeName } from '@drip/core/theme';
+import type { WindowId, Pick } from '@drip/core/types';
+import { LEAGUE, YOU_TEAM_ID, setActiveLeague, resetToDemoLeague, type BuiltLeague } from '@drip/core/data/league';
+import { clearSyntheticWeeks, clearLivePlays } from '@drip/core/data/realPbp';
+import { clearLiveGameFeeds } from '@drip/core/data/gameFeed';
+import { clearRuntimeHeadshots } from '@drip/core/data/media';
+import type { League } from '@drip/core/types';
+import { powerupById, isAmplifier, ampCapacity, capAmplifiers } from '@drip/core/data/powerups';
+import { DEMO_WEEK } from '@drip/core/config';
+import { type ProviderUser, type ProviderId } from '@drip/core/data/providers';
+import { track, identify, Ev } from '@drip/core/analytics';
+import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, hasAuthTokensInUrl, type TargetedState } from '@drip/core/data/liveApi';
 
-import type { SlotSwap } from '../engine/matchup';
+import type { SlotSwap } from '@drip/core/engine/matchup';
 export type { SlotSwap };
 
 /** Powerups applied to a given week (their effects, not the inventory). */

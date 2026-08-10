@@ -6,7 +6,7 @@
 // being closed. It's also the groundwork for the native shells — the icon set,
 // the standalone layout and the launch route are the same assets Capacitor wraps
 // next season (docs/mobile-app-plan.md).
-import { track, Ev } from './analytics';
+import { track, Ev } from '@drip/core/analytics';
 
 const STORE = 'drip.pwa.v1';
 // How long a dismissal sticks. Long enough not to nag, short enough that someone

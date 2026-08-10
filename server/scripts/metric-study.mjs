@@ -13,7 +13,7 @@
 // DEF Suppress) bank 0 here by design — their value lives outside the slot.
 import { readFileSync } from 'node:fs';
 import { makePlayer, injectWeek, resolveWindow, EMPTY } from '../src/engine.js';
-import { STAT_PLAYERS, normName } from '../../src/data/players.ts';
+import { STAT_PLAYERS, normName } from '../../packages/core/src/data/players.ts';
 
 const slugOf = (n) => normName(n).replace(/\s+/g, '-');
 const WEEKS = (process.env.WEEKS ?? '1,2,3,5,7,9,11,13').split(',').map(Number);

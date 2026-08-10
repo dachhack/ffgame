@@ -10,10 +10,10 @@
 //
 // NOTE: run anything importing this under tsx (see package.json scripts), so the
 // .ts imports resolve in Node.
-import { resolveSlot, EMPTY_PLAYER } from '../../src/engine/sim.ts';
-import { resolveLiveMatchup } from '../../src/engine/liveResolve.ts';
-import { setSyntheticWeeks, clearSyntheticWeeks } from '../../src/data/realPbp.ts';
-import { aiLineup, aiLiveBuffs } from '../../src/data/aiLineup.ts';
+import { resolveSlot, EMPTY_PLAYER } from '../../packages/core/src/engine/sim.ts';
+import { resolveLiveMatchup } from '../../packages/core/src/engine/liveResolve.ts';
+import { setSyntheticWeeks, clearSyntheticWeeks } from '../../packages/core/src/data/realPbp.ts';
+import { aiLineup, aiLiveBuffs } from '../../packages/core/src/data/aiLineup.ts';
 
 const ZERO_STATS = {
   games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0,

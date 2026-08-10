@@ -4,6 +4,7 @@
 // is viewed. Until a week is loaded, the accessors report "no data" and the
 // engine falls back to its deterministic simulation.
 import { REAL_WEEKS } from './realWeeks';
+import { platform } from '../platform';
 
 export { REAL_WEEKS };
 export type RealPlayKind =
@@ -78,7 +79,7 @@ export function loadRealWeek(week: number): Promise<boolean> {
   if (!REAL_WEEKS.has(week) || cache.has(week)) return Promise.resolve(true);
   let p = inflight.get(week);
   if (!p) {
-    const url = `${import.meta.env.BASE_URL}pbp/w${week}.json`;
+    const url = platform().assetUrl(`pbp/w${week}.json`);
     p = fetch(url)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`pbp w${week}: HTTP ${r.status}`))))
       .then((data: WeekData) => { cache.set(week, data); return true; })

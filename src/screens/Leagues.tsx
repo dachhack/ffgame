@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
 import { SiteSettings, VersionTag } from '../app/ui';
-import { getProvider, type ProviderLeague } from '../data/providers';
-import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
+import { getProvider, type ProviderLeague } from '@drip/core/data/providers';
+import { prefetchPlayerDirectory } from '@drip/core/data/sleeperPlayers';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 
 // Leagues we've already auto-forwarded into (single-league shortcut). Tracked so

@@ -7,14 +7,14 @@ import { useEffect, useState } from 'react';
 import { useStore, PHOTO_SKINS } from '../app/store';
 import type { Phase } from '../app/store';
 import { PlayerImg, InjuryBadge, useIsMobile, ModalBackdrop } from '../app/ui';
-import { windowsForWeek, gamesInWindow } from '../data/nflSlate';
-import { METRICS, metricById } from '../data/metrics';
-import { powerupById } from '../data/powerups';
-import { getPlayer } from '../data/league';
+import { windowsForWeek, gamesInWindow } from '@drip/core/data/nflSlate';
+import { METRICS, metricById } from '@drip/core/data/metrics';
+import { powerupById } from '@drip/core/data/powerups';
+import { getPlayer } from '@drip/core/data/league';
 import { PlayerCard } from '../app/cardTable';
 import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
-import { FX_COLOR } from '../data/demoNarration';
-import type { Pick, Player, Pos, WindowId, Metric } from '../types';
+import { FX_COLOR } from '@drip/core/data/demoNarration';
+import type { Pick, Player, Pos, WindowId, Metric } from '@drip/core/types';
 
 // ── Pool filtering ───────────────────────────────────────────────────────────
 // A normal fantasy roster is 8-20 players, so every pool list here used to render

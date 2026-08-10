@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { WINDOWS, METRICS, LOCKED_METRIC_UNLOCK } from '../data/metrics';
-import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel } from '../data/nflSlate';
-import { slugMeta } from '../data/slugMeta';
-import type { Pos, WindowId } from '../types';
+import { WINDOWS, METRICS, LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
+import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel } from '@drip/core/data/nflSlate';
+import { slugMeta } from '@drip/core/data/slugMeta';
+import type { Pos, WindowId } from '@drip/core/types';
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
   myBuffs, armBuff, disarmBuff, LIVE_BUFFS,
@@ -10,14 +10,14 @@ import {
   myWallet, ensureWallet,
   myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium, startCheckout,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
-} from '../data/liveApi';
-import { powerupById } from '../data/powerups';
+} from '@drip/core/data/liveApi';
+import { powerupById } from '@drip/core/data/powerups';
 import { PuIcon, GameIcon, Emoji, COIN_GOLD } from '../app/gameIcons';
-import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } from '../data/premiumClient';
-import { shortName } from '../data/players';
-import type { Player } from '../types';
+import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } from '@drip/core/data/premiumClient';
+import { shortName } from '@drip/core/data/players';
+import type { Player } from '@drip/core/types';
 import { SetupRow, PlayerPicker } from './boardParts';
-import { REG_SEASON_WEEKS } from '../data/league';
+import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 
 // Live pool entries are slug/full/pos; the reused setup card wants a Player. Build
 // a light one (zero stats — the setup board only displays name/pos/team/headshot).

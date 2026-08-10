@@ -1,0 +1,40 @@
+{
+  "cli": { "version": ">= 12.0.0", "appVersionSource": "remote" },
+  "build": {
+    "//": "This app CANNOT run in Expo Go — react-native-mmkv v4 is a Nitro module with native code. Every profile below therefore produces a real build. See apps/mobile/README.md.",
+
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": { "simulator": true },
+      "android": { "buildType": "apk" },
+      "channel": "development"
+    },
+
+    "preview": {
+      "//": "The playtester build. `distribution: internal` means an install link rather than a store submission, and `buildType: apk` makes the Android artifact directly sideloadable — a .aab cannot be installed by hand.",
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "ios": { "simulator": false },
+      "channel": "preview"
+    },
+
+    "preview-simulator": {
+      "//": "iOS build that runs in the Xcode Simulator without a paid Apple Developer account. Handy for reviewing screens on a Mac before enrolling.",
+      "distribution": "internal",
+      "ios": { "simulator": true },
+      "channel": "preview"
+    },
+
+    "production": {
+      "//": "Store submission. Android switches to .aab, which Play requires and which cannot be sideloaded.",
+      "distribution": "store",
+      "android": { "buildType": "app-bundle" },
+      "channel": "production",
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

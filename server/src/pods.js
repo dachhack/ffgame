@@ -17,8 +17,8 @@ import { config } from './config.js';
 import { getWeekProjections } from './sleeper.js';
 import { weekKickoffMs, buildSlate } from './poll/scoreboard.js';
 import { REGULAR_SEASON } from './seasonType.js';
-import { statsForSlug, hasStatsForSlug } from '../../src/data/players.ts';
-import { PROJ_2026, PROJ_2026_SID } from '../../src/data/proj2026.ts';
+import { statsForSlug, hasStatsForSlug } from '../../packages/core/src/data/players.ts';
+import { PROJ_2026, PROJ_2026_SID } from '../../packages/core/src/data/proj2026.ts';
 
 // ── Seeded RNG (mulberry32 over a string hash — mirrors the playtester) ──────
 function hashStr(s) {

@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { __setClientForTest } from '../src/supabase.js';
 import { resolveMatchup, prefetchTick } from '../src/resolve.js';
 import { injectWeek } from '../src/engine.js';
-import { slugMeta } from '../../src/data/slugMeta.ts';
+import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
 
 const WEEK = 1;
 

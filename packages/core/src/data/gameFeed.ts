@@ -5,6 +5,7 @@
 // Baked by scripts/pbp/genGameFeed.mjs into public/gamefeed/wN.json and fetched
 // lazily per week, so it costs nothing until a field is actually opened.
 import { REAL_WEEKS } from './realWeeks';
+import { platform } from '../platform';
 
 export interface GamePlay {
   c: number;        // game-elapsed seconds (same clockOf as RealPlay)
@@ -73,7 +74,7 @@ export function loadGameFeedWeek(week: number): Promise<void> {
   if (liveFeeds.has(week) || !REAL_WEEKS.has(week) || cache.has(week)) return Promise.resolve();
   let p = inflight.get(week);
   if (!p) {
-    const url = `${import.meta.env.BASE_URL}gamefeed/w${week}.json`;
+    const url = platform().assetUrl(`gamefeed/w${week}.json`);
     p = fetch(url)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`gamefeed w${week}: HTTP ${r.status}`))))
       .then((data: WeekGameFeed) => { cache.set(week, data); })

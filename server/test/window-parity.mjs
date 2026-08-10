@@ -5,7 +5,7 @@
 // window that never seals and never publishes scores. Runs offline.
 //   npx tsx test/window-parity.mjs
 import { slateFromGames } from '../src/poll/scoreboard.js';
-import { setRuntimeSlate, clearRuntimeSlate, windowForTeam, windowsForWeek } from '../../src/data/nflSlate.ts';
+import { setRuntimeSlate, clearRuntimeSlate, windowForTeam, windowsForWeek } from '../../packages/core/src/data/nflSlate.ts';
 
 // Real 2026 preseason kickoffs (migration 0099) — Thu doubleheaders, Fri and
 // multi-slot Sat slates — plus a regular-season-shaped week with a Sunday

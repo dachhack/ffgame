@@ -1,18 +1,18 @@
 import { useState, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { Session } from '@supabase/supabase-js';
-import type { Pos, ThemeName } from '../theme';
+import type { Pos, ThemeName } from '@drip/core/theme';
 import { useStore, type CardSkin } from './store';
-import { headshot, espnHeadshot, teamLogo } from '../data/media';
-import { injuryFor } from '../data/injuries';
-import { REG_SEASON_WEEKS } from '../data/league';
-import { APP_VERSION, DATA_SOURCE } from './version';
+import { headshot, espnHeadshot, teamLogo } from '@drip/core/data/media';
+import { injuryFor } from '@drip/core/data/injuries';
+import { REG_SEASON_WEEKS } from '@drip/core/data/league';
+import { APP_VERSION, DATA_SOURCE } from '@drip/core/version';
 import { Rulebook } from '../screens/Rulebook';
 import { markBootSessionChecked } from '../screens/DemoBoard';
 import { Faq } from '../screens/Faq';
 import { GameIcon, UI_ART, BRAND_MARK, ICON_SETS } from './gameIcons';
-import { liveConfigured } from '../data/liveConfig';
-import { getSession, onAuth, signOut, isAdmin } from '../data/liveApi';
+import { liveConfigured } from '@drip/core/data/liveConfig';
+import { getSession, onAuth, signOut, isAdmin } from '@drip/core/data/liveApi';
 
 /** True when the viewport is at/below `maxWidth` — drives the mobile layout. */
 export function useIsMobile(maxWidth = 760): boolean {
@@ -180,7 +180,7 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
   // Mirror the Supabase auth session so a signed-in player can sign out from any
   // page (this gear lives in every screen's header). No-op for the static build.
   useEffect(() => {
-    if (!liveConfigured) return;
+    if (!liveConfigured()) return;
     getSession().then(setSession).catch(() => {});
     return onAuth((s) => setSession(s));
   }, []);
@@ -343,7 +343,7 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
               <GameIcon name={UI_ART.admin} emoji="⚡" size="1.5em" /> Super admin →
             </button>
           )}
-          {liveConfigured && !session && (
+          {liveConfigured() && !session && (
             <button
               onClick={() => { setOpen(false); navigate({ name: 'live' }); }}
               className="mono"

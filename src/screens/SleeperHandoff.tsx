@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../app/store';
-import { getProvider } from '../data/providers';
-import { prefetchPlayerDirectory } from '../data/sleeperPlayers';
+import { getProvider } from '@drip/core/data/providers';
+import { prefetchPlayerDirectory } from '@drip/core/data/sleeperPlayers';
 
 // Inline "play it with YOUR team" capture — dropped onto the demo end-cards at the
 // moment of peak intent so a wowed visitor goes straight from the demo into their

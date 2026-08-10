@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Drip Fantasy",
+    "slug": "drip-fantasy",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "scheme": "dripfantasy",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.dripfantasy.app"
+    },
+    "android": {
+      "package": "com.dripfantasy.app",
+      "edgeToEdgeEnabled": true
+    },
+    "extra": {
+      "//": "Mirrors the web build's VITE_* vars. The core platform shim reads these through expo-constants, so core code is identical on both hosts. Public values only — the Supabase anon key is RLS-guarded and the Yahoo client id is a public consumer key.",
+      "VITE_SUPABASE_URL": null,
+      "VITE_SUPABASE_ANON_KEY": null,
+      "VITE_YAHOO_CLIENT_ID": null,
+      "VITE_MARK_FREE": null
+    },
+    "plugins": ["expo-web-browser"]
+  }
+}

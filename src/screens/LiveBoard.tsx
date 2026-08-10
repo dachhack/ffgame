@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { weekLabel } from '../data/nflSlate';
-import { WINDOWS, metricById } from '../data/metrics';
+import { weekLabel } from '@drip/core/data/nflSlate';
+import { WINDOWS, metricById } from '@drip/core/data/metrics';
 import { GameIcon, COIN_GOLD } from '../app/gameIcons';
-import type { Pos } from '../types';
+import type { Pos } from '@drip/core/types';
 import {
   myRoster, myMatchup, getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, myPool, matchupWallets, matchupTeams, weekGameFeeds, leagueCardTheme,
   type LiveMatchup, type WindowScore, type RevealedPick, type PoolPlayer, type TeamInfo, type GameFeedRow,
-} from '../data/liveApi';
+} from '@drip/core/data/liveApi';
 import { CardTableCss, Felt, PlayerCard, SealedCard } from '../app/cardTable';
-import { setLiveGameFeed, feedRowsToWeek } from '../data/gameFeed';
+import { setLiveGameFeed, feedRowsToWeek } from '@drip/core/data/gameFeed';
 import { FieldView } from '../app/FieldView';
-import { REG_SEASON_WEEKS } from '../data/league';
+import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16 };
 const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };

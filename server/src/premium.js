@@ -10,8 +10,8 @@
 // power-up set + special events; the free tier is a complete, balanced game on its own (the
 // playtester measured skill-only at a fair 50.7% home win-rate).
 import { db } from './supabase.js';
-import { LOCKED_METRIC_UNLOCK } from '../../src/data/metrics.ts';
-import { defaultAiMetric } from '../../src/data/aiLineup.ts';
+import { LOCKED_METRIC_UNLOCK } from '../../packages/core/src/data/metrics.ts';
+import { defaultAiMetric } from '../../packages/core/src/data/aiLineup.ts';
 
 // Defaults / fallback. The live values are edited from the super-admin control panel and
 // stored in the premium_tier table (migration 0037); premiumTier() reads them (cached).

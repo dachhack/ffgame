@@ -3,7 +3,7 @@
 // for play-by-play right now.
 // ESPN seasontype: 1 = preseason, 2 = regular, 3 = postseason. Defaults to regular;
 // callers pass config.seasonType so a preseason game can be ingested for rehearsal.
-import { windowIdsFromKickoffs } from '../../../src/data/nflSlate.ts';
+import { windowIdsFromKickoffs } from '../../../packages/core/src/data/nflSlate.ts';
 
 const SB = (season, week, seasonType = 2) =>
   `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${season}&seasontype=${seasonType}&week=${week}`;

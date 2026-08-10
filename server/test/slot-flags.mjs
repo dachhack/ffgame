@@ -4,7 +4,7 @@
 // goes hot. Run: `npx tsx test/slot-flags.mjs` from server/.
 import { readFileSync } from 'node:fs';
 import { makePlayer, injectWeek } from '../src/engine.js';
-import { resolveLiveMatchup } from '../../src/engine/liveResolve';
+import { resolveLiveMatchup } from '../../packages/core/src/engine/liveResolve';
 
 const WEEK = 1;
 const w = JSON.parse(readFileSync(new URL(`../../public/pbp/w${WEEK}.json`, import.meta.url)));

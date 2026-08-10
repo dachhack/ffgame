@@ -16,22 +16,22 @@ import {
   type PlayoffState, type PlayoffMatchup,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
   type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy, type LeagueKdst, type KdstMode,
-} from '../data/liveApi';
-import { PRESEASON_BOARD_WEEKS } from '../data/nflSlate';
-import { importLeague, syncWeek, syncMembers } from '../data/sleeperAdmin';
-import { importEspnSeason, syncEspnSeason, stripProvider } from '../data/providerAdmin';
-import { forceResolve } from '../data/forceResolve';
+} from '@drip/core/data/liveApi';
+import { PRESEASON_BOARD_WEEKS } from '@drip/core/data/nflSlate';
+import { importLeague, syncWeek, syncMembers } from '@drip/core/data/sleeperAdmin';
+import { importEspnSeason, syncEspnSeason, stripProvider } from '@drip/core/data/providerAdmin';
+import { forceResolve } from '@drip/core/data/forceResolve';
 import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
 import { Avatar } from '../app/ui';
 import { useStore } from '../app/store';
 import { AvatarPicker } from '../app/AvatarPicker';
 import { FeedSheet } from './FeedSheet';
-import { WINDOWS, defaultMetric } from '../data/metrics';
-import { NFL_CODES } from '../data/kdst';
-import { slugMeta } from '../data/slugMeta';
-import { isMarkFree, setMarkFree } from '../data/markFree';
-import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '../data/liveApi';
-import { POWERUPS } from '../data/powerups';
+import { WINDOWS, defaultMetric } from '@drip/core/data/metrics';
+import { NFL_CODES } from '@drip/core/data/kdst';
+import { slugMeta } from '@drip/core/data/slugMeta';
+import { isMarkFree, setMarkFree } from '@drip/core/data/markFree';
+import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '@drip/core/data/liveApi';
+import { POWERUPS } from '@drip/core/data/powerups';
 import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, errMsg, type TabDef } from './adminUi';
 import { DraftRoom } from './NativeLeague';
 

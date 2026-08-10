@@ -9,7 +9,7 @@
 // omission check.
 // Run: npx tsx scripts/check-powerup-prices.mjs
 import { readFileSync, readdirSync } from 'node:fs';
-import { POWERUPS } from '../src/data/powerups.ts';
+import { POWERUPS } from '../packages/core/src/data/powerups.ts';
 
 // The newest migration that (re)defines powerup_price() wins — CREATE OR REPLACE
 // semantics — so parity is checked against the last definition, not 0026's.
