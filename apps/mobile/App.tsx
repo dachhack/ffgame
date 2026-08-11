@@ -10,6 +10,7 @@ import { getSession, onAuth, signOut } from '@drip/core/data/liveApi';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { THEMES, ThemeCtx, loadTheme, isLight, MONO } from './src/theme.native';
 import { LivePicks } from './src/screens/LivePicks';
+import { ErrorBoundary } from './src/ui/ErrorBoundary';
 import { SignIn } from './src/screens/SignIn';
 
 export function App() {
@@ -36,6 +37,7 @@ export function App() {
   return (
     <SafeAreaProvider>
       <ThemeCtx.Provider value={theme}>
+        <ErrorBoundary>
         <StatusBar style={isLight(themeName) ? 'dark' : 'light'} />
         <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }} edges={['top', 'left', 'right']}>
           {!ready ? (
@@ -67,6 +69,7 @@ export function App() {
             </View>
           )}
         </SafeAreaView>
+        </ErrorBoundary>
       </ThemeCtx.Provider>
     </SafeAreaProvider>
   );
