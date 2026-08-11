@@ -15,16 +15,23 @@
 //     resizeMode="repeat" over the stock colour. What is still missing is the
 //     gradient's centre highlight; the texture itself is now faithful.
 //   · Cards DEAL IN — a short rise + fade, staggered by slot index, matching the
-//     web's ct-dealin. Built on RN's own Animated rather than Reanimated: this
-//     is an entrance transition on mount, not a gesture or a frame-by-frame
-//     effect, and it does not justify a native dependency. The nuke/flip
-//     moments will.
+//     web's ct-dealin. The reveal flip, idle wobble, nuke burst, hot glow and
+//     score tick live in ./animations.tsx and are wired in below.
+//
+// All of it runs on RN's own Animated with the native driver. That was an open
+// question — the note here used to say the nuke and flip moments would be what
+// finally justified react-native-reanimated. Having built them: they don't.
+// Every moment on this board is a declarative timing over opacity and transform,
+// which is exactly what the native driver takes off the JS thread. Reanimated
+// pays for itself on gestures and on animations that must read values back
+// mid-flight; this board has neither. See the header of animations.tsx.
 import { type ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import { storeGet } from '@drip/core/platform';
 import { MONO } from '../theme.native';
+import { useFlipIn, useWobble, useShake, useScoreTick, NukeBurst, HotGlow } from './animations';
 
 // True playing-card ratio (2.5:3.5). The web sets it as --ct-aspect so both
 // cards in a slot pair match height; here the same number keeps the pair square
@@ -62,9 +69,10 @@ export function cardBackArt() {
 /** A dealt player card: headshot, name, position/team, sealed metric. */
 /** Deal-in: rise + fade, staggered by index. Native driver, so it runs on the
  *  UI thread and a slow JS tick cannot stutter it. */
-function useDealIn(idx: number) {
-  const v = useRef(new Animated.Value(0)).current;
+function useDealIn(idx: number, play = true) {
+  const v = useRef(new Animated.Value(play ? 0 : 1)).current;
   useEffect(() => {
+    if (!play) return;
     Animated.timing(v, {
       toValue: 1,
       duration: 260,
@@ -72,14 +80,14 @@ function useDealIn(idx: number) {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [idx, v]);
+  }, [idx, play, v]);
   return {
     opacity: v,
     transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
   };
 }
 
-export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0, onPress, onRemove, footer }: {
+export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0, flip = false, hot = false, nuked = false, onPress, onRemove, footer }: {
   slug: string;
   name: string;
   pos: string;
@@ -91,6 +99,12 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
   accent: string;
   /** Deal order — staggers the entrance. */
   idx?: number;
+  /** This card just turned face-up — play the reveal rather than the deal.
+   *  Only true for a slot the board watched go from sealed to revealed. */
+  flip?: boolean;
+  /** Worker-published slot flags (matchup_state.slot_scores). */
+  hot?: boolean;
+  nuked?: boolean;
   onPress?: () => void;
   onRemove?: () => void;
   footer?: ReactNode;
@@ -99,10 +113,30 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
   const logo = teamLogo(team);
   const src = photo ?? logo;
 
-  const deal = useDealIn(idx);
+  // Deal and flip are two ways of ARRIVING and a card does exactly one of them:
+  // dealt onto the board on first paint, or turned face-up when its window
+  // kicks off. Running both would read as two separate entrances for one event.
+  //
+  // Latched, because `flip` is true only for the render pass in which the board
+  // noticed the reveal. Without the latch it would fall back to false a frame
+  // later, restart the deal, and re-fade a card that is already on the table.
+  const flipLatch = useRef(flip);
+  if (flip) flipLatch.current = true;
+  const doFlip = flipLatch.current;
+
+  // One transform list rather than a wrapper view per effect. These touch
+  // disjoint properties — perspective/rotateY from the flip, translateY from the
+  // deal, rotateZ from the wobble, translateX from the shake — so concatenating
+  // composes them correctly. Order matters only for perspective, which must lead.
+  const deal = useDealIn(idx, !doFlip);
+  const flipIn = useFlipIn(doFlip);
+  const wob = useWobble(idx);
+  const shake = useShake(nuked);
+  const tick = useScoreTick(bank);
 
   return (
-    <Animated.View style={[{ flex: 1 }, deal]}>
+    <Animated.View style={{ flex: 1, opacity: deal.opacity, transform: [...flipIn.transform, ...deal.transform] }}>
+    <Animated.View style={{ flex: 1, transform: [...wob.transform, ...shake.transform] }}>
     <Pressable onPress={onPress} style={{ flex: 1 }}>
     <ImageBackground
       source={STOCK_TILE}
@@ -142,12 +176,17 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
       )}
 
       {bank != null ? (
-        <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '800', color: INK }}>{bank}</Text>
+        <Animated.Text style={[{ fontFamily: MONO, fontSize: 15, fontWeight: '800', color: INK }, tick]}>{bank}</Animated.Text>
       ) : footer ? (
         <View style={{ flexDirection: 'row', gap: 12 }}>{footer}</View>
       ) : <View style={{ height: 2 }} />}
     </ImageBackground>
+    {/* Overlays sit outside the card face so they aren't clipped by its radius
+        and don't inherit its padding. */}
+    {hot && !nuked && <HotGlow color={accent} />}
+    <NukeBurst play={nuked} />
     </Pressable>
+    </Animated.View>
     </Animated.View>
   );
 }
@@ -158,8 +197,11 @@ export function CardBack({ label = 'SEALED', idx = 0, onPress, actionLabel }: {
   label?: string; idx?: number; onPress?: () => void; actionLabel?: string;
 }) {
   const deal = useDealIn(idx);
+  // Backs wobble too — the web wobbles `.ct-card`, face or not, and a still
+  // sealed card next to a breathing one reads as a rendering glitch.
+  const wob = useWobble(idx);
   return (
-    <Animated.View style={[{ flex: 1, aspectRatio: CARD_ASPECT, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1A2740' }, deal]}>
+    <Animated.View style={{ flex: 1, aspectRatio: CARD_ASPECT, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1A2740', opacity: deal.opacity, transform: [...deal.transform, ...wob.transform] }}>
       <Image source={cardBackArt()} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
       <Pressable onPress={onPress} disabled={!onPress} style={{ position: 'absolute', inset: 0, justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 8 }}>
         <View style={{ backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 3 }}>

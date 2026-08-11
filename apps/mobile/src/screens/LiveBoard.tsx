@@ -14,7 +14,7 @@
 //   · The card-table presentation (league_pref.card_theme) — a skin, and it
 //     depends on cardTable.tsx, 888 lines of DOM-specific card rendering.
 // Both are presentation. The score, the windows and the lineups are here.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { weekLabel, windowsForWeek } from '@drip/core/data/nflSlate';
 import { metricById } from '@drip/core/data/metrics';
@@ -29,6 +29,7 @@ import type { Pos } from '@drip/core/types';
 import { useTheme } from '../theme.native';
 import { Card, Display, LinkButton, Mono } from '../ui/prims';
 import { CardFace, CardBack, FELT } from '../ui/cards';
+import { LivePulse } from '../ui/animations';
 
 const round1 = (n: number) => Math.round(Number(n) * 10) / 10;
 
@@ -278,23 +279,63 @@ function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel }
       return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.localeCompare(b);
     });
 
-  const bankOf = (p: RevealedPick, side: 'home' | 'away') => {
-    const row = scores.find((x) => x.game_window === p.game_window)?.slot_scores
-      ?.find((r) => r.side === side && (r.slot === p.roster_slot || (!!p.player_slug && r.slug === p.player_slug)));
-    return row ? round1(Number(row.score)) : null;
+  // A reveal is a TRANSITION, not a state, and the board is the only thing that
+  // can tell them apart. Every card here remounts constantly — a realtime tick,
+  // a pull-to-refresh, switching tabs — so a card that animated on mount would
+  // replay the reveal every time you glanced at the board, which is precisely
+  // how a moment stops being one. These sets remember what was already on the
+  // table; only a slot that was NOT there last pass gets to flip.
+  //
+  // Deliberately computed during render, not in an effect. The flip has to be
+  // known at the card's first mount — an effect fires a frame late, by which
+  // point the card has already dealt itself in and the flip becomes a second
+  // entrance for the same event. Mutating a ref mid-render is the trade; under a
+  // double-invoking StrictMode the second pass would see the key as already
+  // seen, so the cost is a skipped animation, never wrong data on the board.
+  const seenFaces = useRef<Set<string> | null>(null);
+  const seenNukes = useRef<Set<string>>(new Set());
+  const firstPaint = seenFaces.current === null;
+  if (firstPaint) seenFaces.current = new Set();
+
+  /** True the first time this slot appears face-up — but never on first paint,
+   *  where every card is arriving at once and deals in instead. */
+  const justRevealed = (key: string): boolean => {
+    const seen = seenFaces.current!;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return !firstPaint;
   };
 
-  const faceFor = (p: RevealedPick, side: 'home' | 'away', accent: string) => {
+  /** True the first time the worker reports this slot nuked. A nuke stays true
+   *  on the row for the rest of the week, so without this the burst would fire
+   *  again on every refresh. */
+  const justNuked = (key: string, nuked: boolean): boolean => {
+    if (!nuked) return false;
+    if (seenNukes.current.has(key)) return false;
+    seenNukes.current.add(key);
+    return true;
+  };
+
+  const rowOf = (p: RevealedPick, side: 'home' | 'away') =>
+    scores.find((x) => x.game_window === p.game_window)?.slot_scores
+      ?.find((r) => r.side === side && (r.slot === p.roster_slot || (!!p.player_slug && r.slug === p.player_slug)));
+
+  const faceFor = (p: RevealedPick, side: 'home' | 'away', accent: string, idx: number) => {
     const player = p.player_slug ? pool[p.player_slug] : null;
-    if (!player) return <CardBack key={`${p.game_window}-${p.roster_slot}-${side}`} />;
+    const key = `${p.game_window}-${p.roster_slot}-${side}`;
+    if (!player) return <CardBack key={key} idx={idx} />;
     const metric = metricById(player.pos as Pos, p.metric_id);
+    const row = rowOf(p, side);
     return (
       <CardFace
-        key={`${p.game_window}-${p.roster_slot}-${side}`}
+        key={key} idx={idx}
         slug={player.slug} name={player.full} pos={player.pos} team={slugTeam(player)}
         metric={metric?.name ?? p.metric_id ?? null}
-        bank={bankOf(p, side)}
+        bank={row ? round1(Number(row.score)) : null}
         accent={accent}
+        flip={justRevealed(key)}
+        hot={!!row?.hot}
+        nuked={justNuked(key, !!row?.nuked)}
       />
     );
   };
@@ -317,7 +358,12 @@ function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel }
           <Card key={win} style={{ marginBottom: 10 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <Mono size={10} weight="700" track={0.12}>{winLabel(win)}</Mono>
-              <Mono size={9} weight="700" tone={st === '● LIVE' ? 'you' : 'faint'}>{st}</Mono>
+              {/* The web pulses this chip with ct-livepulse. Only while the
+                  window is actually live — a permanent pulse is just chrome. */}
+              <View>
+                {st === '● LIVE' && <LivePulse color={t.you} />}
+                <Mono size={9} weight="700" tone={st === '● LIVE' ? 'you' : 'faint'}>{st}</Mono>
+              </View>
             </View>
 
             {(you != null || them != null) && (
@@ -331,8 +377,8 @@ function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel }
             <View style={{ gap: 10, backgroundColor: FELT, borderRadius: 8, padding: 10 }}>
               {Array.from({ length: pairs }, (_, i) => (
                 <View key={i} style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
-                  {my[i] ? faceFor(my[i], youSide, t.you) : <CardBack label="—" />}
-                  {th[i] ? faceFor(th[i], oppSide, t.opp) : <CardBack />}
+                  {my[i] ? faceFor(my[i], youSide, t.you, i) : <CardBack label="—" idx={i} />}
+                  {th[i] ? faceFor(th[i], oppSide, t.opp, i) : <CardBack idx={i} />}
                 </View>
               ))}
             </View>
