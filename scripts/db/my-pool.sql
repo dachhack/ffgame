@@ -22,6 +22,16 @@
 \set week 1
 \set roster_id 1
 
+-- ── 0. The league, and the id the SYNC wants ─────────────────────────────────
+-- Two different ids name the same league and they are not interchangeable:
+-- `id` is our uuid (what sleeper_lineup and matchup are keyed by), while
+-- `sleeper_league_id` is Sleeper's own — and THAT is the one the "Sync pilot
+-- league" workflow's `league` input takes, because syncWeek looks the league up
+-- by it before it fetches anything. Passing the uuid fails at the first query.
+select id as our_uuid, sleeper_league_id as sync_workflow_league_input, name, season
+from league
+where name like :'league_name';
+
 -- ── 1. Pool size, and the starters/bench/IR/taxi split ───────────────────────
 -- Before the whole-roster sync, `grp` is absent on every entry and this prints
 -- one row: (none) = starters only. After a re-sync it should print four.
