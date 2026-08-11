@@ -30,21 +30,26 @@ import '@formatjs/intl-datetimeformat/polyfill';
 import '@formatjs/intl-datetimeformat/locale-data/en';
 import '@formatjs/intl-datetimeformat/add-golden-tz';
 
-// The polyfilled DateTimeFormat has no idea what the device's zone is — it
-// defaults to UTC unless told. Anything that formats WITHOUT an explicit
-// timeZone (a lock time shown in the user's own zone, say) would otherwise
-// silently render as UTC.
+// The polyfilled DateTimeFormat defaults to UTC unless told the device's zone,
+// and anything formatted WITHOUT an explicit timeZone then renders as UTC. That
+// is not cosmetic here: lock times are shown with the device's zone, so a SUN
+// 4PM window read "locks 8:25 PM" instead of 4:25 PM — four hours late, in a
+// game where missing the lock costs you the window.
+//
+// The zone comes from expo-localization rather than
+// `Intl.DateTimeFormat().resolvedOptions().timeZone`, which is what shipped
+// first and silently returned nothing: asking the freshly-installed polyfill
+// what zone it is in only ever answers "the one you haven't set yet".
+import * as Localization from 'expo-localization';
+
 try {
-  // Hermes exposes the device zone here even when its Intl is incomplete.
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  if (tz) {
-    // @ts-expect-error — __setDefaultTimeZone is formatjs's own hook, untyped.
-    if (typeof Intl.DateTimeFormat.__setDefaultTimeZone === 'function') {
-      // @ts-expect-error — see above.
-      Intl.DateTimeFormat.__setDefaultTimeZone(tz);
-    }
+  const tz = Localization.getCalendars()[0]?.timeZone;
+  // @ts-expect-error — __setDefaultTimeZone is formatjs's own hook, untyped.
+  if (tz && typeof Intl.DateTimeFormat.__setDefaultTimeZone === 'function') {
+    // @ts-expect-error — see above.
+    Intl.DateTimeFormat.__setDefaultTimeZone(tz);
   }
 } catch {
-  // Leave it at UTC. Every window derivation passes an explicit ET zone, so the
-  // game logic is unaffected either way.
+  // Falls back to UTC. Window derivation always passes an explicit ET zone, so
+  // the game logic is unaffected — only displayed times would be off.
 }
