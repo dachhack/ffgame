@@ -8,7 +8,8 @@
 -- practice, pairings are drawn at random per week (no schedule needed),
 -- already-played weeks are skipped,
 -- practice spending runs on its own weekly 120-coin purse (0115), and the
--- lineup cap is the same 8 + purchased it is in the season (0116).
+-- lineup cap covers every slot the practice board renders (0118), while the
+-- regular season keeps base 8 + purchased.
 \set QUIET on
 \pset pager off
 
@@ -321,13 +322,13 @@ begin
   perform assert_eq(q, 1, '8g real arm consumed inventory');
 end $$;
 
--- ── 8b. the slot cap is the SAME in practice as in the season (0116) ────────
--- 0111 granted the extra slots free on a practice week; 0116 took that back once
--- the board's own preseason slot rule changed (2 slots at 3+ games, 3 at 5+, so
--- 10-11 slots a week). More slots than the base 8 is now DELIBERATE: choosing
--- which windows to contest, and whether to spend 80 of the 120 practice budget on
--- a ninth, is the exercise. A free grant would decide that for the manager and
--- teach a purchase that costs real coin in Week 1 as if it were free.
+-- ── 8b. a practice week accepts every slot ITS BOARD renders (0118) ─────────
+-- The preseason slot rule puts 10-11 slots on a practice board while the season's
+-- cap is 8. Reported live as "the second preseason week only keeps 8 of the picks
+-- I made": the board renders every slot as fillable, the autosave sends the whole
+-- lineup as ONE upsert, and the trigger rejects the entire batch — so the manager
+-- keeps whatever the last 8-pick save held. If the board offers a slot, the server
+-- has to take it.
 do $$
 declare mid_practice uuid; mid_real uuid; i int;
 begin
@@ -335,21 +336,28 @@ begin
   select id into mid_real from matchup where league_id = '00000000-0000-0000-0000-0000000009f1' and week = 1;
   perform probe_as('1');
 
-  -- 8 in on a practice week…
-  for i in 1..8 loop
+  -- 11 — what PRE 3 actually derives — must land on a practice week.
+  for i in 1..11 loop
     insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
       values (mid_practice, '00000000-0000-0000-0000-000000000101', 'w' || i, 's' || i, 'player-' || i);
   end loop;
-  perform assert_eq((select count(*) from sealed_pick where matchup_id = mid_practice), 8, '8h eight practice picks accepted');
-  -- …and the 9th refused, exactly as in the regular season.
+  perform assert_eq((select count(*) from sealed_pick where matchup_id = mid_practice), 11,
+    '8h eleven practice picks accepted — the whole PRE 3 board');
+  perform assert_true(practice_slot_cap() >= 11, '8h2 the cap clears what the board renders');
+
+  -- Still bounded: the cap is generous, not absent.
+  for i in 12..practice_slot_cap() loop
+    insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
+      values (mid_practice, '00000000-0000-0000-0000-000000000101', 'w' || i, 's' || i, 'player-' || i);
+  end loop;
   begin
     insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
-      values (mid_practice, '00000000-0000-0000-0000-000000000101', 'w9', 's9', 'player-9');
-    raise exception 'PROBE FAIL 8i — a 9th practice pick was accepted without an extra slot';
+      values (mid_practice, '00000000-0000-0000-0000-000000000101', 'wOver', 'sOver', 'player-over');
+    raise exception 'PROBE FAIL 8i — a pick past practice_slot_cap() was accepted';
   exception when check_violation then null;
   end;
 
-  -- A REAL week behaves identically: 8 in, the 9th refused.
+  -- The REGULAR season is untouched: 8 in, the 9th refused without an extra slot.
   for i in 1..8 loop
     insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
       values (mid_real, '00000000-0000-0000-0000-000000000101', 'w' || i, 's' || i, 'player-' || i);
