@@ -33,7 +33,7 @@ import {
 import type { PoolGroup } from '@drip/core/data/poolEntry';
 import type { GameWindow, Player, Pos, WindowId } from '@drip/core/types';
 import { useTheme } from '../theme.native';
-import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
+import { Card, Chip, Display, LinkButton, Mono, Notice } from '../ui/prims';
 import { SetupRow } from '../ui/SetupRow';
 import { FELT } from '../ui/cards';
 import { PlayerPicker } from '../ui/PlayerPicker';
@@ -101,6 +101,9 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  /** True once the server's saved picks are in `picks`. Gates the autosave so
+   *  the empty first render can never overwrite a real lineup. */
+  const [hydrated, setHydrated] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   const [shopOpen, setShopOpen] = useState(false);
@@ -137,7 +140,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
     let unsub = () => {};
     (async () => {
       try {
-        setState('loading'); setErr(null);
+        setState('loading'); setErr(null); setHydrated(false);
         const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
         if (!r) { setState('none'); return; }
         setRoster(r);
@@ -199,6 +202,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         }
         setLockedWins(lw);
         setPicks(map);
+        setHydrated(true);
         setExtra(Number(ex ?? 0));
         setBuffs(new Set(bf ?? []));
         setUnlocks(new Set(un ?? []));
@@ -322,22 +326,42 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
     });
   };
 
-  const seal = async () => {
-    if (!matchup || saving) return;
-    setSaving(true); setErr(null);
-    const rows: PickRow[] = slots
-      .map((s) => {
-        const p = picks[s.key];
-        return { game_window: s.win, roster_slot: s.slot, player_slug: p?.player_slug ?? null, metric_id: p?.metric_id ?? null };
-      })
-      // Only filled slots in still-open windows: a locked window's rows are
-      // sealed server-side and would fail the whole upsert (RLS + 0058 trigger).
-      .filter((r) => r.game_window && r.player_slug && !winLocked(r.game_window));
-    if (!rows.length) { setSaved(true); setSaving(false); return; }
-    try { await savePicks(matchup.id, userId, rows); setSaved(true); }
-    catch (e) { setErr(e instanceof Error ? e.message : 'Could not seal picks.'); }
-    finally { setSaving(false); }
-  };
+  // AUTOSAVE, debounced — there is no manual seal, because sealing is not a
+  // player action. A window's picks lock on the real clock, one hour before its
+  // first kickoff (server: config.lockLeadMs, written to matchup.lock_at by the
+  // sync and enforced by the 0058 trigger). The web board has worked this way
+  // all along — "the live board has no LOCK IN button" — and the app shipped a
+  // SEAL LINEUP button instead, which was wrong twice over: it named the player
+  // as the one who seals, and it meant a lineup you built but didn't press the
+  // button on was never saved at all.
+  //
+  // Only AFTER the saved lineup has hydrated. Autosaving from the first render
+  // would write the empty initial `picks` over a returning manager's real
+  // lineup, which is a far worse bug than the one being fixed.
+  useEffect(() => {
+    if (!matchup || !hydrated) return;
+    const id = setTimeout(() => {
+      const rows: PickRow[] = slots
+        .map((sl) => {
+          const p = picks[sl.key];
+          return { game_window: sl.win, roster_slot: sl.slot, player_slug: p?.player_slug ?? null, metric_id: p?.metric_id ?? null };
+        })
+        // Only filled slots in still-open windows: a locked window's rows are
+        // sealed server-side and would fail the whole upsert (RLS + 0058
+        // trigger), and one rejected row discards the entire batch.
+        .filter((r) => r.game_window && r.player_slug && !winLocked(r.game_window));
+      if (!rows.length) return;
+      setSaving(true);
+      savePicks(matchup.id, userId, rows)
+        .then(() => { setSaved(true); setErr(null); })
+        // A swallowed failure is the worst outcome here: the board keeps showing
+        // the lineup you built while the server holds an older one, and you find
+        // out on reload. Say so on the board.
+        .catch((e: unknown) => setErr(e instanceof Error ? e.message : 'Could not save your lineup.'))
+        .finally(() => setSaving(false));
+    }, 1500);
+    return () => clearTimeout(id);
+  }, [picks, matchup, hydrated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refreshCoins = () => { if (matchup) myWallet(matchup.id).then((c) => setCoins(Number(c ?? 0))).catch(() => {}); };
   const priceOf = (id: string) => powerupById(id)?.price ?? 0;
@@ -529,7 +553,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
     <ScrollView
       style={{ flex: 1, backgroundColor: t.bg }}
       // Bottom padding clears the hand, which is pinned over this list rather
-      // than scrolling with it — otherwise the SEAL button sits under the cards.
+      // than scrolling with it — otherwise the save status sits under the cards.
       contentContainerStyle={{ padding: 12, paddingBottom: hand.length ? 170 : 40 }}
     >
       <RosterPanel
@@ -839,8 +863,13 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
 
       {!!err && <Mono size={10.5} tone="opp" style={{ marginVertical: 6 }}>{err}</Mono>}
 
-      {!allLocked && <PrimaryButton label={saving ? 'SEALING…' : saved ? 'SEALED ✓ — UPDATE' : 'SEAL LINEUP'} disabled={saving} onPress={seal} />}
-      {saved && !allLocked && <Mono size={9.5} tone="you" style={{ textAlign: 'center', marginTop: 8 }}>Saved. Each window stays editable until it kicks off.</Mono>}
+      {/* Status, not a control. Nothing here to press: changes save themselves
+          and each window seals an hour before its own kickoff. */}
+      {!allLocked && (
+        <Mono size={9.5} tone={saving ? 'faint' : saved ? 'you' : 'faint'} style={{ textAlign: 'center', marginTop: 4 }}>
+          {saving ? 'Saving…' : saved ? 'Saved ✓ — each window locks 1h before its kickoff' : 'Changes save automatically — each window locks 1h before its kickoff'}
+        </Mono>
+      )}
       {allLocked && <Mono size={10.5} style={{ textAlign: 'center' }}>Every window has kicked off — picks are final.</Mono>}
 
       <View style={{ alignItems: 'center', marginTop: 14 }}><LinkButton label="← back" onPress={onBack} /></View>
