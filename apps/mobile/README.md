@@ -219,11 +219,12 @@ plugins/               Expo config plugins — android/ is generated, so anythin
 
 In rough order of how much they'll cost:
 
-- **Animations.** Cards deal in (`src/ui/cards.tsx`, RN `Animated`, native
-  driver), but the moments that carry the game don't: `nukeburst`, `flipin`,
-  `fvdraw`. They belong to the live board and they are the real test of the
-  port — `react-native-reanimated` still isn't installed, because an entrance
-  transition on mount didn't justify it and these might.
+- **`fvdraw`, the field-view stroke draw.** The one animation with no port. It
+  animates `stroke-dashoffset` on an SVG path, and there is no field view here
+  to draw on — no `react-native-svg`, no field surface on any ported screen. It
+  waits for its subject. Everything else (reveal flip, nuke burst, hot glow,
+  live pulse, deal-in, wobble, score tick) is in `src/ui/animations.tsx`, and
+  `react-native-reanimated` turned out not to be needed — see that file's header.
 - **Extra-slot picks.** Buying/selling works; filling uses three stacked
   `<select>`s on web, which needs a purpose-built native sheet.
 - **Fonts.** Space Grotesk needs `expo-font`; headings currently fall back to
