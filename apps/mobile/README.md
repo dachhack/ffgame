@@ -16,15 +16,15 @@ build, which needs an Apple/EAS account.
 
 ## Running it
 
-First: set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `app.json` →
-`expo.extra`. Same key names as the web build, because core reads them through
-the same shim. Without them the app opens on a "Live mode isn't configured"
-placeholder.
-
 ```bash
 npm install            # from the REPO ROOT — this is an npm workspace
 cd apps/mobile
 ```
+
+**No configuration needed for a production build.** `liveConfig.ts` carries the
+production Supabase URL and anon key as defaults — public by design, since the
+anon key grants nothing on its own and every table is RLS-guarded — so a build
+with no environment at all talks to the real backend.
 
 **Expo Go will not work.** `react-native-mmkv` v4 is a Nitro module with native
 code, so every path below produces a real build. That's a deliberate trade:
@@ -55,6 +55,36 @@ npm run ios            # expo run:ios — builds and boots the Simulator
 No paid Apple Developer account is needed for the Simulator. For a build you
 can put on a real iPhone, `npm run ios:simulator` covers Simulator-only via EAS,
 and TestFlight distribution needs the $99/yr enrollment.
+
+### Pointing a build somewhere else
+
+Only needed to target a different Supabase project (staging), or to flip
+mark-free / Yahoo. Core reads config via `platform().env(key)`, which on native
+resolves to `expo.extra`; `app.config.js` layers the environment onto it at
+**build** time, so changing one means rebuilding.
+
+The keys are the web build's names verbatim — `VITE_SUPABASE_URL`,
+`VITE_SUPABASE_ANON_KEY`, `VITE_YAHOO_CLIENT_ID`, `VITE_MARK_FREE` — so one name
+means the same thing on both hosts and there's no mapping to maintain.
+
+```bash
+# 1. your machine, gitignored — best for day to day
+echo 'VITE_SUPABASE_URL=https://staging.xyz.supabase.co' >> .env.local
+echo 'VITE_SUPABASE_ANON_KEY=sb_publishable_…'           >> .env.local
+
+# 2. one-off
+VITE_SUPABASE_URL=https://staging.xyz.supabase.co npx expo run:android
+
+# 3. EAS — the `env` block on a build profile in eas.json
+```
+
+Check what a build will actually carry before you build it:
+
+```bash
+npx expo config --type public --json | python3 -c "import json,sys; print(json.load(sys.stdin)['extra'])"
+```
+
+An empty `extra` is correct and means "use the production defaults".
 
 ### First-run gotchas
 

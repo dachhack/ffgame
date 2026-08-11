@@ -12,15 +12,10 @@
       "bundleIdentifier": "com.dripfantasy.app"
     },
     "android": {
-      "package": "com.dripfantasy.app",
-      "edgeToEdgeEnabled": true
+      "package": "com.dripfantasy.app"
     },
     "extra": {
-      "//": "Mirrors the web build's VITE_* vars. The core platform shim reads these through expo-constants, so core code is identical on both hosts. Public values only — the Supabase anon key is RLS-guarded and the Yahoo client id is a public consumer key.",
-      "VITE_SUPABASE_URL": null,
-      "VITE_SUPABASE_ANON_KEY": null,
-      "VITE_YAHOO_CLIENT_ID": null,
-      "VITE_MARK_FREE": null
+      "//": "Build-time config for core's platform shim. Deliberately EMPTY: unset keys fall through to the production defaults in packages/core/src/data/liveConfig.ts, so a plain build is a working production build. To point at another project, set VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY / VITE_YAHOO_CLIENT_ID / VITE_MARK_FREE in the environment — app.config.js layers them in. See the header there."
     },
     "plugins": ["expo-web-browser"]
   }
