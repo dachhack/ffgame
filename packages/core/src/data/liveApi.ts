@@ -3,7 +3,7 @@
 // redeem_invite RPC (migration 0002), never a direct membership write.
 import { getSupabase } from './supabaseClient';
 import { platform, storeGet } from '../platform';
-import { readPool } from './poolEntry';
+import { readPool, type PoolGroup } from './poolEntry';
 import { resolveUser } from './sleeper';
 import { PRESEASON_BOARD_WEEKS } from './nflSlate';
 import type { Session } from '@supabase/supabase-js';
@@ -400,7 +400,10 @@ export async function redeemCommish(commishCode: string): Promise<ConfirmCommish
 
 // ── Sealed picks (live-H2H lineup) ──────────────────────────────────────────────
 export interface LiveMatchup { id: string; league_id: string; week: number; status: string; lock_at: string | null; home_roster_id: number; away_roster_id: number; home_coin: number | null; away_coin: number | null; }
-export interface PoolPlayer { slug: string; full: string; pos: string; }
+/** `grp` is which part of the manager's roster the player sits on — the pool is
+ *  their WHOLE roster (starters, bench, IR, taxi), not just who Sleeper has
+ *  starting. Untagged rows read as 'start'; see entryGroup in poolEntry.ts. */
+export interface PoolPlayer { slug: string; full: string; pos: string; grp: PoolGroup; }
 export interface PickRow { game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null; locked?: boolean; }
 
 /** The caller's enrolled roster in a league (first enrolled membership). */
@@ -459,8 +462,15 @@ export async function leagueResults(leagueId: string): Promise<MatchupResult[]> 
 
 /** The caller's player pool for a week (their Sleeper roster, from sleeper_lineup). */
 export async function myPool(leagueId: string, week: number, rosterId: number): Promise<PoolPlayer[]> {
-  const { data } = await (await client()).from('sleeper_lineup').select('starters_json')
+  const { data, error } = await (await client()).from('sleeper_lineup').select('starters_json')
     .eq('league_id', leagueId).eq('week', week).eq('roster_id', rosterId).maybeSingle();
+  // SURFACE the error. This used to destructure `data` alone, which made an RLS
+  // denial, a dropped connection and a genuinely empty roster all arrive as the
+  // same empty array — so a broken read looked exactly like a manager with
+  // nobody rostered, and every explanation for one was equally consistent with
+  // the other. Two wrong diagnoses came out of that ambiguity. A read that
+  // failed should say it failed.
+  if (error) throw new Error(`roster read failed (league ${leagueId.slice(0, 8)}… wk ${week} roster ${rosterId}): ${error.message}`);
   // Read through the shared reader, NOT `p.slug`. That column is written in two
   // shapes and a Sleeper-synced league uses `player_slug` — reading only `slug`
   // dropped every entry and reported the roster as empty. See poolEntry.ts.

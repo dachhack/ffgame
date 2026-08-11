@@ -19,6 +19,9 @@
 // about.
 import { slugMeta } from './slugMeta';
 
+/** Which part of the manager's roster an entry came from. */
+export type PoolGroup = 'start' | 'bench' | 'ir' | 'taxi';
+
 /** Every shape `starters_json` has ever been written in. */
 export interface PoolEntry {
   slug?: string | null;
@@ -28,7 +31,19 @@ export interface PoolEntry {
   pos?: string | null;
   team?: string | null;
   nflTeam?: string | null;
+  grp?: string | null;
 }
+
+/** The roster group an entry belongs to, defaulting to 'start'.
+ *
+ *  The default is not a guess, it's history: every row written before the sync
+ *  started tagging groups held ONLY Sleeper's starters, and the preseason pool
+ *  is synthetic and wholly playable. So an untagged entry really is a starter,
+ *  and a league that hasn't re-synced keeps rendering exactly as it did. */
+export const entryGroup = (p: PoolEntry): PoolGroup => {
+  const g = String(p?.grp ?? '').toLowerCase();
+  return g === 'bench' || g === 'ir' || g === 'taxi' ? g : 'start';
+};
 
 /** The player's slug, whichever key the writer used. '' when there isn't one —
  *  an entry with no slug cannot be slate-gated, sealed or scored. */
@@ -39,14 +54,27 @@ export const entrySlug = (p: PoolEntry): string => p?.slug || p?.player_slug || 
  *  stats DB by name) can layer on top. */
 export const entryTeam = (p: PoolEntry): string => p?.team || p?.nflTeam || '';
 
-/** A `{ slug, full, pos }` view of a row, with the slug-less entries dropped.
+/** Just the STARTERS' slugs, in order.
+ *
+ *  For the server's unenrolled-opponent fallback, which fields an absent
+ *  manager's real Sleeper lineup. When the pool widened to the whole roster
+ *  (starters + bench + IR + taxi) so a human could field anyone they own, this
+ *  fallback would silently have widened with it — an absent manager's "lineup"
+ *  would suddenly include their IR stash, which is a change to how games score,
+ *  not to what a screen shows. Same rule as before: starters only. */
+export function starterSlugs(raw: unknown): string[] {
+  const rows = Array.isArray(raw) ? (raw as PoolEntry[]) : [];
+  return rows.filter((p) => entryGroup(p) === 'start').map(entrySlug).filter(Boolean);
+}
+
+/** A `{ slug, full, pos, grp }` view of a row, with the slug-less entries dropped.
  *
  *  `full` and `pos` are only ever displayed or grouped by, so they get derived
  *  defaults rather than costing the user a pickable player: a Sleeper row
  *  carries no `full`, and "josh-allen" → "josh allen" beats showing nothing. */
-export function readPool(raw: unknown): { slug: string; full: string; pos: string }[] {
+export function readPool(raw: unknown): { slug: string; full: string; pos: string; grp: PoolGroup }[] {
   const rows = Array.isArray(raw) ? (raw as PoolEntry[]) : [];
-  const out: { slug: string; full: string; pos: string }[] = [];
+  const out: { slug: string; full: string; pos: string; grp: PoolGroup }[] = [];
   for (const p of rows) {
     const slug = entrySlug(p);
     if (!slug) continue;
@@ -54,6 +82,7 @@ export function readPool(raw: unknown): { slug: string; full: string; pos: strin
       slug,
       full: p.full || slug.replace(/-/g, ' '),
       pos: p.pos || slugMeta(slug).pos,
+      grp: entryGroup(p),
     });
   }
   return out;

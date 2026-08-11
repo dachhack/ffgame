@@ -28,6 +28,7 @@ import {
   myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium, startCheckout,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
 } from '@drip/core/data/liveApi';
+import type { PoolGroup } from '@drip/core/data/poolEntry';
 import type { GameWindow, Player, Pos, WindowId } from '@drip/core/types';
 import { useTheme } from '../theme.native';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
@@ -215,6 +216,11 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const week = matchup?.week ?? 0;
   const gateOn = hasSlate(week);
   const teamBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, slugMeta(p.slug).team])), [pool]);
+  // Slug → roster group. The pool is the manager's WHOLE roster now (starters,
+  // bench, IR, taxi), and the group is the only thing distinguishing a fielded
+  // RB1 from a taxi rookie in a list that otherwise shows them identically.
+  const grpBySlug = useMemo<Record<string, PoolGroup>>(
+    () => Object.fromEntries(pool.map((p) => [p.slug, p.grp])), [pool]);
   const winBySlug = useMemo<Record<string, WindowId | 'any' | null>>(() => {
     const m: Record<string, WindowId | 'any' | null> = {};
     for (const p of pool) { const tm = teamBySlug[p.slug]; m[p.slug] = tm ? windowForTeam(week, tm) : 'any'; }
@@ -473,6 +479,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         // Same resolver the slate gating uses, so the grouping here and the
         // eligibility counts on each window can never disagree.
         windowOf={(id) => winBySlug[id] ?? null}
+        groupOf={(id) => grpBySlug[id] ?? 'start'}
         accent={t.you}
       />
 
@@ -486,10 +493,18 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         <Card style={{ marginBottom: 12, borderColor: t.warn }}>
           <Mono size={10} weight="700" tone="warn" track={0.1}>NO ROSTER FOR {weekLabel(matchup!.week).toUpperCase()}</Mono>
           <Text style={{ fontSize: 12.5, color: t.text, lineHeight: 18, marginTop: 6 }}>
-            This league hasn’t synced starters for this week yet, so there’s
-            nobody to field — every window will read 0 eligible until it does.
-            Use ‹ › above to check another week.
+            No starters came back for this week, so there’s nobody to field and
+            every window reads 0 eligible. Use ‹ › above to check another week.
           </Text>
+          {/* The exact tuple the read asked for. "No roster" has two very
+              different causes — nothing matched, or something matched and was
+              discarded — and they look identical from the outside. Printing the
+              query makes it checkable against the table instead of guessable:
+              if these ids are right and the row exists, the read is the
+              problem, not the data. */}
+          <Mono size={9} tone="faint" style={{ marginTop: 8 }}>
+            asked: league {roster?.leagueId?.slice(0, 8) ?? '?'}… · week {matchup!.week} · roster {roster?.rosterId ?? '?'}
+          </Mono>
         </Card>
       )}
 
@@ -778,6 +793,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
             players={players}
             currentId={cur}
             windowLabel={wins.find((w) => w.id === pickerSlot.win)?.label}
+            groupOf={(id) => grpBySlug[id] ?? 'start'}
             gated={(p) => !matchPremium && !isFreePosition(p.pos)}
             onGated={(p) => {
               markGatedAttempt('position:' + p.pos);

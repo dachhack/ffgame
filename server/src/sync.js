@@ -82,6 +82,16 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
   const lid = leagueRow.id;
   const kdstMode = leagueRow.kdst_mode ?? 'off';
   const rows = await sleeper.getMatchups(leagueId, week); // one row per roster
+  // The matchups endpoint carries `starters` and `players`, but NOT `reserve`
+  // (IR) or `taxi` — those live on /rosters. Fetched separately so the pool can
+  // be a manager's WHOLE roster rather than only who Sleeper has starting.
+  // Tolerated as empty on failure: a pool of starters is worse than a full one
+  // but far better than no sync at all.
+  const rosterRows = await sleeper.getLeagueRosters(leagueId).catch((e) => {
+    console.error(`[sync-week] rosters ${leagueId}: ${e?.message ?? e}`);
+    return [];
+  });
+  const rosterById = new Map((rosterRows ?? []).map((r) => [r.roster_id, r]));
   // REGULAR season explicitly: this mirrors Sleeper's schedule, which only ever
   // describes regular-season weeks. It used to read config.seasonType, which was
   // harmless only because the sync was skipped entirely in preseason mode — now
@@ -124,15 +134,47 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
   }
   if (matchups.length) await db().from('matchup').upsert(matchups, { onConflict: 'league_id,week,home_roster_id,away_roster_id' });
 
-  // Store each roster's starters (player pool + unenrolled-opponent fallback),
-  // resolved to our shared slug via the Sleeper player index.
-  const lineups = rows.map((r) => ({
-    league_id: lid, week, roster_id: r.roster_id,
-    starters_json: (r.starters ?? []).map((sid, i) => {
-      const p = idx.sleeper(sid);
-      return { slot: i, sleeper_id: sid, player_slug: p?.slug ?? null, pos: p?.pos ?? null };
-    }),
-  }));
+  // Store each roster's WHOLE roster as the player pool (and the
+  // unenrolled-opponent fallback), resolved to our shared slug via the Sleeper
+  // player index.
+  //
+  // Starters, bench, IR and taxi — not just starters. A manager fields one
+  // player per window here, against a slate that is nothing like Sleeper's
+  // weekly lineup, so "who Sleeper has starting" was never the right constraint
+  // on who you may play; it was just the only list this sync fetched. The
+  // column keeps its name because renaming it would touch every reader for no
+  // behavioural gain.
+  //
+  // Each entry carries `grp` so the distinction survives: the UI can group and
+  // label, and a future rule could restrict by it. Order is starters first
+  // (their `slot` is Sleeper's own ordering), then bench, IR, taxi.
+  const GROUPS = ['start', 'bench', 'ir', 'taxi'];
+  const lineups = rows.map((r) => {
+    const rr = rosterById.get(r.roster_id) ?? {};
+    const starters = (r.starters ?? []).filter((sid) => sid && sid !== '0');
+    const reserve = rr.reserve ?? [];
+    const taxi = rr.taxi ?? [];
+    // `players` is everything on the roster; bench is what's left once the
+    // named groups are removed. Falls back to the matchup row's own player list
+    // when /rosters didn't come back.
+    const all = rr.players ?? r.players ?? [];
+    const named = new Set([...starters, ...reserve, ...taxi].map(String));
+    const bench = all.filter((sid) => sid && !named.has(String(sid)));
+    const buckets = { start: starters, bench, ir: reserve, taxi };
+
+    const seen = new Set();
+    const entries = [];
+    for (const grp of GROUPS) {
+      for (const sid of buckets[grp] ?? []) {
+        const key = String(sid);
+        if (!sid || key === '0' || seen.has(key)) continue;
+        seen.add(key);
+        const p = idx.sleeper(sid);
+        entries.push({ slot: entries.length, sleeper_id: sid, player_slug: p?.slug ?? null, pos: p?.pos ?? null, grp });
+      }
+    }
+    return { league_id: lid, week, roster_id: r.roster_id, starters_json: entries };
+  });
 
   // K/DST fill (migration 0028): if the commissioner enabled a fill mode and this
   // league doesn't roster K and/or DEF, inject a team-keyed K/DST slug into each
@@ -152,8 +194,12 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
       for (const l of [...lineups].sort((a, b) => a.roster_id - b.roster_id)) {
         const fill = assignKdst({ leagueId: lid, rosterId: l.roster_id, week, mode: kdstMode, needK, needDef, manual: manualBy.get(l.roster_id), taken });
         let slot = l.starters_json.length;
-        if (fill.kSlug) l.starters_json.push({ slot: slot++, sleeper_id: null, player_slug: fill.kSlug, pos: 'K' });
-        if (fill.dstSlug) l.starters_json.push({ slot: slot++, sleeper_id: null, player_slug: fill.dstSlug, pos: 'DEF' });
+        // grp 'start': a filled K/DST is not on anyone's bench — it exists only
+        // because the league doesn't roster the position, so it is always
+        // playable and should group with the starters rather than sit under a
+        // "Bench" heading it was never on.
+        if (fill.kSlug) l.starters_json.push({ slot: slot++, sleeper_id: null, player_slug: fill.kSlug, pos: 'K', grp: 'start' });
+        if (fill.dstSlug) l.starters_json.push({ slot: slot++, sleeper_id: null, player_slug: fill.dstSlug, pos: 'DEF', grp: 'start' });
       }
     }
   }

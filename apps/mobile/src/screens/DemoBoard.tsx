@@ -112,7 +112,7 @@ function build(): Built {
   const label: Record<string, string> = {};
   const sub: Record<string, string> = {};
   const seat = (win: string, i: number, who: string, p: { player: { id: string; name: string; pos: string }; metricId: string }): RevealedPick => {
-    pool[p.player.id] = { slug: p.player.id, full: p.player.name, pos: p.player.pos };
+    pool[p.player.id] = { slug: p.player.id, full: p.player.name, pos: p.player.pos, grp: 'start' };
     return { app_user_id: who, game_window: win, roster_slot: String(i), player_slug: p.player.id, metric_id: p.metricId, locked: true };
   };
 
