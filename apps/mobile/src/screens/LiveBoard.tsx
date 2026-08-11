@@ -256,7 +256,7 @@ function Big({ label, value, color, team }: { label: string; value: number; colo
  *  The sealed-back count MIRRORS YOUR OWN card count, never the opponent's real
  *  one. Showing their true count before reveal would leak how many slots they
  *  filled in a window, which is information the game deliberately withholds. */
-function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel }: {
+export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel }: {
   mine: RevealedPick[];
   theirs: RevealedPick[];
   pool: Record<string, PoolPlayer>;
