@@ -31,6 +31,7 @@ import type { GameWindow, Player, Pos, WindowId } from '@drip/core/types';
 import { useTheme } from '../theme.native';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
 import { SetupRow } from '../ui/SetupRow';
+import { FELT } from '../ui/cards';
 import { PlayerPicker } from '../ui/PlayerPicker';
 
 // Live pool entries are slug/full/pos; SetupRow wants a Player. Build a light
@@ -472,7 +473,9 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
               </View>
             </View>
 
-            <View style={{ gap: 8 }}>
+            {/* Felt under the pair, so the cards read as dealt onto a table
+                rather than floating on the app background. */}
+            <View style={{ gap: 10, backgroundColor: FELT, borderRadius: 8, padding: 10 }}>
               {winSlots.map((s) => {
                 const p = picks[s.key];
                 const pick = p?.player_slug ? { playerId: p.player_slug, metricId: p.metric_id ?? null } : undefined;

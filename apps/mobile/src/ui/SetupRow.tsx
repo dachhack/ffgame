@@ -14,7 +14,8 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { METRICS, metricById } from '@drip/core/data/metrics';
 import type { Metric, Pick, Player, Pos } from '@drip/core/types';
 import { useTheme, MONO, alpha } from '../theme.native';
-import { Display, Mono, PosPill } from './prims';
+import { Display, Mono } from './prims';
+import { CardFace, CardBack, CardEmpty } from './cards';
 
 export function SetupRow({ pick, resolve, lockPlayer, metricFilter, onOpenPicker, onPickMetric, onClearSlot }: {
   pick?: Pick;
@@ -38,64 +39,31 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, onOpenPicker
   }, [pick?.playerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <View style={{ flexDirection: 'row', gap: 6 }}>
-      {/* Your spot */}
+    <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
+      {/* Your card, then the opponent's face-down one — the pairing IS the
+          game's premise, so they sit at matched size on the felt. */}
       {player ? (
-        <View style={{
-          flex: 1, backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
-          borderLeftWidth: 3, borderLeftColor: t.you, borderRadius: 4, padding: 10, gap: 7,
-        }}>
-          <Pressable onPress={lockPlayer ? undefined : onOpenPicker} style={{ gap: 4 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <PosPill pos={player.pos} />
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, fontWeight: '700', color: t.text }}>{player.name}</Text>
-            </View>
-            <Mono size={8.5} tone="faint" track={0.06}>{player.team || '—'}</Mono>
-          </Pressable>
-
-          {metric ? (
-            <Pressable onPress={lockPlayer ? undefined : () => setMetricOpen(true)}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <View style={{ backgroundColor: alpha(t.fx[metric.fx] ?? t.you, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(t.fx[metric.fx] ?? t.you, 45), borderRadius: 3, paddingHorizontal: 5, paddingVertical: 2 }}>
-                  <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.fx[metric.fx] ?? t.you }}>{metric.tag}</Text>
-                </View>
-                <Mono size={9} tone="mid" style={{ flex: 1 }}>{metric.name}</Mono>
-              </View>
-            </Pressable>
-          ) : (
-            <Pressable onPress={lockPlayer ? undefined : () => setMetricOpen(true)}>
-              <Mono size={8.5} tone="warn" weight="700" track={0.1}>SEAL A METRIC →</Mono>
-            </Pressable>
+        <CardFace
+          slug={player.id}
+          name={player.name}
+          pos={player.pos}
+          team={player.team}
+          metric={metric?.name ?? null}
+          accent={t.you}
+          onPress={lockPlayer ? undefined : () => (pick?.metricId ? setMetricOpen(true) : onOpenPicker())}
+          onRemove={lockPlayer ? undefined : onClearSlot}
+          footer={lockPlayer ? undefined : (
+            <>
+              <Text onPress={() => setMetricOpen(true)} style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: '#8A6A28' }}>↻ METRIC</Text>
+              <Text onPress={onOpenPicker} style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: '#A2422F' }}>⇄ PLAYER</Text>
+            </>
           )}
-
-          {!lockPlayer && (
-            <Pressable onPress={onClearSlot} hitSlop={8} style={{ position: 'absolute', top: 6, right: 8 }}>
-              <Text style={{ fontFamily: MONO, fontSize: 11, color: t.opp }}>✕</Text>
-            </Pressable>
-          )}
-        </View>
+        />
       ) : (
-        <Pressable
-          onPress={lockPlayer ? undefined : onOpenPicker}
-          style={{
-            flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderStyle: 'dashed',
-            borderRadius: 4, padding: 10, minHeight: 74, alignItems: 'center', justifyContent: 'center',
-            opacity: lockPlayer ? 0.5 : 1,
-          }}
-        >
-          <Mono size={9.5} tone="faint" track={0.1}>{lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'}</Mono>
-        </Pressable>
+        <CardEmpty label={lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'} onPress={lockPlayer ? undefined : onOpenPicker} />
       )}
 
-      {/* Opponent: face-down until its window kicks off. Rendered here rather
-          than by the caller so the two cards share a row height. */}
-      <View style={{
-        flex: 1, backgroundColor: t.sh, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
-        borderLeftWidth: 3, borderLeftColor: t.opp, borderRadius: 4, padding: 10,
-        alignItems: 'center', justifyContent: 'center', minHeight: 74,
-      }}>
-        <Mono size={9.5} tone="faint" track={0.12}>SEALED</Mono>
-      </View>
+      <CardBack />
 
       <MetricModal
         visible={metricOpen}
