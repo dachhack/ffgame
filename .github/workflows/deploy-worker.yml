@@ -1,0 +1,68 @@
+name: Deploy the worker
+
+# `fly deploy` for the background worker (server/), from CI instead of from
+# whichever laptop happens to have flyctl signed in. Same thing DEPLOY.md
+# documents — Dockerfile + fly.toml at the repo root — with two differences that
+# matter: the deployed commit is a fact in the run log rather than a memory, and
+# it does not depend on one person's machine.
+#
+# NOT automatic on merge. deploy.yml publishes the static site on every push to
+# main because a bad page is a refresh away from fixed; the worker locks
+# matchups, resolves live games and writes scores, so restarting it mid-slate is
+# a different class of act. It stays a deliberate click.
+#
+# Deploys whatever ref you run it from. Run it from `main` unless you are
+# knowingly shipping a branch.
+#
+# Secret required (Settings → Secrets and variables → Actions):
+#   FLY_API_TOKEN — from `fly tokens create deploy -x 999999h`
+on:
+  workflow_dispatch:
+    inputs:
+      strategy:
+        description: 'rolling (default) | immediate — immediate is faster but drops the old machine first'
+        type: choice
+        options: [rolling, immediate]
+        default: rolling
+
+# Never two deploys at once, and never a deploy racing the sync/simulate jobs
+# that ssh into the same machine.
+concurrency: fly-worker
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the token is set
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          if [ -z "${FLY_API_TOKEN:-}" ]; then
+            echo "::error::Set the FLY_API_TOKEN repo secret. Create one with: fly tokens create deploy -x 999999h"
+            exit 1
+          fi
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: What we're about to deploy
+        run: |
+          echo "ref:    ${{ github.ref_name }}"
+          echo "commit: $(git rev-parse --short HEAD) — $(git log -1 --pretty=%s)"
+
+      - name: fly deploy
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        # From the repo ROOT: the build context needs packages/core/ and
+        # scripts/espn/ as well as server/. Building from server/ would produce
+        # an image that starts and then dies on the first engine import.
+        run: flyctl deploy --remote-only --strategy "${{ inputs.strategy }}"
+
+      - name: Machine status after deploy
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        # A green `fly deploy` means the image shipped and the machine started,
+        # not that the scheduler is ticking. Print the state so a crash-looping
+        # machine is visible here rather than an hour later in the logs.
+        run: flyctl status || true

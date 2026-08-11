@@ -29,6 +29,8 @@ let lastSyncedWeek = null;
 let lastSyncAt = 0;
 let syncing = false;
 
+const log = (...a) => console.log(new Date().toISOString(), ...a);
+
 // ── Week contexts ────────────────────────────────────────────────────────────
 // The scheduler used to hold exactly ONE current week, with preseason bolted on
 // as a process-wide MODE of it (PILOT_SEASON_TYPE=1 → every DB read/write shifted
@@ -96,6 +98,38 @@ async function activeContexts(season) {
     forced === REGULAR_SEASON ? Promise.resolve(null) : espnWeekFor(season, forced ?? PRESEASON),
   ]);
   return contextsFor(forced, regW, preW);
+}
+
+/** Is any game in the tick's pooled slate live, or within ~24h of kickoff? Drives
+ *  the injury cadence (hourly near games, daily otherwise). */
+function gameDay(games, now = Date.now()) {
+  return games.some((g) => g.state === 'in' || (g.kickoffMs && g.kickoffMs - now < 24 * 3600e3 && g.kickoffMs - now > -6 * 3600e3));
+}
+
+/** Auto weekly sync: mirror every configured league's schedule + lineups. Fires on
+ *  boot, on NFL week rollover, and every config.weeklySyncRefreshMs (to catch lineup
+ *  changes before lock). Guarded against overlap — at ~100 leagues a sync can run
+ *  longer than one play tick, so it lives on its own (slower) interval.
+ *
+ *  Always the REGULAR-season week, and no preseason early-return. Sleeper has no
+ *  preseason pairings, so there is nothing to mirror at an offset week — but the
+ *  old version turned that into "skip the sync entirely while preseason is on",
+ *  which meant a league that DRAFTED in August got no rosters until someone ran
+ *  the CLI by hand. Syncing the regular-season week is both correct and the thing
+ *  that fixes that. */
+async function syncTick() {
+  if (syncing || !config.leagueIds.length) return;
+  const season = config.season;
+  const week = await regularWeek(season);
+  const due = week !== lastSyncedWeek || Date.now() - lastSyncAt >= config.weeklySyncRefreshMs;
+  if (!due) return;
+  syncing = true;
+  try {
+    const r = await syncAllLeagues(week, season, playerIndex, config.leagueIds);
+    lastSyncedWeek = week; lastSyncAt = Date.now();
+    log('weekly sync: week', week, '—', `${r.ok}/${r.total} leagues`);
+  } catch (e) { log('weekly sync error', e.message); }
+  finally { syncing = false; }
 }
 
 /** One context's pass: fetch its scoreboard, then lock → poll → resolve →
