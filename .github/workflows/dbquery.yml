@@ -1,0 +1,72 @@
+name: Run a database query
+
+# Runs a checked-in SQL file from scripts/db/ against the database and prints the
+# result in the job log. For diagnostics — "which picks are orphaned", "who is
+# over the slot cap" — the questions you want answered without pasting SQL into
+# a dashboard, and want a record of having asked.
+#
+# NOT the migrations workflow. migrate.yml owns schema changes: it runs on merge,
+# holds the supabase-migrate concurrency lock, and its file input means "a
+# migration". Borrowing it for a read-only question would make its history a mix
+# of schema changes and diagnostics, and make "has this migration run?"
+# ambiguous. Different jobs, different workflows.
+#
+# READ-ONLY BY DEFAULT. The session sets default_transaction_read_only, so a file
+# that only selects works and a file that writes FAILS unless the run explicitly
+# asks for writes. That is deliberate for this class of script: the ones worth
+# running here are look-then-decide, and orphan-window-picks.sql keeps its delete
+# commented out for the same reason. Making the runner enforce it means a
+# hurried copy-paste cannot skip the looking.
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: 'SQL file under scripts/db/, e.g. scripts/db/orphan-window-picks.sql'
+        required: true
+      allow_writes:
+        description: 'Allow the file to modify data (default: read-only)'
+        type: boolean
+        default: false
+        required: false
+
+concurrency: supabase-dbquery
+
+jobs:
+  query:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure psql
+        run: psql --version || (sudo apt-get update && sudo apt-get install -y postgresql-client)
+      - name: Run the query
+        env:
+          PGURL: ${{ secrets.SUPABASE_DB_URL }}
+          FILE: ${{ inputs.file }}
+          ALLOW_WRITES: ${{ inputs.allow_writes }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PGURL:-}" ]; then
+            echo "::error::Set the SUPABASE_DB_URL repo secret (Settings → Secrets → Actions)."; exit 1
+          fi
+          # Confined to scripts/db/. The input is a path from whoever clicked Run,
+          # and psql -f will read anything it is handed — including a migration,
+          # or a path climbing out of the repo. Refuse rather than trust.
+          case "$FILE" in
+            scripts/db/*.sql) ;;
+            *) echo "::error::file must be a .sql under scripts/db/ (got: $FILE)"; exit 1 ;;
+          esac
+          if [ "$FILE" != "${FILE#*..}" ]; then echo "::error::no .. in the path"; exit 1; fi
+          if [ ! -f "$FILE" ]; then echo "::error::$FILE not found on this branch"; exit 1; fi
+
+          # search_path is unset for this role — unqualified table names fail with
+          # "relation does not exist" unless pinned. Same reason migrate.yml pins it.
+          OPTS="-c search_path=public"
+          if [ "$ALLOW_WRITES" = "true" ]; then
+            echo "::warning::Writes ENABLED for this run."
+          else
+            OPTS="$OPTS -c default_transaction_read_only=on"
+            echo "Read-only session. A file that writes will fail — re-run with allow_writes if that is intended."
+          fi
+
+          echo "── $FILE ──"
+          PGOPTIONS="$OPTS" psql "$PGURL" -v ON_ERROR_STOP=1 -f "$FILE"
