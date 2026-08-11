@@ -3,7 +3,7 @@
 // their own module so the landing page never statically imports Matchup.tsx —
 // keeping the whole game screen out of the eager landing chunk (App.tsx lazy-
 // loads Matchup; that split only works if nothing eager imports it).
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore, PHOTO_SKINS } from '../app/store';
 import type { Phase } from '../app/store';
 import { PlayerImg, InjuryBadge, useIsMobile, ModalBackdrop } from '../app/ui';
@@ -319,7 +319,18 @@ export function SetupRow(props: {
   // player with no metric auto-opens it; ↻ METRIC re-opens it to change.
   const [metricOpen, setMetricOpen] = useState(false);
   const [infoMetric, setInfoMetric] = useState<Metric | null>(null);
-  useEffect(() => { if (pick?.playerId && !pick?.metricId && !lockPlayer && !applyMode) setMetricOpen(true); }, [pick?.playerId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Opens when a player is freshly PLACED — i.e. the player changed — so a slot
+  // never sits half-set. Keyed on `pick?.playerId` alone it also fired on mount,
+  // which meant a saved lineup holding a player without a metric threw this card
+  // up over the board before the user had touched anything. The ref starts at
+  // the mount-time value so the first run is always a no-op.
+  const prevPlayerId = useRef(pick?.playerId);
+  useEffect(() => {
+    const prev = prevPlayerId.current;
+    prevPlayerId.current = pick?.playerId;
+    if (prev === pick?.playerId) return;
+    if (pick?.playerId && !pick?.metricId && !lockPlayer && !applyMode) setMetricOpen(true);
+  }, [pick?.playerId, pick?.metricId, lockPlayer, applyMode]);
   const link: React.CSSProperties = { background: 'none', border: 'none', padding: 0, fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.1em' };
 
   return (
