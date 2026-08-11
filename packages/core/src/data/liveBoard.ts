@@ -9,6 +9,7 @@ import { REG_SEASON_WEEKS } from './league';
 import type { League, FantasyTeam, Player, Pos, PlayerStats, ScheduleGame } from '../types';
 import { shortName, teamForName, normName } from './players';
 import { slugMeta, normTeam } from './slugMeta';
+import { entrySlug, entryTeam, type PoolEntry } from './poolEntry';
 import { getSupabase } from './supabaseClient';
 import { liveSlate } from './liveApi';
 import { setRuntimeSlate } from './nflSlate';
@@ -17,12 +18,11 @@ import type { WindowId } from '../types';
 const ZERO: PlayerStats = { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 };
 const teamId = (rosterId: number) => `r${rosterId}`;
 
-// starters_json has two historical shapes: ESPN's { slug, full, pos } and
-// Sleeper's { player_slug, sleeper_id, pos }. The real NFL team (team/nflTeam) is
-// carried when the sync provides it; older rows don't have it, so we also resolve
-// from the slug map and the stats DB by name.
-interface PoolEntry { slug?: string; player_slug?: string | null; full?: string; pos?: string; team?: string | null; nflTeam?: string | null }
-const entrySlug = (p: PoolEntry): string => (p.slug ?? p.player_slug ?? '');
+// starters_json's two shapes are read by the shared reader (poolEntry.ts) — the
+// definition used to live here, which is exactly why myPool could be written
+// without knowing about it. The real NFL team (team/nflTeam) is carried when the
+// sync provides it; older rows don't have it, so we also resolve from the slug
+// map and the stats DB by name.
 
 function poolToPlayer(p: PoolEntry): Player {
   const slug = entrySlug(p);
@@ -32,7 +32,7 @@ function poolToPlayer(p: PoolEntry): Player {
   // Resolve the NFL team so the player lands in a real game window rather than
   // being silently dropped: the sync's carried team first (most current), then the
   // baked slug map, then the stats DB by name.
-  const team = normTeam(p.team ?? p.nflTeam ?? '') || meta.team || teamForName(full);
+  const team = normTeam(entryTeam(p)) || meta.team || teamForName(full);
   // Kickers are played as the TEAM's kicker, not a specific name — key/label them
   // like the engine's team-keyed K ("kc-k" → "KC K"), matching the demo board.
   if (pos === 'K' && team) {
