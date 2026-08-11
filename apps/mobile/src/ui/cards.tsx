@@ -134,8 +134,13 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
   const shake = useShake(nuked);
   const tick = useScoreTick(bank);
 
+  // aspectRatio sits on the OUTERMOST view, the same place CardBack and
+  // CardEmpty put it. It used to live on the ImageBackground below, which meant
+  // a face was sized by its content chain while a back was sized by the rule —
+  // so a filled slot and the sealed card beside it were laid out two different
+  // ways and only agreed by luck. Same rule, same box.
   return (
-    <Animated.View style={{ flex: 1, opacity: deal.opacity, transform: [...flipIn.transform, ...deal.transform] }}>
+    <Animated.View style={{ flex: 1, aspectRatio: CARD_ASPECT, opacity: deal.opacity, transform: [...flipIn.transform, ...deal.transform] }}>
     <Animated.View style={{ flex: 1, transform: [...wob.transform, ...shake.transform] }}>
     <Pressable onPress={onPress} style={{ flex: 1 }}>
     <ImageBackground
@@ -143,7 +148,7 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
       resizeMode="repeat"
       imageStyle={{ borderRadius: 8 }}
       style={{
-        aspectRatio: CARD_ASPECT, backgroundColor: STOCK,
+        flex: 1, backgroundColor: STOCK,
         borderWidth: StyleSheet.hairlineWidth, borderColor: STOCK_EDGE,
         borderTopWidth: 3, borderTopColor: accent,
         borderRadius: 8, padding: 8, alignItems: 'center', justifyContent: 'space-between',

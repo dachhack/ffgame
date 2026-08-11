@@ -39,7 +39,11 @@ const FLOAT_OVERHANG = 12;
 // brown rather than loose on the green, so the two halves of a duel read as two
 // objects instead of one run-on row.
 const PANEL = {
-  flex: 1, gap: 6, alignItems: 'center' as const,
+  // TOP-aligned, not centred. The two panels in a duel are independent heights
+  // — one metric name wraps to two lines, the other doesn't — and centring made
+  // each card float to the middle of its own panel, so the pair sat at
+  // different heights whenever the names differed in length.
+  flex: 1, gap: 6, alignItems: 'flex-start' as const,
   backgroundColor: '#241E15', borderWidth: StyleSheet.hairlineWidth, borderColor: '#4A3F2A',
   borderRadius: 8, paddingHorizontal: 4, paddingVertical: 6,
   // The floating card overhangs; without this Android clips it at the panel edge.
