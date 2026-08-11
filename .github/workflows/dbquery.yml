@@ -48,6 +48,12 @@ jobs:
           if [ -z "${PGURL:-}" ]; then
             echo "::error::Set the SUPABASE_DB_URL repo secret (Settings → Secrets → Actions)."; exit 1
           fi
+          # Normalise before validating. A leading slash or ./ is how people
+          # actually type a repo path, and failing the run over it teaches
+          # nothing — the guard exists to stop psql reading a migration or
+          # something outside the repo, not to police punctuation.
+          FILE="${FILE#./}"
+          FILE="${FILE#/}"
           # Confined to scripts/db/. The input is a path from whoever clicked Run,
           # and psql -f will read anything it is handed — including a migration,
           # or a path climbing out of the repo. Refuse rather than trust.
