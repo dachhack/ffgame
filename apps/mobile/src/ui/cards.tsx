@@ -202,10 +202,16 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
         </Pressable>
       )}
 
+      {/* Square art in a position-coloured frame, not a circle.
+          This was the only portrait in the app still round: the web's card art
+          (.ct-art) is a bordered rounded rectangle, and both the picker's mini
+          cards and LiveCard already matched it. A circle also crops a headshot
+          worse — it cuts the corners off exactly where the shoulders and helmet
+          are, on images already framed head-and-shoulders. */}
       <View style={{ alignItems: 'center', gap: 4, marginTop: 6 }}>
-        <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#EDE4CB', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        <View style={{ width: 60, height: 60, borderRadius: 7, borderWidth: 1.5, borderColor: accent, backgroundColor: '#EDE4CB', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
           {src
-            ? <Image source={{ uri: src }} style={{ width: 56, height: 56 }} resizeMode={photo ? 'cover' : 'contain'} />
+            ? <Image source={{ uri: src }} style={{ width: '100%', height: '100%' }} resizeMode={photo ? 'cover' : 'contain'} />
             : <Text style={{ fontFamily: MONO, fontSize: 16, color: INK_DIM }}>{pos}</Text>}
         </View>
         <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '800', color: INK, letterSpacing: 0.2 }}>{name}</Text>
