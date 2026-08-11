@@ -29,6 +29,7 @@ import type { Pos } from '@drip/core/types';
 import { useTheme } from '../theme.native';
 import { Card, Display, LinkButton, Mono } from '../ui/prims';
 import { CardFace, CardBack, FELT } from '../ui/cards';
+import { LiveCard } from '../ui/LiveCard';
 import { LivePulse } from '../ui/animations';
 
 const round1 = (n: number) => Math.round(Number(n) * 10) / 10;
@@ -256,7 +257,7 @@ function Big({ label, value, color, team }: { label: string; value: number; colo
  *  The sealed-back count MIRRORS YOUR OWN card count, never the opponent's real
  *  one. Showing their true count before reveal would leak how many slots they
  *  filled in a window, which is information the game deliberately withholds. */
-export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus, slotDetail }: {
+export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus, slotDetail, liveExtras }: {
   mine: RevealedPick[];
   theirs: RevealedPick[];
   pool: Record<string, PoolPlayer>;
@@ -275,6 +276,13 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
    *  events in hand, while the live board would have to read published feeds.
    *  Returning null (the live board's current answer) simply renders nothing. */
   slotDetail?: (win: string, slot: string) => ReactNode;
+  /** Extra live-row text a caller can supply per side: the game and clock
+   *  ("KC@LAC · Q1 9:00"), the statline, coin earned. Everything here needs data
+   *  Duel doesn't have — a game feed, a StatLine — so it's the caller's to fill
+   *  and the row degrades cleanly to card + metric + score without it. */
+  liveExtras?: (win: string, slot: string, side: 'you' | 'their') => {
+    gameLabel?: string | null; stat?: string | null; coin?: number | null;
+  } | null;
 }) {
   const t = useTheme();
   const youSide = youAreHome ? 'home' : 'away';
@@ -329,6 +337,31 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
   const rowOf = (p: RevealedPick, side: 'home' | 'away') =>
     scores.find((x) => x.game_window === p.game_window)?.slot_scores
       ?.find((r) => r.side === side && (r.slot === p.roster_slot || (!!p.player_slug && r.slug === p.player_slug)));
+
+  /** A slot's live row — what the card becomes once the window is scoring.
+   *  A missing or unresolvable pick renders the sealed variant rather than a
+   *  gap, so an opponent who hasn't revealed still occupies their half. */
+  const liveFor = (p: RevealedPick | undefined, side: 'home' | 'away', who: 'you' | 'their', win: string, slot: string, idx: number) => {
+    const player = p?.player_slug ? pool[p.player_slug] : null;
+    if (!p || !player) return <LiveCard key={`${win}-${slot}-${who}`} side={who} sealed idx={idx} />;
+    const metric = metricById(player.pos as Pos, p.metric_id);
+    const row = rowOf(p, side);
+    const ex = liveExtras?.(win, p.roster_slot, who);
+    return (
+      <LiveCard
+        key={`${win}-${slot}-${who}`}
+        side={who} idx={idx}
+        slug={player.slug} name={player.full} pos={player.pos} team={slugTeam(player)}
+        metricName={metric?.name ?? p.metric_id ?? null}
+        bank={row ? round1(Number(row.score)) : null}
+        hot={!!row?.hot}
+        nuked={!!row?.nuked}
+        gameLabel={ex?.gameLabel}
+        stat={ex?.stat}
+        coin={ex?.coin}
+      />
+    );
+  };
 
   const faceFor = (p: RevealedPick, side: 'home' | 'away', accent: string, idx: number) => {
     const player = p.player_slug ? pool[p.player_slug] : null;
@@ -394,10 +427,24 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
                 const slot = my[i]?.roster_slot ?? th[i]?.roster_slot ?? String(i);
                 return (
                   <View key={i} style={{ gap: 8 }}>
+                    {/* Two portrait cards until the window has scored, then the
+                        compact live rows — the web's switch, and the reveal
+                        flip depends on it. At kickoff the opponent's card is
+                        revealed but no play has landed, so this is still card
+                        mode and the flip plays; the first score converts the
+                        pair. Convert on reveal instead and the flip is skipped
+                        entirely, which is how the moment gets lost. */}
+                    {hasRows ? (
+                      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
+                        {liveFor(my[i], youSide, 'you', win, slot, i)}
+                        {liveFor(th[i], oppSide, 'their', win, slot, i)}
+                      </View>
+                    ) : (
                     <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
                       {my[i] ? faceFor(my[i], youSide, t.you, i) : <CardBack label="—" idx={i} />}
                       {th[i] ? faceFor(th[i], oppSide, t.opp, i) : <CardBack idx={i} />}
                     </View>
+                    )}
                     {/* The duel's game(s) and play log, directly under the pair
                         they belong to — the web's arrangement, and the reason
                         it's here rather than in a panel below the board: the

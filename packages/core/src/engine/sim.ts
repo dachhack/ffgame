@@ -1171,3 +1171,80 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
 }
 
 export { GAME_SECONDS, fmtClock };
+
+/** A StatLine as the board shows it — "12-58 ru · 3/4-31 rec · 1 TD".
+ *
+ *  Lives here rather than in a screen because both hosts render it now: the
+ *  web's live score rows and the native LiveCard. `compact` collapses
+ *  "N car · M rush yd" to "N-M ru" (and the receiving pair likewise) so the
+ *  line fits a phone without ellipsing — which is the only reason the compact
+ *  variant exists. */
+export function fmtStat(pos: Pos, s: StatLine, compact = false): string {
+  // Compact (mobile): collapse "N car · M rush yd" → "N-M ru" and
+  // "R/T rec · Y rec yd" → "R/T-Y rec" so the line fits without ellipsing.
+  if (compact) {
+    if (pos === 'QB') {
+      const p = [`${s.passYds} pass`, `${s.passTds} TD`];
+      if (s.rushYds) p.push(`${s.rushYds} ru`);
+      return p.join(' · ');
+    }
+    if (pos === 'RB') {
+      const p = [`${s.carries}-${s.rushYds} ru`, `${s.rec}/${s.targets}-${s.recYds} rec`];
+      const td = s.rushTds + s.recTds;
+      if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
+      if (s.retYds) p.push(`${s.retYds} ret${s.retTds ? `·${s.retTds}TD` : ''}`);
+      return p.join(' · ');
+    }
+    if (pos === 'WR' || pos === 'TE') {
+      const p = [`${s.rec}/${s.targets}-${s.recYds} rec`];
+      if (s.carries) p.push(`${s.carries}-${s.rushYds} ru`);
+      const td = s.rushTds + s.recTds;
+      if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
+      if (s.retYds) p.push(`${s.retYds} ret${s.retTds ? `·${s.retTds}TD` : ''}`);
+      return p.join(' · ');
+    }
+    // K / DEF lines are already short — fall through to the full format.
+  }
+  if (pos === 'QB') {
+    const p = [`${s.passYds} pass yd`, `${s.passTds} TD`];
+    if (s.rushYds) p.push(`${s.rushYds} rush`);
+    return p.join(' · ');
+  }
+  if (pos === 'RB') {
+    // Full line: rushing AND receiving, every week. TDs split when both happen.
+    const p = [`${s.carries} car`, `${s.rushYds} rush yd`, `${s.rec}/${s.targets} rec`, `${s.recYds} rec yd`];
+    const td = s.rushTds + s.recTds;
+    if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
+    if (s.retYds) p.push(`${s.retYds} ret yd${s.retTds ? ` · ${s.retTds} ret TD` : ''}`);
+    return p.join(' · ');
+  }
+  if (pos === 'WR' || pos === 'TE') {
+    const p = [`${s.rec}/${s.targets} rec`, `${s.recYds} rec yd`];
+    if (s.carries) p.push(`${s.carries} car`, `${s.rushYds} rush yd`); // jet sweeps / end-arounds
+    const td = s.rushTds + s.recTds;
+    if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
+    if (s.retYds) p.push(`${s.retYds} ret yd${s.retTds ? ` · ${s.retTds} ret TD` : ''}`);
+    return p.join(' · ');
+  }
+  if (pos === 'K') return `${s.fg} FG · ${s.xp} XP`;
+  if (pos === 'DEF') {
+    const p: string[] = [];
+    if (s.sacks) p.push(`${s.sacks} sk`);
+    if (s.ints) p.push(`${s.ints} INT`);
+    if (s.fumrec) p.push(`${s.fumrec} FR`);
+    if (s.dtd) p.push(`${s.dtd} TD`);
+    if (s.safety) p.push(`${s.safety} SF`);
+    return p.length ? p.join(' · ') : 'no splash';
+  }
+  if (pos === 'DL' || pos === 'LB' || pos === 'DB') {
+    const p: string[] = [];
+    if (s.tackles) p.push(`${s.tackles} tkl`);
+    if (s.sacks) p.push(`${s.sacks} sk`);
+    if (s.ints) p.push(`${s.ints} INT`);
+    if (s.fumrec) p.push(`${s.fumrec} FR`);
+    if (s.dtd) p.push(`${s.dtd} TD`);
+    if (s.safety) p.push(`${s.safety} SF`);
+    return p.length ? p.join(' · ') : '—';
+  }
+  return '—';
+}
