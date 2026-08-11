@@ -31,8 +31,8 @@
 // cheap if the demo ever wants a menu; it's one file per week under assets/pbp.
 //
 // GLOBAL STATE: `resetToDemoLeague()` swaps core's ACTIVE league. That is safe
-// here only because this app never loads a live league into core — LivePicks and
-// LiveBoard read everything from Supabase and touch core's league registry not
+// here only because this app never loads a live league into core — the board reads
+// everything from Supabase and touches core's league registry not
 // at all. If that ever changes, this screen has to restore what it replaced.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -47,7 +47,7 @@ import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import type { RevealedPick, WindowScore, PoolPlayer, SlotScoreRow } from '@drip/core/data/liveApi';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { Card, Display, Mono } from '../ui/prims';
-import { Duel } from './LiveBoard';
+import { Duel } from '../ui/Duel';
 import { FieldView } from '../ui/FieldView';
 import { PlayLog } from '../ui/PlayLog';
 

@@ -49,7 +49,7 @@ const BURST_EASE = Easing.bezier(0.2, 1.6, 0.4, 1);
  *  remounts every face on screen. Flipping on mount would replay the reveal
  *  every time you look at the board, which drains the moment of the one thing
  *  that makes it a moment. The caller decides, by remembering which slots it had
- *  already seen revealed — see LiveBoard's `seenRevealed`. */
+ *  already seen revealed — see Duel's `seenFaces`. */
 export function useFlipIn(play: boolean) {
   const v = useRef(new Animated.Value(play ? 0 : 1)).current;
   useEffect(() => {
