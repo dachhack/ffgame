@@ -12,6 +12,13 @@ export function normTeam(t: string): string {
 }
 
 export function slugMeta(slug: string): { pos: Pos; team: string } {
+  // A missing slug resolves to the same neutral answer as an unknown one.
+  // This is a pure lookup on the render path of every board, and callers reach
+  // it through data we do not control — `sleeper_lineup.starters_json` is an
+  // untrusted JSON blob that gets *cast* to PoolPlayer[], so a row missing its
+  // slug type-checks perfectly and then throws here. An unresolvable player
+  // should degrade to "unknown team", never take the screen down with it.
+  if (!slug) return { pos: 'WR', team: '' };
   if (slug.endsWith('-dst')) return { pos: 'DEF', team: normTeam(slug.slice(0, -4)) };
   if (slug.endsWith('-k')) return { pos: 'K', team: normTeam(slug.slice(0, -2)) };
   const b = BAKED_SLUGS[slug];
