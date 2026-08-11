@@ -634,7 +634,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
             visible
             players={players}
             currentId={cur}
-            subtitle="YOUR PLAYERS WHOSE GAME FALLS IN THIS WINDOW"
+            windowLabel={wins.find((w) => w.id === pickerSlot.win)?.label}
             gated={(p) => !matchPremium && !isFreePosition(p.pos)}
             onGated={(p) => {
               markGatedAttempt('position:' + p.pos);
