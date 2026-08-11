@@ -38,6 +38,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { resetToDemoLeague, getActiveLeague } from '@drip/core/data/league';
 import { installRealWeek } from '@drip/core/data/realPbp';
+import { installGameFeedWeek } from '@drip/core/data/gameFeed';
 import {
   defaultLineup, aiLineup, buildMatchup, banksAtClock, liveCardFlags,
   type ResolvedMatchup,
@@ -46,6 +47,8 @@ import type { RevealedPick, WindowScore, PoolPlayer, SlotScoreRow } from '@drip/
 import { useTheme, MONO } from '../theme.native';
 import { Card, Display, Mono } from '../ui/prims';
 import { Duel } from './LiveBoard';
+import { FieldView } from '../ui/FieldView';
+import { PlayLog } from '../ui/PlayLog';
 
 const WEEK = 8;
 const YOU_TEAM = 'Gone Fishing Phins';
@@ -78,6 +81,9 @@ function build(): Built {
   // alongside loadRealWeek (that one goes through platform().assetUrl, which
   // throws on native by design).
   installRealWeek(WEEK, require('../../assets/pbp/w8.json'));
+  // The parallel per-GAME feed, which only the field visual reads — the engine
+  // never touches it. Same reason it has to be installed rather than fetched.
+  installGameFeedWeek(WEEK, require('../../assets/gamefeed/w8.json'));
 
   const lg = getActiveLeague();
   const you = lg.teams.find((t) => t.name === YOU_TEAM) ?? lg.teams[0];
@@ -290,7 +296,74 @@ export function DemoBoard() {
         winLabel={(id) => b.label[id] ?? id.toUpperCase()}
         winStatus={winStatus}
       />
+
+      {/* The live window's duels, in detail: the field each player's game is on
+          and the play log behind their score.
+          ONE SLOT AT A TIME, on purpose. A window can hold three duels and each
+          carries up to two fields plus a log, which on a phone is a scroll
+          nobody reaches the end of. The picker keeps the thing being talked
+          about on screen. */}
+      {wi >= 0 && <SlotDetail slots={b.resolved.windows[wi].slots} clock={clock} youName={b.youName} oppName={b.oppName} />}
     </ScrollView>
+  );
+}
+
+/** One duel from the live window: both players' fields, then the play log that
+ *  produced their banks. */
+function SlotDetail({ slots, clock, youName, oppName }: {
+  slots: ResolvedMatchup['windows'][number]['slots'];
+  clock: number; youName: string; oppName: string;
+}) {
+  const t = useTheme();
+  const [sel, setSel] = useState(0);
+  const filled = slots.filter((s) => s.you || s.their);
+  if (!filled.length) return null;
+  const s = filled[Math.min(sel, filled.length - 1)];
+
+  // Only what has happened by now — the log is a record, not a spoiler.
+  const events = s.events.filter((e) => e.clock <= clock);
+  // Two players are often in the SAME game (a QB and the opposing RB), in which
+  // case one field covers both. Dedupe by team's game rather than by team.
+  const teams = [s.you?.player.team, s.their?.player.team].filter(Boolean) as string[];
+  const games = [...new Set(teams)];
+
+  return (
+    <Card style={{ marginTop: 10 }}>
+      {filled.length > 1 && (
+        <View style={{ flexDirection: 'row', gap: 4, marginBottom: 8 }}>
+          {filled.map((x, i) => (
+            <Pressable
+              key={x.slotIndex}
+              onPress={() => setSel(i)}
+              style={{
+                flex: 1, paddingVertical: 6, borderRadius: 5, alignItems: 'center',
+                backgroundColor: i === Math.min(sel, filled.length - 1) ? t.you : t.surface,
+                borderWidth: StyleSheet.hairlineWidth, borderColor: i === Math.min(sel, filled.length - 1) ? t.you : t.bd,
+              }}
+            >
+              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: i === Math.min(sel, filled.length - 1) ? t.onAccent : t.dim }}>
+                {x.you?.player.name ?? '—'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Mono size={10} weight="700" tone="you">{s.you?.player.name ?? '—'}</Mono>
+        <Mono size={8.5} tone="faint">VS</Mono>
+        <Mono size={10} weight="700" style={{ color: t.opp }}>{s.their?.player.name ?? 'unopposed'}</Mono>
+      </View>
+
+      {games.map((tm) => <FieldView key={tm} week={WEEK} team={tm} clock={clock} />)}
+
+      <PlayLog
+        events={events}
+        gameLabel={games.join(' · ')}
+        youName={youName}
+        theirName={oppName}
+      />
+    </Card>
   );
 }
 
