@@ -142,7 +142,25 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
           const oppRoster = m.home_roster_id === r.rosterId ? m.away_roster_id : m.home_roster_id;
           myPool(r.leagueId, m.week, oppRoster).then(setOppPool).catch(() => setOppPool([]));
         }
-        setRuntimeSlate(m.week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId })));
+        // `kickoff` is NOT optional here, whatever the type says. deriveWeek()
+        // clusters a week into its real windows from kickoff times, and it
+        // demands a kickoff on EVERY game — one missing and it abandons the
+        // whole derivation for the fixed regular-season five (tnf / early /
+        // late / snf / mnf). Omitting it therefore fails silently and
+        // plausibly: the board renders five sensible-looking windows, and a
+        // preseason week that really has (say) seven Thursday-through-Saturday
+        // clusters loses the ones with no fallback equivalent.
+        //
+        // That is not just a cosmetic mismatch. Picks are stored against the
+        // DERIVED window id, and repeated buckets get a numeric suffix
+        // (tnf, tnf2, tnf3…). Under the fallback the app renders `tnf` and
+        // never `tnf2`, so a pick saved on the web is present, correct and
+        // invisible — which read as "my picks are gone" when only the one pick
+        // that landed in the first cluster survived.
+        setRuntimeSlate(m.week, slate.map((g) => ({
+          away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId,
+          kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined,
+        })));
         // MUST follow setRuntimeSlate: this is what makes a preseason week show
         // its own windows instead of the regular-season five.
         setWins(windowsForWeek(m.week));
