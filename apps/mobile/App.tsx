@@ -1,16 +1,16 @@
-// App root. Deliberately thin: this exists to prove the shell — theme context,
-// safe areas, session — around the one ported screen. Navigation arrives with
-// the second screen; a stack with a single route would be scaffolding for its
-// own sake.
-import { useEffect, useState } from 'react';
+// App root. Still thin: theme context, safe areas, and the session gate around
+// the ported screens. Navigation arrives with the third screen; a stack for two
+// routes that are really one branch would be scaffolding for its own sake.
+import { useCallback, useEffect, useState } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
-import { getSession, onAuth } from '@drip/core/data/liveApi';
+import { getSession, onAuth, signOut } from '@drip/core/data/liveApi';
 import { liveConfigured } from '@drip/core/data/liveConfig';
-import { THEMES, ThemeCtx, loadTheme, isLight } from './src/theme.native';
+import { THEMES, ThemeCtx, loadTheme, isLight, MONO } from './src/theme.native';
 import { LivePicks } from './src/screens/LivePicks';
+import { SignIn } from './src/screens/SignIn';
 
 export function App() {
   const [themeName] = useState(loadTheme);
@@ -21,8 +21,16 @@ export function App() {
   useEffect(() => {
     if (!liveConfigured()) { setReady(true); return; }
     getSession().then((s) => { setSession(s); setReady(true); }).catch(() => setReady(true));
+    // Covers sign-out, token refresh and the sign-in this app performs, so the
+    // gate below never goes stale.
     const un = onAuth((s) => setSession(s));
     return () => { un?.(); };
+  }, []);
+
+  // SignIn calls this once it has a session; onAuth normally fires too, but
+  // re-reading makes the handoff independent of subscription timing.
+  const refreshSession = useCallback(() => {
+    getSession().then(setSession).catch(() => {});
   }, []);
 
   return (
@@ -35,33 +43,31 @@ export function App() {
               <ActivityIndicator color={theme.you} />
             </View>
           ) : !liveConfigured() ? (
-            <Placeholder
-              title="Live mode isn’t configured"
-              body="Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in app.json → expo.extra, then reload."
-            />
+            // Unreachable with the defaults baked into liveConfig.ts; kept for a
+            // build that deliberately points at nothing.
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 10 }}>
+              <Text style={{ fontSize: 17, fontWeight: '700', color: theme.text, textAlign: 'center' }}>Live mode isn’t configured</Text>
+              <Text style={{ fontSize: 12, color: theme.dim, textAlign: 'center', lineHeight: 18 }}>
+                This build has no Supabase project. See apps/mobile/app.config.js.
+              </Text>
+            </View>
           ) : !session ? (
-            // Sign-in is LiveOnboard's job on web (1,541 lines). Until that's
-            // ported, sign in on the web app — the session is the same account
-            // either way, so nothing is lost by doing it there first.
-            <Placeholder
-              title="Sign in on the web first"
-              body="This build ports the picks screen only. Sign in at dripfantasy.com; the onboarding flow lands in the next pass."
-            />
+            <SignIn onSignedIn={refreshSession} />
           ) : (
-            <LivePicks userId={session.user.id} onBack={() => {}} />
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9, color: theme.faint }} numberOfLines={1}>
+                  {session.user.email}
+                </Text>
+                <Pressable onPress={() => { void signOut(); }} hitSlop={10}>
+                  <Text style={{ fontFamily: MONO, fontSize: 9, color: theme.dim }}>sign out</Text>
+                </Pressable>
+              </View>
+              <LivePicks userId={session.user.id} onBack={() => {}} />
+            </View>
           )}
         </SafeAreaView>
       </ThemeCtx.Provider>
     </SafeAreaProvider>
-  );
-}
-
-function Placeholder({ title, body }: { title: string; body: string }) {
-  const theme = THEMES[loadTheme()];
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 10 }}>
-      <Text style={{ fontSize: 17, fontWeight: '700', color: theme.text, textAlign: 'center' }}>{title}</Text>
-      <Text style={{ fontSize: 12, color: theme.dim, textAlign: 'center', lineHeight: 18 }}>{body}</Text>
-    </View>
   );
 }
