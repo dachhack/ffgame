@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { getSession, onAuth, signOut } from '@drip/core/data/liveApi';
+import { APP_VERSION } from '@drip/core/version';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { THEMES, ThemeCtx, loadTheme, isLight, MONO } from './src/theme.native';
 import { Leagues } from './src/screens/Leagues';
@@ -66,20 +67,36 @@ export function App() {
 
     return (
       <View style={{ flex: 1 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, gap: 10 }}>
-          {open ? (
-            <Pressable onPress={() => setOpen(null)} hitSlop={10} style={{ flex: 1 }}>
-              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>← {open.name}</Text>
+        {/* Brand bar — the web's persistent header: who you are, where you are,
+            and the way back out. Version is shown because playtesters are
+            running sideloaded builds and "which one have you got" is otherwise
+            unanswerable. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.bd }}>
+          <View style={{ flexShrink: 1 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', letterSpacing: 1.4, color: theme.text }}>DRIP FANTASY</Text>
+            <Text style={{ fontFamily: MONO, fontSize: 8, color: theme.faint }}>{APP_VERSION}</Text>
+          </View>
+
+          {open && (
+            <Pressable
+              onPress={() => setOpen(null)}
+              hitSlop={8}
+              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: theme.you, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 6, flexShrink: 1 }}
+            >
+              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>← my leagues</Text>
             </Pressable>
-          ) : (
-            <Text numberOfLines={1} style={{ flex: 1, fontFamily: MONO, fontSize: 9, color: theme.faint }}>
-              {session.user.email}
-            </Text>
           )}
+
+          <View style={{ flex: 1 }} />
+
           <Pressable onPress={() => { void signOut(); }} hitSlop={10}>
             <Text style={{ fontFamily: MONO, fontSize: 9, color: theme.dim }}>sign out</Text>
           </Pressable>
         </View>
+
+        <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9.5, color: open ? theme.dim : theme.faint, paddingHorizontal: 14, paddingTop: 8 }}>
+          {open ? open.name : session.user.email}
+        </Text>
 
         {open ? (
           <View style={{ flex: 1 }}>

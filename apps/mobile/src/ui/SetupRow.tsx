@@ -19,8 +19,10 @@ import { CardFace, CardBack, CardEmpty } from './cards';
 import { Overlay } from './Overlay';
 import { teamLogo } from '@drip/core/data/media';
 
-export function SetupRow({ pick, resolve, lockPlayer, metricFilter, onOpenPicker, onPickMetric, onClearSlot }: {
+export function SetupRow({ pick, resolve, lockPlayer, metricFilter, idx = 0, onOpenPicker, onPickMetric, onClearSlot }: {
   pick?: Pick;
+  /** Deal order within the window. */
+  idx?: number;
   resolve: (id: string) => Player | undefined;
   lockPlayer?: boolean;
   /** Which metrics this slot may offer — LivePicks filters by armed unlocks. */
@@ -52,6 +54,7 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, onOpenPicker
           team={player.team}
           metric={metric?.name ?? null}
           accent={t.you}
+          idx={idx}
           onPress={lockPlayer ? undefined : () => (pick?.metricId ? setMetricOpen(true) : onOpenPicker())}
           onRemove={lockPlayer ? undefined : onClearSlot}
           footer={lockPlayer ? undefined : (
@@ -65,7 +68,7 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, onOpenPicker
         <CardEmpty label={lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'} onPress={lockPlayer ? undefined : onOpenPicker} />
       )}
 
-      <CardBack />
+      <CardBack idx={idx} />
 
       <MetricModal
         visible={metricOpen}

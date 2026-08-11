@@ -34,6 +34,7 @@ import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '..
 import { SetupRow } from '../ui/SetupRow';
 import { FELT } from '../ui/cards';
 import { PlayerPicker } from '../ui/PlayerPicker';
+import { RosterPanel } from '../ui/RosterPanel';
 import { ShopModal } from '../ui/ShopModal';
 
 // Live pool entries are slug/full/pos; SetupRow wants a Player. Build a light
@@ -368,6 +369,16 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
+      <RosterPanel
+        title="Your roster"
+        players={pool.map(poolToPlayer)}
+        wins={wins}
+        // Same resolver the slate gating uses, so the grouping here and the
+        // eligibility counts on each window can never disagree.
+        windowOf={(id) => winBySlug[id] ?? null}
+        accent={t.you}
+      />
+
       {/* Header — mirrors the web's title block: who is playing, how much of
           the lineup is set, and the week you are looking at. */}
       <Card style={{ marginBottom: 12 }}>
@@ -528,12 +539,13 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
             {/* Felt under the pair, so the cards read as dealt onto a table
                 rather than floating on the app background. */}
             <View style={{ gap: 10, backgroundColor: FELT, borderRadius: 8, padding: 10 }}>
-              {winSlots.map((s) => {
+              {winSlots.map((s, si) => {
                 const p = picks[s.key];
                 const pick = p?.player_slug ? { playerId: p.player_slug, metricId: p.metric_id ?? null } : undefined;
                 return (
                   <SetupRow
                     key={s.key}
+                    idx={si}
                     pick={pick}
                     resolve={(id) => playersBySlug[id]}
                     lockPlayer={wLocked}

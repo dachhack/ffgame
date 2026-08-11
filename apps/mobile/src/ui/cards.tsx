@@ -9,15 +9,19 @@
 //     source={{uri}}> renders the same photo the web does. Falling back to the
 //     team logo when a player has no headshot mirrors the web.
 //   · The card FACE is a radial gradient in CSS (#FDF8E9 → #F4EDDA → #E2D5B6)
-//     over an 11px dot pattern. React Native has no radial gradient and no
-//     background-repeat, so this is a flat stock colour from the middle of that
-//     ramp plus a warm border. Close at a glance, not identical — the dot
-//     texture and the centre highlight are the two things missing.
-//   · The deal-in wobble and the flip are not here. They are Reanimated work,
-//     and they belong with the live board's other animations rather than bolted
-//     onto a static card.
+//     over an 11px dot pattern. RN has no radial gradient, but it CAN tile an
+//     image — so the dot layer is a real 11x11 PNG (91 bytes, generated to the
+//     same rgba(184,134,59,.12) at the same spacing) drawn with
+//     resizeMode="repeat" over the stock colour. What is still missing is the
+//     gradient's centre highlight; the texture itself is now faithful.
+//   · Cards DEAL IN — a short rise + fade, staggered by slot index, matching the
+//     web's ct-dealin. Built on RN's own Animated rather than Reanimated: this
+//     is an entrance transition on mount, not a gesture or a frame-by-frame
+//     effect, and it does not justify a native dependency. The nuke/flip
+//     moments will.
 import { type ReactNode } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Easing, Image, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import { storeGet } from '@drip/core/platform';
 import { MONO } from '../theme.native';
@@ -28,6 +32,7 @@ import { MONO } from '../theme.native';
 export const CARD_ASPECT = 0.714;
 
 const STOCK = '#F4EDDA';       // middle of the web's face gradient
+const STOCK_TILE = require('../../assets/card-stock.png');
 const STOCK_EDGE = '#D8C9A4';  // its darkest stop, used as the border
 const INK = '#201C12';
 const INK_DIM = '#6B6047';
@@ -55,7 +60,26 @@ export function cardBackArt() {
 }
 
 /** A dealt player card: headshot, name, position/team, sealed metric. */
-export function CardFace({ slug, name, pos, team, metric, bank, accent, onPress, onRemove, footer }: {
+/** Deal-in: rise + fade, staggered by index. Native driver, so it runs on the
+ *  UI thread and a slow JS tick cannot stutter it. */
+function useDealIn(idx: number) {
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(v, {
+      toValue: 1,
+      duration: 260,
+      delay: Math.min(idx, 8) * 70,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [idx, v]);
+  return {
+    opacity: v,
+    transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+  };
+}
+
+export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0, onPress, onRemove, footer }: {
   slug: string;
   name: string;
   pos: string;
@@ -65,6 +89,8 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, onPress,
   bank?: number | null;
   /** Top edge colour — the side this card belongs to. */
   accent: string;
+  /** Deal order — staggers the entrance. */
+  idx?: number;
   onPress?: () => void;
   onRemove?: () => void;
   footer?: ReactNode;
@@ -73,11 +99,17 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, onPress,
   const logo = teamLogo(team);
   const src = photo ?? logo;
 
+  const deal = useDealIn(idx);
+
   return (
-    <Pressable
-      onPress={onPress}
+    <Animated.View style={[{ flex: 1 }, deal]}>
+    <Pressable onPress={onPress} style={{ flex: 1 }}>
+    <ImageBackground
+      source={STOCK_TILE}
+      resizeMode="repeat"
+      imageStyle={{ borderRadius: 8 }}
       style={{
-        flex: 1, aspectRatio: CARD_ASPECT, backgroundColor: STOCK,
+        aspectRatio: CARD_ASPECT, backgroundColor: STOCK,
         borderWidth: StyleSheet.hairlineWidth, borderColor: STOCK_EDGE,
         borderTopWidth: 3, borderTopColor: accent,
         borderRadius: 8, padding: 8, alignItems: 'center', justifyContent: 'space-between',
@@ -114,22 +146,25 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, onPress,
       ) : footer ? (
         <View style={{ flexDirection: 'row', gap: 12 }}>{footer}</View>
       ) : <View style={{ height: 2 }} />}
+    </ImageBackground>
     </Pressable>
+    </Animated.View>
   );
 }
 
 /** The opponent's face-down pick. Real deck art, so it reads as a card rather
  *  than an empty panel. */
-export function CardBack({ label = 'SEALED' }: { label?: string }) {
+export function CardBack({ label = 'SEALED', idx = 0 }: { label?: string; idx?: number }) {
+  const deal = useDealIn(idx);
   return (
-    <View style={{ flex: 1, aspectRatio: CARD_ASPECT, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1A2740' }}>
+    <Animated.View style={[{ flex: 1, aspectRatio: CARD_ASPECT, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1A2740' }, deal]}>
       <Image source={cardBackArt()} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
       <View style={{ position: 'absolute', bottom: 8, left: 0, right: 0, alignItems: 'center' }}>
         <View style={{ backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 3 }}>
           <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 1, color: '#E7DCC2' }}>{label}</Text>
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
