@@ -72,7 +72,74 @@ function redirectTo(): string {
  *  code must NOT rewrite the URL while this is true or the tokens are destroyed
  *  and the user bounces back to the sign-in form. */
 export function hasAuthTokensInUrl(): boolean {
-  try { return /[#&](access_token|refresh_token|error_description|error_code|error)=/.test(platform().url.hash()); } catch { return false; }
+  try {
+    if (/[#&](access_token|refresh_token|error_description|error_code|error)=/.test(platform().url.hash())) return true;
+    // A FAILED return arrives in the QUERY, not the hash (see authUrlError).
+    // This guard is what every boot path asks before touching the URL — including
+    // the store's route normaliser — so missing the query half meant a failed
+    // sign-in got its URL rewritten out from under it before anything could read
+    // the reason.
+    const q = platform().url.query();
+    return q.has('error_code') || q.has('error_description') || q.has('error');
+  } catch { return false; }
+}
+
+/** A FAILED auth return, e.g.
+ *  `?error=invalid_request&error_code=bad_oauth_state&error_description=…`.
+ *
+ *  Supabase splits these two ways: a SUCCESS comes back in the hash (implicit
+ *  flow — `#access_token=…`), but a failure from its own callback comes back in
+ *  the QUERY. hasAuthTokensInUrl above reads the hash only, so a failed sign-in
+ *  was invisible to boot code: the user landed on the marketing page, signed
+ *  out, with the raw error still in the address bar and nothing explaining it.
+ *  Most people just try again — which usually works, since the retry starts a
+ *  fresh state — but "it silently did nothing" is the worst thing a sign-in
+ *  button can do. Read both, so neither half is missed. */
+export interface AuthUrlError { code: string; description: string }
+export function authUrlError(): AuthUrlError | null {
+  try {
+    const q = platform().url.query();
+    // The hash arrives as "#a=1&b=2"; parse it with the same reader.
+    const h = new URLSearchParams(platform().url.hash().replace(/^#/, ''));
+    const code = q.get('error_code') || h.get('error_code') || q.get('error') || h.get('error');
+    if (!code) return null;
+    const description = q.get('error_description') || h.get('error_description') || '';
+    return { code, description: description.replace(/\+/g, ' ') };
+  } catch { return null; }
+}
+
+// Captured at boot BEFORE the URL is cleaned, so the sign-in screen can still
+// explain what happened after the params are gone. Lives for this page load
+// only — a reload starts clean.
+let pendingAuthError: AuthUrlError | null = null;
+/** Stash the current URL's auth failure (if any). Returns what it captured. */
+export function captureAuthUrlError(): AuthUrlError | null {
+  const e = authUrlError();
+  if (e) pendingAuthError = e;
+  return e;
+}
+/** The captured failure. NON-destructive on purpose: a read-once version looks
+ *  right until React StrictMode double-mounts the sign-in screen in dev, the
+ *  first mount swallows the message and the surviving one renders nothing. The
+ *  retry clears it instead (clearAuthUrlError), which is also when it stops
+ *  being true. */
+export function pendingAuthUrlError(): AuthUrlError | null { return pendingAuthError; }
+/** Drop the stashed failure — called when a fresh sign-in attempt starts, so a
+ *  stale message can't outlive the attempt it describes. */
+export function clearAuthUrlError(): void { pendingAuthError = null; }
+
+/** Human-readable cause for a failed auth return. `bad_oauth_state` is the
+ *  common one and almost never means anything is broken: the sign-in was
+ *  finished in a different browser than it was started in (an in-app browser or
+ *  the installed app handing off to the system browser), or a stale callback URL
+ *  was opened a second time. */
+export function authErrorMessage(e: AuthUrlError): string {
+  if (/bad_oauth_state|flow_state_not_found|flow_state_expired/i.test(e.code)) {
+    return 'Sign-in didn’t complete — the link was opened in a different browser, or it had already been used. Please try again.';
+  }
+  if (/access_denied/i.test(e.code)) return 'Sign-in was cancelled.';
+  if (/expired/i.test(e.code)) return 'That sign-in link has expired. Please request a new one.';
+  return e.description || 'Sign-in didn’t complete. Please try again.';
 }
 
 export async function sendMagicLink(email: string): Promise<void> {

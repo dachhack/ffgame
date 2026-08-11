@@ -3,7 +3,7 @@ import { useStore, PHOTO_SKINS } from './app/store';
 import { THEMES, themeVars } from '@drip/core/theme';
 import { DemoBoard } from './screens/DemoBoard';
 import { yahooExchange } from '@drip/core/data/providers/yahooClient';
-import { getSession, hasAuthTokensInUrl } from '@drip/core/data/liveApi';
+import { getSession, hasAuthTokensInUrl, captureAuthUrlError } from '@drip/core/data/liveApi';
 import { RequestCodeFab } from './screens/RequestCode';
 import { InstallPrompt } from './app/InstallPrompt';
 import { DEMO_WEEK } from '@drip/core/config';
@@ -54,6 +54,18 @@ export function App() {
   // is stashed so it survives the magic-link round trip and pre-fills the join form.
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
+    // A FAILED auth return (?error=…&error_code=bad_oauth_state). Handled BEFORE
+    // the ?live=1 branch below and outside it, because Supabase's error redirect
+    // doesn't necessarily carry our redirectTo query back — so this used to match
+    // nothing at all: no cleanup, no message, the raw error left in the address
+    // bar and the user dropped on the marketing page wondering what happened.
+    // Capture it, scrub the URL, and go where sign-in actually lives so they can
+    // read the reason and retry.
+    if (captureAuthUrlError()) {
+      try { window.history.replaceState({}, '', window.location.pathname + '#/live'); } catch { /* ignore */ }
+      navigate({ name: 'live' });
+      return;
+    }
     // Yahoo OAuth redirect: ?code=…&state=yahoo → exchange for tokens, then land
     // on the Yahoo league picker (strip the query so a refresh doesn't re-run it).
     if (p.get('state') === 'yahoo' && p.get('code')) {

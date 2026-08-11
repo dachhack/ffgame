@@ -4,6 +4,7 @@ import { SiteSettings, VersionTag, Img } from '../app/ui';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
+  pendingAuthUrlError, clearAuthUrlError, authErrorMessage, type AuthUrlError,
   getSession, onAuth, signOut, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, myLinkedSleeper, claimMyRosters,
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft,
@@ -202,6 +203,9 @@ function AuthForm() {
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  // Read-once: the boot capture is cleared by this read, so a later visit to the
+  // sign-in screen doesn't re-accuse a session that has since worked.
+  const [authErr, setAuthErr] = useState<AuthUrlError | null>(() => pendingAuthUrlError());
   const [err, setErr] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [signupPending, setSignupPending] = useState(false); // awaiting email confirmation
@@ -210,6 +214,9 @@ function AuthForm() {
 
   const run = async (fn: () => Promise<void>) => {
     if (busy) return;
+    // A fresh attempt supersedes the last failed return — keeping the old banner
+    // up would describe an attempt that is no longer the current one.
+    clearAuthUrlError(); setAuthErr(null);
     setBusy(true); reset();
     try { await fn(); } catch (x) { setErr(friendlyError(x)); }
     finally { setBusy(false); }
@@ -276,6 +283,14 @@ function AuthForm() {
           </div>
         )}
       </div>
+      {/* A sign-in that came back FAILED. Captured at boot before the URL was
+          scrubbed (App.tsx), so the reason survives the cleanup instead of the
+          user landing here with no idea why they're still signed out. */}
+      {authErr && (
+        <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', background: 'color-mix(in srgb, var(--opp) 10%, var(--bg))', border: '1px solid color-mix(in srgb, var(--opp) 45%, var(--bd))', borderRadius: 6, padding: '10px 12px', marginBottom: 12, lineHeight: 1.5 }}>
+          ⚠ {authErrorMessage(authErr)}
+        </div>
+      )}
       <div style={card}>
         {showPw && (SHOW_GOOGLE || SHOW_APPLE) && (
           <div style={{ marginBottom: 14 }}>
