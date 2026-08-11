@@ -20,12 +20,12 @@
 //
 // ORDER IS LOAD-BEARING — each polyfill builds on the previous one, and this is
 // the sequence formatjs documents. Do not reorder or tree-shake it.
+//
+// Only DateTimeFormat is polyfilled: nothing in core or the app uses
+// Intl.NumberFormat or PluralRules, and formatjs's versions of those are ~200KB
+// of bundle for an API we never call.
 import '@formatjs/intl-getcanonicallocales/polyfill';
 import '@formatjs/intl-locale/polyfill';
-import '@formatjs/intl-pluralrules/polyfill';
-import '@formatjs/intl-pluralrules/locale-data/en';
-import '@formatjs/intl-numberformat/polyfill';
-import '@formatjs/intl-numberformat/locale-data/en';
 import '@formatjs/intl-datetimeformat/polyfill';
 import '@formatjs/intl-datetimeformat/locale-data/en';
 import '@formatjs/intl-datetimeformat/add-golden-tz';
