@@ -3,7 +3,7 @@
 // redeem_invite RPC (migration 0002), never a direct membership write.
 import { getSupabase } from './supabaseClient';
 import { platform, storeGet } from '../platform';
-import { slugMeta } from './slugMeta';
+import { readPool } from './poolEntry';
 import { resolveUser } from './sleeper';
 import { PRESEASON_BOARD_WEEKS } from './nflSlate';
 import type { Session } from '@supabase/supabase-js';
@@ -461,19 +461,10 @@ export async function leagueResults(leagueId: string): Promise<MatchupResult[]> 
 export async function myPool(leagueId: string, week: number, rosterId: number): Promise<PoolPlayer[]> {
   const { data } = await (await client()).from('sleeper_lineup').select('starters_json')
     .eq('league_id', leagueId).eq('week', week).eq('roster_id', rosterId).maybeSingle();
-  // `starters_json` is a JSON blob written by the sync, not a typed column, so
-  // `as PoolPlayer[]` asserts a shape nobody enforces. An entry without a slug
-  // is unusable — it cannot be slate-gated, sealed or scored — and passing it
-  // through only moves the failure into whichever screen touches it first.
-  // Drop them here, once, rather than guarding at every call site.
-  //
-  // The slug is required — an entry without one is dropped. `full` and `pos`
-  // are only ever displayed, so they get defaults rather than costing the user
-  // a pickable player: a nameless entry is still a legitimate pick.
-  const raw = ((data?.starters_json) ?? []) as Partial<PoolPlayer>[];
-  return raw
-    .filter((p): p is Partial<PoolPlayer> => !!p && typeof p.slug === 'string' && p.slug.length > 0)
-    .map((p) => ({ slug: p.slug!, full: p.full || p.slug!, pos: p.pos || slugMeta(p.slug!).pos }));
+  // Read through the shared reader, NOT `p.slug`. That column is written in two
+  // shapes and a Sleeper-synced league uses `player_slug` — reading only `slug`
+  // dropped every entry and reported the roster as empty. See poolEntry.ts.
+  return readPool(data?.starters_json);
 }
 
 /** The caller's saved picks for a matchup (locked = that window has sealed). */
