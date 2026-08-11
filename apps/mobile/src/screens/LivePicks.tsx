@@ -17,12 +17,12 @@ import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, wi
 import { teamLogo } from '@drip/core/data/media';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
-import { powerupById } from '@drip/core/data/powerups';
+import { powerupById, POWERUPS, isAmplifier, ampCapacity } from '@drip/core/data/powerups';
 import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } from '@drip/core/data/premiumClient';
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
-  myBuffs, armBuff, disarmBuff, LIVE_BUFFS,
+  myBuffs, heroSetBuffs, myInventory, consumeInventory, refundInventory,
   myUnlocks, armUnlock, disarmUnlock, myComboQty,
   myWallet, ensureWallet,
   myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium, startCheckout,
@@ -36,6 +36,8 @@ import { FELT } from '../ui/cards';
 import { PlayerPicker } from '../ui/PlayerPicker';
 import { RosterPanel } from '../ui/RosterPanel';
 import { ShopModal } from '../ui/ShopModal';
+import { PowerupHand, type HandCard } from '../ui/PowerupHand';
+import { Overlay } from '../ui/Overlay';
 
 // Live pool entries are slug/full/pos; SetupRow wants a Player. Build a light
 // one — the setup board only ever displays name/pos/team.
@@ -86,6 +88,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const [buffs, setBuffs] = useState<Set<string>>(new Set());
   const [unlocks, setUnlocks] = useState<Set<string>>(new Set());
   const [comboQty, setComboQty] = useState(0);
+  const [inventory, setInventory] = useState<Record<string, number>>({});
   const [coins, setCoins] = useState(0);
   const [buffBusy, setBuffBusy] = useState<string | null>(null);
   const [extra, setExtra] = useState(0);
@@ -105,6 +108,11 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   // Set only after the live slate is installed below — windowsForWeek() reads
   // that slate, so asking before it lands returns the generic default.
   const [wins, setWins] = useState<GameWindow[]>([]);
+  // The opponent's ROSTER is public in this game — what stays hidden is which
+  // player they put in which slot. So scouting fetches their pool the same way
+  // it fetches yours, and shows only who COULD appear in a window.
+  const [oppPool, setOppPool] = useState<PoolPlayer[]>([]);
+  const [scoutWin, setScoutWin] = useState<GameWindow | null>(null);
 
   useEffect(() => { ensurePremiumTier(); }, []);
 
@@ -129,6 +137,11 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
           myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId), myBuffs(m.id), myUnlocks(m.id),
           myExtra(m.id).catch(() => 0), liveSlate(m.week).catch(() => []), myComboQty(m.id, userId).catch(() => 0),
         ]);
+        myInventory(m.id).then((inv) => setInventory(inv ?? {})).catch(() => {});
+        {
+          const oppRoster = m.home_roster_id === r.rosterId ? m.away_roster_id : m.home_roster_id;
+          myPool(r.leagueId, m.week, oppRoster).then(setOppPool).catch(() => setOppPool([]));
+        }
         setRuntimeSlate(m.week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId })));
         // MUST follow setRuntimeSlate: this is what makes a preseason week show
         // its own windows instead of the regular-season five.
@@ -254,19 +267,79 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
     startCheckout(kind, roster.leagueId).catch((e) => setErr(e instanceof Error ? e.message : 'Checkout failed.'));
   };
 
-  const toggleBuff = async (id: string) => {
+  /** Arm a card from the hand.
+   *
+   *  This CONSUMES AN OWNED CARD, it does not charge coin — coin was charged
+   *  once, in the shop. The screen previously called `arm_buff`, which charges
+   *  at arm time; with a shop in front of it that billed the same power-up
+   *  twice. This mirrors the web's live board (store.armBuff →
+   *  consumeAndApply + heroSetBuffs).
+   *
+   *  Amplifier capacity is enforced here as well as server-side, so an
+   *  impossible arm is refused before it spends a card. */
+  const armFromHand = async (id: string) => {
     if (!matchup || locked || buffBusy) return;
-    const armed = buffs.has(id);
-    if (!armed && puLocked(id)) { markGatedAttempt('powerup:' + id); setErr(upgradeMsg); return; }
-    if (!armed && coins < priceOf(id)) { setErr(insufficientMsg(id)); return; }
+    if (buffs.has(id)) return;
+    const armed = new Set(buffs);
+    if (id === 'amp-3' && !armed.has('amp-2')) { setErr('Third Amp needs Second Amp armed first.'); return; }
+    if (isAmplifier(id) && [...armed].filter(isAmplifier).length >= ampCapacity(armed)) {
+      setErr('Amplifier capacity reached — arm Second/Third Amp to raise it.'); return;
+    }
+    if ((inventory[id] ?? 0) <= 0) { setErr('You don’t own that card — buy it in the shop.'); return; }
+
     setBuffBusy(id); setErr(null);
     try {
-      const r = armed ? await disarmBuff(matchup.id, id) : await armBuff(matchup.id, id);
-      if (r.ok && r.buffs) { setBuffs(new Set(r.buffs)); refreshCoins(); }
-      else setErr(r.error === 'insufficient' ? insufficientMsg(id) : (r.detail ?? r.error ?? 'Could not update power-ups.'));
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Could not update power-ups.'); }
-    finally { setBuffBusy(null); }
+      const c = await consumeInventory(matchup.id, id);
+      if (!c?.ok) { setErr('Could not play that card.'); return; }
+      const next = [...armed, id];
+      const r = await heroSetBuffs(matchup.id, next);
+      if (r?.ok) {
+        setBuffs(new Set(next));
+        setInventory((inv) => ({ ...inv, [id]: Math.max(0, (inv[id] ?? 1) - 1) }));
+      } else {
+        // Persisting failed — hand the card back rather than silently eating it.
+        await refundInventory(matchup.id, id).catch(() => {});
+        setErr(r?.error ?? 'Could not arm that power-up.');
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not arm that power-up.');
+    } finally { setBuffBusy(null); }
   };
+
+  const disarmFromHand = async (id: string) => {
+    if (!matchup || locked || buffBusy) return;
+    if (!buffs.has(id)) return;
+    setBuffBusy(id); setErr(null);
+    try {
+      const next = [...buffs].filter((b) => b !== id);
+      const r = await heroSetBuffs(matchup.id, next);
+      if (r?.ok) {
+        await refundInventory(matchup.id, id).catch(() => {});
+        setBuffs(new Set(next));
+        setInventory((inv) => ({ ...inv, [id]: (inv[id] ?? 0) + 1 }));
+      } else setErr(r?.error ?? 'Could not disarm that power-up.');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not disarm that power-up.');
+    } finally { setBuffBusy(null); }
+  };
+
+  /** The hand: everything owned, plus anything currently armed (an armed card
+   *  has left the inventory, so it would otherwise vanish from view). */
+  const hand: HandCard[] = POWERUPS
+    .filter((p) => (inventory[p.id] ?? 0) > 0 || buffs.has(p.id))
+    .map((p) => {
+      const armed = buffs.has(p.id);
+      const pre = p.timing === 'pre';
+      return {
+        id: p.id,
+        qty: inventory[p.id] ?? 0,
+        armed,
+        usable: !locked && pre,
+        note: locked ? 'The week has started — arms are closed.'
+          : pre ? undefined
+          : 'Real-time card — playable from the live board once a window kicks off.',
+      };
+    });
 
   const toggleUnlock = async (id: string) => {
     if (!matchup || locked || buffBusy) return;
@@ -368,7 +441,13 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const filled = slots.filter((s) => picks[s.key]?.player_slug && picks[s.key]?.metric_id).length;
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
+    <View style={{ flex: 1 }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: t.bg }}
+      // Bottom padding clears the hand, which is pinned over this list rather
+      // than scrolling with it — otherwise the SEAL button sits under the cards.
+      contentContainerStyle={{ padding: 12, paddingBottom: hand.length ? 150 : 40 }}
+    >
       <RosterPanel
         title="Your roster"
         players={pool.map(poolToPlayer)}
@@ -443,26 +522,9 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
             </View>
           )}
 
-          {/* A horizontal rail, not a wrapped wall. Eleven pills stacked five
-              rows deep pushed the actual lineup below the fold; the web solves
-              the same problem with ACTIVE/APPLY/SHOP buttons. */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }} style={{ marginTop: 10 }}>
-            {LIVE_BUFFS.map((id) => {
-              const pu = powerupById(id);
-              const on = buffs.has(id);
-              const afford = on || coins >= priceOf(id);
-              return (
-                <Chip
-                  key={id}
-                  label={`${pu?.icon ?? ''} ${pu?.name ?? id} ${on ? '✓' : puLocked(id) ? '🔒' : `◆${priceOf(id)}`}`}
-                  on={on}
-                  disabled={locked || !!buffBusy || !afford}
-                  dim={buffBusy === id}
-                  onPress={() => toggleBuff(id)}
-                />
-              );
-            })}
-          </ScrollView>
+          <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>
+            Buy cards in the shop; they land in your hand at the bottom of the screen. Arming one plays the card — coin is charged once, at purchase.
+          </Mono>
 
           <Mono size={9.5} weight="700" track={0.06} style={{ marginTop: 14 }}>METRIC UNLOCKS</Mono>
           <Mono size={9} tone="faint">Arm one to make its locked metric pickable (🔓) in the slots below.</Mono>
@@ -555,6 +617,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
                     onOpenPicker={() => { if (!wLocked) setPickerSlot({ key: s.key, win: w.id as WindowId }); }}
                     onPickMetric={(mid) => { if (!wLocked) setSlot(s.key, { metric_id: mid }); }}
                     onClearSlot={() => { if (!wLocked) setSlot(s.key, { player_slug: null, metric_id: null }); }}
+                    onScout={oppPool.length ? () => setScoutWin(w) : undefined}
                   />
                 );
               })}
@@ -620,6 +683,39 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
 
       <View style={{ alignItems: 'center', marginTop: 14 }}><LinkButton label="← back" onPress={onBack} /></View>
 
+      {/* Scout: who the opponent COULD field in this window. Never who they
+          actually slotted — that stays sealed until the window kicks off. */}
+      <Overlay
+        visible={!!scoutWin}
+        title={`Scout · ${scoutWin?.label ?? ''}`}
+        subtitle={`${(oppTeam?.team_name ?? 'OPPONENT').toUpperCase()} · WHO THEY COULD FIELD — NOT WHO THEY PLAYED`}
+        onClose={() => setScoutWin(null)}
+      >
+        <ScrollView contentContainerStyle={{ padding: 12, gap: 6 }}>
+          {(() => {
+            const win = scoutWin?.id;
+            const list = !win ? [] : oppPool
+              .filter((op) => {
+                if (!gateOn) return true;
+                const tm = slugMeta(op.slug).team;
+                const w = tm ? windowForTeam(week, tm) : 'any';
+                return w === 'any' || w === win;
+              })
+              .sort((a, b) => a.pos.localeCompare(b.pos) || a.full.localeCompare(b.full));
+            if (!list.length) return <Mono size={10.5} tone="dim">Nobody on their roster plays in this window.</Mono>;
+            return list.map((op) => (
+              <View key={op.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
+                <View style={{ backgroundColor: (t.pos[op.pos as keyof typeof t.pos] ?? { bg: t.sh }).bg, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1 }}>
+                  <Text style={{ fontFamily: 'System', fontSize: 9, fontWeight: '700', color: (t.pos[op.pos as keyof typeof t.pos] ?? { fg: t.dim }).fg }}>{op.pos}</Text>
+                </View>
+                <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: t.text }}>{op.full}</Text>
+                <Mono size={9} tone="faint">{slugMeta(op.slug).team}</Mono>
+              </View>
+            ));
+          })()}
+        </ScrollView>
+      </Overlay>
+
       {!!matchup && (
         <ShopModal
           visible={shopOpen}
@@ -660,5 +756,13 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         );
       })()}
     </ScrollView>
+
+    <PowerupHand
+      cards={hand}
+      busyId={buffBusy}
+      onArm={armFromHand}
+      onDisarm={disarmFromHand}
+    />
+    </View>
   );
 }

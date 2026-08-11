@@ -154,16 +154,18 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
 
 /** The opponent's face-down pick. Real deck art, so it reads as a card rather
  *  than an empty panel. */
-export function CardBack({ label = 'SEALED', idx = 0 }: { label?: string; idx?: number }) {
+export function CardBack({ label = 'SEALED', idx = 0, onPress, actionLabel }: {
+  label?: string; idx?: number; onPress?: () => void; actionLabel?: string;
+}) {
   const deal = useDealIn(idx);
   return (
     <Animated.View style={[{ flex: 1, aspectRatio: CARD_ASPECT, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1A2740' }, deal]}>
       <Image source={cardBackArt()} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-      <View style={{ position: 'absolute', bottom: 8, left: 0, right: 0, alignItems: 'center' }}>
-        <View style={{ backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 3 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 1, color: '#E7DCC2' }}>{label}</Text>
+      <Pressable onPress={onPress} disabled={!onPress} style={{ position: 'absolute', inset: 0, justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 8 }}>
+        <View style={{ backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 3 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 1, color: '#E7DCC2' }}>{actionLabel ?? label}</Text>
         </View>
-      </View>
+      </Pressable>
     </Animated.View>
   );
 }
