@@ -11,7 +11,7 @@
 // exactly as they do on web. That is the whole point of the extraction — a rule
 // change lands in one file and both apps get it.
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
 import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, isPreseasonWeek } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
@@ -34,6 +34,7 @@ import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '..
 import { SetupRow } from '../ui/SetupRow';
 import { FELT } from '../ui/cards';
 import { PlayerPicker } from '../ui/PlayerPicker';
+import { ShopModal } from '../ui/ShopModal';
 
 // Live pool entries are slug/full/pos; SetupRow wants a Player. Build a light
 // one — the setup board only ever displays name/pos/team.
@@ -94,6 +95,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
+  const [shopOpen, setShopOpen] = useState(false);
   const [matchPremium, setMatchPremium] = useState(true); // default true = no false locks until we know
   const [weekSel, setWeekSel] = useState<number | null>(null);
   const [winKickIso, setWinKickIso] = useState<Record<string, string>>({});
@@ -405,9 +407,16 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
       {/* Power-ups */}
       {controller !== 'ai' && (
         <Card style={{ marginBottom: 12 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <Display size={14}>Power-ups</Display>
-            <Mono size={10} tone="you" weight="700">◆ {Math.round(coins)} coin</Mono>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <Display size={14} style={{ flex: 1 }}>Power-ups</Display>
+            <Mono size={10} tone="you" weight="700">◆ {Math.round(coins)}</Mono>
+            <Pressable
+              onPress={() => setShopOpen(true)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.bg, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}
+            >
+              <Text style={{ fontSize: 12 }}>🛒</Text>
+              <Text style={{ fontFamily: 'System', fontSize: 11, fontWeight: '700', color: t.text }}>SHOP</Text>
+            </Pressable>
           </View>
           <Mono size={9.5} tone="faint" style={{ marginTop: 6 }}>Arm before kickoff — each buffs your whole lineup all week, spent from your drip coin. Locks at kickoff.</Mono>
 
@@ -598,6 +607,21 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
       {allLocked && <Mono size={10.5} style={{ textAlign: 'center' }}>Every window has kicked off — picks are final.</Mono>}
 
       <View style={{ alignItems: 'center', marginTop: 14 }}><LinkButton label="← back" onPress={onBack} /></View>
+
+      {!!matchup && (
+        <ShopModal
+          visible={shopOpen}
+          matchupId={matchup.id}
+          balance={coins}
+          // Preseason weeks are practice: the server charges nothing, so the
+          // shop must not imply the season wallet moves.
+          practice={isPreseasonWeek(matchup.week)}
+          onClose={() => setShopOpen(false)}
+          // Trust the server's balance rather than deducting locally — on a
+          // practice week nothing is actually charged.
+          onChanged={(bal) => setCoins(bal)}
+        />
+      )}
 
       {pickerSlot && (() => {
         const cur = picks[pickerSlot.key]?.player_slug ?? undefined;
