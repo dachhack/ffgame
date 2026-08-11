@@ -126,6 +126,41 @@ No paid Apple Developer account is needed for the Simulator. For a build you
 can put on a real iPhone, `npm run ios:simulator` covers Simulator-only via EAS,
 and TestFlight distribution needs the $99/yr enrollment.
 
+### Google sign-in needs a Supabase redirect entry
+
+`dripfantasy://**` must be listed under **Supabase → Authentication → URL
+Configuration → Redirect URLs**. Without it Google sign-in appears to work and
+then dumps you on the website.
+
+That symptom is worth spelling out because it looks like an app bug and isn't
+one. Supabase does not reject an unlisted `redirect_to` — it silently
+substitutes the project's Site URL. So the in-app browser completes the Google
+round trip, lands on dripfantasy.com, and `openAuthSessionAsync` never sees the
+`dripfantasy://` callback it is waiting for. Email-code sign-in is unaffected,
+because `verifyOtp` exchanges the code directly and never redirects — which
+makes "one sign-in method works, the other opens the website" the signature of
+this specific misconfiguration.
+
+The app sends `dripfantasy:///auth?live=1` — three slashes, since
+`Linking.createURL('/auth')` builds `scheme:` + `//` + an empty host + the path.
+The `**` in the pattern matches across separators, so it covers that and the
+two-slash form both.
+
+You can check the allow-list without rebuilding or reinstalling anything. Any
+`type=magiclink` verify with a junk token redirects to wherever the rules say it
+should go, so the destination tells you whether the entry took:
+
+```bash
+curl -sI "$SUPABASE_URL/auth/v1/verify?token=junk&type=magiclink\
+&redirect_to=dripfantasy%3A%2F%2F%2Fauth%3Flive%3D1" -H "apikey: $ANON" | grep -i ^location
+# allowed  → location: dripfantasy:///auth?live=1#error=access_denied&…
+# NOT listed → location: https://dripfantasy.com#…       (the Site URL fallback)
+```
+
+The `error=access_denied` is just the junk token; only the destination matters.
+Run it against a URL you know is bogus too — if that one is preserved as well,
+the rules are too broad rather than working.
+
 ### Pointing a build somewhere else
 
 Only needed to target a different Supabase project (staging), or to flip
