@@ -1,213 +1,314 @@
-// A scripted window, for showing the board's moments on demand.
+// A real 2025 week, replayed on the real board.
 //
-// WHY THIS EXISTS: the flip, the nuke burst and the hot glow are all driven by
-// live state — an opponent's card turning face-up at kickoff, `nuked`/`hot`
-// arriving on a slot row from the worker. Outside a live slate none of them can
-// be made to happen, which makes them impossible to show, review, or check for
-// regressions on any day that isn't a game day.
+// WHY: the flip, the nuke burst and the hot glow only happen when live state
+// changes — an opponent's card turning face-up at kickoff, `nuked`/`hot`
+// arriving on a slot row from the worker. Outside a game day none of them can be
+// made to happen, so they can't be demoed, reviewed, or caught regressing.
 //
-// IT DRIVES THE REAL BOARD. This screen feeds hand-written props to the SAME
-// `Duel` component the live board renders, which renders the same `CardFace`,
-// which runs the same animations. Nothing here is a mock-up of the board or a
-// second copy of its layout — if a moment looks right in this screen it looks
-// right on Thursday, and if one breaks, this breaks with it. That property is
-// the entire point, and it's worth protecting: resist the temptation to "just
-// tweak" the demo's own copy of anything.
+// WHAT IT IS NOT: a mock-up. It feeds props to the SAME `Duel` the live board
+// renders, which renders the same `CardFace`, running the same animations. The
+// numbers are not invented either — this is the baked Drip Test League's real
+// 2025 week 8, resolved by the real engine (`buildMatchup`) against real
+// play-by-play, and the clock is a genuine scrub through those events via
+// `banksAtClock` and `liveCardFlags`. If a moment looks right here it looks
+// right on Thursday; if one breaks, this breaks with it. Worth protecting: the
+// value is precisely that this screen owns no copy of the board.
 //
-// The data is real players with real headshots and real metric ids, but the
-// matchup is invented, so the screen says so plainly at the top. Nobody should
-// be able to mistake this for their week.
-import { useCallback, useEffect, useState } from 'react';
+// WHY WEEK 8, PHINS vs TITANS: chosen by scanning all 14 baked weeks × every
+// team pairing (1,260 in total) for the one that actually exercises the moments
+// — two nukes (SUN 1PM), a hot streak, no empty windows, and a last window that
+// decides it. Most pairings show none of that, so re-run the scan rather than
+// guessing if the baked play-by-play is ever regenerated.
+//
+// The banked total this board reaches (126.9–132.2) is NOT the engine's final
+// for the week (141.9–142.2). That gap is real and correct: banks are what has
+// been scored play by play, while the final adds end-of-week awards — window-win
+// bonuses and the like — that no clock position can show. The live board sums
+// window banks exactly the same way, so the demo is faithful to it rather than
+// to the scoreboard.
+//
+// SIZE: one week's play-by-play is ~190 KB in a ~30 MB APK. Adding more weeks is
+// cheap if the demo ever wants a menu; it's one file per week under assets/pbp.
+//
+// GLOBAL STATE: `resetToDemoLeague()` swaps core's ACTIVE league. That is safe
+// here only because this app never loads a live league into core — LivePicks and
+// LiveBoard read everything from Supabase and touch core's league registry not
+// at all. If that ever changes, this screen has to restore what it replaced.
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { resetToDemoLeague, getActiveLeague } from '@drip/core/data/league';
+import { installRealWeek } from '@drip/core/data/realPbp';
+import {
+  defaultLineup, aiLineup, buildMatchup, banksAtClock, liveCardFlags,
+  type ResolvedMatchup,
+} from '@drip/core/engine/matchup';
 import type { RevealedPick, WindowScore, PoolPlayer, SlotScoreRow } from '@drip/core/data/liveApi';
-import { slugMeta } from '@drip/core/data/slugMeta';
 import { useTheme, MONO } from '../theme.native';
 import { Card, Display, Mono } from '../ui/prims';
 import { Duel } from './LiveBoard';
 
-const WIN = 'early';
-const WEEK = 1;
+const WEEK = 8;
+const YOU_TEAM = 'Gone Fishing Phins';
+const OPP_TEAM = 'Taco Time Titans';
 
-interface Seat { slug: string; full: string; metric: string; score: number }
+// Game-clock seconds per real second. A window's clock runs to ~3900, so 1× is
+// about 40 seconds of watching and 8× about 5 — the range between "talk over it"
+// and "get to the point".
+const SPEEDS = [1, 2, 4, 8] as const;
+const BASE_RATE = 100;
+const TICK_MS = 100;
 
-// Real slugs, so headshots and team logos resolve exactly as they do live.
-const MINE: Seat[] = [
-  { slug: 'patrick-mahomes', full: 'Patrick Mahomes', metric: 'pass', score: 21.4 },
-  { slug: 'saquon-barkley', full: 'Saquon Barkley', metric: 'rush', score: 14.8 },
-  { slug: 'justin-jefferson', full: 'Justin Jefferson', metric: 'recyd', score: 9.6 },
-];
-const THEIRS: Seat[] = [
-  { slug: 'josh-allen', full: 'Josh Allen', metric: 'pass', score: 18.2 },
-  { slug: 'christian-mccaffrey', full: 'Christian McCaffrey', metric: 'rush', score: 16.1 },
-  { slug: 'jamarr-chase', full: 'Ja’Marr Chase', metric: 'recyd', score: 12.7 },
-];
-
-const pool: Record<string, PoolPlayer> = Object.fromEntries(
-  [...MINE, ...THEIRS].map((s) => [s.slug, { slug: s.slug, full: s.full, pos: slugMeta(s.slug).pos }]),
-);
-
-const pick = (s: Seat, i: number, who: string): RevealedPick => ({
-  app_user_id: who, game_window: WIN, roster_slot: String(i),
-  player_slug: s.slug, metric_id: s.metric, locked: true,
-});
-
-const MY_PICKS = MINE.map((s, i) => pick(s, i, 'you'));
-const THEIR_PICKS = THEIRS.map((s, i) => pick(s, i, 'them'));
-
-/** Each beat is a whole board state, not a delta — so stepping to a beat gives
- *  the same result whether you arrived by autoplay, by tapping forward, or by
- *  replaying. Deltas would make the demo's behaviour depend on its history,
- *  which is exactly the bug class a demo exists to rule out. */
-interface Beat {
-  name: string;
-  note: string;
-  /** Milliseconds to dwell here before autoplay advances. */
-  hold: number;
+interface Built {
+  resolved: ResolvedMatchup;
+  /** Highest event clock per window — when a window is over. */
+  winMax: number[];
+  mine: RevealedPick[];
   theirs: RevealedPick[];
-  status: string;
-  rows: SlotScoreRow[];
+  pool: Record<string, PoolPlayer>;
+  label: Record<string, string>;
+  wins: string[];
+  youName: string;
+  oppName: string;
 }
 
-const row = (side: 'home' | 'away', i: number, s: Seat, score: number, extra: Partial<SlotScoreRow> = {}): SlotScoreRow =>
-  ({ side, slot: String(i), slug: s.slug, metric: s.metric, score, ...extra });
+function build(): Built {
+  resetToDemoLeague();
+  // Metro bundles this JSON and require() hands it back already parsed, so
+  // there is nothing to fetch — which is the whole reason installRealWeek exists
+  // alongside loadRealWeek (that one goes through platform().assetUrl, which
+  // throws on native by design).
+  installRealWeek(WEEK, require('../../assets/pbp/w8.json'));
 
-const scored = (f: number, extra: Record<number, Partial<SlotScoreRow>> = {}): SlotScoreRow[] => [
-  ...MINE.map((s, i) => row('home', i, s, Math.round(s.score * f * 10) / 10, extra[i] ?? {})),
-  ...THEIRS.map((s, i) => row('away', i, s, Math.round(s.score * f * 10) / 10)),
-];
+  const lg = getActiveLeague();
+  const you = lg.teams.find((t) => t.name === YOU_TEAM) ?? lg.teams[0];
+  const opp = lg.teams.find((t) => t.name === OPP_TEAM) ?? lg.teams[1];
 
-const BEATS: Beat[] = [
-  {
-    name: 'SEALED', hold: 2200,
-    note: 'Pre-kickoff. You see your own three; theirs are face-down — the game’s whole premise.',
-    theirs: [], status: 'scheduled', rows: [],
-  },
-  {
-    name: 'KICKOFF', hold: 2600,
-    note: 'The window opens and their cards turn over — ct-flipin, 550ms, rotateY 180°→0. The chip starts pulsing.',
-    theirs: THEIR_PICKS, status: 'live', rows: [],
-  },
-  {
-    name: 'SCORING', hold: 2400,
-    note: 'Banks land and every score pops as it changes.',
-    theirs: THEIR_PICKS, status: 'live', rows: scored(0.45),
-  },
-  {
-    name: 'HOT', hold: 2600,
-    note: 'The worker flags a slot hot; the card breathes until it cools.',
-    theirs: THEIR_PICKS, status: 'live', rows: scored(0.75, { 1: { hot: true } }),
-  },
-  {
-    name: 'NUKE', hold: 3400,
-    note: 'A nuke lands on your QB — the card takes the hit and the burst plays over it.',
-    theirs: THEIR_PICKS, status: 'live', rows: scored(0.9, { 0: { nuked: true }, 1: { hot: true } }),
-  },
-  {
-    name: 'FINAL', hold: 3200,
-    note: 'Window closed, banks settled.',
-    theirs: THEIR_PICKS, status: 'final', rows: scored(1),
-  },
-];
+  const resolved = buildMatchup(
+    you.id, opp.id, WEEK,
+    defaultLineup(you.id, WEEK),
+    aiLineup(opp.id, you.id, WEEK),
+    {}, {}, {}, {}, {},
+    true, // realResolve — cross-game effects resolve in real-time order
+  );
+
+  const mine: RevealedPick[] = [];
+  const theirs: RevealedPick[] = [];
+  const pool: Record<string, PoolPlayer> = {};
+  const label: Record<string, string> = {};
+  const seat = (win: string, i: number, who: string, p: { player: { id: string; name: string; pos: string }; metricId: string }): RevealedPick => {
+    pool[p.player.id] = { slug: p.player.id, full: p.player.name, pos: p.player.pos };
+    return { app_user_id: who, game_window: win, roster_slot: String(i), player_slug: p.player.id, metric_id: p.metricId, locked: true };
+  };
+
+  for (const w of resolved.windows) {
+    label[w.window.id] = `${w.window.label} · ${w.window.sub ?? ''}`.trim().replace(/ ·\s*$/, '');
+    for (const s of w.slots) {
+      if (s.you) mine.push(seat(w.window.id, s.slotIndex, 'you', s.you));
+      if (s.their) theirs.push(seat(w.window.id, s.slotIndex, 'them', s.their));
+    }
+  }
+
+  return {
+    resolved,
+    winMax: resolved.windows.map((w) => w.slots.reduce((m, s) => s.events.reduce((a, e) => Math.max(a, e.clock), m), 0)),
+    mine, theirs, pool, label,
+    wins: resolved.windows.map((w) => w.window.id),
+    youName: you.name, oppName: opp.name,
+  };
+}
 
 export function DemoBoard() {
   const t = useTheme();
-  const [at, setAt] = useState(0);
-  const [playing, setPlaying] = useState(true);
-  // Remounting Duel resets the "which slots have I already seen face-up"
-  // bookkeeping that stops a reveal replaying on every refresh. Stepping
-  // BACKWARD has to bump this or the flip is a one-time event per app launch and
-  // the second run of a demo shows nothing.
+  // Built once. Resolving a matchup walks every play of every slot, so this is
+  // not something to redo on a clock tick.
+  const b = useMemo(build, []);
+
+  // -1 is PRE-KICKOFF: your lineup showing, every opponent card face-down.
+  // Without it the demo opens with the first window already revealed and its
+  // flip — the one moment people most want to see — never plays.
+  const [wi, setWi] = useState(-1);
+  const [clock, setClock] = useState(0);    // game clock within the live window
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState<number>(2);
+  // Duel remembers which cards it has already seen face-up so a refresh doesn't
+  // replay every reveal. Restarting has to remount it or the second run of a
+  // demo shows no flips at all.
   const [run, setRun] = useState(0);
 
-  // Going backwards remounts; going forwards never does. So the reveal replays
-  // by returning to SEALED and stepping forward — which is also the only place
-  // the reveal means anything, since a flip is the SEALED→KICKOFF edge rather
-  // than a property of the KICKOFF beat.
-  const go = useCallback((next: number) => {
-    const n = Math.max(0, Math.min(BEATS.length - 1, next));
-    if (n <= at) setRun((r) => r + 1);
-    setAt(n);
-  }, [at]);
+  const done = wi >= b.wins.length - 1 && clock >= b.winMax[b.wins.length - 1];
+
+  const tick = useRef<(() => void) | null>(null);
+  tick.current = () => {
+    // Leaving pre-kickoff is its own step, so the first window's reveal gets a
+    // frame of its own rather than being overwritten by the same tick's clock.
+    if (wi < 0) { setWi(0); setClock(0); return; }
+    const max = b.winMax[wi] ?? 0;
+    const next = clock + BASE_RATE * speed * (TICK_MS / 1000);
+    if (next < max) { setClock(next); return; }
+    if (wi < b.wins.length - 1) { setWi(wi + 1); setClock(0); return; }
+    setClock(max);
+    setPlaying(false);
+  };
 
   useEffect(() => {
     if (!playing) return;
-    if (at >= BEATS.length - 1) { setPlaying(false); return; }
-    const id = setTimeout(() => setAt((cur) => Math.min(cur + 1, BEATS.length - 1)), BEATS[at].hold);
-    return () => clearTimeout(id);
-  }, [at, playing]);
+    const id = setInterval(() => tick.current?.(), TICK_MS);
+    return () => clearInterval(id);
+  }, [playing]);
 
-  const beat = BEATS[at];
+  const restart = useCallback(() => {
+    setWi(-1); setClock(0); setRun((r) => r + 1); setPlaying(true);
+  }, []);
+
+  const jump = useCallback((i: number) => {
+    setPlaying(false);
+    // Backwards means un-seeing reveals, which only a remount can do.
+    setRun((r) => (i <= wi ? r + 1 : r));
+    setWi(i); setClock(0);
+  }, [wi]);
+
+  // The board state at the current position. Windows before the live one are
+  // complete; the live one is scrubbed to `clock`; later ones have no rows at
+  // all, so Duel renders their opponent cards face-down.
+  const { scores, revealed } = useMemo(() => {
+    const out: WindowScore[] = [];
+    const shown: RevealedPick[] = [];
+    b.resolved.windows.forEach((w, i) => {
+      if (i > wi) return;
+      const at = i < wi ? (b.winMax[i] ?? 0) : clock;
+      const rows: SlotScoreRow[] = [];
+      let home = 0, away = 0;
+      for (const s of w.slots) {
+        const bank = banksAtClock(s.events, at);
+        if (s.you) {
+          const f = liveCardFlags(s.events, 'you', at);
+          rows.push({ side: 'home', slot: String(s.slotIndex), slug: s.you.player.id, metric: s.you.metricId, score: bank.you, ...(f.hot ? { hot: true } : {}), ...(f.nuked ? { nuked: true } : {}) });
+          home += bank.you;
+        }
+        if (s.their) {
+          const f = liveCardFlags(s.events, 'their', at);
+          rows.push({ side: 'away', slot: String(s.slotIndex), slug: s.their.player.id, metric: s.their.metricId, score: bank.their, ...(f.hot ? { hot: true } : {}), ...(f.nuked ? { nuked: true } : {}) });
+          away += bank.their;
+        }
+      }
+      out.push({ game_window: w.window.id, home_score: home, away_score: away, slot_scores: rows });
+      for (const p of b.theirs) if (p.game_window === w.window.id) shown.push(p);
+    });
+    return { scores: out, revealed: shown };
+  }, [b, wi, clock]);
+
+  const winStatus = useCallback((id: string) => {
+    const i = b.wins.indexOf(id);
+    if (i < 0 || i > wi) return 'SEALED';
+    if (i < wi) return 'FINAL';
+    return clock >= (b.winMax[wi] ?? 0) ? 'FINAL' : '● LIVE';
+  }, [b, wi, clock]);
+
+  const live = scores[wi];
+  const mm = (n: number) => `${Math.floor(n / 60)}:${String(Math.floor(n % 60)).padStart(2, '0')}`;
 
   return (
     <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 32 }}>
       <Card style={{ marginBottom: 10, borderColor: t.you }}>
-        <Display size={15}>Demo window</Display>
+        <Display size={15}>{b.youName} vs {b.oppName}</Display>
         <Mono size={9.5} tone="warn" style={{ marginTop: 4 }}>
-          NOT YOUR MATCHUP — a scripted window, real players, invented result.
+          DEMO — DRIP TEST LEAGUE, REAL 2025 WEEK {WEEK}. NOT YOUR MATCHUP.
         </Mono>
         <Text style={{ fontSize: 12, color: t.mid, lineHeight: 18, marginTop: 8 }}>
-          Every moment below is the live board’s own component running its own
-          animation. Nothing here is a mock-up.
+          Real play-by-play through the real engine, on the live board’s own
+          components. Watch SUN 1PM for two nukes, and MNF for the hot streak
+          that decides it.
         </Text>
       </Card>
 
       <Card style={{ marginBottom: 10 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <Mono size={11} weight="700" tone="you" track={0.14}>{at + 1}/{BEATS.length} · {beat.name}</Mono>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <Mono size={11} weight="700" tone="you" track={0.14}>
+            {wi < 0 ? 'PRE-KICKOFF · SEALED' : `${b.label[b.wins[wi]] ?? b.wins[wi]} · ${mm(Math.min(clock, b.winMax[wi] ?? 0))}`}
+          </Mono>
+          <Mono size={11} weight="700">
+            {live ? `${Math.round(scores.reduce((n, s) => n + s.home_score, 0) * 10) / 10} – ${Math.round(scores.reduce((n, s) => n + s.away_score, 0) * 10) / 10}` : '0 – 0'}
+          </Mono>
         </View>
-        <Text style={{ fontSize: 12.5, color: t.text, lineHeight: 18, minHeight: 54 }}>{beat.note}</Text>
 
-        <View style={{ flexDirection: 'row', gap: 6, marginTop: 10 }}>
-          <Btn label="◀ BACK" onPress={() => { setPlaying(false); go(at - 1); }} disabled={at === 0} />
-          <Btn
-            label={playing ? '❚❚ PAUSE' : at >= BEATS.length - 1 ? '↻ REPLAY' : '▶ PLAY'}
-            primary
-            onPress={() => {
-              if (playing) { setPlaying(false); return; }
-              if (at >= BEATS.length - 1) { go(0); }
-              setPlaying(true);
+        {/* Window progress, and a way to jump straight to a moment. */}
+        <View style={{ flexDirection: 'row', gap: 4, marginBottom: 10 }}>
+          <Pressable
+            onPress={() => jump(-1)}
+            style={{
+              flex: 1, paddingVertical: 6, borderRadius: 5, alignItems: 'center',
+              backgroundColor: wi < 0 ? t.you : t.surface,
+              borderWidth: StyleSheet.hairlineWidth, borderColor: wi < 0 ? t.you : t.bd,
             }}
+          >
+            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: wi < 0 ? t.onAccent : t.dim }}>
+              SEALED
+            </Text>
+          </Pressable>
+          {b.wins.map((w, i) => (
+            <Pressable
+              key={w}
+              onPress={() => jump(i)}
+              style={{
+                flex: 1, paddingVertical: 6, borderRadius: 5, alignItems: 'center',
+                backgroundColor: i < wi ? t.sh : i === wi ? t.you : t.surface,
+                borderWidth: StyleSheet.hairlineWidth, borderColor: i === wi ? t.you : t.bd,
+              }}
+            >
+              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: i === wi ? t.onAccent : t.dim }}>
+                {w.toUpperCase()}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          <Btn
+            label={playing ? '❚❚ PAUSE' : done ? '↻ REPLAY' : '▶ PLAY'}
+            primary
+            onPress={() => { if (playing) setPlaying(false); else if (done) restart(); else setPlaying(true); }}
           />
-          <Btn label="NEXT ▶" onPress={() => { setPlaying(false); go(at + 1); }} disabled={at >= BEATS.length - 1} />
+          <Btn label="↺ RESTART" onPress={restart} />
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: 4, marginTop: 6 }}>
+          {SPEEDS.map((s) => (
+            <Btn key={s} label={`${s}×`} small active={speed === s} onPress={() => setSpeed(s)} />
+          ))}
         </View>
       </Card>
 
       <Duel
-        key={`demo-${run}`}
-        mine={MY_PICKS}
-        theirs={beat.theirs}
-        pool={pool}
-        scores={[{
-          game_window: WIN,
-          home_score: beat.rows.filter((r) => r.side === 'home').reduce((n, r) => n + r.score, 0),
-          away_score: beat.rows.filter((r) => r.side === 'away').reduce((n, r) => n + r.score, 0),
-          slot_scores: beat.rows,
-        }] as WindowScore[]}
+        key={`replay-${run}`}
+        mine={b.mine}
+        theirs={revealed}
+        pool={b.pool}
+        scores={scores}
         youAreHome
-        status={beat.status}
+        status={done ? 'final' : 'live'}
         week={WEEK}
-        winLabel={() => 'SUN 1PM · DEMO'}
+        winLabel={(id) => b.label[id] ?? id.toUpperCase()}
+        winStatus={winStatus}
       />
     </ScrollView>
   );
 }
 
-function Btn({ label, onPress, disabled, primary }: {
-  label: string; onPress: () => void; disabled?: boolean; primary?: boolean;
+function Btn({ label, onPress, primary, small, active }: {
+  label: string; onPress: () => void; primary?: boolean; small?: boolean; active?: boolean;
 }) {
   const t = useTheme();
+  const on = primary || active;
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled}
       style={{
-        flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 6,
-        backgroundColor: primary ? t.you : t.surface,
-        borderWidth: StyleSheet.hairlineWidth, borderColor: primary ? t.you : t.bd,
-        opacity: disabled ? 0.4 : 1,
+        flex: 1, alignItems: 'center', paddingVertical: small ? 7 : 10, borderRadius: 6,
+        backgroundColor: on ? t.you : t.surface,
+        borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd,
       }}
     >
-      <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, color: primary ? t.onAccent : t.dim }}>
+      <Text style={{ fontFamily: MONO, fontSize: small ? 9 : 10, fontWeight: '700', letterSpacing: 0.6, color: on ? t.onAccent : t.dim }}>
         {label}
       </Text>
     </Pressable>

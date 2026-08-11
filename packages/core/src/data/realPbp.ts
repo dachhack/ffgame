@@ -71,6 +71,26 @@ export function isRealWeekLoaded(week: number): boolean {
   return cache.has(week);
 }
 
+/** Install a week's baked play-by-play from data the host already holds, rather
+ *  than fetching it.
+ *
+ *  `loadRealWeek` below reaches the JSON through `platform().assetUrl`, which
+ *  assumes a host that serves files over HTTP. The native app is not one: it has
+ *  no origin, `assetUrl` throws there on purpose, and its copy of a week arrives
+ *  as a Metro `require()` of a bundled JSON — already parsed, already in memory,
+ *  nothing to fetch. This is the door for that case.
+ *
+ *  Same cache, so everything downstream (isRealWeekLoaded, realPbpFor,
+ *  realPointsFor, the engine's real resolve) cannot tell the two apart. Also
+ *  useful from tests and the worker's dress rehearsal, which likewise hold the
+ *  data before anyone asks for it. */
+export function installRealWeek(week: number, data: WeekData): void {
+  if (!data || typeof data !== 'object' || !data.pbp) {
+    throw new Error(`installRealWeek(${week}): expected a WeekData with a pbp map`);
+  }
+  cache.set(week, data);
+}
+
 /** Fetch + cache a week's real play-by-play. Resolves `true` when the week's
  *  plays are available (already-loaded or freshly fetched, and for non-real weeks
  *  that need no fetch), or `false` when the fetch failed — so callers can show an

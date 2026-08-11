@@ -256,7 +256,7 @@ function Big({ label, value, color, team }: { label: string; value: number; colo
  *  The sealed-back count MIRRORS YOUR OWN card count, never the opponent's real
  *  one. Showing their true count before reveal would leak how many slots they
  *  filled in a window, which is information the game deliberately withholds. */
-export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel }: {
+export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus }: {
   mine: RevealedPick[];
   theirs: RevealedPick[];
   pool: Record<string, PoolPlayer>;
@@ -265,6 +265,10 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
   status: string;
   week: number;
   winLabel: (id: string) => string;
+  /** Per-window override of the status chip. The live board has one status for
+   *  the whole matchup, so it doesn't pass this; a replay does, because it walks
+   *  windows one at a time and a finished window shouldn't still read LIVE. */
+  winStatus?: (id: string) => string | null;
 }) {
   const t = useTheme();
   const youSide = youAreHome ? 'home' : 'away';
@@ -351,7 +355,8 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
         const them = s ? round1(Number(youAreHome ? s.away_score : s.home_score)) : null;
         const sealedBacks = !th.length && status !== 'final' ? Math.max(my.length, 1) : 0;
         const hasRows = !!s?.slot_scores?.length;
-        const st = status === 'final' ? 'FINAL' : sealedBacks > 0 && !hasRows ? 'SEALED' : status === 'live' ? '● LIVE' : 'SEALED';
+        const st = winStatus?.(win)
+          ?? (status === 'final' ? 'FINAL' : sealedBacks > 0 && !hasRows ? 'SEALED' : status === 'live' ? '● LIVE' : 'SEALED');
         const pairs = Math.max(my.length, th.length, sealedBacks);
 
         return (

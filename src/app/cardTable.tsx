@@ -7,7 +7,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { DripCoin, FxIcon, PuIcon } from './gameIcons';
-import type { PbpEvent } from '@drip/core/types';
+// liveCardFlags moved to core (engine/matchup) when the native demo needed the
+// same flags off the same play-by-play. Re-exported here so this stays the
+// import site the board screens already use.
+export { liveCardFlags } from '@drip/core/engine/matchup';
 
 const FONT_URL = `${import.meta.env.BASE_URL}fonts/lilita-one.woff2`;
 
@@ -612,29 +615,6 @@ export function PlayerCard({ slug, name, pos, team, slot, metric, bank, opp = fa
   );
 }
 
-/** HOT / NUKED at a playback clock, from a slot's own play-by-play — the sim
- *  mirror of the worker's `flagsFor` (engine/liveResolve.ts), which feeds the
- *  same flags to LiveBoard's cards from published slot_scores. Attribution:
- *    • hot — the side's own drip/streak badges carry the state; the LATEST one
- *      before the clock wins (🔥 HOT / STREAK 2× turns it on, a plain DRIP ↑
- *      tick turns it off), and an opponent's STREAK COLD or a nuke cools it.
- *    • nuked — latches once a nuke lands on this side: TD/erasure nukes ride
- *      the ATTACKER's play (sig), TE-TD drip nukes sit on the VICTIM's own
- *      standalone event. */
-export function liveCardFlags(events: PbpEvent[], side: 'you' | 'their', clock: number): { hot: boolean; nuked: boolean } {
-  let hot = false, nuked = false;
-  for (const e of events) {
-    if (e.clock > clock) continue;
-    const t = e.effect?.text ?? e.play ?? '';
-    if (e.side === side) {
-      if (e.effect?.type === 'streak' || e.drip) hot = t.includes('HOT') || t.includes('STREAK 2×');
-    } else if (e.effect?.type === 'cold') hot = false;
-    // Giveaways are typed 'nuke' for the log's red ✕ (they pay the opponent
-    // coin) but wipe nothing — a pick-six thrower isn't a scorched card.
-    if (e.effect?.type === 'nuke' && !t.includes('TURNOVER') && (e.sig ? e.side !== side : e.side === side)) { nuked = true; hot = false; }
-  }
-  return { hot, nuked };
-}
 
 /** A live duel row — a MINI physical card (headshot, position, name, team on
  *  cream stock, with the liquid bank fill / HOT glow / NUKE scorch) and all the
