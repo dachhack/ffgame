@@ -15,8 +15,10 @@
 //     depends on cardTable.tsx, 888 lines of DOM-specific card rendering.
 // Both are presentation. The score, the windows and the lineups are here.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { weekLabel, windowsForWeek } from '@drip/core/data/nflSlate';
+import { ActivityIndicator, Image, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow } from '@drip/core/data/nflSlate';
+import { WINDOW_WIN_BONUS } from '@drip/core/engine/matchup';
+import { teamLogo } from '@drip/core/data/media';
 import { metricById } from '@drip/core/data/metrics';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { REG_SEASON_WEEKS } from '@drip/core/data/league';
@@ -26,7 +28,7 @@ import {
   type LiveMatchup, type WindowScore, type RevealedPick, type PoolPlayer, type TeamInfo,
 } from '@drip/core/data/liveApi';
 import type { Pos } from '@drip/core/types';
-import { useTheme } from '../theme.native';
+import { useTheme, MONO } from '../theme.native';
 import { Card, Display, LinkButton, Mono } from '../ui/prims';
 import { CardFace, CardBack, FELT } from '../ui/cards';
 import { LiveCard } from '../ui/LiveCard';
@@ -291,6 +293,8 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
   // Ordered by the week's OWN windows; anything unrecognised sorts to the end
   // rather than disappearing.
   const order = windowsForWeek(week).map((w) => String(w.id));
+  /** The window's long name ("Sunday Early") — the web shows it beside the id. */
+  const winSub = (id: string) => windowsForWeek(week).find((w) => String(w.id) === id)?.sub ?? '';
   const wins = [...new Set([...mine, ...theirs].map((p) => p.game_window).concat(scores.map((s) => s.game_window)))]
     .sort((a, b) => {
       const ia = order.indexOf(a); const ib = order.indexOf(b);
@@ -400,23 +404,76 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
 
         return (
           <Card key={win} style={{ marginBottom: 10 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <Mono size={10} weight="700" track={0.12}>{winLabel(win)}</Mono>
-              {/* The web pulses this chip with ct-livepulse. Only while the
-                  window is actually live — a permanent pulse is just chrome. */}
+            {/* Window header: id, the long name, the date and the kickoff —
+                the web's four-part line. The date and time matter more here
+                than they look: a preseason week's windows are Thu/Fri/Sat
+                clusters with nothing in their id to tell them apart. */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 6, flexWrap: 'wrap' }}>
+              <Mono size={13} weight="700" track={0.06}>{winLabel(win)}</Mono>
+              <Mono size={9} tone="dim" track={0.1}>{winSub(win)}</Mono>
+              <Mono size={9} tone="mid">{windowDateLabel(week, win as never)}</Mono>
+              <Mono size={9} tone="faint">{windowTimeLabel(week, win as never)}</Mono>
+              <View style={{ flex: 1 }} />
               <View>
+                {/* The web pulses this chip with ct-livepulse. Only while the
+                    window is actually live — a permanent pulse is just chrome. */}
                 {st === '● LIVE' && <LivePulse color={t.you} />}
                 <Mono size={9} weight="700" tone={st === '● LIVE' ? 'you' : 'faint'}>{st}</Mono>
               </View>
             </View>
 
-            {(you != null || them != null) && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, marginBottom: 10 }}>
-                <Text style={{ fontSize: 20, fontWeight: '700', color: t.you }}>{you ?? '—'}</Text>
-                <Mono size={9} tone="faint" track={0.12}>VS</Mono>
-                <Text style={{ fontSize: 20, fontWeight: '700', color: t.opp }}>{them ?? '—'}</Text>
-              </View>
-            )}
+            {/* The slate crests — which games this window actually is. */}
+            {(() => {
+              const games = gamesInWindow(week, win as never);
+              if (!games.length) return null;
+              const logos = [...new Set(games.flatMap((g) => [g.away, g.home]))];
+              return (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
+                  {logos.slice(0, 10).map((tm) => {
+                    const url = teamLogo(tm);
+                    return url ? <Image key={tm} source={{ uri: url }} style={{ width: 14, height: 14 }} resizeMode="contain" />
+                      : <Mono key={tm} size={8} tone="faint">{tm}</Mono>;
+                  })}
+                  <Mono size={8.5} tone="faint" track={0.12}>
+                    SLATE · {games.length} GAME{games.length === 1 ? '' : 'S'}
+                  </Mono>
+                </View>
+              );
+            })()}
+
+            {/* WINDOW BATTLE — the web's bar, not a bare "x VS y". The bar is
+                the point: a window is a head-to-head worth a bonus, and the
+                proportional fill says who is winning it at a glance. */}
+            {(you != null || them != null) && (() => {
+              const yTot = you ?? 0, tTot = them ?? 0;
+              const total = yTot + tTot;
+              const yPct = total > 0 ? Math.max(4, Math.min(96, (yTot / total) * 100)) : 50;
+              const even = Math.abs(yTot - tTot) < 0.05;
+              const leadYou = yTot > tTot;
+              const done = st === 'FINAL';
+              const leadColor = even ? t.dim : leadYou ? t.you : t.opp;
+              const label = done ? (even ? 'EVEN' : leadYou ? '★ WON' : 'LOST')
+                : (even ? 'DEAD EVEN' : leadYou ? 'YOU LEAD' : 'THEY LEAD');
+              return (
+                <View style={{ backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 10, paddingVertical: 7, marginBottom: 9 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
+                    <Mono size={8.5} weight="700" tone="faint" track={0.1}>
+                      ⚔ WINDOW BATTLE{done ? '' : ` · win for +${WINDOW_WIN_BONUS}`}
+                    </Mono>
+                    <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.7, color: leadColor }}>
+                      {label}{done && !even ? ` +${WINDOW_WIN_BONUS}` : ''}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: t.you, minWidth: 38, textAlign: 'right' }}>{yTot.toFixed(1)}</Text>
+                    <View style={{ flex: 1, height: 6, borderRadius: 4, overflow: 'hidden', backgroundColor: t.opp }}>
+                      <View style={{ width: `${yPct}%`, height: '100%', backgroundColor: t.you }} />
+                    </View>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: t.opp, minWidth: 38 }}>{tTot.toFixed(1)}</Text>
+                  </View>
+                </View>
+              );
+            })()}
 
             <View style={{ gap: 10, backgroundColor: FELT, borderRadius: 8, padding: 10 }}>
               {Array.from({ length: pairs }, (_, i) => {

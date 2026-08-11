@@ -30,6 +30,15 @@ const INK = '#2A2312';
 const INK_DIM = '#6E6650';
 const CARD_W = 78;
 
+// Each side sits in its own panel on the felt, as on the web — warm stock-ish
+// brown rather than loose on the green, so the two halves of a duel read as two
+// objects instead of one run-on row.
+const PANEL = {
+  flex: 1, gap: 9, alignItems: 'flex-start' as const,
+  backgroundColor: '#241E15', borderWidth: StyleSheet.hairlineWidth, borderColor: '#4A3F2A',
+  borderRadius: 8, padding: 7,
+};
+
 const fmt = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
 const initials = (name: string) => name.split(/\s+/).map((w) => w[0]).join('').slice(0, 3).toUpperCase();
 
@@ -146,7 +155,7 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, gameLabe
 
   if (sealed) {
     return (
-      <View style={{ flex: 1, flexDirection: mirror ? 'row-reverse' : 'row', gap: 9, alignItems: 'flex-start' }}>
+      <View style={[PANEL, { flexDirection: mirror ? 'row-reverse' : 'row' }]}>
         <View style={{ width: CARD_W, height: 106, borderRadius: 8, borderWidth: 2, borderColor: '#000', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
           <Image source={cardBackArt()} style={{ position: 'absolute', width: '100%', height: '100%' }} resizeMode="cover" />
           <Text style={{ fontSize: 17, color: '#E9B959' }}>◈</Text>
@@ -162,19 +171,22 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, gameLabe
   }
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={{ flex: 1, flexDirection: mirror ? 'row-reverse' : 'row', gap: 9, alignItems: 'flex-start' }}
-    >
+    <Pressable onPress={onPress} style={[PANEL, { flexDirection: mirror ? 'row-reverse' : 'row' }]}>
       <MiniCard side={side} slug={slug ?? ''} name={name ?? ''} pos={pos ?? 'DEF'} team={team} bank={bank} hot={hot} nuked={nuked} idx={idx} />
 
       <View style={{ flex: 1, minWidth: 0, alignItems: mirror ? 'flex-end' : 'flex-start', gap: 3 }}>
         {!!gameLabel && (
           <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: t.dimstrong }}>{gameLabel}</Text>
         )}
+        {/* The metric chip carries the SIDE's colour, not one shared gold — on
+            the web yours reads teal and theirs red, which is how you tell the
+            two halves apart at a glance when both are mid-sentence. Two lines
+            rather than one truncated: "Receiving Yards" ellipsed to
+            "Receiving …" loses the only word that distinguishes it from
+            "Receiving TDs". */}
         {!!metricName && (
-          <View style={{ backgroundColor: '#2E2412', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 2.5 }}>
-            <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '800', color: '#FFD86B' }}>{metricName}</Text>
+          <View style={{ backgroundColor: alpha(accent, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(accent, 55), borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3, maxWidth: '100%' }}>
+            <Text numberOfLines={2} style={{ fontSize: 11, fontWeight: '800', color: accent, textAlign: mirror ? 'right' : 'left' }}>{metricName}</Text>
           </View>
         )}
         {/* Score sits under the chip rather than in its own column: the web
@@ -187,7 +199,7 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, gameLabe
             </Text>
             <Text style={{ fontFamily: MONO, fontSize: 7, color: t.faint, letterSpacing: 1 }}>PTS</Text>
             {coin != null && coin !== 0 && (
-              <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.warn }}>◆ {coin > 0 ? '+' : ''}{coin}</Text>
+              <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.warn }}>🪙 {coin > 0 ? '+' : ''}{coin}</Text>
             )}
           </View>
         )}
