@@ -9,7 +9,7 @@
 // screen. Porting it wholesale would have carried ~150 lines of branches that
 // can never be taken here. When the live board (which does use apply mode)
 // gets ported, this component grows to meet it — not before.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { METRICS, metricById } from '@drip/core/data/metrics';
 import type { Metric, Pick, Player } from '@drip/core/types';
@@ -38,11 +38,25 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, idx = 0, onS
   const metric = player && pick?.metricId ? metricById(player.pos, pick.metricId) : null;
   const [metricOpen, setMetricOpen] = useState(false);
 
-  // A freshly-placed player with no metric opens the picker straight away —
-  // same behaviour as the web card, and the reason a slot never sits half-set.
+  // A freshly-placed player with no metric opens the picker straight away, so a
+  // slot never sits half-set.
+  //
+  // FRESHLY-placed, which means the player CHANGED — not merely that there is
+  // one. Keyed on `pick?.playerId` alone, this also fired on mount, so opening a
+  // league whose saved lineup already held a player without a metric threw the
+  // metric card up over the board before you had touched anything. Half-set
+  // slots are exactly what a saved lineup is full of, so the prompt meant to
+  // catch your own action ambushed you on arrival instead.
+  //
+  // The ref starts at the mount-time value, so the first run is always a no-op
+  // and only a real change reaches setMetricOpen.
+  const prevPlayerId = useRef(pick?.playerId);
   useEffect(() => {
+    const prev = prevPlayerId.current;
+    prevPlayerId.current = pick?.playerId;
+    if (prev === pick?.playerId) return;
     if (pick?.playerId && !pick?.metricId && !lockPlayer) setMetricOpen(true);
-  }, [pick?.playerId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pick?.playerId, pick?.metricId, lockPlayer]);
 
   return (
     <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
