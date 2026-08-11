@@ -26,7 +26,9 @@ import {
   myUnlocks, armUnlock, disarmUnlock, myComboQty,
   myWallet, ensureWallet,
   myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium, startCheckout,
+  getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, matchupWallets,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
+  type WindowScore, type RevealedPick,
 } from '@drip/core/data/liveApi';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
 import type { GameWindow, Player, Pos, WindowId } from '@drip/core/types';
@@ -38,6 +40,7 @@ import { PlayerPicker } from '../ui/PlayerPicker';
 import { RosterPanel } from '../ui/RosterPanel';
 import { ShopModal } from '../ui/ShopModal';
 import { PowerupHand, type HandCard } from '../ui/PowerupHand';
+import { Duel, Big, round1 } from '../ui/Duel';
 import { Overlay } from '../ui/Overlay';
 
 // Live pool entries are slug/full/pos; SetupRow wants a Player. Build a light
@@ -115,9 +118,23 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const [oppPool, setOppPool] = useState<PoolPlayer[]>([]);
   const [scoutWin, setScoutWin] = useState<GameWindow | null>(null);
 
+  // ── Live state ──────────────────────────────────────────────────────────────
+  // What the WORKER published, not anything resolved here. This screen used to
+  // stop at lock — a locked window greyed its cards out and that was the end of
+  // it — and the scores lived on a separate LIVE BOARD tab, so on Sunday you set
+  // a lineup on one screen and watched it on another. Now a window is SETUP
+  // before its kickoff and LIVE after, on this one board, the way the web's
+  // Matchup phases.
+  const [scores, setScores] = useState<WindowScore[]>([]);
+  const [revealed, setRevealed] = useState<RevealedPick[]>([]);
+  const [wallets, setWallets] = useState<{ home: number | null; away: number | null } | null>(null);
+  const [youAreHome, setYouAreHome] = useState(true);
+
   useEffect(() => { ensurePremiumTier(); }, []);
 
   useEffect(() => {
+    let alive = true;
+    let unsub = () => {};
     (async () => {
       try {
         setState('loading'); setErr(null);
@@ -187,14 +204,53 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         setUnlocks(new Set(un ?? []));
         setComboQty(Number(cq ?? 0));
         ensureWallet(m.id).then((c) => setCoins(Number(c ?? 0))).catch(() => {});
+        setYouAreHome(m.home_roster_id === r.rosterId);
+
+        // Live reads, then a realtime channel. No polling loop: the worker
+        // writes matchup_state and Supabase pushes, which is also why the score
+        // on the phone cannot drift from the score on the web.
+        const refreshLive = async () => {
+          const [mm, ss, pk2, ww] = await Promise.all([
+            getMatchup(m.id), getMatchupState(m.id), getRevealedPicks(m.id),
+            matchupWallets(m.id).catch(() => null),
+          ]);
+          if (!alive) return;
+          if (mm) setMatchup(mm);
+          setScores(ss); setRevealed(pk2); setWallets(ww);
+        };
+        await refreshLive().catch(() => {});
+        if (!alive) return;
+        unsub = subscribeMatchup(m.id, () => { refreshLive().catch(() => {}); });
+
         setState('ready');
       } catch (e) {
+        if (!alive) return;
         setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('error');
       }
     })();
+    return () => { alive = false; unsub(); };
   }, [userId, leagueId, rosterId, weekSel, attempt]);
 
   const locked = !!matchup && (matchup.status !== 'scheduled' || (!!matchup.lock_at && new Date(matchup.lock_at) <= new Date()));
+
+  /** Slug → player for the DUEL, covering both sides. The old live board passed
+   *  only your own pool, so an opponent's revealed card fell back to a face-down
+   *  back whenever their player wasn't also on your roster — which is almost
+   *  always. Scouting already loads their pool; merging it here is what makes
+   *  the reveal actually show you what you were beaten by. */
+  const duelPool = useMemo(
+    () => Object.fromEntries([...oppPool, ...pool].map((p) => [p.slug, p])) as Record<string, PoolPlayer>,
+    [pool, oppPool]);
+
+  /** Window labels from the week's OWN windows — a preseason cluster has no
+   *  entry in the regular-season list and would render as its raw id. */
+  const winLabelFor = (id: string) => wins.find((w) => String(w.id) === id)?.label ?? id.toUpperCase();
+
+  const totals = useMemo(() => {
+    const home = scores.reduce((n, s) => n + Number(s.home_score), 0);
+    const away = scores.reduce((n, s) => n + Number(s.away_score), 0);
+    return { you: youAreHome ? home : away, them: youAreHome ? away : home };
+  }, [scores, youAreHome]);
 
   useEffect(() => {
     const id = setInterval(() => setNowTs(Date.now()), 30_000);
@@ -609,12 +665,64 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         </Card>
       )}
 
-      {/* Windows */}
+      {/* The score, once there IS one. Hidden before kickoff rather than shown
+          as 0–0: a scoreboard reading nil-nil on Wednesday looks like a result,
+          and this board's job before kickoff is the lineup. */}
+      {(scores.length > 0 || matchup!.status !== 'scheduled') && (
+        <Card style={{ marginBottom: 10 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Mono size={10} weight="700" track={0.12}>THIS WEEK</Mono>
+            <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 4, paddingHorizontal: 7, paddingVertical: 3 }}>
+              <Mono size={9} tone={matchup!.status === 'final' ? 'dim' : 'you'}>{matchup!.status.toUpperCase()}</Mono>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: 18, marginTop: 12 }}>
+            <Big label="YOU" value={round1(totals.you)} color={t.you} team={myTeam ?? undefined} />
+            <Mono size={11} tone="faint" style={{ paddingTop: 16 }}>vs</Mono>
+            <Big label="OPP" value={round1(totals.them)} color={t.opp} team={oppTeam ?? undefined} />
+          </View>
+          {(() => {
+            const myBank = youAreHome ? wallets?.home : wallets?.away;
+            const theirBank = youAreHome ? wallets?.away : wallets?.home;
+            if (myBank == null && theirBank == null) return null;
+            return (
+              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 18, marginTop: 8 }}>
+                <Mono size={9.5} tone="you">◆ {round1(Number(myBank ?? 0))} banked</Mono>
+                <Mono size={9.5} tone="opp">◆ {round1(Number(theirBank ?? 0))}</Mono>
+              </View>
+            );
+          })()}
+        </Card>
+      )}
+
+      {/* Windows. Each one phases on its OWN kickoff, which is the whole reason
+          this can be one screen: at any moment on a Sunday some windows are
+          still yours to set and others are already scoring, and a board split
+          by tab could only ever show you one of those at a time. */}
       {wins.map((w) => {
         const winSlots = slots.filter((s) => s.win === w.id);
         const elig = gateOn ? pool.filter((pl) => winBySlug[pl.slug] === 'any' || winBySlug[pl.slug] === w.id).length : pool.length;
         const setN = winSlots.filter((s) => picks[s.key]?.player_slug && picks[s.key]?.metric_id).length;
         const wLocked = winLocked(w.id);
+
+        // Sealed and scoring → the duel, with its own window header. Duel
+        // renders nothing at all for a window with no picks and no score, so
+        // that case deliberately falls through to the setup card below: a
+        // window you left empty still has to appear, reading LOCKED, rather
+        // than vanishing off the board.
+        const myLive = revealed.filter((p) => p.app_user_id === userId && p.game_window === w.id);
+        const theirLive = revealed.filter((p) => p.app_user_id !== userId && p.game_window === w.id);
+        const winScores = scores.filter((s) => s.game_window === w.id);
+        if (wLocked && (myLive.length || theirLive.length || winScores.length)) {
+          return (
+            <Duel
+              key={w.id}
+              mine={myLive} theirs={theirLive} pool={duelPool} scores={winScores}
+              youAreHome={youAreHome} status={matchup!.status} week={week} winLabel={winLabelFor}
+            />
+          );
+        }
+
         return (
           <Card key={w.id} style={{ marginBottom: 10, opacity: wLocked ? 0.75 : 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>

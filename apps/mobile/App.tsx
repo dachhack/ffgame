@@ -17,7 +17,6 @@ import { liveConfigured } from '@drip/core/data/liveConfig';
 import { THEMES, ThemeCtx, loadTheme, isLight, MONO } from './src/theme.native';
 import { Leagues } from './src/screens/Leagues';
 import { LivePicks } from './src/screens/LivePicks';
-import { LiveBoard } from './src/screens/LiveBoard';
 import { DemoBoard } from './src/screens/DemoBoard';
 import { SignIn } from './src/screens/SignIn';
 import { ErrorBoundary } from './src/ui/ErrorBoundary';
@@ -30,7 +29,7 @@ export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState<OpenLeague | null>(null);
-  const [view, setView] = useState<'picks' | 'board' | 'demo'>('picks');
+  const [view, setView] = useState<'picks' | 'demo'>('picks');
 
   useEffect(() => {
     if (!liveConfigured()) { setReady(true); return; }
@@ -101,14 +100,19 @@ export function App() {
 
         {open ? (
           <View style={{ flex: 1 }}>
-            {/* Picks vs board. Two tabs, so a segmented control rather than a
-                navigator — and both keep their own data, so switching is free. */}
-            {/* Three tabs, and DEMO is deliberately visible rather than hidden
-                behind a gesture: it exists to be reached in front of an
-                audience. It renders the live board's own components against a
-                scripted window and labels itself as not-your-matchup. */}
+            {/* Two tabs: your matchup, and the demo.
+                There used to be a third — SET LINEUP and LIVE BOARD were
+                separate screens, so on Sunday you set a lineup on one tab and
+                watched it score on another, and neither ever showed you the
+                other half. The board now phases per window the way the web's
+                Matchup does: a window is SETUP until its kickoff and LIVE after,
+                on the one screen. Nothing to switch between, so no tab.
+
+                DEMO stays visible rather than hidden behind a gesture: it exists
+                to be reached in front of an audience. It renders the board's own
+                components against a scripted window and says it isn't yours. */}
             <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingBottom: 8 }}>
-              {(['picks', 'board', 'demo'] as const).map((tab) => {
+              {(['picks', 'demo'] as const).map((tab) => {
                 const on = view === tab;
                 return (
                   <Pressable
@@ -121,7 +125,7 @@ export function App() {
                     }}
                   >
                     <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', letterSpacing: 0.7, color: on ? theme.onAccent : theme.dim }}>
-                      {tab === 'picks' ? 'SET LINEUP' : tab === 'board' ? 'LIVE BOARD' : 'DEMO'}
+                      {tab === 'picks' ? 'MY MATCHUP' : 'DEMO'}
                     </Text>
                   </Pressable>
                 );
@@ -129,18 +133,10 @@ export function App() {
             </View>
             {view === 'demo' ? (
               <DemoBoard />
-            ) : view === 'picks' ? (
+            ) : (
               <LivePicks
                 // Remounts when you switch leagues, so no state leaks between them.
                 key={`picks-${open.leagueId}-${open.rosterId}`}
-                userId={session.user.id}
-                leagueId={open.leagueId}
-                rosterId={open.rosterId}
-                onBack={() => setOpen(null)}
-              />
-            ) : (
-              <LiveBoard
-                key={`board-${open.leagueId}-${open.rosterId}`}
                 userId={session.user.id}
                 leagueId={open.leagueId}
                 rosterId={open.rosterId}
