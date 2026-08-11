@@ -44,7 +44,7 @@ import {
   type ResolvedMatchup,
 } from '@drip/core/engine/matchup';
 import type { RevealedPick, WindowScore, PoolPlayer, SlotScoreRow } from '@drip/core/data/liveApi';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, alpha } from '../theme.native';
 import { Card, Display, Mono } from '../ui/prims';
 import { Duel } from './LiveBoard';
 import { FieldView } from '../ui/FieldView';
@@ -210,6 +210,21 @@ export function DemoBoard() {
     return clock >= (b.winMax[wi] ?? 0) ? 'FINAL' : '● LIVE';
   }, [b, wi, clock]);
 
+  // Each duel's game and play log, rendered by Duel directly under that duel's
+  // card pair. Windows that haven't kicked off get nothing — there is no game to
+  // show and no plays to log, and an empty expander on a sealed window invites
+  // taps that do nothing.
+  const slotDetail = useCallback((win: string, slot: string) => {
+    const i = b.wins.indexOf(win);
+    if (i < 0 || i > wi) return null;
+    const s = b.resolved.windows[i]?.slots.find((x) => String(x.slotIndex) === slot);
+    if (!s || (!s.you && !s.their)) return null;
+    // A finished window shows its whole game; the live one shows only as far as
+    // the clock has reached.
+    const at = i < wi ? (b.winMax[i] ?? 0) : clock;
+    return <SlotDetail slot={s} clock={at} youName={b.youName} oppName={b.oppName} />;
+  }, [b, wi, clock]);
+
   const live = scores[wi];
   const mm = (n: number) => `${Math.floor(n / 60)}:${String(Math.floor(n % 60)).padStart(2, '0')}`;
 
@@ -295,75 +310,57 @@ export function DemoBoard() {
         week={WEEK}
         winLabel={(id) => b.label[id] ?? id.toUpperCase()}
         winStatus={winStatus}
+        slotDetail={slotDetail}
       />
-
-      {/* The live window's duels, in detail: the field each player's game is on
-          and the play log behind their score.
-          ONE SLOT AT A TIME, on purpose. A window can hold three duels and each
-          carries up to two fields plus a log, which on a phone is a scroll
-          nobody reaches the end of. The picker keeps the thing being talked
-          about on screen. */}
-      {wi >= 0 && <SlotDetail slots={b.resolved.windows[wi].slots} clock={clock} youName={b.youName} oppName={b.oppName} />}
     </ScrollView>
   );
 }
 
-/** One duel from the live window: both players' fields, then the play log that
- *  produced their banks. */
-function SlotDetail({ slots, clock, youName, oppName }: {
-  slots: ResolvedMatchup['windows'][number]['slots'];
+/** One duel's detail, sitting directly under its card pair: the field its
+ *  players' game is on, and the play log behind their banks.
+ *
+ *  COLLAPSED BY DEFAULT, like the web's FieldCollapse. A window can hold three
+ *  duels and each carries a field plus a log; expanded by default that is a
+ *  board nobody can see the shape of. The toggle keeps the cards — which ARE the
+ *  board — as the thing you scroll through, with the explanation one tap away. */
+function SlotDetail({ slot, clock, youName, oppName }: {
+  slot: ResolvedMatchup['windows'][number]['slots'][number];
   clock: number; youName: string; oppName: string;
 }) {
   const t = useTheme();
-  const [sel, setSel] = useState(0);
-  const filled = slots.filter((s) => s.you || s.their);
-  if (!filled.length) return null;
-  const s = filled[Math.min(sel, filled.length - 1)];
+  const [open, setOpen] = useState(false);
 
   // Only what has happened by now — the log is a record, not a spoiler.
-  const events = s.events.filter((e) => e.clock <= clock);
-  // Two players are often in the SAME game (a QB and the opposing RB), in which
-  // case one field covers both. Dedupe by team's game rather than by team.
-  const teams = [s.you?.player.team, s.their?.player.team].filter(Boolean) as string[];
-  const games = [...new Set(teams)];
+  const events = slot.events.filter((e) => e.clock <= clock);
+  // The two players are often in the SAME game (a QB against the opposing RB),
+  // where one field covers both. Dedupe by team so that duel shows one field,
+  // not the same one twice.
+  const games = [...new Set([slot.you?.player.team, slot.their?.player.team].filter(Boolean) as string[])];
+  if (!games.length) return null;
 
   return (
-    <Card style={{ marginTop: 10 }}>
-      {filled.length > 1 && (
-        <View style={{ flexDirection: 'row', gap: 4, marginBottom: 8 }}>
-          {filled.map((x, i) => (
-            <Pressable
-              key={x.slotIndex}
-              onPress={() => setSel(i)}
-              style={{
-                flex: 1, paddingVertical: 6, borderRadius: 5, alignItems: 'center',
-                backgroundColor: i === Math.min(sel, filled.length - 1) ? t.you : t.surface,
-                borderWidth: StyleSheet.hairlineWidth, borderColor: i === Math.min(sel, filled.length - 1) ? t.you : t.bd,
-              }}
-            >
-              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: i === Math.min(sel, filled.length - 1) ? t.onAccent : t.dim }}>
-                {x.you?.player.name ?? '—'}
-              </Text>
-            </Pressable>
-          ))}
+    <View>
+      <Pressable
+        onPress={() => setOpen((v) => !v)}
+        style={{ alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 5, paddingHorizontal: 12, borderRadius: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: open ? t.you : t.bd, backgroundColor: open ? alpha(t.you, 12) : 'transparent' }}
+      >
+        <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.8, color: open ? t.you : t.dim }}>
+          {open ? 'HIDE ▲' : `● FIELD ▾  ${games.join(' · ')}`}
+        </Text>
+      </Pressable>
+
+      {open && (
+        <View style={{ marginTop: 4 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Mono size={9.5} weight="700" tone="you">{slot.you?.player.name ?? '—'}</Mono>
+            <Mono size={8} tone="faint">VS</Mono>
+            <Mono size={9.5} weight="700" style={{ color: t.opp }}>{slot.their?.player.name ?? 'unopposed'}</Mono>
+          </View>
+          {games.map((tm) => <FieldView key={tm} week={WEEK} team={tm} clock={clock} />)}
+          <PlayLog events={events} gameLabel={games.join(' · ')} youName={youName} theirName={oppName} />
         </View>
       )}
-
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Mono size={10} weight="700" tone="you">{s.you?.player.name ?? '—'}</Mono>
-        <Mono size={8.5} tone="faint">VS</Mono>
-        <Mono size={10} weight="700" style={{ color: t.opp }}>{s.their?.player.name ?? 'unopposed'}</Mono>
-      </View>
-
-      {games.map((tm) => <FieldView key={tm} week={WEEK} team={tm} clock={clock} />)}
-
-      <PlayLog
-        events={events}
-        gameLabel={games.join(' · ')}
-        youName={youName}
-        theirName={oppName}
-      />
-    </Card>
+    </View>
   );
 }
 

@@ -14,7 +14,7 @@
 //   · The card-table presentation (league_pref.card_theme) — a skin, and it
 //     depends on cardTable.tsx, 888 lines of DOM-specific card rendering.
 // Both are presentation. The score, the windows and the lineups are here.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { weekLabel, windowsForWeek } from '@drip/core/data/nflSlate';
 import { metricById } from '@drip/core/data/metrics';
@@ -256,7 +256,7 @@ function Big({ label, value, color, team }: { label: string; value: number; colo
  *  The sealed-back count MIRRORS YOUR OWN card count, never the opponent's real
  *  one. Showing their true count before reveal would leak how many slots they
  *  filled in a window, which is information the game deliberately withholds. */
-export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus }: {
+export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus, slotDetail }: {
   mine: RevealedPick[];
   theirs: RevealedPick[];
   pool: Record<string, PoolPlayer>;
@@ -269,6 +269,12 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
    *  the whole matchup, so it doesn't pass this; a replay does, because it walks
    *  windows one at a time and a finished window shouldn't still read LIVE. */
   winStatus?: (id: string) => string | null;
+  /** Rendered directly beneath a slot's card pair — the field visual and play
+   *  log for that duel. A prop rather than built in, because the two callers get
+   *  the underlying plays from different places: the replay has resolved engine
+   *  events in hand, while the live board would have to read published feeds.
+   *  Returning null (the live board's current answer) simply renders nothing. */
+  slotDetail?: (win: string, slot: string) => ReactNode;
 }) {
   const t = useTheme();
   const youSide = youAreHome ? 'home' : 'away';
@@ -380,12 +386,27 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
             )}
 
             <View style={{ gap: 10, backgroundColor: FELT, borderRadius: 8, padding: 10 }}>
-              {Array.from({ length: pairs }, (_, i) => (
-                <View key={i} style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
-                  {my[i] ? faceFor(my[i], youSide, t.you, i) : <CardBack label="—" idx={i} />}
-                  {th[i] ? faceFor(th[i], oppSide, t.opp, i) : <CardBack idx={i} />}
-                </View>
-              ))}
+              {Array.from({ length: pairs }, (_, i) => {
+                // The slot this pair belongs to. Taken from the picks rather
+                // than the loop index: `mine`/`theirs` are already filtered to
+                // this window and a window's filled slots can be sparse, so the
+                // position in the array is not the roster slot.
+                const slot = my[i]?.roster_slot ?? th[i]?.roster_slot ?? String(i);
+                return (
+                  <View key={i} style={{ gap: 8 }}>
+                    <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
+                      {my[i] ? faceFor(my[i], youSide, t.you, i) : <CardBack label="—" idx={i} />}
+                      {th[i] ? faceFor(th[i], oppSide, t.opp, i) : <CardBack idx={i} />}
+                    </View>
+                    {/* The duel's game(s) and play log, directly under the pair
+                        they belong to — the web's arrangement, and the reason
+                        it's here rather than in a panel below the board: the
+                        field only means anything next to the cards whose score
+                        it explains. */}
+                    {slotDetail?.(win, slot)}
+                  </View>
+                );
+              })}
             </View>
           </Card>
         );
