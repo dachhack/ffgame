@@ -17,7 +17,7 @@
 // reader. This is the shared reader. New shapes get handled here once rather
 // than at each call site, and a caller cannot forget a field it never knew
 // about.
-import { slugMeta } from './slugMeta';
+import { slugMeta, normTeam } from './slugMeta';
 
 /** Which part of the manager's roster an entry came from. */
 export type PoolGroup = 'start' | 'bench' | 'ir' | 'taxi';
@@ -72,9 +72,9 @@ export function starterSlugs(raw: unknown): string[] {
  *  `full` and `pos` are only ever displayed or grouped by, so they get derived
  *  defaults rather than costing the user a pickable player: a Sleeper row
  *  carries no `full`, and "josh-allen" → "josh allen" beats showing nothing. */
-export function readPool(raw: unknown): { slug: string; full: string; pos: string; grp: PoolGroup }[] {
+export function readPool(raw: unknown): { slug: string; full: string; pos: string; team: string; grp: PoolGroup }[] {
   const rows = Array.isArray(raw) ? (raw as PoolEntry[]) : [];
-  const out: { slug: string; full: string; pos: string; grp: PoolGroup }[] = [];
+  const out: { slug: string; full: string; pos: string; team: string; grp: PoolGroup }[] = [];
   for (const p of rows) {
     const slug = entrySlug(p);
     if (!slug) continue;
@@ -82,6 +82,10 @@ export function readPool(raw: unknown): { slug: string; full: string; pos: strin
       slug,
       full: p.full || slug.replace(/-/g, ' '),
       pos: p.pos || slugMeta(slug).pos,
+      // The row's own team first (the sync carries Sleeper's, which is current
+      // and complete), then the baked 2025 table. '' when neither knows — the
+      // caller has to treat that as "unplaceable", not as a real team.
+      team: normTeam(entryTeam(p)) || slugMeta(slug).team,
       grp: entryGroup(p),
     });
   }

@@ -155,7 +155,11 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
   // stranded. Gating is off entirely for weeks we have no baked slate for.
   const week = matchup?.week ?? 0;
   const gateOn = hasSlate(week);
-  const teamBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, slugMeta(p.slug).team])), [pool]);
+  // readPool resolves the team (the synced row's own first, then the baked 2025
+  // table) — this used to consult slugMeta alone, which knows only players who
+  // existed in 2025 and returned '' for everyone else, sending them to the
+  // 'any' branch below instead of their real window.
+  const teamBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, p.team || slugMeta(p.slug).team])), [pool]);
   const winBySlug = useMemo<Record<string, WindowId | 'any' | null>>(() => {
     const m: Record<string, WindowId | 'any' | null> = {};
     for (const p of pool) { const t = teamBySlug[p.slug]; m[p.slug] = t ? windowForTeam(week, t) : 'any'; }

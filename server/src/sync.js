@@ -170,7 +170,15 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
         if (!sid || key === '0' || seen.has(key)) continue;
         seen.add(key);
         const p = idx.sleeper(sid);
-        entries.push({ slot: entries.length, sleeper_id: sid, player_slug: p?.slug ?? null, pos: p?.pos ?? null, grp });
+        // CARRY `team` and `full`. The index has both and this used to drop them,
+        // which left the client resolving a player's NFL team from the 2025 baked
+        // slug table or by name-matching the stats DB. That works for a veteran
+        // and fails for anyone who wasn't in the 2025 set — a rookie, most of a
+        // dynasty taxi squad — and the failure is invisible in the worst way:
+        // windowPools() can't place a player with no team, so they vanish from
+        // EVERY window rather than showing up wrong. Sleeper knows the team;
+        // there is no reason to re-derive it downstream.
+        entries.push({ slot: entries.length, sleeper_id: sid, player_slug: p?.slug ?? null, full: p?.full ?? null, pos: p?.pos ?? null, team: p?.team ?? null, grp });
       }
     }
     return { league_id: lid, week, roster_id: r.roster_id, starters_json: entries };
