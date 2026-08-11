@@ -77,6 +77,7 @@ interface Built {
   theirs: RevealedPick[];
   pool: Record<string, PoolPlayer>;
   label: Record<string, string>;
+  sub: Record<string, string>;
   wins: string[];
   youName: string;
   oppName: string;
@@ -109,13 +110,17 @@ function build(): Built {
   const theirs: RevealedPick[] = [];
   const pool: Record<string, PoolPlayer> = {};
   const label: Record<string, string> = {};
+  const sub: Record<string, string> = {};
   const seat = (win: string, i: number, who: string, p: { player: { id: string; name: string; pos: string }; metricId: string }): RevealedPick => {
     pool[p.player.id] = { slug: p.player.id, full: p.player.name, pos: p.player.pos };
     return { app_user_id: who, game_window: win, roster_slot: String(i), player_slug: p.player.id, metric_id: p.metricId, locked: true };
   };
 
   for (const w of resolved.windows) {
-    label[w.window.id] = `${w.window.label} · ${w.window.sub ?? ''}`.trim().replace(/ ·\s*$/, '');
+    // SHORT label only. Duel renders the window's sub itself, so folding it in
+    // here printed "TNF · Thursday Night  Thursday Night" on the board.
+    label[w.window.id] = w.window.label;
+    sub[w.window.id] = w.window.sub ?? '';
     for (const s of w.slots) {
       if (s.you) mine.push(seat(w.window.id, s.slotIndex, 'you', s.you));
       if (s.their) theirs.push(seat(w.window.id, s.slotIndex, 'them', s.their));
@@ -125,7 +130,7 @@ function build(): Built {
   return {
     resolved,
     winMax: resolved.windows.map((w) => w.slots.reduce((m, s) => s.events.reduce((a, e) => Math.max(a, e.clock), m), 0)),
-    mine, theirs, pool, label,
+    mine, theirs, pool, label, sub,
     wins: resolved.windows.map((w) => w.window.id),
     youName: you.name, oppName: opp.name,
   };
@@ -288,7 +293,7 @@ export function DemoBoard() {
       <Card style={{ marginBottom: 10 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <Mono size={11} weight="700" tone="you" track={0.14}>
-            {wi < 0 ? 'PRE-KICKOFF · SEALED' : `${b.label[b.wins[wi]] ?? b.wins[wi]} · ${mm(Math.min(clock, b.winMax[wi] ?? 0))}`}
+            {wi < 0 ? 'PRE-KICKOFF · SEALED' : `${b.label[b.wins[wi]] ?? b.wins[wi]}${b.sub[b.wins[wi]] ? ` · ${b.sub[b.wins[wi]]}` : ''} · ${mm(Math.min(clock, b.winMax[wi] ?? 0))}`}
           </Mono>
           <Mono size={11} weight="700">
             {live ? `${Math.round(scores.reduce((n, s) => n + s.home_score, 0) * 10) / 10} – ${Math.round(scores.reduce((n, s) => n + s.away_score, 0) * 10) / 10}` : '0 – 0'}

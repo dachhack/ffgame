@@ -284,9 +284,17 @@ function firstGameWindow(week: number) {
 // ── Real kickoff times (when the week's play-by-play is loaded) ───────────────
 // epoch ms → ET seconds-of-day.
 function etSod(ms: number): number {
-  const h = +new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }).format(ms) % 24;
-  const m = +new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', minute: '2-digit' }).format(ms);
-  return h * 3600 + m * 60;
+  // formatToParts, NOT format(). Coercing `format()` to a number assumes the
+  // engine returns a bare "20" for an hour-only format, and Hermes's formatjs
+  // polyfill does not — it returns a patterned string, `+"..."` is NaN, and the
+  // window header rendered "NaN:NaNa" on device while every browser was fine.
+  // Parts are addressed by type, so no pattern can surprise this.
+  const p = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(new Date(ms));
+  const h = Number(p.find((x) => x.type === 'hour')?.value ?? 0) % 24;
+  const m = Number(p.find((x) => x.type === 'minute')?.value ?? 0);
+  return (Number.isFinite(h) ? h : 0) * 3600 + (Number.isFinite(m) ? m : 0) * 60;
 }
 // seconds-of-day → compact slot label e.g. "1:00p" (matches the window labels).
 function fmtSodShort(sod: number): string {

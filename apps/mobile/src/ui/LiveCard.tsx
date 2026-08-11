@@ -39,9 +39,9 @@ const FLOAT_OVERHANG = 12;
 // brown rather than loose on the green, so the two halves of a duel read as two
 // objects instead of one run-on row.
 const PANEL = {
-  flex: 1, gap: 8, alignItems: 'center' as const,
+  flex: 1, gap: 6, alignItems: 'center' as const,
   backgroundColor: '#241E15', borderWidth: StyleSheet.hairlineWidth, borderColor: '#4A3F2A',
-  borderRadius: 8, paddingHorizontal: 7, paddingVertical: 6,
+  borderRadius: 8, paddingHorizontal: 4, paddingVertical: 6,
   // The floating card overhangs; without this Android clips it at the panel edge.
   overflow: 'visible' as const,
 };

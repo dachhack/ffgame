@@ -403,7 +403,10 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
         const pairs = Math.max(my.length, th.length, sealedBacks);
 
         return (
-          <Card key={win} style={{ marginBottom: 10 }}>
+          // Card's default 16 padding, the felt's 10 and the panel's 7 stacked
+          // to 33px of dead margin on each side before the card even started —
+          // width the metric labels needed more than the edges did.
+          <Card key={win} style={{ marginBottom: 10, paddingHorizontal: 7, paddingVertical: 10 }}>
             {/* Window header: id, the long name, the date and the kickoff —
                 the web's four-part line. The date and time matter more here
                 than they look: a preseason week's windows are Thu/Fri/Sat
@@ -478,7 +481,7 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
             {/* Row gap and padding both allow for the floating cards, which
                 overhang their panels by 12 — without the clearance adjacent
                 duels overlap and the felt clips the top and bottom rows. */}
-            <View style={{ gap: 22, backgroundColor: FELT, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 18 }}>
+            <View style={{ gap: 22, backgroundColor: FELT, borderRadius: 8, paddingHorizontal: 4, paddingVertical: 18 }}>
               {Array.from({ length: pairs }, (_, i) => {
                 // The slot this pair belongs to. Taken from the picks rather
                 // than the loop index: `mine`/`theirs` are already filtered to
