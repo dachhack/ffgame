@@ -5,14 +5,15 @@ web — see `docs/native-port-plan.md` for what's in scope and why.
 
 ## Status
 
-First pass: the shell plus **one** ported screen (`LivePicks`), chosen because
-it's the smallest screen that exercises the whole stack — Supabase auth and
-reads/writes, the slate and per-window lock rules, the metric catalogue, the
-premium gate, the coin wallet.
+Playable on Android. Sign-in (magic link + Google), leagues, `LivePicks` (set
+your lineup, seal metrics, buy and arm power-ups, scout the opponent's window
+pool) and `LiveBoard` (the server-authoritative live view). Between them they
+exercise the whole stack — Supabase auth and reads/writes, the slate and
+per-window lock rules, the metric catalogue, the premium gate, the coin wallet.
 
-Verified: typechecks, and Metro bundles it (706 modules) against `@drip/core`
-across the workspace. **Not yet run on a device** — that needs a development
-build, which needs an Apple/EAS account.
+Release APKs are built locally (`android/gradlew assembleRelease`) and signed
+with the committed playtest key — see **Signing** below. iOS has never been
+built or run.
 
 ## Running it
 
@@ -43,6 +44,45 @@ Builds in Expo's cloud and hands back an install link plus a downloadable
 `production` profile emits a `.aab`, which Play requires but which **cannot be
 sideloaded**. Use `npm run apk:local` to build on your own machine instead;
 that one needs the Android SDK + NDK installed locally.
+
+### Signing, and why there's a keystore in the repo
+
+Release builds are signed with `playtest.keystore`, which is **committed**, with
+its password in `plugins/withPlaytestSigning.js`. That's deliberate. What it
+replaces is worse: the bare template signs release with the `debug.keystore` it
+ships — a fixed file dated 2013 whose private half is in every React Native
+project on earth. Builds signed with it install perfectly well, which is exactly
+why it goes unnoticed, but it means anyone can forge an update for
+`com.dripfantasy.app` and that Play will never accept the identity.
+
+The committed key is safe to commit because of what it is not:
+
+- **Not the Play upload key.** Generate a fresh one for the store, hand it to
+  EAS credentials, and leave this to sideloaded builds. Play App Signing makes
+  the upload key rotatable, so deferring that choice costs nothing.
+- **Not a server credential.** Every table is RLS-guarded against the signed-in
+  user. A forged build gets you a login screen.
+
+Committing it is what makes the identity *stable* — a fresh clone or a
+throwaway CI container signs the same way, so a playtester's next APK installs
+over the last one instead of demanding an uninstall. If that trade ever stops
+being worth it, move the file out and pass the path in through the environment;
+the plugin asserts the keystore exists rather than falling back to the debug key,
+so its absence fails the build loudly.
+
+`versionCode` is derived from `version` in `app.json` (0.1.0 → 100), computed in
+`app.config.js`. Set `ANDROID_VERSION_CODE` to override it when you hand out two
+different APKs on one day without bumping the version.
+
+```bash
+ANDROID_VERSION_CODE=101 npx expo prebuild --platform android --clean
+```
+
+To confirm what a built APK is actually signed with:
+
+```bash
+apksigner verify --print-certs android/app/build/outputs/apk/release/app-release.apk
+```
 
 ### iOS
 
@@ -98,30 +138,40 @@ An empty `extra` is correct and means "use the production defaults".
 
 ```
 index.ts               entry — installs the platform adapter FIRST (order matters)
-App.tsx                theme context + session gate around the one screen
+App.tsx                brand header, session gate, picks/board tabs
 src/platform.native.ts MMKV / expo-constants / Linking → core's platform contract
 src/theme.native.ts    core's design tokens for RN + the color-mix replacement
-src/ui/                themed primitives, SetupRow, PlayerPicker
-src/screens/           ported screens
+src/intl-polyfill.ts   formatjs — Hermes ships no IANA zones; see the gotcha below
+src/ui/cards.tsx       the card table: faces, backs, stock texture, deal-in
+src/ui/                Overlay, SetupRow, PlayerPicker, ShopModal, RosterPanel,
+                       PowerupHand, ErrorBoundary, themed primitives
+src/screens/           SignIn, Leagues, LivePicks, LiveBoard
+plugins/               Expo config plugins — android/ is generated, so anything
+                       the native build needs lives here or it gets erased
 ```
 
-## What the next screen needs
+## Still deferred
 
-Deliberately deferred, in rough order of how much they'll cost:
+In rough order of how much they'll cost:
 
-- **Sign-in.** `LiveOnboard` (1,541 lines on web) covers magic link, invite
-  codes, commish codes and solo passes. Until it's ported, sign in on the web —
-  it's the same account and the same session.
-- **Navigation.** A single route doesn't justify a stack. `@react-navigation`
-  is installed and ready for screen two.
+- **Animations.** Cards deal in (`src/ui/cards.tsx`, RN `Animated`, native
+  driver), but the moments that carry the game don't: `nukeburst`, `flipin`,
+  `fvdraw`. They belong to the live board and they are the real test of the
+  port — `react-native-reanimated` still isn't installed, because an entrance
+  transition on mount didn't justify it and these might.
 - **Extra-slot picks.** Buying/selling works; filling uses three stacked
   `<select>`s on web, which needs a purpose-built native sheet.
 - **Fonts.** Space Grotesk needs `expo-font`; headings currently fall back to
   the system sans.
-- **Animations.** Nothing here animates yet. The 13 CSS keyframes
-  (`nukeburst`, `flipin`, `fvdraw`…) land with the live board, and that's the
-  real test of the port — `react-native-reanimated` isn't installed yet because
-  nothing needed it.
+- **Card face gradient.** The dot texture is faithful (a real tiled PNG); the
+  radial gradient's centre highlight has no RN equivalent and is still missing.
+- **iOS.** Never built or run. Needs a Mac; TestFlight needs the $99 enrolment.
+
+Sign-in is done (magic link + Google OAuth, `src/screens/SignIn.tsx`); invite
+codes, commish codes and solo passes still live on the web's `LiveOnboard`.
+Navigation is deliberately absent — `@react-navigation` was removed once it
+turned out to be shipping a native library nothing imported. Bring it back for a
+real stack, not to model one push.
 
 ## Two things that will bite
 

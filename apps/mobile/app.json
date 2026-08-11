@@ -19,7 +19,8 @@
     },
     "plugins": [
       "expo-web-browser",
-      "./plugins/withCoreBundleInput"
+      "./plugins/withCoreBundleInput",
+      "./plugins/withPlaytestSigning"
     ]
   }
 }
