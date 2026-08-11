@@ -475,7 +475,10 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
               );
             })()}
 
-            <View style={{ gap: 10, backgroundColor: FELT, borderRadius: 8, padding: 10 }}>
+            {/* Row gap and padding both allow for the floating cards, which
+                overhang their panels by 12 — without the clearance adjacent
+                duels overlap and the felt clips the top and bottom rows. */}
+            <View style={{ gap: 22, backgroundColor: FELT, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 18 }}>
               {Array.from({ length: pairs }, (_, i) => {
                 // The slot this pair belongs to. Taken from the picks rather
                 // than the loop index: `mine`/`theirs` are already filtered to

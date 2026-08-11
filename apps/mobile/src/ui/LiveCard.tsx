@@ -29,14 +29,21 @@ const STOCK_TILE = require('../../assets/card-stock.png');
 const INK = '#2A2312';
 const INK_DIM = '#6E6650';
 const CARD_W = 78;
+// Floating: the web's `.ct-float` — narrower, and overhanging its panel top and
+// bottom so the card reads as dealt ONTO the strip rather than boxed inside it.
+// The 12px of negative margin is what buys the middle its width back.
+const FLOAT_W = 72;
+const FLOAT_OVERHANG = 12;
 
 // Each side sits in its own panel on the felt, as on the web — warm stock-ish
 // brown rather than loose on the green, so the two halves of a duel read as two
 // objects instead of one run-on row.
 const PANEL = {
-  flex: 1, gap: 9, alignItems: 'flex-start' as const,
+  flex: 1, gap: 8, alignItems: 'center' as const,
   backgroundColor: '#241E15', borderWidth: StyleSheet.hairlineWidth, borderColor: '#4A3F2A',
-  borderRadius: 8, padding: 7,
+  borderRadius: 8, paddingHorizontal: 7, paddingVertical: 6,
+  // The floating card overhangs; without this Android clips it at the panel edge.
+  overflow: 'visible' as const,
 };
 
 const fmt = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
@@ -45,10 +52,12 @@ const initials = (name: string) => name.split(/\s+/).map((w) => w[0]).join('').s
 /** The mini physical card: identity, the liquid bank fill, and the hot/nuked
  *  states. Same stock and texture as the full card — it should read as the same
  *  object seen smaller, not as a different component. */
-export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked = false, idx = 0 }: {
+export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked = false, idx = 0, float = false }: {
   side: 'you' | 'their';
   slug: string; name: string; pos: string; team?: string | null;
   bank?: number | null; hot?: boolean; nuked?: boolean; idx?: number;
+  /** Overhang the container, as the web's `.ct-float` does on a score strip. */
+  float?: boolean;
 }) {
   const t = useTheme();
   const suit = t.pos[(pos as Pos)] ?? t.pos.DEF;
@@ -62,7 +71,9 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
   const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
 
   return (
-    <View style={{ width: CARD_W }}>
+    <View style={float
+      ? { width: FLOAT_W, marginTop: -FLOAT_OVERHANG, marginBottom: -FLOAT_OVERHANG, zIndex: 2 }
+      : { width: CARD_W }}>
       <Animated.View
         style={{
           borderRadius: 8, borderWidth: 2, borderColor: '#000', overflow: 'hidden',
@@ -98,7 +109,7 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
               )}
             </View>
 
-            <View style={{ height: 50, borderRadius: 5, borderWidth: 1.5, borderColor: suit.fg, overflow: 'hidden', backgroundColor: '#EDE4CB', alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ height: float ? 46 : 50, borderRadius: 5, borderWidth: 1.5, borderColor: suit.fg, overflow: 'hidden', backgroundColor: '#EDE4CB', alignItems: 'center', justifyContent: 'center' }}>
               {photo
                 ? <Image source={{ uri: photo }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                 : logo
@@ -156,7 +167,7 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, gameLabe
   if (sealed) {
     return (
       <View style={[PANEL, { flexDirection: mirror ? 'row-reverse' : 'row' }]}>
-        <View style={{ width: CARD_W, height: 106, borderRadius: 8, borderWidth: 2, borderColor: '#000', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: FLOAT_W, height: 106, marginTop: -FLOAT_OVERHANG, marginBottom: -FLOAT_OVERHANG, zIndex: 2, borderRadius: 8, borderWidth: 2, borderColor: '#000', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
           <Image source={cardBackArt()} style={{ position: 'absolute', width: '100%', height: '100%' }} resizeMode="cover" />
           <Text style={{ fontSize: 17, color: '#E9B959' }}>◈</Text>
         </View>
@@ -172,7 +183,7 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, gameLabe
 
   return (
     <Pressable onPress={onPress} style={[PANEL, { flexDirection: mirror ? 'row-reverse' : 'row' }]}>
-      <MiniCard side={side} slug={slug ?? ''} name={name ?? ''} pos={pos ?? 'DEF'} team={team} bank={bank} hot={hot} nuked={nuked} idx={idx} />
+      <MiniCard float side={side} slug={slug ?? ''} name={name ?? ''} pos={pos ?? 'DEF'} team={team} bank={bank} hot={hot} nuked={nuked} idx={idx} />
 
       <View style={{ flex: 1, minWidth: 0, alignItems: mirror ? 'flex-end' : 'flex-start', gap: 3 }}>
         {!!gameLabel && (
