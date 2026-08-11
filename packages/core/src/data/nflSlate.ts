@@ -3,6 +3,7 @@
 import type { WindowId, GameWindow } from '../types';
 import { WINDOWS } from './metrics';
 import { realKickoff } from './realPbp';
+import { normTeam } from './slugMeta';
 export interface NflGame { away: string; home: string; aScore: number; hScore: number; win: WindowId; kickoff?: number; }
 export const NFL_SLATE: Record<number, NflGame[]> = {
   1: [{ away: "DAL", home: "PHI", aScore: 20, hScore: 24, win: "tnf" }, { away: "KC", home: "LAC", aScore: 21, hScore: 27, win: "tnf" }, { away: "TB", home: "ATL", aScore: 23, hScore: 20, win: "early" }, { away: "CIN", home: "CLE", aScore: 17, hScore: 16, win: "early" }, { away: "MIA", home: "IND", aScore: 8, hScore: 33, win: "early" }, { away: "CAR", home: "JAX", aScore: 10, hScore: 26, win: "early" }, { away: "LV", home: "NE", aScore: 20, hScore: 13, win: "early" }, { away: "ARI", home: "NO", aScore: 20, hScore: 13, win: "early" }, { away: "PIT", home: "NYJ", aScore: 34, hScore: 32, win: "early" }, { away: "NYG", home: "WAS", aScore: 6, hScore: 21, win: "early" }, { away: "TEN", home: "DEN", aScore: 12, hScore: 20, win: "late" }, { away: "SF", home: "SEA", aScore: 17, hScore: 13, win: "late" }, { away: "DET", home: "GB", aScore: 13, hScore: 27, win: "late" }, { away: "HOU", home: "LA", aScore: 9, hScore: 14, win: "late" }, { away: "BAL", home: "BUF", aScore: 40, hScore: 41, win: "snf" }, { away: "MIN", home: "CHI", aScore: 27, hScore: 24, win: "mnf" }],
@@ -58,7 +59,12 @@ export function nflGameForTeam(week: number, team?: string | null): NflGame | un
 /** The time-slot window a team plays in for a given week, or null (bye). */
 export function windowForTeam(week: number, team?: string | null): WindowId | null {
   if (!team) return null;
-  return deriveWeek(week).teamWin.get(team) ?? null;
+  // NORMALISE the input. The map is keyed by the slate's codes, and the slate
+  // says LA / WAS / JAX while feeds and player rows say LAR / WSH / JAC. An
+  // un-normalised lookup misses silently and the player lands in no window at
+  // all — invisible everywhere rather than visibly wrong, which is the harder
+  // failure to notice.
+  return deriveWeek(week).teamWin.get(normTeam(team)) ?? null;
 }
 
 /** Every real NFL game scheduled in a given time-slot window that week. */

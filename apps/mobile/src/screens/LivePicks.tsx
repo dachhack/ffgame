@@ -215,7 +215,11 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
 
   const week = matchup?.week ?? 0;
   const gateOn = hasSlate(week);
-  const teamBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, slugMeta(p.slug).team])), [pool]);
+  // readPool resolves the team (the synced row's own first, then the baked 2025
+  // table) — this used to consult slugMeta alone, which knows only players who
+  // existed in 2025 and returned '' for everyone else, sending them to the
+  // 'any' branch below instead of their real window.
+  const teamBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, p.team || slugMeta(p.slug).team])), [pool]);
   // Slug → roster group. The pool is the manager's WHOLE roster now (starters,
   // bench, IR, taxi), and the group is the only thing distinguishing a fielded
   // RB1 from a taxi rookie in a list that otherwise shows them identically.
