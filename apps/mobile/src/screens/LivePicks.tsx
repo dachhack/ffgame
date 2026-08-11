@@ -11,9 +11,10 @@
 // exactly as they do on web. That is the whole point of the extraction — a rule
 // change lands in one file and both apps get it.
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
-import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek } from '@drip/core/data/nflSlate';
+import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, isPreseasonWeek } from '@drip/core/data/nflSlate';
+import { teamLogo } from '@drip/core/data/media';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { powerupById } from '@drip/core/data/powerups';
@@ -58,6 +59,10 @@ const slotsFor = (wins: GameWindow[]): Slot[] =>
   wins.flatMap((w) =>
     Array.from({ length: w.slots }, (_, i) => ({ win: w.id, winLabel: w.label, slot: String(i), key: `${w.id}-${i}` })));
 
+/** The real NFL games a window covers. Thin wrapper so the render path reads
+ *  cleanly; deriveWeek already memoises per week. */
+const slateOf = (week: number, win: WindowId) => gamesInWindow(week, win);
+
 const fmtLock = (iso: string | null) => {
   if (!iso) return 'kickoff';
   try { return new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
@@ -70,6 +75,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const t = useTheme();
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
   const [myTeam, setMyTeam] = useState<TeamInfo | null>(null);
+  const [oppTeam, setOppTeam] = useState<TeamInfo | null>(null);
   const [roster, setRoster] = useState<{ leagueId: string; rosterId: number } | null>(null);
   const [controller, setController] = useState<Controller>('human');
   const [aiBusy, setAiBusy] = useState(false);
@@ -111,7 +117,11 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         if (!m) { setMatchup(null); setState('none'); return; }
         setMatchup(m);
         matchupPremium(m.id).then(setMatchPremium).catch(() => {});
-        matchupTeams(r.leagueId, [r.rosterId]).then((tm) => setMyTeam(tm[r.rosterId] ?? null)).catch(() => {});
+        matchupTeams(r.leagueId, [m.home_roster_id, m.away_roster_id]).then((tm) => {
+          setMyTeam(tm[r.rosterId] ?? null);
+          const oppId = m.home_roster_id === r.rosterId ? m.away_roster_id : m.home_roster_id;
+          setOppTeam(tm[oppId] ?? null);
+        }).catch(() => {});
         const [pl, pk, bf, un, ex, slate, cq] = await Promise.all([
           myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId), myBuffs(m.id), myUnlocks(m.id),
           myExtra(m.id).catch(() => 0), liveSlate(m.week).catch(() => []), myComboQty(m.id, userId).catch(() => 0),
@@ -356,22 +366,28 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
-      {/* Header */}
+      {/* Header — mirrors the web's title block: who is playing, how much of
+          the lineup is set, and the week you are looking at. */}
       <Card style={{ marginBottom: 12 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            {!!myTeam?.team_name && <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: '700', color: t.text }}>{myTeam.team_name}</Text>}
-            <Display size={18}>{weekLabel(matchup!.week)} lineup</Display>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
+            {isPreseasonWeek(matchup!.week) && (
+              <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 }}>
+                <Mono size={9} tone="you" weight="700" track={0.08}>🏈 PRESEASON</Mono>
+              </View>
+            )}
           </View>
           <WeekNav />
         </View>
 
-        <View style={{ alignSelf: 'flex-start', marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: allLocked ? t.opp : t.you, borderRadius: 4, paddingHorizontal: 7, paddingVertical: 3 }}>
-          <Mono size={9} tone={allLocked ? 'opp' : 'you'}>{allLocked ? 'LOCKED' : locked ? 'LOCKS BY WINDOW' : `FIRST LOCK ${fmtLock(matchup!.lock_at)}`}</Mono>
-        </View>
+        <Mono size={9.5} tone="faint" track={0.12} style={{ marginTop: 12 }}>SLOTS SET {filled}/{slots.length}</Mono>
+        <Display size={24} style={{ marginTop: 2 }}>Set Your Windows</Display>
+        <Text numberOfLines={1} style={{ fontSize: 13, color: t.dim, marginTop: 2 }}>
+          {myTeam?.team_name ?? 'You'} vs {oppTeam?.team_name ?? 'Opponent'}
+        </Text>
 
-        <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>
-          Pick a player + a hidden metric per slot. Each window locks at its own kickoff — later windows stay editable all weekend, and your opponent can’t see a pick until its window kicks off. {filled}/{slots.length} set.
+        <Mono size={9.5} tone="faint" style={{ marginTop: 10 }}>
+          Pick a player + a hidden metric per slot. Each window locks at its own kickoff — later windows stay editable all weekend, and your opponent can’t see a pick until its window kicks off.
           {gateOn ? '\nEach slot only takes players whose real NFL team plays in that window. Players on a bye can’t be slotted.' : ''}
         </Mono>
 
@@ -407,7 +423,10 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
             </View>
           )}
 
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+          {/* A horizontal rail, not a wrapped wall. Eleven pills stacked five
+              rows deep pushed the actual lineup below the fold; the web solves
+              the same problem with ACTIVE/APPLY/SHOP buttons. */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }} style={{ marginTop: 10 }}>
             {LIVE_BUFFS.map((id) => {
               const pu = powerupById(id);
               const on = buffs.has(id);
@@ -423,11 +442,11 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
                 />
               );
             })}
-          </View>
+          </ScrollView>
 
           <Mono size={9.5} weight="700" track={0.06} style={{ marginTop: 14 }}>METRIC UNLOCKS</Mono>
           <Mono size={9} tone="faint">Arm one to make its locked metric pickable (🔓) in the slots below.</Mono>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }} style={{ marginTop: 8 }}>
             {LIVE_UNLOCKS.map((id) => {
               const pu = powerupById(id);
               const combo = id === 'unlock-combo-drip';
@@ -450,7 +469,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
                 </View>
               );
             })}
-          </View>
+          </ScrollView>
         </Card>
       )}
 
@@ -462,15 +481,39 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         const wLocked = winLocked(w.id);
         return (
           <Card key={w.id} style={{ marginBottom: 10, opacity: wLocked ? 0.75 : 1 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-              <Mono size={10} weight="700" track={0.12}>{w.label} · {w.sub}</Mono>
-              <View style={{ flexDirection: 'row', gap: 10, alignItems: 'baseline' }}>
-                {gateOn && <Mono size={9} tone={elig ? 'faint' : 'opp'}>{elig} eligible</Mono>}
-                <Mono size={9} weight="700" tone={setN === winSlots.length ? 'you' : 'faint'}>{setN}/{winSlots.length} SET</Mono>
-                <Mono size={9} weight="700" tone={wLocked ? 'opp' : 'faint'}>
-                  {wLocked ? '🔒 LOCKED' : winKickIso[w.id] ? `locks ${fmtLock(winKickIso[w.id])}` : 'locks at kickoff'}
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: t.text }}>{w.label}</Text>
+              <Mono size={10} tone="dim" track={0.1}>{w.sub.toUpperCase()}</Mono>
+              <Mono size={10} tone="mid">{windowDateLabel(week, w.id)}</Mono>
+              <Mono size={10} tone="faint">{windowTimeLabel(week, w.id)}</Mono>
+            </View>
+
+            {/* Slate strip — which real games this window covers. The crests make
+                a window scannable at a glance the way a list of abbreviations
+                does not. */}
+            {slateOf(week, w.id).length > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 7, flexWrap: 'wrap' }}>
+                {slateOf(week, w.id).slice(0, 10).flatMap((g) => [g.away, g.home]).map((abbr, i) => {
+                  const uri = teamLogo(abbr);
+                  return uri
+                    ? <Image key={`${abbr}-${i}`} source={{ uri }} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                    : <Mono key={`${abbr}-${i}`} size={8} tone="faint">{abbr}</Mono>;
+                })}
+                <Mono size={9} tone="faint" track={0.08} style={{ marginLeft: 4 }}>
+                  SLATE · {slateOf(week, w.id).length} GAME{slateOf(week, w.id).length === 1 ? '' : 'S'}
                 </Mono>
               </View>
+            )}
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+              <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: wLocked ? t.opp : t.you, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}>
+                <Mono size={9} weight="700" tone={wLocked ? 'opp' : 'you'} track={0.08}>{wLocked ? 'LOCKED' : 'SETUP'}</Mono>
+              </View>
+              <Mono size={9.5} tone={wLocked ? 'opp' : 'warn'} weight="700">
+                {wLocked ? '🔒 locked' : winKickIso[w.id] ? `🔒 locks ${fmtLock(winKickIso[w.id])}` : '🔒 locks at kickoff'}
+              </Mono>
+              <Mono size={9.5} weight="700" tone={setN === winSlots.length ? 'you' : 'faint'}>{setN}/{winSlots.length} SET</Mono>
+              {gateOn && <Mono size={9} tone={elig ? 'faint' : 'opp'}>{elig} eligible</Mono>}
             </View>
 
             {/* Felt under the pair, so the cards read as dealt onto a table
