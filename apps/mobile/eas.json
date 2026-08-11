@@ -16,7 +16,9 @@
       "distribution": "internal",
       "android": { "buildType": "apk" },
       "ios": { "simulator": false },
-      "channel": "preview"
+      "channel": "preview",
+      "//env": "Uncomment and fill to point this profile at a non-production Supabase project. Unset keys fall through to the production defaults in packages/core/src/data/liveConfig.ts, so an empty env is a working production build — see apps/mobile/app.config.js.",
+      "env": {}
     },
 
     "preview-simulator": {

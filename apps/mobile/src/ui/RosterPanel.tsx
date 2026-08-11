@@ -1,0 +1,156 @@
+// YOUR ROSTER — the collapsible pool panel from the web board.
+//
+// Not the same thing as the slot picker. The picker answers "who can fill THIS
+// slot in THIS window"; this answers "what have I actually got", grouped by the
+// window each player's real game falls in. That grouping is the point: it is
+// how you see that a window you have to fill has nobody in it, which is exactly
+// the confusion the empty preseason pools caused.
+//
+// Collapsed by default. On a phone this list runs to hundreds of players and
+// would otherwise bury the board it sits above.
+import { useMemo, useState } from 'react';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { headshot, teamLogo } from '@drip/core/data/media';
+import type { GameWindow, Player } from '@drip/core/types';
+import { useTheme, MONO } from '../theme.native';
+import { Mono } from './prims';
+
+const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
+
+export function RosterPanel({ title, players, wins, windowOf, accent }: {
+  title: string;
+  players: Player[];
+  /** The week's windows, in order — the grouping and its labels. */
+  wins: GameWindow[];
+  /** Which window a player's real game falls in ('any' when unresolvable). */
+  windowOf: (playerId: string) => string | null;
+  accent: string;
+}) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [pos, setPos] = useState<string>('ALL');
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return players.filter((p) => {
+      if (pos !== 'ALL' && p.pos !== pos) return false;
+      if (!needle) return true;
+      return p.full.toLowerCase().includes(needle) || (p.team ?? '').toLowerCase().includes(needle);
+    });
+  }, [players, q, pos]);
+
+  // Grouped by window, in the week's own order. Players whose window can't be
+  // resolved land in a trailing bucket rather than vanishing.
+  const groups = useMemo(() => {
+    const by = new Map<string, Player[]>();
+    for (const p of filtered) {
+      const w = windowOf(p.id) ?? 'other';
+      const key = w === 'any' ? 'other' : w;
+      (by.get(key) ?? by.set(key, []).get(key)!).push(p);
+    }
+    const ordered: { id: string; label: string; players: Player[] }[] = [];
+    for (const w of wins) {
+      const list = by.get(String(w.id));
+      if (list?.length) ordered.push({ id: String(w.id), label: w.label, players: list });
+    }
+    const rest = by.get('other');
+    if (rest?.length) ordered.push({ id: 'other', label: 'NO GAME THIS WEEK', players: rest });
+    return ordered;
+  }, [filtered, wins, windowOf]);
+
+  return (
+    <View style={{ marginBottom: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: open ? accent : t.bd, borderRadius: 8, overflow: 'hidden', backgroundColor: t.surface }}>
+      <Pressable
+        onPress={() => setOpen((o) => !o)}
+        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 13 }}
+      >
+        <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 1, color: open ? accent : t.dim }}>
+          {open ? '▾' : '▸'}  {title.toUpperCase()}
+        </Text>
+        <Mono size={10} tone="faint">{players.length}</Mono>
+      </Pressable>
+
+      {open && (
+        <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+          <View style={{ padding: 10, gap: 8 }}>
+            <TextInput
+              value={q}
+              onChangeText={setQ}
+              placeholder="search players…"
+              placeholderTextColor={t.faint}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={{
+                fontFamily: MONO, fontSize: 14, color: t.text, backgroundColor: t.bg,
+                borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7,
+                paddingHorizontal: 11, paddingVertical: 9,
+              }}
+            />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 5 }}>
+              {POS_TABS.map((tab) => {
+                const on = pos === tab;
+                return (
+                  <Pressable
+                    key={tab}
+                    onPress={() => setPos(tab)}
+                    style={{
+                      borderRadius: 6, paddingHorizontal: 11, paddingVertical: 6,
+                      backgroundColor: on ? accent : t.bg,
+                      borderWidth: StyleSheet.hairlineWidth, borderColor: on ? accent : t.bd,
+                    }}
+                  >
+                    <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: on ? t.onAccent : t.dim }}>{tab}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <Mono size={9.5} tone="faint">{filtered.length} player{filtered.length === 1 ? '' : 's'}</Mono>
+          </View>
+
+          {/* Bounded height: this list can be a thousand rows, and an unbounded
+              one would push the board off the screen entirely. */}
+          <ScrollView style={{ maxHeight: 330 }} nestedScrollEnabled contentContainerStyle={{ paddingBottom: 8 }}>
+            {groups.map((g) => (
+              <View key={g.id}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', backgroundColor: t.sh, paddingHorizontal: 12, paddingVertical: 6 }}>
+                  <Mono size={9.5} weight="700" track={0.1}>{g.label}</Mono>
+                  <Mono size={9} tone="faint">{g.players.length}</Mono>
+                </View>
+                {g.players.map((p) => <RosterRow key={p.id} player={p} />)}
+              </View>
+            ))}
+            {!groups.length && (
+              <Mono size={10.5} tone="dim" style={{ padding: 14 }}>
+                {players.length ? 'No players match that filter.' : 'No players on this roster yet.'}
+              </Mono>
+            )}
+          </ScrollView>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function RosterRow({ player }: { player: Player }) {
+  const t = useTheme();
+  const pc = t.pos[player.pos as keyof typeof t.pos] ?? { bg: t.sh, fg: t.dim, bd: t.bd };
+  const photo = headshot(player.id);
+  const logo = teamLogo(player.team);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
+      <View style={{ width: 26, height: 26, borderRadius: 13, overflow: 'hidden', backgroundColor: t.sh, alignItems: 'center', justifyContent: 'center' }}>
+        {photo
+          ? <Image source={{ uri: photo }} style={{ width: 26, height: 26 }} resizeMode="cover" />
+          : logo
+            ? <Image source={{ uri: logo }} style={{ width: 18, height: 18 }} resizeMode="contain" />
+            : <Text style={{ fontFamily: MONO, fontSize: 9, color: t.faint }}>{player.pos}</Text>}
+      </View>
+      <View style={{ backgroundColor: pc.bg, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1 }}>
+        <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: pc.fg }}>{player.pos}</Text>
+      </View>
+      <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: t.text }}>{player.full}</Text>
+      <Mono size={9} tone="faint">{player.team}</Mono>
+    </View>
+  );
+}

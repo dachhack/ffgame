@@ -1,19 +1,29 @@
-// Player choice for a slot, as a sheet.
+// Player choice for a slot — a floating card over the board, matching the web.
 //
-// The web version (boardParts.tsx) also renders a card-table variant and a
-// headshot grid; both are skin features that follow the card-deck setting,
-// which the app doesn't carry yet. This is the list form only.
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+// The list version this replaces was legible but wrong in kind: on the web this
+// is a GRID of mini player cards, because you pick a face, not a row of text.
+// The search box and position filters are the difference between usable and
+// not — this window's pool ran to 340 players in a preseason league and 1024 in
+// the roster panel.
+//
+// Deliberately absent: the "all games (N)" and "all teams (N)" dropdowns. They
+// want a real dropdown component, and position + search already cut the list
+// hard. Worth adding when someone actually needs to filter by kickoff.
+import { useMemo, useState } from 'react';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { headshot, teamLogo } from '@drip/core/data/media';
 import type { Player } from '@drip/core/types';
-import { useTheme, alpha } from '../theme.native';
-import { Display, Mono, PosPill } from './prims';
+import { useTheme, MONO } from '../theme.native';
+import { Mono } from './prims';
+import { Overlay } from './Overlay';
 
-export function PlayerPicker({ visible, players, currentId, subtitle, gated, onGated, onPick, onRemove, onClose }: {
+const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
+
+export function PlayerPicker({ visible, windowLabel, players, currentId, gated, onGated, onPick, onRemove, onClose }: {
   visible: boolean;
+  windowLabel?: string;
   players: Player[];
   currentId?: string;
-  subtitle?: string;
-  /** True when the player sits behind the premium tier (K/DST/IDP). */
   gated?: (p: Player) => boolean;
   onGated?: (p: Player) => void;
   onPick: (id: string) => void;
@@ -21,54 +31,131 @@ export function PlayerPicker({ visible, players, currentId, subtitle, gated, onG
   onClose: () => void;
 }) {
   const t = useTheme();
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: t.bg }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
-          <View style={{ flex: 1 }}>
-            <Display size={16}>Pick a player</Display>
-            {!!subtitle && <Mono size={8.5} tone="faint" track={0.06}>{subtitle}</Mono>}
-          </View>
-          <Pressable onPress={onClose} hitSlop={10}><Mono size={11} tone="dim">close</Mono></Pressable>
-        </View>
+  const [q, setQ] = useState('');
+  const [pos, setPos] = useState<string>('ALL');
 
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 6 }}>
-          {players.map((p) => {
-            const isGated = gated?.(p) ?? false;
-            const on = p.id === currentId;
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return players.filter((p) => {
+      if (pos !== 'ALL' && p.pos !== pos) return false;
+      if (!needle) return true;
+      return p.full.toLowerCase().includes(needle) || (p.team ?? '').toLowerCase().includes(needle);
+    });
+  }, [players, q, pos]);
+
+  return (
+    <Overlay
+      visible={visible}
+      title={`${windowLabel ?? 'Slot'} · Pick a player`}
+      subtitle="YOUR PLAYERS WHOSE GAME FALLS IN THIS WINDOW"
+      onClose={onClose}
+      footer={currentId ? (
+        <Pressable
+          onPress={onRemove}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.opp, borderStyle: 'dashed', borderRadius: 8, paddingVertical: 13, alignItems: 'center' }}
+        >
+          <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '700', letterSpacing: 1, color: t.opp }}>✕  REMOVE FROM SPOT</Text>
+        </Pressable>
+      ) : undefined}
+    >
+      <View style={{ padding: 12, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
+        <TextInput
+          value={q}
+          onChangeText={setQ}
+          placeholder="search players…"
+          placeholderTextColor={t.faint}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={{
+            fontFamily: MONO, fontSize: 14, color: t.text, backgroundColor: t.bg,
+            borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8,
+            paddingHorizontal: 12, paddingVertical: 10,
+          }}
+        />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+          {POS_TABS.map((tab) => {
+            const on = pos === tab;
             return (
               <Pressable
-                key={p.id}
-                onPress={() => (isGated ? onGated?.(p) : onPick(p.id))}
+                key={tab}
+                onPress={() => setPos(tab)}
                 style={{
-                  flexDirection: 'row', alignItems: 'center', gap: 9,
-                  backgroundColor: on ? alpha(t.you, 12) : t.surface,
+                  borderRadius: 7, paddingHorizontal: 13, paddingVertical: 7,
+                  backgroundColor: on ? t.you : t.bg,
                   borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd,
-                  borderRadius: 6, padding: 12,
-                  opacity: isGated ? 0.55 : 1,
                 }}
               >
-                <PosPill pos={p.pos} />
-                <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: '700', color: t.text }}>{p.full}</Text>
-                <Mono size={9} tone="faint">{p.team || '—'}</Mono>
-                {isGated && <Text style={{ fontSize: 11 }}>🔒</Text>}
-                {on && <Mono size={9} tone="you" weight="700">✓</Mono>}
+                <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', color: on ? t.onAccent : t.dim }}>{tab}</Text>
               </Pressable>
             );
           })}
-          {!players.length && (
-            <Mono size={10.5} tone="dim">No eligible players for this window. Everyone on your roster is either on a bye or plays in another window.</Mono>
-          )}
         </ScrollView>
-
-        {!!currentId && (
-          <View style={{ padding: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
-            <Pressable onPress={onRemove} style={{ alignItems: 'center', paddingVertical: 10 }}>
-              <Mono size={10.5} tone="opp" weight="700" track={0.06}>REMOVE FROM SLOT</Mono>
-            </Pressable>
-          </View>
-        )}
+        <Mono size={10} tone="faint">{shown.length} player{shown.length === 1 ? '' : 's'}</Mono>
       </View>
-    </Modal>
+
+      <ScrollView contentContainerStyle={{ padding: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-start' }}>
+        {shown.map((p) => (
+          <MiniPlayerCard
+            key={p.id}
+            player={p}
+            current={p.id === currentId}
+            gated={gated?.(p) ?? false}
+            onPress={() => (gated?.(p) ? onGated?.(p) : onPick(p.id))}
+          />
+        ))}
+        {!shown.length && (
+          <Mono size={10.5} tone="dim" style={{ padding: 8 }}>
+            {players.length
+              ? 'No players match that filter.'
+              : 'No eligible players for this window — everyone on your roster is on a bye or plays in another window.'}
+          </Mono>
+        )}
+      </ScrollView>
+    </Overlay>
+  );
+}
+
+/** A dealt mini card: position badge, team crest, headshot, name. Same cream
+ *  stock as the board's cards so the picker reads as the same deck. */
+function MiniPlayerCard({ player, current, gated, onPress }: {
+  player: Player; current: boolean; gated: boolean; onPress: () => void;
+}) {
+  const t = useTheme();
+  const pc = t.pos[player.pos as keyof typeof t.pos] ?? { bg: t.sh, fg: t.dim, bd: t.bd };
+  const photo = headshot(player.id);
+  const logo = teamLogo(player.team);
+  const src = photo ?? logo;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        width: '31.5%',
+        backgroundColor: '#F4EDDA',
+        borderWidth: current ? 2 : StyleSheet.hairlineWidth,
+        borderColor: current ? '#E0B24E' : '#D8C9A4',
+        borderRadius: 8, padding: 6, gap: 5, alignItems: 'center',
+        opacity: gated ? 0.5 : 1,
+      }}
+    >
+      <View style={{ flexDirection: 'row', alignSelf: 'stretch', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ backgroundColor: pc.bg, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: pc.fg }}>{player.pos}</Text>
+        </View>
+        {!!logo
+          ? <Image source={{ uri: logo }} style={{ width: 13, height: 13 }} resizeMode="contain" />
+          : <Text style={{ fontFamily: MONO, fontSize: 8, color: '#6B6047' }}>{player.team}</Text>}
+      </View>
+
+      <View style={{ width: '100%', aspectRatio: 1, borderRadius: 6, borderWidth: 1.5, borderColor: pc.fg, backgroundColor: '#EDE4CB', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
+        {src
+          ? <Image source={{ uri: src }} style={{ width: '100%', height: '100%' }} resizeMode={photo ? 'cover' : 'contain'} />
+          : <Text style={{ fontFamily: MONO, fontSize: 14, color: '#6B6047' }}>{player.pos}</Text>}
+      </View>
+
+      <Text numberOfLines={1} style={{ fontSize: 10.5, fontWeight: '800', color: '#201C12', textAlign: 'center' }}>{player.name}</Text>
+      {current && <Mono size={8} weight="700" style={{ color: '#8A6A28' }}>CURRENT ✓</Mono>}
+      {gated && <Text style={{ fontSize: 10 }}>🔒</Text>}
+    </Pressable>
   );
 }

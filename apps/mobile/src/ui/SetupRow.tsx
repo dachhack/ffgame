@@ -10,14 +10,21 @@
 // can never be taken here. When the live board (which does use apply mode)
 // gets ported, this component grows to meet it — not before.
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { METRICS, metricById } from '@drip/core/data/metrics';
-import type { Metric, Pick, Player, Pos } from '@drip/core/types';
+import type { Metric, Pick, Player } from '@drip/core/types';
 import { useTheme, MONO, alpha } from '../theme.native';
-import { Display, Mono, PosPill } from './prims';
+import { Mono } from './prims';
+import { CardFace, CardBack, CardEmpty } from './cards';
+import { Overlay } from './Overlay';
+import { teamLogo } from '@drip/core/data/media';
 
-export function SetupRow({ pick, resolve, lockPlayer, metricFilter, onOpenPicker, onPickMetric, onClearSlot }: {
+export function SetupRow({ pick, resolve, lockPlayer, metricFilter, idx = 0, onScout, onOpenPicker, onPickMetric, onClearSlot }: {
   pick?: Pick;
+  /** Deal order within the window. */
+  idx?: number;
+  /** Opens the opponent's window pool. Absent when there is nothing to scout. */
+  onScout?: () => void;
   resolve: (id: string) => Player | undefined;
   lockPlayer?: boolean;
   /** Which metrics this slot may offer — LivePicks filters by armed unlocks. */
@@ -38,68 +45,36 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, onOpenPicker
   }, [pick?.playerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <View style={{ flexDirection: 'row', gap: 6 }}>
-      {/* Your spot */}
+    <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
+      {/* Your card, then the opponent's face-down one — the pairing IS the
+          game's premise, so they sit at matched size on the felt. */}
       {player ? (
-        <View style={{
-          flex: 1, backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
-          borderLeftWidth: 3, borderLeftColor: t.you, borderRadius: 4, padding: 10, gap: 7,
-        }}>
-          <Pressable onPress={lockPlayer ? undefined : onOpenPicker} style={{ gap: 4 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <PosPill pos={player.pos} />
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, fontWeight: '700', color: t.text }}>{player.name}</Text>
-            </View>
-            <Mono size={8.5} tone="faint" track={0.06}>{player.team || '—'}</Mono>
-          </Pressable>
-
-          {metric ? (
-            <Pressable onPress={lockPlayer ? undefined : () => setMetricOpen(true)}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <View style={{ backgroundColor: alpha(t.fx[metric.fx] ?? t.you, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(t.fx[metric.fx] ?? t.you, 45), borderRadius: 3, paddingHorizontal: 5, paddingVertical: 2 }}>
-                  <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.fx[metric.fx] ?? t.you }}>{metric.tag}</Text>
-                </View>
-                <Mono size={9} tone="mid" style={{ flex: 1 }}>{metric.name}</Mono>
-              </View>
-            </Pressable>
-          ) : (
-            <Pressable onPress={lockPlayer ? undefined : () => setMetricOpen(true)}>
-              <Mono size={8.5} tone="warn" weight="700" track={0.1}>SEAL A METRIC →</Mono>
-            </Pressable>
+        <CardFace
+          slug={player.id}
+          name={player.name}
+          pos={player.pos}
+          team={player.team}
+          metric={metric?.name ?? null}
+          accent={t.you}
+          idx={idx}
+          onPress={lockPlayer ? undefined : () => (pick?.metricId ? setMetricOpen(true) : onOpenPicker())}
+          onRemove={lockPlayer ? undefined : onClearSlot}
+          footer={lockPlayer ? undefined : (
+            <>
+              <Text onPress={() => setMetricOpen(true)} style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: '#8A6A28' }}>↻ METRIC</Text>
+              <Text onPress={onOpenPicker} style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: '#A2422F' }}>⇄ PLAYER</Text>
+            </>
           )}
-
-          {!lockPlayer && (
-            <Pressable onPress={onClearSlot} hitSlop={8} style={{ position: 'absolute', top: 6, right: 8 }}>
-              <Text style={{ fontFamily: MONO, fontSize: 11, color: t.opp }}>✕</Text>
-            </Pressable>
-          )}
-        </View>
+        />
       ) : (
-        <Pressable
-          onPress={lockPlayer ? undefined : onOpenPicker}
-          style={{
-            flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderStyle: 'dashed',
-            borderRadius: 4, padding: 10, minHeight: 74, alignItems: 'center', justifyContent: 'center',
-            opacity: lockPlayer ? 0.5 : 1,
-          }}
-        >
-          <Mono size={9.5} tone="faint" track={0.1}>{lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'}</Mono>
-        </Pressable>
+        <CardEmpty label={lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'} onPress={lockPlayer ? undefined : onOpenPicker} />
       )}
 
-      {/* Opponent: face-down until its window kicks off. Rendered here rather
-          than by the caller so the two cards share a row height. */}
-      <View style={{
-        flex: 1, backgroundColor: t.sh, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
-        borderLeftWidth: 3, borderLeftColor: t.opp, borderRadius: 4, padding: 10,
-        alignItems: 'center', justifyContent: 'center', minHeight: 74,
-      }}>
-        <Mono size={9.5} tone="faint" track={0.12}>SEALED</Mono>
-      </View>
+      <CardBack idx={idx} onPress={onScout} actionLabel={onScout ? '🔍 SCOUT' : undefined} />
 
       <MetricModal
         visible={metricOpen}
-        pos={player?.pos ?? null}
+        player={player}
         currentId={pick?.metricId ?? null}
         filter={metricFilter}
         onPick={(id) => { onPickMetric(id); setMetricOpen(false); }}
@@ -109,57 +84,76 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, onOpenPicker
   );
 }
 
-/** Metric choice, in its own sheet. The web version does the same rather than
- *  expanding inline — an inline list balloons the card height and drags the
- *  paired sealed card with it. */
-function MetricModal({ visible, pos, currentId, filter, onPick, onClose }: {
-  visible: boolean; pos: Pos | null; currentId: string | null;
+/** Metric choice — a floating card, matching the web's "Pick how he scores".
+ *
+ *  Still a separate overlay rather than expanding inline: an inline list
+ *  balloons the card height and drags the paired sealed card with it. */
+function MetricModal({ visible, player, currentId, filter, onPick, onClose }: {
+  visible: boolean; player: Player | null; currentId: string | null;
   filter?: (m: Metric) => boolean;
   onPick: (id: string) => void; onClose: () => void;
 }) {
   const t = useTheme();
-  if (!pos) return null;
-  const all = METRICS[pos] ?? [];
+  const [info, setInfo] = useState<Metric | null>(null);
+  if (!player) return null;
+  const all = METRICS[player.pos] ?? [];
   const list = filter ? all.filter(filter) : all;
+  const logo = teamLogo(player.team);
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: t.bg }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
-          <Display size={16}>Seal a metric</Display>
-          <Pressable onPress={onClose} hitSlop={10}><Mono size={11} tone="dim">close</Mono></Pressable>
-        </View>
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 8 }}>
-          <Mono size={9.5} tone="faint">How this player scores — and the effect it fires. Hidden from your opponent until the window kicks off.</Mono>
-          {list.map((m) => {
-            const on = m.id === currentId;
-            const fx = t.fx[m.fx] ?? t.you;
-            return (
-              <Pressable
-                key={m.id}
-                onPress={() => onPick(m.id)}
-                style={{
-                  backgroundColor: on ? alpha(t.you, 12) : t.surface,
-                  borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd,
-                  borderLeftWidth: 3, borderLeftColor: fx,
-                  borderRadius: 6, padding: 12, gap: 5,
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: t.text }}>{m.lock ? '🔓 ' : ''}{m.name}</Text>
-                  <View style={{ backgroundColor: alpha(fx, 14), borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1 }}>
+    <Overlay
+      visible={visible}
+      title="Pick how he scores"
+      subtitle={`${player.name.toUpperCase()} · ${player.pos} · SEALED FROM YOUR OPPONENT UNTIL KICKOFF`}
+      titleLeft={logo ? <Image source={{ uri: logo }} style={{ width: 34, height: 34 }} resizeMode="contain" /> : undefined}
+      onClose={onClose}
+    >
+      <ScrollView contentContainerStyle={{ padding: 12, gap: 8 }}>
+        {list.map((m) => {
+          const on = m.id === currentId;
+          const fx = t.fx[m.fx] ?? t.you;
+          return (
+            <Pressable
+              key={m.id}
+              onPress={() => onPick(m.id)}
+              style={{
+                flexDirection: 'row', alignItems: 'center', gap: 10,
+                backgroundColor: on ? alpha(t.you, 12) : t.bg,
+                borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd,
+                borderRadius: 8, padding: 12,
+              }}
+            >
+              <View style={{ flex: 1, gap: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: t.text }}>{m.lock ? '🔓 ' : ''}{m.name}</Text>
+                  <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: fx, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
                     <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: fx }}>{m.tag}</Text>
                   </View>
                   {on && <Mono size={9} tone="you" weight="700">✓ SEALED</Mono>}
                 </View>
-                <Mono size={9.5} tone="mid">{m.hook}</Mono>
-                <Mono size={8.5} tone="faint">{m.sc}</Mono>
+                <Text style={{ fontSize: 12, color: t.mid, lineHeight: 17 }}>{m.hook}</Text>
+              </View>
+              {/* The web's ⓘ opens the full effect text; the scoring line is the
+                  most-asked-for half of it, so it sits behind the same tap. */}
+              <Pressable
+                onPress={() => setInfo(m)}
+                hitSlop={8}
+                style={{ width: 30, height: 30, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Text style={{ fontSize: 13, color: t.dim }}>ⓘ</Text>
               </Pressable>
-            );
-          })}
-          {!list.length && <Mono size={10} tone="dim">No metrics available for this position.</Mono>}
+            </Pressable>
+          );
+        })}
+        {!list.length && <Mono size={10} tone="dim">No metrics available for this position.</Mono>}
+      </ScrollView>
+
+      {/* The full effect text, on demand — too long to sit in every row. */}
+      <Overlay visible={!!info} title={info?.name ?? ''} subtitle={info?.sc} onClose={() => setInfo(null)}>
+        <ScrollView contentContainerStyle={{ padding: 16 }}>
+          <Text style={{ fontSize: 13, color: t.text, lineHeight: 20 }}>{info?.ef ?? info?.hook}</Text>
         </ScrollView>
-      </View>
-    </Modal>
+      </Overlay>
+    </Overlay>
   );
 }

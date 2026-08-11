@@ -11,27 +11,33 @@
 // exactly as they do on web. That is the whole point of the extraction — a rule
 // change lands in one file and both apps get it.
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { WINDOWS, LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
-import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel } from '@drip/core/data/nflSlate';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
+import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, isPreseasonWeek } from '@drip/core/data/nflSlate';
+import { teamLogo } from '@drip/core/data/media';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
-import { powerupById } from '@drip/core/data/powerups';
+import { powerupById, POWERUPS, isAmplifier, ampCapacity } from '@drip/core/data/powerups';
 import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } from '@drip/core/data/premiumClient';
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
-  myBuffs, armBuff, disarmBuff, LIVE_BUFFS,
+  myBuffs, heroSetBuffs, myInventory, consumeInventory, refundInventory,
   myUnlocks, armUnlock, disarmUnlock, myComboQty,
   myWallet, ensureWallet,
   myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium, startCheckout,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
 } from '@drip/core/data/liveApi';
-import type { Player, Pos, WindowId } from '@drip/core/types';
+import type { GameWindow, Player, Pos, WindowId } from '@drip/core/types';
 import { useTheme } from '../theme.native';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
 import { SetupRow } from '../ui/SetupRow';
+import { FELT } from '../ui/cards';
 import { PlayerPicker } from '../ui/PlayerPicker';
+import { RosterPanel } from '../ui/RosterPanel';
+import { ShopModal } from '../ui/ShopModal';
+import { PowerupHand, type HandCard } from '../ui/PowerupHand';
+import { Overlay } from '../ui/Overlay';
 
 // Live pool entries are slug/full/pos; SetupRow wants a Player. Build a light
 // one — the setup board only ever displays name/pos/team.
@@ -43,8 +49,23 @@ function poolToPlayer(p: PoolPlayer): Player {
 const LIVE_UNLOCKS = ['unlock-combo-drip', 'unlock-return', 'unlock-pass-td10'] as const;
 
 interface Slot { win: string; winLabel: string; slot: string; key: string }
-const SLOTS: Slot[] = WINDOWS.flatMap((w) =>
-  Array.from({ length: w.slots }, (_, i) => ({ win: w.id, winLabel: w.label, slot: String(i), key: `${w.id}-${i}` })));
+
+/** A week's slots, from that week's OWN windows.
+ *
+ *  Not a module constant. `WINDOWS` in metrics.ts is the regular-season default
+ *  — TNF / SUN 1PM x3 / SUN 4PM x2 / SNF / MNF — but a week's real windows are
+ *  DERIVED from its actual kickoffs (nflSlate.deriveWeek), and preseason weeks
+ *  cluster into a different shape entirely. Building slots from the static list
+ *  showed the wrong windows AND hid saved picks, because a pick is keyed by
+ *  `game_window` and the ids did not line up. Worse, sealing would have written
+ *  rows under window ids the week does not have. */
+const slotsFor = (wins: GameWindow[]): Slot[] =>
+  wins.flatMap((w) =>
+    Array.from({ length: w.slots }, (_, i) => ({ win: w.id, winLabel: w.label, slot: String(i), key: `${w.id}-${i}` })));
+
+/** The real NFL games a window covers. Thin wrapper so the render path reads
+ *  cleanly; deriveWeek already memoises per week. */
+const slateOf = (week: number, win: WindowId) => gamesInWindow(week, win);
 
 const fmtLock = (iso: string | null) => {
   if (!iso) return 'kickoff';
@@ -58,6 +79,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const t = useTheme();
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
   const [myTeam, setMyTeam] = useState<TeamInfo | null>(null);
+  const [oppTeam, setOppTeam] = useState<TeamInfo | null>(null);
   const [roster, setRoster] = useState<{ leagueId: string; rosterId: number } | null>(null);
   const [controller, setController] = useState<Controller>('human');
   const [aiBusy, setAiBusy] = useState(false);
@@ -66,6 +88,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const [buffs, setBuffs] = useState<Set<string>>(new Set());
   const [unlocks, setUnlocks] = useState<Set<string>>(new Set());
   const [comboQty, setComboQty] = useState(0);
+  const [inventory, setInventory] = useState<Record<string, number>>({});
   const [coins, setCoins] = useState(0);
   const [buffBusy, setBuffBusy] = useState<string | null>(null);
   const [extra, setExtra] = useState(0);
@@ -76,11 +99,20 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
+  const [shopOpen, setShopOpen] = useState(false);
   const [matchPremium, setMatchPremium] = useState(true); // default true = no false locks until we know
   const [weekSel, setWeekSel] = useState<number | null>(null);
   const [winKickIso, setWinKickIso] = useState<Record<string, string>>({});
   const [lockedWins, setLockedWins] = useState<Set<string>>(new Set());
   const [nowTs, setNowTs] = useState(() => Date.now());
+  // Set only after the live slate is installed below — windowsForWeek() reads
+  // that slate, so asking before it lands returns the generic default.
+  const [wins, setWins] = useState<GameWindow[]>([]);
+  // The opponent's ROSTER is public in this game — what stays hidden is which
+  // player they put in which slot. So scouting fetches their pool the same way
+  // it fetches yours, and shows only who COULD appear in a window.
+  const [oppPool, setOppPool] = useState<PoolPlayer[]>([]);
+  const [scoutWin, setScoutWin] = useState<GameWindow | null>(null);
 
   useEffect(() => { ensurePremiumTier(); }, []);
 
@@ -96,12 +128,42 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         if (!m) { setMatchup(null); setState('none'); return; }
         setMatchup(m);
         matchupPremium(m.id).then(setMatchPremium).catch(() => {});
-        matchupTeams(r.leagueId, [r.rosterId]).then((tm) => setMyTeam(tm[r.rosterId] ?? null)).catch(() => {});
+        matchupTeams(r.leagueId, [m.home_roster_id, m.away_roster_id]).then((tm) => {
+          setMyTeam(tm[r.rosterId] ?? null);
+          const oppId = m.home_roster_id === r.rosterId ? m.away_roster_id : m.home_roster_id;
+          setOppTeam(tm[oppId] ?? null);
+        }).catch(() => {});
         const [pl, pk, bf, un, ex, slate, cq] = await Promise.all([
           myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId), myBuffs(m.id), myUnlocks(m.id),
           myExtra(m.id).catch(() => 0), liveSlate(m.week).catch(() => []), myComboQty(m.id, userId).catch(() => 0),
         ]);
-        setRuntimeSlate(m.week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId })));
+        myInventory(m.id).then((inv) => setInventory(inv ?? {})).catch(() => {});
+        {
+          const oppRoster = m.home_roster_id === r.rosterId ? m.away_roster_id : m.home_roster_id;
+          myPool(r.leagueId, m.week, oppRoster).then(setOppPool).catch(() => setOppPool([]));
+        }
+        // `kickoff` is NOT optional here, whatever the type says. deriveWeek()
+        // clusters a week into its real windows from kickoff times, and it
+        // demands a kickoff on EVERY game — one missing and it abandons the
+        // whole derivation for the fixed regular-season five (tnf / early /
+        // late / snf / mnf). Omitting it therefore fails silently and
+        // plausibly: the board renders five sensible-looking windows, and a
+        // preseason week that really has (say) seven Thursday-through-Saturday
+        // clusters loses the ones with no fallback equivalent.
+        //
+        // That is not just a cosmetic mismatch. Picks are stored against the
+        // DERIVED window id, and repeated buckets get a numeric suffix
+        // (tnf, tnf2, tnf3…). Under the fallback the app renders `tnf` and
+        // never `tnf2`, so a pick saved on the web is present, correct and
+        // invisible — which read as "my picks are gone" when only the one pick
+        // that landed in the first cluster survived.
+        setRuntimeSlate(m.week, slate.map((g) => ({
+          away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId,
+          kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined,
+        })));
+        // MUST follow setRuntimeSlate: this is what makes a preseason week show
+        // its own windows instead of the regular-season five.
+        setWins(windowsForWeek(m.week));
         const wkick: Record<string, string> = {};
         for (const g of slate) {
           if (!g.kickoff) continue;
@@ -147,7 +209,8 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
     const iso = winKickIso[winId];
     return iso ? Date.parse(iso) <= nowTs : true;
   };
-  const allLocked = !!matchup && locked && WINDOWS.every((w) => winLocked(w.id));
+  const allLocked = !!matchup && locked && wins.every((w) => winLocked(w.id));
+  const slots = useMemo(() => slotsFor(wins), [wins]);
 
   const week = matchup?.week ?? 0;
   const gateOn = hasSlate(week);
@@ -175,7 +238,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
 
   const slottedInWin = (winId: string, exceptKey: string): Set<string> => {
     const s = new Set<string>();
-    for (const sl of SLOTS.filter((x) => x.win === winId)) {
+    for (const sl of slots.filter((x) => x.win === winId)) {
       if (sl.key === exceptKey) continue;
       const slug = picks[sl.key]?.player_slug;
       if (slug) s.add(slug);
@@ -196,7 +259,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const seal = async () => {
     if (!matchup || saving) return;
     setSaving(true); setErr(null);
-    const rows: PickRow[] = SLOTS
+    const rows: PickRow[] = slots
       .map((s) => {
         const p = picks[s.key];
         return { game_window: s.win, roster_slot: s.slot, player_slug: p?.player_slug ?? null, metric_id: p?.metric_id ?? null };
@@ -222,19 +285,79 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
     startCheckout(kind, roster.leagueId).catch((e) => setErr(e instanceof Error ? e.message : 'Checkout failed.'));
   };
 
-  const toggleBuff = async (id: string) => {
+  /** Arm a card from the hand.
+   *
+   *  This CONSUMES AN OWNED CARD, it does not charge coin — coin was charged
+   *  once, in the shop. The screen previously called `arm_buff`, which charges
+   *  at arm time; with a shop in front of it that billed the same power-up
+   *  twice. This mirrors the web's live board (store.armBuff →
+   *  consumeAndApply + heroSetBuffs).
+   *
+   *  Amplifier capacity is enforced here as well as server-side, so an
+   *  impossible arm is refused before it spends a card. */
+  const armFromHand = async (id: string) => {
     if (!matchup || locked || buffBusy) return;
-    const armed = buffs.has(id);
-    if (!armed && puLocked(id)) { markGatedAttempt('powerup:' + id); setErr(upgradeMsg); return; }
-    if (!armed && coins < priceOf(id)) { setErr(insufficientMsg(id)); return; }
+    if (buffs.has(id)) return;
+    const armed = new Set(buffs);
+    if (id === 'amp-3' && !armed.has('amp-2')) { setErr('Third Amp needs Second Amp armed first.'); return; }
+    if (isAmplifier(id) && [...armed].filter(isAmplifier).length >= ampCapacity(armed)) {
+      setErr('Amplifier capacity reached — arm Second/Third Amp to raise it.'); return;
+    }
+    if ((inventory[id] ?? 0) <= 0) { setErr('You don’t own that card — buy it in the shop.'); return; }
+
     setBuffBusy(id); setErr(null);
     try {
-      const r = armed ? await disarmBuff(matchup.id, id) : await armBuff(matchup.id, id);
-      if (r.ok && r.buffs) { setBuffs(new Set(r.buffs)); refreshCoins(); }
-      else setErr(r.error === 'insufficient' ? insufficientMsg(id) : (r.detail ?? r.error ?? 'Could not update power-ups.'));
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Could not update power-ups.'); }
-    finally { setBuffBusy(null); }
+      const c = await consumeInventory(matchup.id, id);
+      if (!c?.ok) { setErr('Could not play that card.'); return; }
+      const next = [...armed, id];
+      const r = await heroSetBuffs(matchup.id, next);
+      if (r?.ok) {
+        setBuffs(new Set(next));
+        setInventory((inv) => ({ ...inv, [id]: Math.max(0, (inv[id] ?? 1) - 1) }));
+      } else {
+        // Persisting failed — hand the card back rather than silently eating it.
+        await refundInventory(matchup.id, id).catch(() => {});
+        setErr(r?.error ?? 'Could not arm that power-up.');
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not arm that power-up.');
+    } finally { setBuffBusy(null); }
   };
+
+  const disarmFromHand = async (id: string) => {
+    if (!matchup || locked || buffBusy) return;
+    if (!buffs.has(id)) return;
+    setBuffBusy(id); setErr(null);
+    try {
+      const next = [...buffs].filter((b) => b !== id);
+      const r = await heroSetBuffs(matchup.id, next);
+      if (r?.ok) {
+        await refundInventory(matchup.id, id).catch(() => {});
+        setBuffs(new Set(next));
+        setInventory((inv) => ({ ...inv, [id]: (inv[id] ?? 0) + 1 }));
+      } else setErr(r?.error ?? 'Could not disarm that power-up.');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not disarm that power-up.');
+    } finally { setBuffBusy(null); }
+  };
+
+  /** The hand: everything owned, plus anything currently armed (an armed card
+   *  has left the inventory, so it would otherwise vanish from view). */
+  const hand: HandCard[] = POWERUPS
+    .filter((p) => (inventory[p.id] ?? 0) > 0 || buffs.has(p.id))
+    .map((p) => {
+      const armed = buffs.has(p.id);
+      const pre = p.timing === 'pre';
+      return {
+        id: p.id,
+        qty: inventory[p.id] ?? 0,
+        armed,
+        usable: !locked && pre,
+        note: locked ? 'The week has started — arms are closed.'
+          : pre ? undefined
+          : 'Real-time card — playable from the live board once a window kicks off.',
+      };
+    });
 
   const toggleUnlock = async (id: string) => {
     if (!matchup || locked || buffBusy) return;
@@ -333,26 +456,48 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
     );
   }
 
-  const filled = SLOTS.filter((s) => picks[s.key]?.player_slug && picks[s.key]?.metric_id).length;
+  const filled = slots.filter((s) => picks[s.key]?.player_slug && picks[s.key]?.metric_id).length;
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
-      {/* Header */}
+    <View style={{ flex: 1 }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: t.bg }}
+      // Bottom padding clears the hand, which is pinned over this list rather
+      // than scrolling with it — otherwise the SEAL button sits under the cards.
+      contentContainerStyle={{ padding: 12, paddingBottom: hand.length ? 150 : 40 }}
+    >
+      <RosterPanel
+        title="Your roster"
+        players={pool.map(poolToPlayer)}
+        wins={wins}
+        // Same resolver the slate gating uses, so the grouping here and the
+        // eligibility counts on each window can never disagree.
+        windowOf={(id) => winBySlug[id] ?? null}
+        accent={t.you}
+      />
+
+      {/* Header — mirrors the web's title block: who is playing, how much of
+          the lineup is set, and the week you are looking at. */}
       <Card style={{ marginBottom: 12 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            {!!myTeam?.team_name && <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: '700', color: t.text }}>{myTeam.team_name}</Text>}
-            <Display size={18}>{weekLabel(matchup!.week)} lineup</Display>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
+            {isPreseasonWeek(matchup!.week) && (
+              <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 }}>
+                <Mono size={9} tone="you" weight="700" track={0.08}>🏈 PRESEASON</Mono>
+              </View>
+            )}
           </View>
           <WeekNav />
         </View>
 
-        <View style={{ alignSelf: 'flex-start', marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: allLocked ? t.opp : t.you, borderRadius: 4, paddingHorizontal: 7, paddingVertical: 3 }}>
-          <Mono size={9} tone={allLocked ? 'opp' : 'you'}>{allLocked ? 'LOCKED' : locked ? 'LOCKS BY WINDOW' : `FIRST LOCK ${fmtLock(matchup!.lock_at)}`}</Mono>
-        </View>
+        <Mono size={9.5} tone="faint" track={0.12} style={{ marginTop: 12 }}>SLOTS SET {filled}/{slots.length}</Mono>
+        <Display size={24} style={{ marginTop: 2 }}>Set Your Windows</Display>
+        <Text numberOfLines={1} style={{ fontSize: 13, color: t.dim, marginTop: 2 }}>
+          {myTeam?.team_name ?? 'You'} vs {oppTeam?.team_name ?? 'Opponent'}
+        </Text>
 
-        <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>
-          Pick a player + a hidden metric per slot. Each window locks at its own kickoff — later windows stay editable all weekend, and your opponent can’t see a pick until its window kicks off. {filled}/{SLOTS.length} set.
+        <Mono size={9.5} tone="faint" style={{ marginTop: 10 }}>
+          Pick a player + a hidden metric per slot. Each window locks at its own kickoff — later windows stay editable all weekend, and your opponent can’t see a pick until its window kicks off.
           {gateOn ? '\nEach slot only takes players whose real NFL team plays in that window. Players on a bye can’t be slotted.' : ''}
         </Mono>
 
@@ -370,9 +515,16 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
       {/* Power-ups */}
       {controller !== 'ai' && (
         <Card style={{ marginBottom: 12 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <Display size={14}>Power-ups</Display>
-            <Mono size={10} tone="you" weight="700">◆ {Math.round(coins)} coin</Mono>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <Display size={14} style={{ flex: 1 }}>Power-ups</Display>
+            <Mono size={10} tone="you" weight="700">◆ {Math.round(coins)}</Mono>
+            <Pressable
+              onPress={() => setShopOpen(true)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.bg, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}
+            >
+              <Text style={{ fontSize: 12 }}>🛒</Text>
+              <Text style={{ fontFamily: 'System', fontSize: 11, fontWeight: '700', color: t.text }}>SHOP</Text>
+            </Pressable>
           </View>
           <Mono size={9.5} tone="faint" style={{ marginTop: 6 }}>Arm before kickoff — each buffs your whole lineup all week, spent from your drip coin. Locks at kickoff.</Mono>
 
@@ -388,27 +540,13 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
             </View>
           )}
 
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-            {LIVE_BUFFS.map((id) => {
-              const pu = powerupById(id);
-              const on = buffs.has(id);
-              const afford = on || coins >= priceOf(id);
-              return (
-                <Chip
-                  key={id}
-                  label={`${pu?.icon ?? ''} ${pu?.name ?? id} ${on ? '✓' : puLocked(id) ? '🔒' : `◆${priceOf(id)}`}`}
-                  on={on}
-                  disabled={locked || !!buffBusy || !afford}
-                  dim={buffBusy === id}
-                  onPress={() => toggleBuff(id)}
-                />
-              );
-            })}
-          </View>
+          <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>
+            Buy cards in the shop; they land in your hand at the bottom of the screen. Arming one plays the card — coin is charged once, at purchase.
+          </Mono>
 
           <Mono size={9.5} weight="700" track={0.06} style={{ marginTop: 14 }}>METRIC UNLOCKS</Mono>
           <Mono size={9} tone="faint">Arm one to make its locked metric pickable (🔓) in the slots below.</Mono>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }} style={{ marginTop: 8 }}>
             {LIVE_UNLOCKS.map((id) => {
               const pu = powerupById(id);
               const combo = id === 'unlock-combo-drip';
@@ -431,36 +569,63 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
                 </View>
               );
             })}
-          </View>
+          </ScrollView>
         </Card>
       )}
 
       {/* Windows */}
-      {WINDOWS.map((w) => {
-        const winSlots = SLOTS.filter((s) => s.win === w.id);
+      {wins.map((w) => {
+        const winSlots = slots.filter((s) => s.win === w.id);
         const elig = gateOn ? pool.filter((pl) => winBySlug[pl.slug] === 'any' || winBySlug[pl.slug] === w.id).length : pool.length;
         const setN = winSlots.filter((s) => picks[s.key]?.player_slug && picks[s.key]?.metric_id).length;
         const wLocked = winLocked(w.id);
         return (
           <Card key={w.id} style={{ marginBottom: 10, opacity: wLocked ? 0.75 : 1 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-              <Mono size={10} weight="700" track={0.12}>{w.label} · {w.sub}</Mono>
-              <View style={{ flexDirection: 'row', gap: 10, alignItems: 'baseline' }}>
-                {gateOn && <Mono size={9} tone={elig ? 'faint' : 'opp'}>{elig} eligible</Mono>}
-                <Mono size={9} weight="700" tone={setN === winSlots.length ? 'you' : 'faint'}>{setN}/{winSlots.length} SET</Mono>
-                <Mono size={9} weight="700" tone={wLocked ? 'opp' : 'faint'}>
-                  {wLocked ? '🔒 LOCKED' : winKickIso[w.id] ? `locks ${fmtLock(winKickIso[w.id])}` : 'locks at kickoff'}
-                </Mono>
-              </View>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: t.text }}>{w.label}</Text>
+              <Mono size={10} tone="dim" track={0.1}>{w.sub.toUpperCase()}</Mono>
+              <Mono size={10} tone="mid">{windowDateLabel(week, w.id)}</Mono>
+              <Mono size={10} tone="faint">{windowTimeLabel(week, w.id)}</Mono>
             </View>
 
-            <View style={{ gap: 8 }}>
-              {winSlots.map((s) => {
+            {/* Slate strip — which real games this window covers. The crests make
+                a window scannable at a glance the way a list of abbreviations
+                does not. */}
+            {slateOf(week, w.id).length > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 7, flexWrap: 'wrap' }}>
+                {slateOf(week, w.id).slice(0, 10).flatMap((g) => [g.away, g.home]).map((abbr, i) => {
+                  const uri = teamLogo(abbr);
+                  return uri
+                    ? <Image key={`${abbr}-${i}`} source={{ uri }} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                    : <Mono key={`${abbr}-${i}`} size={8} tone="faint">{abbr}</Mono>;
+                })}
+                <Mono size={9} tone="faint" track={0.08} style={{ marginLeft: 4 }}>
+                  SLATE · {slateOf(week, w.id).length} GAME{slateOf(week, w.id).length === 1 ? '' : 'S'}
+                </Mono>
+              </View>
+            )}
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+              <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: wLocked ? t.opp : t.you, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}>
+                <Mono size={9} weight="700" tone={wLocked ? 'opp' : 'you'} track={0.08}>{wLocked ? 'LOCKED' : 'SETUP'}</Mono>
+              </View>
+              <Mono size={9.5} tone={wLocked ? 'opp' : 'warn'} weight="700">
+                {wLocked ? '🔒 locked' : winKickIso[w.id] ? `🔒 locks ${fmtLock(winKickIso[w.id])}` : '🔒 locks at kickoff'}
+              </Mono>
+              <Mono size={9.5} weight="700" tone={setN === winSlots.length ? 'you' : 'faint'}>{setN}/{winSlots.length} SET</Mono>
+              {gateOn && <Mono size={9} tone={elig ? 'faint' : 'opp'}>{elig} eligible</Mono>}
+            </View>
+
+            {/* Felt under the pair, so the cards read as dealt onto a table
+                rather than floating on the app background. */}
+            <View style={{ gap: 10, backgroundColor: FELT, borderRadius: 8, padding: 10 }}>
+              {winSlots.map((s, si) => {
                 const p = picks[s.key];
                 const pick = p?.player_slug ? { playerId: p.player_slug, metricId: p.metric_id ?? null } : undefined;
                 return (
                   <SetupRow
                     key={s.key}
+                    idx={si}
                     pick={pick}
                     resolve={(id) => playersBySlug[id]}
                     lockPlayer={wLocked}
@@ -470,6 +635,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
                     onOpenPicker={() => { if (!wLocked) setPickerSlot({ key: s.key, win: w.id as WindowId }); }}
                     onPickMetric={(mid) => { if (!wLocked) setSlot(s.key, { metric_id: mid }); }}
                     onClearSlot={() => { if (!wLocked) setSlot(s.key, { player_slug: null, metric_id: null }); }}
+                    onScout={oppPool.length ? () => setScoutWin(w) : undefined}
                   />
                 );
               })}
@@ -535,6 +701,54 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
 
       <View style={{ alignItems: 'center', marginTop: 14 }}><LinkButton label="← back" onPress={onBack} /></View>
 
+      {/* Scout: who the opponent COULD field in this window. Never who they
+          actually slotted — that stays sealed until the window kicks off. */}
+      <Overlay
+        visible={!!scoutWin}
+        title={`Scout · ${scoutWin?.label ?? ''}`}
+        subtitle={`${(oppTeam?.team_name ?? 'OPPONENT').toUpperCase()} · WHO THEY COULD FIELD — NOT WHO THEY PLAYED`}
+        onClose={() => setScoutWin(null)}
+      >
+        <ScrollView contentContainerStyle={{ padding: 12, gap: 6 }}>
+          {(() => {
+            const win = scoutWin?.id;
+            const list = !win ? [] : oppPool
+              .filter((op) => {
+                if (!gateOn) return true;
+                const tm = slugMeta(op.slug).team;
+                const w = tm ? windowForTeam(week, tm) : 'any';
+                return w === 'any' || w === win;
+              })
+              .sort((a, b) => a.pos.localeCompare(b.pos) || a.full.localeCompare(b.full));
+            if (!list.length) return <Mono size={10.5} tone="dim">Nobody on their roster plays in this window.</Mono>;
+            return list.map((op) => (
+              <View key={op.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
+                <View style={{ backgroundColor: (t.pos[op.pos as keyof typeof t.pos] ?? { bg: t.sh }).bg, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1 }}>
+                  <Text style={{ fontFamily: 'System', fontSize: 9, fontWeight: '700', color: (t.pos[op.pos as keyof typeof t.pos] ?? { fg: t.dim }).fg }}>{op.pos}</Text>
+                </View>
+                <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: t.text }}>{op.full}</Text>
+                <Mono size={9} tone="faint">{slugMeta(op.slug).team}</Mono>
+              </View>
+            ));
+          })()}
+        </ScrollView>
+      </Overlay>
+
+      {!!matchup && (
+        <ShopModal
+          visible={shopOpen}
+          matchupId={matchup.id}
+          balance={coins}
+          // Preseason weeks are practice: the server charges nothing, so the
+          // shop must not imply the season wallet moves.
+          practice={isPreseasonWeek(matchup.week)}
+          onClose={() => setShopOpen(false)}
+          // Trust the server's balance rather than deducting locally — on a
+          // practice week nothing is actually charged.
+          onChanged={(bal) => setCoins(bal)}
+        />
+      )}
+
       {pickerSlot && (() => {
         const cur = picks[pickerSlot.key]?.player_slug ?? undefined;
         const slotted = slottedInWin(pickerSlot.win, pickerSlot.key);
@@ -546,7 +760,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
             visible
             players={players}
             currentId={cur}
-            subtitle="YOUR PLAYERS WHOSE GAME FALLS IN THIS WINDOW"
+            windowLabel={wins.find((w) => w.id === pickerSlot.win)?.label}
             gated={(p) => !matchPremium && !isFreePosition(p.pos)}
             onGated={(p) => {
               markGatedAttempt('position:' + p.pos);
@@ -560,5 +774,13 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         );
       })()}
     </ScrollView>
+
+    <PowerupHand
+      cards={hand}
+      busyId={buffBusy}
+      onArm={armFromHand}
+      onDisarm={disarmFromHand}
+    />
+    </View>
   );
 }

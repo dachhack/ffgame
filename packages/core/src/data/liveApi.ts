@@ -3,6 +3,7 @@
 // redeem_invite RPC (migration 0002), never a direct membership write.
 import { getSupabase } from './supabaseClient';
 import { platform, storeGet } from '../platform';
+import { slugMeta } from './slugMeta';
 import { resolveUser } from './sleeper';
 import { PRESEASON_BOARD_WEEKS } from './nflSlate';
 import type { Session } from '@supabase/supabase-js';
@@ -90,6 +91,70 @@ export async function verifyEmailOtp(email: string, token: string): Promise<void
 export async function signInWithProvider(provider: 'google' | 'apple'): Promise<void> {
   const { error } = await (await client()).auth.signInWithOAuth({ provider, options: { redirectTo: redirectTo() } });
   if (error) throw error;
+}
+
+/** OAuth step 1 for hosts with no page to navigate (native).
+ *
+ *  `signInWithProvider` above works by redirecting the browser; an app has to
+ *  open the provider in an in-app browser and handle the return itself, so it
+ *  needs the URL rather than a navigation. `skipBrowserRedirect` is what hands
+ *  it back.
+ *
+ *  The provider still sees SUPABASE's callback URL, not ours — Supabase then
+ *  redirects on to `redirectTo()`. So enabling this needs no new client in the
+ *  Google console; it needs the app's deep link added to Supabase → Auth → URL
+ *  Configuration → Redirect URLs. */
+export async function oauthAuthorizeUrl(provider: 'google' | 'apple'): Promise<string> {
+  const { data, error } = await (await client()).auth.signInWithOAuth({
+    provider,
+    options: { redirectTo: redirectTo(), skipBrowserRedirect: true },
+  });
+  if (error) throw error;
+  if (!data?.url) throw new Error('The provider didn’t return a sign-in URL.');
+  return data.url;
+}
+
+/** OAuth step 2: turn the callback URL into a session.
+ *
+ *  Handles BOTH shapes on purpose rather than pinning a flow. PKCE comes back
+ *  as `?code=…` and is exchanged; the implicit flow comes back with the tokens
+ *  in the fragment and is set directly. Which one arrives depends on the
+ *  client's `flowType`, and hard-coding either here would break the moment that
+ *  default changes under us.
+ *
+ *  Parsed with regex, not `new URL()`: React Native's URL polyfill is partial
+ *  and unreliable on custom schemes like `dripfantasy://`, which is exactly
+ *  what this receives. */
+export async function completeOAuthCallback(callbackUrl: string): Promise<void> {
+  const grab = (re: RegExp): string | null => {
+    const m = re.exec(callbackUrl);
+    return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : null;
+  };
+
+  // The provider can decline before any token exists — surface its reason
+  // rather than a generic "no session".
+  const errDesc = grab(/[?#&]error_description=([^&]+)/);
+  const errCode = grab(/[?#&]error(?:_code)?=([^&]+)/);
+  if (errDesc || errCode) throw new Error(errDesc || errCode || 'Sign-in was declined.');
+
+  const sb = await client();
+
+  const code = grab(/[?&]code=([^&#]+)/);
+  if (code) {
+    const { error } = await sb.auth.exchangeCodeForSession(code);
+    if (error) throw error;
+    return;
+  }
+
+  const access_token = grab(/[#&]access_token=([^&]+)/);
+  const refresh_token = grab(/[#&]refresh_token=([^&]+)/);
+  if (access_token && refresh_token) {
+    const { error } = await sb.auth.setSession({ access_token, refresh_token });
+    if (error) throw error;
+    return;
+  }
+
+  throw new Error('Sign-in didn’t return a session. Please try again.');
 }
 
 // ── Password auth ───────────────────────────────────────────────────────────────
@@ -396,7 +461,19 @@ export async function leagueResults(leagueId: string): Promise<MatchupResult[]> 
 export async function myPool(leagueId: string, week: number, rosterId: number): Promise<PoolPlayer[]> {
   const { data } = await (await client()).from('sleeper_lineup').select('starters_json')
     .eq('league_id', leagueId).eq('week', week).eq('roster_id', rosterId).maybeSingle();
-  return ((data?.starters_json) ?? []) as PoolPlayer[];
+  // `starters_json` is a JSON blob written by the sync, not a typed column, so
+  // `as PoolPlayer[]` asserts a shape nobody enforces. An entry without a slug
+  // is unusable — it cannot be slate-gated, sealed or scored — and passing it
+  // through only moves the failure into whichever screen touches it first.
+  // Drop them here, once, rather than guarding at every call site.
+  //
+  // The slug is required — an entry without one is dropped. `full` and `pos`
+  // are only ever displayed, so they get defaults rather than costing the user
+  // a pickable player: a nameless entry is still a legitimate pick.
+  const raw = ((data?.starters_json) ?? []) as Partial<PoolPlayer>[];
+  return raw
+    .filter((p): p is Partial<PoolPlayer> => !!p && typeof p.slug === 'string' && p.slug.length > 0)
+    .map((p) => ({ slug: p.slug!, full: p.full || p.slug!, pos: p.pos || slugMeta(p.slug!).pos }));
 }
 
 /** The caller's saved picks for a matchup (locked = that window has sealed). */

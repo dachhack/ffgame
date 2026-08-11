@@ -68,6 +68,23 @@ export function hasGameFeed(week: number): boolean {
   return REAL_WEEKS.has(week);
 }
 
+/** Install a week's baked game feeds from data the host already holds.
+ *
+ *  The twin of realPbp's `installRealWeek`, and for the same reason:
+ *  `loadGameFeedWeek` below reaches its JSON through `platform().assetUrl`,
+ *  which assumes a host serving files over HTTP. The native app has no origin
+ *  and `assetUrl` throws there by design; its copy arrives as a Metro
+ *  `require()` of a bundled JSON, already parsed.
+ *
+ *  Fills the BAKED cache, not the live overlay — a live week must stay
+ *  exclusive, so `setLiveGameFeed` remains the only way in for worker rows. */
+export function installGameFeedWeek(week: number, feed: WeekGameFeed): void {
+  if (!feed || typeof feed !== 'object' || !feed.games || !feed.teams) {
+    throw new Error(`installGameFeedWeek(${week}): expected a WeekGameFeed with games + teams`);
+  }
+  cache.set(week, feed);
+}
+
 /** Fetch + cache a week's game feeds (no-op for non-real weeks / already loaded).
  *  A live-overlaid week never fetches baked data — the overlay is exclusive. */
 export function loadGameFeedWeek(week: number): Promise<void> {

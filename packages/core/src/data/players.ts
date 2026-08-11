@@ -127,8 +127,12 @@ export function teamForName(fullName: string): string {
 
 /** "Christian McCaffrey" -> "C. McCaffrey" */
 export function shortName(full: string): string {
-  const parts = full.split(' ');
-  if (parts.length < 2) return full;
+  // Guarded because this formats names that arrive from provider syncs, not
+  // from our own tables — an absent or single-token name must render as itself
+  // rather than throw on `parts[0][0]`.
+  if (!full) return '';
+  const parts = full.split(' ').filter(Boolean);
+  if (parts.length < 2 || !parts[0]) return full;
   const last = parts.slice(1).join(' ');
   return `${parts[0][0]}. ${last}`;
 }
