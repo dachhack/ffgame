@@ -207,10 +207,14 @@ App.tsx                brand header, session gate, picks/board tabs
 src/platform.native.ts MMKV / expo-constants / Linking → core's platform contract
 src/theme.native.ts    core's design tokens for RN + the color-mix replacement
 src/intl-polyfill.ts   formatjs — Hermes ships no IANA zones; see the gotcha below
-src/ui/cards.tsx       the card table: faces, backs, stock texture, deal-in
+src/ui/cards.tsx       the card table: faces, backs, stock texture
+src/ui/animations.tsx  the moments: flip, nuke, hot, live pulse, deal, wobble
+src/ui/FieldView.tsx   the drive chart (react-native-svg), web geometry verbatim
+src/ui/PlayLog.tsx     two-column play-by-play with running banks on the edges
 src/ui/                Overlay, SetupRow, PlayerPicker, ShopModal, RosterPanel,
                        PowerupHand, ErrorBoundary, themed primitives
-src/screens/           SignIn, Leagues, LivePicks, LiveBoard
+src/screens/           SignIn, Leagues, LivePicks, LiveBoard, DemoBoard
+assets/pbp, gamefeed   one baked 2025 week, bundled for the replay demo
 plugins/               Expo config plugins — android/ is generated, so anything
                        the native build needs lives here or it gets erased
 ```
@@ -219,12 +223,6 @@ plugins/               Expo config plugins — android/ is generated, so anythin
 
 In rough order of how much they'll cost:
 
-- **`fvdraw`, the field-view stroke draw.** The one animation with no port. It
-  animates `stroke-dashoffset` on an SVG path, and there is no field view here
-  to draw on — no `react-native-svg`, no field surface on any ported screen. It
-  waits for its subject. Everything else (reveal flip, nuke burst, hot glow,
-  live pulse, deal-in, wobble, score tick) is in `src/ui/animations.tsx`, and
-  `react-native-reanimated` turned out not to be needed — see that file's header.
 - **Extra-slot picks.** Buying/selling works; filling uses three stacked
   `<select>`s on web, which needs a purpose-built native sheet.
 - **Fonts.** Space Grotesk needs `expo-font`; headings currently fall back to
