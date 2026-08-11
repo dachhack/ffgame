@@ -9,13 +9,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { getSession, onAuth, signOut } from '@drip/core/data/liveApi';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { THEMES, ThemeCtx, loadTheme, isLight, MONO } from './src/theme.native';
 import { Leagues } from './src/screens/Leagues';
 import { LivePicks } from './src/screens/LivePicks';
+import { LiveBoard } from './src/screens/LiveBoard';
 import { SignIn } from './src/screens/SignIn';
 import { ErrorBoundary } from './src/ui/ErrorBoundary';
 
@@ -27,6 +28,7 @@ export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState<OpenLeague | null>(null);
+  const [view, setView] = useState<'picks' | 'board'>('picks');
 
   useEffect(() => {
     if (!liveConfigured()) { setReady(true); return; }
@@ -80,18 +82,52 @@ export function App() {
         </View>
 
         {open ? (
-          <LivePicks
-            // Remounts when you switch leagues, so no state leaks between them.
-            key={`${open.leagueId}-${open.rosterId}`}
-            userId={session.user.id}
-            leagueId={open.leagueId}
-            rosterId={open.rosterId}
-            onBack={() => setOpen(null)}
-          />
+          <View style={{ flex: 1 }}>
+            {/* Picks vs board. Two tabs, so a segmented control rather than a
+                navigator — and both keep their own data, so switching is free. */}
+            <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingBottom: 8 }}>
+              {(['picks', 'board'] as const).map((tab) => {
+                const on = view === tab;
+                return (
+                  <Pressable
+                    key={tab}
+                    onPress={() => setView(tab)}
+                    style={{
+                      flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 6,
+                      backgroundColor: on ? theme.you : theme.surface,
+                      borderWidth: StyleSheet.hairlineWidth, borderColor: on ? theme.you : theme.bd,
+                    }}
+                  >
+                    <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', letterSpacing: 0.7, color: on ? theme.onAccent : theme.dim }}>
+                      {tab === 'picks' ? 'SET LINEUP' : 'LIVE BOARD'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {view === 'picks' ? (
+              <LivePicks
+                // Remounts when you switch leagues, so no state leaks between them.
+                key={`picks-${open.leagueId}-${open.rosterId}`}
+                userId={session.user.id}
+                leagueId={open.leagueId}
+                rosterId={open.rosterId}
+                onBack={() => setOpen(null)}
+              />
+            ) : (
+              <LiveBoard
+                key={`board-${open.leagueId}-${open.rosterId}`}
+                userId={session.user.id}
+                leagueId={open.leagueId}
+                rosterId={open.rosterId}
+                onBack={() => setOpen(null)}
+              />
+            )}
+          </View>
         ) : (
           <Leagues
             userId={session.user.id}
-            onOpen={(leagueId, rosterId, name) => setOpen({ leagueId, rosterId, name })}
+            onOpen={(leagueId, rosterId, name) => { setView('picks'); setOpen({ leagueId, rosterId, name }); }}
           />
         )}
       </View>
