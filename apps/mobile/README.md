@@ -78,11 +78,41 @@ different APKs on one day without bumping the version.
 ANDROID_VERSION_CODE=101 npx expo prebuild --platform android --clean
 ```
 
-To confirm what a built APK is actually signed with:
+To confirm what a built APK is actually signed with — worth doing once after any
+change to the plugin, since a build that quietly fell back to the debug key
+looks exactly like a build that didn't:
 
 ```bash
-apksigner verify --print-certs android/app/build/outputs/apk/release/app-release.apk
+$ANDROID_HOME/build-tools/36.0.0/apksigner verify --print-certs \
+  android/app/build/outputs/apk/release/app-release.apk
+# Signer #1 certificate DN: CN=Drip Fantasy Playtest, …
 ```
+
+### Building the APK by hand
+
+```bash
+export ANDROID_HOME=/path/to/android-sdk   # prebuild --clean deletes
+                                           # android/local.properties, so
+                                           # gradlew can't find the SDK without it
+cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+```
+
+**Pass the architecture.** Without it Gradle emits a universal APK carrying all
+four ABIs — 75 MiB against 28 MiB for arm64 alone, and the other three are dead
+weight for every phone shipped in the last decade. Drop the flag only when
+something genuinely needs x86 (an emulator image, an old device).
+
+And verify the JS bundle, not just that the build succeeded:
+
+```bash
+unzip -p android/app/build/outputs/apk/release/app-release.apk \
+  assets/index.android.bundle | sha256sum
+```
+
+Two byte-identical APKs from two different source trees have shipped from this
+repo before. `withCoreBundleInput` is the fix and this is the check that the fix
+is still working — an unchanged hash after a change to `packages/core` means the
+bundle is stale, not that the build was fast.
 
 ### iOS
 
