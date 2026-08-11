@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { weekLabel, windowsForWeek } from '@drip/core/data/nflSlate';
 import { metricById } from '@drip/core/data/metrics';
+import { slugMeta } from '@drip/core/data/slugMeta';
 import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 import {
   myRoster, myMatchup, getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup,
@@ -25,8 +26,9 @@ import {
   type LiveMatchup, type WindowScore, type RevealedPick, type PoolPlayer, type TeamInfo,
 } from '@drip/core/data/liveApi';
 import type { Pos } from '@drip/core/types';
-import { useTheme, MONO } from '../theme.native';
-import { Card, Display, LinkButton, Mono, PosPill } from '../ui/prims';
+import { useTheme } from '../theme.native';
+import { Card, Display, LinkButton, Mono } from '../ui/prims';
+import { CardFace, CardBack, FELT } from '../ui/cards';
 
 const round1 = (n: number) => Math.round(Number(n) * 10) / 10;
 
@@ -151,7 +153,6 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: {
   }
 
   const status = matchup!.status;
-  const locked = status !== 'scheduled';
   const mine = picks.filter((p) => p.app_user_id === userId);
   const theirs = picks.filter((p) => p.app_user_id !== userId);
   const myCoin = youAreHome ? matchup!.home_coin : matchup!.away_coin;
@@ -222,8 +223,10 @@ export function LiveBoard({ userId, leagueId, rosterId, onBack }: {
         </Card>
       )}
 
-      <Lineup title="Your lineup" picks={mine} pool={pool} scores={scores} side={youAreHome ? 'home' : 'away'} reveal winLabel={winLabel} />
-      <Lineup title={locked ? 'Opponent lineup' : 'Opponent — sealed'} picks={theirs} pool={pool} scores={scores} side={youAreHome ? 'away' : 'home'} reveal={locked} winLabel={winLabel} />
+      <Duel
+        mine={mine} theirs={theirs} pool={pool} scores={scores}
+        youAreHome={youAreHome} status={status} week={week} winLabel={winLabel}
+      />
 
       <View style={{ alignItems: 'center', marginTop: 14 }}><LinkButton label="← back" onPress={onBack} /></View>
     </ScrollView>
@@ -243,48 +246,104 @@ function Big({ label, value, color, team }: { label: string; value: number; colo
   );
 }
 
-/** One side's sealed picks, with each slot's banked score when the worker has
- *  published one. A missing slot_scores row is not an error — only kicked-off
- *  windows carry rows, so it just means "no points yet". */
-function Lineup({ title, picks, pool, scores, side, reveal, winLabel }: {
-  title: string;
-  picks: RevealedPick[];
+/** The card duel: one pod per game window, your cards paired against theirs.
+ *
+ *  The web lays this out as three columns (you | score | them). A phone is too
+ *  narrow for that, so pairs stack vertically instead — the same pairing the
+ *  setup board uses, which also keeps the two screens visually consistent.
+ *
+ *  The sealed-back count MIRRORS YOUR OWN card count, never the opponent's real
+ *  one. Showing their true count before reveal would leak how many slots they
+ *  filled in a window, which is information the game deliberately withholds. */
+function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel }: {
+  mine: RevealedPick[];
+  theirs: RevealedPick[];
   pool: Record<string, PoolPlayer>;
   scores: WindowScore[];
-  side: 'home' | 'away';
-  reveal: boolean;
+  youAreHome: boolean;
+  status: string;
+  week: number;
   winLabel: (id: string) => string;
 }) {
   const t = useTheme();
-  if (picks.length === 0 && reveal) return null;
+  const youSide = youAreHome ? 'home' : 'away';
+  const oppSide = youAreHome ? 'away' : 'home';
+
+  // Ordered by the week's OWN windows; anything unrecognised sorts to the end
+  // rather than disappearing.
+  const order = windowsForWeek(week).map((w) => String(w.id));
+  const wins = [...new Set([...mine, ...theirs].map((p) => p.game_window).concat(scores.map((s) => s.game_window)))]
+    .sort((a, b) => {
+      const ia = order.indexOf(a); const ib = order.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.localeCompare(b);
+    });
+
+  const bankOf = (p: RevealedPick, side: 'home' | 'away') => {
+    const row = scores.find((x) => x.game_window === p.game_window)?.slot_scores
+      ?.find((r) => r.side === side && (r.slot === p.roster_slot || (!!p.player_slug && r.slug === p.player_slug)));
+    return row ? round1(Number(row.score)) : null;
+  };
+
+  const faceFor = (p: RevealedPick, side: 'home' | 'away', accent: string) => {
+    const player = p.player_slug ? pool[p.player_slug] : null;
+    if (!player) return <CardBack key={`${p.game_window}-${p.roster_slot}-${side}`} />;
+    const metric = metricById(player.pos as Pos, p.metric_id);
+    return (
+      <CardFace
+        key={`${p.game_window}-${p.roster_slot}-${side}`}
+        slug={player.slug} name={player.full} pos={player.pos} team={slugTeam(player)}
+        metric={metric?.name ?? p.metric_id ?? null}
+        bank={bankOf(p, side)}
+        accent={accent}
+      />
+    );
+  };
 
   return (
-    <Card style={{ marginBottom: 10 }}>
-      <Mono size={10} weight="700" track={0.12} style={{ marginBottom: 8 }}>{title.toUpperCase()}</Mono>
-      {!reveal ? (
-        <Mono size={10.5} tone="faint">Hidden until kickoff.</Mono>
-      ) : picks.length === 0 ? (
-        <Mono size={10.5} tone="faint">No sealed picks (plays their Sleeper lineup).</Mono>
-      ) : (
-        [...picks].sort((a, b) => a.game_window.localeCompare(b.game_window)).map((p, i) => {
-          const player = p.player_slug ? pool[p.player_slug] : null;
-          const metric = player ? metricById(player.pos as Pos, p.metric_id) : null;
-          const row = scores.find((x) => x.game_window === p.game_window)?.slot_scores
-            ?.find((r) => r.side === side && (r.slot === p.roster_slot || (!!p.player_slug && r.slug === p.player_slug)));
-          return (
-            <View key={`${p.game_window}-${p.roster_slot}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
-              {!!player && <PosPill pos={player.pos} />}
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text numberOfLines={1} style={{ fontSize: 12.5, color: t.text }}>{player?.full ?? p.player_slug ?? '—'}</Text>
-                <Mono size={9} tone="faint">{winLabel(p.game_window)} · {metric?.name ?? p.metric_id ?? '—'}</Mono>
-              </View>
-              {row != null && (
-                <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: t.text }}>{round1(Number(row.score))}</Text>
-              )}
+    <>
+      {wins.map((win) => {
+        const my = mine.filter((p) => p.game_window === win);
+        const th = theirs.filter((p) => p.game_window === win);
+        const s = scores.find((x) => x.game_window === win);
+        if (!my.length && !th.length && !s) return null;
+        const you = s ? round1(Number(youAreHome ? s.home_score : s.away_score)) : null;
+        const them = s ? round1(Number(youAreHome ? s.away_score : s.home_score)) : null;
+        const sealedBacks = !th.length && status !== 'final' ? Math.max(my.length, 1) : 0;
+        const hasRows = !!s?.slot_scores?.length;
+        const st = status === 'final' ? 'FINAL' : sealedBacks > 0 && !hasRows ? 'SEALED' : status === 'live' ? '● LIVE' : 'SEALED';
+        const pairs = Math.max(my.length, th.length, sealedBacks);
+
+        return (
+          <Card key={win} style={{ marginBottom: 10 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Mono size={10} weight="700" track={0.12}>{winLabel(win)}</Mono>
+              <Mono size={9} weight="700" tone={st === '● LIVE' ? 'you' : 'faint'}>{st}</Mono>
             </View>
-          );
-        })
-      )}
-    </Card>
+
+            {(you != null || them != null) && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, marginBottom: 10 }}>
+                <Text style={{ fontSize: 20, fontWeight: '700', color: t.you }}>{you ?? '—'}</Text>
+                <Mono size={9} tone="faint" track={0.12}>VS</Mono>
+                <Text style={{ fontSize: 20, fontWeight: '700', color: t.opp }}>{them ?? '—'}</Text>
+              </View>
+            )}
+
+            <View style={{ gap: 10, backgroundColor: FELT, borderRadius: 8, padding: 10 }}>
+              {Array.from({ length: pairs }, (_, i) => (
+                <View key={i} style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
+                  {my[i] ? faceFor(my[i], youSide, t.you) : <CardBack label="—" />}
+                  {th[i] ? faceFor(th[i], oppSide, t.opp) : <CardBack />}
+                </View>
+              ))}
+            </View>
+          </Card>
+        );
+      })}
+    </>
   );
+}
+
+/** Pool entries carry no team; resolve it the same way the setup board does. */
+function slugTeam(p: PoolPlayer): string {
+  return slugMeta(p.slug).team;
 }
