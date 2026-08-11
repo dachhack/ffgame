@@ -67,7 +67,7 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, idx = 0, onS
           )}
         />
       ) : (
-        <CardEmpty label={lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'} onPress={lockPlayer ? undefined : onOpenPicker} />
+        <CardEmpty idx={idx} label={lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'} onPress={lockPlayer ? undefined : onOpenPicker} />
       )}
 
       <CardBack idx={idx} onPress={onScout} actionLabel={onScout ? '🔍 SCOUT' : undefined} />

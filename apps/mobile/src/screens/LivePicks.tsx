@@ -476,6 +476,23 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         accent={t.you}
       />
 
+      {/* An empty pool is not a bug and not the user's fault, but "0 eligible"
+          on every window looks exactly like both. The lineup is keyed by
+          (league, WEEK, roster) — a league that hasn't synced starters for the
+          week you're looking at simply has no pool yet, which is the normal
+          state for a regular-season week in August. Say so, and say which week,
+          because paging to a week that IS synced is the actual fix. */}
+      {!pool.length && (
+        <Card style={{ marginBottom: 12, borderColor: t.warn }}>
+          <Mono size={10} weight="700" tone="warn" track={0.1}>NO ROSTER FOR {weekLabel(matchup!.week).toUpperCase()}</Mono>
+          <Text style={{ fontSize: 12.5, color: t.text, lineHeight: 18, marginTop: 6 }}>
+            This league hasn’t synced starters for this week yet, so there’s
+            nobody to field — every window will read 0 eligible until it does.
+            Use ‹ › above to check another week.
+          </Text>
+        </Card>
+      )}
+
       {/* Header — mirrors the web's title block: who is playing, how much of
           the lineup is set, and the week you are looking at. */}
       <Card style={{ marginBottom: 12 }}>

@@ -26,6 +26,7 @@
 // pays for itself on gestures and on animations that must read values back
 // mid-flight; this board has neither. See the header of animations.tsx.
 import { type ReactNode } from 'react';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
@@ -87,6 +88,50 @@ function useDealIn(idx: number, play = true) {
   };
 }
 
+
+/** Whatever the variant hooks put in a transform list — typed off the hooks
+ *  themselves so the shell can't drift from what they actually produce. */
+type CardTx = ReturnType<typeof useFlipIn>['transform'][number]
+  | ReturnType<typeof useShake>['transform'][number]
+  | ReturnType<typeof useWobble>['transform'][number];
+
+/** The card BOX — every slot on the board is one of these, whatever is drawn
+ *  inside it.
+ *
+ *  It exists because the three variants kept disagreeing. They had the same
+ *  flex and aspectRatio and still looked like different sizes, because the
+ *  differences had moved into the TRANSFORMS: a face wobbled on an inner view
+ *  while a back wobbled on its outer one, and an empty slot had no wobble and no
+ *  deal at all — so it sat perfectly still beside a neighbour rotating 0.9° and
+ *  drifting 2px, which reads as "these are different sizes" long before it reads
+ *  as "one of them is moving".
+ *
+ *  One component owns the box, the entrance and the idle motion. A variant may
+ *  add a transform (the reveal flip, the nuke shake) but cannot own the shape. */
+function CardShell({ idx = 0, deal: playDeal = true, extra = [], style, children }: {
+  idx?: number;
+  /** False when another entrance is playing instead (the reveal flip). */
+  deal?: boolean;
+  /** Variant transforms. Prepended, because `perspective` has to lead the list. */
+  extra?: CardTx[];
+  style?: StyleProp<ViewStyle>;
+  children: ReactNode;
+}) {
+  const deal = useDealIn(idx, playDeal);
+  const wob = useWobble(idx);
+  return (
+    <Animated.View
+      style={[
+        { flex: 1, aspectRatio: CARD_ASPECT },
+        style,
+        { opacity: deal.opacity, transform: [...extra, ...deal.transform, ...wob.transform] },
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
 export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0, flip = false, hot = false, nuked = false, onPress, onRemove, footer }: {
   slug: string;
   name: string;
@@ -128,9 +173,7 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
   // disjoint properties — perspective/rotateY from the flip, translateY from the
   // deal, rotateZ from the wobble, translateX from the shake — so concatenating
   // composes them correctly. Order matters only for perspective, which must lead.
-  const deal = useDealIn(idx, !doFlip);
   const flipIn = useFlipIn(doFlip);
-  const wob = useWobble(idx);
   const shake = useShake(nuked);
   const tick = useScoreTick(bank);
 
@@ -140,8 +183,7 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
   // so a filled slot and the sealed card beside it were laid out two different
   // ways and only agreed by luck. Same rule, same box.
   return (
-    <Animated.View style={{ flex: 1, aspectRatio: CARD_ASPECT, opacity: deal.opacity, transform: [...flipIn.transform, ...deal.transform] }}>
-    <Animated.View style={{ flex: 1, transform: [...wob.transform, ...shake.transform] }}>
+    <CardShell idx={idx} deal={!doFlip} extra={[...flipIn.transform, ...shake.transform]}>
     <Pressable onPress={onPress} style={{ flex: 1 }}>
     <ImageBackground
       source={STOCK_TILE}
@@ -191,8 +233,7 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
     {hot && !nuked && <HotGlow color={accent} />}
     <NukeBurst play={nuked} />
     </Pressable>
-    </Animated.View>
-    </Animated.View>
+    </CardShell>
   );
 }
 
@@ -201,34 +242,34 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
 export function CardBack({ label = 'SEALED', idx = 0, onPress, actionLabel }: {
   label?: string; idx?: number; onPress?: () => void; actionLabel?: string;
 }) {
-  const deal = useDealIn(idx);
-  // Backs wobble too — the web wobbles `.ct-card`, face or not, and a still
-  // sealed card next to a breathing one reads as a rendering glitch.
-  const wob = useWobble(idx);
   return (
-    <Animated.View style={{ flex: 1, aspectRatio: CARD_ASPECT, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1A2740', opacity: deal.opacity, transform: [...deal.transform, ...wob.transform] }}>
+    <CardShell idx={idx} style={{ borderRadius: 8, overflow: 'hidden', backgroundColor: '#1A2740' }}>
       <Image source={cardBackArt()} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
       <Pressable onPress={onPress} disabled={!onPress} style={{ position: 'absolute', inset: 0, justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 8 }}>
         <View style={{ backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 3 }}>
           <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 1, color: '#E7DCC2' }}>{actionLabel ?? label}</Text>
         </View>
       </Pressable>
-    </Animated.View>
+    </CardShell>
   );
 }
 
-/** An unfilled slot — dashed, on the felt, same size as a card. */
-export function CardEmpty({ label, onPress }: { label: string; onPress?: () => void }) {
+/** An unfilled slot — dashed, on the felt, and the same box as a card because it
+ *  is literally the same shell. It deals and breathes too: a static dashed
+ *  rectangle beside a wobbling card is what made the pair look mismatched. */
+export function CardEmpty({ label, idx = 0, onPress }: { label: string; idx?: number; onPress?: () => void }) {
   return (
-    <Pressable
-      onPress={onPress}
+    <CardShell
+      idx={idx}
       style={{
-        flex: 1, aspectRatio: CARD_ASPECT, borderRadius: 8,
+        borderRadius: 8,
         borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(233,185,89,0.45)', borderStyle: 'dashed',
-        alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.03)',
+        backgroundColor: 'rgba(255,255,255,0.03)',
       }}
     >
-      <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', letterSpacing: 1, color: 'rgba(233,185,89,0.85)' }}>{label}</Text>
-    </Pressable>
+      <Pressable onPress={onPress} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', letterSpacing: 1, color: 'rgba(233,185,89,0.85)' }}>{label}</Text>
+      </Pressable>
+    </CardShell>
   );
 }
