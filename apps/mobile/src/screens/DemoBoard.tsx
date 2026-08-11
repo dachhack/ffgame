@@ -38,11 +38,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { resetToDemoLeague, getActiveLeague } from '@drip/core/data/league';
 import { installRealWeek } from '@drip/core/data/realPbp';
-import { installGameFeedWeek } from '@drip/core/data/gameFeed';
+import { installGameFeedWeek, gameFeedFor } from '@drip/core/data/gameFeed';
 import {
   defaultLineup, aiLineup, buildMatchup, banksAtClock, liveCardFlags,
   type ResolvedMatchup,
 } from '@drip/core/engine/matchup';
+import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import type { RevealedPick, WindowScore, PoolPlayer, SlotScoreRow } from '@drip/core/data/liveApi';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { Card, Display, Mono } from '../ui/prims';
@@ -57,6 +58,13 @@ const OPP_TEAM = 'Taco Time Titans';
 // Game-clock seconds per real second. A window's clock runs to ~3900, so 1× is
 // about 40 seconds of watching and 8× about 5 — the range between "talk over it"
 // and "get to the point".
+/** "Q1 9:00" from game-elapsed seconds — the same rule the field view uses. */
+const qClock = (c: number): string => {
+  if (c >= 3600) { const r = 600 - ((c - 3600) % 600); return `OT ${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')}`; }
+  const q = Math.floor(c / 900) + 1, r = 900 - (c % 900);
+  return `Q${q} ${Math.floor(r / 60)}:${String(Math.floor(r % 60)).padStart(2, '0')}`;
+};
+
 const SPEEDS = [1, 2, 4, 8] as const;
 const BASE_RATE = 100;
 const TICK_MS = 100;
@@ -69,6 +77,7 @@ interface Built {
   theirs: RevealedPick[];
   pool: Record<string, PoolPlayer>;
   label: Record<string, string>;
+  sub: Record<string, string>;
   wins: string[];
   youName: string;
   oppName: string;
@@ -101,13 +110,17 @@ function build(): Built {
   const theirs: RevealedPick[] = [];
   const pool: Record<string, PoolPlayer> = {};
   const label: Record<string, string> = {};
+  const sub: Record<string, string> = {};
   const seat = (win: string, i: number, who: string, p: { player: { id: string; name: string; pos: string }; metricId: string }): RevealedPick => {
     pool[p.player.id] = { slug: p.player.id, full: p.player.name, pos: p.player.pos };
     return { app_user_id: who, game_window: win, roster_slot: String(i), player_slug: p.player.id, metric_id: p.metricId, locked: true };
   };
 
   for (const w of resolved.windows) {
-    label[w.window.id] = `${w.window.label} · ${w.window.sub ?? ''}`.trim().replace(/ ·\s*$/, '');
+    // SHORT label only. Duel renders the window's sub itself, so folding it in
+    // here printed "TNF · Thursday Night  Thursday Night" on the board.
+    label[w.window.id] = w.window.label;
+    sub[w.window.id] = w.window.sub ?? '';
     for (const s of w.slots) {
       if (s.you) mine.push(seat(w.window.id, s.slotIndex, 'you', s.you));
       if (s.their) theirs.push(seat(w.window.id, s.slotIndex, 'them', s.their));
@@ -117,7 +130,7 @@ function build(): Built {
   return {
     resolved,
     winMax: resolved.windows.map((w) => w.slots.reduce((m, s) => s.events.reduce((a, e) => Math.max(a, e.clock), m), 0)),
-    mine, theirs, pool, label,
+    mine, theirs, pool, label, sub,
     wins: resolved.windows.map((w) => w.window.id),
     youName: you.name, oppName: opp.name,
   };
@@ -182,7 +195,14 @@ export function DemoBoard() {
     b.resolved.windows.forEach((w, i) => {
       if (i > wi) return;
       const at = i < wi ? (b.winMax[i] ?? 0) : clock;
+      // No rows at 0:00. Duel switches from cards to live rows the moment a
+      // window has scores, so emitting them at kickoff would convert the pair
+      // before the reveal flip had a frame to play — and the flip is the thing
+      // the kickoff is for. One tick later the plays start and it converts.
       const rows: SlotScoreRow[] = [];
+      if (at <= 0) { out.push({ game_window: w.window.id, home_score: 0, away_score: 0, slot_scores: [] });
+                     for (const p of b.theirs) if (p.game_window === w.window.id) shown.push(p);
+                     return; }
       let home = 0, away = 0;
       for (const s of w.slots) {
         const bank = banksAtClock(s.events, at);
@@ -201,6 +221,34 @@ export function DemoBoard() {
       for (const p of b.theirs) if (p.game_window === w.window.id) shown.push(p);
     });
     return { scores: out, revealed: shown };
+  }, [b, wi, clock]);
+
+  // The live row's changing text — the game and its clock, and the statline.
+  // Duel can't derive either: the game feed is a parallel per-GAME track it
+  // never reads, and a statline needs the engine's own play data. So they come
+  // from here, and the row degrades to card + metric + score without them.
+  const liveExtras = useCallback((win: string, slot: string, who: 'you' | 'their') => {
+    const i = b.wins.indexOf(win);
+    if (i < 0 || i > wi) return null;
+    const s = b.resolved.windows[i]?.slots.find((x) => String(x.slotIndex) === slot);
+    const seat = who === 'you' ? s?.you : s?.their;
+    if (!seat) return null;
+    const at = i < wi ? (b.winMax[i] ?? 0) : clock;
+    const feed = gameFeedFor(WEEK, seat.player.team);
+    // The clock shown is the LAST PLAY's, not the playback clock — a window
+    // clock can outrun the real game and would read a Q4 game as OT.
+    let label: string | null = null;
+    if (feed) {
+      let last = -1;
+      for (let j = 0; j < feed.plays.length; j++) { if (feed.plays[j].c <= at) last = j; else break; }
+      const c = last >= 0 ? feed.plays[last].c : 0;
+      label = `${feed.away}@${feed.home} · ${qClock(c)}`;
+    }
+    return {
+      gameLabel: label,
+      stat: fmtStat(seat.player.pos, statlineAt(seat.player, WEEK, at, seat.metricId), true),
+      coin: null,
+    };
   }, [b, wi, clock]);
 
   const winStatus = useCallback((id: string) => {
@@ -245,7 +293,7 @@ export function DemoBoard() {
       <Card style={{ marginBottom: 10 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <Mono size={11} weight="700" tone="you" track={0.14}>
-            {wi < 0 ? 'PRE-KICKOFF · SEALED' : `${b.label[b.wins[wi]] ?? b.wins[wi]} · ${mm(Math.min(clock, b.winMax[wi] ?? 0))}`}
+            {wi < 0 ? 'PRE-KICKOFF · SEALED' : `${b.label[b.wins[wi]] ?? b.wins[wi]}${b.sub[b.wins[wi]] ? ` · ${b.sub[b.wins[wi]]}` : ''} · ${mm(Math.min(clock, b.winMax[wi] ?? 0))}`}
           </Mono>
           <Mono size={11} weight="700">
             {live ? `${Math.round(scores.reduce((n, s) => n + s.home_score, 0) * 10) / 10} – ${Math.round(scores.reduce((n, s) => n + s.away_score, 0) * 10) / 10}` : '0 – 0'}
@@ -311,6 +359,7 @@ export function DemoBoard() {
         winLabel={(id) => b.label[id] ?? id.toUpperCase()}
         winStatus={winStatus}
         slotDetail={slotDetail}
+        liveExtras={liveExtras}
       />
     </ScrollView>
   );

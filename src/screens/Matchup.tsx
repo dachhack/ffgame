@@ -13,7 +13,7 @@ import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
 } from '@drip/core/engine/matchup';
-import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, GAME_SECONDS, type StatLine } from '@drip/core/engine/sim';
+import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, fmtStat, GAME_SECONDS } from '@drip/core/engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '@drip/core/data/demoNarration';
@@ -2882,75 +2882,6 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
   );
 }
 
-function fmtStat(pos: Pos, s: StatLine, compact = false): string {
-  // Compact (mobile): collapse "N car · M rush yd" → "N-M ru" and
-  // "R/T rec · Y rec yd" → "R/T-Y rec" so the line fits without ellipsing.
-  if (compact) {
-    if (pos === 'QB') {
-      const p = [`${s.passYds} pass`, `${s.passTds} TD`];
-      if (s.rushYds) p.push(`${s.rushYds} ru`);
-      return p.join(' · ');
-    }
-    if (pos === 'RB') {
-      const p = [`${s.carries}-${s.rushYds} ru`, `${s.rec}/${s.targets}-${s.recYds} rec`];
-      const td = s.rushTds + s.recTds;
-      if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
-      if (s.retYds) p.push(`${s.retYds} ret${s.retTds ? `·${s.retTds}TD` : ''}`);
-      return p.join(' · ');
-    }
-    if (pos === 'WR' || pos === 'TE') {
-      const p = [`${s.rec}/${s.targets}-${s.recYds} rec`];
-      if (s.carries) p.push(`${s.carries}-${s.rushYds} ru`);
-      const td = s.rushTds + s.recTds;
-      if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
-      if (s.retYds) p.push(`${s.retYds} ret${s.retTds ? `·${s.retTds}TD` : ''}`);
-      return p.join(' · ');
-    }
-    // K / DEF lines are already short — fall through to the full format.
-  }
-  if (pos === 'QB') {
-    const p = [`${s.passYds} pass yd`, `${s.passTds} TD`];
-    if (s.rushYds) p.push(`${s.rushYds} rush`);
-    return p.join(' · ');
-  }
-  if (pos === 'RB') {
-    // Full line: rushing AND receiving, every week. TDs split when both happen.
-    const p = [`${s.carries} car`, `${s.rushYds} rush yd`, `${s.rec}/${s.targets} rec`, `${s.recYds} rec yd`];
-    const td = s.rushTds + s.recTds;
-    if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
-    if (s.retYds) p.push(`${s.retYds} ret yd${s.retTds ? ` · ${s.retTds} ret TD` : ''}`);
-    return p.join(' · ');
-  }
-  if (pos === 'WR' || pos === 'TE') {
-    const p = [`${s.rec}/${s.targets} rec`, `${s.recYds} rec yd`];
-    if (s.carries) p.push(`${s.carries} car`, `${s.rushYds} rush yd`); // jet sweeps / end-arounds
-    const td = s.rushTds + s.recTds;
-    if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
-    if (s.retYds) p.push(`${s.retYds} ret yd${s.retTds ? ` · ${s.retTds} ret TD` : ''}`);
-    return p.join(' · ');
-  }
-  if (pos === 'K') return `${s.fg} FG · ${s.xp} XP`;
-  if (pos === 'DEF') {
-    const p: string[] = [];
-    if (s.sacks) p.push(`${s.sacks} sk`);
-    if (s.ints) p.push(`${s.ints} INT`);
-    if (s.fumrec) p.push(`${s.fumrec} FR`);
-    if (s.dtd) p.push(`${s.dtd} TD`);
-    if (s.safety) p.push(`${s.safety} SF`);
-    return p.length ? p.join(' · ') : 'no splash';
-  }
-  if (pos === 'DL' || pos === 'LB' || pos === 'DB') {
-    const p: string[] = [];
-    if (s.tackles) p.push(`${s.tackles} tkl`);
-    if (s.sacks) p.push(`${s.sacks} sk`);
-    if (s.ints) p.push(`${s.ints} INT`);
-    if (s.fumrec) p.push(`${s.fumrec} FR`);
-    if (s.dtd) p.push(`${s.dtd} TD`);
-    if (s.safety) p.push(`${s.safety} SF`);
-    return p.length ? p.join(' · ') : '—';
-  }
-  return '—';
-}
 
 function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, suppressSpent, negated, halvedFrom, chip, coin, fgMult, twin, cards, hot, scorched }: {
   side: 'you' | 'their'; player: Player; week: number; clock: number; metricId?: string; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string; coin?: number; fgMult?: number; twin?: boolean;

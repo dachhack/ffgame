@@ -187,6 +187,12 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
         </Pressable>
       </View>
 
+      {/* The web tilts the field back — `perspective: 560` on the wrapper and
+          `rotateX(20deg)` on the svg, hinged at the bottom edge. It is the
+          difference between a diagram and a field you are looking down at.
+          transformOrigin is what makes it hinge rather than pivot about the
+          middle; without it the far end swings up instead of away. */}
+      <View style={{ transform: [{ perspective: 560 }, { rotateX: '20deg' }], transformOrigin: '50% 100%' }}>
       <Svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ aspectRatio: W / H }}>
         {/* turf + end zones */}
         <Rect x={FX} y={TOP} width={FW} height={BOT - TOP} fill={mix(t.you, 5, t.surface)} />
@@ -253,6 +259,7 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
           </AnimatedG>
         )}
       </Svg>
+      </View>
 
       {/* situation chip + play text */}
       <View style={{ alignItems: 'center', marginTop: 4 }}>
