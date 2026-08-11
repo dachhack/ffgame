@@ -12,8 +12,8 @@
 // change lands in one file and both apps get it.
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { WINDOWS, LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
-import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel } from '@drip/core/data/nflSlate';
+import { LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
+import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek } from '@drip/core/data/nflSlate';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { powerupById } from '@drip/core/data/powerups';
@@ -27,7 +27,7 @@ import {
   myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium, startCheckout,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
 } from '@drip/core/data/liveApi';
-import type { Player, Pos, WindowId } from '@drip/core/types';
+import type { GameWindow, Player, Pos, WindowId } from '@drip/core/types';
 import { useTheme } from '../theme.native';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
 import { SetupRow } from '../ui/SetupRow';
@@ -43,8 +43,19 @@ function poolToPlayer(p: PoolPlayer): Player {
 const LIVE_UNLOCKS = ['unlock-combo-drip', 'unlock-return', 'unlock-pass-td10'] as const;
 
 interface Slot { win: string; winLabel: string; slot: string; key: string }
-const SLOTS: Slot[] = WINDOWS.flatMap((w) =>
-  Array.from({ length: w.slots }, (_, i) => ({ win: w.id, winLabel: w.label, slot: String(i), key: `${w.id}-${i}` })));
+
+/** A week's slots, from that week's OWN windows.
+ *
+ *  Not a module constant. `WINDOWS` in metrics.ts is the regular-season default
+ *  — TNF / SUN 1PM x3 / SUN 4PM x2 / SNF / MNF — but a week's real windows are
+ *  DERIVED from its actual kickoffs (nflSlate.deriveWeek), and preseason weeks
+ *  cluster into a different shape entirely. Building slots from the static list
+ *  showed the wrong windows AND hid saved picks, because a pick is keyed by
+ *  `game_window` and the ids did not line up. Worse, sealing would have written
+ *  rows under window ids the week does not have. */
+const slotsFor = (wins: GameWindow[]): Slot[] =>
+  wins.flatMap((w) =>
+    Array.from({ length: w.slots }, (_, i) => ({ win: w.id, winLabel: w.label, slot: String(i), key: `${w.id}-${i}` })));
 
 const fmtLock = (iso: string | null) => {
   if (!iso) return 'kickoff';
@@ -81,6 +92,9 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const [winKickIso, setWinKickIso] = useState<Record<string, string>>({});
   const [lockedWins, setLockedWins] = useState<Set<string>>(new Set());
   const [nowTs, setNowTs] = useState(() => Date.now());
+  // Set only after the live slate is installed below — windowsForWeek() reads
+  // that slate, so asking before it lands returns the generic default.
+  const [wins, setWins] = useState<GameWindow[]>([]);
 
   useEffect(() => { ensurePremiumTier(); }, []);
 
@@ -102,6 +116,9 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
           myExtra(m.id).catch(() => 0), liveSlate(m.week).catch(() => []), myComboQty(m.id, userId).catch(() => 0),
         ]);
         setRuntimeSlate(m.week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId })));
+        // MUST follow setRuntimeSlate: this is what makes a preseason week show
+        // its own windows instead of the regular-season five.
+        setWins(windowsForWeek(m.week));
         const wkick: Record<string, string> = {};
         for (const g of slate) {
           if (!g.kickoff) continue;
@@ -147,7 +164,8 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
     const iso = winKickIso[winId];
     return iso ? Date.parse(iso) <= nowTs : true;
   };
-  const allLocked = !!matchup && locked && WINDOWS.every((w) => winLocked(w.id));
+  const allLocked = !!matchup && locked && wins.every((w) => winLocked(w.id));
+  const slots = useMemo(() => slotsFor(wins), [wins]);
 
   const week = matchup?.week ?? 0;
   const gateOn = hasSlate(week);
@@ -175,7 +193,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
 
   const slottedInWin = (winId: string, exceptKey: string): Set<string> => {
     const s = new Set<string>();
-    for (const sl of SLOTS.filter((x) => x.win === winId)) {
+    for (const sl of slots.filter((x) => x.win === winId)) {
       if (sl.key === exceptKey) continue;
       const slug = picks[sl.key]?.player_slug;
       if (slug) s.add(slug);
@@ -196,7 +214,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const seal = async () => {
     if (!matchup || saving) return;
     setSaving(true); setErr(null);
-    const rows: PickRow[] = SLOTS
+    const rows: PickRow[] = slots
       .map((s) => {
         const p = picks[s.key];
         return { game_window: s.win, roster_slot: s.slot, player_slug: p?.player_slug ?? null, metric_id: p?.metric_id ?? null };
@@ -333,7 +351,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
     );
   }
 
-  const filled = SLOTS.filter((s) => picks[s.key]?.player_slug && picks[s.key]?.metric_id).length;
+  const filled = slots.filter((s) => picks[s.key]?.player_slug && picks[s.key]?.metric_id).length;
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
@@ -352,7 +370,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         </View>
 
         <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>
-          Pick a player + a hidden metric per slot. Each window locks at its own kickoff — later windows stay editable all weekend, and your opponent can’t see a pick until its window kicks off. {filled}/{SLOTS.length} set.
+          Pick a player + a hidden metric per slot. Each window locks at its own kickoff — later windows stay editable all weekend, and your opponent can’t see a pick until its window kicks off. {filled}/{slots.length} set.
           {gateOn ? '\nEach slot only takes players whose real NFL team plays in that window. Players on a bye can’t be slotted.' : ''}
         </Mono>
 
@@ -436,8 +454,8 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
       )}
 
       {/* Windows */}
-      {WINDOWS.map((w) => {
-        const winSlots = SLOTS.filter((s) => s.win === w.id);
+      {wins.map((w) => {
+        const winSlots = slots.filter((s) => s.win === w.id);
         const elig = gateOn ? pool.filter((pl) => winBySlug[pl.slug] === 'any' || winBySlug[pl.slug] === w.id).length : pool.length;
         const setN = winSlots.filter((s) => picks[s.key]?.player_slug && picks[s.key]?.metric_id).length;
         const wLocked = winLocked(w.id);
