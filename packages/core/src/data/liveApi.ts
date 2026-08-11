@@ -459,8 +459,15 @@ export async function leagueResults(leagueId: string): Promise<MatchupResult[]> 
 
 /** The caller's player pool for a week (their Sleeper roster, from sleeper_lineup). */
 export async function myPool(leagueId: string, week: number, rosterId: number): Promise<PoolPlayer[]> {
-  const { data } = await (await client()).from('sleeper_lineup').select('starters_json')
+  const { data, error } = await (await client()).from('sleeper_lineup').select('starters_json')
     .eq('league_id', leagueId).eq('week', week).eq('roster_id', rosterId).maybeSingle();
+  // SURFACE the error. This used to destructure `data` alone, which made an RLS
+  // denial, a dropped connection and a genuinely empty roster all arrive as the
+  // same empty array — so a broken read looked exactly like a manager with
+  // nobody rostered, and every explanation for one was equally consistent with
+  // the other. Two wrong diagnoses came out of that ambiguity. A read that
+  // failed should say it failed.
+  if (error) throw new Error(`roster read failed (league ${leagueId.slice(0, 8)}… wk ${week} roster ${rosterId}): ${error.message}`);
   // Read through the shared reader, NOT `p.slug`. That column is written in two
   // shapes and a Sleeper-synced league uses `player_slug` — reading only `slug`
   // dropped every entry and reported the roster as empty. See poolEntry.ts.

@@ -486,10 +486,18 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         <Card style={{ marginBottom: 12, borderColor: t.warn }}>
           <Mono size={10} weight="700" tone="warn" track={0.1}>NO ROSTER FOR {weekLabel(matchup!.week).toUpperCase()}</Mono>
           <Text style={{ fontSize: 12.5, color: t.text, lineHeight: 18, marginTop: 6 }}>
-            This league hasn’t synced starters for this week yet, so there’s
-            nobody to field — every window will read 0 eligible until it does.
-            Use ‹ › above to check another week.
+            No starters came back for this week, so there’s nobody to field and
+            every window reads 0 eligible. Use ‹ › above to check another week.
           </Text>
+          {/* The exact tuple the read asked for. "No roster" has two very
+              different causes — nothing matched, or something matched and was
+              discarded — and they look identical from the outside. Printing the
+              query makes it checkable against the table instead of guessable:
+              if these ids are right and the row exists, the read is the
+              problem, not the data. */}
+          <Mono size={9} tone="faint" style={{ marginTop: 8 }}>
+            asked: league {roster?.leagueId?.slice(0, 8) ?? '?'}… · week {matchup!.week} · roster {roster?.rosterId ?? '?'}
+          </Mono>
         </Card>
       )}
 
