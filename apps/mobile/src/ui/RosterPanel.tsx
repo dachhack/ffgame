@@ -12,33 +12,49 @@ import { useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import type { GameWindow, Player } from '@drip/core/types';
+import type { PoolGroup } from '@drip/core/data/poolEntry';
 import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
+import { GROUP_TABS, GroupBadge } from './rosterGroup';
 
 const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
-export function RosterPanel({ title, players, wins, windowOf, accent }: {
+export function RosterPanel({ title, players, wins, windowOf, groupOf, accent }: {
   title: string;
   players: Player[];
   /** The week's windows, in order — the grouping and its labels. */
   wins: GameWindow[];
   /** Which window a player's real game falls in ('any' when unresolvable). */
   windowOf: (playerId: string) => string | null;
+  /** Which part of the roster a player sits on. Optional: the demo board and
+   *  any caller with a synthetic pool has no such distinction to draw. */
+  groupOf?: (playerId: string) => PoolGroup;
   accent: string;
 }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<string>('ALL');
+  const [grp, setGrp] = useState<PoolGroup | 'ALL'>('ALL');
+
+  // Only offer the group filter when the roster actually HAS non-starters. A
+  // league synced before the sync started sending bench/IR/taxi reads as all
+  // starters, and showing it a row of chips that can only ever empty the list
+  // would be chrome that lies about what is there.
+  const hasGroups = useMemo(
+    () => !!groupOf && players.some((p) => groupOf(p.id) !== 'start'),
+    [players, groupOf],
+  );
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return players.filter((p) => {
       if (pos !== 'ALL' && p.pos !== pos) return false;
+      if (grp !== 'ALL' && (groupOf?.(p.id) ?? 'start') !== grp) return false;
       if (!needle) return true;
       return p.full.toLowerCase().includes(needle) || (p.team ?? '').toLowerCase().includes(needle);
     });
-  }, [players, q, pos]);
+  }, [players, q, pos, grp, groupOf]);
 
   // Grouped by window, in the week's own order. Players whose window can't be
   // resolved land in a trailing bucket rather than vanishing.
@@ -105,6 +121,26 @@ export function RosterPanel({ title, players, wins, windowOf, accent }: {
                 );
               })}
             </ScrollView>
+            {hasGroups && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 5 }}>
+                {GROUP_TABS.map((tab) => {
+                  const on = grp === tab.id;
+                  return (
+                    <Pressable
+                      key={tab.id}
+                      onPress={() => setGrp(tab.id)}
+                      style={{
+                        borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5,
+                        backgroundColor: on ? t.sh : 'transparent',
+                        borderWidth: StyleSheet.hairlineWidth, borderColor: on ? accent : t.bd,
+                      }}
+                    >
+                      <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: on ? accent : t.faint }}>{tab.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
             <Mono size={9.5} tone="faint">{filtered.length} player{filtered.length === 1 ? '' : 's'}</Mono>
           </View>
 
@@ -117,7 +153,7 @@ export function RosterPanel({ title, players, wins, windowOf, accent }: {
                   <Mono size={9.5} weight="700" track={0.1}>{g.label}</Mono>
                   <Mono size={9} tone="faint">{g.players.length}</Mono>
                 </View>
-                {g.players.map((p) => <RosterRow key={p.id} player={p} />)}
+                {g.players.map((p) => <RosterRow key={p.id} player={p} group={groupOf?.(p.id) ?? 'start'} />)}
               </View>
             ))}
             {!groups.length && (
@@ -132,7 +168,7 @@ export function RosterPanel({ title, players, wins, windowOf, accent }: {
   );
 }
 
-function RosterRow({ player }: { player: Player }) {
+function RosterRow({ player, group }: { player: Player; group: PoolGroup }) {
   const t = useTheme();
   const pc = t.pos[player.pos as keyof typeof t.pos] ?? { bg: t.sh, fg: t.dim, bd: t.bd };
   const photo = headshot(player.id);
@@ -150,6 +186,7 @@ function RosterRow({ player }: { player: Player }) {
         <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: pc.fg }}>{player.pos}</Text>
       </View>
       <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: t.text }}>{player.full}</Text>
+      <GroupBadge group={group} />
       <Mono size={9} tone="faint">{player.team}</Mono>
     </View>
   );

@@ -22,6 +22,7 @@ import { config } from './config.js';
 import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY } from './engine.js';
 import { matchupPremium, premiumTier, hasPremiumContent, gateSide, hasPremiumTargeted, gateTargeted } from './premium.js';
 import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
+import { starterSlugs } from '../../packages/core/src/data/poolEntry.ts';
 // Shared with the client and migration 0110: board weeks above PRESEASON_BASE
 // are throwaway practice and never move real coin.
 import { isPreseasonWeek as isPracticeWeek } from '../../packages/core/src/data/nflSlate.ts';
@@ -96,12 +97,19 @@ async function enrolledPicks(matchup, membership, ctx) {
   return data.filter((p) => p.locked).map((p) => ({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id }));
 }
 
-/** A roster's real Sleeper starters (the unenrolled-opponent fallback / player pool). */
+/** A roster's real Sleeper STARTERS (the unenrolled-opponent fallback / player pool).
+ *
+ *  starters_json now holds the manager's whole roster — starters, bench, IR,
+ *  taxi — because a human fielding a lineup should be able to pick anyone they
+ *  own. This fallback deliberately does NOT widen with it: it stands in for an
+ *  absent manager, and the lineup an absent manager would have fielded is the
+ *  one Sleeper has them starting, not their IR stash. Filtering here keeps the
+ *  scoring rule exactly what it was. */
 async function lineupSlugs(matchup, rosterId, ctx) {
   if (ctx) return ctx.lineups.get(`${matchup.league_id}:${rosterId}`) ?? [];
   const { data } = await db().from('sleeper_lineup').select('starters_json')
     .eq('league_id', matchup.league_id).eq('week', matchup.week).eq('roster_id', rosterId).maybeSingle();
-  return ((data?.starters_json) ?? []).map((s) => s.player_slug).filter(Boolean);
+  return starterSlugs(data?.starters_json);
 }
 
 /** A side's armed loadout (applied_state.payload_json) for this matchup — buffs and
@@ -143,7 +151,10 @@ export async function prefetchTick(live, week) {
   }
   const policy = new Map((lg.data ?? []).map((r) => [r.id, r.lineup_policy ?? 'best_lineup']));
   const lineups = new Map();   // `${leagueId}:${roster}` -> slugs[]
-  for (const r of lu.data ?? []) lineups.set(`${r.league_id}:${r.roster_id}`, (r.starters_json ?? []).map((s) => s.player_slug).filter(Boolean));
+  // Starters only — same reasoning as lineupSlugs. The prefetch path and the
+  // per-matchup path MUST agree; they are the same rule read two ways, and a
+  // divergence would score a league differently depending on tick size.
+  for (const r of lu.data ?? []) lineups.set(`${r.league_id}:${r.roster_id}`, starterSlugs(r.starters_json));
   const applied = new Map();   // `${matchupId}:${appUser}` -> payload
   for (const r of ap.data ?? []) applied.set(`${r.matchup_id}:${r.app_user_id}`, r.payload_json ?? {});
   const picks = new Map();     // `${matchupId}:${appUser}` -> [{win,slot,slug,metric}] (LOCKED rows)

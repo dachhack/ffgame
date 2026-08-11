@@ -13,17 +13,21 @@ import { useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import type { Player } from '@drip/core/types';
+import type { PoolGroup } from '@drip/core/data/poolEntry';
 import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
 import { Overlay } from './Overlay';
+import { GROUP_TABS, groupTag } from './rosterGroup';
 
 const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
-export function PlayerPicker({ visible, windowLabel, players, currentId, gated, onGated, onPick, onRemove, onClose }: {
+export function PlayerPicker({ visible, windowLabel, players, currentId, groupOf, gated, onGated, onPick, onRemove, onClose }: {
   visible: boolean;
   windowLabel?: string;
   players: Player[];
   currentId?: string;
+  /** Which part of the roster a player sits on, when the caller knows. */
+  groupOf?: (playerId: string) => PoolGroup;
   gated?: (p: Player) => boolean;
   onGated?: (p: Player) => void;
   onPick: (id: string) => void;
@@ -33,15 +37,24 @@ export function PlayerPicker({ visible, windowLabel, players, currentId, gated, 
   const t = useTheme();
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<string>('ALL');
+  const [grp, setGrp] = useState<PoolGroup | 'ALL'>('ALL');
+
+  // Same reasoning as the roster panel: no chips unless there is something for
+  // them to separate.
+  const hasGroups = useMemo(
+    () => !!groupOf && players.some((p) => groupOf(p.id) !== 'start'),
+    [players, groupOf],
+  );
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return players.filter((p) => {
       if (pos !== 'ALL' && p.pos !== pos) return false;
+      if (grp !== 'ALL' && (groupOf?.(p.id) ?? 'start') !== grp) return false;
       if (!needle) return true;
       return p.full.toLowerCase().includes(needle) || (p.team ?? '').toLowerCase().includes(needle);
     });
-  }, [players, q, pos]);
+  }, [players, q, pos, grp, groupOf]);
 
   return (
     <Overlay
@@ -90,6 +103,26 @@ export function PlayerPicker({ visible, windowLabel, players, currentId, gated, 
             );
           })}
         </ScrollView>
+        {hasGroups && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+            {GROUP_TABS.map((tab) => {
+              const on = grp === tab.id;
+              return (
+                <Pressable
+                  key={tab.id}
+                  onPress={() => setGrp(tab.id)}
+                  style={{
+                    borderRadius: 7, paddingHorizontal: 11, paddingVertical: 6,
+                    backgroundColor: on ? t.sh : 'transparent',
+                    borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd,
+                  }}
+                >
+                  <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: on ? t.you : t.faint }}>{tab.label}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
         <Mono size={10} tone="faint">{shown.length} player{shown.length === 1 ? '' : 's'}</Mono>
       </View>
 
@@ -99,6 +132,7 @@ export function PlayerPicker({ visible, windowLabel, players, currentId, gated, 
             key={p.id}
             player={p}
             current={p.id === currentId}
+            group={groupOf?.(p.id) ?? 'start'}
             gated={gated?.(p) ?? false}
             onPress={() => (gated?.(p) ? onGated?.(p) : onPick(p.id))}
           />
@@ -117,14 +151,16 @@ export function PlayerPicker({ visible, windowLabel, players, currentId, gated, 
 
 /** A dealt mini card: position badge, team crest, headshot, name. Same cream
  *  stock as the board's cards so the picker reads as the same deck. */
-function MiniPlayerCard({ player, current, gated, onPress }: {
-  player: Player; current: boolean; gated: boolean; onPress: () => void;
+function MiniPlayerCard({ player, current, group, gated, onPress }: {
+  player: Player; current: boolean; group: PoolGroup; gated: boolean; onPress: () => void;
 }) {
   const t = useTheme();
   const pc = t.pos[player.pos as keyof typeof t.pos] ?? { bg: t.sh, fg: t.dim, bd: t.bd };
   const photo = headshot(player.id);
   const logo = teamLogo(player.team);
   const src = photo ?? logo;
+  const tag = groupTag(group);
+  const tagFg = group === 'ir' ? '#A3401F' : group === 'taxi' ? '#5B6B2E' : '#8A7C55';
 
   return (
     <Pressable
@@ -142,6 +178,14 @@ function MiniPlayerCard({ player, current, gated, onPress }: {
         <View style={{ backgroundColor: pc.bg, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
           <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: pc.fg }}>{player.pos}</Text>
         </View>
+        {/* Deliberately NOT the shared GroupBadge: that one is drawn in theme
+            colours, and this card is cream stock in both themes — t.dim on
+            cream is unreadable in dark mode. Same tags, card-local palette. */}
+        {tag ? (
+          <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: tagFg, borderRadius: 3, paddingHorizontal: 3 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '700', color: tagFg }}>{tag}</Text>
+          </View>
+        ) : null}
         {!!logo
           ? <Image source={{ uri: logo }} style={{ width: 13, height: 13 }} resizeMode="contain" />
           : <Text style={{ fontFamily: MONO, fontSize: 8, color: '#6B6047' }}>{player.team}</Text>}

@@ -54,13 +54,15 @@ export function PodBuilder({ leagueId, rosterId, week: weekProp, leagueName, onB
       if (!ok) return;
       setBoard(rows);
       setLocks(lk);
-      // starters_json rows are {slot, sleeper_id, player_slug, pos} — PoolPlayer's
-      // declared shape predates that; read the raw field.
-      const mine = (await myPool(leagueId, w, rosterId).catch(() => [])) as unknown as { player_slug?: string | null }[];
+      // myPool NORMALISES the two starters_json shapes now (poolEntry.readPool),
+      // so `slug` is always populated. This used to cast the result and read
+      // `player_slug` — the raw Sleeper key — which readPool never emits, so
+      // every entry came back undefined and nothing was ever re-seated.
+      const mine = await myPool(leagueId, w, rosterId).catch(() => []);
       if (!ok || !mine.length) return;
       // Re-seat the saved entry into slots by position, in order.
       const bySlug = new Map(rows.map((r) => [r.slug, r]));
-      const remaining = mine.map((p) => p.player_slug).filter((s): s is string => !!s && bySlug.has(s));
+      const remaining = mine.map((p) => p.slug).filter((s): s is string => !!s && bySlug.has(s));
       setPicks(SLOTS.map(({ pos }) => {
         const i = remaining.findIndex((s) => bySlug.get(s)!.pos === pos);
         return i >= 0 ? remaining.splice(i, 1)[0] : null;

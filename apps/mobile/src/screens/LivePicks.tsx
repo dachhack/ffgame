@@ -28,6 +28,7 @@ import {
   myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium, startCheckout,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
 } from '@drip/core/data/liveApi';
+import type { PoolGroup } from '@drip/core/data/poolEntry';
 import type { GameWindow, Player, Pos, WindowId } from '@drip/core/types';
 import { useTheme } from '../theme.native';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
@@ -215,6 +216,11 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const week = matchup?.week ?? 0;
   const gateOn = hasSlate(week);
   const teamBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, slugMeta(p.slug).team])), [pool]);
+  // Slug → roster group. The pool is the manager's WHOLE roster now (starters,
+  // bench, IR, taxi), and the group is the only thing distinguishing a fielded
+  // RB1 from a taxi rookie in a list that otherwise shows them identically.
+  const grpBySlug = useMemo<Record<string, PoolGroup>>(
+    () => Object.fromEntries(pool.map((p) => [p.slug, p.grp])), [pool]);
   const winBySlug = useMemo<Record<string, WindowId | 'any' | null>>(() => {
     const m: Record<string, WindowId | 'any' | null> = {};
     for (const p of pool) { const tm = teamBySlug[p.slug]; m[p.slug] = tm ? windowForTeam(week, tm) : 'any'; }
@@ -473,6 +479,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         // Same resolver the slate gating uses, so the grouping here and the
         // eligibility counts on each window can never disagree.
         windowOf={(id) => winBySlug[id] ?? null}
+        groupOf={(id) => grpBySlug[id] ?? 'start'}
         accent={t.you}
       />
 
@@ -786,6 +793,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
             players={players}
             currentId={cur}
             windowLabel={wins.find((w) => w.id === pickerSlot.win)?.label}
+            groupOf={(id) => grpBySlug[id] ?? 'start'}
             gated={(p) => !matchPremium && !isFreePosition(p.pos)}
             onGated={(p) => {
               markGatedAttempt('position:' + p.pos);

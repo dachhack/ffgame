@@ -3,7 +3,7 @@
 // redeem_invite RPC (migration 0002), never a direct membership write.
 import { getSupabase } from './supabaseClient';
 import { platform, storeGet } from '../platform';
-import { readPool } from './poolEntry';
+import { readPool, type PoolGroup } from './poolEntry';
 import { resolveUser } from './sleeper';
 import { PRESEASON_BOARD_WEEKS } from './nflSlate';
 import type { Session } from '@supabase/supabase-js';
@@ -400,7 +400,10 @@ export async function redeemCommish(commishCode: string): Promise<ConfirmCommish
 
 // ── Sealed picks (live-H2H lineup) ──────────────────────────────────────────────
 export interface LiveMatchup { id: string; league_id: string; week: number; status: string; lock_at: string | null; home_roster_id: number; away_roster_id: number; home_coin: number | null; away_coin: number | null; }
-export interface PoolPlayer { slug: string; full: string; pos: string; }
+/** `grp` is which part of the manager's roster the player sits on — the pool is
+ *  their WHOLE roster (starters, bench, IR, taxi), not just who Sleeper has
+ *  starting. Untagged rows read as 'start'; see entryGroup in poolEntry.ts. */
+export interface PoolPlayer { slug: string; full: string; pos: string; grp: PoolGroup; }
 export interface PickRow { game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null; locked?: boolean; }
 
 /** The caller's enrolled roster in a league (first enrolled membership). */
