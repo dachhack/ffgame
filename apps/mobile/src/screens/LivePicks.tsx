@@ -474,7 +474,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
       style={{ flex: 1, backgroundColor: t.bg }}
       // Bottom padding clears the hand, which is pinned over this list rather
       // than scrolling with it — otherwise the SEAL button sits under the cards.
-      contentContainerStyle={{ padding: 12, paddingBottom: hand.length ? 150 : 40 }}
+      contentContainerStyle={{ padding: 12, paddingBottom: hand.length ? 170 : 40 }}
     >
       <RosterPanel
         title="Your roster"
@@ -781,7 +781,9 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
           onClose={() => setShopOpen(false)}
           // Trust the server's balance rather than deducting locally — on a
           // practice week nothing is actually charged.
-          onChanged={(bal) => setCoins(bal)}
+          // Both, or the hand goes stale: a bought card only reaches the hand
+          // through `inventory`, which is otherwise read once on mount.
+          onChanged={(bal, inv) => { setCoins(bal); setInventory(inv); }}
         />
       )}
 

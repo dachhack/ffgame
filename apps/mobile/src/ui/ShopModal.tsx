@@ -9,12 +9,21 @@
 // uses. The balance it returns is authoritative; nothing is deducted locally.
 // That matters on practice weeks, where the server deliberately charges nothing
 // — a client-side ledger would show coin draining that the server never took.
+//
+// Rendered in `Overlay`, like every other modal here. It was the last holdout on
+// `presentationStyle="pageSheet"` — the full-screen iOS idiom Overlay's own note
+// says this product isn't. Two things went wrong with it on a phone: the sheet
+// took the entire screen with the board gone behind it, and its header drew
+// UNDER the status bar, putting the ✕ beneath the clock and battery where the
+// system eats the tap. That is the "doesn't close" — there was no backdrop to
+// tap either, so the only way out was the button that couldn't be pressed.
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { POWERUPS, POWERUP_CATEGORIES, powerupCategory } from '@drip/core/data/powerups';
 import { myInventory, walletBuyPowerup } from '@drip/core/data/liveApi';
 import { useTheme, MONO, alpha } from '../theme.native';
-import { Display, Mono } from './prims';
+import { Mono } from './prims';
+import { Overlay } from './Overlay';
 
 export function ShopModal({ visible, matchupId, balance, practice, onClose, onChanged }: {
   visible: boolean;
@@ -24,9 +33,17 @@ export function ShopModal({ visible, matchupId, balance, practice, onClose, onCh
    *  not imply the season wallet moves. */
   practice?: boolean;
   onClose: () => void;
-  /** Fired after a successful buy with the server's new balance, so the caller
-   *  can re-read its own wallet rather than guessing. */
-  onChanged: (balance: number) => void;
+  /** Fired after a successful buy with the server's new balance AND the freshly
+   *  re-read inventory.
+   *
+   *  The inventory is not a convenience. This used to report the balance only,
+   *  and the shop refreshed its own `owned` map privately — so after a purchase
+   *  the shop said OWNED ×1 while the board's hand, reading the parent's copy
+   *  loaded once on mount, stayed empty. Coin left the wallet, the item existed
+   *  server-side, and the card the player paid for was nowhere on screen. Handing
+   *  the fresh map up makes the two views incapable of disagreeing, and costs no
+   *  extra round trip: the shop already had to fetch it. */
+  onChanged: (balance: number, inventory: Record<string, number>) => void;
 }) {
   const t = useTheme();
   const [tab, setTab] = useState<string>('all');
@@ -51,8 +68,13 @@ export function ShopModal({ visible, matchupId, balance, practice, onClose, onCh
       if (r?.ok) {
         setFlash(id);
         setTimeout(() => setFlash((f) => (f === id ? null : f)), 700);
-        onChanged(Number(r.balance ?? balance));
-        myInventory(matchupId).then((inv) => setOwned(inv ?? {})).catch(() => {});
+        // Re-read BEFORE reporting up, so the caller gets the post-purchase
+        // inventory rather than being told a balance and left to find out about
+        // the item on its own. On a failed read, fall back to an optimistic
+        // bump: the buy succeeded, so the item is owned whatever the re-read did.
+        const inv = await myInventory(matchupId).catch(() => ({ ...owned, [id]: (owned[id] ?? 0) + 1 }));
+        setOwned(inv ?? {});
+        onChanged(Number(r.balance ?? balance), inv ?? {});
       } else {
         setErr(r?.error ?? 'Could not buy that power-up.');
       }
@@ -64,20 +86,15 @@ export function ShopModal({ visible, matchupId, balance, practice, onClose, onCh
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: t.bg }}>
-        <View style={{ padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Display size={20}>Power-Up Shop</Display>
-            <Pressable onPress={onClose} hitSlop={12}><Text style={{ fontSize: 20, color: t.dim }}>✕</Text></Pressable>
-          </View>
-          <Mono size={10} tone="faint" style={{ marginTop: 6 }}>
-            {practice
-              ? `◈ ${Math.round(balance)} PRACTICE COIN · 🏈 this week’s practice budget — your season wallet is untouched`
-              : `◈ ${Math.round(balance)} DRIP COIN · +5 per signature play`}
-          </Mono>
-        </View>
-
+    <Overlay
+      visible={visible}
+      title="Power-Up Shop"
+      subtitle={practice
+        ? `◈ ${Math.round(balance)} PRACTICE COIN · 🏈 THIS WEEK’S PRACTICE BUDGET — YOUR SEASON WALLET IS UNTOUCHED`
+        : `◈ ${Math.round(balance)} DRIP COIN · +5 PER SIGNATURE PLAY`}
+      onClose={onClose}
+    >
+      <View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 6, padding: 12 }}>
           {[{ id: 'all', label: 'All' }, ...POWERUP_CATEGORIES].map((c) => {
             const on = tab === c.id;
@@ -99,7 +116,11 @@ export function ShopModal({ visible, matchupId, balance, practice, onClose, onCh
 
         {!!err && <Mono size={10.5} tone="opp" style={{ paddingHorizontal: 14, paddingBottom: 6 }}>{err}</Mono>}
 
-        <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40, flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' }}>
+        {/* Bounded, not full-screen: the card sits inside Overlay's 88% cap, so
+            the grid scrolls within it rather than the sheet swallowing the
+            board. Without a height here the wrapped grid would size to its
+            content and push the ✕ off the top. */}
+        <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ padding: 12, paddingBottom: 20, flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' }}>
           {shown.map((p) => {
             const have = owned[p.id] ?? 0;
             const afford = balance >= p.price;
@@ -140,6 +161,6 @@ export function ShopModal({ visible, matchupId, balance, practice, onClose, onCh
           })}
         </ScrollView>
       </View>
-    </Modal>
+    </Overlay>
   );
 }
