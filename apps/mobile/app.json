@@ -20,7 +20,8 @@
     "plugins": [
       "expo-web-browser",
       "./plugins/withCoreBundleInput",
-      "./plugins/withPlaytestSigning"
+      "./plugins/withPlaytestSigning",
+      "./plugins/withReleaseShrink"
     ]
   }
 }
