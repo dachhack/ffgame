@@ -92,6 +92,70 @@ export async function signInWithProvider(provider: 'google' | 'apple'): Promise<
   if (error) throw error;
 }
 
+/** OAuth step 1 for hosts with no page to navigate (native).
+ *
+ *  `signInWithProvider` above works by redirecting the browser; an app has to
+ *  open the provider in an in-app browser and handle the return itself, so it
+ *  needs the URL rather than a navigation. `skipBrowserRedirect` is what hands
+ *  it back.
+ *
+ *  The provider still sees SUPABASE's callback URL, not ours — Supabase then
+ *  redirects on to `redirectTo()`. So enabling this needs no new client in the
+ *  Google console; it needs the app's deep link added to Supabase → Auth → URL
+ *  Configuration → Redirect URLs. */
+export async function oauthAuthorizeUrl(provider: 'google' | 'apple'): Promise<string> {
+  const { data, error } = await (await client()).auth.signInWithOAuth({
+    provider,
+    options: { redirectTo: redirectTo(), skipBrowserRedirect: true },
+  });
+  if (error) throw error;
+  if (!data?.url) throw new Error('The provider didn’t return a sign-in URL.');
+  return data.url;
+}
+
+/** OAuth step 2: turn the callback URL into a session.
+ *
+ *  Handles BOTH shapes on purpose rather than pinning a flow. PKCE comes back
+ *  as `?code=…` and is exchanged; the implicit flow comes back with the tokens
+ *  in the fragment and is set directly. Which one arrives depends on the
+ *  client's `flowType`, and hard-coding either here would break the moment that
+ *  default changes under us.
+ *
+ *  Parsed with regex, not `new URL()`: React Native's URL polyfill is partial
+ *  and unreliable on custom schemes like `dripfantasy://`, which is exactly
+ *  what this receives. */
+export async function completeOAuthCallback(callbackUrl: string): Promise<void> {
+  const grab = (re: RegExp): string | null => {
+    const m = re.exec(callbackUrl);
+    return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : null;
+  };
+
+  // The provider can decline before any token exists — surface its reason
+  // rather than a generic "no session".
+  const errDesc = grab(/[?#&]error_description=([^&]+)/);
+  const errCode = grab(/[?#&]error(?:_code)?=([^&]+)/);
+  if (errDesc || errCode) throw new Error(errDesc || errCode || 'Sign-in was declined.');
+
+  const sb = await client();
+
+  const code = grab(/[?&]code=([^&#]+)/);
+  if (code) {
+    const { error } = await sb.auth.exchangeCodeForSession(code);
+    if (error) throw error;
+    return;
+  }
+
+  const access_token = grab(/[#&]access_token=([^&]+)/);
+  const refresh_token = grab(/[#&]refresh_token=([^&]+)/);
+  if (access_token && refresh_token) {
+    const { error } = await sb.auth.setSession({ access_token, refresh_token });
+    if (error) throw error;
+    return;
+  }
+
+  throw new Error('Sign-in didn’t return a session. Please try again.');
+}
+
 // ── Password auth ───────────────────────────────────────────────────────────────
 export async function signInPassword(email: string, password: string): Promise<void> {
   const { error } = await (await client()).auth.signInWithPassword({ email: email.trim(), password });

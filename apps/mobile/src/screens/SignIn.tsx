@@ -17,8 +17,11 @@
 // "magic-link fallback for mobile".
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import {
   signInPassword, signUpPassword, sendMagicLink, verifyEmailOtp, ensureAppUser, getSession, friendlyError,
+  oauthAuthorizeUrl, completeOAuthCallback,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
 import { Display, LinkButton, Mono, PrimaryButton } from '../ui/prims';
@@ -80,6 +83,24 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
 
   const submitCode = () => run(async () => {
     await verifyEmailOtp(email, code);
+    await finish();
+  });
+
+  /** Google, via an in-app browser session.
+   *
+   *  This is the one flow that genuinely needs the deep-link handling the code
+   *  path avoids — there is no way to do OAuth without leaving the app and
+   *  coming back. `openAuthSessionAsync` keeps it inside an ASWebAuthenticationSession
+   *  / Custom Tab, so the return lands here as a value rather than as a cold
+   *  app launch we would have to reconstruct state from.
+   *
+   *  Backing out is not an error: `cancel` (user hit done) and `dismiss` (swiped
+   *  it away) both just return them to the form. */
+  const google = () => run(async () => {
+    const url = await oauthAuthorizeUrl('google');
+    const res = await WebBrowser.openAuthSessionAsync(url, Linking.createURL('/auth'));
+    if (res.type !== 'success') return;
+    await completeOAuthCallback(res.url);
     await finish();
   });
 
@@ -163,6 +184,20 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
               <Mono size={9} tone="faint" track={0.1}>OR</Mono>
               <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: t.bd }} />
             </View>
+
+            <Pressable
+              onPress={google}
+              disabled={busy}
+              style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bdh, backgroundColor: t.surface, borderRadius: 6, paddingVertical: 13, opacity: busy ? 0.6 : 1 }}
+            >
+              {/* A plain letter mark, not the Google "G" asset. Google's branding
+                  guidelines require their supplied logo at a fixed size and
+                  wordmark — worth doing with a real asset before this ships to a
+                  store, but shipping a wrong-coloured approximation of a
+                  trademark is worse than not using one. */}
+              <Text style={{ fontSize: 15, fontWeight: '700', color: t.dimstrong }}>G</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: t.text }}>Continue with Google</Text>
+            </Pressable>
 
             <Pressable
               onPress={() => (email.trim() ? requestCode() : setErr('Enter your email first.'))}
