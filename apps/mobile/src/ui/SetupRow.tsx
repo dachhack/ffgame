@@ -65,12 +65,16 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, hydrated = t
     if (pick?.playerId && !pick?.metricId && !lockPlayer) setMetricOpen(true);
   }, [pick?.playerId, pick?.metricId, lockPlayer, hydrated]);
 
+  // Centred, because the cards are capped now (COMPACT_W) and left to
+  // themselves a flex row would push them to the edges with a hole between —
+  // the pairing is the point, so they sit together.
   return (
-    <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
+    <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start', justifyContent: 'center' }}>
       {/* Your card, then the opponent's face-down one — the pairing IS the
           game's premise, so they sit at matched size on the felt. */}
       {player ? (
         <CardFace
+          compact
           slug={player.id}
           name={player.name}
           pos={player.pos}
@@ -88,10 +92,10 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, hydrated = t
           )}
         />
       ) : (
-        <CardEmpty idx={idx} label={lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'} onPress={lockPlayer ? undefined : onOpenPicker} />
+        <CardEmpty compact idx={idx} label={lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'} onPress={lockPlayer ? undefined : onOpenPicker} />
       )}
 
-      <CardBack idx={idx} onPress={onScout} actionLabel={onScout ? '🔍 SCOUT' : undefined} />
+      <CardBack compact idx={idx} onPress={onScout} actionLabel={onScout ? '🔍 SCOUT' : undefined} />
 
       <MetricModal
         visible={metricOpen}

@@ -17,6 +17,13 @@
 // about the centre; tapping one straightens it, lifts it, and opens its tip
 // above with the ARM / DISARM action. At most MAX_HAND fan, the rest sit behind
 // a "+N MORE" tile that opens the full list.
+//
+// The hand is STOWED by default and rises when you tap the POWER UPS tab. It
+// used to sit permanently open, which cost 170pt of a phone screen — the board
+// had to reserve that much bottom padding whether or not you were thinking
+// about cards, and on the setup board you mostly are not: you are filling
+// slots. A tab costs 40pt and says how many cards are waiting, which is the
+// part you need at a glance. Dealing it out is the deliberate act.
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -38,12 +45,19 @@ export interface HandCard {
 const CARD_W = 78;
 const CARD_H = 106;
 const MAX_HAND = 6;
+/** The stowed tab's height — and so the only bottom padding the board owes the
+ *  hand. Exported so LivePicks reserves exactly this and not a card's worth. */
+export const HAND_TAB_H = 40;
 /** Card stock: the web's dark leather. RN has no radial-gradient, so this is the
  *  gradient's midpoint as a flat fill — the dot texture reads as noise at 78px
  *  anyway, and the black rim + hard shadow are what actually sell it. */
 const STOCK = '#2A2115';
 const STOCK_EDGE = '#000';
 const INK = '#EFE4C8';
+/** The tab's ground. Card stock rather than a theme surface: it reads as the
+ *  edge of the deck the cards come out of, and it has to stay legible against
+ *  every theme's background, six of which the picker can swap under it. */
+const FELT_BAR = '#1C160C';
 
 export function PowerupHand({ cards, busyId, onArm, onDisarm }: {
   cards: HandCard[];
@@ -58,17 +72,25 @@ export function PowerupHand({ cards, busyId, onArm, onDisarm }: {
   const insets = useSafeAreaInsets();
   const [raised, setRaised] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const rise = useRef(new Animated.Value(0)).current;
 
+  const dealt = open && cards.length > 0;
   useEffect(() => {
-    Animated.timing(rise, { toValue: cards.length ? 1 : 0, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-  }, [cards.length, rise]);
+    Animated.timing(rise, { toValue: dealt ? 1 : 0, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [dealt, rise]);
 
   // A card that leaves the hand (armed away, consumed) must not stay raised —
   // the tip would hang over the board with nothing under it.
   useEffect(() => {
     if (raised && !cards.some((c) => c.id === raised)) setRaised(null);
   }, [cards, raised]);
+
+  // Playing your last card stows the hand rather than leaving an empty fan open
+  // over the board.
+  useEffect(() => {
+    if (!cards.length && open) setOpen(false);
+  }, [cards.length, open]);
 
   if (!cards.length) return null;
 
@@ -95,12 +117,15 @@ export function PowerupHand({ cards, busyId, onArm, onDisarm }: {
     <>
       {/* box-none: the board keeps scrolling between and behind the cards —
           only the cards themselves take touches. */}
+      {/* Stowed, the fan is translated below the screen edge AND transparent AND
+          untouchable — all three, because a card that is merely off-screen still
+          catches touches at the edge on Android. */}
       <Animated.View
-        pointerEvents="box-none"
+        pointerEvents={dealt ? 'box-none' : 'none'}
         style={{
-          position: 'absolute', left: 0, right: 0, bottom: insets.bottom + 8, height: CARD_H + 40,
+          position: 'absolute', left: 0, right: 0, bottom: insets.bottom + HAND_TAB_H + 6, height: CARD_H + 40,
           opacity: rise,
-          transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [90, 0] }) }],
+          transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [CARD_H + 60, 0] }) }],
         }}
       >
         <Mono size={8.5} tone="faint" track={0.24} style={{ textAlign: 'center', marginBottom: 4 }}>
@@ -185,6 +210,27 @@ export function PowerupHand({ cards, busyId, onArm, onDisarm }: {
           </Pressable>
         )}
       </Animated.View>
+
+      {/* The tab. Always there, always the same place, and it carries the count
+          so a stowed hand still tells you what you're holding. */}
+      <Pressable
+        onPress={() => { setOpen((o) => !o); setRaised(null); }}
+        style={{
+          position: 'absolute', left: 0, right: 0, bottom: 0,
+          height: HAND_TAB_H + insets.bottom, paddingBottom: insets.bottom,
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+          backgroundColor: FELT_BAR,
+          borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#000',
+        }}
+      >
+        <Text style={{ fontSize: 13 }}>🃏</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', letterSpacing: 1.2, color: INK }}>
+          POWER UPS · {total}
+        </Text>
+        {/* Which way the hand will move, not which way it is now — the arrow is
+            the affordance, so it points at the outcome of pressing. */}
+        <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.faint }}>{dealt ? '▾' : '▴'}</Text>
+      </Pressable>
 
       {/* The tip. The web anchors it to the card; here it is anchored to the
           hand so an outer card's tip can't run off the screen edge. */}
