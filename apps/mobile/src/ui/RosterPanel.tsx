@@ -19,7 +19,7 @@ import { GROUP_TABS, GroupBadge } from './rosterGroup';
 
 const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
-export function RosterPanel({ title, players, wins, windowOf, groupOf, accent }: {
+export function RosterPanel({ title, players, wins, windowOf, groupOf, accent, open: openProp, onToggle }: {
   title: string;
   players: Player[];
   /** The week's windows, in order — the grouping and its labels. */
@@ -30,9 +30,21 @@ export function RosterPanel({ title, players, wins, windowOf, groupOf, accent }:
    *  any caller with a synthetic pool has no such distinction to draw. */
   groupOf?: (playerId: string) => PoolGroup;
   accent: string;
+  /** Controlled mode. The board shows YOUR ROSTER and OPPONENT ROSTER as a pair
+   *  of buttons on one row — the web's arrangement — so the caller owns which is
+   *  open and this renders only the body. Uncontrolled (no `open`) keeps the
+   *  self-contained header for any other caller. */
+  open?: boolean;
+  onToggle?: () => void;
 }) {
   const t = useTheme();
-  const [open, setOpen] = useState(false);
+  const [openSelf, setOpenSelf] = useState(false);
+  const controlled = openProp !== undefined;
+  const open = controlled ? openProp : openSelf;
+  const setOpen = (v: boolean | ((o: boolean) => boolean)) => {
+    if (controlled) { onToggle?.(); return; }
+    setOpenSelf(v as never);
+  };
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<string>('ALL');
   const [grp, setGrp] = useState<PoolGroup | 'ALL'>('ALL');
@@ -77,18 +89,20 @@ export function RosterPanel({ title, players, wins, windowOf, groupOf, accent }:
 
   return (
     <View style={{ marginBottom: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: open ? accent : t.bd, borderRadius: 8, overflow: 'hidden', backgroundColor: t.surface }}>
-      <Pressable
-        onPress={() => setOpen((o) => !o)}
-        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 13 }}
-      >
-        <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 1, color: open ? accent : t.dim }}>
-          {open ? '▾' : '▸'}  {title.toUpperCase()}
-        </Text>
-        <Mono size={10} tone="faint">{players.length}</Mono>
-      </Pressable>
+      {!controlled && (
+        <Pressable
+          onPress={() => setOpen((o) => !o)}
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 13 }}
+        >
+          <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 1, color: open ? accent : t.dim }}>
+            {open ? '▾' : '▸'}  {title.toUpperCase()}
+          </Text>
+          <Mono size={10} tone="faint">{players.length}</Mono>
+        </Pressable>
+      )}
 
       {open && (
-        <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+        <View style={controlled ? undefined : { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
           <View style={{ padding: 10, gap: 8 }}>
             <TextInput
               value={q}

@@ -26,14 +26,14 @@ import {
   myUnlocks, armUnlock, disarmUnlock, myComboQty,
   myWallet, ensureWallet,
   liveSlate, matchupTeams, matchupPremium, startCheckout, friendlyError,
-  getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, matchupWallets, weekGameFeeds,
+  getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, weekGameFeeds,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
   type WindowScore, type RevealedPick, type GameFeedRow,
 } from '@drip/core/data/liveApi';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/gameFeed';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
 import type { GameWindow, Player, Pos, WindowId } from '@drip/core/types';
-import { useTheme } from '../theme.native';
+import { useTheme, MONO } from '../theme.native';
 import { Card, Chip, Display, LinkButton, Mono, Notice } from '../ui/prims';
 import { SetupRow } from '../ui/SetupRow';
 import { FELT } from '../ui/cards';
@@ -41,7 +41,7 @@ import { PlayerPicker } from '../ui/PlayerPicker';
 import { RosterPanel } from '../ui/RosterPanel';
 import { ShopModal } from '../ui/ShopModal';
 import { PowerupHand, type HandCard } from '../ui/PowerupHand';
-import { Duel, Big, round1 } from '../ui/Duel';
+import { Duel, round1 } from '../ui/Duel';
 import { FieldView } from '../ui/FieldView';
 import { Overlay } from '../ui/Overlay';
 
@@ -120,6 +120,8 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   // it fetches yours, and shows only who COULD appear in a window.
   const [oppPool, setOppPool] = useState<PoolPlayer[]>([]);
   const [scoutWin, setScoutWin] = useState<GameWindow | null>(null);
+  /** Which roster is expanded — one at a time, so the board stays reachable. */
+  const [rosterOpen, setRosterOpen] = useState<'you' | 'their' | null>(null);
 
   // ── Live state ──────────────────────────────────────────────────────────────
   // What the WORKER published, not anything resolved here. This screen used to
@@ -130,7 +132,6 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   // Matchup phases.
   const [scores, setScores] = useState<WindowScore[]>([]);
   const [revealed, setRevealed] = useState<RevealedPick[]>([]);
-  const [wallets, setWallets] = useState<{ home: number | null; away: number | null } | null>(null);
   const [youAreHome, setYouAreHome] = useState(true);
   /** Per-GAME play feeds the worker publishes — what the drive chart reads.
    *  Separate from live_play (the engine's per-player rows): a field needs the
@@ -217,14 +218,13 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         // writes matchup_state and Supabase pushes, which is also why the score
         // on the phone cannot drift from the score on the web.
         const refreshLive = async () => {
-          const [mm, ss, pk2, ww, gf] = await Promise.all([
+          const [mm, ss, pk2, gf] = await Promise.all([
             getMatchup(m.id), getMatchupState(m.id), getRevealedPicks(m.id),
-            matchupWallets(m.id).catch(() => null),
             weekGameFeeds(m.week).catch(() => [] as GameFeedRow[]),
           ]);
           if (!alive) return;
           if (mm) setMatchup(mm);
-          setScores(ss); setRevealed(pk2); setWallets(ww);
+          setScores(ss); setRevealed(pk2);
           // Install the week's feeds so gameFeedFor() resolves them. The live
           // overlay is exclusive per week — a live board must never fall through
           // to baked 2025 drives, which would draw a plausible, wrong field.
@@ -326,6 +326,13 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   // RB1 from a taxi rookie in a list that otherwise shows them identically.
   const grpBySlug = useMemo<Record<string, PoolGroup>>(
     () => Object.fromEntries(pool.map((p) => [p.slug, p.grp])), [pool]);
+  const oppWinBySlug = useMemo<Record<string, WindowId | 'any' | null>>(() => {
+    const m: Record<string, WindowId | 'any' | null> = {};
+    for (const p of oppPool) { const tm = p.team || slugMeta(p.slug).team; m[p.slug] = tm ? windowForTeam(week, tm) : 'any'; }
+    return m;
+  }, [oppPool, week]);
+  const oppGrpBySlug = useMemo<Record<string, PoolGroup>>(
+    () => Object.fromEntries(oppPool.map((p) => [p.slug, p.grp])), [oppPool]);
   const winBySlug = useMemo<Record<string, WindowId | 'any' | null>>(() => {
     const m: Record<string, WindowId | 'any' | null> = {};
     for (const p of pool) { const tm = teamBySlug[p.slug]; m[p.slug] = tm ? windowForTeam(week, tm) : 'any'; }
@@ -597,16 +604,71 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
       // than scrolling with it — otherwise the save status sits under the cards.
       contentContainerStyle={{ padding: 12, paddingBottom: hand.length ? 170 : 40 }}
     >
-      <RosterPanel
-        title="Your roster"
-        players={pool.map(poolToPlayer)}
-        wins={wins}
-        // Same resolver the slate gating uses, so the grouping here and the
-        // eligibility counts on each window can never disagree.
-        windowOf={(id) => winBySlug[id] ?? null}
-        groupOf={(id) => grpBySlug[id] ?? 'start'}
-        accent={t.you}
-      />
+      {/* Week + score on ONE line — the web's slim strip. This was a full card
+          headed THIS WEEK with two 38px numerals, which is a lot of screen for
+          "0 vs 0" on a Wednesday. The score matters most when it's moving, and
+          when it is, it's still right here. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <WeekNav />
+        <View style={{ flex: 1 }} />
+        <Mono size={9} tone="faint" track={0.1}>{matchup!.status.toUpperCase()}</Mono>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+          <Text style={{ fontSize: 19, fontWeight: '800', color: t.you }}>{round1(totals.you)}</Text>
+          <Mono size={9} tone="faint">vs</Mono>
+          <Text style={{ fontSize: 19, fontWeight: '800', color: t.opp }}>{round1(totals.them)}</Text>
+        </View>
+      </View>
+
+      {/* Both rosters, as a pair — the web's arrangement. The opponent's ROSTER
+          is public in this game; what stays hidden is which of them they put in
+          which slot, and that is a different question this panel never answers.
+          Scouting already showed one window's worth; this is the whole thing. */}
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+        {([['you', 'YOUR ROSTER', t.you, pool.length], ['their', 'OPPONENT ROSTER', t.opp, oppPool.length]] as const).map(([side, label, accent, n]) => {
+          const on = rosterOpen === side;
+          return (
+            <Pressable
+              key={side}
+              onPress={() => setRosterOpen(on ? null : side)}
+              style={{
+                flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 6,
+                backgroundColor: t.surface,
+                borderWidth: StyleSheet.hairlineWidth, borderColor: on ? accent : t.bd,
+              }}
+            >
+              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.8, color: on ? accent : t.dim }}>
+                {on ? '▾' : '▸'} {label}{n ? ` ${n}` : ''}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {rosterOpen === 'you' && (
+        <RosterPanel
+          title="Your roster"
+          players={pool.map(poolToPlayer)}
+          wins={wins}
+          // Same resolver the slate gating uses, so the grouping here and the
+          // eligibility counts on each window can never disagree.
+          windowOf={(id) => winBySlug[id] ?? null}
+          groupOf={(id) => grpBySlug[id] ?? 'start'}
+          accent={t.you}
+          open
+          onToggle={() => setRosterOpen(null)}
+        />
+      )}
+      {rosterOpen === 'their' && (
+        <RosterPanel
+          title="Opponent roster"
+          players={oppPool.map(poolToPlayer)}
+          wins={wins}
+          windowOf={(id) => oppWinBySlug[id] ?? null}
+          groupOf={(id) => oppGrpBySlug[id] ?? 'start'}
+          accent={t.opp}
+          open
+          onToggle={() => setRosterOpen(null)}
+        />
+      )}
 
       {/* An empty pool is not a bug and not the user's fault, but "0 eligible"
           on every window looks exactly like both. The lineup is keyed by
@@ -635,31 +697,26 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
 
       {/* Header — mirrors the web's title block: who is playing, how much of
           the lineup is set, and the week you are looking at. */}
-      <Card style={{ marginBottom: 12 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
-            {isPreseasonWeek(matchup!.week) && (
-              <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 }}>
-                <Mono size={9} tone="you" weight="700" track={0.08}>🏈 PRESEASON</Mono>
-              </View>
-            )}
+      <Card style={{ marginBottom: 10 }}>
+        {isPreseasonWeek(matchup!.week) && (
+          <View style={{ alignSelf: 'flex-start', marginBottom: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 }}>
+            <Mono size={9} tone="you" weight="700" track={0.08}>🏈 PRESEASON</Mono>
           </View>
-          <WeekNav />
-        </View>
+        )}
 
         {/* Who, how far along, and the two controls — nothing else. The rules
             used to be spelled out here in two paragraphs, which is a fine thing
             to read once and a permanent tax on every visit after that; the board
             below already says LOCKED / SETUP, N eligible and N/M SET on each
             window, which is the same information where it applies. */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <Text numberOfLines={1} style={{ flex: 1, fontSize: 15, fontWeight: '700', color: t.text }}>
             {myTeam?.team_name ?? 'You'} vs {oppTeam?.team_name ?? 'Opponent'}
           </Text>
           <Mono size={9.5} weight="700" tone={filled === slots.length ? 'you' : 'faint'} track={0.08}>{filled}/{slots.length} SET</Mono>
         </View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
           <Chip
             label={aiBusy ? '…' : `🤖 auto-pilot ${controller === 'ai' ? 'on' : 'off'}`}
             on={controller === 'ai'}
@@ -726,36 +783,6 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
               );
             })}
           </ScrollView>
-        </Card>
-      )}
-
-      {/* The score, once there IS one. Hidden before kickoff rather than shown
-          as 0–0: a scoreboard reading nil-nil on Wednesday looks like a result,
-          and this board's job before kickoff is the lineup. */}
-      {(scores.length > 0 || matchup!.status !== 'scheduled') && (
-        <Card style={{ marginBottom: 10 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Mono size={10} weight="700" track={0.12}>THIS WEEK</Mono>
-            <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 4, paddingHorizontal: 7, paddingVertical: 3 }}>
-              <Mono size={9} tone={matchup!.status === 'final' ? 'dim' : 'you'}>{matchup!.status.toUpperCase()}</Mono>
-            </View>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: 18, marginTop: 12 }}>
-            <Big label="YOU" value={round1(totals.you)} color={t.you} team={myTeam ?? undefined} />
-            <Mono size={11} tone="faint" style={{ paddingTop: 16 }}>vs</Mono>
-            <Big label="OPP" value={round1(totals.them)} color={t.opp} team={oppTeam ?? undefined} />
-          </View>
-          {(() => {
-            const myBank = youAreHome ? wallets?.home : wallets?.away;
-            const theirBank = youAreHome ? wallets?.away : wallets?.home;
-            if (myBank == null && theirBank == null) return null;
-            return (
-              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 18, marginTop: 8 }}>
-                <Mono size={9.5} tone="you">◆ {round1(Number(myBank ?? 0))} banked</Mono>
-                <Mono size={9.5} tone="opp">◆ {round1(Number(theirBank ?? 0))}</Mono>
-              </View>
-            );
-          })()}
         </Card>
       )}
 
