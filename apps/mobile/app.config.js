@@ -29,6 +29,10 @@ const KEYS = [
   'VITE_SUPABASE_ANON_KEY',
   'VITE_YAHOO_CLIENT_ID',
   'VITE_MARK_FREE',
+  // Google's WEB OAuth client id. Present = this build signs in through the
+  // Play Services account picker instead of a browser; absent = the browser
+  // flow, which is what every build did before. See src/auth/googleNative.ts.
+  'VITE_GOOGLE_WEB_CLIENT_ID',
 ];
 
 // Android's versionCode is an integer the OS compares to decide what counts as

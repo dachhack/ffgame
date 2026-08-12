@@ -23,6 +23,7 @@ import {
   signInPassword, signUpPassword, sendMagicLink, verifyEmailOtp, ensureAppUser, getSession, friendlyError,
   oauthAuthorizeUrl, completeOAuthCallback,
 } from '@drip/core/data/liveApi';
+import { nativeGoogleReady, signInWithGoogleNative } from '../auth/googleNative';
 import { useTheme, MONO } from '../theme.native';
 import { Display, LinkButton, Mono, PrimaryButton } from '../ui/prims';
 
@@ -86,17 +87,26 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
     await finish();
   });
 
-  /** Google, via an in-app browser session.
+  /** Google — natively when the build has a client id, else via an in-app
+   *  browser session.
    *
-   *  This is the one flow that genuinely needs the deep-link handling the code
-   *  path avoids — there is no way to do OAuth without leaving the app and
-   *  coming back. `openAuthSessionAsync` keeps it inside an ASWebAuthenticationSession
+   *  The browser path is the one flow that genuinely needs the deep-link
+   *  handling the code path avoids: OAuth over the web cannot happen without
+   *  leaving the app and coming back. `openAuthSessionAsync` keeps it inside an ASWebAuthenticationSession
    *  / Custom Tab, so the return lands here as a value rather than as a cold
    *  app launch we would have to reconstruct state from.
    *
    *  Backing out is not an error: `cancel` (user hit done) and `dismiss` (swiped
    *  it away) both just return them to the form. */
   const google = () => run(async () => {
+    // Native first when this build is configured for it — the account picker is
+    // a system sheet, so no browser opens at all. See src/auth/googleNative.ts
+    // for what "configured" needs; an unconfigured build falls through.
+    if (nativeGoogleReady()) {
+      if (!await signInWithGoogleNative()) return; // backed out
+      await finish();
+      return;
+    }
     const url = await oauthAuthorizeUrl('google');
     const res = await WebBrowser.openAuthSessionAsync(url, Linking.createURL('/auth'));
     if (res.type !== 'success') return;
