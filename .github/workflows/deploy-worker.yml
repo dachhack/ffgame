@@ -186,3 +186,36 @@ jobs:
             exit 1
           fi
           echo "All machines started."
+
+      # ── Is it WORKING? ────────────────────────────────────────────────────
+      # Three questions, three separate answers, and this session burned a day
+      # discovering they are not the same one:
+      #
+      #   fly deploy green   an image shipped
+      #   state = started    a process exists
+      #   these log lines    the process is doing its job
+      #
+      # `started` was true while the scheduler sat behind a hung ESPN fetch and
+      # synced nothing for four days. The only thing that would have shown that
+      # is the worker's own output, which lived in `fly logs` on a laptop. It
+      # lives in the run log now, so the deploy that breaks the tick is the
+      # deploy you can see breaking it.
+      #
+      # Never fails the job: the machine-state assert above is the gate, and a
+      # log stream that hiccups must not turn a good deploy red.
+      - name: What the worker is saying
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -uo pipefail
+          # Long enough to clear buildPlayerIndex, the first tick(), and the
+          # boot syncTick — the three things worth seeing.
+          sleep 75
+          echo "── recent worker output ──"
+          { timeout 60 flyctl logs --no-tail || timeout 45 flyctl logs || true; } 2>&1 | tail -150
+          echo "── end ──"
+          echo "Expect: 'worker starting', 'player index built', and — if"
+          echo "PILOT_LEAGUE_IDS is set — a 'weekly sync: week N' line. A"
+          echo "'no PILOT_LEAGUE_IDS set' line means a stale Fly secret is"
+          echo "overriding fly.toml. No sync line at all means the tick above"
+          echo "it never returned."
