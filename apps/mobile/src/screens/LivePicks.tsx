@@ -52,7 +52,11 @@ function poolToPlayer(p: PoolPlayer): Player {
   return { id: p.slug, name: shortName(p.full), full: p.full, pos: p.pos as Pos, team: slugMeta(p.slug).team, stats: { ...ZERO_STATS } };
 }
 
-const LIVE_UNLOCKS = ['unlock-combo-drip', 'unlock-return', 'unlock-pass-td10'] as const;
+// The board used to carry a hardcoded LIVE_UNLOCKS trio here. The shop derives
+// the set from `kind: 'metric'` instead, which is the property that decides the
+// behaviour anyway — and which does not go stale: the hardcoded list had missed
+// `unlock-underdog` since it was added, so its metric gated on an unlock nothing
+// in the app could arm.
 
 interface Slot { win: string; winLabel: string; slot: string; key: string }
 
@@ -482,6 +486,12 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   /** The hand: everything owned, plus anything currently armed (an armed card
    *  has left the inventory, so it would otherwise vanish from view). */
   const hand: HandCard[] = POWERUPS
+    // Metric unlocks are NOT cards. They arm through arm_unlock and the metric
+    // picker gates on `unlocks`; a card played from the hand arms into `buffs`,
+    // which nothing reads for these. Left in, a stray inventory row from before
+    // the shop stopped selling them would deal a card that costs a card and
+    // unlocks nothing.
+    .filter((p) => p.kind !== 'metric')
     .filter((p) => (inventory[p.id] ?? 0) > 0 || buffs.has(p.id))
     .map((p) => {
       const armed = buffs.has(p.id);
@@ -608,10 +618,19 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
           headed THIS WEEK with two 38px numerals, which is a lot of screen for
           "0 vs 0" on a Wednesday. The score matters most when it's moving, and
           when it is, it's still right here. */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <WeekNav />
-        <View style={{ flex: 1 }} />
-        <Mono size={9} tone="faint" track={0.1}>{matchup!.status.toUpperCase()}</Mono>
+        {/* Who's playing, on the week line rather than heading a card of its
+            own. It takes the slack that was an empty spacer. */}
+        <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, fontWeight: '700', color: t.text }}>
+          {myTeam?.team_name ?? 'You'} vs {oppTeam?.team_name ?? 'Opponent'}
+        </Text>
+        {/* SCHEDULED is the default and says nothing a 0–0 score doesn't; it
+            cost ~70px on the one line that now has to hold a team name too.
+            LIVE and FINAL are worth the room, so they still get it. */}
+        {matchup!.status !== 'scheduled' && (
+          <Mono size={9} tone="faint" track={0.1}>{matchup!.status.toUpperCase()}</Mono>
+        )}
         <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
           <Text style={{ fontSize: 19, fontWeight: '800', color: t.you }}>{round1(totals.you)}</Text>
           <Mono size={9} tone="faint">vs</Mono>
@@ -649,28 +668,22 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
           </View>
         )}
 
-        {/* Who, how far along, and the two controls — nothing else. The rules
-            used to be spelled out here in two paragraphs, which is a fine thing
-            to read once and a permanent tax on every visit after that; the board
-            below already says LOCKED / SETUP, N eligible and N/M SET on each
-            window, which is the same information where it applies. */}
+        {/* One row: the controls, and how far along you are. The rules used to
+            be spelled out here in two paragraphs, which is a fine thing to read
+            once and a permanent tax on every visit after that; the board below
+            already says LOCKED / SETUP, N eligible and N/M SET on each window,
+            which is the same information where it applies. */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <Text numberOfLines={1} style={{ flex: 1, fontSize: 15, fontWeight: '700', color: t.text }}>
-            {myTeam?.team_name ?? 'You'} vs {oppTeam?.team_name ?? 'Opponent'}
-          </Text>
-          <Mono size={9.5} weight="700" tone={filled === slots.length ? 'you' : 'faint'} track={0.08}>{filled}/{slots.length} SET</Mono>
-        </View>
-
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
           <Chip
             label={aiBusy ? '…' : `🤖 auto-pilot ${controller === 'ai' ? 'on' : 'off'}`}
             on={controller === 'ai'}
             disabled={aiBusy}
             onPress={toggleAi}
           />
+          <View style={{ flex: 1 }} />
+          <Mono size={9.5} weight="700" tone={filled === slots.length ? 'you' : 'faint'} track={0.08}>{filled}/{slots.length} SET</Mono>
           {controller !== 'ai' && (
             <>
-              <View style={{ flex: 1 }} />
               <Mono size={10} tone="you" weight="700">◆ {Math.round(coins)}</Mono>
               <Pressable
                 onPress={() => setShopOpen(true)}
@@ -684,51 +697,21 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         </View>
         {controller === 'ai' && <Mono size={9} tone="faint" style={{ marginTop: 8 }}>Auto-pilot is on — your manual picks below are paused until you turn it off.</Mono>}
 
-        {/* Power-ups live in this card now rather than one of their own.
-            Hidden entirely under auto-pilot, same as before: the AI arms
-            nothing, so offering the controls would be offering a lever
-            attached to nothing. */}
-        {controller !== 'ai' && (
+        {/* The metric-unlock chips that used to sit here are in the shop now —
+            they were a purchase wearing a control's clothes, and the shop is
+            where purchases live. Hidden under auto-pilot for the same reason
+            they always were: the AI arms nothing, so the lever attaches to
+            nothing.
+            What stays is the premium upsell, and only when it applies. */}
+        {controller !== 'ai' && !matchPremium && (
           <View style={{ marginTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
-            {!matchPremium && (
-              <View style={{ marginBottom: 10 }}>
-                <Notice>
-                  <Mono size={9.5} tone="you" weight="700">🔒 Premium unlocks K/DST/IDP + the full power-up set + special events. Both sides of a premium matchup get the full set — never pay-to-win.</Mono>
-                  <View style={{ flexDirection: 'row', gap: 6, marginTop: 7 }}>
-                    <Chip label="Unlock $5 · you" on onPress={() => checkout('personal')} />
-                    <Chip label="Unlock league · $30" onPress={() => checkout('league')} />
-                  </View>
-                </Notice>
+            <Notice>
+              <Mono size={9.5} tone="you" weight="700">🔒 Premium unlocks K/DST/IDP + the full power-up set + special events. Both sides of a premium matchup get the full set — never pay-to-win.</Mono>
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 7 }}>
+                <Chip label="Unlock $5 · you" on onPress={() => checkout('personal')} />
+                <Chip label="Unlock league · $30" onPress={() => checkout('league')} />
               </View>
-            )}
-
-            {/* Unlocks are a control, so they stay — folded into this card
-                rather than owning one. A heading, a card border and 24px of
-                padding to introduce three chips was more frame than picture. */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }} style={{ marginTop: 10 }}>
-              {LIVE_UNLOCKS.map((id) => {
-                const pu = powerupById(id);
-                const combo = id === 'unlock-combo-drip';
-                const on = combo ? comboQty > 0 : unlocks.has(id);
-                // Combo Drip is one slot PER PURCHASE, so the chip always offers
-                // to buy another — affordability matters even when armed.
-                const afford = (on && !combo) || coins >= priceOf(id);
-                return (
-                  <View key={id} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                    <Chip
-                      label={`${pu?.icon ?? ''} ${pu?.name ?? id} ${on ? (combo ? `✓ ×${comboQty} ＋` : '✓') : puLocked(id) ? '🔒' : `◆${priceOf(id)}`}`}
-                      on={on}
-                      disabled={locked || !!buffBusy || !afford}
-                      dim={buffBusy === id}
-                      onPress={() => toggleUnlock(id)}
-                    />
-                    {combo && comboQty > 0 && !locked && (
-                      <Chip label="➖" disabled={!!buffBusy} onPress={disarmComboOne} />
-                    )}
-                  </View>
-                );
-              })}
-            </ScrollView>
+            </Notice>
           </View>
         )}
       </Card>
@@ -933,6 +916,15 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
           // Preseason weeks are practice: the server charges nothing, so the
           // shop must not imply the season wallet moves.
           practice={isPreseasonWeek(matchup.week)}
+          // Metric unlocks buy-and-arm inside the shop rather than becoming
+          // cards — see the note on these props in ShopModal.
+          unlocks={unlocks}
+          comboQty={comboQty}
+          unlockBusy={buffBusy}
+          unlockLocked={puLocked}
+          armsClosed={locked}
+          onToggleUnlock={toggleUnlock}
+          onDisarmCombo={disarmComboOne}
           onClose={() => setShopOpen(false)}
           // Trust the server's balance rather than deducting locally — on a
           // practice week nothing is actually charged.
