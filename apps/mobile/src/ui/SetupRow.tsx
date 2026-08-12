@@ -19,7 +19,7 @@ import { CardFace, CardBack, CardEmpty } from './cards';
 import { Overlay } from './Overlay';
 import { teamLogo } from '@drip/core/data/media';
 
-export function SetupRow({ pick, resolve, lockPlayer, metricFilter, idx = 0, onScout, onOpenPicker, onPickMetric, onClearSlot }: {
+export function SetupRow({ pick, resolve, lockPlayer, metricFilter, hydrated = true, idx = 0, onScout, onOpenPicker, onPickMetric, onClearSlot }: {
   pick?: Pick;
   /** Deal order within the window. */
   idx?: number;
@@ -29,6 +29,10 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, idx = 0, onS
   lockPlayer?: boolean;
   /** Which metrics this slot may offer — LivePicks filters by armed unlocks. */
   metricFilter?: (m: Metric) => boolean;
+  /** False while the board is still loading its saved lineup — see the note on
+   *  the auto-open below. Defaults true for callers whose picks are present
+   *  from the first render. */
+  hydrated?: boolean;
   onOpenPicker: () => void;
   onPickMetric: (id: string) => void;
   onClearSlot: () => void;
@@ -38,25 +42,28 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, idx = 0, onS
   const metric = player && pick?.metricId ? metricById(player.pos, pick.metricId) : null;
   const [metricOpen, setMetricOpen] = useState(false);
 
-  // A freshly-placed player with no metric opens the picker straight away, so a
-  // slot never sits half-set.
+  // A freshly-PLACED player with no metric opens the picker, so a slot never
+  // sits half-set. Placed, which means the player CHANGED and you changed it —
+  // not merely that there is one.
   //
-  // FRESHLY-placed, which means the player CHANGED — not merely that there is
-  // one. Keyed on `pick?.playerId` alone, this also fired on mount, so opening a
-  // league whose saved lineup already held a player without a metric threw the
-  // metric card up over the board before you had touched anything. Half-set
-  // slots are exactly what a saved lineup is full of, so the prompt meant to
-  // catch your own action ambushed you on arrival instead.
-  //
-  // The ref starts at the mount-time value, so the first run is always a no-op
-  // and only a real change reaches setMetricOpen.
+  // Keyed on `pick?.playerId` alone this fires on mount, so a saved lineup
+  // holding a player without a metric threw the card up before you had touched
+  // anything. A mount-seeded ref fixes that only when the pick is already there
+  // at mount; `hydrated` covers the board that renders first and loads after,
+  // where the slot goes undefined → someone; and `settled` covers the case
+  // where the picks and the hydrated flag arrive in the SAME render, which they
+  // do when both setStates land in one batch. All three are needed — see the
+  // matching note in the web's boardParts.tsx, which had all three failures.
   const prevPlayerId = useRef(pick?.playerId);
+  const settled = useRef(false);
   useEffect(() => {
     const prev = prevPlayerId.current;
     prevPlayerId.current = pick?.playerId;
+    if (!hydrated) return;
+    if (!settled.current) { settled.current = true; return; }
     if (prev === pick?.playerId) return;
     if (pick?.playerId && !pick?.metricId && !lockPlayer) setMetricOpen(true);
-  }, [pick?.playerId, pick?.metricId, lockPlayer]);
+  }, [pick?.playerId, pick?.metricId, lockPlayer, hydrated]);
 
   return (
     <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>

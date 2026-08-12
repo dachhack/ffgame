@@ -1065,7 +1065,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6, lineHeight: 1.45 }}>This is the real board. Tap a player’s metric to change how he scores — it’s hidden from your opponent — then arm a power-up and kick off.</div>
               </div>
               <WindowSection
-                rw={demoWin} week={week} phase="setup" clock={0} maxClock={winTarget[fid] ?? GAME_SECONDS}
+                rw={demoWin} week={week} hydrated={heroHydrated} phase="setup" clock={0} maxClock={winTarget[fid] ?? GAME_SECONDS}
                 wallClock={wallClock} realClock={realResolve} wallSeconds={0} playing={false}
                 onTogglePlay={() => {}} onReplay={() => {}}
                 canApplyExtra={false} extraSlotQty={0} onApplyExtra={() => {}} onRemoveExtra={() => {}} rivalryQty={0} rivalryArmed={false} onApplyRivalry={() => {}} onRemoveRivalry={() => {}} onArmClutch={onArmClutch} onAssignBackup={() => {}}
@@ -1120,7 +1120,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             </div>
             <WindowSection
               rw={demoWin}
-              week={week}
+              week={week} hydrated={heroHydrated}
               phase={phase}
               clock={dClock}
               maxClock={dMax}
@@ -1454,7 +1454,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               <WindowSection
                 key={rw.window.id}
                 rw={rw}
-                week={week}
+                week={week} hydrated={heroHydrated}
                 potMatchupId={liveCtx?.matchupId ?? null}
                 phase={winPhaseFor(rw.window.id)}
                 realtime={winRt(rw.window.id)}
@@ -2094,6 +2094,9 @@ function WindowSectionInner(props: {
   rw: ReturnType<typeof buildMatchup>['windows'][number];
   week: number;
   phase: Phase;
+  /** False until the live board's saved lineup has loaded. Passed straight to
+   *  SetupRow, which must not mistake picks ARRIVING for picks being placed. */
+  hydrated?: boolean;
   realtime?: 'setup' | 'locked' | 'live' | 'final' | null; // live board: real-clock window state (no manual playback)
   clock: number;
   maxClock: number;
@@ -2144,7 +2147,7 @@ function WindowSectionInner(props: {
    *  below still short-circuits idle windows. */
   potMatchupId?: string | null;
 }) {
-  const { rw, week, phase, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch, preKick, cards, potMatchupId } = props;
+  const { rw, week, phase, hydrated, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch, preKick, cards, potMatchupId } = props;
   const w = rw.window;
   // Null unless this is a LIVE matchup in a league with the pot flag on. Every
   // window's chip shares one poll (the store in WindowPot.tsx).
@@ -2396,6 +2399,7 @@ function WindowSectionInner(props: {
                 onOpenPicker={() => onOpenPicker(key, w.id)} onPickMetric={(m) => pickMetricFor(key, m)}
                 onClearSlot={() => onClearSlot(key)}
                 onDropPlayer={(id) => onAssign(id)} onScout={() => onScout(w.id)} lockPlayer={lockPlayer || preKick} preKick={preKick}
+                hydrated={hydrated}
               />
             );
             return setupRow;
