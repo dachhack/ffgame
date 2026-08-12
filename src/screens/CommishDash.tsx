@@ -46,7 +46,7 @@ export function CommishDash({ onBack, focusId, defaultTab }: {
           // With several leagues, cards collapse to just their header (first one
           // starts open) so the list stays scannable; a lone/focused league is
           // always expanded.
-          <LeagueRow key={l.league_id} l={l} reload={load} admin={false} defaultTab={defaultTab ?? 'members'}
+          <LeagueRow key={l.league_id} l={l} reload={load} admin={false} mine defaultTab={defaultTab ?? 'members'}
             collapsible={shown.length > 1} defaultOpen={i === 0} />
         ))}
 

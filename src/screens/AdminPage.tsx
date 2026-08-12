@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
-  adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, commishAudit,
+  adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, redeemCommish, commishOverview, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
   adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, type PreseasonWindow, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
@@ -138,6 +138,8 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
   const [audit, setAudit] = useState<AdminAudit[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [tab, setTab] = useState<AdminTab>('leagues');
+  // League ids whose commissioner seat this account personally holds.
+  const [mine, setMine] = useState<Set<string>>(new Set());
   // Open code-request count — badges the Requests tab so new ones aren't missed.
   const [pendingReqs, setPendingReqs] = useState(0);
 
@@ -145,8 +147,14 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
   // (leagues used to vanish when a later call threw), and failures surface with
   // their real message + which call produced it.
   const load = async () => {
-    const [ov, ors, au] = await Promise.allSettled([adminOverview(), adminOverrides(), adminAudit(60)]);
+    // commish_overview() filters on commissioner_id = auth.uid(), so it answers
+    // the one question admin_overview can't: which of these seats are MINE.
+    // (admin_overview's `commissioner` is `commissioner_id is not null` — the
+    // seat is taken, by anyone.) Failure here is not an error worth showing:
+    // the set just stays empty and the button offers to take the seat.
+    const [ov, ors, au, ci] = await Promise.allSettled([adminOverview(), adminOverrides(), adminAudit(60), commishOverview()]);
     if (ov.status === 'fulfilled') setLeagues(ov.value); else setLeagues((cur) => cur ?? []);
+    setMine(ci.status === 'fulfilled' ? new Set(ci.value.map((c) => c.league_id)) : new Set());
     if (ors.status === 'fulfilled') setOverrides(ors.value);
     if (au.status === 'fulfilled') setAudit(au.value);
     const parts = [['overview', ov], ['overrides', ors], ['audit', au]] as const;
@@ -185,7 +193,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
           <ImportLeague reload={load} />
           {leagues === null ? <div style={card}><Muted text="Loading…" /></div>
             : leagues.length === 0 ? <div style={card}><Muted text="No leagues imported yet — import one above." /></div>
-            : leagues.map((l) => <LeagueRow key={l.league_id} l={l} reload={load} />)}
+            : leagues.map((l) => <LeagueRow key={l.league_id} l={l} reload={load} mine={mine.has(l.league_id)} />)}
         </>
       )}
 
@@ -532,8 +540,14 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
   );
 }
 
-export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsible = false, defaultOpen = true }: {
+export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = '', collapsible = false, defaultOpen = true }: {
   l: AdminLeague; reload: () => void; admin?: boolean; defaultTab?: '' | LeagueTab;
+  /** Whether the signed-in user personally holds this league's commissioner
+   *  seat. Deliberately NOT `l.commissioner`, which is
+   *  `commissioner_id is not null` — "somebody runs this league", not "you do".
+   *  CommishDash rows come from commish_overview(), which filters on
+   *  auth.uid(), so there every row is `mine`. */
+  mine?: boolean;
   /** Collapsible card: the header toggles the management panel (CommishDash uses
    *  this when you run several leagues). Non-collapsible cards are always open. */
   collapsible?: boolean; defaultOpen?: boolean;
@@ -692,6 +706,34 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
     if (r.ok) reload();
   };
 
+  /** Take the commissioner seat on a league you did not verify.
+   *
+   *  This does NOT need a new admin RPC, and deliberately doesn't get one. Since
+   *  0039 the commish code IS the authorization — "whoever redeems it becomes
+   *  the league's commissioner" — precisely so a league on a platform with no
+   *  Sleeper-style ownership proof can still be handed to someone. An admin
+   *  looking at this row already has the code on screen; the button just spends
+   *  it, through the same redeem_commish every other commissioner goes through.
+   *
+   *  Adding an admin-only setter instead would create a second way to become
+   *  commissioner, with its own rules to keep in step with the first. */
+  const [takingCommish, setTakingCommish] = useState(false);
+  const takeCommish = async () => {
+    const warn = l.commissioner
+      ? '\n\nThere is one commissioner seat per league, so this takes it from whoever holds it now.'
+      : '';
+    if (!confirm(`Make yourself commissioner of ${l.name}?${warn}`)) return;
+    setTakingCommish(true);
+    setBusy(null);
+    try {
+      const r = await redeemCommish(l.commish_code);
+      if (r.ok) { setBusy('✓ you are the commissioner'); reload(); }
+      else setBusy(r.error ?? 'could not take the commissioner seat');
+    } catch (e) {
+      setBusy(errMsg(e, 'could not take the commissioner seat'));
+    } finally { setTakingCommish(false); }
+  };
+
   // League crest. set_league_avatar (0066) allows admin OR the league's own
   // commissioner and doesn't care about provider, so imported Sleeper/ESPN
   // leagues get the same picker native ones have had. `crest` is an optimistic
@@ -794,6 +836,21 @@ export function LeagueRow({ l, reload, admin = true, defaultTab = '', collapsibl
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
                 <span style={chip}>commish&nbsp;<CodeChip v={l.commish_code} /></span>
                 {admin && <button onClick={() => regen('commish')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate the commissioner code">↻ regen</button>}
+                {admin && !mine && (
+                  <button
+                    onClick={takeCommish}
+                    disabled={takingCommish}
+                    className="mono"
+                    style={{ ...linkBtn, fontSize: 9, color: 'var(--warn)' }}
+                    title="Redeem this league's commissioner code as yourself — the same path every commissioner goes through"
+                  >
+                    {takingCommish ? '…' : l.commissioner ? '⚑ take commish seat' : '⚑ make me commish'}
+                  </button>
+                )}
+                {/* Admin console only. In CommishDash every row is yours by
+                    construction, so the chip would be on every card saying
+                    nothing. */}
+                {admin && mine && <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--you)' }}>⚑ you run this</span>}
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
                 <span style={chip}>invite&nbsp;<CodeChip v={l.invite_code} /></span>
