@@ -1,4 +1,4 @@
--- 0119: a REGULAR week's cap covers the slots its own board renders.
+-- 0120: a REGULAR week's cap covers the slots its own board renders.
 --
 -- Reported from the real board: "looks like issues saving my lineup", with
 -- every autosave failing on 2026 Week 1.
@@ -53,12 +53,19 @@
 --
 -- Falls back to base_slot_count() when a week has no slate rows loaded, so a
 -- league whose slate hasn't synced behaves exactly as it did before.
+--
+-- (0119 was this migration with the sum written as sum(least(3, ceil(count(*)…)))
+-- — a nested aggregate, which Postgres rejects outright, and which would have
+-- returned one row per window rather than a total even if it had parsed. It
+-- failed on the first statement so nothing applied; renumbered because the
+-- migrate workflow only picks up ADDED files.)
 create or replace function week_slot_count(p_season text, p_week int) returns int
   language sql stable security definer set search_path = public as $$
   select coalesce(
-    (select sum(least(3, ceil(count(*)::numeric / 3)))::int
-       from nfl_slate where season = p_season and week = p_week
-      group by win),
+    (select sum(s)::int from (
+       select least(3, ceil(count(*)::numeric / 3)) as s
+         from nfl_slate where season = p_season and week = p_week
+        group by win) w),
     base_slot_count())
 $$;
 grant execute on function week_slot_count(text, int) to authenticated;
