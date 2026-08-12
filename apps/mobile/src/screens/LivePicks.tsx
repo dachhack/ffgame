@@ -26,10 +26,11 @@ import {
   myUnlocks, armUnlock, disarmUnlock, myComboQty,
   myWallet, ensureWallet,
   myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium, startCheckout,
-  getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, matchupWallets,
+  getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, matchupWallets, weekGameFeeds,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
-  type WindowScore, type RevealedPick,
+  type WindowScore, type RevealedPick, type GameFeedRow,
 } from '@drip/core/data/liveApi';
+import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/gameFeed';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
 import type { GameWindow, Player, Pos, WindowId } from '@drip/core/types';
 import { useTheme } from '../theme.native';
@@ -41,6 +42,7 @@ import { RosterPanel } from '../ui/RosterPanel';
 import { ShopModal } from '../ui/ShopModal';
 import { PowerupHand, type HandCard } from '../ui/PowerupHand';
 import { Duel, Big, round1 } from '../ui/Duel';
+import { FieldView } from '../ui/FieldView';
 import { Overlay } from '../ui/Overlay';
 
 // Live pool entries are slug/full/pos; SetupRow wants a Player. Build a light
@@ -132,6 +134,10 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const [revealed, setRevealed] = useState<RevealedPick[]>([]);
   const [wallets, setWallets] = useState<{ home: number | null; away: number | null } | null>(null);
   const [youAreHome, setYouAreHome] = useState(true);
+  /** Per-GAME play feeds the worker publishes — what the drive chart reads.
+   *  Separate from live_play (the engine's per-player rows): a field needs the
+   *  whole game's drives, not one player's touches. */
+  const [gameFeeds, setGameFeeds] = useState<GameFeedRow[]>([]);
 
   useEffect(() => { ensurePremiumTier(); }, []);
 
@@ -214,13 +220,19 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         // writes matchup_state and Supabase pushes, which is also why the score
         // on the phone cannot drift from the score on the web.
         const refreshLive = async () => {
-          const [mm, ss, pk2, ww] = await Promise.all([
+          const [mm, ss, pk2, ww, gf] = await Promise.all([
             getMatchup(m.id), getMatchupState(m.id), getRevealedPicks(m.id),
             matchupWallets(m.id).catch(() => null),
+            weekGameFeeds(m.week).catch(() => [] as GameFeedRow[]),
           ]);
           if (!alive) return;
           if (mm) setMatchup(mm);
           setScores(ss); setRevealed(pk2); setWallets(ww);
+          // Install the week's feeds so gameFeedFor() resolves them. The live
+          // overlay is exclusive per week — a live board must never fall through
+          // to baked 2025 drives, which would draw a plausible, wrong field.
+          setLiveGameFeed(m.week, feedRowsToWeek(gf));
+          setGameFeeds(gf);
         };
         await refreshLive().catch(() => {});
         if (!alive) return;
@@ -249,6 +261,38 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   /** Window labels from the week's OWN windows — a preseason cluster has no
    *  entry in the regular-season list and would render as its raw id. */
   const winLabelFor = (id: string) => wins.find((w) => String(w.id) === id)?.label ?? id.toUpperCase();
+
+  /** The field(s) under one duel: the real NFL games the two players are in.
+   *
+   *  Deduped by team, because the pair is very often IN the same game — a QB
+   *  against the opposing RB — and two identical drive charts stacked under one
+   *  pair reads as a rendering bug.
+   *
+   *  clock is MAX_SAFE_INTEGER: a live board always shows the latest play there
+   *  is. The demo passes a real clock because it is scrubbing through a finished
+   *  week; here "now" is simply the end of the feed.
+   *
+   *  Returns null when neither team has a published feed, which is also the
+   *  honest answer before kickoff — FieldView itself renders nothing without one,
+   *  but returning null keeps Duel from laying out an empty container. */
+  const slotDetail = (win: string, slot: string) => {
+    // Guard on the STATE, not just gameFeedFor: setLiveGameFeed writes a module
+    // map, which React cannot see. Reading the row count here is what ties the
+    // fields to a re-render when the feeds land.
+    if (!gameFeeds.length) return null;
+    const mySlug = revealed.find((p) => p.app_user_id === userId && p.game_window === win && p.roster_slot === slot)?.player_slug;
+    const theirSlug = revealed.find((p) => p.app_user_id !== userId && p.game_window === win && p.roster_slot === slot)?.player_slug;
+    const teams = [...new Set([mySlug, theirSlug]
+      .map((sl) => (sl ? duelPool[sl]?.team || slugMeta(sl).team : ''))
+      .filter(Boolean))];
+    const withFeed = teams.filter((tm) => !!gameFeedFor(week, tm));
+    if (!withFeed.length) return null;
+    return (
+      <View style={{ gap: 6 }}>
+        {withFeed.map((tm) => <FieldView key={tm} week={week} team={tm} clock={Number.MAX_SAFE_INTEGER} />)}
+      </View>
+    );
+  };
 
   const totals = useMemo(() => {
     const home = scores.reduce((n, s) => n + Number(s.home_score), 0);
@@ -743,6 +787,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
               key={w.id}
               mine={myLive} theirs={theirLive} pool={duelPool} scores={winScores}
               youAreHome={youAreHome} status={matchup!.status} week={week} winLabel={winLabelFor}
+              slotDetail={slotDetail}
             />
           );
         }
