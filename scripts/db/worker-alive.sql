@@ -1,36 +1,40 @@
 -- Is the Fly worker running, and is it running the CURRENT code?
 --
--- Two questions that look the same and aren't. A machine can be `started` and
--- have died on the first line of main(); a machine can be running last month's
--- image. `flyctl status` answers neither. These do, from the only side that
--- matters — what actually landed in the database.
+-- WHAT NOT TO USE: league.synced_at is NOT a worker heartbeat, however much it
+-- reads like one. It is stamped by importLeague() — the one-off league import —
+-- and the weekly sync never touches it. syncAllLeagues() calls syncWeek(),
+-- which writes nfl_slate, matchup and sleeper_lineup and nothing else. So a
+-- synced_at four days old means "this league was imported on Tuesday", not
+-- "the worker is dead", and reading it the other way cost an hour here.
 --
---   fly deploy → green            says an image shipped
---   flyctl status → started       says a process exists
---   league.synced_at moved        says the worker BOOTED, reached main(), ran
---                                 syncTick, reached Sleeper AND reached us
+-- WHAT TO USE INSTEAD, in order of how directly it answers the question:
 --
--- league.synced_at is stamped by server/src/sync.js and by nothing else — the
--- client-side syncWeek (packages/core/data/sleeperAdmin.ts) doesn't write it.
--- So a fresh synced_at cannot come from someone pressing a button in the app.
--- It is the worker or it is nobody.
+--   1. The deploy run log. `.github/workflows/deploy-worker.yml` prints the
+--      worker's own output after every deploy. `weekly sync: week N — ok/total
+--      leagues` is the heartbeat, from the process itself. Nothing here beats
+--      that; these queries are for the days you have not just deployed.
+--   2. Sections 1–3 below: did the week's mirror actually land, and does it
+--      have the shape the current code produces.
+--
+-- There is deliberately no "when did the weekly sync last run" column. Adding
+-- one to sleeper_lineup would make that a single query instead of an inference
+-- — worth doing if this file gets run often.
 
 \echo ''
-\echo '── 1. When did the worker last sync each pilot league? ──'
-\echo '   syncTick runs on boot, so this should be within a minute or two of a'
-\echo '   deploy. Anything older than weeklySyncRefreshMs means it is not ticking.'
+\echo '── 1. Did the week mirror land? (matchup, written by syncWeek) ──'
 select
   l.name,
-  l.sleeper_league_id,
-  l.season,
-  l.synced_at,
-  case
-    when l.synced_at is null then 'NEVER — the worker has not synced this league'
-    else age(now(), l.synced_at)::text || ' ago'
-  end as last_sync
-from league l
-order by l.synced_at desc nulls last
-limit 10;
+  m.week,
+  count(*)                                        as matchups,
+  count(*) filter (where m.status = 'live')       as live,
+  count(*) filter (where m.status = 'final')      as final,
+  max(m.created_at)                               as newest_row,
+  count(*) filter (where m.lock_at is not null)   as with_lock_at
+from matchup m
+join league l on l.id = m.league_id
+group by 1, 2
+order by m.week desc, 1
+limit 12;
 
 \echo ''
 \echo '── 2. Is the pool the WHOLE roster, or just starters? ──'
@@ -40,8 +44,8 @@ limit 10;
 select
   l.name,
   sl.week,
-  count(distinct sl.roster_id)                              as rosters,
-  sum(jsonb_array_length(sl.starters_json))                 as entries,
+  count(distinct sl.roster_id)                                 as rosters,
+  sum(jsonb_array_length(sl.starters_json))                    as entries,
   count(*) filter (where sl.starters_json::text like '%"grp"%') as rows_with_grp
 from sleeper_lineup sl
 join league l on l.id = sl.league_id
@@ -71,7 +75,14 @@ order by 1, 3;
 \echo '   Blank on a Wednesday is CORRECT. This is here so a Sunday run of the'
 \echo '   same file answers the resolver question too — see docs/sunday-ops-runbook.md.'
 select
-  (select max(ingested_at) from live_play)         as last_play_ingest,
-  (select count(*) from live_play)                 as live_plays,
+  (select max(ingested_at) from live_play)              as last_play_ingest,
+  (select count(*) from live_play)                      as live_plays,
   (select count(*) from matchup where status = 'live')  as live_matchups,
   (select count(*) from matchup where status = 'final') as final_matchups;
+
+\echo ''
+\echo '── 5. League import times (NOT a worker heartbeat — see header) ──'
+select l.name, l.sleeper_league_id, l.season, l.synced_at as imported_at
+from league l
+order by l.synced_at desc nulls last
+limit 10;
