@@ -31,6 +31,7 @@ import {
   type WindowScore, type RevealedPick, type GameFeedRow,
 } from '@drip/core/data/liveApi';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/gameFeed';
+import { Ev, track } from '@drip/core/analytics';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
 import type { GameWindow, Player, Pos, WindowId } from '@drip/core/types';
 import { useTheme, MONO, alpha } from '../theme.native';
@@ -416,7 +417,11 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
       if (!rows.length) return;
       setSaving(true);
       savePicks(matchup.id, userId, rows)
-        .then(() => { setSaved(true); setErr(null); commit(); })
+        // The activation event, and the North Star's input (a week with a
+        // lineup in). Fired on the SAVE rather than on each tap, so it counts
+        // lineups that reached the server — the autosave debounce above is
+        // what keeps one settled edit burst to one event.
+        .then(() => { setSaved(true); setErr(null); commit(); track(Ev.lineupSet, { week: matchup.week, slots: rows.length }); })
         // A swallowed failure is the worst outcome here: the board keeps showing
         // the lineup you built while the server holds an older one, and you find
         // out on reload. Say so on the board.

@@ -245,8 +245,9 @@ resolves to `expo.extra`; `app.config.js` layers the environment onto it at
 **build** time, so changing one means rebuilding.
 
 The keys are the web build's names verbatim — `VITE_SUPABASE_URL`,
-`VITE_SUPABASE_ANON_KEY`, `VITE_YAHOO_CLIENT_ID`, `VITE_MARK_FREE` — so one name
-means the same thing on both hosts and there's no mapping to maintain.
+`VITE_SUPABASE_ANON_KEY`, `VITE_YAHOO_CLIENT_ID`, `VITE_MARK_FREE`,
+`VITE_POSTHOG_KEY` — so one name means the same thing on both hosts and there's
+no mapping to maintain.
 
 ```bash
 # 1. your machine, gitignored — best for day to day
@@ -267,6 +268,26 @@ npx expo config --type public --json | python3 -c "import json,sys; print(json.l
 
 An empty `extra` is correct and means "use the production defaults".
 
+### Analytics (PostHog)
+
+Off unless the build carries `VITE_POSTHOG_KEY` (the public `phc_…` ingestion
+token — the same one the web deploy sets). No key = no network call, ever; core
+keeps buffering to nowhere exactly as it did before.
+
+```bash
+echo 'VITE_POSTHOG_KEY=phc_…' >> .env.local     # or the eas.json profile's env block
+# EU / self-hosted only:
+echo 'VITE_POSTHOG_HOST=https://eu.i.posthog.com' >> .env.local
+```
+
+Since it's read at build time, a build handed out without the key can't be
+turned on later — it needs a new build. Playtest builds that should report are
+the `preview` profile's `env` block.
+
+The sink is `src/analytics.native.ts` (a plain POST to PostHog's `/batch/` API,
+no SDK — see the note at the top of that file for why), registered into core's
+provider-agnostic layer at boot. Event list: `docs/analytics-plan.md`.
+
 ### First-run gotchas
 
 - Run `npm install` from the repo root, not from `apps/mobile` — npm workspaces
@@ -281,6 +302,7 @@ An empty `extra` is correct and means "use the production defaults".
 index.ts               entry — installs the platform adapter FIRST (order matters)
 App.tsx                brand header, session gate, picks/board tabs
 src/platform.native.ts MMKV / expo-constants / Linking → core's platform contract
+src/analytics.native.ts PostHog sink for core's analytics layer (batched HTTP, no SDK)
 src/theme.native.ts    core's design tokens for RN + the color-mix replacement
 src/intl-polyfill.ts   formatjs — Hermes ships no IANA zones; see the gotcha below
 src/ui/cards.tsx       the card table: faces, backs, stock texture

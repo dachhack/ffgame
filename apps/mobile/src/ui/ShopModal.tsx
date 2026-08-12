@@ -21,6 +21,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { POWERUPS, POWERUP_CATEGORIES, powerupCategory } from '@drip/core/data/powerups';
 import { myInventory, walletBuyPowerup } from '@drip/core/data/liveApi';
+import { Ev, track } from '@drip/core/analytics';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
 import { commit } from './feedback';
@@ -93,6 +94,11 @@ export function ShopModal({ visible, matchupId, balance, practice, unlocks, comb
       const r = await walletBuyPowerup(matchupId, id);
       if (r?.ok) {
         commit();
+        // After the server said yes, never before: a rejected buy that still
+        // reported would inflate the engagement metric with purchases that
+        // never happened. `practice` rides along because a preseason board
+        // charges nothing (0110) and those buys aren't real spend.
+        track(Ev.powerupBought, { id, price, practice: !!practice });
         setFlash(id);
         setTimeout(() => setFlash((f) => (f === id ? null : f)), 700);
         // Re-read BEFORE reporting up, so the caller gets the post-purchase
