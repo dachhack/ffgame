@@ -9,20 +9,20 @@
 // Collapsed by default. On a phone this list runs to hundreds of players and
 // would otherwise bury the board it sits above.
 import { useMemo, useState } from 'react';
-import { Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import type { GameWindow, Player } from '@drip/core/types';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
 import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
+import { sheetBodyMax } from './Overlay';
 import { GROUP_TABS, GroupBadge } from './rosterGroup';
 
 const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
-/** Everything in the sheet that isn't the list: title + subtitle, search, the
- *  position and group chip rows, the count line, and the footer button. */
-const SHEET_CHROME = 300;
-const listMax = Math.max(200, Math.round(Dimensions.get('window').height * 0.88) - SHEET_CHROME);
+/** Title + subtitle, search box, the position and group chip rows, the count
+ *  line, and the footer button. */
+const listMax = sheetBodyMax(300);
 
 export function RosterPanel({ title, players, wins, windowOf, groupOf, accent, open: openProp, onToggle }: {
   title: string;

@@ -17,7 +17,7 @@
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { THEMES, type ThemeName, useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
-import { Overlay } from './Overlay';
+import { Overlay, sheetBodyMax } from './Overlay';
 import { CARD_BACKS, type CardSkin } from './cards';
 
 /** Theme ids with the web's display names. Order matches the web menu. */
@@ -60,7 +60,7 @@ export function SettingsModal({ visible, theme, skin, version, onTheme, onSkin, 
   const t = useTheme();
   return (
     <Overlay visible={visible} title="Settings" subtitle={`DRIP FANTASY ${version.toUpperCase()}`} onClose={onClose}>
-      <ScrollView style={{ maxHeight: 460 }} contentContainerStyle={{ padding: 14, gap: 18 }}>
+      <ScrollView style={{ maxHeight: sheetBodyMax(110) }} contentContainerStyle={{ padding: 14, gap: 18 }}>
         <View style={{ gap: 8 }}>
           <Mono size={8.5} weight="700" track={0.16} tone="faint">COLOUR THEME</Mono>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>

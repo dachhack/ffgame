@@ -18,8 +18,22 @@
 // touches at all, and tap-to-dismiss still works because the backdrop covers
 // the whole screen behind it.
 import { type ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme, MONO } from '../theme.native';
+
+/** How tall a sheet's scrolling body may be, given everything ELSE in the sheet.
+ *
+ *  Every sheet here holds a list inside a card capped at 88% of the screen, and
+ *  each was picking its own number for that list — 420, 380, 460, and in one
+ *  case nothing at all. Both mistakes look identical to a user: too big and the
+ *  card overflows its cap and CLIPS (a list that won't scroll), too small and
+ *  the sheet floats in the middle of the screen with empty space around a body
+ *  that scrolls a row at a time. Neither is a guess worth making four times.
+ *
+ *  `chrome` is the sheet's own furniture — title, subtitle, any filter rows, the
+ *  footer button — measured per sheet, since that part really does differ. */
+export const sheetBodyMax = (chrome: number): number =>
+  Math.max(200, Math.round(Dimensions.get('window').height * 0.88) - chrome);
 
 export function Overlay({ visible, title, subtitle, titleLeft, onClose, children, footer }: {
   visible: boolean;
