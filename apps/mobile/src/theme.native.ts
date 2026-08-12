@@ -91,6 +91,21 @@ export function mix(a: string, pct: number, b: string): string {
  *  know, and deriving it from the palette is guesswork. */
 export const isLight = (name: ThemeName): boolean => name === 'daylight' || name === 'arctic';
 
+/** Is the ACTIVE theme a light one, asked of the tokens rather than the name?
+ *
+ *  `isLight` above needs the name, and most components only ever receive the
+ *  resolved Theme through context — passing the name down beside it just to
+ *  answer this would be threading a second copy of the same fact. Reading the
+ *  background's luminance answers it from what is already in hand, and a theme
+ *  added later is classified correctly without being added to a list. */
+export function isLightTheme(t: Theme): boolean {
+  const c = parse(t.bg);
+  if (!c) return false;
+  // Rec. 709 luma. The midpoint is enough here: the question is only "will dark
+  // furniture look like a hole punched in this page".
+  return (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255 > 0.5;
+}
+
 // ── Type scale ───────────────────────────────────────────────────────────────
 // The web app leans on two font families applied via className ('mono' and
 // 'grotesk'). RN has no cascade, so they become explicit style objects. System

@@ -36,7 +36,7 @@ import type { GameWindow, Player, Pos, WindowId } from '@drip/core/types';
 import { useTheme, MONO } from '../theme.native';
 import { Card, Chip, Display, LinkButton, Mono, Notice } from '../ui/prims';
 import { SetupRow } from '../ui/SetupRow';
-import { FELT } from '../ui/cards';
+import { feltFor } from '../ui/cards';
 import { PlayerPicker } from '../ui/PlayerPicker';
 import { RosterPanel } from '../ui/RosterPanel';
 import { ShopModal } from '../ui/ShopModal';
@@ -786,7 +786,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
 
             {/* Felt under the pair, so the cards read as dealt onto a table
                 rather than floating on the app background. */}
-            <View style={{ gap: 10, backgroundColor: FELT, borderRadius: 8, padding: 10 }}>
+            <View style={{ gap: 10, backgroundColor: feltFor(t), borderRadius: 8, padding: 10 }}>
               {winSlots.map((s, si) => {
                 const p = picks[s.key];
                 const pick = p?.player_slug ? { playerId: p.player_slug, metricId: p.metric_id ?? null } : undefined;

@@ -31,7 +31,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import { storeGet, storeSet } from '@drip/core/platform';
-import { MONO } from '../theme.native';
+import { MONO, isLightTheme, type Theme } from '../theme.native';
 import { useFlipIn, useWobble, useShake, useScoreTick, NukeBurst, HotGlow } from './animations';
 
 // True playing-card ratio (2.5:3.5). The web sets it as --ct-aspect so both
@@ -82,6 +82,18 @@ const STOCK_EDGE = '#D8C9A4';  // its darkest stop, used as the border
 const INK = '#201C12';
 const INK_DIM = '#6B6047';
 export const FELT = '#0B1F1A'; // --ct-felt, the table under the cards
+
+/** The table under a slot's cards, for the ACTIVE theme.
+ *
+ *  The green baize is the web's `--ct-felt`, and on a dark board it is the
+ *  table the game is played on. Under a light theme it is a black rectangle
+ *  stamped into a pale page — the web's own mobile board doesn't even draw one
+ *  there, it lays the cards straight onto the page.
+ *
+ *  So light themes get the page colour: the cards still sit in a defined area
+ *  (the window card around them is `surface`, this is `bg`, so it reads as a
+ *  shallow recess) without the hole. Dark themes keep the baize. */
+export const feltFor = (t: Theme): string => (isLightTheme(t) ? t.bg : FELT);
 
 // The photographic decks. Same ids and the same key the web stores under
 // (`gc-cardskin`), so a future profile sync carries one value.
