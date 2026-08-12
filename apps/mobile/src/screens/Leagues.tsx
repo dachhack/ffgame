@@ -5,10 +5,11 @@
 // membership, which is arbitrary the moment you're in more than one league, and
 // it gave you no way to reach the others.
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { myEnrollments, claimMyRosters, friendlyError, type Enrollment } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
 import { Card, Display, LinkButton, Mono } from '../ui/prims';
+import { BrandLoading } from '../ui/BrandLoading';
 
 /** A league or team crest.
  *
@@ -73,10 +74,7 @@ export function Leagues({ userId, onOpen }: {
 
   if (rows === null) {
     return (
-      <View style={{ flex: 1, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-        <ActivityIndicator color={t.you} />
-        <Mono size={11}>Loading your leagues…</Mono>
-      </View>
+      <BrandLoading label="Loading your leagues…" />
     );
   }
 

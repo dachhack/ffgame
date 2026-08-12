@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { getSession, onAuth, signOut } from '@drip/core/data/liveApi';
 import { APP_VERSION } from '@drip/core/version';
@@ -26,6 +26,7 @@ import { Commish } from './src/screens/Commish';
 import { Admin } from './src/screens/Admin';
 import { SignIn } from './src/screens/SignIn';
 import { ErrorBoundary } from './src/ui/ErrorBoundary';
+import { BrandLoading } from './src/ui/BrandLoading';
 
 // Hold the native splash past the first frame. Without this it hides as soon as
 // React mounts, which is BEFORE getSession() answers — so the launch read splash
@@ -91,13 +92,7 @@ export function App() {
   }, []);
 
   const body = () => {
-    if (!ready) {
-      return (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={theme.you} />
-        </View>
-      );
-    }
+    if (!ready) return <BrandLoading />;
     if (!liveConfigured()) {
       // Unreachable with the defaults baked into liveConfig.ts; kept for a build
       // that deliberately points at nothing.
