@@ -7,18 +7,32 @@
 -- synced_at four days old means "this league was imported on Tuesday", not
 -- "the worker is dead", and reading it the other way cost an hour here.
 --
--- WHAT TO USE INSTEAD, in order of how directly it answers the question:
+-- WHAT TO USE INSTEAD: sleeper_lineup.synced_at (0122), section 0 below. A
+-- trigger stamps it on every write, so it answers "when did the weekly sync
+-- last run" directly rather than by inference, and no writer can forget to set
+-- it. It is also on the app's Admin → Health tab as LAST SYNC.
 --
---   1. The deploy run log. `.github/workflows/deploy-worker.yml` prints the
---      worker's own output after every deploy. `weekly sync: week N — ok/total
---      leagues` is the heartbeat, from the process itself. Nothing here beats
---      that; these queries are for the days you have not just deployed.
---   2. Sections 1–3 below: did the week's mirror actually land, and does it
---      have the shape the current code produces.
---
--- There is deliberately no "when did the weekly sync last run" column. Adding
--- one to sleeper_lineup would make that a single query instead of an inference
--- — worth doing if this file gets run often.
+-- The deploy run log is the other first-hand answer:
+-- `.github/workflows/deploy-worker.yml` prints the worker's own output after
+-- every deploy, and `weekly sync: week N — ok/total leagues` is the heartbeat
+-- straight from the process.
+
+\echo ''
+\echo '── 0. When did the weekly sync last write each league? ──'
+\echo '   THE heartbeat. The sync runs on boot and every 6h (weeklySyncRefreshMs),'
+\echo '   so anything older than that during the season means it is not ticking.'
+\echo '   NULL = a row written before 0122, not a fault.'
+select
+  l.name,
+  sl.week,
+  max(sl.synced_at)                                        as last_sync,
+  case when max(sl.synced_at) is null then 'unknown (pre-0122 row)'
+       else age(now(), max(sl.synced_at))::text || ' ago' end as freshness
+from sleeper_lineup sl
+join league l on l.id = sl.league_id
+group by 1, 2
+order by max(sl.synced_at) desc nulls last, 1
+limit 12;
 
 \echo ''
 \echo '── 1. Did the week mirror land? (matchup, written by syncWeek) ──'
