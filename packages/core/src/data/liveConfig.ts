@@ -26,3 +26,21 @@ export const supabaseUrl = () => env('VITE_SUPABASE_URL') || DEFAULT_URL;
 export const supabaseAnon = () => env('VITE_SUPABASE_ANON_KEY') || DEFAULT_ANON;
 
 export const liveConfigured = () => !!(supabaseUrl() && supabaseAnon());
+
+/** Google's WEB OAuth client id — the audience the native Play Services flow
+ *  mints its ID token for, and the one Supabase verifies against its Authorized
+ *  Client IDs.
+ *
+ *  Committed as a default for the same reason the anon key above is: an OAuth
+ *  CLIENT id is public by construction — it ships inside every APK and is sent
+ *  to Google in the clear on every sign-in. The secret in that pair is the
+ *  client SECRET, which is not here and is not needed: the native flow proves
+ *  the app's identity with the signing certificate's SHA-1, registered against
+ *  the ANDROID client, which nobody can forge without the keystore.
+ *
+ *  A default rather than env-only because the failure mode of env-only is
+ *  silent: a build that forgets to set it doesn't break, it quietly falls back
+ *  to opening a browser, and the only symptom is the thing we removed coming
+ *  back. */
+const DEFAULT_GOOGLE_WEB_CLIENT_ID = '401564304167-pc9ivgpiootdvei6148n9msff5oin2qr.apps.googleusercontent.com';
+export const googleWebClientId = () => env('VITE_GOOGLE_WEB_CLIENT_ID') || DEFAULT_GOOGLE_WEB_CLIENT_ID;
