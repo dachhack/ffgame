@@ -19,7 +19,7 @@ import { GROUP_TABS, GroupBadge } from './rosterGroup';
 
 const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
-export function RosterPanel({ title, players, wins, windowOf, groupOf, accent }: {
+export function RosterPanel({ title, players, wins, windowOf, groupOf, accent, open: openProp, onToggle }: {
   title: string;
   players: Player[];
   /** The week's windows, in order — the grouping and its labels. */
@@ -30,9 +30,21 @@ export function RosterPanel({ title, players, wins, windowOf, groupOf, accent }:
    *  any caller with a synthetic pool has no such distinction to draw. */
   groupOf?: (playerId: string) => PoolGroup;
   accent: string;
+  /** Controlled mode. The board opens rosters in a MODAL, so the caller owns
+   *  which side is showing and supplies the frame; this renders only the filters
+   *  and the list, with no header and no border of its own. Uncontrolled (no
+   *  `open`) keeps the self-contained collapsible panel for any other caller. */
+  open?: boolean;
+  onToggle?: () => void;
 }) {
   const t = useTheme();
-  const [open, setOpen] = useState(false);
+  const [openSelf, setOpenSelf] = useState(false);
+  const controlled = openProp !== undefined;
+  const open = controlled ? openProp : openSelf;
+  const setOpen = (v: boolean | ((o: boolean) => boolean)) => {
+    if (controlled) { onToggle?.(); return; }
+    setOpenSelf(v as never);
+  };
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<string>('ALL');
   const [grp, setGrp] = useState<PoolGroup | 'ALL'>('ALL');
@@ -76,19 +88,21 @@ export function RosterPanel({ title, players, wins, windowOf, groupOf, accent }:
   }, [filtered, wins, windowOf]);
 
   return (
-    <View style={{ marginBottom: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: open ? accent : t.bd, borderRadius: 8, overflow: 'hidden', backgroundColor: t.surface }}>
-      <Pressable
-        onPress={() => setOpen((o) => !o)}
-        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 13 }}
-      >
-        <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 1, color: open ? accent : t.dim }}>
-          {open ? '▾' : '▸'}  {title.toUpperCase()}
-        </Text>
-        <Mono size={10} tone="faint">{players.length}</Mono>
-      </Pressable>
+    <View style={controlled ? undefined : { marginBottom: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: open ? accent : t.bd, borderRadius: 8, overflow: 'hidden', backgroundColor: t.surface }}>
+      {!controlled && (
+        <Pressable
+          onPress={() => setOpen((o) => !o)}
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 13 }}
+        >
+          <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 1, color: open ? accent : t.dim }}>
+            {open ? '▾' : '▸'}  {title.toUpperCase()}
+          </Text>
+          <Mono size={10} tone="faint">{players.length}</Mono>
+        </Pressable>
+      )}
 
       {open && (
-        <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+        <View style={controlled ? undefined : { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
           <View style={{ padding: 10, gap: 8 }}>
             <TextInput
               value={q}
@@ -146,7 +160,7 @@ export function RosterPanel({ title, players, wins, windowOf, groupOf, accent }:
 
           {/* Bounded height: this list can be a thousand rows, and an unbounded
               one would push the board off the screen entirely. */}
-          <ScrollView style={{ maxHeight: 330 }} nestedScrollEnabled contentContainerStyle={{ paddingBottom: 8 }}>
+          <ScrollView style={{ maxHeight: controlled ? 420 : 330 }} nestedScrollEnabled contentContainerStyle={{ paddingBottom: 8 }}>
             {groups.map((g) => (
               <View key={g.id}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', backgroundColor: t.sh, paddingHorizontal: 12, paddingVertical: 6 }}>
