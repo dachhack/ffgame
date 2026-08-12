@@ -1,6 +1,7 @@
 {
   "expo": {
     "name": "Drip Fantasy",
+    "icon": "./assets/icon.png",
     "slug": "drip-fantasy",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -12,7 +13,11 @@
       "bundleIdentifier": "com.dripfantasy.app"
     },
     "android": {
-      "package": "com.dripfantasy.app"
+      "package": "com.dripfantasy.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0D1F22"
+      }
     },
     "extra": {
       "//": "Build-time config for core's platform shim. Deliberately EMPTY: unset keys fall through to the production defaults in packages/core/src/data/liveConfig.ts, so a plain build is a working production build. To point at another project, set VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY / VITE_YAHOO_CLIENT_ID / VITE_MARK_FREE in the environment \u2014 app.config.js layers them in. See the header there."

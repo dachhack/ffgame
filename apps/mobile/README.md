@@ -108,6 +108,22 @@ spinner → app, with the spinner the longest part. There is a 4s ceiling on tha
 hold: a slow launch is a nuisance, an app that appears not to start is a bug
 report.
 
+### The icon
+
+Two assets, because Android needs two.
+
+`assets/icon.png` is the square brand tile (`public/brand/ig-profile.png`, resized
+to 1024). It is already opaque, which matters — iOS rejects an app icon with an
+alpha channel.
+
+`assets/adaptive-icon.png` is the Android foreground layer, and it is the MARK
+ALONE on transparency, sized into the centre 62%. The launcher masks this layer
+to a circle or squircle of its choosing and only the middle ~66% is guaranteed
+to survive, so the square tile cannot be it: the wordmark along the bottom is
+exactly what a round mask cuts off. The ground comes from `adaptiveIcon
+.backgroundColor` (`#0D1F22`, the same plate as the splash) rather than being
+baked into the image.
+
 ### Building the APK by hand
 
 ```bash
