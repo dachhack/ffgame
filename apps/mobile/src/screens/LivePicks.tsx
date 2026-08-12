@@ -40,7 +40,7 @@ import { FELT } from '../ui/cards';
 import { PlayerPicker } from '../ui/PlayerPicker';
 import { RosterPanel } from '../ui/RosterPanel';
 import { ShopModal } from '../ui/ShopModal';
-import { PowerupHand, type HandCard } from '../ui/PowerupHand';
+import { PowerupHand, HAND_TAB_H, type HandCard } from '../ui/PowerupHand';
 import { Duel, round1 } from '../ui/Duel';
 import { FieldView } from '../ui/FieldView';
 import { Overlay } from '../ui/Overlay';
@@ -610,9 +610,11 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
     <View style={{ flex: 1 }}>
     <ScrollView
       style={{ flex: 1, backgroundColor: t.bg }}
-      // Bottom padding clears the hand, which is pinned over this list rather
-      // than scrolling with it — otherwise the save status sits under the cards.
-      contentContainerStyle={{ padding: 12, paddingBottom: hand.length ? 170 : 40 }}
+      // Bottom padding clears the hand's TAB, which is pinned over this list
+      // rather than scrolling with it. Only the tab: the fan is stowed until you
+      // ask for it, and reserving a card's height for something that isn't
+      // there was 170pt of a phone screen spent on nothing.
+      contentContainerStyle={{ padding: 12, paddingBottom: hand.length ? HAND_TAB_H + 24 : 40 }}
     >
       {/* Week + score on ONE line — the web's slim strip. This was a full card
           headed THIS WEEK with two 38px numerals, which is a lot of screen for
