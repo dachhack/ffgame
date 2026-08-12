@@ -23,6 +23,7 @@ import { POWERUPS, POWERUP_CATEGORIES, powerupCategory } from '@drip/core/data/p
 import { myInventory, walletBuyPowerup } from '@drip/core/data/liveApi';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
+import { commit } from './feedback';
 import { Overlay } from './Overlay';
 
 export function ShopModal({ visible, matchupId, balance, practice, unlocks, comboQty, unlockBusy, unlockLocked, armsClosed, onToggleUnlock, onDisarmCombo, onClose, onChanged }: {
@@ -91,6 +92,7 @@ export function ShopModal({ visible, matchupId, balance, practice, unlocks, comb
     try {
       const r = await walletBuyPowerup(matchupId, id);
       if (r?.ok) {
+        commit();
         setFlash(id);
         setTimeout(() => setFlash((f) => (f === id ? null : f)), 700);
         // Re-read BEFORE reporting up, so the caller gets the post-purchase

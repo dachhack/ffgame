@@ -33,7 +33,8 @@ import {
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/gameFeed';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
 import type { GameWindow, Player, Pos, WindowId } from '@drip/core/types';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, alpha } from '../theme.native';
+import { tap, commit } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice } from '../ui/prims';
 import { SetupRow } from '../ui/SetupRow';
 import { PlayerPicker } from '../ui/PlayerPicker';
@@ -415,7 +416,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
       if (!rows.length) return;
       setSaving(true);
       savePicks(matchup.id, userId, rows)
-        .then(() => { setSaved(true); setErr(null); })
+        .then(() => { setSaved(true); setErr(null); commit(); })
         // A swallowed failure is the worst outcome here: the board keeps showing
         // the lineup you built while the server holds an older one, and you find
         // out on reload. Say so on the board.
@@ -464,6 +465,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
       const next = [...armed, id];
       const r = await heroSetBuffs(matchup.id, next);
       if (r?.ok) {
+        commit();
         setBuffs(new Set(next));
         setInventory((inv) => ({ ...inv, [id]: Math.max(0, (inv[id] ?? 1) - 1) }));
       } else {
@@ -658,12 +660,14 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         {([['you', 'YOUR ROSTER', t.you, pool.length], ['their', 'OPPONENT ROSTER', t.opp, oppPool.length]] as const).map(([side, label, accent, n]) => (
           <Pressable
             key={side}
-            onPress={() => setRosterOpen(side)}
-            style={{
-              flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 6,
-              backgroundColor: t.surface,
+            onPress={() => { tap(); setRosterOpen(side); }}
+            android_ripple={{ color: alpha(accent, 20) }}
+            style={({ pressed }) => ({
+              flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 10,
+              overflow: 'hidden',
+              backgroundColor: t.surface, opacity: pressed ? 0.8 : 1,
               borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
-            }}
+            })}
           >
             <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.8, color: accent }}>
               {label}{n ? ` ${n}` : ''}

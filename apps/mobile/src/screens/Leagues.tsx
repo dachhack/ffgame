@@ -7,7 +7,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { myEnrollments, claimMyRosters, friendlyError, type Enrollment } from '@drip/core/data/liveApi';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, alpha } from '../theme.native';
+import { tap } from '../ui/feedback';
 import { Card, Display, LinkButton, Mono } from '../ui/prims';
 import { BrandLoading } from '../ui/BrandLoading';
 
@@ -107,13 +108,15 @@ export function Leagues({ userId, onOpen }: {
         return (
           <Pressable
             key={`${e.league_id}-${e.sleeper_roster_id}`}
-            onPress={() => onOpen(e.league_id, e.sleeper_roster_id, lg?.name ?? 'League')}
-            style={{
-              backgroundColor: t.surface,
+            onPress={() => { tap(); onOpen(e.league_id, e.sleeper_roster_id, lg?.name ?? 'League'); }}
+            android_ripple={{ color: alpha(t.you, 16) }}
+            style={({ pressed }) => ({
+              backgroundColor: t.surface, overflow: 'hidden',
               borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
               borderLeftWidth: 3, borderLeftColor: t.you,
-              borderRadius: 8, padding: 14, gap: 4,
-            }}
+              borderRadius: 12, padding: 14, gap: 4,
+              opacity: pressed ? 0.85 : 1,
+            })}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
               <Crest url={lg?.avatar_url} name={lg?.name} size={42} />

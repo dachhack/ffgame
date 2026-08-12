@@ -24,6 +24,7 @@
     "@react-native-google-signin/google-signin": "^16.1.4",
     "expo": "^57.0.12",
     "expo-constants": "~57.0.10",
+    "expo-haptics": "^57.0.1",
     "expo-linking": "~57.0.5",
     "expo-localization": "~57.0.1",
     "expo-splash-screen": "~57.0.6",
