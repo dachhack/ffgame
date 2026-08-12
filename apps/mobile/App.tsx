@@ -16,7 +16,7 @@ import { APP_VERSION } from '@drip/core/version';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { THEMES, ThemeCtx, loadTheme, saveTheme, isLight, MONO } from './src/theme.native';
 import { SettingsModal } from './src/ui/SettingsModal';
-import { loadCardSkin, saveCardSkin, type CardSkin } from './src/ui/cards';
+import { loadCardSkin, saveCardSkin, loadCardSize, saveCardSize, type CardSkin, type CardSize } from './src/ui/cards';
 import { Leagues } from './src/screens/Leagues';
 import { isAdmin } from '@drip/core/data/liveApi';
 import { LivePicks } from './src/screens/LivePicks';
@@ -35,6 +35,9 @@ export function App() {
   // holding it in state here is what makes a change repaint the board — there is
   // nothing to subscribe to on a module-level read.
   const [cardSkin, setCardSkin] = useState<CardSkin>(loadCardSkin);
+  // Held here rather than read where it's used, so changing it re-renders the
+  // board below and the new size lands without closing and reopening anything.
+  const [cardSize, setCardSize] = useState<CardSize>(loadCardSize);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Whether to OFFER the admin entry. The RPCs behind it are the real gate —
   // is_admin() + RLS server-side — exactly as on the web.
@@ -169,9 +172,11 @@ export function App() {
             visible={settingsOpen}
             theme={themeName}
             skin={cardSkin}
+            cardSize={cardSize}
             version={APP_VERSION}
             onTheme={(name) => { saveTheme(name); setThemeName(name); }}
             onSkin={(s) => { saveCardSkin(s); setCardSkin(s); }}
+            onCardSize={(s) => { saveCardSize(s); setCardSize(s); }}
             isAdmin={admin}
             onDemo={() => setView('demo')}
             onCommish={() => setView('commish')}

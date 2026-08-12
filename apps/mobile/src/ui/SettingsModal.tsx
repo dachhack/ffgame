@@ -17,8 +17,8 @@
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { THEMES, type ThemeName, useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
-import { Overlay, sheetBodyMax } from './Overlay';
-import { CARD_BACKS, type CardSkin } from './cards';
+import { Overlay } from './Overlay';
+import { CARD_BACKS, CARD_SIZES, type CardSkin, type CardSize } from './cards';
 
 /** Theme ids with the web's display names. Order matches the web menu. */
 const THEME_OPTS: { id: ThemeName; name: string }[] = [
@@ -46,16 +46,18 @@ const SKIN_OPTS: { id: CardSkin; name: string }[] = [
   { id: 'battalion', name: 'Battalion' },
 ];
 
-export function SettingsModal({ visible, theme, skin, version, isAdmin, onTheme, onSkin, onDemo, onCommish, onAdmin, onSignOut, onClose }: {
+export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin, onTheme, onSkin, onCardSize, onDemo, onCommish, onAdmin, onSignOut, onClose }: {
   visible: boolean;
   theme: ThemeName;
   skin: CardSkin;
+  cardSize: CardSize;
   version: string;
   /** Resolved from is_admin(). Only decides whether the entry is SHOWN — the
    *  RPCs behind it are the real gate, as they are on the web. */
   isAdmin?: boolean;
   onTheme: (t: ThemeName) => void;
   onSkin: (s: CardSkin) => void;
+  onCardSize: (s: CardSize) => void;
   onDemo: () => void;
   onCommish: () => void;
   onAdmin: () => void;
@@ -65,7 +67,7 @@ export function SettingsModal({ visible, theme, skin, version, isAdmin, onTheme,
   const t = useTheme();
   return (
     <Overlay visible={visible} title="Settings" subtitle={`DRIP FANTASY ${version.toUpperCase()}`} onClose={onClose}>
-      <ScrollView style={{ maxHeight: sheetBodyMax(110) }} contentContainerStyle={{ padding: 14, gap: 18 }}>
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, gap: 18 }}>
         <View style={{ gap: 8 }}>
           <Mono size={8.5} weight="700" track={0.16} tone="faint">COLOUR THEME</Mono>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
@@ -92,6 +94,36 @@ export function SettingsModal({ visible, theme, skin, version, isAdmin, onTheme,
                     <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: th.opp, marginLeft: -3 }} />
                   </View>
                   <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: th.text }}>{o.name}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={{ gap: 8 }}>
+          <Mono size={8.5} weight="700" track={0.16} tone="faint">CARD SIZE</Mono>
+          <Mono size={9} tone="faint">On the setup board. Smaller fits a whole window on screen; larger is easier to read and to hit.</Mono>
+          <View style={{ flexDirection: 'row', gap: 7 }}>
+            {CARD_SIZES.map((o) => {
+              const on = cardSize === o.id;
+              // A proportional swatch, so the choice is visible rather than a
+              // word you have to close the sheet to evaluate. Same 2.5:3.5 as
+              // the real card; the widths are the real caps, quartered.
+              const w = Math.round((o.w ?? 152) / 4);
+              return (
+                <Pressable
+                  key={o.id}
+                  onPress={() => onCardSize(o.id)}
+                  style={{
+                    flex: 1, alignItems: 'center', gap: 6, paddingVertical: 9,
+                    borderRadius: 7, backgroundColor: on ? t.sh : 'transparent',
+                    borderWidth: on ? 2 : StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd,
+                  }}
+                >
+                  <View style={{ height: 40, justifyContent: 'flex-end' }}>
+                    <View style={{ width: w, aspectRatio: 0.714, borderRadius: 3, backgroundColor: on ? t.you : t.bd }} />
+                  </View>
+                  <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: on ? t.you : t.faint }}>{o.name.toUpperCase()}</Text>
                 </Pressable>
               );
             })}

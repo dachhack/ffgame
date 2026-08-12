@@ -18,22 +18,31 @@
 // touches at all, and tap-to-dismiss still works because the backdrop covers
 // the whole screen behind it.
 import { type ReactNode } from 'react';
-import { Dimensions, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, MONO } from '../theme.native';
 
-/** How tall a sheet's scrolling body may be, given everything ELSE in the sheet.
+/** SHEET BODY SIZING — why there is no number here any more.
  *
- *  Every sheet here holds a list inside a card capped at 88% of the screen, and
- *  each was picking its own number for that list — 420, 380, 460, and in one
- *  case nothing at all. Both mistakes look identical to a user: too big and the
- *  card overflows its cap and CLIPS (a list that won't scroll), too small and
- *  the sheet floats in the middle of the screen with empty space around a body
- *  that scrolls a row at a time. Neither is a guess worth making four times.
+ *  Every sheet holds a list inside a card capped at 88% of the screen, and each
+ *  was picking its own height for that list: 420, 380, 460, and in one case
+ *  nothing. That became `sheetBodyMax(chrome)`, where `chrome` was a per-sheet
+ *  ESTIMATE of the title, filter rows and footer around it — which is the same
+ *  guess wearing a helper function. It guessed low on the roster sheet (300
+ *  against an actual ~360, and the estimate also forgot the 12pt the card is
+ *  inset by), the card overflowed its cap, and `overflow: hidden` took the
+ *  bottom off the OPPONENT ROSTER button.
  *
- *  `chrome` is the sheet's own furniture — title, subtitle, any filter rows, the
- *  footer button — measured per sheet, since that part really does differ. */
-export const sheetBodyMax = (chrome: number): number =>
-  Math.max(200, Math.round(Dimensions.get('window').height * 0.88) - chrome);
+ *  Both failure modes look the same to a player: too big and the card clips
+ *  (a footer with its bottom sliced off, a list that will not reach its end),
+ *  too small and the sheet floats with empty space around a body scrolling a
+ *  row at a time.
+ *
+ *  So nothing measures anything now. The card is a flex column with a max
+ *  height; the header and footer size to their content; the body is the one
+ *  child that may SHRINK, so it takes exactly what is left and not a point
+ *  more. A sheet's body just has to be able to shrink — `flexShrink: 1` on the
+ *  ScrollView — which is a property, not an arithmetic. */
 
 export function Overlay({ visible, title, subtitle, titleLeft, onClose, children, footer }: {
   visible: boolean;
@@ -46,9 +55,14 @@ export function Overlay({ visible, title, subtitle, titleLeft, onClose, children
   footer?: ReactNode;
 }) {
   const t = useTheme();
+  const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <View style={{ flex: 1, justifyContent: 'center', padding: 12 }}>
+      {/* Inset by the safe area, not a flat 12. The card is centred, so on most
+          screens this changes nothing — but a sheet whose content fills the 88%
+          cap ends its last 12pt under the home indicator, and the last 12pt of
+          a sheet is where the footer button lives. */}
+      <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 12, paddingTop: Math.max(12, insets.top), paddingBottom: Math.max(12, insets.bottom) }}>
         <Pressable
           accessibilityLabel="Close"
           onPress={onClose}
@@ -77,7 +91,11 @@ export function Overlay({ visible, title, subtitle, titleLeft, onClose, children
             </Pressable>
           </View>
 
-          {children}
+          {/* The only child that may shrink, so it absorbs the overflow and the
+              footer below it is never the thing that gets cut. minHeight: 0 is
+              required for that — without it a flex child refuses to shrink
+              below its content and the clipping comes straight back. */}
+          <View style={{ flexShrink: 1, minHeight: 0 }}>{children}</View>
 
           {!!footer && (
             <View style={{ padding: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>{footer}</View>

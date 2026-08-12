@@ -39,23 +39,42 @@ import { useFlipIn, useWobble, useShake, useScoreTick, NukeBurst, HotGlow } from
 // with each other regardless of content.
 export const CARD_ASPECT = 0.714;
 
-/** Setup-board card width cap.
+/** SETUP-BOARD CARD SIZE — a player setting, not a constant.
  *
- *  A slot pair is two flex:1 cards, so on a phone they ate the full width —
- *  ~152pt each, ~213 tall, which is one slot per screenful before you have
- *  scrolled. Capping the width lets a window show its slots at a glance, and
- *  the pair centres in the leftover room rather than stretching to fill it.
+ *  A slot pair is two flex:1 cards, so left alone they take the full width:
+ *  ~152pt each and ~213 tall on a phone, which is about one slot per screenful.
+ *  Smaller fits a window at a glance; larger is nicer to look at and easier to
+ *  hit. That is taste, not a correct answer, so it is in Settings next to the
+ *  theme and the deck.
  *
- *  Deliberately NOT applied to every card: the revealed cards in a live duel
- *  are the thing you are watching, and shrinking those to fit more of a board
- *  you are no longer editing is the wrong trade. Hence a flag rather than a new
- *  value for CARD_ASPECT's neighbours. */
-export const COMPACT_W = 122;
-/** Everything inside a card is a fixed pt size, so the box cannot shrink alone —
- *  a 122pt card with a 60pt portrait and 13pt name reads as a cramped big card,
- *  not a small one. One factor, applied to each. */
-const CS = 0.82;
-const cs = (n: number) => Math.round(n * CS * 10) / 10;
+ *  `w` caps the width (null = the old uncapped, full-width behaviour) and `s`
+ *  scales what is inside it. Both are needed: everything in a card is a fixed
+ *  pt size, so a 122pt card still holding a 60pt portrait and a 13pt name reads
+ *  as a cramped big card rather than a small one.
+ *
+ *  Applies to the SETUP board only. The revealed cards in a live duel are the
+ *  thing you are watching, and shrinking those to fit more of a board you have
+ *  finished editing is the wrong trade — so only SetupRow opts in. */
+export type CardSize = 'small' | 'medium' | 'large';
+export const CARD_SIZES: { id: CardSize; name: string; w: number | null; s: number }[] = [
+  { id: 'small', name: 'Small', w: 122, s: 0.82 },
+  { id: 'medium', name: 'Medium', w: 146, s: 0.91 },
+  { id: 'large', name: 'Large', w: null, s: 1 },
+];
+
+export const CARD_SIZE_KEY = 'gc-cardsize';
+
+export function loadCardSize(): CardSize {
+  const s = storeGet(CARD_SIZE_KEY) as CardSize | null;
+  return CARD_SIZES.some((o) => o.id === s) ? (s as CardSize) : 'small';
+}
+export function saveCardSize(s: CardSize): void { storeSet(CARD_SIZE_KEY, s); }
+
+/** Scale a fixed pt size by the chosen card's factor. k = 1 is a no-op, so
+ *  the same expression serves the full-size card. */
+const cs = (n: number, k: number) => Math.round(n * k * 10) / 10;
+
+const sizeSpec = (size?: CardSize) => CARD_SIZES.find((o) => o.id === (size ?? loadCardSize())) ?? CARD_SIZES[0];
 
 const STOCK = '#F4EDDA';       // middle of the web's face gradient
 const STOCK_TILE = require('../../assets/card-stock.png');
@@ -139,12 +158,12 @@ type CardTx = ReturnType<typeof useFlipIn>['transform'][number]
  *
  *  One component owns the box, the entrance and the idle motion. A variant may
  *  add a transform (the reveal flip, the nuke shake) but cannot own the shape. */
-function CardShell({ idx = 0, deal: playDeal = true, compact = false, extra = [], style, children }: {
+function CardShell({ idx = 0, deal: playDeal = true, size, extra = [], style, children }: {
   idx?: number;
   /** False when another entrance is playing instead (the reveal flip). */
   deal?: boolean;
-  /** Setup-board sizing — see COMPACT_W. */
-  compact?: boolean;
+  /** Setup-board sizing. Absent = uncapped, the live-duel size. */
+  size?: CardSize;
   /** Variant transforms. Prepended, because `perspective` has to lead the list. */
   extra?: CardTx[];
   style?: StyleProp<ViewStyle>;
@@ -156,7 +175,7 @@ function CardShell({ idx = 0, deal: playDeal = true, compact = false, extra = []
     <Animated.View
       style={[
         { flex: 1, aspectRatio: CARD_ASPECT },
-        compact && { maxWidth: COMPACT_W },
+        size ? { maxWidth: sizeSpec(size).w ?? undefined } : null,
         style,
         { opacity: deal.opacity, transform: [...extra, ...deal.transform, ...wob.transform] },
       ]}
@@ -166,8 +185,8 @@ function CardShell({ idx = 0, deal: playDeal = true, compact = false, extra = []
   );
 }
 
-export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0, flip = false, hot = false, nuked = false, compact = false, onPress, onRemove, footer }: {
-  compact?: boolean;
+export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0, flip = false, hot = false, nuked = false, size, onPress, onRemove, footer }: {
+  size?: CardSize;
   slug: string;
   name: string;
   pos: string;
@@ -211,6 +230,8 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
   const flipIn = useFlipIn(doFlip);
   const shake = useShake(nuked);
   const tick = useScoreTick(bank);
+  // 1 when no size was asked for — the live-duel card is unscaled.
+  const sc = size ? sizeSpec(size).s : 1;
 
   // aspectRatio sits on the OUTERMOST view, the same place CardBack and
   // CardEmpty put it. It used to live on the ImageBackground below, which meant
@@ -218,7 +239,7 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
   // so a filled slot and the sealed card beside it were laid out two different
   // ways and only agreed by luck. Same rule, same box.
   return (
-    <CardShell idx={idx} deal={!doFlip} compact={compact} extra={[...flipIn.transform, ...shake.transform]}>
+    <CardShell idx={idx} deal={!doFlip} size={size} extra={[...flipIn.transform, ...shake.transform]}>
     <Pressable onPress={onPress} style={{ flex: 1 }}>
     <ImageBackground
       source={STOCK_TILE}
@@ -228,7 +249,7 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
         flex: 1, backgroundColor: STOCK,
         borderWidth: StyleSheet.hairlineWidth, borderColor: STOCK_EDGE,
         borderTopWidth: 3, borderTopColor: accent,
-        borderRadius: 8, padding: compact ? cs(8) : 8, alignItems: 'center', justifyContent: 'space-between',
+        borderRadius: 8, padding: cs(8, sc), alignItems: 'center', justifyContent: 'space-between',
       }}
     >
       {!!onRemove && (
@@ -243,28 +264,28 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
           cards and LiveCard already matched it. A circle also crops a headshot
           worse — it cuts the corners off exactly where the shoulders and helmet
           are, on images already framed head-and-shoulders. */}
-      <View style={{ alignItems: 'center', gap: compact ? 3 : 4, marginTop: compact ? 3 : 6 }}>
-        <View style={{ width: compact ? cs(60) : 60, height: compact ? cs(60) : 60, borderRadius: 7, borderWidth: 1.5, borderColor: accent, backgroundColor: '#EDE4CB', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+      <View style={{ alignItems: 'center', gap: cs(4, sc), marginTop: cs(6, sc) }}>
+        <View style={{ width: cs(60, sc), height: cs(60, sc), borderRadius: 7, borderWidth: 1.5, borderColor: accent, backgroundColor: '#EDE4CB', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
           {src
             ? <Image source={{ uri: src }} style={{ width: '100%', height: '100%' }} resizeMode={photo ? 'cover' : 'contain'} />
-            : <Text style={{ fontFamily: MONO, fontSize: compact ? cs(16) : 16, color: INK_DIM }}>{pos}</Text>}
+            : <Text style={{ fontFamily: MONO, fontSize: cs(16, sc), color: INK_DIM }}>{pos}</Text>}
         </View>
-        <Text numberOfLines={1} style={{ fontSize: compact ? cs(13) : 13, fontWeight: '800', color: INK, letterSpacing: 0.2 }}>{name}</Text>
-        <Text style={{ fontFamily: MONO, fontSize: compact ? cs(9.5) : 9.5, color: INK_DIM }}>{pos}{team ? ` · ${team}` : ''}</Text>
+        <Text numberOfLines={1} style={{ fontSize: cs(13, sc), fontWeight: '800', color: INK, letterSpacing: 0.2 }}>{name}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: cs(9.5, sc), color: INK_DIM }}>{pos}{team ? ` · ${team}` : ''}</Text>
       </View>
 
       {metric ? (
-        <View style={{ backgroundColor: '#3A2E14', borderRadius: 5, paddingHorizontal: compact ? cs(8) : 8, paddingVertical: compact ? 3 : 4, maxWidth: '100%' }}>
-          <Text numberOfLines={1} style={{ fontSize: compact ? cs(11) : 11, fontWeight: '700', color: '#F2D79A' }}>{metric}</Text>
+        <View style={{ backgroundColor: '#3A2E14', borderRadius: 5, paddingHorizontal: cs(8, sc), paddingVertical: cs(4, sc), maxWidth: '100%' }}>
+          <Text numberOfLines={1} style={{ fontSize: cs(11, sc), fontWeight: '700', color: '#F2D79A' }}>{metric}</Text>
         </View>
       ) : (
-        <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: '#B8863B', borderStyle: 'dashed', borderRadius: 5, paddingHorizontal: compact ? cs(8) : 8, paddingVertical: compact ? 3 : 4 }}>
-          <Text style={{ fontFamily: MONO, fontSize: compact ? cs(9) : 9, fontWeight: '700', color: '#8A6A28' }}>SEAL A METRIC</Text>
+        <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: '#B8863B', borderStyle: 'dashed', borderRadius: 5, paddingHorizontal: cs(8, sc), paddingVertical: cs(4, sc) }}>
+          <Text style={{ fontFamily: MONO, fontSize: cs(9, sc), fontWeight: '700', color: '#8A6A28' }}>SEAL A METRIC</Text>
         </View>
       )}
 
       {bank != null ? (
-        <Animated.Text style={[{ fontFamily: MONO, fontSize: compact ? cs(15) : 15, fontWeight: '800', color: INK }, tick]}>{bank}</Animated.Text>
+        <Animated.Text style={[{ fontFamily: MONO, fontSize: cs(15, sc), fontWeight: '800', color: INK }, tick]}>{bank}</Animated.Text>
       ) : footer ? (
         <View style={{ flexDirection: 'row', gap: 12 }}>{footer}</View>
       ) : <View style={{ height: 2 }} />}
@@ -280,11 +301,11 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
 
 /** The opponent's face-down pick. Real deck art, so it reads as a card rather
  *  than an empty panel. */
-export function CardBack({ label = 'SEALED', idx = 0, compact = false, onPress, actionLabel }: {
-  label?: string; idx?: number; compact?: boolean; onPress?: () => void; actionLabel?: string;
+export function CardBack({ label = 'SEALED', idx = 0, size, onPress, actionLabel }: {
+  label?: string; idx?: number; size?: CardSize; onPress?: () => void; actionLabel?: string;
 }) {
   return (
-    <CardShell idx={idx} compact={compact} style={{ borderRadius: 8, overflow: 'hidden', backgroundColor: '#1A2740' }}>
+    <CardShell idx={idx} size={size} style={{ borderRadius: 8, overflow: 'hidden', backgroundColor: '#1A2740' }}>
       <Image source={cardBackArt()} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
       <Pressable onPress={onPress} disabled={!onPress} style={{ position: 'absolute', inset: 0, justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 8 }}>
         <View style={{ backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 3 }}>
@@ -298,11 +319,12 @@ export function CardBack({ label = 'SEALED', idx = 0, compact = false, onPress, 
 /** An unfilled slot — dashed, on the felt, and the same box as a card because it
  *  is literally the same shell. It deals and breathes too: a static dashed
  *  rectangle beside a wobbling card is what made the pair look mismatched. */
-export function CardEmpty({ label, idx = 0, compact = false, onPress }: { label: string; idx?: number; compact?: boolean; onPress?: () => void }) {
+export function CardEmpty({ label, idx = 0, size, onPress }: { label: string; idx?: number; size?: CardSize; onPress?: () => void }) {
+  const sc = size ? sizeSpec(size).s : 1;
   return (
     <CardShell
       idx={idx}
-      compact={compact}
+      size={size}
       style={{
         borderRadius: 8,
         borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(233,185,89,0.45)', borderStyle: 'dashed',
@@ -310,7 +332,7 @@ export function CardEmpty({ label, idx = 0, compact = false, onPress }: { label:
       }}
     >
       <Pressable onPress={onPress} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 6 }}>
-        <Text style={{ fontFamily: MONO, fontSize: compact ? cs(10) : 10, fontWeight: '700', letterSpacing: 1, textAlign: 'center', color: 'rgba(233,185,89,0.85)' }}>{label}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: cs(10, sc), fontWeight: '700', letterSpacing: 1, textAlign: 'center', color: 'rgba(233,185,89,0.85)' }}>{label}</Text>
       </Pressable>
     </CardShell>
   );

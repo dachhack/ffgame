@@ -15,7 +15,7 @@ import { METRICS, metricById } from '@drip/core/data/metrics';
 import type { Metric, Pick, Player } from '@drip/core/types';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
-import { CardFace, CardBack, CardEmpty } from './cards';
+import { CardFace, CardBack, CardEmpty, loadCardSize } from './cards';
 import { Overlay } from './Overlay';
 import { teamLogo } from '@drip/core/data/media';
 
@@ -41,6 +41,9 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, hydrated = t
   const player = pick ? resolve(pick.playerId) ?? null : null;
   const metric = player && pick?.metricId ? metricById(player.pos, pick.metricId) : null;
   const [metricOpen, setMetricOpen] = useState(false);
+  // Read per render, like the deck art — Settings lives above this in the tree,
+  // so changing it re-renders the board and the new size lands with it.
+  const cardSize = loadCardSize();
 
   // A freshly-PLACED player with no metric opens the picker, so a slot never
   // sits half-set. Placed, which means the player CHANGED and you changed it —
@@ -65,16 +68,17 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, hydrated = t
     if (pick?.playerId && !pick?.metricId && !lockPlayer) setMetricOpen(true);
   }, [pick?.playerId, pick?.metricId, lockPlayer, hydrated]);
 
-  // Centred, because the cards are capped now (COMPACT_W) and left to
+  // Centred, because at Small and Medium the cards are capped and left to
   // themselves a flex row would push them to the edges with a hole between —
-  // the pairing is the point, so they sit together.
+  // the pairing is the point, so they sit together. At Large they fill the row
+  // and centring is a no-op.
   return (
     <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start', justifyContent: 'center' }}>
       {/* Your card, then the opponent's face-down one — the pairing IS the
           game's premise, so they sit at matched size on the felt. */}
       {player ? (
         <CardFace
-          compact
+          size={cardSize}
           slug={player.id}
           name={player.name}
           pos={player.pos}
@@ -92,10 +96,10 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, hydrated = t
           )}
         />
       ) : (
-        <CardEmpty compact idx={idx} label={lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'} onPress={lockPlayer ? undefined : onOpenPicker} />
+        <CardEmpty size={cardSize} idx={idx} label={lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'} onPress={lockPlayer ? undefined : onOpenPicker} />
       )}
 
-      <CardBack compact idx={idx} onPress={onScout} actionLabel={onScout ? '🔍 SCOUT' : undefined} />
+      <CardBack size={cardSize} idx={idx} onPress={onScout} actionLabel={onScout ? '🔍 SCOUT' : undefined} />
 
       <MetricModal
         visible={metricOpen}
