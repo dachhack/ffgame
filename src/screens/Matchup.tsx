@@ -5,7 +5,7 @@ import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile, 
 import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { avatarUrl, teamLogo } from '@drip/core/data/media';
-import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, weekLabel } from '@drip/core/data/nflSlate';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, weekLabel, LOCK_LEAD_MS, windowLockMs } from '@drip/core/data/nflSlate';
 import { METRICS, metricById } from '@drip/core/data/metrics';
 import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '@drip/core/data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '@drip/core/data/league';
@@ -519,7 +519,6 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // elapsed. The play-by-play log fills in from the worker feed — which only
   // carries plays that have already happened — so a LIVE window simply reveals
   // everything ingested so far. No manual LOCK IN / ▶: the wall clock drives it.
-  const LOCK_LEAD_MS = 3_600_000;        // lineups lock 1h before kickoff
   const GAME_WINDOW_MS = 4 * 3_600_000;  // a game reads "in progress" for ~4h after kickoff
   type WinState = 'setup' | 'locked' | 'live' | 'final';
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -2155,10 +2154,7 @@ function WindowSectionInner(props: {
   // Betting closes the instant this window's picks do — kickoff − 1h, the same
   // lead the lock countdown above uses and the same instant enforce_window_lock
   // (0102) enforces server-side.
-  const potLockAtMs = (() => {
-    const k = windowKickoffMs(week, w.id);
-    return k == null ? null : k - (testTimelineOn() ? TEST_LOCK_LEAD_MS : 3_600_000);
-  })();
+  const potLockAtMs = windowLockMs(week, w.id);
   // Twin Generals: with the buff armed and ≥2 of your Field General QBs in this
   // window, the top two multipliers stack — link those QB spots so you can see
   // which two are paired.

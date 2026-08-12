@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
-import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, nflGameForTeam, kickoffLabel, isPreseasonWeek } from '@drip/core/data/nflSlate';
+import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, nflGameForTeam, kickoffLabel, isPreseasonWeek, LOCK_LEAD_MS } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
@@ -307,14 +307,23 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
     return () => clearInterval(id);
   }, []);
 
-  /** A window's picks are final: the server sealed our rows, or its first
-   *  kickoff passed. Once the week starts, a window with no known kickoff is
-   *  treated as locked (fail safe). */
+  /** A window's picks are final: the server sealed our rows, or its LOCK time
+   *  passed. Once the week starts, a window with no known kickoff is treated as
+   *  locked (fail safe).
+   *
+   *  Lock time, not kickoff. This compared against the raw kickoff, so the board
+   *  stayed editable — and kept offering the player picker — through the whole
+   *  hour the DB's enforce_window_lock trigger was already rejecting the write.
+   *  The lead is LOCK_LEAD_MS in core now, shared with the web board. */
+  const winLockMs = (winId: string): number | null => {
+    const iso = winKickIso[winId];
+    return iso ? Date.parse(iso) - LOCK_LEAD_MS : null;
+  };
   const winLocked = (winId: string): boolean => {
     if (!locked) return false;
     if (lockedWins.has(winId)) return true;
-    const iso = winKickIso[winId];
-    return iso ? Date.parse(iso) <= nowTs : true;
+    const ms = winLockMs(winId);
+    return ms != null ? ms <= nowTs : true;
   };
   const allLocked = !!matchup && locked && wins.every((w) => winLocked(w.id));
   const slots = useMemo(() => slotsFor(wins), [wins]);
@@ -782,7 +791,10 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
                 <Mono size={9} weight="700" tone={wLocked ? 'opp' : 'you'} track={0.08}>{wLocked ? 'LOCKED' : 'SETUP'}</Mono>
               </View>
               <Mono size={9.5} tone={wLocked ? 'opp' : 'warn'} weight="700">
-                {wLocked ? '🔒 locked' : winKickIso[w.id] ? `🔒 locks ${fmtLock(winKickIso[w.id])}` : '🔒 locks at kickoff'}
+                {wLocked ? '🔒 locked' : (() => {
+                  const ms = winLockMs(w.id);
+                  return ms != null ? `🔒 locks ${fmtLock(new Date(ms).toISOString())}` : '🔒 locks 1h before kickoff';
+                })()}
               </Mono>
               <Mono size={9.5} weight="700" tone={setN === winSlots.length ? 'you' : 'faint'}>{setN}/{winSlots.length} SET</Mono>
               {gateOn && <Mono size={9} tone={elig ? 'faint' : 'opp'}>{elig} eligible</Mono>}

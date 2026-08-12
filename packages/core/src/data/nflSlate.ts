@@ -351,6 +351,23 @@ let TEST_ANCHOR: number | null = null;
 const TEST_SETUP_LEAD_MS = 180_000; // 3m of setup before the first window kicks
 const TEST_STEP_MS = 120_000;       // 2m between successive window kickoffs
 export const TEST_LOCK_LEAD_MS = 60_000;  // window locks 1m before its (test) kickoff
+
+/** How long before its own kickoff a window's picks stop being editable.
+ *
+ *  THE RULE, not a display hint. The authority is the DB — migration 0102's
+ *  enforce_window_lock rejects any client write once
+ *  `window_kickoff - interval '1 hour' <= now()` — and the worker derives
+ *  matchup.lock_at from the same lead (server/src/config.js lockLeadMs). This is
+ *  the CLIENT's copy of that number, and it lives in core so the web board and
+ *  the app cannot hold different ones.
+ *
+ *  They did. The app compared against the raw kickoff, so it showed a window as
+ *  open, and offered its picker, for the whole hour the database was already
+ *  refusing the write — the one hour where being wrong actually costs a lineup.
+ *  Three copies of a rule is how that happens; the two clients now share one.
+ *
+ *  Changing this alone changes nothing real. The trigger is what locks. */
+export const LOCK_LEAD_MS = 3_600_000;
 export const TEST_GAME_MS = 120_000;      // a window reads LIVE for 2m, then FINAL
 /** Enable/disable the compressed live-test timeline (anchor = epoch ms, null = off). */
 export function setTestTimeline(anchorMs: number | null): void { TEST_ANCHOR = anchorMs; }
@@ -372,6 +389,18 @@ export function windowKickoffMs(week: number, win: WindowId): number | null {
   }
   return min;
 }
+
+/** The instant a window's picks stop being editable (epoch ms), or null when the
+ *  week's kickoffs aren't known yet.
+ *
+ *  Kickoff minus the lead — and the TEST lead when the compressed live-test
+ *  timeline is on, so a rehearsal locks a minute before its fake kickoff rather
+ *  than an hour before, which on a 2-minute window would be "already locked". */
+export function windowLockMs(week: number, win: WindowId): number | null {
+  const k = windowKickoffMs(week, win);
+  return k == null ? null : k - (testTimelineOn() ? TEST_LOCK_LEAD_MS : LOCK_LEAD_MS);
+}
+
 /** A window's kickoff as ET seconds-of-day — the real first-snap time when the
  *  week is loaded, else the scheduled slot time. Base for the live wall clock. */
 export function windowKickoffSod(week: number, win: WindowId): number {
