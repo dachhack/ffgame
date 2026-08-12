@@ -21,20 +21,16 @@
 //      that is the committed keystore: AC:D4:CF:A3:31:1F:D4:3B:1A:61:42:AC:2D:
 //      48:E6:A3:F8:3A:BF:3E. A Play-signed release has a DIFFERENT SHA-1 and
 //      needs its own client.
-//   2. Google Cloud → Credentials → a WEB OAuth client. Its id is what goes in
-//      VITE_GOOGLE_WEB_CLIENT_ID: the Android client authorises the app, but the
-//      ID TOKEN is minted for the web client, and that is the `aud` Supabase
-//      checks.
+//   2. Google Cloud → Credentials → a WEB OAuth client. Its id lives in
+//      liveConfig.googleWebClientId (committed — an OAuth client id is public,
+//      see the note there), overridable with VITE_GOOGLE_WEB_CLIENT_ID. The
+//      Android client authorises the app, but the ID TOKEN is minted for the
+//      web client, and that is the `aud` Supabase checks.
 //   3. Supabase → Authentication → Providers → Google → Authorized Client IDs:
 //      both ids. Supabase rejects an ID token whose audience it doesn't know,
 //      which is what stops anyone bringing their own token.
-import { platform } from '@drip/core/platform';
+import { googleWebClientId } from '@drip/core/data/liveConfig';
 import { signInWithGoogleIdToken } from '@drip/core/data/liveApi';
-
-/** The web client id, from the build's env (app.config.js layers it into
- *  `expo.extra`). Empty string and undefined both mean "not configured" — see
- *  the note in app.config.js on why an empty value is treated as unset. */
-export const googleWebClientId = (): string => platform().env('VITE_GOOGLE_WEB_CLIENT_ID') || '';
 
 /** Whether this build can do the native flow at all: a client id AND the native
  *  module actually linked in. The module is a `require` rather than a top-level
