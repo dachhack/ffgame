@@ -53,7 +53,13 @@ export const hasSlate = (week: number): boolean => !!slateFor(week);
 /** The NFL game a team plays in a given week, or undefined (bye). */
 export function nflGameForTeam(week: number, team?: string | null): NflGame | undefined {
   if (!team) return undefined;
-  return (slateFor(week) || []).find((g) => g.home === team || g.away === team);
+  // NORMALISED on both sides, for the reason spelled out on windowForTeam below
+  // — this compared raw strings while its neighbour normalised, so a player on
+  // LAR / WSH / JAC matched no game at all. Same slate, same codes, and the same
+  // silent miss: the game slate preview simply left that player out rather than
+  // listing him against the wrong game.
+  const want = normTeam(team);
+  return (slateFor(week) || []).find((g) => normTeam(g.home) === want || normTeam(g.away) === want);
 }
 
 /** The time-slot window a team plays in for a given week, or null (bye). */
