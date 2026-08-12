@@ -162,7 +162,7 @@ function LeagueSheet({ league, onClose, onChanged }: {
 
       {!!note && <Mono size={10} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ paddingHorizontal: 14, paddingTop: 10 }}>{note}</Mono>}
 
-      <ScrollView style={{ maxHeight: 380 }} contentContainerStyle={{ padding: 12, gap: 8 }}>
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 12, gap: 8 }}>
         {tab === 'members' && (members ?? []).map((m) => (
           <View key={m.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 10 }}>
             <Mono size={9} tone="faint" style={{ width: 20 }}>{m.roster_id}</Mono>

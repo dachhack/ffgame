@@ -16,7 +16,7 @@ import type { Player } from '@drip/core/types';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
 import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
-import { Overlay, sheetBodyMax } from './Overlay';
+import { Overlay } from './Overlay';
 import { GROUP_TABS, groupTag } from './rosterGroup';
 
 const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
@@ -130,7 +130,7 @@ export function PlayerPicker({ visible, windowLabel, players, currentId, groupOf
           preseason window sized this grid past Overlay's cap, and a card that
           overflows its cap clips — so the pool simply ended partway down with
           no way to reach the rest. */}
-      <ScrollView style={{ maxHeight: sheetBodyMax(210) }} contentContainerStyle={{ padding: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-start' }}>
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-start' }}>
         {shown.map((p) => (
           <MiniPlayerCard
             key={p.id}

@@ -23,10 +23,7 @@ import { POWERUPS, POWERUP_CATEGORIES, powerupCategory } from '@drip/core/data/p
 import { myInventory, walletBuyPowerup } from '@drip/core/data/liveApi';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
-import { Overlay, sheetBodyMax } from './Overlay';
-
-/** Title, balance line, and the category chip row. Everything else is grid. */
-const gridMax = sheetBodyMax(150);
+import { Overlay } from './Overlay';
 
 export function ShopModal({ visible, matchupId, balance, practice, unlocks, comboQty, unlockBusy, unlockLocked, armsClosed, onToggleUnlock, onDisarmCombo, onClose, onChanged }: {
   visible: boolean;
@@ -122,7 +119,7 @@ export function ShopModal({ visible, matchupId, balance, practice, unlocks, comb
         : `◈ ${Math.round(balance)} DRIP COIN · +5 PER SIGNATURE PLAY`}
       onClose={onClose}
     >
-      <View>
+      <View style={{ flexShrink: 1, minHeight: 0 }}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 6, padding: 12 }}>
           {[{ id: 'all', label: 'All' }, ...POWERUP_CATEGORIES].map((c) => {
             const on = tab === c.id;
@@ -144,11 +141,9 @@ export function ShopModal({ visible, matchupId, balance, practice, unlocks, comb
 
         {!!err && <Mono size={10.5} tone="opp" style={{ paddingHorizontal: 14, paddingBottom: 6 }}>{err}</Mono>}
 
-        {/* Bounded, but bounded by the SHEET rather than by a guess — see
-            gridMax. Without any height the wrapped grid would size to its
-            content and push the ✕ off the top; with a fixed one it left the
-            sheet short of the room Overlay had already given it. */}
-        <ScrollView style={{ maxHeight: gridMax }} contentContainerStyle={{ padding: 12, paddingBottom: 20, flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' }}>
+        {/* Shrinks to whatever the sheet has left — see the note in Overlay.
+            Left to size itself the wrapped grid would push the ✕ off the top. */}
+        <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 20, flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' }}>
           {shown.map((p) => {
             // A metric unlock is armed here, not owned. Combo Drip stays
             // buyable while armed — each purchase is another slot.
