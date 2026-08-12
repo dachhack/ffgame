@@ -17,7 +17,18 @@ async function client() {
 /** Turn a raw Supabase / auth / network error into calm, player-facing copy.
  *  Unknown messages fall through lightly cleaned (capitalized, trailing period). */
 export function friendlyError(x: unknown): string {
-  const raw = (x instanceof Error ? x.message : typeof x === 'string' ? x : '').trim();
+  // A Supabase/PostgREST failure is a PLAIN OBJECT ({message, details, hint,
+  // code}), not an Error — so `x instanceof Error` alone threw away the only
+  // part of the response that explains anything. That is how a lineup that hit
+  // the slot-cap trigger ("lineup is full — 8 slots max") reported itself as
+  // "Something went wrong": the server said exactly what was wrong and the
+  // client dropped it on the floor.
+  const raw = (
+    x instanceof Error ? x.message
+      : typeof x === 'string' ? x
+      : typeof (x as { message?: unknown })?.message === 'string' ? (x as { message: string }).message
+      : ''
+  ).trim();
   if (!raw) return 'Something went wrong. Please try again.';
   const m = raw.toLowerCase();
   if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('load failed') || m.includes('fetch failed'))

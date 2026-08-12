@@ -25,7 +25,7 @@ import {
   myBuffs, heroSetBuffs, myInventory, consumeInventory, refundInventory,
   myUnlocks, armUnlock, disarmUnlock, myComboQty,
   myWallet, ensureWallet,
-  myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium, startCheckout,
+  liveSlate, matchupTeams, matchupPremium, startCheckout, friendlyError,
   getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, matchupWallets, weekGameFeeds,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
   type WindowScore, type RevealedPick, type GameFeedRow,
@@ -97,8 +97,6 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const [inventory, setInventory] = useState<Record<string, number>>({});
   const [coins, setCoins] = useState(0);
   const [buffBusy, setBuffBusy] = useState<string | null>(null);
-  const [extra, setExtra] = useState(0);
-  const [extraBusy, setExtraBusy] = useState(false);
   const [state, setState] = useState<'loading' | 'ready' | 'none' | 'error'>('loading');
   const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -160,9 +158,9 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
           const oppId = m.home_roster_id === r.rosterId ? m.away_roster_id : m.home_roster_id;
           setOppTeam(tm[oppId] ?? null);
         }).catch(() => {});
-        const [pl, pk, bf, un, ex, slate, cq] = await Promise.all([
+        const [pl, pk, bf, un, slate, cq] = await Promise.all([
           myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId), myBuffs(m.id), myUnlocks(m.id),
-          myExtra(m.id).catch(() => 0), liveSlate(m.week).catch(() => []), myComboQty(m.id, userId).catch(() => 0),
+          liveSlate(m.week).catch(() => []), myComboQty(m.id, userId).catch(() => 0),
         ]);
         myInventory(m.id).then((inv) => setInventory(inv ?? {})).catch(() => {});
         {
@@ -209,7 +207,6 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         setLockedWins(lw);
         setPicks(map);
         setHydrated(true);
-        setExtra(Number(ex ?? 0));
         setBuffs(new Set(bf ?? []));
         setUnlocks(new Set(un ?? []));
         setComboQty(Number(cq ?? 0));
@@ -401,7 +398,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         // A swallowed failure is the worst outcome here: the board keeps showing
         // the lineup you built while the server holds an older one, and you find
         // out on reload. Say so on the board.
-        .catch((e: unknown) => setErr(e instanceof Error ? e.message : 'Could not save your lineup.'))
+        .catch((e: unknown) => setErr(friendlyError(e)))
         .finally(() => setSaving(false));
     }, 1500);
     return () => clearTimeout(id);
@@ -855,55 +852,6 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
           </Card>
         );
       })}
-
-      {/* Extra slots are BUYABLE here but not yet fillable: the web fills them
-          with three stacked <select>s (window / player / metric), which has no
-          native equivalent and wants a purpose-built sheet. Buying and selling
-          work, and any extra-slot picks already made on the web are preserved —
-          this screen simply doesn't write to them. */}
-      {controller !== 'ai' && (
-        <Card style={{ marginBottom: 10 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <Display size={14}>Extra slots</Display>
-            <Mono size={9.5} tone="faint">{extra}/2 owned · ◆ {Math.round(coins)}</Mono>
-          </View>
-          <Mono size={9.5} tone="faint" style={{ marginTop: 6 }}>
-            Add up to 2 bonus lineup slots (◆{priceOf('extra-slot')} each). An extra slot is one-sided — it plays unopposed as a best-ball backup. Fill them on the web for now.
-          </Mono>
-          <View style={{ flexDirection: 'row', gap: 6, marginTop: 10 }}>
-            <Chip
-              label={`➕ extra slot ◆${priceOf('extra-slot')}`}
-              disabled={locked || extraBusy || extra >= 2 || coins < priceOf('extra-slot')}
-              onPress={async () => {
-                if (!matchup) return;
-                setExtraBusy(true); setErr(null);
-                try {
-                  const r = await buyExtraSlot(matchup.id);
-                  if (r.ok && typeof r.extra === 'number') { setExtra(r.extra); refreshCoins(); }
-                  else setErr(r.error === 'insufficient' ? insufficientMsg('extra-slot') : r.error === 'cap' ? 'Extra-slot cap reached (2 per team).' : (r.error ?? 'Could not buy an extra slot.'));
-                } catch (e) { setErr(e instanceof Error ? e.message : 'Could not buy an extra slot.'); }
-                finally { setExtraBusy(false); }
-              }}
-            />
-            {extra > 0 && (
-              <Chip
-                label={`➖ sell ◆${priceOf('extra-slot')}`}
-                disabled={locked || extraBusy}
-                onPress={async () => {
-                  if (!matchup) return;
-                  setExtraBusy(true); setErr(null);
-                  try {
-                    const r = await sellExtraSlot(matchup.id);
-                    if (r.ok && typeof r.extra === 'number') { setExtra(r.extra); refreshCoins(); }
-                    else setErr(r.error ?? 'Could not sell the extra slot.');
-                  } catch (e) { setErr(e instanceof Error ? e.message : 'Could not sell the extra slot.'); }
-                  finally { setExtraBusy(false); }
-                }}
-              />
-            )}
-          </View>
-        </Card>
-      )}
 
       {!!err && <Mono size={10.5} tone="opp" style={{ marginVertical: 6 }}>{err}</Mono>}
 
