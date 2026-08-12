@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
-import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, isPreseasonWeek } from '@drip/core/data/nflSlate';
+import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, nflGameForTeam, kickoffLabel, isPreseasonWeek } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
@@ -123,6 +123,8 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   // it fetches yours, and shows only who COULD appear in a window.
   const [oppPool, setOppPool] = useState<PoolPlayer[]>([]);
   const [scoutWin, setScoutWin] = useState<GameWindow | null>(null);
+  /** Which window's game slate is open — the real NFL games it covers. */
+  const [slateWin, setSlateWin] = useState<GameWindow | null>(null);
   /** Which roster is expanded — one at a time, so the board stays reachable. */
   const [rosterOpen, setRosterOpen] = useState<'you' | 'their' | null>(null);
 
@@ -759,7 +761,10 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
                 a window scannable at a glance the way a list of abbreviations
                 does not. */}
             {slateOf(week, w.id).length > 0 && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 7, flexWrap: 'wrap' }}>
+              <Pressable
+                onPress={() => setSlateWin(w)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 7, flexWrap: 'wrap' }}
+              >
                 {slateOf(week, w.id).slice(0, 10).flatMap((g) => [g.away, g.home]).map((abbr, i) => {
                   const uri = teamLogo(abbr);
                   return uri
@@ -767,9 +772,9 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
                     : <Mono key={`${abbr}-${i}`} size={8} tone="faint">{abbr}</Mono>;
                 })}
                 <Mono size={9} tone="faint" track={0.08} style={{ marginLeft: 4 }}>
-                  SLATE · {slateOf(week, w.id).length} GAME{slateOf(week, w.id).length === 1 ? '' : 'S'}
+                  SLATE · {slateOf(week, w.id).length} GAME{slateOf(week, w.id).length === 1 ? '' : 'S'} ›
                 </Mono>
-              </View>
+              </Pressable>
             )}
 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -874,6 +879,81 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
             open
           />
         )}
+      </Overlay>
+
+      {/* The window's real NFL games, and who you have in each — the web's
+          "· Game Slate" sheet. Reachable by tapping the crest strip, which was
+          already showing the same games without saying which ones they were.
+          The point is deciding a lineup: "this window is five games, and I
+          already have someone in two of them" is the question the strip raises
+          and could not answer. */}
+      <Overlay
+        visible={!!slateWin}
+        title={`${slateWin?.label ?? ''} · Game Slate`}
+        subtitle={slateWin
+          ? `${slateOf(week, slateWin.id).length} GAME${slateOf(week, slateWin.id).length === 1 ? '' : 'S'} · ${windowDateLabel(week, slateWin.id).toUpperCase()} · ${windowTimeLabel(week, slateWin.id).toUpperCase()}`
+          : undefined}
+        onClose={() => setSlateWin(null)}
+      >
+        <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 12, gap: 7 }}>
+          {(() => {
+            if (!slateWin) return null;
+            const win = slateWin.id;
+            const games = slateOf(week, win);
+            // Seeded with every real game so the sheet is complete before anyone
+            // is slotted — a lone TNF game still has to appear.
+            const rows = games.map((g) => ({ g, you: [] as string[], their: [] as string[] }));
+            const put = (team: string | null | undefined, name: string, side: 'you' | 'their') => {
+              if (!team) return;
+              const g = nflGameForTeam(week, team);
+              if (!g) return;
+              const row = rows.find((r) => r.g.away === g.away && r.g.home === g.home);
+              if (row && !row[side].includes(`${name} · ${team}`)) row[side].push(`${name} · ${team}`);
+            };
+            for (const s of slots.filter((sl) => sl.win === win)) {
+              const slug = picks[s.key]?.player_slug;
+              if (slug) put(slugMeta(slug).team, shortName(pool.find((p) => p.slug === slug)?.full ?? slug), 'you');
+            }
+            // Theirs ONLY once the window has kicked and their cards are face
+            // up. Listing a sealed opponent lineup here would leak exactly what
+            // the sealed card exists to hide.
+            if (winLocked(win)) {
+              for (const rp of revealed.filter((p) => p.app_user_id !== userId && p.game_window === win)) {
+                const slug = rp.player_slug;
+                if (!slug) continue;
+                put(slugMeta(slug).team, shortName(oppPool.find((p) => p.slug === slug)?.full ?? slug), 'their');
+              }
+            }
+            if (!rows.length) return <Mono size={10.5} tone="dim">No games on the slate for this window yet.</Mono>;
+            return rows.map(({ g, you, their }) => (
+              <View key={`${g.away}@${g.home}`} style={{ backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  {([g.away, g.home] as const).map((abbr, i) => {
+                    const logo = teamLogo(abbr);
+                    return (
+                      <View key={abbr} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+                        {i === 1 && <Mono size={10} weight="700" tone="faint">@</Mono>}
+                        {logo
+                          ? <Image source={{ uri: logo }} style={{ width: 22, height: 22 }} resizeMode="contain" />
+                          : <Mono size={9} tone="faint">{abbr}</Mono>}
+                        <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text }}>{abbr}</Text>
+                      </View>
+                    );
+                  })}
+                  <Mono size={8.5} weight="700" tone="dim">
+                    {g.kickoff ? kickoffLabel(g.kickoff) : windowTimeLabel(week, win)}
+                  </Mono>
+                </View>
+                {(you.length > 0 || their.length > 0) && (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 7, paddingTop: 7, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+                    {you.map((n) => <Mono key={n} size={9.5} tone="you">● {n}</Mono>)}
+                    {their.map((n) => <Mono key={n} size={9.5} tone="opp">● {n}</Mono>)}
+                  </View>
+                )}
+              </View>
+            ));
+          })()}
+        </ScrollView>
       </Overlay>
 
       {/* Scout: who the opponent COULD field in this window. Never who they
