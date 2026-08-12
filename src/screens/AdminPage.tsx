@@ -2121,6 +2121,9 @@ function HealthPanel() {
   const liveOn = (hp?.live_matchups ?? 0) > 0;
   // While games are live, a >90s gap since the last play ingest is suspicious.
   const ingestStale = liveOn && hp?.last_play_ingest && (Date.now() - new Date(hp.last_play_ingest).getTime()) > 90_000;
+  // A null reads as "never synced", which is equally worth flagging — the
+  // column is only NULL on rows written before 0122, or on no rows at all.
+  const syncStale = !!hp && (!hp.last_lineup_sync || Date.now() - new Date(hp.last_lineup_sync).getTime() > 86_400_000);
   const stat = (label: string, value: React.ReactNode, color = 'var(--text)') => (
     <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '6px 9px', minWidth: 0 }}>
       <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.08em', color: 'var(--faint)', fontWeight: 700 }}>{label}</div>
@@ -2141,9 +2144,16 @@ function HealthPanel() {
           {stat('LIVE PLAYS', `${hp.live_play_count}${hp.sim_play_count ? ` (${hp.sim_play_count} sim)` : ''}`)}
           {stat('LAST INGEST', ago(hp.last_play_ingest), ingestStale ? 'var(--opp)' : liveOn ? 'var(--you)' : 'var(--text)')}
           {stat('LAST RESOLVE', ago(hp.last_state_update))}
+          {/* The one that means something between slates. Ingest and resolve
+              only move during games, so out of season hours they read stale on
+              a perfectly healthy worker; the weekly sync runs on boot and every
+              few hours regardless. Amber past a day — the sync's own refresh is
+              6h, so a day of silence is the worker, not the schedule. */}
+          {stat('LAST SYNC', ago(hp.last_lineup_sync), syncStale ? 'var(--warn)' : 'var(--text)')}
         </div>
       )}
       {ingestStale && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--opp)', marginTop: 8 }}>⚠ games are live but no play ingested in over 90s — check the poller.</div>}
+      {syncStale && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--opp)', marginTop: 8 }}>⚠ no lineup sync in over a day — the worker may not be running (fly.io → drip-pilot-worker).</div>}
     </div>
   );
 }

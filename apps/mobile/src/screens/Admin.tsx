@@ -91,13 +91,21 @@ export function Admin({ onBack }: { onBack: () => void }) {
         health === null ? <Card><ActivityIndicator color={t.you} /></Card> : (
           <Card>
             <Mono size={9} weight="700" track={0.14} tone="faint">IS IT RUNNING</Mono>
-            {/* The two that answer that question, first and large. A worker
+            {/* The three that answer that question, first and large. A worker
                 that stopped shows here as an ingest and a publish that have
                 both gone stale, which is the actual symptom behind "my score
-                isn't moving". */}
+                isn't moving".
+                LAST SYNC is the one that works on a WEDNESDAY: ingest and
+                publish only move during games, so between slates they read
+                stale on a healthy worker and tell you nothing. The weekly sync
+                runs on boot and every few hours regardless, which makes it the
+                only liveness signal that means anything out of season hours. */}
             <View style={{ flexDirection: 'row', gap: 14, marginTop: 10 }}>
               <Stat label="LAST PLAY IN" value={ago(health.last_play_ingest)} big />
               <Stat label="LAST PUBLISH" value={ago(health.last_state_update)} big />
+            </View>
+            <View style={{ flexDirection: 'row', gap: 14, marginTop: 12 }}>
+              <Stat label="LAST SYNC" value={ago(health.last_lineup_sync)} big />
             </View>
             <View style={{ height: 1, backgroundColor: t.bd, marginVertical: 12 }} />
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14 }}>
