@@ -683,53 +683,55 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
           )}
         </View>
         {controller === 'ai' && <Mono size={9} tone="faint" style={{ marginTop: 8 }}>Auto-pilot is on — your manual picks below are paused until you turn it off.</Mono>}
+
+        {/* Power-ups live in this card now rather than one of their own.
+            Hidden entirely under auto-pilot, same as before: the AI arms
+            nothing, so offering the controls would be offering a lever
+            attached to nothing. */}
+        {controller !== 'ai' && (
+          <View style={{ marginTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
+            {!matchPremium && (
+              <View style={{ marginBottom: 10 }}>
+                <Notice>
+                  <Mono size={9.5} tone="you" weight="700">🔒 Premium unlocks K/DST/IDP + the full power-up set + special events. Both sides of a premium matchup get the full set — never pay-to-win.</Mono>
+                  <View style={{ flexDirection: 'row', gap: 6, marginTop: 7 }}>
+                    <Chip label="Unlock $5 · you" on onPress={() => checkout('personal')} />
+                    <Chip label="Unlock league · $30" onPress={() => checkout('league')} />
+                  </View>
+                </Notice>
+              </View>
+            )}
+
+            {/* Unlocks are a control, so they stay — folded into this card
+                rather than owning one. A heading, a card border and 24px of
+                padding to introduce three chips was more frame than picture. */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }} style={{ marginTop: 10 }}>
+              {LIVE_UNLOCKS.map((id) => {
+                const pu = powerupById(id);
+                const combo = id === 'unlock-combo-drip';
+                const on = combo ? comboQty > 0 : unlocks.has(id);
+                // Combo Drip is one slot PER PURCHASE, so the chip always offers
+                // to buy another — affordability matters even when armed.
+                const afford = (on && !combo) || coins >= priceOf(id);
+                return (
+                  <View key={id} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                    <Chip
+                      label={`${pu?.icon ?? ''} ${pu?.name ?? id} ${on ? (combo ? `✓ ×${comboQty} ＋` : '✓') : puLocked(id) ? '🔒' : `◆${priceOf(id)}`}`}
+                      on={on}
+                      disabled={locked || !!buffBusy || !afford}
+                      dim={buffBusy === id}
+                      onPress={() => toggleUnlock(id)}
+                    />
+                    {combo && comboQty > 0 && !locked && (
+                      <Chip label="➖" disabled={!!buffBusy} onPress={disarmComboOne} />
+                    )}
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
       </Card>
-
-      {/* Power-ups */}
-      {controller !== 'ai' && (
-        <Card style={{ marginBottom: 12 }}>
-          {!matchPremium && (
-            <View style={{ marginBottom: 10 }}>
-              <Notice>
-                <Mono size={9.5} tone="you" weight="700">🔒 Premium unlocks K/DST/IDP + the full power-up set + special events. Both sides of a premium matchup get the full set — never pay-to-win.</Mono>
-                <View style={{ flexDirection: 'row', gap: 6, marginTop: 7 }}>
-                  <Chip label="Unlock $5 · you" on onPress={() => checkout('personal')} />
-                  <Chip label="Unlock league · $30" onPress={() => checkout('league')} />
-                </View>
-              </Notice>
-            </View>
-          )}
-
-          {/* METRIC UNLOCKS is a control, so it stays — but the paragraph
-              explaining what a power-up is does not. The shop says that, on the
-              card you're about to buy, at the moment you care. */}
-          <Mono size={9.5} weight="700" track={0.06}>METRIC UNLOCKS</Mono>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }} style={{ marginTop: 8 }}>
-            {LIVE_UNLOCKS.map((id) => {
-              const pu = powerupById(id);
-              const combo = id === 'unlock-combo-drip';
-              const on = combo ? comboQty > 0 : unlocks.has(id);
-              // Combo Drip is one slot PER PURCHASE, so the chip always offers
-              // to buy another — affordability matters even when armed.
-              const afford = (on && !combo) || coins >= priceOf(id);
-              return (
-                <View key={id} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                  <Chip
-                    label={`${pu?.icon ?? ''} ${pu?.name ?? id} ${on ? (combo ? `✓ ×${comboQty} ＋` : '✓') : puLocked(id) ? '🔒' : `◆${priceOf(id)}`}`}
-                    on={on}
-                    disabled={locked || !!buffBusy || !afford}
-                    dim={buffBusy === id}
-                    onPress={() => toggleUnlock(id)}
-                  />
-                  {combo && comboQty > 0 && !locked && (
-                    <Chip label="➖" disabled={!!buffBusy} onPress={disarmComboOne} />
-                  )}
-                </View>
-              );
-            })}
-          </ScrollView>
-        </Card>
-      )}
 
       {/* Windows. Each one phases on its OWN kickoff, which is the whole reason
           this can be one screen: at any moment on a Sunday some windows are

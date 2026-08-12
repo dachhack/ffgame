@@ -9,7 +9,7 @@
 // Collapsed by default. On a phone this list runs to hundreds of players and
 // would otherwise bury the board it sits above.
 import { useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import type { GameWindow, Player } from '@drip/core/types';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
@@ -18,6 +18,11 @@ import { Mono } from './prims';
 import { GROUP_TABS, GroupBadge } from './rosterGroup';
 
 const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
+
+/** Everything in the sheet that isn't the list: title + subtitle, search, the
+ *  position and group chip rows, the count line, and the footer button. */
+const SHEET_CHROME = 300;
+const listMax = Math.max(200, Math.round(Dimensions.get('window').height * 0.88) - SHEET_CHROME);
 
 export function RosterPanel({ title, players, wins, windowOf, groupOf, accent, open: openProp, onToggle }: {
   title: string;
@@ -160,7 +165,13 @@ export function RosterPanel({ title, players, wins, windowOf, groupOf, accent, o
 
           {/* Bounded height: this list can be a thousand rows, and an unbounded
               one would push the board off the screen entirely. */}
-          <ScrollView style={{ maxHeight: controlled ? 420 : 330 }} nestedScrollEnabled contentContainerStyle={{ paddingBottom: 8 }}>
+          {/* Sized from what the sheet has LEFT, not from the screen. Overlay
+              caps its card at 88%; the title, search box, two chip rows, count
+              line and footer take ~SHEET_CHROME of that, and whatever remains is
+              the list. A fixed 420 overflowed the cap on a short screen — and an
+              overflowing card clips rather than scrolls, which looks exactly
+              like a list that refuses to move. */}
+          <ScrollView style={{ maxHeight: controlled ? listMax : 330 }} nestedScrollEnabled contentContainerStyle={{ paddingBottom: 8 }}>
             {groups.map((g) => (
               <View key={g.id}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', backgroundColor: t.sh, paddingHorizontal: 12, paddingVertical: 6 }}>

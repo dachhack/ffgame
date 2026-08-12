@@ -7,8 +7,16 @@
 // specific slot in a specific window.
 //
 // `transparent` + a dimmed backdrop reproduces it. Tapping the backdrop closes,
-// tapping the card does not — the press is swallowed by the inner Pressable
-// rather than by stopPropagation, which React Native does not have.
+// tapping the card does not.
+//
+// The backdrop is an absolutely-positioned SIBLING of the card, not its parent.
+// It used to wrap the card — the "swallow the press with an inner Pressable"
+// trick, since RN has no stopPropagation — and that put a Pressable ancestor
+// above every sheet's content. A Pressable competes for the touch responder on
+// a drag, so a scrollable list inside a sheet would not scroll: the roster
+// opened and then sat there. As siblings, nothing above the card handles
+// touches at all, and tap-to-dismiss still works because the backdrop covers
+// the whole screen behind it.
 import { type ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme, MONO } from '../theme.native';
@@ -26,9 +34,13 @@ export function Overlay({ visible, title, subtitle, titleLeft, onClose, children
   const t = useTheme();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.62)', justifyContent: 'center', padding: 12 }}>
+      <View style={{ flex: 1, justifyContent: 'center', padding: 12 }}>
         <Pressable
-          onPress={() => {}}
+          accessibilityLabel="Close"
+          onPress={onClose}
+          style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.62)' }]}
+        />
+        <View
           style={{
             maxHeight: '88%',
             backgroundColor: t.surface,
@@ -56,8 +68,8 @@ export function Overlay({ visible, title, subtitle, titleLeft, onClose, children
           {!!footer && (
             <View style={{ padding: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>{footer}</View>
           )}
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
