@@ -275,8 +275,12 @@ export function SetupRow(props: {
   /** Lock period (post-lock, pre-kick): player fixed, but the metric picker
    *  stays open RESTRICTED to the Underdog comeback flip (unlock-underdog). */
   preKick?: boolean;
+  /** False while the board is still loading its saved lineup. Gates the
+   *  auto-open below — see the note there. Defaults true for the demo and any
+   *  caller whose picks are present from the first render. */
+  hydrated?: boolean;
 }) {
-  const { winId, week, pick, selected, inventory, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout, lockPlayer, resolve, hideScout, preKick } = props;
+  const { winId, week, pick, selected, inventory, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout, lockPlayer, resolve, hideScout, preKick, hydrated = true } = props;
   // Pre-kick, the metric door stays open ONLY for the Underdog flip — and only
   // when the unlock is actually owned (or the slot already flipped).
   const underdogDoor = !!preKick && ((inventory['unlock-underdog'] ?? 0) > 0 || pick?.metricId === 'underdog');
@@ -319,18 +323,27 @@ export function SetupRow(props: {
   // player with no metric auto-opens it; ↻ METRIC re-opens it to change.
   const [metricOpen, setMetricOpen] = useState(false);
   const [infoMetric, setInfoMetric] = useState<Metric | null>(null);
-  // Opens when a player is freshly PLACED — i.e. the player changed — so a slot
-  // never sits half-set. Keyed on `pick?.playerId` alone it also fired on mount,
-  // which meant a saved lineup holding a player without a metric threw this card
-  // up over the board before the user had touched anything. The ref starts at
-  // the mount-time value so the first run is always a no-op.
+  // Opens when a player is freshly PLACED — i.e. the player CHANGED and you are
+  // the one who changed it — so a slot never sits half-set.
+  //
+  // Two ways to get this wrong, and it has been both. Keyed on `pick?.playerId`
+  // alone the effect fires on mount, so a saved lineup holding a player without
+  // a metric threw the card up before you had touched anything. A ref seeded at
+  // mount fixes that only when the pick is ALREADY there at mount — and on this
+  // board it isn't: Matchup renders immediately and the saved lineup arrives
+  // later, so the slot goes undefined → "C. Beck", which is indistinguishable
+  // from a placement by shape alone. Hence `hydrated`: until the saved lineup
+  // has landed, a player appearing is data arriving, not you placing one. The
+  // ref still tracks through that period so the hydration step is absorbed
+  // rather than queued up to fire the moment it flips.
   const prevPlayerId = useRef(pick?.playerId);
   useEffect(() => {
     const prev = prevPlayerId.current;
     prevPlayerId.current = pick?.playerId;
+    if (!hydrated) return;
     if (prev === pick?.playerId) return;
     if (pick?.playerId && !pick?.metricId && !lockPlayer && !applyMode) setMetricOpen(true);
-  }, [pick?.playerId, pick?.metricId, lockPlayer, applyMode]);
+  }, [pick?.playerId, pick?.metricId, lockPlayer, applyMode, hydrated]);
   const link: React.CSSProperties = { background: 'none', border: 'none', padding: 0, fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.1em' };
 
   return (

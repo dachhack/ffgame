@@ -18,8 +18,11 @@ import { THEMES, ThemeCtx, loadTheme, saveTheme, isLight, MONO } from './src/the
 import { SettingsModal } from './src/ui/SettingsModal';
 import { loadCardSkin, saveCardSkin, type CardSkin } from './src/ui/cards';
 import { Leagues } from './src/screens/Leagues';
+import { isAdmin } from '@drip/core/data/liveApi';
 import { LivePicks } from './src/screens/LivePicks';
 import { DemoBoard } from './src/screens/DemoBoard';
+import { Commish } from './src/screens/Commish';
+import { Admin } from './src/screens/Admin';
 import { SignIn } from './src/screens/SignIn';
 import { ErrorBoundary } from './src/ui/ErrorBoundary';
 
@@ -33,10 +36,13 @@ export function App() {
   // nothing to subscribe to on a module-level read.
   const [cardSkin, setCardSkin] = useState<CardSkin>(loadCardSkin);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Whether to OFFER the admin entry. The RPCs behind it are the real gate —
+  // is_admin() + RLS server-side — exactly as on the web.
+  const [admin, setAdmin] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState<OpenLeague | null>(null);
-  const [view, setView] = useState<'picks' | 'demo'>('picks');
+  const [view, setView] = useState<'picks' | 'demo' | 'commish' | 'admin'>('picks');
 
   useEffect(() => {
     if (!liveConfigured()) { setReady(true); return; }
@@ -45,6 +51,14 @@ export function App() {
     const un = onAuth((s) => { setSession(s); if (!s) setOpen(null); });
     return () => { un?.(); };
   }, []);
+
+  // Re-resolved on every session change, and cleared on sign-out — an admin
+  // entry left behind after someone else signs in on the same phone would be
+  // confusing even though the RPCs would refuse them.
+  useEffect(() => {
+    if (!session) { setAdmin(false); return; }
+    isAdmin().then((v) => setAdmin(!!v)).catch(() => setAdmin(false));
+  }, [session]);
 
   const refreshSession = useCallback(() => {
     getSession().then(setSession).catch(() => {});
@@ -112,8 +126,12 @@ export function App() {
 
         {open ? (
           <View style={{ flex: 1 }}>
-            {/* One board. The demo is opened from the gear — see SettingsModal. */}
-            {view === 'demo' ? (
+            {/* One board. Everything else is opened from the gear. */}
+            {view === 'commish' ? (
+              <Commish onBack={() => setView('picks')} />
+            ) : view === 'admin' ? (
+              <Admin onBack={() => setView('picks')} />
+            ) : view === 'demo' ? (
               <View style={{ flex: 1 }}>
                 <Pressable onPress={() => setView('picks')} hitSlop={8} style={{ alignSelf: 'flex-start', marginHorizontal: 12, marginBottom: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.bd, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
                   <Text style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>← back to my matchup</Text>
@@ -154,7 +172,10 @@ export function App() {
             version={APP_VERSION}
             onTheme={(name) => { saveTheme(name); setThemeName(name); }}
             onSkin={(s) => { saveCardSkin(s); setCardSkin(s); }}
+            isAdmin={admin}
             onDemo={() => setView('demo')}
+            onCommish={() => setView('commish')}
+            onAdmin={() => setView('admin')}
             onSignOut={() => { void signOut(); }}
             onClose={() => setSettingsOpen(false)}
           />

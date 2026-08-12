@@ -815,6 +815,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
                     // Locked metrics only become pickable once their unlock is
                     // armed — same rule as the web's metricsFor().
                     metricFilter={(m) => !m.lock || unlocks.has(m.lock)}
+                    hydrated={hydrated}
                     onOpenPicker={() => { if (!wLocked) setPickerSlot({ key: s.key, win: w.id as WindowId }); }}
                     onPickMetric={(mid) => { if (!wLocked) setSlot(s.key, { metric_id: mid }); }}
                     onClearSlot={() => { if (!wLocked) setSlot(s.key, { player_slug: null, metric_id: null }); }}

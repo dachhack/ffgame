@@ -46,14 +46,19 @@ const SKIN_OPTS: { id: CardSkin; name: string }[] = [
   { id: 'battalion', name: 'Battalion' },
 ];
 
-export function SettingsModal({ visible, theme, skin, version, onTheme, onSkin, onDemo, onSignOut, onClose }: {
+export function SettingsModal({ visible, theme, skin, version, isAdmin, onTheme, onSkin, onDemo, onCommish, onAdmin, onSignOut, onClose }: {
   visible: boolean;
   theme: ThemeName;
   skin: CardSkin;
   version: string;
+  /** Resolved from is_admin(). Only decides whether the entry is SHOWN — the
+   *  RPCs behind it are the real gate, as they are on the web. */
+  isAdmin?: boolean;
   onTheme: (t: ThemeName) => void;
   onSkin: (s: CardSkin) => void;
   onDemo: () => void;
+  onCommish: () => void;
+  onAdmin: () => void;
   onSignOut: () => void;
   onClose: () => void;
 }) {
@@ -123,6 +128,28 @@ export function SettingsModal({ visible, theme, skin, version, onTheme, onSkin, 
 
         <View style={{ gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 14 }}>
           <Mono size={8.5} weight="700" track={0.16} tone="faint">MORE</Mono>
+          <Pressable
+            onPress={() => { onClose(); onCommish(); }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 11 }}
+          >
+            <Text style={{ fontSize: 16 }}>⚑</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: t.text }}>Commissioner</Text>
+              <Mono size={9} tone="faint">Invites, who&rsquo;s joined, week sync.</Mono>
+            </View>
+          </Pressable>
+          {isAdmin && (
+            <Pressable
+              onPress={() => { onClose(); onAdmin(); }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 11 }}
+            >
+              <Text style={{ fontSize: 16 }}>◆</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: t.text }}>Admin</Text>
+                <Mono size={9} tone="faint">Health, leagues, code requests, audit.</Mono>
+              </View>
+            </Pressable>
+          )}
           <Pressable
             onPress={() => { onClose(); onDemo(); }}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 11 }}
