@@ -17,7 +17,7 @@ import type { WindowScore, RevealedPick, PoolPlayer, TeamInfo } from '@drip/core
 import type { Pos } from '@drip/core/types';
 import { useTheme, MONO } from "../theme.native";
 import { Card, Mono } from "./prims";
-import { CardFace, CardBack, feltFor } from "./cards";
+import { CardFace, CardBack } from "./cards";
 import { LiveCard } from "./LiveCard";
 import { LivePulse } from "./animations";
 
@@ -268,7 +268,7 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
             {/* Row gap and padding both allow for the floating cards, which
                 overhang their panels by 12 — without the clearance adjacent
                 duels overlap and the felt clips the top and bottom rows. */}
-            <View style={{ gap: 22, backgroundColor: feltFor(t), borderRadius: 8, paddingHorizontal: 4, paddingVertical: 18 }}>
+            <View style={{ gap: 22, paddingHorizontal: 4, paddingVertical: 18 }}>
               {Array.from({ length: pairs }, (_, i) => {
                 // The slot this pair belongs to. Taken from the picks rather
                 // than the loop index: `mine`/`theirs` are already filtered to
