@@ -7,6 +7,7 @@
 import { type ReactNode } from 'react';
 import { Text, View, Pressable, StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { useTheme, MONO, alpha } from '../theme.native';
+import { tap } from './feedback';
 
 type Tone = 'text' | 'dim' | 'faint' | 'mid' | 'you' | 'opp' | 'warn';
 
@@ -49,27 +50,36 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
   );
 }
 
-/** Pill button — power-ups, unlocks, extra slots. `on` is the armed state. */
+/** Pill button — power-ups, unlocks, extra slots. `on` is the armed state.
+ *
+ *  The LABEL is the system font, not mono. Mono earns its place on data — a
+ *  score, a clock, a count that should line up with the one under it — and on a
+ *  control it just reads as a web dashboard. Same for the two buttons below. */
 export function Chip({ label, on, disabled, dim, onPress }: {
   label: ReactNode; on?: boolean; disabled?: boolean; dim?: boolean; onPress?: () => void;
 }) {
   const t = useTheme();
   return (
     <Pressable
-      onPress={disabled ? undefined : onPress}
+      onPress={disabled ? undefined : () => { tap(); onPress?.(); }}
       // Hit slop rather than bigger padding: the chips wrap into dense rows and
       // growing them would reflow the layout, but a 10pt tap target fails
       // Apple's 44pt guidance outright.
       hitSlop={8}
-      style={{
+      // Ripple is the Android idiom and it is bounded by the pill because
+      // `borderRadius` + overflow:hidden clip it; `pressed` covers iOS, which
+      // has no ripple and expects the surface to dim instead.
+      android_ripple={{ color: alpha(on ? t.onAccent : t.you, 22), foreground: true }}
+      style={({ pressed }) => ({
         flexDirection: 'row', alignItems: 'center', gap: 4,
+        overflow: 'hidden',
         backgroundColor: on ? t.you : t.bg,
         borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd,
         borderRadius: 14, paddingVertical: 8, paddingHorizontal: 11,
-        opacity: disabled ? 0.5 : dim ? 0.6 : 1,
-      }}
+        opacity: disabled ? 0.5 : dim ? 0.6 : pressed ? 0.75 : 1,
+      })}
     >
-      <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: on ? t.onAccent : t.text }}>{label}</Text>
+      <Text style={{ fontSize: 11.5, fontWeight: '700', color: on ? t.onAccent : t.text }}>{label}</Text>
     </Pressable>
   );
 }
@@ -79,10 +89,15 @@ export function PrimaryButton({ label, disabled, onPress }: { label: string; dis
   const t = useTheme();
   return (
     <Pressable
-      onPress={disabled ? undefined : onPress}
-      style={{ backgroundColor: t.you, borderRadius: 6, paddingVertical: 14, alignItems: 'center', opacity: disabled ? 0.6 : 1 }}
+      onPress={disabled ? undefined : () => { tap(); onPress(); }}
+      android_ripple={{ color: alpha(t.onAccent, 24), foreground: true }}
+      style={({ pressed }) => ({
+        backgroundColor: t.you, borderRadius: 10, paddingVertical: 15,
+        alignItems: 'center', overflow: 'hidden',
+        opacity: disabled ? 0.6 : pressed ? 0.85 : 1,
+      })}
     >
-      <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '700', letterSpacing: 0.72, color: t.onAccent }}>{label}</Text>
+      <Text style={{ fontSize: 15, fontWeight: '700', letterSpacing: 0.3, color: t.onAccent }}>{label}</Text>
     </Pressable>
   );
 }
@@ -91,8 +106,8 @@ export function PrimaryButton({ label, disabled, onPress }: { label: string; dis
 export function LinkButton({ label, tone = 'dim', onPress }: { label: string; tone?: Tone; onPress: () => void }) {
   const t = useTheme();
   return (
-    <Pressable onPress={onPress} hitSlop={10}>
-      <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', letterSpacing: 0.63, color: t[tone] }}>{label}</Text>
+    <Pressable onPress={() => { tap(); onPress(); }} hitSlop={10} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+      <Text style={{ fontSize: 13, fontWeight: '600', color: t[tone] }}>{label}</Text>
     </Pressable>
   );
 }
