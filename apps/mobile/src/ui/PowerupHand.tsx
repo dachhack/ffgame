@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { powerupById } from '@drip/core/data/powerups';
 import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
-import { Overlay } from './Overlay';
+import { Overlay, sheetBodyMax } from './Overlay';
 
 export interface HandCard {
   id: string;
@@ -229,7 +229,7 @@ export function PowerupHand({ cards, busyId, onArm, onDisarm }: {
         subtitle={`${total} CARD${total === 1 ? '' : 'S'} · TAP ONE TO PLAY IT`}
         onClose={() => setListOpen(false)}
       >
-        <ScrollView style={{ maxHeight: 380 }} contentContainerStyle={{ padding: 12, gap: 8 }}>
+        <ScrollView style={{ maxHeight: sheetBodyMax(130) }} contentContainerStyle={{ padding: 12, gap: 8 }}>
           {cards.map((c) => {
             const p = powerupById(c.id);
             return (

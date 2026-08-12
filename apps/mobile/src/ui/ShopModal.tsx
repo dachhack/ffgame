@@ -23,7 +23,10 @@ import { POWERUPS, POWERUP_CATEGORIES, powerupCategory } from '@drip/core/data/p
 import { myInventory, walletBuyPowerup } from '@drip/core/data/liveApi';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
-import { Overlay } from './Overlay';
+import { Overlay, sheetBodyMax } from './Overlay';
+
+/** Title, balance line, and the category chip row. Everything else is grid. */
+const gridMax = sheetBodyMax(150);
 
 export function ShopModal({ visible, matchupId, balance, practice, onClose, onChanged }: {
   visible: boolean;
@@ -116,11 +119,11 @@ export function ShopModal({ visible, matchupId, balance, practice, onClose, onCh
 
         {!!err && <Mono size={10.5} tone="opp" style={{ paddingHorizontal: 14, paddingBottom: 6 }}>{err}</Mono>}
 
-        {/* Bounded, not full-screen: the card sits inside Overlay's 88% cap, so
-            the grid scrolls within it rather than the sheet swallowing the
-            board. Without a height here the wrapped grid would size to its
-            content and push the ✕ off the top. */}
-        <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ padding: 12, paddingBottom: 20, flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' }}>
+        {/* Bounded, but bounded by the SHEET rather than by a guess — see
+            gridMax. Without any height the wrapped grid would size to its
+            content and push the ✕ off the top; with a fixed one it left the
+            sheet short of the room Overlay had already given it. */}
+        <ScrollView style={{ maxHeight: gridMax }} contentContainerStyle={{ padding: 12, paddingBottom: 20, flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' }}>
           {shown.map((p) => {
             const have = owned[p.id] ?? 0;
             const afford = balance >= p.price;

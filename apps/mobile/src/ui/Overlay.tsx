@@ -7,11 +7,33 @@
 // specific slot in a specific window.
 //
 // `transparent` + a dimmed backdrop reproduces it. Tapping the backdrop closes,
-// tapping the card does not — the press is swallowed by the inner Pressable
-// rather than by stopPropagation, which React Native does not have.
+// tapping the card does not.
+//
+// The backdrop is an absolutely-positioned SIBLING of the card, not its parent.
+// It used to wrap the card — the "swallow the press with an inner Pressable"
+// trick, since RN has no stopPropagation — and that put a Pressable ancestor
+// above every sheet's content. A Pressable competes for the touch responder on
+// a drag, so a scrollable list inside a sheet would not scroll: the roster
+// opened and then sat there. As siblings, nothing above the card handles
+// touches at all, and tap-to-dismiss still works because the backdrop covers
+// the whole screen behind it.
 import { type ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme, MONO } from '../theme.native';
+
+/** How tall a sheet's scrolling body may be, given everything ELSE in the sheet.
+ *
+ *  Every sheet here holds a list inside a card capped at 88% of the screen, and
+ *  each was picking its own number for that list — 420, 380, 460, and in one
+ *  case nothing at all. Both mistakes look identical to a user: too big and the
+ *  card overflows its cap and CLIPS (a list that won't scroll), too small and
+ *  the sheet floats in the middle of the screen with empty space around a body
+ *  that scrolls a row at a time. Neither is a guess worth making four times.
+ *
+ *  `chrome` is the sheet's own furniture — title, subtitle, any filter rows, the
+ *  footer button — measured per sheet, since that part really does differ. */
+export const sheetBodyMax = (chrome: number): number =>
+  Math.max(200, Math.round(Dimensions.get('window').height * 0.88) - chrome);
 
 export function Overlay({ visible, title, subtitle, titleLeft, onClose, children, footer }: {
   visible: boolean;
@@ -26,9 +48,13 @@ export function Overlay({ visible, title, subtitle, titleLeft, onClose, children
   const t = useTheme();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.62)', justifyContent: 'center', padding: 12 }}>
+      <View style={{ flex: 1, justifyContent: 'center', padding: 12 }}>
         <Pressable
-          onPress={() => {}}
+          accessibilityLabel="Close"
+          onPress={onClose}
+          style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.62)' }]}
+        />
+        <View
           style={{
             maxHeight: '88%',
             backgroundColor: t.surface,
@@ -56,8 +82,8 @@ export function Overlay({ visible, title, subtitle, titleLeft, onClose, children
           {!!footer && (
             <View style={{ padding: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>{footer}</View>
           )}
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

@@ -15,9 +15,14 @@ import type { GameWindow, Player } from '@drip/core/types';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
 import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
+import { sheetBodyMax } from './Overlay';
 import { GROUP_TABS, GroupBadge } from './rosterGroup';
 
 const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
+
+/** Title + subtitle, search box, the position and group chip rows, the count
+ *  line, and the footer button. */
+const listMax = sheetBodyMax(300);
 
 export function RosterPanel({ title, players, wins, windowOf, groupOf, accent, open: openProp, onToggle }: {
   title: string;
@@ -160,7 +165,13 @@ export function RosterPanel({ title, players, wins, windowOf, groupOf, accent, o
 
           {/* Bounded height: this list can be a thousand rows, and an unbounded
               one would push the board off the screen entirely. */}
-          <ScrollView style={{ maxHeight: controlled ? 420 : 330 }} nestedScrollEnabled contentContainerStyle={{ paddingBottom: 8 }}>
+          {/* Sized from what the sheet has LEFT, not from the screen. Overlay
+              caps its card at 88%; the title, search box, two chip rows, count
+              line and footer take ~SHEET_CHROME of that, and whatever remains is
+              the list. A fixed 420 overflowed the cap on a short screen — and an
+              overflowing card clips rather than scrolls, which looks exactly
+              like a list that refuses to move. */}
+          <ScrollView style={{ maxHeight: controlled ? listMax : 330 }} nestedScrollEnabled contentContainerStyle={{ paddingBottom: 8 }}>
             {groups.map((g) => (
               <View key={g.id}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', backgroundColor: t.sh, paddingHorizontal: 12, paddingVertical: 6 }}>
