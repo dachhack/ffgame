@@ -1,22 +1,36 @@
 name: Deploy the worker
 
-# `fly deploy` for the background worker (server/), from CI instead of from
-# whichever laptop happens to have flyctl signed in. Same thing DEPLOY.md
-# documents — Dockerfile + fly.toml at the repo root — with two differences that
-# matter: the deployed commit is a fact in the run log rather than a memory, and
-# it does not depend on one person's machine.
+# `fly deploy` for the background worker (server/), from CI rather than from
+# whichever laptop happens to have flyctl signed in. The deployed commit is a
+# fact in the run log instead of a memory, and nobody has to be at a desk.
 #
-# NOT automatic on merge. deploy.yml publishes the static site on every push to
-# main because a bad page is a refresh away from fixed; the worker locks
-# matchups, resolves live games and writes scores, so restarting it mid-slate is
-# a different class of act. It stays a deliberate click.
+# AUTOMATIC on merge to main — but only when the worker's own code changes (see
+# `paths`). This started out as a deliberate click, on the reasoning that
+# restarting a process which locks matchups and resolves live games is a
+# different class of act from republishing a static page. That reasoning
+# protected the wrong risk. A rolling restart is a few seconds of handover and
+# every tick re-reads its state, so the restart itself is close to free; what
+# actually hurts is deploying a worker that DOESN'T RUN — which is exactly what
+# happened when a refactor deleted `log`, `gameDay` and `syncTick` and left the
+# call sites behind. `node --check` passed. A green `fly deploy` passed. The
+# process died on the first line of main() and nothing noticed for a day.
 #
-# Deploys whatever ref you run it from. Run it from `main` unless you are
-# knowingly shipping a branch.
+# So the click is replaced by the check that would have caught that: BOOT IT
+# FIRST. A deploy that can't get past `boot` doesn't reach Fly.
 #
 # Secret required (Settings → Secrets and variables → Actions):
-#   FLY_API_TOKEN — from `fly tokens create deploy -x 999999h`
+#   FLY_API_TOKEN — fly.io/dashboard → Tokens → Create deploy token, or
+#                   `fly tokens create deploy -x 999999h` if you have flyctl.
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'packages/core/**'   # the worker runs this engine through tsx
+      - 'scripts/espn/**'    # bundled into the image
+      - 'Dockerfile'
+      - 'fly.toml'
+      - '.github/workflows/deploy-worker.yml'
   workflow_dispatch:
     inputs:
       strategy:
@@ -24,13 +38,81 @@ on:
         type: choice
         options: [rolling, immediate]
         default: rolling
+      skip_boot_check:
+        description: 'Deploy without booting it first (emergencies only)'
+        type: boolean
+        default: false
 
 # Never two deploys at once, and never a deploy racing the sync/simulate jobs
 # that ssh into the same machine.
 concurrency: fly-worker
 
 jobs:
+  # ── Does it actually start? ────────────────────────────────────────────────
+  # The one question no other gate answers. An unresolved identifier in an ES
+  # module is a RUNTIME error: it type-checks, it parses, it builds an image,
+  # and it throws the moment the line runs. The only way to find out is to run
+  # it, so this runs it — against deliberately bogus Supabase credentials, since
+  # what's being tested is that the scheduler survives its own first pass, not
+  # that it can reach a database.
+  boot:
+    if: ${{ inputs.skip_boot_check != true }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Install worker deps
+        working-directory: server
+        run: npm ci
+      - name: Engine smoke test
+        working-directory: server
+        run: npm run --silent smoke
+      - name: Boot the scheduler and make sure it stays up
+        working-directory: server
+        env:
+          SUPABASE_URL: https://example.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: not-a-real-key
+          # Set, so the weekly-sync branch of main() is exercised too — that is
+          # where syncTick is called, and where the missing binding lived.
+          PILOT_LEAGUE_IDS: '1390853155960389632'
+        run: |
+          set -uo pipefail
+          npx tsx src/index.js > boot.log 2>&1 &
+          PID=$!
+          # Long enough to clear the player-index build and the first full tick.
+          for i in $(seq 1 40); do
+            kill -0 "$PID" 2>/dev/null || break
+            sleep 1
+          done
+
+          if kill -0 "$PID" 2>/dev/null; then
+            kill "$PID" 2>/dev/null || true
+            ALIVE=yes
+          else
+            ALIVE=no
+          fi
+
+          echo "── first 40 lines of the worker log ──"
+          head -40 boot.log || true
+
+          if [ "$ALIVE" != yes ]; then
+            echo "::error::The worker exited during boot. It would deploy and immediately die — see the log above."
+            exit 1
+          fi
+          # Alive isn't sufficient: a process can survive while main() has
+          # already thrown and been swallowed. Require the line main() prints.
+          if ! grep -q 'worker starting' boot.log; then
+            echo "::error::The worker never reached main(). See the log above."
+            exit 1
+          fi
+          echo "Worker booted and was still running after 40s."
+
   deploy:
+    needs: [boot]
+    # `always()` so an intentional skip_boot_check run still deploys; the guard
+    # is that boot must not have FAILED.
+    if: ${{ always() && needs.boot.result != 'failure' && needs.boot.result != 'cancelled' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,7 +122,7 @@ jobs:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
           if [ -z "${FLY_API_TOKEN:-}" ]; then
-            echo "::error::Set the FLY_API_TOKEN repo secret. Create one with: fly tokens create deploy -x 999999h"
+            echo "::error::Set the FLY_API_TOKEN repo secret (Settings → Secrets and variables → Actions). Get one at fly.io/dashboard → Tokens → Create deploy token."
             exit 1
           fi
 
@@ -57,7 +139,7 @@ jobs:
         # From the repo ROOT: the build context needs packages/core/ and
         # scripts/espn/ as well as server/. Building from server/ would produce
         # an image that starts and then dies on the first engine import.
-        run: flyctl deploy --remote-only --strategy "${{ inputs.strategy }}"
+        run: flyctl deploy --remote-only --strategy "${{ inputs.strategy || 'rolling' }}"
 
       - name: Machine status after deploy
         env:
