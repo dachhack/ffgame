@@ -5,10 +5,44 @@
 // membership, which is arbitrary the moment you're in more than one league, and
 // it gave you no way to reach the others.
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { myEnrollments, claimMyRosters, friendlyError, type Enrollment } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
 import { Card, Display, LinkButton, Mono } from '../ui/prims';
+
+/** A league or team crest.
+ *
+ *  The URL was already being fetched by `myEnrollments` and thrown away here —
+ *  the row rendered as text only while the art sat in the response. Commissioners
+ *  pick these, and `importLeague` fills a random first-party tile when Sleeper
+ *  has none, so most rows have one.
+ *
+ *  The fallback is an initial rather than an empty square: a blank tile in a
+ *  list of pictures reads as an image that failed to load. It also covers the
+ *  case a URL is present but 404s, since `onError` swaps to it. */
+function Crest({ url, name, size }: { url?: string | null; name?: string | null; size: number }) {
+  const t = useTheme();
+  const [failed, setFailed] = useState(false);
+  const radius = Math.max(3, Math.round(size * 0.19));
+  const show = url && !failed;
+  return (
+    <View
+      style={{
+        width: size, height: size, borderRadius: radius, overflow: 'hidden', flexShrink: 0,
+        backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
+        alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      {show ? (
+        <Image source={{ uri: url }} onError={() => setFailed(true)} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+      ) : (
+        <Text style={{ fontFamily: MONO, fontSize: Math.round(size * 0.42), fontWeight: '700', color: t.faint }}>
+          {(name ?? '?').trim().charAt(0).toUpperCase() || '?'}
+        </Text>
+      )}
+    </View>
+  );
+}
 
 export function Leagues({ userId, onOpen }: {
   userId: string;
@@ -83,15 +117,27 @@ export function Leagues({ userId, onOpen }: {
               borderRadius: 8, padding: 14, gap: 4,
             }}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: 16, fontWeight: '700', color: t.text }}>
-                {lg?.name ?? 'League'}
-              </Text>
-              {!!lg?.is_mock && <Mono size={8.5} tone="faint" track={0.08}>MOCK</Mono>}
-              {!!kind && <Mono size={8.5} tone="warn" track={0.08}>{kind}</Mono>}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
+              <Crest url={lg?.avatar_url} name={lg?.name} size={42} />
+              <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 16, fontWeight: '700', color: t.text }}>
+                    {lg?.name ?? 'League'}
+                  </Text>
+                  {!!lg?.is_mock && <Mono size={8.5} tone="faint" track={0.08}>MOCK</Mono>}
+                  {!!kind && <Mono size={8.5} tone="warn" track={0.08}>{kind}</Mono>}
+                </View>
+                {/* Your own team crest, small, beside the team it belongs to —
+                    the same pairing the web's league card uses, with the sizes
+                    swapped because there the TEAM is the heading and here the
+                    LEAGUE is. */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  {!!e.avatar_url && <Crest url={e.avatar_url} name={e.team_name} size={16} />}
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, color: t.mid }}>{e.team_name}</Text>
+                </View>
+              </View>
             </View>
-            <Text numberOfLines={1} style={{ fontSize: 12.5, color: t.mid }}>{e.team_name}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
               <Mono size={9} tone="faint" track={0.06}>
                 {lg?.season ?? ''}{lg?.provider ? ` · ${lg.provider.toUpperCase()}` : ''}
               </Mono>

@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { getSession, onAuth, signOut } from '@drip/core/data/liveApi';
@@ -25,6 +26,21 @@ import { Commish } from './src/screens/Commish';
 import { Admin } from './src/screens/Admin';
 import { SignIn } from './src/screens/SignIn';
 import { ErrorBoundary } from './src/ui/ErrorBoundary';
+
+// Hold the native splash past the first frame. Without this it hides as soon as
+// React mounts, which is BEFORE getSession() answers — so the launch read splash
+// → spinner → app, with the spinner being the longest part. Now the brand plate
+// stays up until there is something real to show.
+//
+// Module scope is the documented place for it: an effect runs after the first
+// render, by which point the splash is already gone.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
+/** Never let the splash outlive this, whatever happens to the session call. A
+ *  slow launch is a nuisance; an app that appears not to start at all is a bug
+ *  report. `ready` is set on every path today including the failure ones — this
+ *  is for the path nobody thought of. */
+const SPLASH_MAX_MS = 4000;
 
 interface OpenLeague { leagueId: string; rosterId: number; name: string }
 
@@ -62,6 +78,13 @@ export function App() {
     if (!session) { setAdmin(false); return; }
     isAdmin().then((v) => setAdmin(!!v)).catch(() => setAdmin(false));
   }, [session]);
+
+  // Hide once there is a screen to hide it FOR — or once the ceiling is hit.
+  useEffect(() => {
+    if (ready) { SplashScreen.hideAsync().catch(() => {}); return; }
+    const timer = setTimeout(() => { SplashScreen.hideAsync().catch(() => {}); }, SPLASH_MAX_MS);
+    return () => clearTimeout(timer);
+  }, [ready]);
 
   const refreshSession = useCallback(() => {
     getSession().then(setSession).catch(() => {});
