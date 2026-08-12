@@ -14,7 +14,9 @@ import type { Session } from '@supabase/supabase-js';
 import { getSession, onAuth, signOut } from '@drip/core/data/liveApi';
 import { APP_VERSION } from '@drip/core/version';
 import { liveConfigured } from '@drip/core/data/liveConfig';
-import { THEMES, ThemeCtx, loadTheme, isLight, MONO } from './src/theme.native';
+import { THEMES, ThemeCtx, loadTheme, saveTheme, isLight, MONO } from './src/theme.native';
+import { SettingsModal } from './src/ui/SettingsModal';
+import { loadCardSkin, saveCardSkin, type CardSkin } from './src/ui/cards';
 import { Leagues } from './src/screens/Leagues';
 import { LivePicks } from './src/screens/LivePicks';
 import { DemoBoard } from './src/screens/DemoBoard';
@@ -24,8 +26,13 @@ import { ErrorBoundary } from './src/ui/ErrorBoundary';
 interface OpenLeague { leagueId: string; rosterId: number; name: string }
 
 export function App() {
-  const [themeName] = useState(loadTheme);
+  const [themeName, setThemeName] = useState(loadTheme);
   const theme = THEMES[themeName];
+  // The card deck lives in storage and is read by cards.tsx at render time, so
+  // holding it in state here is what makes a change repaint the board — there is
+  // nothing to subscribe to on a module-level read.
+  const [cardSkin, setCardSkin] = useState<CardSkin>(loadCardSkin);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState<OpenLeague | null>(null);
@@ -89,8 +96,13 @@ export function App() {
 
           <View style={{ flex: 1 }} />
 
-          <Pressable onPress={() => { void signOut(); }} hitSlop={10}>
-            <Text style={{ fontFamily: MONO, fontSize: 9, color: theme.dim }}>sign out</Text>
+          <Pressable
+            onPress={() => setSettingsOpen(true)}
+            hitSlop={10}
+            accessibilityLabel="Settings"
+            style={{ width: 34, height: 34, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: theme.bd, backgroundColor: theme.surface }}
+          >
+            <Text style={{ fontSize: 15, color: theme.dim }}>⚙</Text>
           </Pressable>
         </View>
 
@@ -100,39 +112,14 @@ export function App() {
 
         {open ? (
           <View style={{ flex: 1 }}>
-            {/* Two tabs: your matchup, and the demo.
-                There used to be a third — SET LINEUP and LIVE BOARD were
-                separate screens, so on Sunday you set a lineup on one tab and
-                watched it score on another, and neither ever showed you the
-                other half. The board now phases per window the way the web's
-                Matchup does: a window is SETUP until its kickoff and LIVE after,
-                on the one screen. Nothing to switch between, so no tab.
-
-                DEMO stays visible rather than hidden behind a gesture: it exists
-                to be reached in front of an audience. It renders the board's own
-                components against a scripted window and says it isn't yours. */}
-            <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingBottom: 8 }}>
-              {(['picks', 'demo'] as const).map((tab) => {
-                const on = view === tab;
-                return (
-                  <Pressable
-                    key={tab}
-                    onPress={() => setView(tab)}
-                    style={{
-                      flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 6,
-                      backgroundColor: on ? theme.you : theme.surface,
-                      borderWidth: StyleSheet.hairlineWidth, borderColor: on ? theme.you : theme.bd,
-                    }}
-                  >
-                    <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', letterSpacing: 0.7, color: on ? theme.onAccent : theme.dim }}>
-                      {tab === 'picks' ? 'MY MATCHUP' : 'DEMO'}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            {/* One board. The demo is opened from the gear — see SettingsModal. */}
             {view === 'demo' ? (
-              <DemoBoard />
+              <View style={{ flex: 1 }}>
+                <Pressable onPress={() => setView('picks')} hitSlop={8} style={{ alignSelf: 'flex-start', marginHorizontal: 12, marginBottom: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.bd, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
+                  <Text style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>← back to my matchup</Text>
+                </Pressable>
+                <DemoBoard />
+              </View>
             ) : (
               <LivePicks
                 // Remounts when you switch leagues, so no state leaks between them.
@@ -160,6 +147,17 @@ export function App() {
         <StatusBar style={isLight(themeName) ? 'dark' : 'light'} />
         <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }} edges={['top', 'left', 'right']}>
           <ErrorBoundary>{body()}</ErrorBoundary>
+          <SettingsModal
+            visible={settingsOpen}
+            theme={themeName}
+            skin={cardSkin}
+            version={APP_VERSION}
+            onTheme={(name) => { saveTheme(name); setThemeName(name); }}
+            onSkin={(s) => { saveCardSkin(s); setCardSkin(s); }}
+            onDemo={() => setView('demo')}
+            onSignOut={() => { void signOut(); }}
+            onClose={() => setSettingsOpen(false)}
+          />
         </SafeAreaView>
       </ThemeCtx.Provider>
     </SafeAreaProvider>

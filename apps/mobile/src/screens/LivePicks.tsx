@@ -650,24 +650,38 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
           <WeekNav />
         </View>
 
-        <Mono size={9.5} tone="faint" track={0.12} style={{ marginTop: 12 }}>SLOTS SET {filled}/{slots.length}</Mono>
-        <Display size={24} style={{ marginTop: 2 }}>Set Your Windows</Display>
-        <Text numberOfLines={1} style={{ fontSize: 13, color: t.dim, marginTop: 2 }}>
-          {myTeam?.team_name ?? 'You'} vs {oppTeam?.team_name ?? 'Opponent'}
-        </Text>
+        {/* Who, how far along, and the two controls — nothing else. The rules
+            used to be spelled out here in two paragraphs, which is a fine thing
+            to read once and a permanent tax on every visit after that; the board
+            below already says LOCKED / SETUP, N eligible and N/M SET on each
+            window, which is the same information where it applies. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+          <Text numberOfLines={1} style={{ flex: 1, fontSize: 15, fontWeight: '700', color: t.text }}>
+            {myTeam?.team_name ?? 'You'} vs {oppTeam?.team_name ?? 'Opponent'}
+          </Text>
+          <Mono size={9.5} weight="700" tone={filled === slots.length ? 'you' : 'faint'} track={0.08}>{filled}/{slots.length} SET</Mono>
+        </View>
 
-        <Mono size={9.5} tone="faint" style={{ marginTop: 10 }}>
-          Pick a player + a hidden metric per slot. Each window locks at its own kickoff — later windows stay editable all weekend, and your opponent can’t see a pick until its window kicks off.
-          {gateOn ? '\nEach slot only takes players whose real NFL team plays in that window. Players on a bye can’t be slotted.' : ''}
-        </Mono>
-
-        {/* Season-long auto-pilot */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 12, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
-          <View style={{ flex: 1 }}>
-            <Mono size={10.5} weight="700" tone={controller === 'ai' ? 'you' : 'text'}>🤖 Auto-pilot {controller === 'ai' ? 'ON' : 'OFF'}</Mono>
-            <Mono size={9} tone="faint">{controller === 'ai' ? 'AI sets your best lineup each week. Turn off to pick yourself.' : 'Let AI set your best lineup automatically every week.'}</Mono>
-          </View>
-          <Chip label={aiBusy ? '…' : controller === 'ai' ? 'turn off' : 'turn on'} on={controller === 'ai'} disabled={aiBusy} onPress={toggleAi} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <Chip
+            label={aiBusy ? '…' : `🤖 auto-pilot ${controller === 'ai' ? 'on' : 'off'}`}
+            on={controller === 'ai'}
+            disabled={aiBusy}
+            onPress={toggleAi}
+          />
+          {controller !== 'ai' && (
+            <>
+              <View style={{ flex: 1 }} />
+              <Mono size={10} tone="you" weight="700">◆ {Math.round(coins)}</Mono>
+              <Pressable
+                onPress={() => setShopOpen(true)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.bg, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}
+              >
+                <Text style={{ fontSize: 12 }}>🛒</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: t.text }}>SHOP</Text>
+              </Pressable>
+            </>
+          )}
         </View>
         {controller === 'ai' && <Mono size={9} tone="faint" style={{ marginTop: 8 }}>Auto-pilot is on — your manual picks below are paused until you turn it off.</Mono>}
       </Card>
@@ -675,21 +689,8 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
       {/* Power-ups */}
       {controller !== 'ai' && (
         <Card style={{ marginBottom: 12 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            <Display size={14} style={{ flex: 1 }}>Power-ups</Display>
-            <Mono size={10} tone="you" weight="700">◆ {Math.round(coins)}</Mono>
-            <Pressable
-              onPress={() => setShopOpen(true)}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.bg, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}
-            >
-              <Text style={{ fontSize: 12 }}>🛒</Text>
-              <Text style={{ fontFamily: 'System', fontSize: 11, fontWeight: '700', color: t.text }}>SHOP</Text>
-            </Pressable>
-          </View>
-          <Mono size={9.5} tone="faint" style={{ marginTop: 6 }}>Arm before kickoff — each buffs your whole lineup all week, spent from your drip coin. Locks at kickoff.</Mono>
-
           {!matchPremium && (
-            <View style={{ marginTop: 8 }}>
+            <View style={{ marginBottom: 10 }}>
               <Notice>
                 <Mono size={9.5} tone="you" weight="700">🔒 Premium unlocks K/DST/IDP + the full power-up set + special events. Both sides of a premium matchup get the full set — never pay-to-win.</Mono>
                 <View style={{ flexDirection: 'row', gap: 6, marginTop: 7 }}>
@@ -700,12 +701,10 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
             </View>
           )}
 
-          <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>
-            Buy cards in the shop; they land in your hand at the bottom of the screen. Arming one plays the card — coin is charged once, at purchase.
-          </Mono>
-
-          <Mono size={9.5} weight="700" track={0.06} style={{ marginTop: 14 }}>METRIC UNLOCKS</Mono>
-          <Mono size={9} tone="faint">Arm one to make its locked metric pickable (🔓) in the slots below.</Mono>
+          {/* METRIC UNLOCKS is a control, so it stays — but the paragraph
+              explaining what a power-up is does not. The shop says that, on the
+              card you're about to buy, at the moment you care. */}
+          <Mono size={9.5} weight="700" track={0.06}>METRIC UNLOCKS</Mono>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }} style={{ marginTop: 8 }}>
             {LIVE_UNLOCKS.map((id) => {
               const pu = powerupById(id);

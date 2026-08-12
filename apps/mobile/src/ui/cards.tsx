@@ -30,7 +30,7 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
-import { storeGet } from '@drip/core/platform';
+import { storeGet, storeSet } from '@drip/core/platform';
 import { MONO } from '../theme.native';
 import { useFlipIn, useWobble, useShake, useScoreTick, NukeBurst, HotGlow } from './animations';
 
@@ -46,11 +46,15 @@ const INK = '#201C12';
 const INK_DIM = '#6B6047';
 export const FELT = '#0B1F1A'; // --ct-felt, the table under the cards
 
-// The photographic decks. `emerald` (the web default) is a generated SVG
-// pattern with no file to bundle, so it maps to playbook here — a real deck
-// rather than a blank rectangle. Same key the web stores under, so a future
-// profile sync carries one value.
-const BACKS: Record<string, ReturnType<typeof require>> = {
+// The photographic decks. Same ids and the same key the web stores under
+// (`gc-cardskin`), so a future profile sync carries one value.
+export type CardSkin = 'emerald' | 'playbook' | 'blitz' | 'rivalry' | 'allstar' | 'heritage' | 'gilded' | 'cosmic' | 'fireworks' | 'battalion';
+
+/** Deck art by skin. `emerald` is deliberately absent: on the web it's a plain
+ *  woven pattern with no file to bundle, so it has no entry and falls through to
+ *  playbook below — a real deck rather than a blank rectangle. Exported so the
+ *  settings picker shows the actual art you're choosing. */
+export const CARD_BACKS: Partial<Record<CardSkin, ReturnType<typeof require>>> = {
   playbook: require('../../assets/cardbacks/playbook.jpg'),
   blitz: require('../../assets/cardbacks/blitz.jpg'),
   rivalry: require('../../assets/cardbacks/rivalry.jpg'),
@@ -62,9 +66,18 @@ const BACKS: Record<string, ReturnType<typeof require>> = {
   battalion: require('../../assets/cardbacks/battalion.jpg'),
 };
 
+export const CARD_SKIN_KEY = 'gc-cardskin';
+
+export function loadCardSkin(): CardSkin {
+  const s = storeGet(CARD_SKIN_KEY) as CardSkin | null;
+  return s && SKINS.includes(s) ? s : 'playbook';
+}
+export function saveCardSkin(s: CardSkin): void { storeSet(CARD_SKIN_KEY, s); }
+
+const SKINS: CardSkin[] = ['emerald', 'playbook', 'blitz', 'rivalry', 'allstar', 'heritage', 'gilded', 'cosmic', 'fireworks', 'battalion'];
+
 export function cardBackArt() {
-  const skin = storeGet('gc-cardskin') ?? '';
-  return BACKS[skin] ?? BACKS.playbook;
+  return CARD_BACKS[loadCardSkin()] ?? CARD_BACKS.playbook;
 }
 
 /** A dealt player card: headshot, name, position/team, sealed metric. */
