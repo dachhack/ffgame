@@ -33,6 +33,13 @@ const KEYS = [
   // Play Services account picker instead of a browser; absent = the browser
   // flow, which is what every build did before. See src/auth/googleNative.ts.
   'VITE_GOOGLE_WEB_CLIENT_ID',
+  // PostHog's public ingestion token (phc_…). Present = this build reports
+  // product analytics; absent = it sends nothing at all. Same key name the web
+  // build reads, so one value configures both hosts. VITE_POSTHOG_HOST only
+  // matters for an EU or self-hosted project — it defaults to US cloud.
+  // See src/analytics.native.ts and docs/analytics-plan.md.
+  'VITE_POSTHOG_KEY',
+  'VITE_POSTHOG_HOST',
 ];
 
 // Android's versionCode is an integer the OS compares to decide what counts as

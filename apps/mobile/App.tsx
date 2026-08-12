@@ -13,6 +13,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { getSession, onAuth, signOut } from '@drip/core/data/liveApi';
+import { Ev, identify, track } from '@drip/core/analytics';
 import { APP_VERSION } from '@drip/core/version';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { THEMES, ThemeCtx, loadTheme, saveTheme, isLight, MONO } from './src/theme.native';
@@ -79,6 +80,23 @@ export function App() {
     if (!session) { setAdmin(false); return; }
     isAdmin().then((v) => setAdmin(!!v)).catch(() => setAdmin(false));
   }, [session]);
+
+  // Analytics identity. Tying events to the Supabase user id — the same id the
+  // web identifies on — is what lets one person be followed across their phone
+  // and their browser instead of counting as two. Nothing but the id is sent:
+  // the email is on the session right here, and deliberately stays there.
+  useEffect(() => {
+    if (session?.user.id) identify(session.user.id);
+  }, [session?.user.id]);
+
+  // One `screen_view` per screen, fired from the derived name rather than from
+  // each setter — the screen is a function of three pieces of state here, so a
+  // setter-side call would miss the transitions nobody remembered to annotate
+  // (sign-out, the back-out of a league).
+  const screen = !ready ? null : !session ? 'signin' : open ? view : 'leagues';
+  useEffect(() => {
+    if (screen) track(Ev.screenView, { screen });
+  }, [screen]);
 
   // Hide once there is a screen to hide it FOR — or once the ceiling is hit.
   useEffect(() => {
@@ -173,7 +191,14 @@ export function App() {
         ) : (
           <Leagues
             userId={session.user.id}
-            onOpen={(leagueId, rosterId, name) => { setView('picks'); setOpen({ leagueId, rosterId, name }); }}
+            onOpen={(leagueId, rosterId, name) => {
+              // `live: true` unconditionally: the native app has no sim leagues
+              // to open, so this is the same activation step the web reports
+              // for a live league and lands in the same funnel.
+              track(Ev.leagueOpened, { live: true });
+              setView('picks');
+              setOpen({ leagueId, rosterId, name });
+            }}
           />
         )}
       </View>

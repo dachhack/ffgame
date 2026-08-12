@@ -17,7 +17,7 @@
       "android": { "buildType": "apk" },
       "ios": { "simulator": false },
       "channel": "preview",
-      "//env": "Uncomment and fill to point this profile at a non-production Supabase project. Unset keys fall through to the production defaults in packages/core/src/data/liveConfig.ts, so an empty env is a working production build — see apps/mobile/app.config.js.",
+      "//env": "Fill to point this profile at a non-production Supabase project, or to set VITE_POSTHOG_KEY so playtest builds report analytics (they send nothing without it, and it is read at BUILD time — a build handed out without the key can't be switched on later). Unset keys fall through to the production defaults in packages/core/src/data/liveConfig.ts, so an empty env is a working production build — see apps/mobile/app.config.js.",
       "env": {}
     },
 

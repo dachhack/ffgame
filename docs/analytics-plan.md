@@ -1,9 +1,10 @@
 # Analytics & retention plan (pilot instrumentation)
 
-> **DEFERRED (decided):** the analytics *layer* is shipped (`src/app/analytics.ts`), but
-> wiring an actual provider (**PostHog** recommended) is parked for later — add
-> `posthog-js` + `VITE_POSTHOG_KEY` and call `registerSink()` when ready (snippet below).
-> Until then events log in dev and no-op in prod; nothing else depends on it.
+> **STATUS:** the layer is `packages/core/src/analytics.ts` (provider-agnostic) and
+> **PostHog is wired on both hosts** — web via `posthog-js` in `src/main.tsx`, native via
+> `apps/mobile/src/analytics.native.ts` ("The native app" below). Both are gated on
+> `VITE_POSTHOG_KEY`: without it events log in dev and no-op in prod, and nothing else
+> depends on them. Still open: the server-side truth events from the worker.
 
 
 _Goal: before spending on payments, licensing, or GTM, **measure whether people come
@@ -127,6 +128,32 @@ Until a key is set, events log in dev and no-op in prod — so instrumentation c
 be reviewed before any vendor decision. Add `posthog-js` + `VITE_POSTHOG_KEY` when ready.
 Server-side truth events (`matchup_resolved`, `upgrade_completed`) should post from the Fly
 worker to PostHog's capture API so they don't depend on an open tab.
+
+### The native app
+The Expo app reports through the **same** core layer and the **same** `VITE_POSTHOG_KEY`
+(read from `expo.extra` — see `apps/mobile/app.config.js`), so one token covers both hosts
+and a person who uses the phone and the browser is one person, not two: both call
+`identify()` with the Supabase user id.
+
+The sink is `apps/mobile/src/analytics.native.ts` — a dependency-free POST to PostHog's
+`/batch/` capture API rather than `posthog-react-native`, which would drag in a native
+dependency chain this app deliberately doesn't carry (it stores through MMKV) and would
+mean a fresh build on every playtester's phone before a single event arrived. It batches
+(10s / 20 events), flushes on backgrounding, requeues 5xx and network failures, drops 4xx,
+and caps the queue at 200 so a long offline stretch can't grow without bound. Anonymous
+events carry `$process_person_profile: false`, mirroring the web's `identified_only`.
+
+| Event | Where (native) |
+|---|---|
+| `app_open {version, native:true}` | `index.ts` boot — `native` is what separates app traffic from web/PWA |
+| `screen_view {screen}` | `App.tsx`, from the derived screen (`signin`/`leagues`/`picks`/`demo`/`commish`/`admin`) |
+| `league_opened {live:true}` | opening a league from `Leagues` — the app has no sim leagues, so it's always live |
+| `lineup_set {week, slots}` | `LivePicks` autosave, after the server accepts |
+| `powerup_bought {id, price, practice}` | `ShopModal`, after `wallet_buy_powerup` returns ok |
+| `gated_feature_attempted {feature}` | free — it fires from `premiumClient` in core, which both hosts share |
+
+Native has no referrer and no UTM params, so first-touch attribution is empty there by
+design (`platform.native.ts` returns `''`); install attribution is the store's problem.
 
 ## Pilot read-out (what success looks like)
 Run the closed pilot (`docs/pilot-2026-plan.md` step F) with this instrumented. Decision
