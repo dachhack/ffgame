@@ -67,12 +67,26 @@ jobs:
           # search_path is unset for this role — unqualified table names fail with
           # "relation does not exist" unless pinned. Same reason migrate.yml pins it.
           OPTS="-c search_path=public"
+          # The read-only guard is sent as SQL, not as a startup option.
+          #
+          # It used to be `-c default_transaction_read_only=on` inside PGOPTIONS,
+          # and that DID NOT HOLD against this database: a run with allow_writes
+          # off printed the banner below and then executed `UPDATE 18`. PGOPTIONS
+          # travels in the startup packet, and a connection pooler is free to
+          # drop it — so the promise was never enforced, and every "read-only"
+          # run since this workflow existed could in fact write.
+          #
+          # `SET TRANSACTION READ ONLY` is a statement on the wire inside an
+          # explicit transaction, which nothing in the path can silently discard.
+          # search_path stays in PGOPTIONS: if THAT is dropped the queries fail
+          # loudly with "relation does not exist", which is a safe failure.
+          GUARD=()
           if [ "$ALLOW_WRITES" = "true" ]; then
             echo "::warning::Writes ENABLED for this run."
           else
-            OPTS="$OPTS -c default_transaction_read_only=on"
+            GUARD=(--single-transaction -c 'SET TRANSACTION READ ONLY')
             echo "Read-only session. A file that writes will fail — re-run with allow_writes if that is intended."
           fi
 
           echo "── $FILE ──"
-          PGOPTIONS="$OPTS" psql "$PGURL" -v ON_ERROR_STOP=1 -f "$FILE"
+          PGOPTIONS="$OPTS" psql "$PGURL" -v ON_ERROR_STOP=1 "${GUARD[@]}" -f "$FILE"
