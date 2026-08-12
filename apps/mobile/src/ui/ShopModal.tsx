@@ -28,13 +28,38 @@ import { Overlay, sheetBodyMax } from './Overlay';
 /** Title, balance line, and the category chip row. Everything else is grid. */
 const gridMax = sheetBodyMax(150);
 
-export function ShopModal({ visible, matchupId, balance, practice, onClose, onChanged }: {
+export function ShopModal({ visible, matchupId, balance, practice, unlocks, comboQty, unlockBusy, unlockLocked, armsClosed, onToggleUnlock, onDisarmCombo, onClose, onChanged }: {
   visible: boolean;
   matchupId: string;
   balance: number;
   /** Preseason board weeks charge nothing (migration 0110), so the copy must
    *  not imply the season wallet moves. */
   practice?: boolean;
+  /** ── Metric unlocks (kind: 'metric') ──────────────────────────────────────
+   *  These do NOT go through wallet_buy_powerup and they never enter the hand.
+   *  They are a different server mechanism: arm_unlock spends the wallet and
+   *  arms the unlock in one call, and the metric picker gates on `unlocks`.
+   *  A card in the hand arms into `buffs`, which the picker never reads.
+   *
+   *  So a metric unlock bought into inventory was unusable — the coin left, a
+   *  card appeared, playing it consumed the card and unlocked nothing. That is
+   *  the "bought a power-up, applied it, and it's gone". They buy-and-arm in
+   *  place here instead, which is what the board's chip row did before it was
+   *  folded into the shop. */
+  unlocks: Set<string>;
+  /** Combo Drip is one slot PER purchase, so it has a count rather than a
+   *  boolean and its tile always offers another. */
+  comboQty: number;
+  unlockBusy: string | null;
+  /** Premium-gated on a free matchup. Shown as a locked tile rather than left
+   *  tappable: the board owns the "upgrade to arm this" error, and from inside
+   *  the shop that message would be posted behind the modal where nobody sees
+   *  it. Better to not offer the tap. */
+  unlockLocked: (id: string) => boolean;
+  /** The week has started — arms are closed. */
+  armsClosed?: boolean;
+  onToggleUnlock: (id: string) => void;
+  onDisarmCombo: () => void;
   onClose: () => void;
   /** Fired after a successful buy with the server's new balance AND the freshly
    *  re-read inventory.
@@ -125,15 +150,21 @@ export function ShopModal({ visible, matchupId, balance, practice, onClose, onCh
             sheet short of the room Overlay had already given it. */}
         <ScrollView style={{ maxHeight: gridMax }} contentContainerStyle={{ padding: 12, paddingBottom: 20, flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' }}>
           {shown.map((p) => {
+            // A metric unlock is armed here, not owned. Combo Drip stays
+            // buyable while armed — each purchase is another slot.
+            const isUnlock = p.kind === 'metric';
+            const combo = p.id === 'unlock-combo-drip';
+            const armed = isUnlock && (combo ? comboQty > 0 : unlocks.has(p.id));
+            const gated = isUnlock && !armed && unlockLocked(p.id);
             const have = owned[p.id] ?? 0;
-            const afford = balance >= p.price;
-            const timing = p.kind === 'metric' ? 'METRIC · 1 WK' : p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME';
-            const lit = flash === p.id;
+            const afford = (armed && !combo) || balance >= p.price;
+            const timing = isUnlock ? 'METRIC · 1 WK' : p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME';
+            const lit = flash === p.id || armed;
             return (
               <Pressable
                 key={p.id}
-                onPress={() => buy(p.id, p.price)}
-                disabled={!!busy}
+                onPress={() => (isUnlock ? onToggleUnlock(p.id) : buy(p.id, p.price))}
+                disabled={!!busy || (isUnlock && (!!unlockBusy || !!armsClosed || gated || !afford))}
                 style={{
                   width: '48%',
                   backgroundColor: lit ? alpha(t.you, 14) : '#241E15',
@@ -151,14 +182,31 @@ export function ShopModal({ visible, matchupId, balance, practice, onClose, onCh
                 <Text style={{ fontSize: 13, fontWeight: '800', color: '#F0E6CC', textAlign: 'center' }}>{p.name.toUpperCase()}</Text>
                 <Text numberOfLines={4} style={{ fontSize: 10.5, color: '#B3A88C', textAlign: 'center', lineHeight: 15 }}>{p.blurb}</Text>
 
-                {have > 0 && <Mono size={9} tone="you" weight="700" style={{ textAlign: 'center' }}>OWNED ×{have}</Mono>}
-                {!afford && <Mono size={9} tone="faint" style={{ textAlign: 'center' }}>↳ need ◈{p.price}</Mono>}
+                {/* ARMED, not OWNED — an unlock never becomes a card, so
+                    "owned" would be promising a hand you'll never be dealt. */}
+                {armed && <Mono size={9} tone="you" weight="700" style={{ textAlign: 'center' }}>{combo ? `ARMED ×${comboQty}` : 'ARMED'}</Mono>}
+                {!isUnlock && have > 0 && <Mono size={9} tone="you" weight="700" style={{ textAlign: 'center' }}>OWNED ×{have}</Mono>}
+                {!afford && !gated && <Mono size={9} tone="faint" style={{ textAlign: 'center' }}>↳ need ◈{p.price}</Mono>}
 
-                <View style={{ alignSelf: 'center', marginTop: 2, borderWidth: StyleSheet.hairlineWidth, borderColor: '#4A3F2A', borderRadius: 6, paddingHorizontal: 14, paddingVertical: 6, minWidth: 78, alignItems: 'center' }}>
-                  {busy === p.id
+                <View style={{ alignSelf: 'center', marginTop: 2, borderWidth: StyleSheet.hairlineWidth, borderColor: armed ? t.you : '#4A3F2A', borderRadius: 6, paddingHorizontal: 14, paddingVertical: 6, minWidth: 78, alignItems: 'center' }}>
+                  {busy === p.id || unlockBusy === p.id
                     ? <ActivityIndicator size="small" color={t.you} />
-                    : <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '700', color: afford ? '#F0E6CC' : '#8A7F66' }}>◈ {p.price}</Text>}
+                    : <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '700', color: armed ? t.you : afford && !gated ? '#F0E6CC' : '#8A7F66' }}>
+                        {gated ? '🔒 PREMIUM' : armed && !combo ? '✓ DISARM' : `◈ ${p.price}`}
+                      </Text>}
                 </View>
+
+                {/* One slot per purchase, so removing one has to be its own
+                    control — tapping the tile buys another. */}
+                {combo && comboQty > 0 && !armsClosed && (
+                  <Pressable
+                    onPress={onDisarmCombo}
+                    disabled={!!unlockBusy}
+                    style={{ alignSelf: 'center', marginTop: 2, paddingHorizontal: 10, paddingVertical: 4 }}
+                  >
+                    <Mono size={9} tone="faint" weight="700">➖ REMOVE ONE</Mono>
+                  </Pressable>
+                )}
               </Pressable>
             );
           })}
