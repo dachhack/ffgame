@@ -112,7 +112,7 @@ export function useShake(play: boolean) {
 
 /** nukeburst — 💥 and the NUKED chip over the card that got hit.
  *
- *  The live board publishes `nuked` as a bare boolean (server/src/resolve.js),
+ *  The worker publishes `nuked` as a bare boolean (server/src/resolve.js),
  *  with no points figure — so unlike the demo board's "NUKED −4.2" this shows
  *  the verdict without the number. Inventing one, or digging a delta out of
  *  successive score snapshots, would be guessing at the scoreboard. */

@@ -7,7 +7,7 @@
 // no-ops for onDropPlayer/onScout/onApplyToSpot. All the apply-targeting,
 // drag-and-drop and scouting machinery in the web version is dead code on this
 // screen. Porting it wholesale would have carried ~150 lines of branches that
-// can never be taken here. When the live board (which does use apply mode)
+// can never be taken here. When the web board (which does use apply mode)
 // gets ported, this component grows to meet it — not before.
 import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';

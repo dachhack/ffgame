@@ -3,8 +3,8 @@
 // This used to live in screens/LiveBoard.tsx, the separate "LIVE BOARD" tab.
 // That tab is gone: a window is now either SETUP or LIVE on the one board, the
 // way the web's Matchup phases, so the duel is a component the board composes
-// rather than a screen you navigate to. Two callers share it — the live board
-// rows inside LivePicks, and DemoBoard's scripted replay — which is exactly why
+// rather than a screen you navigate to. Two callers share it — the board's live
+// windows in LivePicks, and DemoBoard's scripted replay — which is exactly why
 // it was worth lifting out instead of inlining.
 import { useRef, type ReactNode } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
@@ -55,15 +55,15 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
   status: string;
   week: number;
   winLabel: (id: string) => string;
-  /** Per-window override of the status chip. The live board has one status for
-   *  the whole matchup, so it doesn't pass this; a replay does, because it walks
+  /** Per-window override of the status chip. The board has one status for the
+   *  whole matchup, so it doesn't pass this; a replay does, because it walks
    *  windows one at a time and a finished window shouldn't still read LIVE. */
   winStatus?: (id: string) => string | null;
   /** Rendered directly beneath a slot's card pair — the field visual and play
    *  log for that duel. A prop rather than built in, because the two callers get
    *  the underlying plays from different places: the replay has resolved engine
-   *  events in hand, while the live board would have to read published feeds.
-   *  Returning null (the live board's current answer) simply renders nothing. */
+   *  events in hand, while the board would have to read published feeds.
+   *  Returning null (the board's current answer) simply renders nothing. */
   slotDetail?: (win: string, slot: string) => ReactNode;
   /** Extra live-row text a caller can supply per side: the game and clock
    *  ("KC@LAC · Q1 9:00"), the statline, coin earned. Everything here needs data

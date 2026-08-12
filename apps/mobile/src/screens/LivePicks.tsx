@@ -445,7 +445,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         usable: !locked && pre,
         note: locked ? 'The week has started — arms are closed.'
           : pre ? undefined
-          : 'Real-time card — playable from the live board once a window kicks off.',
+          : 'Real-time card — playable once this window kicks off.',
       };
     });
 

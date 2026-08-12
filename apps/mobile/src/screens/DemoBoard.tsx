@@ -5,7 +5,7 @@
 // arriving on a slot row from the worker. Outside a game day none of them can be
 // made to happen, so they can't be demoed, reviewed, or caught regressing.
 //
-// WHAT IT IS NOT: a mock-up. It feeds props to the SAME `Duel` the live board
+// WHAT IT IS NOT: a mock-up. It feeds props to the SAME `Duel` the real board
 // renders, which renders the same `CardFace`, running the same animations. The
 // numbers are not invented either — this is the baked Drip Test League's real
 // 2025 week 8, resolved by the real engine (`buildMatchup`) against real
@@ -23,7 +23,7 @@
 // The banked total this board reaches (126.9–132.2) is NOT the engine's final
 // for the week (141.9–142.2). That gap is real and correct: banks are what has
 // been scored play by play, while the final adds end-of-week awards — window-win
-// bonuses and the like — that no clock position can show. The live board sums
+// bonuses and the like — that no clock position can show. The real board sums
 // window banks exactly the same way, so the demo is faithful to it rather than
 // to the scoreboard.
 //
@@ -284,7 +284,7 @@ export function DemoBoard() {
           DEMO — DRIP TEST LEAGUE, REAL 2025 WEEK {WEEK}. NOT YOUR MATCHUP.
         </Mono>
         <Text style={{ fontSize: 12, color: t.mid, lineHeight: 18, marginTop: 8 }}>
-          Real play-by-play through the real engine, on the live board’s own
+          Real play-by-play through the real engine, on your board’s own
           components. Watch SUN 1PM for two nukes, and MNF for the hot streak
           that decides it.
         </Text>
