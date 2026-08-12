@@ -88,6 +88,26 @@ $ANDROID_HOME/build-tools/36.0.0/apksigner verify --print-certs \
 # Signer #1 certificate DN: CN=Drip Fantasy Playtest, …
 ```
 
+### The splash
+
+`assets/splash.png` is the hero mark and the wordmark (`public/brand/hero-mark.png`
++ `hero-wordmark.png`) composited into one 1024px transparent asset, over a plate
+of `#0D1F22` — sampled from `public/brand/ig-profile.png`, so the ground behind
+the logo is the green the logo was drawn against rather than a colour picked to
+go with it. Regenerate it from those two sources if the brand art changes; it is
+laid out by centring the stack, not by fixed offsets, because the first attempt
+used fixed offsets and ran the wordmark off the bottom edge.
+
+`imageWidth` is set. Without it the logo scales with the screen and turns into a
+poster on a tablet.
+
+The splash is also held past the first frame from JS (`preventAutoHideAsync` in
+App.tsx, hidden when the session resolves). Otherwise it hides the moment React
+mounts — which is before `getSession()` answers — and the launch reads splash →
+spinner → app, with the spinner the longest part. There is a 4s ceiling on that
+hold: a slow launch is a nuisance, an app that appears not to start is a bug
+report.
+
 ### Building the APK by hand
 
 ```bash
