@@ -32,6 +32,7 @@
           "backgroundColor": "#0D1F22"
         }
       ],
+      "@react-native-google-signin/google-signin",
       "expo-web-browser",
       "./plugins/withCoreBundleInput",
       "./plugins/withPlaytestSigning",

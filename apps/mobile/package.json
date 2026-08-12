@@ -21,6 +21,7 @@
     "@formatjs/intl-datetimeformat": "^7.6.0",
     "@formatjs/intl-getcanonicallocales": "^3.2.11",
     "@formatjs/intl-locale": "^5.3.10",
+    "@react-native-google-signin/google-signin": "^16.1.4",
     "expo": "^57.0.12",
     "expo-constants": "~57.0.10",
     "expo-linking": "~57.0.5",

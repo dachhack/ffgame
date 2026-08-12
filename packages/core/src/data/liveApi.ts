@@ -236,6 +236,22 @@ export async function completeOAuthCallback(callbackUrl: string): Promise<void> 
 }
 
 // ── Password auth ───────────────────────────────────────────────────────────────
+/** Sign in from a Google ID TOKEN the native SDK already obtained.
+ *
+ *  The browser round trip above exists because the web has no other way to talk
+ *  to Google. A phone does: the Play Services account picker hands back a signed
+ *  ID token directly, and this trades it for a Supabase session — so the flash
+ *  of a Custom Tab opening and closing never happens.
+ *
+ *  Supabase verifies the token's `aud` against the client IDs listed under
+ *  Authentication → Providers → Google → Authorized Client IDs. An ID token from
+ *  a client that isn't listed is rejected, which is the whole security model
+ *  here: the caller can't mint one. */
+export async function signInWithGoogleIdToken(idToken: string, nonce?: string): Promise<void> {
+  const { error } = await (await client()).auth.signInWithIdToken({ provider: 'google', token: idToken, nonce });
+  if (error) throw error;
+}
+
 export async function signInPassword(email: string, password: string): Promise<void> {
   const { error } = await (await client()).auth.signInWithPassword({ email: email.trim(), password });
   if (error) throw error;

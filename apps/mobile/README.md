@@ -162,6 +162,46 @@ No paid Apple Developer account is needed for the Simulator. For a build you
 can put on a real iPhone, `npm run ios:simulator` covers Simulator-only via EAS,
 and TestFlight distribution needs the $99/yr enrollment.
 
+### Google sign-in without the browser
+
+The default flow opens a Custom Tab, bounces through Google and deep-links back.
+That flash of a web page is what a browser-based OAuth flow looks like — it is
+not a bug in ours, and no setting hides it.
+
+Play Services can do the handshake natively: the account picker is a system
+sheet, and what comes back is a signed ID token that Supabase trades for a
+session. The code is in (`src/auth/googleNative.ts`) and switches on by itself
+the moment a build has a Web client id. Until then every build keeps the browser
+flow, so nothing is half-done.
+
+Three things have to exist, all of them, or the token is refused:
+
+1. **Google Cloud → Credentials → an ANDROID OAuth client**
+   package `com.dripfantasy.app`, and the signing cert's SHA-1. For playtest
+   builds that is the committed keystore:
+   `AC:D4:CF:A3:31:1F:D4:3B:1A:61:42:AC:2D:48:E6:A3:F8:3A:BF:3E`
+   (re-read it any time with
+   `keytool -list -v -keystore playtest.keystore -alias playtest -storepass dripplaytest`).
+   A Play-signed release is signed by Google with a DIFFERENT key and needs its
+   own client for that SHA-1.
+2. **Google Cloud → Credentials → a WEB OAuth client.** Counter-intuitive but
+   required: the Android client authorises the app, while the ID token is minted
+   for the WEB client, and that is the audience Supabase checks. Its id is what
+   you pass the build.
+3. **Supabase → Authentication → Providers → Google → Authorized Client IDs** —
+   both ids. Supabase refuses an ID token whose audience it does not know, which
+   is what stops anyone bringing their own.
+
+Then build with it set:
+
+```bash
+VITE_GOOGLE_WEB_CLIENT_ID=…apps.googleusercontent.com \
+  npx expo prebuild --platform android --clean
+```
+
+It is read at BUILD time (app.config.js → `expo.extra`), like every other key
+here, so it has to be present for the prebuild, not just the gradle step.
+
 ### Google sign-in needs a Supabase redirect entry
 
 `dripfantasy://**` must be listed under **Supabase → Authentication → URL
