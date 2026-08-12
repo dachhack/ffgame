@@ -30,10 +30,10 @@ export function RosterPanel({ title, players, wins, windowOf, groupOf, accent, o
    *  any caller with a synthetic pool has no such distinction to draw. */
   groupOf?: (playerId: string) => PoolGroup;
   accent: string;
-  /** Controlled mode. The board shows YOUR ROSTER and OPPONENT ROSTER as a pair
-   *  of buttons on one row — the web's arrangement — so the caller owns which is
-   *  open and this renders only the body. Uncontrolled (no `open`) keeps the
-   *  self-contained header for any other caller. */
+  /** Controlled mode. The board opens rosters in a MODAL, so the caller owns
+   *  which side is showing and supplies the frame; this renders only the filters
+   *  and the list, with no header and no border of its own. Uncontrolled (no
+   *  `open`) keeps the self-contained collapsible panel for any other caller. */
   open?: boolean;
   onToggle?: () => void;
 }) {
@@ -88,7 +88,7 @@ export function RosterPanel({ title, players, wins, windowOf, groupOf, accent, o
   }, [filtered, wins, windowOf]);
 
   return (
-    <View style={{ marginBottom: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: open ? accent : t.bd, borderRadius: 8, overflow: 'hidden', backgroundColor: t.surface }}>
+    <View style={controlled ? undefined : { marginBottom: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: open ? accent : t.bd, borderRadius: 8, overflow: 'hidden', backgroundColor: t.surface }}>
       {!controlled && (
         <Pressable
           onPress={() => setOpen((o) => !o)}
@@ -160,7 +160,7 @@ export function RosterPanel({ title, players, wins, windowOf, groupOf, accent, o
 
           {/* Bounded height: this list can be a thousand rows, and an unbounded
               one would push the board off the screen entirely. */}
-          <ScrollView style={{ maxHeight: 330 }} nestedScrollEnabled contentContainerStyle={{ paddingBottom: 8 }}>
+          <ScrollView style={{ maxHeight: controlled ? 420 : 330 }} nestedScrollEnabled contentContainerStyle={{ paddingBottom: 8 }}>
             {groups.map((g) => (
               <View key={g.id}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', backgroundColor: t.sh, paddingHorizontal: 12, paddingVertical: 6 }}>

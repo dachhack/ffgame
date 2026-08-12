@@ -619,82 +619,27 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
         </View>
       </View>
 
-      {/* Both rosters, as a pair — the web's arrangement. The opponent's ROSTER
-          is public in this game; what stays hidden is which of them they put in
-          which slot, and that is a different question this panel never answers.
-          Scouting already showed one window's worth; this is the whole thing. */}
+      {/* Two doors to the same sheet. No open/closed state on them: the sheet
+          covers the board, so a highlight underneath it could never be seen.
+          Each label carries its own side's colour, which is the only thing that
+          needs distinguishing here. */}
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
-        {([['you', 'YOUR ROSTER', t.you, pool.length], ['their', 'OPPONENT ROSTER', t.opp, oppPool.length]] as const).map(([side, label, accent, n]) => {
-          const on = rosterOpen === side;
-          return (
-            <Pressable
-              key={side}
-              onPress={() => setRosterOpen(on ? null : side)}
-              style={{
-                flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 6,
-                backgroundColor: t.surface,
-                borderWidth: StyleSheet.hairlineWidth, borderColor: on ? accent : t.bd,
-              }}
-            >
-              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.8, color: on ? accent : t.dim }}>
-                {on ? '▾' : '▸'} {label}{n ? ` ${n}` : ''}
-              </Text>
-            </Pressable>
-          );
-        })}
+        {([['you', 'YOUR ROSTER', t.you, pool.length], ['their', 'OPPONENT ROSTER', t.opp, oppPool.length]] as const).map(([side, label, accent, n]) => (
+          <Pressable
+            key={side}
+            onPress={() => setRosterOpen(side)}
+            style={{
+              flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 6,
+              backgroundColor: t.surface,
+              borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
+            }}
+          >
+            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.8, color: accent }}>
+              {label}{n ? ` ${n}` : ''}
+            </Text>
+          </Pressable>
+        ))}
       </View>
-      {rosterOpen === 'you' && (
-        <RosterPanel
-          title="Your roster"
-          players={pool.map(poolToPlayer)}
-          wins={wins}
-          // Same resolver the slate gating uses, so the grouping here and the
-          // eligibility counts on each window can never disagree.
-          windowOf={(id) => winBySlug[id] ?? null}
-          groupOf={(id) => grpBySlug[id] ?? 'start'}
-          accent={t.you}
-          open
-          onToggle={() => setRosterOpen(null)}
-        />
-      )}
-      {rosterOpen === 'their' && (
-        <RosterPanel
-          title="Opponent roster"
-          players={oppPool.map(poolToPlayer)}
-          wins={wins}
-          windowOf={(id) => oppWinBySlug[id] ?? null}
-          groupOf={(id) => oppGrpBySlug[id] ?? 'start'}
-          accent={t.opp}
-          open
-          onToggle={() => setRosterOpen(null)}
-        />
-      )}
-
-      {/* An empty pool is not a bug and not the user's fault, but "0 eligible"
-          on every window looks exactly like both. The lineup is keyed by
-          (league, WEEK, roster) — a league that hasn't synced starters for the
-          week you're looking at simply has no pool yet, which is the normal
-          state for a regular-season week in August. Say so, and say which week,
-          because paging to a week that IS synced is the actual fix. */}
-      {!pool.length && (
-        <Card style={{ marginBottom: 12, borderColor: t.warn }}>
-          <Mono size={10} weight="700" tone="warn" track={0.1}>NO ROSTER FOR {weekLabel(matchup!.week).toUpperCase()}</Mono>
-          <Text style={{ fontSize: 12.5, color: t.text, lineHeight: 18, marginTop: 6 }}>
-            No starters came back for this week, so there’s nobody to field and
-            every window reads 0 eligible. Use ‹ › above to check another week.
-          </Text>
-          {/* The exact tuple the read asked for. "No roster" has two very
-              different causes — nothing matched, or something matched and was
-              discarded — and they look identical from the outside. Printing the
-              query makes it checkable against the table instead of guessable:
-              if these ids are right and the row exists, the read is the
-              problem, not the data. */}
-          <Mono size={9} tone="faint" style={{ marginTop: 8 }}>
-            asked: league {roster?.leagueId?.slice(0, 8) ?? '?'}… · week {matchup!.week} · roster {roster?.rosterId ?? '?'}
-          </Mono>
-        </Card>
-      )}
-
       {/* Header — mirrors the web's title block: who is playing, how much of
           the lineup is set, and the week you are looking at. */}
       <Card style={{ marginBottom: 10 }}>
@@ -892,6 +837,57 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
       {allLocked && <Mono size={10.5} style={{ textAlign: 'center' }}>Every window has kicked off — picks are final.</Mono>}
 
       <View style={{ alignItems: 'center', marginTop: 14 }}><LinkButton label="← back" onPress={onBack} /></View>
+
+      {/* Rosters, in a sheet. They expanded inline before, which meant a
+          34-player list pushed the board — the thing you opened the roster to
+          reason ABOUT — off the screen. In a sheet the board stays where it
+          was, and the two sides become one place you switch between rather
+          than two panels competing for the same column. */}
+      <Overlay
+        visible={!!rosterOpen}
+        title={rosterOpen === 'their' ? 'Opponent roster' : 'Your roster'}
+        subtitle={rosterOpen === 'their'
+          ? `${(oppTeam?.team_name ?? 'THEIR TEAM').toUpperCase()} · WHO THEY COULD FIELD — NOT WHO THEY SLOTTED`
+          : `${(myTeam?.team_name ?? 'YOUR TEAM').toUpperCase()} · GROUPED BY THE WINDOW EACH GAME FALLS IN`}
+        onClose={() => setRosterOpen(null)}
+        footer={
+          <Pressable
+            onPress={() => setRosterOpen(rosterOpen === 'their' ? 'you' : 'their')}
+            style={{
+              borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, paddingVertical: 13, alignItems: 'center',
+              borderColor: rosterOpen === 'their' ? t.you : t.opp,
+            }}
+          >
+            <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: rosterOpen === 'their' ? t.you : t.opp }}>
+              {rosterOpen === 'their' ? '◂ YOUR ROSTER' : 'OPPONENT ROSTER ▸'}
+            </Text>
+          </Pressable>
+        }
+      >
+        {rosterOpen === 'their' ? (
+          <RosterPanel
+            title="Opponent roster"
+            players={oppPool.map(poolToPlayer)}
+            wins={wins}
+            windowOf={(id) => oppWinBySlug[id] ?? null}
+            groupOf={(id) => oppGrpBySlug[id] ?? 'start'}
+            accent={t.opp}
+            open
+          />
+        ) : (
+          <RosterPanel
+            title="Your roster"
+            players={pool.map(poolToPlayer)}
+            wins={wins}
+            // Same resolver the slate gating uses, so the grouping here and the
+            // eligibility counts on each window can never disagree.
+            windowOf={(id) => winBySlug[id] ?? null}
+            groupOf={(id) => grpBySlug[id] ?? 'start'}
+            accent={t.you}
+            open
+          />
+        )}
+      </Overlay>
 
       {/* Scout: who the opponent COULD field in this window. Never who they
           actually slotted — that stays sealed until the window kicks off. */}
