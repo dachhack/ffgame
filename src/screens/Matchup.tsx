@@ -18,7 +18,7 @@ import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndCloc
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '@drip/core/data/demoNarration';
 import { slotMoments, MOMENT_COLOR, type Moment } from '@drip/core/engine/moments';
-import { myPicks, savePicks, friendlyError, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, type PickRow } from '@drip/core/data/liveApi';
+import { myPicks, savePicks, friendlyError, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, type PickRow } from '@drip/core/data/liveApi';
 import { CardTableCss, PowerupHand, PowerupCard, LiveCard, MiniCard, liveCardFlags } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import { Rulebook } from './Rulebook';
@@ -527,6 +527,20 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     const t = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(t);
   }, [liveCtx]);
+  // Admin lock hold (0134/0135): while this week is held, the wall-clock
+  // derivation below is suspended — every window reads 'setup' and stays
+  // editable, kickoff or not, because the SERVER is accepting edits and a board
+  // that shows 🔒 over an open database is lying. Polled every 30s so the
+  // admin's release (relock-102.sql) flips the board back without a reload.
+  const [heldWeeks, setHeldWeeks] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    if (!liveCtx) return;
+    let alive = true;
+    const load = () => { lockHolds().then((h) => { if (alive) setHeldWeeks(h); }); };
+    load();
+    const t = setInterval(load, 30_000);
+    return () => { alive = false; clearInterval(t); };
+  }, [liveCtx]);
   const liveWinState = useMemo(() => {
     // Live-test mode compresses both the lock lead and the live duration so the
     // whole flow plays out in minutes (windowKickoffMs already returns the
@@ -534,10 +548,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     const lockLead = testTimelineOn() ? TEST_LOCK_LEAD_MS : LOCK_LEAD_MS;
     const gameDur = testTimelineOn() ? TEST_GAME_MS : GAME_WINDOW_MS;
     const out: Record<string, WinState> = {};
+    const held = heldWeeks.has(week);
     for (const w of windowsForWeek(week)) {
       const k = windowKickoffMs(week, w.id);
       let s: WinState = 'setup';
-      if (k != null) {
+      if (k != null && !held) {
         if (nowMs >= k + gameDur) s = 'final';
         else if (nowMs >= k) s = 'live';
         else if (nowMs >= k - lockLead) s = 'locked';
@@ -546,7 +561,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [week, nowMs, livePbpVer, testAnchor]);
+  }, [week, nowMs, livePbpVer, testAnchor, heldWeeks]);
   // Overall live-board phase, derived from its windows (all setup → setup, all
   // final → final, else live). Drives the header + board-level gating; a manual
   // phase tab is disabled on the live board.

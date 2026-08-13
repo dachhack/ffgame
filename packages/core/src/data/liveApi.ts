@@ -336,6 +336,18 @@ export interface PreviewRedeem { ok: boolean; error?: string; league?: string; t
 export const requestMemberSync = (code: string) =>
   rpc<{ ok: boolean; error?: string; league_id?: string }>('request_member_sync', { p_code: code.trim() });
 
+/** Board weeks under an admin lock hold (0134/0135) — while a week is listed,
+ *  the live board must NOT derive locked/live window states from the wall
+ *  clock; the week is open for edits until the admin releases the hold.
+ *  Never throws: no hold information degrades to normal kickoff-driven locks. */
+export async function lockHolds(): Promise<Set<number>> {
+  try {
+    const { data, error } = await (await client()).rpc('lock_holds');
+    if (error) return new Set();
+    return new Set((data ?? []) as number[]);
+  } catch { return new Set(); }
+}
+
 /** Which team a code + Sleeper username would join — without enrolling. */
 export async function redeemPreview(code: string, sleeperUsername: string): Promise<PreviewRedeem> {
   const user = await resolveUser(sleeperUsername);
