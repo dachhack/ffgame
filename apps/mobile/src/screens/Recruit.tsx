@@ -75,7 +75,9 @@ export function Recruit({ onBack, onJoined }: {
     try {
       const r = await joinFromBoard(target.league_id, teamDraft.trim() || undefined);
       if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'could not join')); }
-      else { commit(); setJoined(target.name); onJoined(); }
+      else if ((r as { status?: string }).status === 'waitlisted') {
+        commit(); setJoined(`the waiting room for ${target.name} — the commissioner deals you in from there`); onJoined();
+      } else { commit(); setJoined(target.name); onJoined(); }
     } catch (e) { warn(); setErr(friendlyError(e)); }
     finally { setBusy(false); setJoinFor(null); setTeamDraft(''); await load(); }
   };

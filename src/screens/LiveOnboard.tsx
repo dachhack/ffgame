@@ -7,7 +7,7 @@ import {
   pendingAuthUrlError, clearAuthUrlError, authErrorMessage, type AuthUrlError,
   getSession, onAuth, signOut, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, myLinkedSleeper, claimMyRosters,
-  redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft,
+  redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, type WaitlistRow,
   myMatchup, matchupTeams, leagueResults, defaultOpenWeek,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
 } from '@drip/core/data/liveApi';
@@ -401,6 +401,9 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // instead of the signed-in one, and the write CTAs are hidden.
   const { viewAs, route, navigate } = useStore();
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
+  const [waiting, setWaiting] = useState<WaitlistRow[]>([]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { myWaitlist().then(setWaiting).catch(() => {}); }, [enrollments === null ? 0 : (enrollments as Enrollment[]).length]);
   const [loadErr, setLoadErr] = useState(false);
   const [commishLeagues, setCommishLeagues] = useState<AdminLeague[]>([]);
   const [commishLoaded, setCommishLoaded] = useState(false);
@@ -643,6 +646,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   };
 
   return (
+    <>
     <LeagueHome
       enrollments={enrollments}
       commishLeagues={commishLeagues}
@@ -658,6 +662,22 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       onDeleted={refresh}
       isCommish={isCommish}
     />
+    {/* The waiting room: joined a full league, no seat yet (0125). Read-only —
+        the commissioner deals people in; this just stops the join looking
+        like it vanished. */}
+    {waiting.length > 0 && (
+      <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {waiting.map((w) => (
+          <div key={w.league_id} style={{ background: 'var(--surface)', borderRadius: 8, padding: 14, border: '1px dashed var(--bd)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 16 }}>⏳</span>
+            <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text)' }}>
+              <b>{w.name}</b> — you're in, waiting on a team assignment from the commissioner.
+            </span>
+          </div>
+        ))}
+      </div>
+    )}
+    </>
   );
 }
 
@@ -863,7 +883,9 @@ function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage,
         .catch(() => (preseasonOn ? PRESEASON_BASE + 1 : 1));
       const m = await myMatchup(e.league_id, e.sleeper_roster_id, week).catch(() => null);
       const { built, youTeamId } = await buildLiveLeague(e.league_id, e.sleeper_roster_id, week);
-      const ctx = m ? { matchupId: m.id, userId, leagueId: e.league_id, rosterId: e.sleeper_roster_id, week: m.week } : null;
+      // Co-managed seat: sealed picks are written AS the seat owner (0125) —
+      // pick_user_id is that identity; your own on seats you own.
+      const ctx = m ? { matchupId: m.id, userId: e.pick_user_id ?? userId, leagueId: e.league_id, rosterId: e.sleeper_roster_id, week: m.week } : null;
       loadSimLeague(built, youTeamId, ctx);
       navigate({ name: 'matchup', week, phase: 'setup' });
     } catch {
@@ -930,6 +952,7 @@ function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage,
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
             <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{e.team_name}</span>
             {commish && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', borderRadius: 4, padding: '2px 6px' }}>⚑ COMMISSIONER</span>}
+            {e.comanager && <span className="mono" title="you steer this team with its owner — one lineup, more thumbs" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>⇄ CO-MANAGER</span>}
             {e.league?.kind === 'weekly' && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>🏆 WK {e.league.contest_week ?? '—'} SHOWDOWN</span>}
             {e.league?.kind === 'dfs' && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>⚔ DFS LEAGUE</span>}
             {/* Keyed to the week THIS CARD is showing, not to league.preseason_at:
@@ -1036,9 +1059,10 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
   }, [leagueId]);
   const name = (rid: number) => teams[rid]?.team_name ?? `Roster ${rid}`;
 
+  const [sortBy, setSortBy] = useState<'record' | 'pf' | 'diff'>('record');
   const standings = useMemo(() => {
-    const s: Record<number, { rid: number; w: number; l: number; t: number; pf: number }> = {};
-    const get = (rid: number) => (s[rid] ??= { rid, w: 0, l: 0, t: 0, pf: 0 });
+    const s: Record<number, { rid: number; w: number; l: number; t: number; pf: number; pa: number }> = {};
+    const get = (rid: number) => (s[rid] ??= { rid, w: 0, l: 0, t: 0, pf: 0, pa: 0 });
     for (const r of rows ?? []) {
       // Preseason practice (board weeks 101-103) is throwaway — its results show
       // in the week list below, but never in a record. Mirrors league_standings
@@ -1047,10 +1071,15 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
       if (r.status !== 'final' || r.home_final == null || r.away_final == null) continue;
       const h = get(r.home_roster_id), a = get(r.away_roster_id);
       h.pf += Number(r.home_final); a.pf += Number(r.away_final);
+      h.pa += Number(r.away_final); a.pa += Number(r.home_final);
       if (r.home_final > r.away_final) { h.w++; a.l++; } else if (r.home_final < r.away_final) { a.w++; h.l++; } else { h.t++; a.t++; }
     }
-    return Object.values(s).sort((x, y) => (y.w - x.w) || (y.pf - x.pf));
-  }, [rows]);
+    const rows2 = Object.values(s);
+    if (sortBy === 'pf') rows2.sort((x, y) => (y.pf - x.pf) || (y.w - x.w));
+    else if (sortBy === 'diff') rows2.sort((x, y) => ((y.pf - y.pa) - (x.pf - x.pa)) || (y.w - x.w));
+    else rows2.sort((x, y) => (y.w - x.w) || (y.pf - x.pf));   // the seeding order
+    return rows2;
+  }, [rows, sortBy]);
 
   const weeks = useMemo(() => {
     const m = new Map<number, MatchupResult[]>();
@@ -1069,15 +1098,26 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
           <>
             {standings.some((s) => s.w + s.l + s.t > 0) && (
               <div style={{ ...card, marginBottom: 12 }}>
-                <div style={hdr}>STANDINGS</div>
-                {standings.map((s, i) => (
-                  <div key={s.rid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
-                    <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', width: 16 }}>{i + 1}</span>
-                    <span style={{ flex: 1, fontSize: 12, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(s.rid)}</span>
-                    <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>{s.w}-{s.l}{s.t ? `-${s.t}` : ''}</span>
-                    <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 60, textAlign: 'right' }}>{Math.round(s.pf)} PF</span>
-                  </div>
-                ))}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ ...hdr, marginBottom: 0, flex: 1 }}>STANDINGS</div>
+                  {([['record', 'RECORD'], ['pf', 'POINTS'], ['diff', '± DIFF']] as const).map(([id, label]) => (
+                    <button key={id} onClick={() => setSortBy(id)} className="mono"
+                      style={{ ...linkBtn, fontSize: 8.5, letterSpacing: '0.08em', color: sortBy === id ? 'var(--you)' : 'var(--faint)' }}>{label}</button>
+                  ))}
+                </div>
+                <div style={{ marginTop: 8 }} />
+                {standings.map((s, i) => {
+                  const d = Math.round((s.pf - s.pa) * 10) / 10;
+                  return (
+                    <div key={s.rid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
+                      <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', width: 16 }}>{i + 1}</span>
+                      <span style={{ flex: 1, fontSize: 12, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(s.rid)}</span>
+                      <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>{s.w}-{s.l}{s.t ? `-${s.t}` : ''}</span>
+                      <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 56, textAlign: 'right' }}>{Math.round(s.pf)} PF</span>
+                      <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: d > 0 ? 'var(--you)' : d < 0 ? 'var(--opp)' : 'var(--dim)', width: 48, textAlign: 'right' }}>{d > 0 ? '+' : ''}{d}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
             {weeks.map(([wk, ms]) => (

@@ -6,7 +6,7 @@
 // it gave you no way to reach the others.
 import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { myEnrollments, claimMyRosters, commishOverview, friendlyError, type AdminLeague, type Enrollment } from '@drip/core/data/liveApi';
+import { myEnrollments, claimMyRosters, commishOverview, friendlyError, myWaitlist, type AdminLeague, type Enrollment, type WaitlistRow } from '@drip/core/data/liveApi';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Card, Display, LinkButton, Mono } from '../ui/prims';
@@ -50,7 +50,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
   userId: string;
   /** rosterId is null for a league you commission WITHOUT a team — it opens
    *  into management (draft + team tools), not a lineup it doesn't have. */
-  onOpen: (leagueId: string, rosterId: number | null, name: string, native: boolean) => void;
+  onOpen: (leagueId: string, rosterId: number | null, name: string, native: boolean, pickUserId?: string) => void;
   /** Open the league board — browse open leagues, post yours, recruit. */
   onBoard: () => void;
 }) {
@@ -61,6 +61,9 @@ export function Leagues({ userId, onOpen, onBoard }: {
   // before this list a seatless commissioner had no door into their league on
   // the phone at all: enrollments was the only source.
   const [managed, setManaged] = useState<AdminLeague[]>([]);
+  // Leagues joined but not seated — full-league joins wait here (0125) until
+  // the commissioner deals them in as an owner or a co-manager.
+  const [waiting, setWaiting] = useState<WaitlistRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -78,6 +81,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
       // commissioned Sleeper league's tools live on the web.
       const cl = await commishOverview().catch(() => [] as AdminLeague[]);
       setManaged(cl.filter((l) => l.provider === 'native' && !enrolledIds.has(l.league_id)));
+      setWaiting(await myWaitlist().catch(() => []));
     } catch (e) {
       setErr(friendlyError(e));
       setRows([]);
@@ -123,7 +127,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
         return (
           <Pressable
             key={`${e.league_id}-${e.sleeper_roster_id}`}
-            onPress={() => { tap(); onOpen(e.league_id, e.sleeper_roster_id, lg?.name ?? 'League', lg?.provider === 'native'); }}
+            onPress={() => { tap(); onOpen(e.league_id, e.sleeper_roster_id, lg?.name ?? 'League', lg?.provider === 'native', e.pick_user_id); }}
             android_ripple={{ color: alpha(t.you, 16) }}
             style={({ pressed }) => ({
               backgroundColor: t.surface, overflow: 'hidden',
@@ -140,6 +144,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
                   <Text numberOfLines={1} style={{ flex: 1, fontSize: 16, fontWeight: '700', color: t.text }}>
                     {lg?.name ?? 'League'}
                   </Text>
+                  {!!e.comanager && <Mono size={8.5} tone="warn" track={0.08}>CO-MGR</Mono>}
                   {!!lg?.is_mock && <Mono size={8.5} tone="faint" track={0.08}>MOCK</Mono>}
                   {!!kind && <Mono size={8.5} tone="warn" track={0.08}>{kind}</Mono>}
                 </View>
@@ -195,6 +200,19 @@ export function Leagues({ userId, onOpen, onBoard }: {
             <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.warn }}>⚑ MANAGE →</Text>
           </View>
         </Pressable>
+      ))}
+
+      {/* Waiting on a seat: joined, not dealt in yet. Read-only by design —
+          the commissioner's move, not yours. */}
+      {waiting.map((w) => (
+        <View key={`wait-${w.league_id}`} style={{ backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderStyle: 'dashed', borderRadius: 12, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 11 }}>
+          <Crest url={w.avatar_url} name={w.name} size={42} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: '700', color: t.text }}>{w.name}</Text>
+            <Text style={{ fontSize: 11.5, color: t.mid, marginTop: 2 }}>You're in — waiting on a team assignment from the commissioner.</Text>
+          </View>
+          <Mono size={9} tone="warn" weight="700" track={0.06}>⏳ WAITING</Mono>
+        </View>
       ))}
 
       {/* The league board: browse open leagues, post yours, recruit friends.

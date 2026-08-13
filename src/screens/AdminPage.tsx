@@ -10,6 +10,7 @@ import {
   rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
   setTransactionRules, commishMovePlayer, commishRemovePlayer, commishRuleTrade, setLeagueAvatar,
   adminUserState, type ViewAsState,
+  commishSetManager, teamManagers, type TeamManagerRow,
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
   playoffState, setPlayoffRules, generatePlayoffs, advancePlayoffs,
   type WaiverMode, type TradeReview, type TradeRow, type LeaguePoolPlayer, type NativeRosterRow,
@@ -973,6 +974,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
               <SeedCoin balance={wallets[m.roster_id] ?? 0} onSeed={(amt) => seedCoin(m.roster_id, amt)} />
             </div>
           ))}
+          <CoManagerPanel leagueId={l.league_id} members={members} />
         </div>
       )}
       {tab === 'kdst' && (
@@ -1403,6 +1405,65 @@ function SeedCoin({ balance, onSeed }: { balance: number; onSeed: (amt: number) 
         placeholder="grant coin…" inputMode="numeric" style={{ ...inp, fontSize: 10, padding: '5px 7px', width: 90 }} />
       <button onClick={go} disabled={busy || !amt} className="mono" style={{ ...btn(false), opacity: busy || !amt ? 0.6 : 1 }}>{busy ? '…' : 'grant'}</button>
       {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp, #e5484d)' }}>{msg}</span>}
+    </div>
+  );
+}
+
+// Co-managers (0125): several humans steering one seat. The grant lets them
+// write the OWNER'S sealed picks (one team, one lineup, more thumbs) and opens
+// every owns_roster-gated tool — rename, avatar, adds/drops. Power-up
+// inventories stay personal.
+function CoManagerPanel({ leagueId, members }: { leagueId: string; members: AdminMember[] }) {
+  const [mgrs, setMgrs] = useState<TeamManagerRow[]>([]);
+  const [seat, setSeat] = useState('');
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => teamManagers(leagueId).then(setMgrs).catch(() => {});
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [leagueId]);
+  const seated = members.filter((m) => m.enrolled);
+  const teamOf = (rid: number) => members.find((m) => m.roster_id === rid)?.team ?? `Roster ${rid}`;
+  const add = async () => {
+    const rid = parseInt(seat, 10);
+    if (busy || !rid || !email.trim()) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishSetManager(leagueId, rid, { email: email.trim() });
+      if (r.ok) { setMsg('✓ co-manager added'); setEmail(''); } else setMsg(r.error ?? 'failed');
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); load(); }
+  };
+  const remove = async (g: TeamManagerRow) => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishSetManager(leagueId, g.roster_id, { appUserId: g.app_user_id, remove: true });
+      setMsg(r.ok ? '✓ removed' : r.error ?? 'failed');
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); load(); }
+  };
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+      <div style={subhead}>CO-MANAGERS — ONE TEAM, MORE THUMBS</div>
+      {mgrs.length === 0 && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>None yet. A co-manager sets the same lineup as the seat's owner — for shared teams, or extra joiners when the league is past its seats.</div>}
+      {mgrs.map((g) => (
+        <div key={`${g.roster_id}-${g.app_user_id}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
+          <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--text)', flex: 1 }}>
+            {teamOf(g.roster_id)} <span style={{ color: 'var(--faint)' }}>⇄</span> {g.email ?? g.app_user_id.slice(0, 8)}
+          </span>
+          <button onClick={() => remove(g)} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>✕ remove</button>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+        <select value={seat} onChange={(e) => setSeat(e.target.value)} style={{ ...inp, padding: '5px 7px', fontSize: 10.5 }}>
+          <option value="">team…</option>
+          {seated.map((m) => <option key={m.roster_id} value={m.roster_id}>{m.team ?? `Roster ${m.roster_id}`}</option>)}
+        </select>
+        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="comanager@email.com"
+          onKeyDown={(e) => { if (e.key === 'Enter') add(); }} style={{ ...inp, fontSize: 10.5, padding: '5px 7px', width: 190 }} />
+        <button onClick={add} disabled={busy || !seat || !email.trim()} className="mono" style={{ ...btn(true), opacity: busy || !seat || !email.trim() ? 0.6 : 1 }}>＋ add</button>
+        {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</span>}
+      </div>
     </div>
   );
 }

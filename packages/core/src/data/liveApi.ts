@@ -449,17 +449,26 @@ export async function requestCode(input: { email?: string; sleeper?: string; lea
   return data as { ok: boolean; error?: string };
 }
 
-export interface Enrollment { league_id: string; team_name: string; sleeper_roster_id: number; avatar_url: string | null; league: { name: string; season: string; preseason_at?: string | null; provider?: string; avatar_url?: string | null; is_mock?: boolean; kind?: string; contest_week?: number | null } | null; }
+export interface Enrollment {
+  league_id: string; team_name: string; sleeper_roster_id: number; avatar_url: string | null;
+  /** The app_user_id sealed picks must be written AS — the seat OWNER's id.
+   *  Your own on seats you own; the owner's on seats you co-manage (0125).
+   *  Absent only on rows from builds older than the my_teams switch. */
+  pick_user_id?: string;
+  /** You steer this team but the seat isn't yours. */
+  comanager?: boolean;
+  league: { name: string; season: string; preseason_at?: string | null; provider?: string; avatar_url?: string | null; is_mock?: boolean; kind?: string; contest_week?: number | null } | null;
+}
 
-/** The caller's enrolled memberships (RLS scopes to their own rows). */
-export async function myEnrollments(userId: string): Promise<Enrollment[]> {
-  const { data, error } = await (await client())
-    .from('league_membership')
-    .select('league_id, team_name, sleeper_roster_id, avatar_url, league:league_id(name, season, preseason_at, provider, avatar_url, is_mock, kind, contest_week)')
-    .eq('app_user_id', userId)
-    .eq('enrolled', true);
-  if (error) throw error;
-  return (data as unknown as Enrollment[]) ?? [];
+/** Every seat the caller can act for — owned AND co-managed (0125's my_teams).
+ *  Was a direct league_membership select, which by construction could never
+ *  show a co-managed seat: RLS scopes that table to your own rows, and a
+ *  co-manager's whole point is acting on somebody else's. The userId param
+ *  survives for signature compatibility; the server answers for auth.uid(). */
+export async function myEnrollments(_userId: string): Promise<Enrollment[]> {
+  const r = await rpc<Enrollment[] | { error?: string }>('my_teams');
+  if (!Array.isArray(r)) throw new Error((r as { error?: string })?.error ?? 'could not load teams');
+  return r;
 }
 
 // ── Commissioner verification (migration 0003) ──────────────────────────────────
@@ -1436,6 +1445,28 @@ export const leagueInvite = (leagueId: string) =>
 export const leagueListingState = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; listed?: boolean; blurb?: string; seats_open?: number }>(
     'league_listing_state', { p_league_id: leagueId });
+
+// ── Co-managers + the waiting room (0125) ─────────────────────────────────────
+/** Attach/detach a co-manager on a seat: by email (must be an account) or
+ *  app_user_id (straight from the waitlist, which the attach clears). */
+export const commishSetManager = (leagueId: string, rosterId: number, opts: { email?: string; appUserId?: string; remove?: boolean }) =>
+  rpc<{ ok: boolean; error?: string; removed?: boolean }>('commish_set_manager', {
+    p_league_id: leagueId, p_roster_id: rosterId,
+    p_email: opts.email ?? null, p_app_user_id: opts.appUserId ?? null, p_remove: opts.remove ?? false,
+  });
+export interface TeamManagerRow { roster_id: number; app_user_id: string; email: string | null; }
+export async function teamManagers(leagueId: string): Promise<TeamManagerRow[]> {
+  const r = await rpc<TeamManagerRow[] | { error?: string }>('team_managers', { p_league_id: leagueId });
+  if (!Array.isArray(r)) throw new Error((r as { error?: string })?.error ?? 'could not load managers');
+  return r;
+}
+export interface WaitlistRow { league_id: string; name: string; season: string; avatar_url: string | null; joined_at: string; }
+/** Leagues the caller has joined but holds no seat in yet — full-league joins
+ *  land here (native_join v3) until the commissioner deals them in. */
+export async function myWaitlist(): Promise<WaitlistRow[]> {
+  const r = await rpc<WaitlistRow[] | { error?: string }>('my_waitlist');
+  return Array.isArray(r) ? r : [];
+}
 
 /** Subscribe to live score changes for a matchup. Returns an unsubscribe fn. */
 export function subscribeMatchup(matchupId: string, onChange: () => void): () => void {

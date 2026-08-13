@@ -152,9 +152,13 @@ begin
   b := league_board();
   perform assert_true(not exists (select 1 from jsonb_array_elements(b) x where (x ->> 'league_id')::uuid = lid), 'b33 full league hidden');
 
-  -- listing still open, but native_join's own rule answers the fifth joiner
+  -- listing still open; the fifth joiner rides native_join's full-league rule,
+  -- which since 0125 WAITLISTS rather than refuses — the join is a success
+  -- that just doesn't come with a seat yet
   perform probe_as('e');
-  perform assert_err(join_from_board(lid), 'full', 'b34 native_join full-league rule reused');
+  r := join_from_board(lid);
+  perform assert_ok(r, 'b34 full-league board join lands somewhere');
+  perform assert_true(r ->> 'status' = 'waitlisted', 'b34b …the waiting room');
 end $$;
 
 -- ── 7. league_listing_state (0124): the commissioner's own read ──────────────
