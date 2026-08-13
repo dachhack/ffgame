@@ -803,6 +803,10 @@ export const adminUsers = () => rpc<AdminUser[]>('admin_users');
 export interface CodeRequest { id: string; created_at: string; email: string | null; sleeper_username: string | null; league_name: string | null; league_ref: string | null; note: string | null; handled: boolean; }
 export const adminCodeRequests = () => rpc<CodeRequest[]>('admin_code_requests');
 export const adminSetCodeRequestHandled = (id: string, handled: boolean) => rpc<{ ok: boolean }>('admin_set_code_request_handled', { p_id: id, p_handled: handled });
+/** Correct a mistyped (or missing) email on a lead so the invite can actually be
+ *  sent — the address came from an anonymous form and is nobody's to fix but ours. */
+export const adminSetCodeRequestEmail = (id: string, email: string) =>
+  rpc<{ ok: boolean; error?: string; email?: string }>('admin_set_code_request_email', { p_id: id, p_email: email });
 export interface BoardPick { slug: string; metric: string | null; }
 export interface BoardSlotScore { side: 'home' | 'away'; slot: string; slug: string | null; metric: string | null; score: number; }
 export interface BoardState { game_window: string; home_score: number; away_score: number; slot_scores: BoardSlotScore[]; home_picks: BoardPick[]; away_picks: BoardPick[]; }

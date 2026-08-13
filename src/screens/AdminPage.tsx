@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, redeemCommish, commishOverview, commishAudit,
-  adminCodeRequests, adminSetCodeRequestHandled, adminMatchupBoard, adminResetMatchup, dispatchSim,
+  adminCodeRequests, adminSetCodeRequestHandled, adminSetCodeRequestEmail, adminMatchupBoard, adminResetMatchup, dispatchSim,
   adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, type PreseasonWindow, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   adminSetPot, adminClosePots,
@@ -48,6 +48,29 @@ function extractLeagueId(raw: string, platform: string): string {
   return (s.match(/leagues?\/(\d+)/i) ?? s.match(/(\d{5,})/) ?? [])[1] ?? s;
 }
 const copy = (v: string) => navigator.clipboard?.writeText(v);
+
+// Same shape send-invite's EMAIL_RE checks, so the panel refuses what the mailer
+// would refuse anyway — just without the round trip.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Mistypes of the big consumer domains. A lead who fat-fingers their own address
+// on the request form never hears from us and we never see a bounce, so triage is
+// the only place the typo can still be caught.
+const DOMAIN_TYPOS: Record<string, string> = {
+  'gmail.co': 'gmail.com', 'gmail.con': 'gmail.com', 'gmail.cm': 'gmail.com', 'gmail.om': 'gmail.com',
+  'gmial.com': 'gmail.com', 'gmai.com': 'gmail.com', 'gmal.com': 'gmail.com', 'gnail.com': 'gmail.com',
+  'gamil.com': 'gmail.com', 'gmaill.com': 'gmail.com',
+  'yahoo.co': 'yahoo.com', 'yaho.com': 'yahoo.com', 'yahooo.com': 'yahoo.com', 'yahoo.con': 'yahoo.com',
+  'hotmial.com': 'hotmail.com', 'hotmai.com': 'hotmail.com', 'homail.com': 'hotmail.com', 'hotmail.co': 'hotmail.com',
+  'outlok.com': 'outlook.com', 'outloo.com': 'outlook.com', 'outlook.co': 'outlook.com',
+  'icloud.co': 'icloud.com', 'iclould.com': 'icloud.com', 'aol.co': 'aol.com',
+};
+/** A likelier spelling of an address whose domain is a known typo, else null. */
+function emailTypoFix(v: string): string | null {
+  const at = v.lastIndexOf('@');
+  if (at < 1) return null;
+  const fixed = DOMAIN_TYPOS[v.slice(at + 1).trim().toLowerCase()];
+  return fixed ? `${v.slice(0, at)}@${fixed}` : null;
+}
 
 
 /** Friendly local time for a matchup's auto-lock (kickoff), e.g. "Sun 1:00 PM". */
@@ -1255,12 +1278,12 @@ function CodeRequests({ onPending }: { onPending?: (n: number) => void }) {
       </div>
       {rows === null ? <Muted text="Loading…" />
         : visible.length === 0 ? <Muted text={pending === 0 && !rows.length ? 'No requests yet.' : 'All caught up.'} />
-        : visible.map((r) => <CodeRequestRow key={r.id} r={r} leagues={leagues} onToggle={toggle} reloadLeagues={reloadLeagues} />)}
+        : visible.map((r) => <CodeRequestRow key={r.id} r={r} leagues={leagues} onToggle={toggle} reloadLeagues={reloadLeagues} reload={load} />)}
     </div>
   );
 }
 
-function CodeRequestRow({ r, leagues, onToggle, reloadLeagues }: { r: CodeRequest; leagues: AdminLeague[]; onToggle: (id: string, handled: boolean) => void; reloadLeagues: () => Promise<AdminLeague[]> }) {
+function CodeRequestRow({ r, leagues, onToggle, reloadLeagues, reload }: { r: CodeRequest; leagues: AdminLeague[]; onToggle: (id: string, handled: boolean) => void; reloadLeagues: () => Promise<AdminLeague[]>; reload: () => Promise<void> }) {
   const [leagueId, setLeagueId] = useState(leagues[0]?.league_id ?? '');
   const [manual, setManual] = useState('');
   // Default to commissioner: requesters are usually league runners, who need the
@@ -1271,6 +1294,13 @@ function CodeRequestRow({ r, leagues, onToggle, reloadLeagues }: { r: CodeReques
   const [sent, setSent] = useState(false);
   const [importing, setImporting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Fixing the address a lead typed for themselves. The request form is anonymous
+  // and unverified, so a typo (or a request that came in with only a platform
+  // username) leaves the invite with nowhere to go — this is the one place it can
+  // be corrected before "send invite" mails into the void.
+  const [editEmail, setEditEmail] = useState(false);
+  const [draft, setDraft] = useState(r.email ?? '');
+  const [savingEmail, setSavingEmail] = useState(false);
   // The request's platform ('sleeper' | 'espn' | …) and whether we can import it here.
   const platform = (r.sleeper_username ?? '').toLowerCase();
   const refId = r.league_ref ? extractLeagueId(r.league_ref, platform) : '';
@@ -1290,6 +1320,24 @@ function CodeRequestRow({ r, leagues, onToggle, reloadLeagues }: { r: CodeReques
       setLeagueId(newId); setKind('commish'); setSent(false);
     } catch (e) { setErr(errMsg(e, 'import failed')); }
     finally { setImporting(false); }
+  };
+
+  const startEdit = () => { setDraft(r.email ?? ''); setEditEmail(true); setErr(null); };
+  const suggestion = editEmail ? emailTypoFix(draft.trim()) : null;
+  const saveEmail = async () => {
+    const next = draft.trim();
+    if (savingEmail) return;
+    if (next === (r.email ?? '')) { setEditEmail(false); setErr(null); return; }
+    if (!EMAIL_RE.test(next)) { setErr('That doesn’t look like an email address.'); return; }
+    setSavingEmail(true); setErr(null);
+    try {
+      const res = await adminSetCodeRequestEmail(r.id, next);
+      if (!res.ok) { setErr(res.error ?? 'Could not save that email.'); return; }
+      setEditEmail(false);
+      setSent(false); // a new address means the invite hasn't gone anywhere yet
+      await reload();
+    } catch (e) { setErr(errMsg(e, 'Could not save that email.')); }
+    finally { setSavingEmail(false); }
   };
 
   const league = leagues.find((l) => l.league_id === leagueId);
@@ -1314,10 +1362,35 @@ function CodeRequestRow({ r, leagues, onToggle, reloadLeagues }: { r: CodeReques
     <div style={{ padding: '8px 0', borderTop: '1px solid var(--bd)', opacity: r.handled ? 0.5 : 1 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 11.5, color: 'var(--text)' }}>
-            {r.email ? <span className="mono" style={{ ...mono, cursor: 'pointer' }} onClick={() => copy(r.email!)} title="copy">{r.email}</span> : '—'}
-            {r.sleeper_username && <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}> · {r.sleeper_username}</span>}
-          </div>
+          {editEmail ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+              <input value={draft} onChange={(e) => { setDraft(e.target.value); setErr(null); }} autoFocus
+                onKeyDown={(e) => { if (e.key === 'Enter') void saveEmail(); if (e.key === 'Escape') { setEditEmail(false); setErr(null); } }}
+                placeholder="email@example.com" className="mono" style={{ ...inp, fontSize: 11, padding: '5px 6px', width: 210, maxWidth: '100%' }} />
+              <button onClick={() => void saveEmail()} disabled={savingEmail} className="mono" style={{ ...btn(true), opacity: savingEmail ? 0.6 : 1 }}>{savingEmail ? 'saving…' : 'save'}</button>
+              <button onClick={() => { setEditEmail(false); setErr(null); }} className="mono" style={linkBtn}>cancel</button>
+              {suggestion && (
+                <button onClick={() => setDraft(suggestion)} className="mono" style={{ ...linkBtn, fontSize: 9.5, color: 'var(--you)' }} title="Use this instead">
+                  did you mean {suggestion}?
+                </button>
+              )}
+              {err && <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--opp, #e5484d)' }}>{err}</span>}
+            </div>
+          ) : (
+            <div style={{ fontSize: 11.5, color: 'var(--text)' }}>
+              {r.email
+                ? <span className="mono" style={{ ...mono, cursor: 'pointer' }} onClick={() => copy(r.email!)} title="copy">{r.email}</span>
+                : <span className="mono" style={{ ...mono, color: 'var(--faint)' }}>no email</span>}
+              <button onClick={startEdit} className="mono" style={{ ...linkBtn, fontSize: 9.5, marginLeft: 6 }}
+                title={r.email ? 'Fix a mistyped address — the invite goes wherever this says' : 'Add an address so the invite can be sent'}>
+                {r.email ? '✎ fix' : '+ add email'}
+              </button>
+              {r.email && emailTypoFix(r.email) && (
+                <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--warn)' }} title={`Looks like a typo for ${emailTypoFix(r.email)}`}> · likely typo</span>
+              )}
+              {r.sleeper_username && <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}> · {r.sleeper_username}</span>}
+            </div>
+          )}
           {r.league_name && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 2 }}>{r.league_name}</div>}
           {r.league_ref && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--you)', marginTop: 2, cursor: 'pointer', wordBreak: 'break-all' }} onClick={() => copy(r.league_ref!)} title="copy — paste into Import">⛓ {r.league_ref}</div>}
           {r.note && <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 2, lineHeight: 1.4 }}>{r.note}</div>}
@@ -1346,11 +1419,11 @@ function CodeRequestRow({ r, leagues, onToggle, reloadLeagues }: { r: CodeReques
         )}
         <button onClick={send} disabled={!canSend || sending} className="mono"
           style={{ ...btn(sent), opacity: canSend ? 1 : 0.4, cursor: canSend && !sending ? 'pointer' : 'default' }}
-          title={!r.email ? 'No email on this request' : !code ? 'Pick or enter a code first' : `Email the ${kind} invite to ${r.email}`}>
+          title={!r.email ? 'No email on this request — add one with “+ add email” above' : !code ? 'Pick or enter a code first' : `Email the ${kind} invite to ${r.email}`}>
           {sending ? 'sending…' : sent ? '✓ sent' : `✉ send ${kind} invite`}
         </button>
         <button onClick={() => { if (link) { copy(link); setCopied(true); setTimeout(() => setCopied(false), 1200); } }} disabled={!code} className="mono" style={{ ...btn(false), opacity: code ? 1 : 0.4, cursor: code ? 'pointer' : 'default' }} title="Copy the invite link">{copied ? '✓ link copied' : '⛓ copy link'}</button>
-        {err && <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--opp, #e5484d)' }}>{err}</span>}
+        {err && !editEmail && <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--opp, #e5484d)' }}>{err}</span>}
       </div>
     </div>
   );
