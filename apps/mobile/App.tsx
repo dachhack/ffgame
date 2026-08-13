@@ -16,7 +16,7 @@ import { getSession, onAuth, signOut } from '@drip/core/data/liveApi';
 import { Ev, identify, track } from '@drip/core/analytics';
 import { APP_VERSION } from '@drip/core/version';
 import { liveConfigured } from '@drip/core/data/liveConfig';
-import { THEMES, ThemeCtx, loadTheme, saveTheme, isLight, MONO } from './src/theme.native';
+import { THEMES, ThemeCtx, loadTheme, saveTheme, isLight, MONO, alpha } from './src/theme.native';
 import { SettingsModal } from './src/ui/SettingsModal';
 import { loadCardSkin, saveCardSkin, loadCardSize, saveCardSize, type CardSkin, type CardSize } from './src/ui/cards';
 import { Leagues } from './src/screens/Leagues';
@@ -25,6 +25,9 @@ import { LivePicks } from './src/screens/LivePicks';
 import { DemoBoard } from './src/screens/DemoBoard';
 import { Commish } from './src/screens/Commish';
 import { Admin } from './src/screens/Admin';
+import { Draft } from './src/screens/Draft';
+import { Team } from './src/screens/Team';
+import { Recruit } from './src/screens/Recruit';
 import { SignIn } from './src/screens/SignIn';
 import { ErrorBoundary } from './src/ui/ErrorBoundary';
 import { BrandLoading } from './src/ui/BrandLoading';
@@ -44,7 +47,12 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
  *  is for the path nobody thought of. */
 const SPLASH_MAX_MS = 4000;
 
-interface OpenLeague { leagueId: string; rosterId: number; name: string }
+interface OpenLeague {
+  leagueId: string; rosterId: number; name: string;
+  /** Native leagues get the DRAFT / MY TEAM tabs — draft rooms and waivers are
+   *  meaningless for a league whose rosters live on Sleeper/ESPN. */
+  native: boolean;
+}
 
 export function App() {
   const [themeName, setThemeName] = useState(loadTheme);
@@ -63,7 +71,10 @@ export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState<OpenLeague | null>(null);
-  const [view, setView] = useState<'picks' | 'demo' | 'commish' | 'admin'>('picks');
+  // Bumped when a board join lands a new seat — remounts Leagues so the fresh
+  // league is there when the user backs out of the board.
+  const [leaguesEpoch, setLeaguesEpoch] = useState(0);
+  const [view, setView] = useState<'picks' | 'demo' | 'commish' | 'admin' | 'draft' | 'team' | 'board'>('picks');
 
   useEffect(() => {
     if (!liveConfigured()) { setReady(true); return; }
@@ -166,6 +177,25 @@ export function App() {
           {open ? open.name : session.user.email}
         </Text>
 
+        {/* Native leagues carry their whole season in-app — matchup, draft
+            room, waivers — so they get a tab strip. Platform leagues don't:
+            their rosters live on Sleeper/ESPN and these tabs would be doors to
+            nothing. */}
+        {open?.native && (view === 'picks' || view === 'draft' || view === 'team') && (
+          <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 14, paddingTop: 8 }}>
+            {([['picks', '▦ MATCHUP'], ['draft', '⛏ DRAFT'], ['team', '⇄ MY TEAM']] as const).map(([id, label]) => (
+              <Pressable key={id} onPress={() => setView(id)}
+                style={{
+                  borderWidth: StyleSheet.hairlineWidth, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6,
+                  borderColor: view === id ? theme.you : theme.bd,
+                  backgroundColor: view === id ? alpha(theme.you, 12) : theme.surface,
+                }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: view === id ? theme.you : theme.dim }}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+
         {/* The gear's destinations come FIRST, and deliberately are not nested
             under an open league.
 
@@ -180,6 +210,14 @@ export function App() {
           <View style={{ flex: 1 }}><Commish onBack={() => setView('picks')} /></View>
         ) : view === 'admin' ? (
           <View style={{ flex: 1 }}><Admin onBack={() => setView('picks')} /></View>
+        ) : view === 'board' ? (
+          <View style={{ flex: 1 }}>
+            <Recruit onBack={() => setView('picks')} onJoined={() => setLeaguesEpoch((n) => n + 1)} />
+          </View>
+        ) : view === 'draft' && open?.native ? (
+          <View style={{ flex: 1 }}><Draft leagueId={open.leagueId} onBack={() => setView('picks')} /></View>
+        ) : view === 'team' && open?.native ? (
+          <View style={{ flex: 1 }}><Team leagueId={open.leagueId} onBack={() => setView('picks')} onDraft={() => setView('draft')} /></View>
         ) : view === 'demo' ? (
           <View style={{ flex: 1 }}>
             <Pressable onPress={() => setView('picks')} hitSlop={8} style={{ alignSelf: 'flex-start', marginHorizontal: 12, marginBottom: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.bd, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
@@ -203,14 +241,16 @@ export function App() {
           </View>
         ) : (
           <Leagues
+            key={leaguesEpoch}
             userId={session.user.id}
-            onOpen={(leagueId, rosterId, name) => {
+            onBoard={() => setView('board')}
+            onOpen={(leagueId, rosterId, name, native) => {
               // `live: true` unconditionally: the native app has no sim leagues
               // to open, so this is the same activation step the web reports
               // for a live league and lands in the same funnel.
               track(Ev.leagueOpened, { live: true });
               setView('picks');
-              setOpen({ leagueId, rosterId, name });
+              setOpen({ leagueId, rosterId, name, native });
             }}
           />
         )}
