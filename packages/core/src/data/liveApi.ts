@@ -1170,8 +1170,8 @@ export const createNativeLeague = (
 /** Read the league's roster + transaction rules (any member; the commish editors' loader). */
 export const rosterRules = (leagueId: string) =>
   rpc<{ ok?: boolean; error?: string; rounds?: number; draft_status?: string; pos_caps?: PosCaps;
-        waiver_mode?: 'rolling' | 'faab'; faab_budget?: number; trade_review?: 'none' | 'commish';
-        waiver_clear_min?: number | null; waiver_hold_days?: number;
+        waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: 'none' | 'commish';
+        waiver_clear_min?: number | null; waiver_clear_dow?: number[] | null; waiver_hold_days?: number;
         fa_start_min?: number | null; fa_end_min?: number | null }>(
     'roster_rules', { p_league_id: leagueId });
 /** Commissioner: edit position limits any time; roster size only pre-draft. */
@@ -1180,7 +1180,10 @@ export const setRosterRules = (leagueId: string, rounds: number | null, posCaps:
     'set_roster_rules', { p_league_id: leagueId, p_rounds: rounds, p_pos_caps: posCaps });
 
 // ── Transactions (0072): commish roster tools, FAAB waivers, trades ──────────
-export type WaiverMode = 'rolling' | 'faab';
+/** rolling = queue that rotates on wins; standings = reverse of the live
+ *  standings at every clear (Sleeper's default — winning a claim costs
+ *  nothing); faab = blind bids from a season budget. */
+export type WaiverMode = 'rolling' | 'standings' | 'faab';
 export type TradeReview = 'none' | 'commish';
 /** Commissioner: waiver mode / FAAB budget / trade review / waiver clear
  *  schedule / FA window. Nulls = unchanged; the schedule knobs accept -1 to
@@ -1190,12 +1193,16 @@ export const setTransactionRules = (
   leagueId: string, waiverMode: WaiverMode | null, faabBudget: number | null, tradeReview: TradeReview | null,
   waiverClearMin: number | null = null, waiverHoldDays: number | null = null,
   faStartMin: number | null = null, faEndMin: number | null = null,
+  /** Days waivers clear, 0=Sun…6=Sat ET (0126). [] clears back to every day;
+   *  null = leave unchanged. */
+  waiverClearDow: number[] | null = null,
 ) =>
   rpc<{ ok: boolean; error?: string; waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: TradeReview }>(
     'set_transaction_rules', {
       p_league_id: leagueId, p_waiver_mode: waiverMode, p_faab_budget: faabBudget, p_trade_review: tradeReview,
       p_waiver_clear_min: waiverClearMin, p_waiver_hold_days: waiverHoldDays,
       p_fa_start_min: faStartMin, p_fa_end_min: faEndMin,
+      p_waiver_clear_dow: waiverClearDow,
     });
 /** Commissioner override: put any pool player on any roster (clears waiver holds;
  *  position limits bypassed, roster size still enforced). */

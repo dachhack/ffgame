@@ -663,7 +663,7 @@ export function Team({ leagueId, onBack, onDraft, onLeftSeat }: {
 
       {/* standings + the bracket — every member's read */}
       <Standings leagueId={leagueId} myRoster={myRoster} />
-      <Playoffs leagueId={leagueId} isCommish={!!team.is_commish} />
+      <Playoffs leagueId={leagueId} />
 
       {/* commissioner player moves — any player, any roster */}
       {team.is_commish && <CommishPlayers leagueId={leagueId} onChanged={() => void refresh()} />}

@@ -75,16 +75,15 @@ export function Standings({ leagueId, myRoster }: { leagueId: string; myRoster: 
   );
 }
 
-// ── Playoffs: the bracket, and the commissioner's levers ─────────────────────
-export function Playoffs({ leagueId, isCommish }: { leagueId: string; isCommish: boolean }) {
-  const t = useTheme();
+// ── Playoff controls — lives in the ⚑ League settings sheet ──────────────────
+// Split from the bracket card below: editing is a settings decision, the
+// bracket is a scoreboard. Both read the same playoff_state.
+export function PlayoffControls({ leagueId, onChanged }: { leagueId: string; onChanged: () => void }) {
   const [st, setSt] = useState<PlayoffState | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-
   const load = () => playoffState(leagueId).then(setSt).catch(() => {});
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
-
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, done: string) => {
     if (busy) return;
     setBusy(true); setNote(null);
@@ -92,31 +91,17 @@ export function Playoffs({ leagueId, isCommish }: { leagueId: string; isCommish:
       const r = await fn();
       if (r.ok) { commit(); setNote(`✓ ${done}`); } else { warn(); setNote(friendlyError(r.error ?? 'failed')); }
     } catch (e) { warn(); setNote(friendlyError(e)); }
-    finally { setBusy(false); void load(); }
+    finally { setBusy(false); void load(); onChanged(); }
   };
-
   if (!st || st.error) return null;
-  const teamOf = (rid: number) => st.standings.find((s) => s.roster_id === rid)?.team ?? `Roster ${rid}`;
-  const seedOf = (rid: number) => {
-    const i = (st.seeds ?? []).indexOf(rid);
-    return i >= 0 ? `#${i + 1} ` : '';
-  };
-
   return (
-    <Card>
-      <Mono size={9} tone="faint" track={0.12}>🏆 PLAYOFFS</Mono>
+    <View>
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 4 }}>{note}</Mono>}
-
-      {st.champion != null && (
-        <Mono size={11} tone="you" weight="700" style={{ marginTop: 6 }}>
-          👑 {st.champion_team ?? teamOf(st.champion)} — league champion
-        </Mono>
-      )}
-
-      {/* rules — editable until the bracket is underway */}
-      {isCommish && !st.underway && (
+      {st.underway ? (
+        <Mono size={9} tone="faint" style={{ marginTop: 6 }}>The bracket is underway — size and start week are locked.</Mono>
+      ) : (
         <>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
             <Mono size={9} tone="faint">BRACKET</Mono>
             {[2, 4, 6, 8].map((n) => (
               <Chip key={n} label={`${n} TEAMS`} on={st.playoff_teams === n}
@@ -144,17 +129,49 @@ export function Playoffs({ leagueId, isCommish }: { leagueId: string; isCommish:
           </View>
         </>
       )}
-      {isCommish && st.generated && st.champion == null && (
+      {st.generated && st.champion == null && (
         <View style={{ marginTop: 8 }}>
           <PrimaryButton label={busy ? '…' : '⏭ ADVANCE (build the next round from finals)'} disabled={busy}
             onPress={() => { tap(); void run(() => advancePlayoffs(leagueId), 'advanced'); }} />
         </View>
       )}
+      <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 13 }}>
+        Seeding comes from the standings (wins, then points-for). The bracket itself shows on the MY TEAM screen for everyone.
+      </Mono>
+    </View>
+  );
+}
+
+// ── Playoffs: the bracket (view only — the levers live in ⚑ League settings) ──
+export function Playoffs({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [st, setSt] = useState<PlayoffState | null>(null);
+
+  useEffect(() => {
+    playoffState(leagueId).then(setSt).catch(() => {});
+  }, [leagueId]);
+
+  if (!st || st.error) return null;
+  const teamOf = (rid: number) => st.standings.find((s) => s.roster_id === rid)?.team ?? `Roster ${rid}`;
+  const seedOf = (rid: number) => {
+    const i = (st.seeds ?? []).indexOf(rid);
+    return i >= 0 ? `#${i + 1} ` : '';
+  };
+
+  return (
+    <Card>
+      <Mono size={9} tone="faint" track={0.12}>🏆 PLAYOFFS</Mono>
+
+      {st.champion != null && (
+        <Mono size={11} tone="you" weight="700" style={{ marginTop: 6 }}>
+          👑 {st.champion_team ?? teamOf(st.champion)} — league champion
+        </Mono>
+      )}
 
       {/* the bracket, round by round */}
       {st.matchups.length === 0 && (
         <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>
-          No bracket yet{isCommish ? ' — set the rules and generate when the regular season wraps.' : '.'}
+          No bracket yet — the commissioner generates it from ⚑ League settings when the regular season wraps.
         </Mono>
       )}
       {Array.from(new Set(st.matchups.map((m) => m.round))).sort((a, b) => a - b).map((round) => (
