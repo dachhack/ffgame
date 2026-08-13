@@ -103,12 +103,12 @@ export function App() {
   }, [session]);
 
   // Analytics identity. Tying events to the Supabase user id — the same id the
-  // web identifies on — is what lets one person be followed across their phone
-  // and their browser instead of counting as two. Nothing but the id is sent:
-  // the email is on the session right here, and deliberately stays there.
+  // web identifies on (LiveOnboard) — is what lets one person be followed across
+  // their phone and their browser instead of counting as two. The email rides
+  // along as a person trait so PostHog shows a name, not a UUID.
   useEffect(() => {
-    if (session?.user.id) identify(session.user.id);
-  }, [session?.user.id]);
+    if (session?.user.id) identify(session.user.id, session.user.email ? { email: session.user.email } : undefined);
+  }, [session?.user.id, session?.user.email]);
 
   // One `screen_view` per screen, fired from the derived name rather than from
   // each setter — the screen is a function of three pieces of state here, so a

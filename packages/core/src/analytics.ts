@@ -14,6 +14,13 @@ export type Props = Record<string, string | number | boolean | null | undefined>
 export interface AnalyticsSink {
   track(event: string, props?: Props): void;
   identify(id: string, traits?: Props): void;
+  /** Set person properties on WHOEVER the current person is, without touching
+   *  the distinct id. This is the difference that matters: identify() with a
+   *  new id SWITCHES users (two identified ids never merge in PostHog), so
+   *  secondary handles — a Sleeper username, say — must land as traits on the
+   *  signed-in person, not as a competing identity. Optional because a sink
+   *  predating it should degrade to dropping traits, not crash. */
+  setTraits?(traits: Props): void;
 }
 
 // Canonical event names (string-constant'd to avoid typos; doc'd in analytics-plan.md).
@@ -87,7 +94,10 @@ export function attribution(): Props {
 }
 
 let sink: AnalyticsSink | null = null;
-type Buffered = { kind: 'track'; event: string; props?: Props } | { kind: 'identify'; id: string; traits?: Props };
+type Buffered =
+  | { kind: 'track'; event: string; props?: Props }
+  | { kind: 'identify'; id: string; traits?: Props }
+  | { kind: 'traits'; traits: Props };
 const buffer: Buffered[] = [];
 const isDev = () => platform().isDev;
 
@@ -95,7 +105,11 @@ const isDev = () => platform().isDev;
 export function registerSink(s: AnalyticsSink): void {
   sink = s;
   for (const e of buffer.splice(0)) {
-    try { if (e.kind === 'track') s.track(e.event, e.props); else s.identify(e.id, e.traits); } catch { /* never throw */ }
+    try {
+      if (e.kind === 'track') s.track(e.event, e.props);
+      else if (e.kind === 'identify') s.identify(e.id, e.traits);
+      else s.setTraits?.(e.traits);
+    } catch { /* never throw */ }
   }
 }
 
@@ -114,6 +128,18 @@ export function identify(id: string, traits?: Props): void {
     if (sink) { sink.identify(id, traits); return; }
     if (isDev()) console.debug('[analytics] identify', id, traits ?? {});
     if (buffer.length < 100) buffer.push({ kind: 'identify', id, traits });
+  } catch { /* never throw */ }
+}
+
+/** Attach person properties to the current person — identified or not — without
+ *  changing who the events belong to. Use this for every handle that is NOT the
+ *  canonical login id: identify() is reserved for the Supabase user id, which is
+ *  the one id both hosts share (see docs/analytics-plan.md). */
+export function setTraits(traits: Props): void {
+  try {
+    if (sink) { sink.setTraits?.(traits); return; }
+    if (isDev()) console.debug('[analytics] setTraits', traits);
+    if (buffer.length < 100) buffer.push({ kind: 'traits', traits });
   } catch { /* never throw */ }
 }
 

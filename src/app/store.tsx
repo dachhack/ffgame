@@ -9,7 +9,7 @@ import type { League } from '@drip/core/types';
 import { powerupById, isAmplifier, ampCapacity, capAmplifiers } from '@drip/core/data/powerups';
 import { DEMO_WEEK } from '@drip/core/config';
 import { type ProviderUser, type ProviderId } from '@drip/core/data/providers';
-import { track, identify, Ev } from '@drip/core/analytics';
+import { track, setTraits, Ev } from '@drip/core/analytics';
 import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, hasAuthTokensInUrl, type TargetedState } from '@drip/core/data/liveApi';
 
 import type { SlotSwap } from '@drip/core/engine/matchup';
@@ -274,7 +274,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   });
   const setSleeperUser = (u: ProviderUser | null) => {
     setSleeperUserState(u);
-    if (u) { identify(u.userId, { username: u.username }); track(Ev.sleeperConnected); }
+    // Traits, NOT identify(): the Supabase user id is the one analytics
+    // identity (both hosts identify on it — LiveOnboard here, App.tsx in the
+    // app). Identifying with the Sleeper id used to SWITCH the person mid-
+    // session, and since two identified ids never merge in PostHog, the same
+    // human showed up as different users depending on where they signed in.
+    if (u) { setTraits({ sleeper_username: u.username, sleeper_user_id: u.userId }); track(Ev.sleeperConnected); }
   };
   // Boot from the URL hash (refresh keeps your place; screens are shareable), else
   // the returning-user default: a signed-in live user to their pilot, everyone

@@ -92,6 +92,13 @@ class PostHogSink implements AnalyticsSink {
     });
   }
 
+  setTraits(traits: Props): void {
+    // `$set` is PostHog's dedicated set-person-properties event — it updates
+    // whoever `distinct_id` currently is without any identity change, which is
+    // exactly the contract core's setTraits() promises.
+    this.enqueue('$set', { $set: { ...traits } });
+  }
+
   private enqueue(event: string, props: Record<string, unknown>): void {
     this.queue.push({
       event,

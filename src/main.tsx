@@ -18,7 +18,11 @@ const PH_KEY = import.meta.env.VITE_POSTHOG_KEY;
 if (PH_KEY) {
   import('posthog-js').then(({ default: posthog }) => {
     posthog.init(PH_KEY, { api_host: 'https://us.i.posthog.com', capture_pageview: false, person_profiles: 'identified_only' });
-    registerSink({ track: (e, p) => { posthog.capture(e, p); }, identify: (id, t) => { posthog.identify(id, t); } });
+    registerSink({
+      track: (e, p) => { posthog.capture(e, p); },
+      identify: (id, t) => { posthog.identify(id, t); },
+      setTraits: (t) => { posthog.setPersonProperties(t); },
+    });
   }).catch(() => { /* analytics is best-effort */ });
 }
 
