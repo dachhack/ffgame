@@ -7,12 +7,16 @@
 //                      or AI-controlled (the RPC is idempotent + advisory-locked,
 //                      so racing a browser's own tick is harmless).
 //   • process_waivers — resolves pending claims whose 24h waiver window closed.
+//   • auto_weekly_budget — credits each active week's coin allowance to every
+//                      league that set one (0132). Same ledger idem_key as the
+//                      commissioner's manual GRANT, so however many ticks — or
+//                      button presses — hit a week, it pays exactly once.
 // Lineup materialization needs no sweep: every roster-mutating RPC rewrites the
 // still-scheduled weeks' sleeper_lineup itself.
 import { db } from './supabase.js';
 
-export async function sweepNative(log = () => {}) {
-  let drafts = 0, won = 0, lost = 0;
+export async function sweepNative(log = () => {}, weeks = []) {
+  let drafts = 0, won = 0, lost = 0, allowance = 0;
 
   const { data: live, error: de } = await db()
     .from('draft').select('league_id').eq('status', 'live');
@@ -35,5 +39,14 @@ export async function sweepNative(log = () => {}) {
     } catch (e) { log('process_waivers', leagueId, e.message); }
   }
 
-  return { autopicks: drafts, claimsWon: won, claimsLost: lost };
+  // The weekly allowance, one call per active board week (regular + preseason
+  // contexts both pass theirs). Scope and idempotency live server-side.
+  for (const w of new Set(weeks.filter((w) => Number.isInteger(w) && w > 0))) {
+    try {
+      const { data } = await db().rpc('auto_weekly_budget', { p_week: w });
+      allowance += Number(data?.credited ?? 0);
+    } catch (e) { log('auto_weekly_budget', w, e.message); }
+  }
+
+  return { autopicks: drafts, claimsWon: won, claimsLost: lost, allowance };
 }

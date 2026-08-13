@@ -233,7 +233,7 @@ function CommishCoin({ leagueId, onChanged }: { leagueId: string; onChanged: () 
           }} />
       </View>
       <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 13 }}>
-        Granting credits every team that week's allowance — idempotent, so re-granting a week never double-pays.
+        The allowance drops by itself as each week's games arrive — set it and forget it. GRANT WEEK is the manual catch-up (a missed week, an off-schedule top-up); auto and manual share one receipt per week, so nothing ever pays twice.
       </Mono>
 
       {/* one-off bulk move: every seat, same signed amount — commish_seed_coin
