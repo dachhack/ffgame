@@ -310,7 +310,7 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
 // schedule knobs send -1 to CLEAR (daily clear → rolling; window → always).
 interface TxnRules {
   mode: WaiverMode; budget: number; review: TradeReview;
-  clearMin: number | null; holdDays: number; faStart: number | null; faEnd: number | null;
+  clearMin: number | null; clearDow: number[] | null; holdDays: number; faStart: number | null; faEnd: number | null;
 }
 function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
   const [init, setInit] = useState<TxnRules | null>(null);
@@ -318,6 +318,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
   const [budget, setBudget] = useState(100);
   const [review, setReview] = useState<TradeReview>('none');
   const [clearMin, setClearMin] = useState<number | null>(null);   // null = rolling 24h
+  const [clearDow, setClearDow] = useState<number[] | null>(null); // null = every day (0=Sun…6=Sat ET)
   const [holdDays, setHoldDays] = useState(1);
   const [faStart, setFaStart] = useState<number | null>(null);     // null = always open
   const [faEnd, setFaEnd] = useState<number | null>(null);
@@ -328,11 +329,13 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
       if (r.error || !r.ok) { setMsg(r.error ?? 'could not load rules'); return; }
       const cur: TxnRules = {
         mode: r.waiver_mode ?? 'rolling', budget: r.faab_budget ?? 100, review: r.trade_review ?? 'none',
-        clearMin: r.waiver_clear_min ?? null, holdDays: r.waiver_hold_days ?? 1,
+        clearMin: r.waiver_clear_min ?? null,
+        clearDow: Array.isArray(r.waiver_clear_dow) && r.waiver_clear_dow.length ? [...r.waiver_clear_dow].sort() : null,
+        holdDays: r.waiver_hold_days ?? 1,
         faStart: r.fa_start_min ?? null, faEnd: r.fa_end_min ?? null,
       };
       setInit(cur); setMode(cur.mode); setBudget(cur.budget); setReview(cur.review);
-      setClearMin(cur.clearMin); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd);
+      setClearMin(cur.clearMin); setClearDow(cur.clearDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd);
     }).catch((e) => setMsg(errMsg(e, 'could not load rules')));
   }, [leagueId]);
   if (!init) return <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>{msg ?? 'loading rules…'}</div>;
@@ -341,6 +344,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
     setSaving(true); setMsg(null);
     try {
       const clearChanged = clearMin !== init.clearMin;
+      const dowChanged = JSON.stringify(clearDow ?? []) !== JSON.stringify(init.clearDow ?? []);
       const faChanged = faStart !== init.faStart || faEnd !== init.faEnd;
       const r = await setTransactionRules(leagueId,
         mode !== init.mode ? mode : null,
@@ -349,8 +353,9 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         clearChanged ? (clearMin ?? -1) : null,
         holdDays !== init.holdDays ? holdDays : null,
         faChanged ? (faStart ?? -1) : null,
-        faChanged ? (faEnd ?? -1) : null);
-      if (r.ok) { setInit({ mode, budget, review, clearMin, holdDays, faStart, faEnd }); setMsg('✓ saved'); }
+        faChanged ? (faEnd ?? -1) : null,
+        dowChanged ? (clearDow ?? []) : null);
+      if (r.ok) { setInit({ mode, budget, review, clearMin, clearDow, holdDays, faStart, faEnd }); setMsg('✓ saved'); }
       else setMsg(r.error ?? 'save failed');
     } catch (e) { setMsg(errMsg(e, 'save failed')); }
     finally { setSaving(false); }
@@ -375,8 +380,9 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         <div>
           <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>WAIVERS</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
-            {toggle(mode === 'rolling', 'ROLLING PRIORITY', () => setMode('rolling'))}
-            {toggle(mode === 'faab', '💰 FAAB BIDS', () => setMode('faab'))}
+            {toggle(mode === 'rolling', 'ROLLING', () => setMode('rolling'))}
+            {toggle(mode === 'standings', 'REVERSE STANDINGS', () => setMode('standings'))}
+            {toggle(mode === 'faab', '💰 FAAB', () => setMode('faab'))}
           </div>
         </div>
         {mode === 'faab' && (
@@ -414,6 +420,21 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
               <button onClick={() => setHoldDays(Math.max(1, holdDays - 1))} className="mono" style={stepBtnStyle}>−</button>
               <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{holdDays}</span>
               <button onClick={() => setHoldDays(Math.min(7, holdDays + 1))} className="mono" style={stepBtnStyle}>＋</button>
+            </div>
+          </div>
+        )}
+        {clearMin != null && (
+          <div>
+            <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>RUN DAYS (ET)</div>
+            <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
+              {toggle(clearDow === null, 'ALL', () => setClearDow(null))}
+              {(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const).map((d, i) => (
+                <span key={d}>{toggle(!!clearDow?.includes(i), d, () => {
+                  const cur = clearDow ?? [];
+                  const next = cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort();
+                  setClearDow(next.length ? next : null);
+                })}</span>
+              ))}
             </div>
           </div>
         )}

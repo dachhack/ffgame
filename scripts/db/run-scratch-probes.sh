@@ -82,3 +82,4 @@ $RUN -f scripts/db/preseason-practice-probes.sql | grep -E "PROBE FAIL|PROBES PA
 $RUN -f scripts/db/window-pot-probes.sql | grep -E "PROBE FAIL|ALL POT PROBES" || { echo "POT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/league-board-probes.sql | grep -E "PROBE FAIL|ALL BOARD PROBES" || { echo "BOARD PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/team-manager-probes.sql | grep -E "PROBE FAIL|ALL TEAM-MANAGER PROBES" || { echo "TEAM-MANAGER PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/waiver-rules-probes.sql | grep -E "PROBE FAIL|ALL WAIVER-RULES PROBES" || { echo "WAIVER-RULES PROBES FAILED"; exit 1; }
