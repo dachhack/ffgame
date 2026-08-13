@@ -193,6 +193,29 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     </Card>
   );
 
+  // The commissioner-without-a-team header. identityCard is seat-gated (its
+  // whole content is the seat), so a seatless commissioner needs a card of
+  // their own or the SETTINGS/RECRUIT buttons vanish with the roster.
+  const commishCard = myRoster == null && team.is_commish && (
+    <Card style={{ borderLeftWidth: 3, borderLeftColor: t.warn }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Display size={15}>⚑ Commissioner</Display>
+          <Mono size={9.5} tone="faint" style={{ marginTop: 3 }}>
+            You run this league without a team in it — managing, not competing.
+          </Mono>
+        </View>
+        <Pressable onPress={shareInvite} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>⇪ RECRUIT</Text>
+        </Pressable>
+        <Pressable onPress={() => { tap(); setSettingsOpen(true); }}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.warn }}>⚑ SETTINGS</Text>
+        </Pressable>
+      </View>
+    </Card>
+  );
+
   // The commish rules sheet, mounted in BOTH branches below — waiver systems
   // get chosen before the draft, not after it.
   const settingsSheet = team.is_commish ? (
@@ -210,6 +233,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
         </View>
         {!!err && <Notice tone="opp"><Mono size={10} tone="opp">{err}</Mono></Notice>}
         {identityCard}
+        {commishCard}
         <Card>
           <Display size={15}>Rosters arrive at the draft</Display>
           <Mono size={10} style={{ marginTop: 8, lineHeight: 16 }}>
@@ -236,6 +260,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
       </View>
       {!!err && <Notice tone="opp"><Mono size={10} tone="opp">{err}</Mono></Notice>}
       {identityCard}
+      {commishCard}
 
       {/* over-limit lockout: no adds/claims/weekly lineups until legal */}
       {team.roster_issue && (

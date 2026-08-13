@@ -6,7 +6,7 @@
 // it gave you no way to reach the others.
 import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { myEnrollments, claimMyRosters, friendlyError, type Enrollment } from '@drip/core/data/liveApi';
+import { myEnrollments, claimMyRosters, commishOverview, friendlyError, type AdminLeague, type Enrollment } from '@drip/core/data/liveApi';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Card, Display, LinkButton, Mono } from '../ui/prims';
@@ -48,12 +48,19 @@ function Crest({ url, name, size }: { url?: string | null; name?: string | null;
 
 export function Leagues({ userId, onOpen, onBoard }: {
   userId: string;
-  onOpen: (leagueId: string, rosterId: number, name: string, native: boolean) => void;
+  /** rosterId is null for a league you commission WITHOUT a team — it opens
+   *  into management (draft + team tools), not a lineup it doesn't have. */
+  onOpen: (leagueId: string, rosterId: number | null, name: string, native: boolean) => void;
   /** Open the league board — browse open leagues, post yours, recruit. */
   onBoard: () => void;
 }) {
   const t = useTheme();
   const [rows, setRows] = useState<Enrollment[] | null>(null);
+  // Native leagues I commission but hold no seat in. A commissioner does not
+  // need a team (0039 — redeeming the code is the whole qualification), and
+  // before this list a seatless commissioner had no door into their league on
+  // the phone at all: enrollments was the only source.
+  const [managed, setManaged] = useState<AdminLeague[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -64,7 +71,13 @@ export function Leagues({ userId, onOpen, onBoard }: {
       // been linked to yet, THEN read enrollments — otherwise a freshly
       // assigned team doesn't appear until the next load.
       await claimMyRosters().catch(() => {});
-      setRows(await myEnrollments(userId));
+      const enr = await myEnrollments(userId);
+      setRows(enr);
+      const enrolledIds = new Set(enr.map((e) => e.league_id));
+      // Only native leagues: they're the ones the app can actually manage. A
+      // commissioned Sleeper league's tools live on the web.
+      const cl = await commishOverview().catch(() => [] as AdminLeague[]);
+      setManaged(cl.filter((l) => l.provider === 'native' && !enrolledIds.has(l.league_id)));
     } catch (e) {
       setErr(friendlyError(e));
       setRows([]);
@@ -150,6 +163,39 @@ export function Leagues({ userId, onOpen, onBoard }: {
           </Pressable>
         );
       })}
+
+      {/* Leagues I run without playing in — the commissioner-without-a-team
+          case. Amber accent instead of green: this is a management door, not a
+          lineup to set. */}
+      {managed.map((l) => (
+        <Pressable
+          key={`mgmt-${l.league_id}`}
+          onPress={() => { tap(); onOpen(l.league_id, null, l.name, true); }}
+          android_ripple={{ color: alpha(t.warn, 16) }}
+          style={({ pressed }) => ({
+            backgroundColor: t.surface, overflow: 'hidden',
+            borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
+            borderLeftWidth: 3, borderLeftColor: t.warn,
+            borderRadius: 12, padding: 14, gap: 4,
+            opacity: pressed ? 0.85 : 1,
+          })}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
+            <Crest url={l.avatar_url} name={l.name} size={42} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} style={{ fontSize: 16, fontWeight: '700', color: t.text }}>{l.name}</Text>
+              <Text numberOfLines={1} style={{ fontSize: 12, color: t.mid, marginTop: 2 }}>
+                Commissioner — no team · {l.enrolled}/{l.rosters} enrolled
+              </Text>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+            <Mono size={9} tone="faint" track={0.06}>{l.season}</Mono>
+            <View style={{ flex: 1 }} />
+            <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.warn }}>⚑ MANAGE →</Text>
+          </View>
+        </Pressable>
+      ))}
 
       {/* The league board: browse open leagues, post yours, recruit friends.
           Below the league list because your own leagues are the daily visit;

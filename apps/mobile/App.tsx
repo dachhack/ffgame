@@ -48,7 +48,11 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 const SPLASH_MAX_MS = 4000;
 
 interface OpenLeague {
-  leagueId: string; rosterId: number; name: string;
+  leagueId: string;
+  /** null = commissioner without a team: management only, no MATCHUP tab —
+   *  there is no lineup to set for a seat that doesn't exist. */
+  rosterId: number | null;
+  name: string;
   /** Native leagues get the DRAFT / MY TEAM tabs — draft rooms and waivers are
    *  meaningless for a league whose rosters live on Sleeper/ESPN. */
   native: boolean;
@@ -183,7 +187,9 @@ export function App() {
             nothing. */}
         {open?.native && (view === 'picks' || view === 'draft' || view === 'team') && (
           <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 14, paddingTop: 8 }}>
-            {([['picks', '▦ MATCHUP'], ['draft', '⛏ DRAFT'], ['team', '⇄ MY TEAM']] as const).map(([id, label]) => (
+            {([['picks', '▦ MATCHUP'], ['draft', '⛏ DRAFT'], ['team', '⇄ MY TEAM']] as const)
+              .filter(([id]) => id !== 'picks' || open.rosterId != null)
+              .map(([id, label]) => (
               <Pressable key={id} onPress={() => setView(id)}
                 style={{
                   borderWidth: StyleSheet.hairlineWidth, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6,
@@ -215,9 +221,11 @@ export function App() {
             <Recruit onBack={() => setView('picks')} onJoined={() => setLeaguesEpoch((n) => n + 1)} />
           </View>
         ) : view === 'draft' && open?.native ? (
-          <View style={{ flex: 1 }}><Draft leagueId={open.leagueId} onBack={() => setView('picks')} /></View>
+          // A seatless commissioner has no MATCHUP to go back to — back means
+          // leaving the league, not landing on a lineup that doesn't exist.
+          <View style={{ flex: 1 }}><Draft leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('picks'); }} /></View>
         ) : view === 'team' && open?.native ? (
-          <View style={{ flex: 1 }}><Team leagueId={open.leagueId} onBack={() => setView('picks')} onDraft={() => setView('draft')} /></View>
+          <View style={{ flex: 1 }}><Team leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('picks'); }} onDraft={() => setView('draft')} /></View>
         ) : view === 'demo' ? (
           <View style={{ flex: 1 }}>
             <Pressable onPress={() => setView('picks')} hitSlop={8} style={{ alignSelf: 'flex-start', marginHorizontal: 12, marginBottom: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.bd, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
@@ -228,7 +236,7 @@ export function App() {
             </Pressable>
             <DemoBoard />
           </View>
-        ) : open ? (
+        ) : open && open.rosterId != null ? (
           <View style={{ flex: 1 }}>
             <LivePicks
               // Remounts when you switch leagues, so no state leaks between them.
@@ -249,7 +257,9 @@ export function App() {
               // to open, so this is the same activation step the web reports
               // for a live league and lands in the same funnel.
               track(Ev.leagueOpened, { live: true });
-              setView('picks');
+              // No seat → no lineup: a seatless commissioner lands on
+              // management, not on a MATCHUP tab that cannot render.
+              setView(rosterId == null ? 'team' : 'picks');
               setOpen({ leagueId, rosterId, name, native });
             }}
           />
