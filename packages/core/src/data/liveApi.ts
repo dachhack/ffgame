@@ -1431,6 +1431,11 @@ export const joinFromBoard = (leagueId: string, teamName?: string) =>
 export const leagueInvite = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; invite_code?: string; name?: string; seats_open?: number }>(
     'league_invite', { p_league_id: leagueId });
+/** The listing's true state, commish/admin only (0124). league_board() hides
+ *  full leagues, so it cannot answer "is my league public?" — this can. */
+export const leagueListingState = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; listed?: boolean; blurb?: string; seats_open?: number }>(
+    'league_listing_state', { p_league_id: leagueId });
 
 /** Subscribe to live score changes for a matchup. Returns an unsubscribe fn. */
 export function subscribeMatchup(matchupId: string, onChange: () => void): () => void {

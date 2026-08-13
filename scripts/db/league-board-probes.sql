@@ -157,4 +157,30 @@ begin
   perform assert_err(join_from_board(lid), 'full', 'b34 native_join full-league rule reused');
 end $$;
 
+-- ── 7. league_listing_state (0124): the commissioner's own read ──────────────
+do $$
+declare r jsonb; lid uuid := current_setting('probe.board_lid')::uuid;
+begin
+  -- a plain member may not read the dial — the listing is the commissioner's
+  perform probe_as('b');
+  perform assert_err(league_listing_state(lid), 'forbidden', 'b35 member cannot read listing state');
+
+  -- the league is FULL here (section 6 filled it) and hidden from the board —
+  -- but the row is still open, and this read must say so. That divergence is
+  -- the whole reason 0124 exists.
+  perform probe_as('a');
+  r := league_listing_state(lid);
+  perform assert_ok(r, 'b36 commish reads state');
+  perform assert_true((r ->> 'listed')::boolean, 'b37 still LISTED while full/hidden');
+  perform assert_true((r ->> 'seats_open')::int = 0, 'b38 zero open seats');
+
+  perform assert_ok(close_league_listing(lid), 'b39 unlist');
+  perform assert_true(((league_listing_state(lid)) ->> 'listed')::boolean = false, 'b40 reads unlisted');
+
+  -- a league never posted reads as unlisted, not as an error
+  perform assert_true(((league_listing_state(
+    (select id from league where sleeper_league_id = 'BOARD-SLPR'))) ->> 'listed')::boolean = false,
+    'b41 never-posted league reads unlisted');
+end $$;
+
 select 'ALL BOARD PROBES PASSED' as result;
