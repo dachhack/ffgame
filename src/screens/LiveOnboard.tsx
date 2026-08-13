@@ -15,7 +15,6 @@ import { buildDripTestLeague } from '@drip/core/data/dripTest';
 import { track, Ev } from '@drip/core/analytics';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { PRESEASON_BASE, isPreseasonWeek, preseasonWeekNum, weekLabel, clearRuntimeSlate } from '@drip/core/data/nflSlate';
-import { LiveBoard } from './LiveBoard';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { AdminPage, type LeagueTab } from './AdminPage';
 import { CommishDash } from './CommishDash';
@@ -49,7 +48,7 @@ function GoogleG() {
   );
 }
 
-type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'board' | 'admin' | 'add' | 'join' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass';
+type OnboardView = 'home' | 'commish' | 'commishdash' | 'picks' | 'admin' | 'add' | 'join' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass';
 
 export function LiveOnboard() {
   const { navigate, route, viewAs, setViewAs } = useStore();
@@ -579,7 +578,6 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     <PodBuilder leagueId={target.leagueId} rosterId={target.rosterId} week={target.week} leagueName={target.name}
       onBack={() => { setView('home'); refresh(); }} />
   );
-  if (view === 'board') return <LiveBoard userId={session.user.id} leagueId={target?.leagueId} rosterId={target?.rosterId} onBack={() => setView('home')} />;
   if (view === 'results' && target) return <LeagueResults leagueId={target.leagueId} onBack={() => setView('home')} />;
   // Leaving also clears `view` from the route. Without that the URL still says
   // admin while the screen says leagues, and the effect above would bounce you
@@ -651,7 +649,6 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       cards={cards}
       commishIds={commishIds}
       userId={viewAs?.userId ?? session.user.id}
-      onBoard={(leagueId, rosterId) => guard(() => { setTarget({ leagueId, rosterId }); setView('board'); })()}
       onPodBuild={(leagueId, rosterId, week, name) => guard(() => { setTarget({ leagueId, rosterId, week, name }); setView('podbuild'); })()}
       onResults={(leagueId) => { setTarget({ leagueId, rosterId: 0 }); setView('results'); }}
       onManage={(id) => guard(() => { setManageId(id); setManageTab(undefined); setView('commishdash'); })()}
@@ -666,9 +663,9 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onBoard, onPodBuild, onResults, onManage, onDraft, onTeam, onAdd, onDeleted, isCommish }: {
+function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onPodBuild, onResults, onManage, onDraft, onTeam, onAdd, onDeleted, isCommish }: {
   enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
-  onBoard: (leagueId: string, rosterId: number) => void; onPodBuild: (leagueId: string, rosterId: number, week?: number, name?: string) => void;
+  onPodBuild: (leagueId: string, rosterId: number, week?: number, name?: string) => void;
   onResults: (leagueId: string) => void; onManage: (leagueId: string) => void;
   onDraft: (leagueId: string, rosterId: number) => void; onTeam: (leagueId: string, rosterId: number) => void; onAdd: () => void;
   onDeleted: () => void; isCommish: boolean;
@@ -709,11 +706,11 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} onResults={() => onResults(l.league_id)} />)}
         {enrolledCommish.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} />
+          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} />
         )}
         {filter === 'all' && enrolledPlayer.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onBoard={() => onBoard(e.league_id, e.sleeper_roster_id)} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} />
+          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} />
         )}
       </div>
       <div style={{ textAlign: 'center', marginTop: 18 }}>
@@ -843,9 +840,9 @@ function MockLeagueCard({ e, onDraft, onDeleted }: { e: Enrollment; onDraft: () 
   );
 }
 
-function LeagueCard({ e, card, commish, userId, onBoard, onPodBuild, onResults, onManage, onDraft, onTeam }: {
+function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage, onDraft, onTeam }: {
   e: Enrollment; card?: MatchupCard; commish: boolean; userId: string;
-  onBoard: () => void; onPodBuild: () => void; onResults: () => void; onManage: () => void; onDraft: () => void; onTeam: () => void;
+  onPodBuild: () => void; onResults: () => void; onManage: () => void; onDraft: () => void; onTeam: () => void;
 }) {
   const { loadSimLeague, navigate, setDemoWeek } = useStore();
   const [building, setBuilding] = useState(false);
@@ -980,7 +977,6 @@ function LeagueCard({ e, card, commish, userId, onBoard, onPodBuild, onResults, 
       )}
       {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{buildErr}</div>}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>
-        {!pending && <button onClick={onBoard} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>◫ live board</button>}
         {e.league?.provider === 'native' && <button onClick={onDraft} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>⛏ draft</button>}
         {e.league?.provider === 'native' && <button onClick={onTeam} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>⇄ team</button>}
         <button onClick={onResults} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>▦ scores</button>
