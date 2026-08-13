@@ -310,7 +310,8 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
 // schedule knobs send -1 to CLEAR (daily clear → rolling; window → always).
 interface TxnRules {
   mode: WaiverMode; budget: number; review: TradeReview;
-  clearMin: number | null; clearDow: number[] | null; holdDays: number; faStart: number | null; faEnd: number | null;
+  clearMin: number | null; clearDow: number[] | null; faDow: number[] | null;
+  holdDays: number; faStart: number | null; faEnd: number | null;
 }
 function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
   const [init, setInit] = useState<TxnRules | null>(null);
@@ -319,6 +320,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
   const [review, setReview] = useState<TradeReview>('none');
   const [clearMin, setClearMin] = useState<number | null>(null);   // null = rolling 24h
   const [clearDow, setClearDow] = useState<number[] | null>(null); // null = every day (0=Sun…6=Sat ET)
+  const [faDow, setFaDow] = useState<number[] | null>(null);       // days FA waits for the waiver run
   const [holdDays, setHoldDays] = useState(1);
   const [faStart, setFaStart] = useState<number | null>(null);     // null = always open
   const [faEnd, setFaEnd] = useState<number | null>(null);
@@ -331,11 +333,12 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         mode: r.waiver_mode ?? 'rolling', budget: r.faab_budget ?? 100, review: r.trade_review ?? 'none',
         clearMin: r.waiver_clear_min ?? null,
         clearDow: Array.isArray(r.waiver_clear_dow) && r.waiver_clear_dow.length ? [...r.waiver_clear_dow].sort() : null,
+        faDow: Array.isArray(r.fa_after_waivers_dow) && r.fa_after_waivers_dow.length ? [...r.fa_after_waivers_dow].sort() : null,
         holdDays: r.waiver_hold_days ?? 1,
         faStart: r.fa_start_min ?? null, faEnd: r.fa_end_min ?? null,
       };
       setInit(cur); setMode(cur.mode); setBudget(cur.budget); setReview(cur.review);
-      setClearMin(cur.clearMin); setClearDow(cur.clearDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd);
+      setClearMin(cur.clearMin); setClearDow(cur.clearDow); setFaDow(cur.faDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd);
     }).catch((e) => setMsg(errMsg(e, 'could not load rules')));
   }, [leagueId]);
   if (!init) return <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>{msg ?? 'loading rules…'}</div>;
@@ -345,6 +348,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
     try {
       const clearChanged = clearMin !== init.clearMin;
       const dowChanged = JSON.stringify(clearDow ?? []) !== JSON.stringify(init.clearDow ?? []);
+      const faDowChanged = JSON.stringify(faDow ?? []) !== JSON.stringify(init.faDow ?? []);
       const faChanged = faStart !== init.faStart || faEnd !== init.faEnd;
       const r = await setTransactionRules(leagueId,
         mode !== init.mode ? mode : null,
@@ -354,8 +358,9 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         holdDays !== init.holdDays ? holdDays : null,
         faChanged ? (faStart ?? -1) : null,
         faChanged ? (faEnd ?? -1) : null,
-        dowChanged ? (clearDow ?? []) : null);
-      if (r.ok) { setInit({ mode, budget, review, clearMin, clearDow, holdDays, faStart, faEnd }); setMsg('✓ saved'); }
+        dowChanged ? (clearDow ?? []) : null,
+        faDowChanged ? (faDow ?? []) : null);
+      if (r.ok) { setInit({ mode, budget, review, clearMin, clearDow, faDow, holdDays, faStart, faEnd }); setMsg('✓ saved'); }
       else setMsg(r.error ?? 'save failed');
     } catch (e) { setMsg(errMsg(e, 'save failed')); }
     finally { setSaving(false); }
@@ -438,6 +443,19 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
             </div>
           </div>
         )}
+        <div>
+          <div className="mono" title="On checked days, instant adds stay closed until that day's waiver run has cleared." style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>FA WAITS FOR THE RUN ON</div>
+          <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
+            {toggle(faDow === null, 'NEVER', () => setFaDow(null))}
+            {(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const).map((d, i) => (
+              <span key={`fa-${d}`}>{toggle(!!faDow?.includes(i), d, () => {
+                const cur = faDow ?? [];
+                const next = cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort();
+                setFaDow(next.length ? next : null);
+              })}</span>
+            ))}
+          </div>
+        </div>
         <div>
           <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>FREE AGENCY</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>

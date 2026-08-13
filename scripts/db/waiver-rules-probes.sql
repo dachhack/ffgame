@@ -152,4 +152,51 @@ begin
   perform assert_true(r -> 'waiver_clear_dow' is null or jsonb_typeof(r -> 'waiver_clear_dow') = 'null', 'w22 dow cleared in reader');
 end $$;
 
+-- ── 4. FA after waivers, per day (0127) ──────────────────────────────────────
+-- Deterministic despite being time-of-day logic: the clear time is set
+-- RELATIVE to the current ET minute, so "before the run" and "after the run"
+-- are chosen by the probe, not by when CI happens to run it.
+do $$
+declare lid uuid := current_setting('probe.wv_lid')::uuid;
+        today int; nowmin int; r jsonb;
+begin
+  perform probe_as('a');
+  today := extract(dow from now() at time zone 'America/New_York')::int;
+  nowmin := et_minutes(now());
+
+  -- shape gates
+  perform assert_err(set_transaction_rules(lid, p_fa_after_waivers_dow => '[7]'::jsonb), 'Sunday', 'w23 dow gate');
+  perform assert_err(set_transaction_rules(lid, p_fa_after_waivers_dow => '5'::jsonb), 'list', 'w24 shape gate');
+
+  -- today is a wait-day and the run is still an hour out → FA closed
+  r := set_transaction_rules(lid,
+        p_waiver_clear_min => least(nowmin + 60, 1439),
+        p_fa_after_waivers_dow => to_jsonb(array[today]));
+  perform assert_ok(r, 'w25 config accepted');
+  if nowmin < 1439 - 60 then   -- skip the assert only in the last hour before ET midnight
+    perform assert_true(not fa_window_open(lid), 'w26 FA waits for the run');
+  end if;
+
+  -- the run already happened today → FA open again
+  perform assert_ok(set_transaction_rules(lid, p_waiver_clear_min => greatest(nowmin - 60, 0)), 'w27 run moved behind us');
+  if nowmin > 60 then          -- skip only in the first hour after ET midnight
+    perform assert_true(fa_window_open(lid), 'w28 FA opens after the run');
+  end if;
+
+  -- a wait-day that ISN'T today never blocks
+  perform assert_ok(set_transaction_rules(lid,
+    p_waiver_clear_min => least(nowmin + 60, 1439),
+    p_fa_after_waivers_dow => to_jsonb(array[(today + 3) % 7])), 'w29 other-day config');
+  perform assert_true(fa_window_open(lid), 'w30 other days unaffected');
+
+  -- [] clears the gate entirely
+  perform assert_ok(set_transaction_rules(lid, p_fa_after_waivers_dow => '[]'::jsonb), 'w31 cleared');
+  perform assert_true(fa_window_open(lid), 'w32 no gate, FA open');
+
+  -- the reader reports it for the editors
+  perform assert_ok(set_transaction_rules(lid, p_fa_after_waivers_dow => '[2,5]'::jsonb), 'w33 set two days');
+  r := roster_rules(lid);
+  perform assert_true(r -> 'fa_after_waivers_dow' = '[2,5]'::jsonb, 'w34 reader reports the days');
+end $$;
+
 select 'ALL WAIVER-RULES PROBES PASSED' as result;

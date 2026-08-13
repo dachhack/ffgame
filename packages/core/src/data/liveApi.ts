@@ -1171,7 +1171,8 @@ export const createNativeLeague = (
 export const rosterRules = (leagueId: string) =>
   rpc<{ ok?: boolean; error?: string; rounds?: number; draft_status?: string; pos_caps?: PosCaps;
         waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: 'none' | 'commish';
-        waiver_clear_min?: number | null; waiver_clear_dow?: number[] | null; waiver_hold_days?: number;
+        waiver_clear_min?: number | null; waiver_clear_dow?: number[] | null;
+        fa_after_waivers_dow?: number[] | null; waiver_hold_days?: number;
         fa_start_min?: number | null; fa_end_min?: number | null }>(
     'roster_rules', { p_league_id: leagueId });
 /** Commissioner: edit position limits any time; roster size only pre-draft. */
@@ -1196,13 +1197,16 @@ export const setTransactionRules = (
   /** Days waivers clear, 0=Sun…6=Sat ET (0126). [] clears back to every day;
    *  null = leave unchanged. */
   waiverClearDow: number[] | null = null,
+  /** Days instant adds wait for the waiver run (0127). [] clears; null = leave
+   *  unchanged. */
+  faAfterWaiversDow: number[] | null = null,
 ) =>
   rpc<{ ok: boolean; error?: string; waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: TradeReview }>(
     'set_transaction_rules', {
       p_league_id: leagueId, p_waiver_mode: waiverMode, p_faab_budget: faabBudget, p_trade_review: tradeReview,
       p_waiver_clear_min: waiverClearMin, p_waiver_hold_days: waiverHoldDays,
       p_fa_start_min: faStartMin, p_fa_end_min: faEndMin,
-      p_waiver_clear_dow: waiverClearDow,
+      p_waiver_clear_dow: waiverClearDow, p_fa_after_waivers_dow: faAfterWaiversDow,
     });
 /** Commissioner override: put any pool player on any roster (clears waiver holds;
  *  position limits bypassed, roster size still enforced). */
