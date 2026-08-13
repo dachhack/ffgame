@@ -2929,7 +2929,10 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // Plain-English explanation of the (often jargony) metric, for a hover tooltip
   // on the chip — the board otherwise shows only the tag (DRIP/NUKE/SUPPRESS…).
   const metricEf = metricId ? (metricById(player.pos, metricId)?.ef ?? '') : '';
-  const { bigText, fullStats } = useStore();
+  // NOTE: `fullStats` (the settings toggle) used to gate wrap-vs-ellipsis on
+  // this statline and nothing else; statlines now always wrap, so the setting
+  // is vestigial — worth retiring from SiteSettings in a quiet moment.
+  const { bigText } = useStore();
   const fs = (n: number) => bigText ? Math.round(n * 1.3 * 10) / 10 : n; // larger-text mode bumps the small card labels
   const nuked = fx === 'nuke' && bank === 0 && !subName && suppressSpent == null;
   const stat = useMemo(() => fmtStat(player.pos, statlineAt(player, week, clock, metricId), isMobile), [player, week, clock, metricId, isMobile]);
@@ -2973,9 +2976,10 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
       ? <div className="mono" style={{ fontSize: fs(9.5), color: accent, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>⤴ {subName} scoring</div>
       : <div className="mono" style={isMobile
           ? { fontSize: 8.5, lineHeight: 1.3, color: 'var(--dimstrong)', whiteSpace: 'normal', textAlign: edge }
-          : fullStats
-            ? { fontSize: fs(9.5), lineHeight: 1.3, color: 'var(--dimstrong)', whiteSpace: 'normal', textAlign: edge } // full: wrap, never truncate
-            : { fontSize: fs(9.5), color: 'var(--dimstrong)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>{stat}</div>;
+          // Wrap, never truncate — desktop too. The game line's departure
+          // (v0.169.4) freed the stats area, and "0 pa…" was the one thing
+          // still spending it on an ellipsis.
+          : { fontSize: fs(9.5), lineHeight: 1.3, color: 'var(--dimstrong)', whiteSpace: 'normal', textAlign: edge }}>{stat}</div>;
   const bigNum = suppressSpent != null ? (
     <div className="grotesk mx-sc-big" style={{ fontSize: 22, fontWeight: 700, color: 'var(--dim)', lineHeight: 1, textDecoration: 'line-through' }}>{suppressSpent.toFixed(1)}</div>
   ) : halvedFrom != null ? (
@@ -3181,13 +3185,16 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
     && nflGameForTeam(week, youPlayer.team)?.home === nflGameForTeam(week, theirPlayer.team)?.home;
   return (
     <div style={{ marginTop: 5, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-        {gameChip(youPlayer) ?? <span />}
+      {/* 1fr | auto | 1fr, not space-between: the toggles sit at the row's TRUE
+          center regardless of how wide either game chip runs, so they line up
+          down the column of slot logs instead of drifting per row. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <span style={{ justifySelf: 'start', minWidth: 0, overflow: 'hidden' }}>{gameChip(youPlayer)}</span>
         <span style={{ display: 'inline-flex', gap: 4 }}>
           {toggle(minutes, minutes ? 'MINUTES' : 'PLAYS', () => setMinutes((m) => !m))}
-          {toggle(top, top ? 'NEWest ↑' : 'NEWest ↓', () => setTop((t) => !t))}
+          {toggle(top, top ? 'Newest ↑' : 'Newest ↓', () => setTop((t) => !t))}
         </span>
-        {(sameGame ? null : gameChip(theirPlayer)) ?? <span />}
+        <span style={{ justifySelf: 'end', minWidth: 0, overflow: 'hidden' }}>{sameGame ? null : gameChip(theirPlayer)}</span>
       </div>
       <div ref={scroller} onScroll={onScroll} style={{ maxHeight: fw(210), overflow: 'auto', paddingRight: 6, scrollbarGutter: 'stable', scrollbarWidth: 'thin' }}>
         {rows.length === 0 && (
