@@ -312,7 +312,8 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
   );
 }
 
-/** Pool entries carry no team; resolve it the same way the setup board does. */
+/** The entry's own team first (rookies aren't in the baked 2025 table), then
+ *  the bake — the same order the setup board resolves in. */
 function slugTeam(p: PoolPlayer): string {
-  return slugMeta(p.slug).team;
+  return p.team || slugMeta(p.slug).team;
 }
