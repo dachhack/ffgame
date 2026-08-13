@@ -1,6 +1,53 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-08-13 · Build `v0.168.0`_
+_Last updated: 2026-08-13 · Build `v0.169.0`_
+
+## The week lock switch (v0.169.0, 0134→0136, 2026-08-13 evening)
+
+Born as a live-fire emergency and grown into a control, in three migrations the
+same evening — the sequence is worth keeping because each step exposed the next:
+
+1. **0134** — mid-slate, the founder needed every week-102 pick reopened NOW and
+   held open until manually relocked. Two locking mechanisms had to stand down:
+   the worker (matchups → 'scheduled', `lock_at` 2099 — its sweeps select on
+   `lock_at` and only touch live/final) and `enforce_window_lock`, which is
+   slate-driven and would have re-engaged at kickoff−1h on its own; it learned
+   to honor a `lock_hold` row. The reopen rode IN the migration because
+   migrate.yml on main was the session's only prod write path. Receipt from the
+   run log: 12 matchups reopened, 0 picks unsealed — the lockout had been
+   status-level only, so nobody's picks were ever exposed.
+2. **0135, within the hour** — the founder sent a screenshot still showing 🔒.
+   The web board derives every window's locked/live state FROM THE WALL CLOCK
+   against slate kickoffs (Matchup.tsx `liveWinState`), on its own authority. A
+   client can't honor a hold it can't see: `lock_holds()` is the peephole into
+   the RLS-dark table, and the board polls it every 30s while a league is open.
+   The app never had the bug — it gates on matchup `status`/`lock_at`.
+3. **0136** — the founder asked for the real thing: per-league unlock/lock
+   buttons. `week_lock_hold (league_id, week)` replaces the global table (the
+   active 102 hold was CONVERTED, not dropped — leagues mid-hold saw nothing
+   change), the trigger and peephole are league-scoped, and
+   `admin_set_week_lock(league, week, locked)` — `is_admin()` only — is wired
+   to **AdminPage → league → 🔓 unlock wk / 🔒 lock wk** with held weeks shown
+   as relock chips.
+
+**The LOCK semantics are the design decision worth not re-deriving.** Lock does
+NOT mean "lock now" — it deletes the hold and NULLs `lock_at`, and the worker's
+`backfillLockAt` (which only fills NULLs) restores the week's NATURAL lock time,
+first kickoff − 1h. Relock early and the week locks when it always would have;
+relock mid-slate and the natural time has passed, so the next tick seals it,
+window locks and AI auto-lineups included. Manual lock restores nature rather
+than inventing a second rule.
+
+UNLOCK's blast radius, probed: scheduled+live matchups of that (league, week)
+only — `final` is never reanimated, other weeks and other leagues untouched;
+picks are unsealed AND unrevealed. `scripts/db/lock-hold-probes.sql` is the
+ninth suite. `relock-102.sql` remains as a bulk dbquery fallback for the
+emergency's leftovers.
+
+**Ops note from the same evening:** the APK ritual's `/opt/android-sdk` does
+not exist in this remote environment — JDK 17 + Android cmdline-tools were
+installed ad hoc to build APK 16800. Bake them into the environment (or a
+SessionStart hook) before the next APK ask, or the ritual fails at gradle.
 
 ## Members sync themselves — the claim flow self-heals (v0.168.0, 2026-08-13)
 

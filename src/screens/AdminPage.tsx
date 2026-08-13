@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, redeemCommish, commishOverview, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminSetCodeRequestEmail, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, type PreseasonWindow, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   adminSetPot, adminClosePots,
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
@@ -961,7 +961,8 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           {admin && (
             <div>
               <div style={subhead}>ADMIN MODES</div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <WeekLockControl leagueId={l.league_id} />
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
                 <TestLiveToggle on={!!l.test_live_at} leagueId={l.league_id} reload={reload} />
                 <CardThemeToggle leagueId={l.league_id} />
                 <WindowPotToggle l={l} reload={reload} />
@@ -1635,6 +1636,56 @@ function WeeklyBudget({ l, onGranted }: { l: AdminLeague; onGranted: () => void 
 // clock (Setup → Locked → Live → Final in minutes) so the flow can be exercised in
 // preseason. Affects every member of the league. Toggling off restores the real
 // slate. Re-toggling on re-anchors the schedule to "now".
+// WEEK LOCK — the super-admin unlock/lock switch (0136), grown from the 0134
+// live-fire emergency. UNLOCK reopens a week mid-slate: hold recorded, matchups
+// back to 'scheduled' with far-future lock_at, picks unsealed — and every open
+// board follows within ~30s because the live board polls lock_holds(). LOCK
+// releases the hold and NULLs lock_at, which is deliberately NOT "lock now":
+// the worker's backfill restores the week's NATURAL lock time, so relocking
+// early doesn't jump the gun and relocking mid-slate seals on the next tick.
+function WeekLockControl({ leagueId }: { leagueId: string }) {
+  const [holds, setHolds] = useState<number[]>([]);
+  const [week, setWeek] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const load = () => {
+    lockHolds().then((h) => setHolds(
+      [...h].filter((k) => k.startsWith(`${leagueId}:`)).map((k) => Number(k.split(':')[1])).sort((a, b) => a - b),
+    )).catch(() => {});
+  };
+  useEffect(load, [leagueId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const go = async (wk: number, locked: boolean) => {
+    if (busy || !Number.isFinite(wk)) return;
+    setBusy(true); setNote(null);
+    const r = await adminSetWeekLock(leagueId, wk, locked).catch((e: unknown) => ({ ok: false as const, error: friendlyError(e) }));
+    setNote(r.ok
+      ? locked
+        ? `✓ week ${wk} relocked — the worker seals it at its natural time (next tick if that's already passed)`
+        : `✓ week ${wk} unlocked — ${('matchups' in r ? r.matchups : 0) ?? 0} matchups reopened, ${('picks' in r ? r.picks : 0) ?? 0} picks unsealed; boards follow within ~30s`
+      : (r.error ?? 'failed'));
+    setBusy(false);
+    load();
+  };
+  const btn: React.CSSProperties = { fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', border: '1px solid var(--warn)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', background: 'var(--bg)', color: 'var(--warn)' };
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      {holds.map((wk) => (
+        <button key={wk} onClick={() => go(wk, true)} disabled={busy} title={`Week ${wk} is UNLOCKED by admin hold — picks are editable past kickoff. Click to relock (restores the natural lock).`}
+          className="mono" style={{ ...btn, background: 'var(--warn)', color: 'var(--on-accent)' }}>
+          {busy ? '…' : `🔓 WK ${wk} OPEN — relock`}
+        </button>
+      ))}
+      <input value={week} onChange={(e) => setWeek(e.target.value.replace(/\D/g, ''))} placeholder="wk (102…)"
+        className="mono" style={{ width: 64, fontSize: 10, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 4 }} />
+      <button onClick={() => go(Number(week), false)} disabled={busy || !week} title="Emergency unlock: reopen this week's picks for THIS league and hold every lock off until relocked here."
+        className="mono" style={{ ...btn, opacity: busy || !week ? 0.6 : 1 }}>{busy ? '…' : '🔓 unlock wk'}</button>
+      <button onClick={() => go(Number(week), true)} disabled={busy || !week} title="Release the hold on this week and restore its natural lock time."
+        className="mono" style={{ ...btn, opacity: busy || !week ? 0.6 : 1 }}>{busy ? '…' : '🔒 lock wk'}</button>
+      {note && <span className="mono" style={{ fontSize: 9, color: 'var(--dim)' }}>{note}</span>}
+    </div>
+  );
+}
+
 function TestLiveToggle({ on, leagueId, reload }: { on: boolean; leagueId: string; reload: () => void }) {
   const [busy, setBusy] = useState(false);
   const go = async () => {
