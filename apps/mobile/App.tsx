@@ -23,7 +23,7 @@ import { Leagues } from './src/screens/Leagues';
 import { isAdmin } from '@drip/core/data/liveApi';
 import { LivePicks } from './src/screens/LivePicks';
 import { DemoBoard } from './src/screens/DemoBoard';
-import { Commish } from './src/screens/Commish';
+import { CommishTools } from './src/screens/CommishTools';
 import { Admin } from './src/screens/Admin';
 import { Draft } from './src/screens/Draft';
 import { Team } from './src/screens/Team';
@@ -59,6 +59,9 @@ interface OpenLeague {
   /** Native leagues get the DRAFT / MY TEAM tabs — draft rooms and waivers are
    *  meaningless for a league whose rosters live on Sleeper/ESPN. */
   native: boolean;
+  /** This account commissions the league → the ⚑ COMMISH tab renders. Display
+   *  only; every RPC behind that tab re-checks commissionership server-side. */
+  commish?: boolean;
 }
 
 export function App() {
@@ -81,7 +84,7 @@ export function App() {
   // Bumped when a board join lands a new seat — remounts Leagues so the fresh
   // league is there when the user backs out of the board.
   const [leaguesEpoch, setLeaguesEpoch] = useState(0);
-  const [view, setView] = useState<'picks' | 'demo' | 'commish' | 'admin' | 'draft' | 'team' | 'board'>('picks');
+  const [view, setView] = useState<'picks' | 'demo' | 'admin' | 'draft' | 'team' | 'commishtools' | 'board'>('picks');
 
   useEffect(() => {
     if (!liveConfigured()) { setReady(true); return; }
@@ -188,10 +191,11 @@ export function App() {
             room, waivers — so they get a tab strip. Platform leagues don't:
             their rosters live on Sleeper/ESPN and these tabs would be doors to
             nothing. */}
-        {open?.native && (view === 'picks' || view === 'draft' || view === 'team') && (
+        {open?.native && (view === 'picks' || view === 'draft' || view === 'team' || view === 'commishtools') && (
           <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 14, paddingTop: 8 }}>
-            {([['picks', '▦ MATCHUP'], ['draft', '⛏ DRAFT'], ['team', '⇄ MY TEAM']] as const)
-              .filter(([id]) => id !== 'picks' || open.rosterId != null)
+            {([['picks', '▦ MATCHUP'], ['draft', '⛏ DRAFT'], ['team', '⇄ MY TEAM'], ['commishtools', '⚑ COMMISH']] as const)
+              // No seat → no lineup tabs; not the commissioner → no ⚑ tab.
+              .filter(([id]) => ((id !== 'picks' && id !== 'team') || open.rosterId != null) && (id !== 'commishtools' || open.commish))
               .map(([id, label]) => (
               <Pressable key={id} onPress={() => setView(id)}
                 style={{
@@ -215,9 +219,7 @@ export function App() {
             nothing. It went unnoticed because it only broke once the leagues
             list became the landing screen; before that a league was always open
             by the time you could reach the gear. */}
-        {view === 'commish' ? (
-          <View style={{ flex: 1 }}><Commish onBack={() => setView('picks')} /></View>
-        ) : view === 'admin' ? (
+        {view === 'admin' ? (
           <View style={{ flex: 1 }}><Admin onBack={() => setView('picks')} /></View>
         ) : view === 'board' ? (
           <View style={{ flex: 1 }}>
@@ -228,10 +230,15 @@ export function App() {
           // leaving the league, not landing on a lineup that doesn't exist.
           <View style={{ flex: 1 }}><Draft leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('picks'); }} /></View>
         ) : view === 'team' && open?.native ? (
-          <View style={{ flex: 1 }}><Team leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('picks'); }} onDraft={() => setView('draft')}
+          <View style={{ flex: 1 }}><Team leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('picks'); }} onDraft={() => setView('draft')} /></View>
+        ) : view === 'commishtools' && open?.native ? (
+          <View style={{ flex: 1 }}><CommishTools leagueId={open.leagueId}
+            // A seatless commissioner has nowhere else in the league to land —
+            // back means back to the leagues list.
+            onBack={() => { setOpen(null); setView('picks'); }}
             // Vacating your own seat invalidates open.rosterId — leave the
-            // league view entirely; Leagues remounts and re-lists it as MANAGE.
-            onLeftSeat={() => { setOpen(null); setView('picks'); setLeaguesEpoch((n) => n + 1); }} /></View>
+            // league view entirely; Leagues remounts with the fresh shape.
+            onSelfUnassigned={() => { setOpen(null); setView('picks'); setLeaguesEpoch((n) => n + 1); }} /></View>
         ) : view === 'demo' ? (
           <View style={{ flex: 1 }}>
             <Pressable onPress={() => setView('picks')} hitSlop={8} style={{ alignSelf: 'flex-start', marginHorizontal: 12, marginBottom: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.bd, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
@@ -261,15 +268,15 @@ export function App() {
             key={leaguesEpoch}
             userId={session.user.id}
             onBoard={() => setView('board')}
-            onOpen={(leagueId, rosterId, name, native, pickUserId) => {
+            onOpen={(leagueId, rosterId, name, native, commish, pickUserId) => {
               // `live: true` unconditionally: the native app has no sim leagues
               // to open, so this is the same activation step the web reports
               // for a live league and lands in the same funnel.
               track(Ev.leagueOpened, { live: true });
               // No seat → no lineup: a seatless commissioner lands on
               // management, not on a MATCHUP tab that cannot render.
-              setView(rosterId == null ? 'team' : 'picks');
-              setOpen({ leagueId, rosterId, name, native, pickUserId });
+              setView(rosterId == null ? 'commishtools' : 'picks');
+              setOpen({ leagueId, rosterId, name, native, commish, pickUserId });
             }}
           />
         )}
@@ -294,7 +301,6 @@ export function App() {
             onCardSize={(s) => { saveCardSize(s); setCardSize(s); }}
             isAdmin={admin}
             onDemo={() => setView('demo')}
-            onCommish={() => setView('commish')}
             onAdmin={() => setView('admin')}
             onSignOut={() => { void signOut(); }}
             onClose={() => setSettingsOpen(false)}
