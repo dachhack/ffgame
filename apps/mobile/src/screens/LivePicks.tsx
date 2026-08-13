@@ -29,8 +29,9 @@ import {
   getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, weekGameFeeds,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
   type WindowScore, type RevealedPick, type GameFeedRow,
-  nativeTeamState,
+  nativeTeamState, loadLiveInjuries,
 } from '@drip/core/data/liveApi';
+import { clearLiveInjuries } from '@drip/core/data/injuries';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/gameFeed';
 import { Ev, track } from '@drip/core/analytics';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
@@ -128,6 +129,11 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
   const [matchPremium, setMatchPremium] = useState(true); // default true = no false locks until we know
   const [weekSel, setWeekSel] = useState<number | null>(null);
   const [winKickIso, setWinKickIso] = useState<Record<string, string>>({});
+  // The VALUE is deliberately discarded — only the re-render matters. `injuryFor`
+  // is a synchronous module-cache read (it has to be; the engine calls it too),
+  // so a report landing after first paint would never reach the badges on its
+  // own. Bumping this state re-renders the board, and the badges with it.
+  const [, setInjuryVer] = useState(0);
   const [lockedWins, setLockedWins] = useState<Set<string>>(new Set());
   const [nowTs, setNowTs] = useState(() => Date.now());
   // Set only after the live slate is installed below — windowsForWeek() reads
@@ -184,6 +190,13 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
           liveSlate(m.week).catch(() => []), myComboQty(m.id, userId).catch(() => 0),
         ]);
         myInventory(m.id).then((inv) => setInventory(inv ?? {})).catch(() => {});
+        // The week's NFL injury report. Cleared first so a league or week switch
+        // can never show the previous board's designations against this pool.
+        // Off the critical path on purpose — it swallows its own failures and
+        // resolves into a module cache, so a slow feed delays no part of the
+        // board; `injuryVer` bumps to re-render the badges once it lands.
+        clearLiveInjuries();
+        loadLiveInjuries(m.week).then((n) => { if (alive && n) setInjuryVer((v) => v + 1); }).catch(() => {});
         {
           const oppRoster = m.home_roster_id === r.rosterId ? m.away_roster_id : m.home_roster_id;
           myPool(r.leagueId, m.week, oppRoster).then(setOppPool).catch(() => setOppPool([]));
@@ -906,6 +919,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
             title="Opponent roster"
             players={oppPool.map(poolToPlayer)}
             wins={wins}
+            week={week}
             windowOf={(id) => oppWinBySlug[id] ?? null}
             groupOf={(id) => oppGrpBySlug[id] ?? 'start'}
             accent={t.opp}
@@ -916,6 +930,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
             title="Your roster"
             players={pool.map(poolToPlayer)}
             wins={wins}
+            week={week}
             // Same resolver the slate gating uses, so the grouping here and the
             // eligibility counts on each window can never disagree.
             windowOf={(id) => winBySlug[id] ?? null}
@@ -1071,6 +1086,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
             visible
             players={players}
             currentId={cur}
+            week={week}
             windowLabel={wins.find((w) => w.id === pickerSlot.win)?.label}
             groupOf={(id) => grpBySlug[id] ?? 'start'}
             gated={(p) => !matchPremium && !isFreePosition(p.pos)}
