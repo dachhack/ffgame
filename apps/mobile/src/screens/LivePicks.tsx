@@ -29,6 +29,7 @@ import {
   getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, weekGameFeeds,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
   type WindowScore, type RevealedPick, type GameFeedRow,
+  nativeTeamState,
 } from '@drip/core/data/liveApi';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/gameFeed';
 import { Ev, track } from '@drip/core/analytics';
@@ -84,8 +85,13 @@ const fmtLock = (iso: string | null) => {
   catch { return iso; }
 };
 
-export function LivePicks({ userId, leagueId, rosterId, onBack }: {
-  userId: string; leagueId?: string; rosterId?: number; onBack: () => void;
+export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
+  userId: string; leagueId?: string; rosterId?: number;
+  /** Native league: check roster legality — an over-limit roster is locked out
+   *  of picks and power-ups (0072/0128), and the ban deserves a banner here,
+   *  not just an error after a tap. */
+  native?: boolean;
+  onBack: () => void;
 }) {
   const t = useTheme();
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
@@ -93,6 +99,13 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
   const [oppTeam, setOppTeam] = useState<TeamInfo | null>(null);
   const [roster, setRoster] = useState<{ leagueId: string; rosterId: number } | null>(null);
   const [controller, setController] = useState<Controller>('human');
+  // Why this roster is locked out of picks/power-ups (native leagues; null = legal).
+  const [rosterIssue, setRosterIssue] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!native || !leagueId) { setRosterIssue(null); return; }
+    nativeTeamState(leagueId).then((tm) => setRosterIssue(tm.roster_issue ?? null)).catch(() => {});
+  }, [native, leagueId]);
   const [aiBusy, setAiBusy] = useState(false);
   const [pool, setPool] = useState<PoolPlayer[]>([]);
   const [picks, setPicks] = useState<Record<string, { player_slug: string | null; metric_id: string | null }>>({});
@@ -680,6 +693,17 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: {
           </Pressable>
         ))}
       </View>
+      {/* Over-limit lockout: the server refuses picks and power-ups for an
+          illegal roster (0072/0128) — say so BEFORE the first rejected tap,
+          with the reason and the way out. */}
+      {!!rosterIssue && (
+        <Notice tone="opp">
+          <Mono size={10} tone="opp" style={{ lineHeight: 15 }}>
+            ⚠ {rosterIssue}. Picks and power-ups are locked until your roster is legal — drops always work, in the MY TEAM tab.
+          </Mono>
+        </Notice>
+      )}
+
       {/* Header — mirrors the web's title block: who is playing, how much of
           the lineup is set, and the week you are looking at. */}
       <Card style={{ marginBottom: 10 }}>
