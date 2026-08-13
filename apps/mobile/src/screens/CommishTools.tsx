@@ -27,8 +27,16 @@ import { AvatarGrid } from '../ui/AvatarGrid';
 import { CommishSettings } from '../ui/CommishSettings';
 import { CommishPlayers } from '../ui/LeagueExtras';
 
-export function CommishTools({ leagueId, onBack, onSelfUnassigned }: {
+export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassigned }: {
   leagueId: string;
+  /** Platform (Sleeper) leagues get seat/co-manager/coin management only —
+   *  rosters, waivers and rules live on the platform, so those cards hide.
+   *  The RPCs behind the seats card are league-agnostic (0022/0042/0052). */
+  native: boolean;
+  /** The opener's seat, for a platform league where there's no
+   *  native_team_state to ask. Native leagues re-derive it live instead, so a
+   *  ＋ ME claim mid-screen is reflected without reopening the league. */
+  rosterId: number | null;
   onBack: () => void;
   /** The commissioner vacated their own seat — the tabs above are stale (no
    *  MATCHUP/MY TEAM for a seat that no longer exists), so leave the league. */
@@ -43,6 +51,7 @@ export function CommishTools({ leagueId, onBack, onSelfUnassigned }: {
   const [epoch, setEpoch] = useState(0);
 
   const refresh = async () => {
+    if (!native) return; // native_team_state is a native-league RPC
     try {
       const tm = await nativeTeamState(leagueId);
       if (tm.error) { setErr(friendlyError(tm.error)); return; }
@@ -50,6 +59,8 @@ export function CommishTools({ leagueId, onBack, onSelfUnassigned }: {
     } catch (x) { setErr(friendlyError(x)); }
   };
   useEffect(() => { void refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+
+  const myRoster = native ? (team?.my_roster_id ?? null) : rosterId;
 
   // The same OS share sheet MY TEAM's ⇪ RECRUIT opens — a commissioner filling
   // seats is this button's whole audience, so it lives here too.
@@ -65,7 +76,7 @@ export function CommishTools({ leagueId, onBack, onSelfUnassigned }: {
     } catch (x) { warn(); setErr(friendlyError(x)); }
   };
 
-  if (team === null && !err) {
+  if (native && team === null && !err) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
         <ActivityIndicator color={t.you} />
@@ -77,7 +88,7 @@ export function CommishTools({ leagueId, onBack, onSelfUnassigned }: {
   // Unreachable through the app's own UI (the tab only renders for
   // commissioners), but state can go stale — a commissioner demoted while the
   // screen is open should see why every button would refuse them.
-  if (team && !team.is_commish) {
+  if (native && team && !team.is_commish) {
     return (
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12 }}>
         <Notice>These tools are the commissioner's. You're not this league's commissioner (anymore?) — head back to your leagues.</Notice>
@@ -93,27 +104,33 @@ export function CommishTools({ leagueId, onBack, onSelfUnassigned }: {
           <View style={{ flex: 1, minWidth: 0 }}>
             <Display size={17}>⚑ Commissioner</Display>
             <Mono size={9} tone="faint" style={{ marginTop: 3 }}>
-              {team?.my_roster_id != null ? 'You also manage a team — that stays in MY TEAM.' : 'You run this league without a team in it.'}
+              {!native
+                ? 'Rosters and rules live on Sleeper — seats, co-managers and coin are managed here.'
+                : myRoster != null ? 'You also manage a team — that stays in MY TEAM.' : 'You run this league without a team in it.'}
             </Mono>
           </View>
           <Pressable onPress={shareInvite} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
             <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>⇪ RECRUIT</Text>
           </Pressable>
-          <Pressable onPress={() => { tap(); setSettingsOpen(true); }} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
-            <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.warn }}>⚑ SETTINGS</Text>
-          </Pressable>
+          {native && (
+            <Pressable onPress={() => { tap(); setSettingsOpen(true); }} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
+              <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.warn }}>⚑ SETTINGS</Text>
+            </Pressable>
+          )}
         </View>
         {!!err && <Mono size={10} tone="opp" style={{ marginTop: 6 }}>⚠ {err}</Mono>}
       </Card>
 
-      <CommishTeams key={`teams-${epoch}`} leagueId={leagueId} myRoster={team?.my_roster_id ?? null}
+      <CommishTeams key={`teams-${epoch}`} leagueId={leagueId} myRoster={myRoster}
         onChanged={() => void refresh()} onSelfUnassigned={onSelfUnassigned} />
 
-      <CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} />
+      {native && <CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} />}
 
-      <CommishSettings visible={settingsOpen} leagueId={leagueId}
-        onClose={() => setSettingsOpen(false)}
-        onSaved={() => { setEpoch((n) => n + 1); void refresh(); }} />
+      {native && (
+        <CommishSettings visible={settingsOpen} leagueId={leagueId}
+          onClose={() => setSettingsOpen(false)}
+          onSaved={() => { setEpoch((n) => n + 1); void refresh(); }} />
+      )}
     </ScrollView>
   );
 }

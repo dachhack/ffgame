@@ -9,7 +9,7 @@ import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } 
 import { myEnrollments, claimMyRosters, commishOverview, friendlyError, myWaitlist, type AdminLeague, type Enrollment, type WaitlistRow } from '@drip/core/data/liveApi';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from '../ui/feedback';
-import { Card, Display, LinkButton, Mono } from '../ui/prims';
+import { Card, Chip, Display, LinkButton, Mono } from '../ui/prims';
 import { BrandLoading } from '../ui/BrandLoading';
 
 /** A league or team crest.
@@ -70,6 +70,9 @@ export function Leagues({ userId, onOpen, onBoard }: {
   const [waiting, setWaiting] = useState<WaitlistRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // ALL vs ⚑ COMMISH — same two-chip filter the web's league home has. Only
+  // rendered when you actually commission something; a pure player never sees it.
+  const [filter, setFilter] = useState<'all' | 'commish'>('all');
 
   const load = useCallback(async () => {
     setErr(null);
@@ -81,11 +84,13 @@ export function Leagues({ userId, onOpen, onBoard }: {
       const enr = await myEnrollments(userId);
       setRows(enr);
       const enrolledIds = new Set(enr.map((e) => e.league_id));
-      // Only native leagues: they're the ones the app can actually manage. A
-      // commissioned Sleeper league's tools live on the web.
+      // EVERY league you commission, platform ones included — the app manages
+      // seats, co-managers and coin for any league (those RPCs are
+      // league-agnostic); only rosters/waivers/rules are native-only and the
+      // ⚑ COMMISH screen hides those cards for platform leagues itself.
       const cl = await commishOverview().catch(() => [] as AdminLeague[]);
       setCommishIds(new Set(cl.map((l) => l.league_id)));
-      setManaged(cl.filter((l) => l.provider === 'native' && !enrolledIds.has(l.league_id)));
+      setManaged(cl.filter((l) => !enrolledIds.has(l.league_id)));
       setWaiting(await myWaitlist().catch(() => []));
     } catch (e) {
       setErr(friendlyError(e));
@@ -114,6 +119,13 @@ export function Leagues({ userId, onOpen, onBoard }: {
         <Mono size={9.5} tone="faint">Pull down to refresh.</Mono>
       </View>
 
+      {(commishIds.size > 0 || managed.length > 0) && (
+        <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 4 }}>
+          <Chip label={`ALL (${rows.length + managed.length})`} on={filter === 'all'} onPress={() => { tap(); setFilter('all'); }} />
+          <Chip label={`⚑ COMMISH (${rows.filter((e) => commishIds.has(e.league_id)).length + managed.length})`} on={filter === 'commish'} onPress={() => { tap(); setFilter('commish'); }} />
+        </View>
+      )}
+
       {!!err && <Mono size={10.5} tone="opp">{err}</Mono>}
 
       {rows.length === 0 && !err && (
@@ -126,7 +138,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
         </Card>
       )}
 
-      {rows.map((e) => {
+      {rows.filter((e) => filter === 'all' || commishIds.has(e.league_id)).map((e) => {
         const lg = e.league;
         const kind = lg?.kind && lg.kind !== 'league' ? lg.kind.toUpperCase() : null;
         return (
@@ -180,7 +192,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
       {managed.map((l) => (
         <Pressable
           key={`mgmt-${l.league_id}`}
-          onPress={() => { tap(); onOpen(l.league_id, null, l.name, true, true); }}
+          onPress={() => { tap(); onOpen(l.league_id, null, l.name, l.provider === 'native', true); }}
           android_ripple={{ color: alpha(t.warn, 16) }}
           style={({ pressed }) => ({
             backgroundColor: t.surface, overflow: 'hidden',
@@ -200,7 +212,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
             </View>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
-            <Mono size={9} tone="faint" track={0.06}>{l.season}</Mono>
+            <Mono size={9} tone="faint" track={0.06}>{l.season}{l.provider ? ` · ${l.provider.toUpperCase()}` : ''}</Mono>
             <View style={{ flex: 1 }} />
             <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.warn }}>⚑ MANAGE →</Text>
           </View>
@@ -209,7 +221,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
 
       {/* Waiting on a seat: joined, not dealt in yet. Read-only by design —
           the commissioner's move, not yours. */}
-      {waiting.map((w) => (
+      {filter === 'all' && waiting.map((w) => (
         <View key={`wait-${w.league_id}`} style={{ backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderStyle: 'dashed', borderRadius: 12, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 11 }}>
           <Crest url={w.avatar_url} name={w.name} size={42} />
           <View style={{ flex: 1, minWidth: 0 }}>
