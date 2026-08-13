@@ -3171,11 +3171,16 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
     const last = f && f.plays.length ? f.plays[f.plays.length - 1] : null;
     const over = f?.st === 'post';
     const qc = last ? (() => { const q = Math.min(5, Math.floor(last.c / 900) + 1); const r = Math.max(0, 900 - (last.c % 900)); return `${q > 4 ? 'OT' : `Q${q}`} ${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')}`; })() : null;
+    // Mobile drops the team CODES — the logos carry the identity and the codes
+    // were the difference between the row fitting and wrapping (founder's
+    // call). The score (or @ pregame) sits between the crests either way.
     return (
       <span className="mono" title="real NFL game · live score · real game clock" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: fs(8.5), fontWeight: 700, color: 'var(--dimstrong)', whiteSpace: 'nowrap' }}>
-        <Img src={teamLogo(g.away)} size={12} radius={2} fallback={<span />} />
-        <span>{g.away}{last ? ` ${last.as}–${last.hs} ` : '@'}{g.home}</span>
-        <Img src={teamLogo(g.home)} size={12} radius={2} fallback={<span />} />
+        <Img src={teamLogo(g.away)} size={isMobile ? 14 : 12} radius={2} fallback={<span>{g.away}</span>} />
+        <span>{isMobile
+          ? (last ? `${last.as}–${last.hs}` : '@')
+          : `${g.away}${last ? ` ${last.as}–${last.hs} ` : '@'}${g.home}`}</span>
+        <Img src={teamLogo(g.home)} size={isMobile ? 14 : 12} radius={2} fallback={<span>{g.home}</span>} />
         {(over || qc) && <span style={{ color: 'var(--faint)' }}>· {over ? 'FINAL' : qc}</span>}
       </span>
     );
