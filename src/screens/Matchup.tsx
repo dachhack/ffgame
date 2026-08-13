@@ -3056,8 +3056,8 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   }
 
   return (
-    <div onClick={onClick} className={`mx-scorecard${cards ? ' mx-sc-cards' : ''} mx-sc-${side}`} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 6, cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
-      <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 11, alignItems: 'center' }}>
+    <div onClick={onClick} className={`mx-scorecard${cards ? ' mx-sc-cards' : ''} mx-sc-${side}`} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4, cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
+      <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', gap: 9, alignItems: 'center' }}>
         {imgEl}
         <div style={{ flex: 1, minWidth: 0, textAlign: edge }}>
           {nameRow}
@@ -3069,11 +3069,14 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
           {coinEl}
         </div>
       </div>
-      {/* Statline lies ACROSS the card's full width (founder's call): stacked
-          in the middle column it wrapped one word per line beside the mini
-          card, and the metric chip was starved for the same width. Full-width
-          it almost never wraps, and the chip's cap rises 48% → 60%. */}
-      {statLine}
+      {/* Statline lies ACROSS the card (founder's call): stacked in the middle
+          column it wrapped one word per line, starving the metric chip too.
+          Pinned to the BOTTOM (marginTop auto) so the pair's statlines sit
+          level when top halves differ in height. In the card-table theme the
+          outer edge is inset past the FLOATING mini card (72px + gap): the
+          card deliberately pokes below the strip at z-index 2, and without
+          the inset a long statline ran underneath it and wrapped. */}
+      <div style={{ marginTop: 'auto', ...(cards ? { [side === 'you' ? 'paddingLeft' : 'paddingRight']: 84 } : {}) }}>{statLine}</div>
     </div>
   );
 }
