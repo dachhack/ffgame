@@ -213,4 +213,31 @@ begin
   perform assert_true((r ->> 'coin')::numeric = 25, 'tm37 dock reflected');
 end $$;
 
+-- ── 6. league-wide coin levers (0131) ────────────────────────────────────────
+-- Bulk lands on every seat (b sits at 25 from §5, so +10 → 35), clear zeroes
+-- the whole league, and both keep the ledger invariant: sum(delta) == balance.
+do $$
+declare lid uuid := current_setting('probe.tm_lid')::uuid;
+        bseat int := current_setting('probe.tm_bseat')::int;
+        r jsonb; n numeric;
+begin
+  perform probe_as('a');
+  r := commish_bulk_coin(lid, 10);
+  perform assert_true((r ->> 'ok')::boolean and (r ->> 'teams')::int >= 2, 'tm38 bulk hits every seat');
+  select coins into n from team_wallet where league_id = lid and roster_id = bseat;
+  perform assert_true(n = 35, 'tm39 bulk is additive (25 + 10)');
+  perform assert_err(commish_bulk_coin(lid, 0), 'amount required', 'tm40 zero bulk refused');
+  r := commish_clear_coin(lid);
+  perform assert_true((r ->> 'ok')::boolean and (r ->> 'cleared')::int >= 2, 'tm41 clear touches funded wallets');
+  select coalesce(sum(coins), -1) into n from team_wallet where league_id = lid;
+  perform assert_true(n = 0, 'tm42 every wallet at exactly 0');
+  select coalesce(sum(delta), -1) into n from coin_ledger where league_id = lid;
+  perform assert_true(n = 0, 'tm43 ledger sums to the balances (0)');
+  r := commish_clear_coin(lid);
+  perform assert_true((r ->> 'ok')::boolean and (r ->> 'cleared')::int = 0, 'tm44 clearing zeroes is a no-op');
+  perform probe_as('d');
+  perform assert_err(commish_bulk_coin(lid, 5), 'forbidden', 'tm45 member cannot bulk');
+  perform assert_err(commish_clear_coin(lid), 'forbidden', 'tm46 member cannot clear');
+end $$;
+
 select 'ALL TEAM-MANAGER PROBES PASSED' as result;

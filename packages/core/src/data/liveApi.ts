@@ -889,6 +889,12 @@ export const commishClaimRoster = (leagueId: string, rosterId: number) =>
 /** Commissioner/admin grants drip coin to a team (additive). */
 export const commishSeedCoin = (leagueId: string, rosterId: number, amount: number) =>
   rpc<{ ok: boolean; error?: string; balance?: number }>('commish_seed_coin', { p_league_id: leagueId, p_roster_id: rosterId, p_amount: amount });
+/** Commissioner/admin moves EVERY team's balance by the same signed amount (0131). */
+export const commishBulkCoin = (leagueId: string, amount: number) =>
+  rpc<{ ok: boolean; error?: string; teams?: number }>('commish_bulk_coin', { p_league_id: leagueId, p_amount: amount });
+/** Commissioner/admin zeroes every wallet in the league, via the ledger (0131). */
+export const commishClearCoin = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; cleared?: number }>('commish_clear_coin', { p_league_id: leagueId });
 export interface RosterWallet { roster_id: number; coins: number }
 /** Admin/commish: every team's current coin balance. */
 export const adminLeagueWallets = (leagueId: string) => rpc<RosterWallet[]>('admin_league_wallets', { p_league_id: leagueId });
