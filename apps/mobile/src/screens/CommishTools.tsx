@@ -14,8 +14,10 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
-  adminAssignRoster, adminLeagueJoiners, adminLeagueMembers, commishClaimRoster,
-  commishSeedCoin, commishSetManager, friendlyError, leagueInvite, nativeTeamState,
+  adminAssignRoster, adminLeagueJoiners, adminLeagueMembers, commishBulkCoin,
+  commishClaimRoster, commishClearCoin, commishGrantWeeklyBudget, commishOverview,
+  commishSeedCoin, commishSetManager, commishSetWeeklyBudget, friendlyError,
+  leagueInvite, nativeTeamState,
   setTeamAvatar, setTeamController, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
 } from '@drip/core/data/liveApi';
@@ -124,6 +126,11 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
       <CommishTeams key={`teams-${epoch}`} leagueId={leagueId} myRoster={myRoster}
         onChanged={() => void refresh()} onSelfUnassigned={onSelfUnassigned} />
 
+      {/* league-wide coin: the allowance and the bulk levers, right under the
+          seat rows whose 💰 chips they move. onChanged remounts the cards so
+          those balances re-read after every bulk move. */}
+      <CommishCoin leagueId={leagueId} onChanged={() => { setEpoch((n) => n + 1); void refresh(); }} />
+
       {native && <CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} />}
 
       {native && (
@@ -141,6 +148,122 @@ const coinFmt = (v?: number) => {
   const n = Number(v ?? 0);
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 };
+
+/** League-wide drip coin: the weekly allowance (set once, grant per week) and
+ *  the bulk levers — the same signed grant commish_seed_coin makes, applied to
+ *  every seat at once, plus a zero-everything reset. Balances live on the seat
+ *  rows above (💰 chips); this card is everything that moves them together.
+ *
+ *  Moved here from the ⚑ SETTINGS sheet: an allowance is something you REVISIT
+ *  (set it, grant a week, check balances, grant again), and burying it two taps
+ *  deep under league rules made it read as configuration instead of a tool. */
+function CommishCoin({ leagueId, onChanged }: { leagueId: string; onChanged: () => void }) {
+  const t = useTheme();
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [weeklyDraft, setWeeklyDraft] = useState('');
+  const [weeklyInit, setWeeklyInit] = useState<number | null>(null);
+  const [grantWeekDraft, setGrantWeekDraft] = useState('');
+  const [bulkDraft, setBulkDraft] = useState('');
+  const [bulkSign, setBulkSign] = useState<1 | -1>(1);
+
+  useEffect(() => {
+    // The weekly budget rides along on commish_overview — the same read the
+    // web's commissioner card uses.
+    commishOverview().then((ls) => {
+      const wb = ls.find((l) => l.league_id === leagueId)?.weekly_budget ?? null;
+      setWeeklyInit(wb); setWeeklyDraft(wb != null ? String(wb) : '');
+    }).catch(() => {});
+  }, [leagueId]);
+
+  const act = async (fn: () => Promise<{ ok: boolean; error?: string }>, done: (r: { ok: boolean } & Record<string, unknown>) => void) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await fn();
+      if (r.ok) { commit(); done(r as { ok: boolean } & Record<string, unknown>); onChanged(); }
+      else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
+  const inp = (w: number) => ({
+    width: w, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6,
+    paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg,
+  } as const);
+
+  const doClear = () => {
+    Alert.alert('Zero every wallet?', 'Every team in the league goes to 0 coin. The moves land on the ledger like any other adjustment — this resets balances, not history.', [
+      { text: 'cancel', style: 'cancel' },
+      {
+        text: 'zero them all', style: 'destructive',
+        onPress: () => void act(() => commishClearCoin(leagueId),
+          (r) => setNote(`✓ ${Number(r.cleared ?? 0)} wallet${Number(r.cleared ?? 0) === 1 ? '' : 's'} zeroed`)),
+      },
+    ]);
+  };
+
+  return (
+    <Card>
+      <Mono size={9} tone="faint" track={0.12}>💰 DRIP COIN — THE WHOLE LEAGUE AT ONCE</Mono>
+      {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
+
+      {/* the standing allowance: set it once, grant it per week (idempotent) */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+        <Mono size={9} tone="faint">WEEKLY ALLOWANCE</Mono>
+        <TextInput value={weeklyDraft} keyboardType="number-pad" placeholder={weeklyInit != null ? String(weeklyInit) : '0'}
+          placeholderTextColor={t.faint} onChangeText={(v) => setWeeklyDraft(v.replace(/\D/g, ''))} style={inp(70)} />
+        <Chip label="SET" on disabled={busy || !weeklyDraft || parseInt(weeklyDraft, 10) === weeklyInit}
+          onPress={() => {
+            const amt = parseInt(weeklyDraft || '0', 10) || 0;
+            void act(() => commishSetWeeklyBudget(leagueId, amt),
+              (r) => { setWeeklyInit(Number(r.weekly_budget ?? amt)); setNote(`✓ weekly allowance ${Number(r.weekly_budget ?? amt)}`); });
+          }} />
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+        <Mono size={9} tone="faint">GRANT WEEK</Mono>
+        <TextInput value={grantWeekDraft} keyboardType="number-pad" placeholder="wk#"
+          placeholderTextColor={t.faint} onChangeText={(v) => setGrantWeekDraft(v.replace(/\D/g, ''))} style={inp(56)} />
+        <Chip label="💰 ALL TEAMS" disabled={busy || !grantWeekDraft || !weeklyInit}
+          onPress={() => {
+            const wk = parseInt(grantWeekDraft || '0', 10);
+            if (!wk) return;
+            void act(() => commishGrantWeeklyBudget(leagueId, wk),
+              (r) => setNote(`✓ credited ${Number(r.credited ?? 0)} team${Number(r.credited ?? 0) === 1 ? '' : 's'} for week ${wk}`));
+          }} />
+      </View>
+      <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 13 }}>
+        Granting credits every team that week's allowance — idempotent, so re-granting a week never double-pays.
+      </Mono>
+
+      {/* one-off bulk move: every seat, same signed amount — commish_seed_coin
+          generalized. NOT idempotent, exactly like the per-seat 💰 lever. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10, flexWrap: 'wrap' }}>
+        <Mono size={9} tone="faint">ONE-OFF</Mono>
+        <Chip label="＋" on={bulkSign === 1} onPress={() => { tap(); setBulkSign(1); }} />
+        <Chip label="−" on={bulkSign === -1} onPress={() => { tap(); setBulkSign(-1); }} />
+        <TextInput value={bulkDraft} keyboardType="number-pad" placeholder="amount"
+          placeholderTextColor={t.faint} onChangeText={(v) => setBulkDraft(v.replace(/\D/g, ''))} style={inp(80)} />
+        <Chip label={bulkSign === 1 ? '💰 GRANT ALL' : '− DOCK ALL'} disabled={busy || !bulkDraft}
+          onPress={() => {
+            const amt = (parseInt(bulkDraft || '0', 10) || 0) * bulkSign;
+            if (!amt) return;
+            setBulkDraft('');
+            void act(() => commishBulkCoin(leagueId, amt),
+              (r) => setNote(`✓ ${amt > 0 ? '+' : ''}${amt} coin × ${Number(r.teams ?? 0)} teams`));
+          }} />
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 }}>
+        <View style={{ flex: 1 }}>
+          <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>
+            Every adjustment here lands on the coin ledger — nothing is edited in place.
+          </Mono>
+        </View>
+        <LinkButton label="⌀ zero all wallets" tone="opp" onPress={() => { tap(); doClear(); }} />
+      </View>
+    </Card>
+  );
+}
 
 /** Seat management, for the commissioner: assign a user to a team by email,
  *  unassign (kick) one, take an open seat yourself, or vacate your own —

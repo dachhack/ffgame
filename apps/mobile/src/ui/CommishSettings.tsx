@@ -14,7 +14,7 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
-  closeLeagueListing, commishGrantWeeklyBudget, commishOverview, commishSetWeeklyBudget, friendlyError,
+  closeLeagueListing, friendlyError,
   leagueListingState, postLeagueListing, rosterRules, setRosterRules, setTransactionRules, POS_CAP_KEYS,
   type PosCaps, type TradeReview, type WaiverMode,
 } from '@drip/core/data/liveApi';
@@ -84,10 +84,6 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
   const [rounds, setRounds] = useState<number | null>(null);
   const [roundsInit, setRoundsInit] = useState<number | null>(null);
   const [preDraft, setPreDraft] = useState(false);
-  // Drip coin: the league's weekly budget + a one-tap grant for a chosen week.
-  const [weeklyDraft, setWeeklyDraft] = useState('');
-  const [weeklyInit, setWeeklyInit] = useState<number | null>(null);
-  const [grantWeekDraft, setGrantWeekDraft] = useState('');
 
   useEffect(() => {
     if (!visible) return;
@@ -111,12 +107,6 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
     }).catch((e) => setMsg(friendlyError(e)));
     leagueListingState(leagueId).then((r) => {
       if (r.ok) { setListed(!!r.listed); setBlurbDraft(r.blurb ?? ''); }
-    }).catch(() => {});
-    // The weekly budget rides along on commish_overview — the same read the
-    // web's commissioner card uses.
-    commishOverview().then((ls) => {
-      const wb = ls.find((l) => l.league_id === leagueId)?.weekly_budget ?? null;
-      setWeeklyInit(wb); setWeeklyDraft(wb != null ? String(wb) : '');
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, leagueId]);
@@ -190,30 +180,6 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
       const r = await setRosterRules(leagueId, roundsChanged ? rounds : null, capsChanged ? caps : null);
       if (r.ok) { commit(); setCapsInit({ ...caps }); setRoundsInit(rounds); setMsg('✓ roster rules saved'); onSaved(); }
       else { warn(); setMsg(friendlyError(r.error ?? 'save failed')); }
-    } catch (e) { warn(); setMsg(friendlyError(e)); }
-    finally { setBusy(false); }
-  };
-
-  const saveWeekly = async () => {
-    const amt = parseInt(weeklyDraft || '0', 10) || 0;
-    if (busy || amt < 0) return;
-    setBusy(true); setMsg(null);
-    try {
-      const r = await commishSetWeeklyBudget(leagueId, amt);
-      if (r.ok) { commit(); setWeeklyInit(r.weekly_budget ?? amt); setMsg(`✓ weekly budget ${r.weekly_budget ?? amt}`); onSaved(); }
-      else { warn(); setMsg(friendlyError(r.error ?? 'save failed')); }
-    } catch (e) { warn(); setMsg(friendlyError(e)); }
-    finally { setBusy(false); }
-  };
-  const grantWeekly = async () => {
-    const wk = parseInt(grantWeekDraft || '0', 10);
-    if (busy || !wk) return;
-    setBusy(true); setMsg(null);
-    try {
-      // Idempotent server-side: re-granting a week never double-credits.
-      const r = await commishGrantWeeklyBudget(leagueId, wk);
-      if (r.ok) { commit(); setMsg(`✓ credited ${r.credited ?? 0} teams for week ${wk}`); }
-      else { warn(); setMsg(friendlyError(r.error ?? 'grant failed')); }
     } catch (e) { warn(); setMsg(friendlyError(e)); }
     finally { setBusy(false); }
   };
@@ -367,24 +333,8 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
               disabled={busy || !(capsChanged || roundsChanged)} onPress={() => void saveRoster()} />
           </View>
 
-          {sec('DRIP COIN')}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
-            <Mono size={9} tone="faint">WEEKLY BUDGET</Mono>
-            <TextInput value={weeklyDraft} keyboardType="number-pad" placeholder={weeklyInit != null ? String(weeklyInit) : '0'}
-              placeholderTextColor={t.faint} onChangeText={(v) => setWeeklyDraft(v.replace(/\D/g, ''))}
-              style={{ width: 70, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
-            <Chip label="SET" on disabled={busy || !weeklyDraft || parseInt(weeklyDraft, 10) === weeklyInit} onPress={() => void saveWeekly()} />
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
-            <Mono size={9} tone="faint">GRANT WEEK</Mono>
-            <TextInput value={grantWeekDraft} keyboardType="number-pad" placeholder="wk#"
-              placeholderTextColor={t.faint} onChangeText={(v) => setGrantWeekDraft(v.replace(/\D/g, ''))}
-              style={{ width: 56, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
-            <Chip label="💰 GRANT ALL TEAMS" disabled={busy || !grantWeekDraft} onPress={() => void grantWeekly()} />
-          </View>
-          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
-            Granting credits every team the weekly budget for that week — idempotent, so re-granting a week never double-pays.
-          </Mono>
+          {/* DRIP COIN moved to its own card on the ⚑ COMMISH screen — the
+              allowance and the bulk levers live next to the balances they move. */}
 
           {sec('🏆 PLAYOFFS')}
           <PlayoffControls leagueId={leagueId} onChanged={onSaved} />
