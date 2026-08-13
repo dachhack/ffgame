@@ -188,14 +188,19 @@ export function App() {
         </Text>
 
         {/* Native leagues carry their whole season in-app — matchup, draft
-            room, waivers — so they get a tab strip. Platform leagues don't:
-            their rosters live on Sleeper/ESPN and these tabs would be doors to
-            nothing. */}
-        {open?.native && (view === 'picks' || view === 'draft' || view === 'team' || view === 'commishtools') && (
+            room, waivers — so they get the full tab strip. Platform leagues
+            only earn one when you commission them: MATCHUP + ⚑ COMMISH (seat
+            management works anywhere; rosters/waivers stay on Sleeper). A
+            platform league you merely play in keeps its stripless board. */}
+        {open && (open.native || open.commish) && (view === 'picks' || view === 'draft' || view === 'team' || view === 'commishtools') && (
           <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 14, paddingTop: 8 }}>
-            {([['picks', '▦ MATCHUP'], ['draft', '⛏ DRAFT'], ['team', '⇄ MY TEAM'], ['commishtools', '⚑ COMMISH']] as const)
-              // No seat → no lineup tabs; not the commissioner → no ⚑ tab.
-              .filter(([id]) => ((id !== 'picks' && id !== 'team') || open.rosterId != null) && (id !== 'commishtools' || open.commish))
+            {([
+              ['picks', '▦ MATCHUP', open.rosterId != null],           // no seat → no lineup
+              ['draft', '⛏ DRAFT', open.native],                       // draft rooms are native-only
+              ['team', '⇄ MY TEAM', open.native && open.rosterId != null],
+              ['commishtools', '⚑ COMMISH', !!open.commish],
+            ] as const)
+              .filter(([, , show]) => show)
               .map(([id, label]) => (
               <Pressable key={id} onPress={() => setView(id)}
                 style={{
@@ -231,8 +236,8 @@ export function App() {
           <View style={{ flex: 1 }}><Draft leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('picks'); }} /></View>
         ) : view === 'team' && open?.native ? (
           <View style={{ flex: 1 }}><Team leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('picks'); }} onDraft={() => setView('draft')} /></View>
-        ) : view === 'commishtools' && open?.native ? (
-          <View style={{ flex: 1 }}><CommishTools leagueId={open.leagueId}
+        ) : view === 'commishtools' && open ? (
+          <View style={{ flex: 1 }}><CommishTools leagueId={open.leagueId} native={open.native} rosterId={open.rosterId}
             // A seatless commissioner has nowhere else in the league to land —
             // back means back to the leagues list.
             onBack={() => { setOpen(null); setView('picks'); }}
