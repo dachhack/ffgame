@@ -2953,13 +2953,20 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   ) : (
     <span className="mx-sc-img" style={{ flex: 'none', display: 'inline-flex' }}><PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={isMobile ? 46 : 64} /></span>
   );
+  // flexWrap + per-span nowrap, or this line collides with its neighbors: the
+  // row itself never shrank (nowrap flex spans), so squeezed between the metric
+  // column and the floating mini card it OVERFLOWED the text column — and on
+  // the mirrored side that paints leftward, sliding "Q1" underneath the metric
+  // chip while "15:00" wrapped inside its own span. Wrapping whole units keeps
+  // every piece inside the column; a long squeeze drops the clock to its own
+  // line instead of drawing over the neighbor.
   const gameLine = g ? (
-    <div className="mono" title="real NFL game · real game clock" style={{ display: 'flex', alignItems: 'center', gap: 5, flexDirection: side === 'you' ? 'row' : 'row-reverse', fontSize: fs(8.5), letterSpacing: '0.02em', marginTop: 2 }}>
+    <div className="mono" title="real NFL game · real game clock" style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', flexDirection: side === 'you' ? 'row' : 'row-reverse', fontSize: fs(8.5), letterSpacing: '0.02em', marginTop: 2, minWidth: 0 }}>
       <Img src={teamLogo(g.away)} size={12} radius={2} fallback={<span />} />
-      <span style={{ fontWeight: 700, color: 'var(--dimstrong)' }}>{g.away}@{g.home}</span>
+      <span style={{ fontWeight: 700, color: 'var(--dimstrong)', whiteSpace: 'nowrap' }}>{g.away}@{g.home}</span>
       <Img src={teamLogo(g.home)} size={12} radius={2} fallback={<span />} />
       <span style={{ color: 'var(--faint)' }}>·</span>
-      <span style={{ color: 'var(--faint)', fontWeight: 700 }}>{gameOver ? 'FINAL' : fmtGameClock(gClk)}</span>
+      <span style={{ color: 'var(--faint)', fontWeight: 700, whiteSpace: 'nowrap' }}>{gameOver ? 'FINAL' : fmtGameClock(gClk)}</span>
     </div>
   ) : null;
   // On mobile the chip is anchored to two lines (name over tag) so it's always
