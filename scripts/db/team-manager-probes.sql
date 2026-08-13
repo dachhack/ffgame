@@ -191,4 +191,26 @@ begin
   perform assert_true(jsonb_array_length(my_teams()) = 0, 'tm32 my_teams empty again');
 end $$;
 
+-- ── 5. the members list carries wallet balances (0130) ──────────────────────
+-- The commissioner's grant/dock lever needs the number it's moving: coin on
+-- every row, 0 for a wallet that was never minted, live after seed and dock.
+do $$
+declare lid uuid := current_setting('probe.tm_lid')::uuid;
+        bseat int := current_setting('probe.tm_bseat')::int;
+        r jsonb;
+begin
+  perform probe_as('a');
+  select e into r from jsonb_array_elements(admin_league_members(lid)) e
+    where (e ->> 'roster_id')::int = bseat;
+  perform assert_true(r ? 'coin' and (r ->> 'coin')::numeric = 0, 'tm33 unminted wallet reads 0');
+  perform assert_ok(commish_seed_coin(lid, bseat, 37), 'tm34 seed 37');
+  select e into r from jsonb_array_elements(admin_league_members(lid)) e
+    where (e ->> 'roster_id')::int = bseat;
+  perform assert_true((r ->> 'coin')::numeric = 37, 'tm35 balance surfaces');
+  perform assert_ok(commish_seed_coin(lid, bseat, -12), 'tm36 dock 12');
+  select e into r from jsonb_array_elements(admin_league_members(lid)) e
+    where (e ->> 'roster_id')::int = bseat;
+  perform assert_true((r ->> 'coin')::numeric = 25, 'tm37 dock reflected');
+end $$;
+
 select 'ALL TEAM-MANAGER PROBES PASSED' as result;

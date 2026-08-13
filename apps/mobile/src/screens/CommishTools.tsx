@@ -135,6 +135,13 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
   );
 }
 
+/** A balance for humans: whole coins as-is, fractional ones to one decimal —
+ *  wallets are numeric and window credits can leave change. */
+const coinFmt = (v?: number) => {
+  const n = Number(v ?? 0);
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+};
+
 /** Seat management, for the commissioner: assign a user to a team by email,
  *  unassign (kick) one, take an open seat yourself, or vacate your own —
  *  including the seat you were given at creation, which is how a playing
@@ -249,7 +256,9 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
                 <Chip label={m.controller === 'ai' ? '🤖' : '👤'} on={m.controller === 'ai'}
                   onPress={() => { tap(); void act(() => setTeamController(leagueId, m.roster_id, m.controller === 'ai' ? 'human' : 'ai'),
                     () => setNote(`✓ ${m.team ?? `roster ${m.roster_id}`} → ${m.controller === 'ai' ? 'human' : '🤖 AI'} control`)); }} />
-                <Chip label="💰" onPress={() => { tap(); setCoinFor(m); setCoinDraft(''); setCoinSign(1); }} />
+                {/* the balance IS the button label — you see what you're about
+                    to move, and it re-reads with the seats after every act() */}
+                <Chip label={`💰 ${coinFmt(m.coin)}`} onPress={() => { tap(); setCoinFor(m); setCoinDraft(''); setCoinSign(1); }} />
                 <Chip label={self ? '✕ LEAVE' : '✕'} onPress={() => { tap(); doKick(m); }} />
               </>
             )}
@@ -314,7 +323,7 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
       {/* manual coin adjustment — commish_seed_coin is signed (only zero is
           refused), so grant and dock are the same lever with a sign toggle */}
       <Overlay visible={!!coinFor} title={coinFor ? `Adjust coin — ${coinFor.team ?? `roster ${coinFor.roster_id}`}` : ''}
-        subtitle="Applied to their current balance." onClose={() => setCoinFor(null)}>
+        subtitle={coinFor ? `Current balance: ${coinFmt(coinFor.coin)} coin.` : ''} onClose={() => setCoinFor(null)}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Chip label="＋ GRANT" on={coinSign === 1} onPress={() => { tap(); setCoinSign(1); }} />
           <Chip label="− DOCK" on={coinSign === -1} onPress={() => { tap(); setCoinSign(-1); }} />
