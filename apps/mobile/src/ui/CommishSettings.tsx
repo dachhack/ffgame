@@ -54,7 +54,8 @@ function TimeStep({ label, value, onChange }: { label: string; value: number; on
 
 interface Rules {
   mode: WaiverMode; budget: number; review: TradeReview;
-  clearMin: number | null; clearDow: number[] | null; holdDays: number; faStart: number | null; faEnd: number | null;
+  clearMin: number | null; clearDow: number[] | null; faDow: number[] | null;
+  holdDays: number; faStart: number | null; faEnd: number | null;
 }
 
 export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
@@ -69,6 +70,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
   const [review, setReview] = useState<TradeReview>('none');
   const [clearMin, setClearMin] = useState<number | null>(null);   // null = rolling 24h
   const [clearDow, setClearDow] = useState<number[] | null>(null); // null = every day (0=Sun…6=Sat ET)
+  const [faDow, setFaDow] = useState<number[] | null>(null);       // days FA waits for the waiver run
   const [holdDays, setHoldDays] = useState(1);
   const [faStart, setFaStart] = useState<number | null>(null);     // null = always open
   const [faEnd, setFaEnd] = useState<number | null>(null);
@@ -96,11 +98,12 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
         mode: r.waiver_mode ?? 'rolling', budget: r.faab_budget ?? 100, review: r.trade_review ?? 'none',
         clearMin: r.waiver_clear_min ?? null,
         clearDow: Array.isArray(r.waiver_clear_dow) && r.waiver_clear_dow.length ? [...r.waiver_clear_dow].sort() : null,
+        faDow: Array.isArray(r.fa_after_waivers_dow) && r.fa_after_waivers_dow.length ? [...r.fa_after_waivers_dow].sort() : null,
         holdDays: r.waiver_hold_days ?? 1,
         faStart: r.fa_start_min ?? null, faEnd: r.fa_end_min ?? null,
       };
       setInit(cur); setMode(cur.mode); setBudgetDraft(String(cur.budget)); setReview(cur.review);
-      setClearMin(cur.clearMin); setClearDow(cur.clearDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd);
+      setClearMin(cur.clearMin); setClearDow(cur.clearDow); setFaDow(cur.faDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd);
       const pc = r.pos_caps ?? ({} as PosCaps);
       setCaps({ ...pc }); setCapsInit({ ...pc });
       setRounds(r.rounds ?? null); setRoundsInit(r.rounds ?? null);
@@ -126,6 +129,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
     try {
       const clearChanged = clearMin !== init.clearMin;
       const dowChanged = JSON.stringify(clearDow ?? []) !== JSON.stringify(init.clearDow ?? []);
+      const faDowChanged = JSON.stringify(faDow ?? []) !== JSON.stringify(init.faDow ?? []);
       const faChanged = faStart !== init.faStart || faEnd !== init.faEnd;
       const r = await setTransactionRules(leagueId,
         mode !== init.mode ? mode : null,
@@ -135,10 +139,11 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
         holdDays !== init.holdDays ? holdDays : null,
         faChanged ? (faStart ?? -1) : null,
         faChanged ? (faEnd ?? -1) : null,
-        dowChanged ? (clearDow ?? []) : null);
+        dowChanged ? (clearDow ?? []) : null,
+        faDowChanged ? (faDow ?? []) : null);
       if (r.ok) {
         commit();
-        setInit({ mode, budget, review, clearMin, clearDow, holdDays, faStart, faEnd });
+        setInit({ mode, budget, review, clearMin, clearDow, faDow, holdDays, faStart, faEnd });
         setMsg('✓ saved'); onSaved();
       } else { warn(); setMsg(friendlyError(r.error ?? 'save failed')); }
     } catch (e) { warn(); setMsg(friendlyError(e)); }
@@ -216,7 +221,8 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
   const sec = (label: string) => <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>{label}</Mono>;
   const changed = init && (mode !== init.mode || (mode === 'faab' && budget !== init.budget) || review !== init.review
     || clearMin !== init.clearMin || holdDays !== init.holdDays || faStart !== init.faStart || faEnd !== init.faEnd
-    || JSON.stringify(clearDow ?? []) !== JSON.stringify(init.clearDow ?? []));
+    || JSON.stringify(clearDow ?? []) !== JSON.stringify(init.clearDow ?? [])
+    || JSON.stringify(faDow ?? []) !== JSON.stringify(init.faDow ?? []));
 
   return (
     <Overlay visible={visible} title="⚑ League settings" subtitle="Commissioner — waivers, rosters, coin, visibility." onClose={onClose}>
@@ -306,6 +312,25 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
               <TimeStep label="CLOSES" value={faEnd} onChange={setFaEnd} />
             </View>
           )}
+          {/* Sleeper's quiet morning: on checked days, instant adds stay closed
+              until that day's waiver run has cleared — nobody snipes the add
+              market while claims are still being decided. */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, flexWrap: 'wrap' }}>
+            <Mono size={9} tone="faint">WAITS FOR THE WAIVER RUN ON</Mono>
+            <Chip label="NEVER" on={faDow === null} onPress={() => { tap(); setFaDow(null); }} />
+            {(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const).map((d, i) => (
+              <Chip key={d} label={d} on={!!faDow?.includes(i)}
+                onPress={() => {
+                  tap();
+                  const cur = faDow ?? [];
+                  const next = cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort();
+                  setFaDow(next.length ? next : null);
+                }} />
+            ))}
+          </View>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 13 }}>
+            On checked days, adds open only after the waiver clear time ({fmtEt(clearMin ?? 180)} ET) has passed.
+          </Mono>
 
           {sec('TRADES')}
           <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
