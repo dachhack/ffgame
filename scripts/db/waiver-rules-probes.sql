@@ -199,4 +199,79 @@ begin
   perform assert_true(r -> 'fa_after_waivers_dow' = '[2,5]'::jsonb, 'w34 reader reports the days');
 end $$;
 
+-- ── 5. illegal rosters lose the board (0128) ─────────────────────────────────
+-- Runs as the authenticated role: these are trigger probes on RLS'd tables,
+-- and the superuser bypasses both.
+do $$
+declare lid uuid := current_setting('probe.wv_lid')::uuid;
+        bseat int := current_setting('probe.wv_b')::int;
+        cseat int := current_setting('probe.wv_c')::int;
+        mid uuid; i int; caught boolean;
+begin
+  perform probe_as('a');
+  -- b goes ILLEGAL: rounds=7, load the roster to 8 (b already holds wp1)
+  for i in 1..7 loop
+    insert into league_pool (league_id, slug, full_name, pos, team, rank)
+      values (lid, 'ill' || i, 'Illegal Filler ' || i, 'WR', 'SEA', 100 + i);
+    insert into native_roster (league_id, roster_id, slug, acquired) values (lid, bseat, 'ill' || i, 'commish');
+  end loop;
+  perform assert_true(roster_illegal_reason(lid, bseat) is not null, 'w35 b is illegal');
+  -- a fresh scheduled matchup for the pick writes (week 1 kickoff is future)
+  insert into nfl_slate (season, week, home, away, win, kickoff)
+    values ('2026', 1, 'SEA', 'KC', 'snf', '2026-09-09T20:20:00-04:00') on conflict do nothing;
+  insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
+    values (lid, 4, bseat, cseat, 'scheduled') returning id into mid;
+
+  set local role authenticated;
+
+  -- b: picks blocked, with the reason in the message
+  perform probe_as('b');
+  caught := false;
+  begin
+    insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
+      values (mid, probe_uid('b'), 'snf', 'S1', 'wp1');
+  exception when others then
+    caught := true;
+    perform assert_true(position('over its limits' in SQLERRM) > 0, 'w36b lockout message carries the reason');
+  end;
+  perform assert_true(caught, 'w36 illegal roster cannot set picks');
+
+  -- b: power-up applies blocked the same way
+  caught := false;
+  begin
+    insert into applied_state (matchup_id, app_user_id, week, payload_json)
+      values (mid, probe_uid('b'), 4, '{"buffs": ["probe"]}'::jsonb);
+  exception when others then
+    caught := true;
+    perform assert_true(position('over its limits' in SQLERRM) > 0, 'w37b same message on power-ups');
+  end;
+  perform assert_true(caught, 'w37 illegal roster cannot apply power-ups');
+
+  -- c (legal): both writes land
+  perform probe_as('c');
+  insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
+    values (mid, probe_uid('c'), 'snf', 'S1', 'wp2');
+  insert into applied_state (matchup_id, app_user_id, week, payload_json)
+    values (mid, probe_uid('c'), 4, '{}'::jsonb);
+  perform assert_true(true, 'w38 legal roster unaffected');
+
+  reset role;
+
+  -- the worker (auth.uid() null) still writes freely — locking rows, reveals
+  perform set_config('app.uid', '', false);
+  update sealed_pick set locked = true where matchup_id = mid and app_user_id = probe_uid('c');
+  perform assert_true(true, 'w39 server writes skip the gate');
+  perform probe_as('a');
+
+  -- b drops back to legal (drops always work) → the board unlocks
+  delete from native_roster where league_id = lid and roster_id = bseat and slug like 'ill%';
+  perform assert_true(roster_illegal_reason(lid, bseat) is null, 'w40 legal again');
+  set local role authenticated;
+  perform probe_as('b');
+  insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
+    values (mid, probe_uid('b'), 'snf', 'S1', 'wp1');
+  perform assert_true(true, 'w41 picks unlock the moment the roster is legal');
+  reset role;
+end $$;
+
 select 'ALL WAIVER-RULES PROBES PASSED' as result;

@@ -1198,7 +1198,7 @@ begin
     raised := false;
   exception when others then
     raised := true;
-    perform assert_true(sqlerrm like '%over limits%', '25k lockout message');
+    perform assert_true(sqlerrm like '%over its limits%', '25k lockout message');
   end;
   perform assert_true(raised, '25l weekly pick rejected while illegal');
   perform probe_as('a');

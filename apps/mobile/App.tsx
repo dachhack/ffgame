@@ -252,6 +252,7 @@ export function App() {
               userId={open.pickUserId ?? session.user.id}
               leagueId={open.leagueId}
               rosterId={open.rosterId}
+              native={open.native}
               onBack={() => setOpen(null)}
             />
           </View>
