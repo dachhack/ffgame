@@ -17,7 +17,8 @@
     "gen:rulebook": "tsx scripts/gen-rulebook.mjs",
     "check:prices": "tsx scripts/check-powerup-prices.mjs",
     "check:metrics": "tsx scripts/check-locked-metrics.mjs",
-    "check:parity": "npm run check:prices && npm run check:metrics"
+    "check:injuries": "tsx scripts/check-injuries.mjs",
+    "check:parity": "npm run check:prices && npm run check:metrics && npm run check:injuries"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

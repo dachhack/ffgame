@@ -41,3 +41,30 @@ export function GroupBadge({ group, size = 8 }: { group: PoolGroup; size?: numbe
     </View>
   );
 }
+
+// ── injury designation ───────────────────────────────────────────────────────
+//
+// A DIFFERENT AXIS from the group badge above, which is easy to conflate because
+// both can read "IR". The group badge says where a player SITS on the roster
+// (Sleeper's IR slot); this says what the NFL injury report SAYS about him. A
+// player can be an ordinary starter and Out, or parked on the IR slot and off
+// the report entirely — so they stack rather than replace each other.
+//
+// Fixed hues, not theme colours, and the same ones the web board uses
+// (`INJURY_COLOR` in src/app/ui.tsx): a severity scale has to mean the same
+// thing on both hosts and in both themes, and these stay legible on either
+// ground — including the cream player card, which can't use theme colours.
+export const INJURY_COLOR: Record<string, string> = { O: '#FF4F62', IR: '#C2304A', D: '#FF8A3D', Q: '#E8B23A' };
+
+/** The NFL injury designation for a player, or nothing. Info only — it never
+ *  blocks a pick: a Questionable player is a legitimate start, and even an Out
+ *  one is the manager's call to make. */
+export function InjuryBadge({ status, size = 8 }: { status: string | null; size?: number }) {
+  const fg = status ? INJURY_COLOR[status] : null;
+  if (!status || !fg) return null;
+  return (
+    <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: fg, borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
+      <Text style={{ fontFamily: MONO, fontSize: size, fontWeight: '700', color: fg }}>{status}</Text>
+    </View>
+  );
+}

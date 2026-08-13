@@ -13,6 +13,7 @@ import { buildPlayerIndex } from './playerIndex.js';
 import { getGames, gamesToPollFrom, slateFromGames, espnCurrentWeek } from './poll/scoreboard.js';
 import { pollGame } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
+import { sweepMembers } from './poll/members.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt } from './lock.js';
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues } from './sync.js';
@@ -243,6 +244,16 @@ async function tick() {
       log('native sweep:', nat.autopicks, 'autopicks,', nat.claimsWon, 'claims won,', nat.claimsLost, 'lost,', nat.allowance, 'allowances');
     }
   } catch (e) { log('native sweep error', e.message); }
+
+  // Members (0133): re-pull Sleeper users/rosters for poked leagues (a claimant
+  // bounced off redeem_invite and asked) and, on a slow cadence, every
+  // current-season sleeper league — so "refresh members" stops being a button
+  // the commissioner has to remember during a join rush. Runs every tick
+  // because the poked path is latency-sensitive: the claim screen is polling.
+  try {
+    const ms = await sweepMembers(log, season);
+    if (ms.synced || ms.failed) log('member sweep:', ms.synced, 'synced,', ms.failed, 'failed');
+  } catch (e) { log('member sweep error', e.message); }
 
   // Window Pot (0117): void offers nobody matched and freeze live ladders at
   // picks lock, then settle windows that have gone final. Week-agnostic like the

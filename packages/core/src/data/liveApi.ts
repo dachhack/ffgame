@@ -4,6 +4,7 @@
 import { getSupabase } from './supabaseClient';
 import { platform, storeGet } from '../platform';
 import { readPool, type PoolGroup } from './poolEntry';
+import { setLiveInjuries, type InjuryRow } from './injuries';
 import { resolveUser } from './sleeper';
 import { PRESEASON_BOARD_WEEKS } from './nflSlate';
 import type { Session } from '@supabase/supabase-js';
@@ -326,6 +327,15 @@ export interface RedeemResult { ok: boolean; error?: string; league_id?: string;
 
 export interface PreviewRedeem { ok: boolean; error?: string; league?: string; team?: string; avatar?: string | null; }
 
+/** Ask the worker to re-pull this league's member list from Sleeper (0133).
+ *  For the claim flow's "your Sleeper account is not a manager in this league"
+ *  bounce — which, when the claimant JUST joined on Sleeper, means our copy of
+ *  the members is behind, not that they're wrong. The poke stamps the league;
+ *  the worker's next tick (~25s) syncs; the caller should retry the preview
+ *  until the seat appears. Rate-limited server-side, so retry loops are cheap. */
+export const requestMemberSync = (code: string) =>
+  rpc<{ ok: boolean; error?: string; league_id?: string }>('request_member_sync', { p_code: code.trim() });
+
 /** Which team a code + Sleeper username would join — without enrolling. */
 export async function redeemPreview(code: string, sleeperUsername: string): Promise<PreviewRedeem> {
   const user = await resolveUser(sleeperUsername);
@@ -406,6 +416,42 @@ export async function podSalaries(week: number, season = '2026'): Promise<PodSal
     .eq('season', season).eq('week', week)
     .order('salary', { ascending: false });
   return (data ?? []) as PodSalaryRow[];
+}
+
+/** Load the live NFL injury report into core's cache for `week`.
+ *
+ *  The worker keeps `injury_status` current from ESPN; this is the read side.
+ *  The table is plain public NFL info with an authenticated-read policy from
+ *  0001, so it needs no RPC — a direct select is the whole story.
+ *
+ *  Never throws. A missing report has to degrade to "no badges", exactly as it
+ *  behaved before, rather than taking down the league open that called it.
+ *  Returns how many designations landed (0 on failure) for the caller to log. */
+export async function loadLiveInjuries(week: number): Promise<number> {
+  try {
+    const { data, error } = await (await client()).from('injury_status')
+      .select('player_slug, status, return_date, comment, team, updated_at');
+    if (error) return 0;
+    const rows: Record<string, InjuryRow> = {};
+    for (const r of (data ?? []) as InjuryStatusRow[]) {
+      // Trust the worker's normalizer, but never let an unexpected status
+      // through — a stray value would render as a mystery badge on a card.
+      if (r.status !== 'O' && r.status !== 'D' && r.status !== 'Q' && r.status !== 'IR') continue;
+      rows[r.player_slug] = {
+        status: r.status,
+        returnDate: r.return_date, comment: r.comment,
+        team: r.team, updatedAt: r.updated_at,
+      };
+    }
+    setLiveInjuries(week, rows);
+    return Object.keys(rows).length;
+  } catch { return 0; }
+}
+
+interface InjuryStatusRow {
+  player_slug: string; status: string;
+  return_date: string | null; comment: string | null;
+  team: string | null; updated_at: string | null;
 }
 
 /** Per-team entry-lock times for a week (0093 late swap): each game locks its

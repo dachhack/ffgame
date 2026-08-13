@@ -18,14 +18,19 @@ import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
 import { Overlay } from './Overlay';
 import { GROUP_TABS, groupTag } from './rosterGroup';
+import { injuryFor } from '@drip/core/data/injuries';
 
 const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
-export function PlayerPicker({ visible, windowLabel, players, currentId, groupOf, gated, onGated, onPick, onRemove, onClose }: {
+export function PlayerPicker({ visible, windowLabel, players, currentId, week, groupOf, gated, onGated, onPick, onRemove, onClose }: {
   visible: boolean;
   windowLabel?: string;
   players: Player[];
   currentId?: string;
+  /** The week being filled — scopes the injury report to the week it speaks for.
+   *  This is the surface where the designation actually changes a decision: it
+   *  is the last thing a manager sees before committing a player to a slot. */
+  week: number;
   /** Which part of the roster a player sits on, when the caller knows. */
   groupOf?: (playerId: string) => PoolGroup;
   gated?: (p: Player) => boolean;
@@ -137,6 +142,7 @@ export function PlayerPicker({ visible, windowLabel, players, currentId, groupOf
             player={p}
             current={p.id === currentId}
             group={groupOf?.(p.id) ?? 'start'}
+            injury={injuryFor(week, p.id)}
             gated={gated?.(p) ?? false}
             onPress={() => (gated?.(p) ? onGated?.(p) : onPick(p.id))}
           />
@@ -155,8 +161,8 @@ export function PlayerPicker({ visible, windowLabel, players, currentId, groupOf
 
 /** A dealt mini card: position badge, team crest, headshot, name. Same cream
  *  stock as the board's cards so the picker reads as the same deck. */
-function MiniPlayerCard({ player, current, group, gated, onPress }: {
-  player: Player; current: boolean; group: PoolGroup; gated: boolean; onPress: () => void;
+function MiniPlayerCard({ player, current, group, injury, gated, onPress }: {
+  player: Player; current: boolean; group: PoolGroup; injury: string | null; gated: boolean; onPress: () => void;
 }) {
   const t = useTheme();
   const pc = t.pos[player.pos as keyof typeof t.pos] ?? { bg: t.sh, fg: t.dim, bd: t.bd };
@@ -165,6 +171,11 @@ function MiniPlayerCard({ player, current, group, gated, onPress }: {
   const src = photo ?? logo;
   const tag = groupTag(group);
   const tagFg = group === 'ir' ? '#A3401F' : group === 'taxi' ? '#5B6B2E' : '#8A7C55';
+  // Card-local injury palette, for the same reason the group tag has one: the
+  // shared hues are tuned to sit on a themed background, and this card is cream
+  // stock in both themes — the Questionable yellow in particular washes out on
+  // it. Same hue family, darkened until it holds on cream, same severity order.
+  const injFg = injury === 'O' ? '#C42A38' : injury === 'IR' ? '#8E1F31' : injury === 'D' ? '#B2551A' : '#8A6A28';
 
   return (
     <Pressable
@@ -188,6 +199,11 @@ function MiniPlayerCard({ player, current, group, gated, onPress }: {
         {tag ? (
           <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: tagFg, borderRadius: 3, paddingHorizontal: 3 }}>
             <Text style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '700', color: tagFg }}>{tag}</Text>
+          </View>
+        ) : null}
+        {injury ? (
+          <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: injFg, borderRadius: 3, paddingHorizontal: 3 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '700', color: injFg }}>{injury}</Text>
           </View>
         ) : null}
         {!!logo

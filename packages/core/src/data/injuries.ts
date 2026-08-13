@@ -29,8 +29,8 @@ export const INJURIES: Record<number, Record<string, 'O' | 'D' | 'Q'>> = {
 export const IR_FROM: Record<string, number> = { 'brandon-aiyuk': 1, 'deshaun-watson': 1, 'george-kittle': 14, 'james-conner': 4, 'jk-dobbins': 11, 'justin-fields': 12, 'kyler-murray': 6 };
 
 // The baked report above is REAL 2025 data. It only applies to a 2025 board (the
-// demo/replay, or a real 2025 league); a live 2026+ season has no injury feed
-// yet, so the report is disabled there rather than replaying last year's tags.
+// demo/replay, or a real 2025 league); any other season is served by the LIVE
+// report below rather than by replaying last year's tags.
 // The active season is set on league load (setActiveLeague → setInjurySeason).
 const INJURY_DATA_SEASON = 2025;
 let activeSeason = INJURY_DATA_SEASON;
@@ -38,9 +38,68 @@ export function setInjurySeason(year: number): void {
   if (Number.isFinite(year)) activeSeason = year;
 }
 
-// IR (from its start week) takes precedence; else the week's designation; else null.
+// ─────────────────────────────────────────────────────────────────────────────
+// The live report
+//
+// The worker has polled ESPN into `injury_status` since 0001 (daily, hourly on
+// game days) but nothing ever read it, so on a 2026 board every badge rendered
+// blank and the engine's `healthy()` believed the whole league was available.
+// This is the read side.
+//
+// It is a MODULE CACHE behind a SYNCHRONOUS getter on purpose. `injuryFor` is
+// called from the render path (12 sites) and from `defaultLineup`/`aiLineup`
+// deep inside the engine, none of which can await; the same shape as the
+// live-plays and game-feed overlays (`setLivePlays` / `clearLivePlays`), loaded
+// once per league open and cleared on exit.
+//
+// ONE WEEK ONLY, and that is not a shortcut. The ESPN feed is a snapshot of the
+// designations standing right now — it carries no week and keeps no history, so
+// it can only speak for the week being played. Asked about any other week it
+// returns null rather than tagging a past week with today's report.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Everything the report knows about one player, for a detail view. */
+export interface InjuryRow {
+  status: InjuryStatus;
+  returnDate?: string | null;
+  comment?: string | null;
+  team?: string | null;
+  updatedAt?: string | null;
+}
+
+let liveWeek: number | null = null;
+let liveRows: Record<string, InjuryRow> = {};
+
+/** Install the live report for `week` (the week it was polled for). */
+export function setLiveInjuries(week: number, rows: Record<string, InjuryRow>): void {
+  if (!Number.isFinite(week)) return;
+  liveWeek = week;
+  liveRows = rows;
+}
+
+/** Drop the live report (league exit), reverting to the baked-season behavior. */
+export function clearLiveInjuries(): void {
+  liveWeek = null;
+  liveRows = {};
+}
+
+/** True once a live report is installed — lets a caller tell "healthy" apart
+ *  from "we have no feed", which read identically before. */
+export function hasLiveInjuries(week: number): boolean {
+  return liveWeek != null && week === liveWeek;
+}
+
+/** The full live row for a player, for a badge that opens into detail. */
+export function injuryRowFor(week: number, slug: string): InjuryRow | null {
+  if (!hasLiveInjuries(week)) return null;
+  return liveRows[slug] ?? null;
+}
+
+// The live report wins for the week it covers; otherwise the baked 2025 report
+// serves a 2025 board (IR from its start week takes precedence there); else null.
 export function injuryFor(week: number, slug: string): InjuryStatus | null {
-  if (activeSeason !== INJURY_DATA_SEASON) return null; // no injury feed for other seasons
+  if (hasLiveInjuries(week)) return liveRows[slug]?.status ?? null;
+  if (activeSeason !== INJURY_DATA_SEASON) return null; // no feed loaded for this season
   const ir = IR_FROM[slug];
   if (ir != null && week >= ir) return 'IR';
   return INJURIES[week]?.[slug] ?? null;

@@ -51,26 +51,25 @@ export async function importLeague(leagueId, season = config.season) {
     if (crest) await db().from('league').update({ avatar_url: crest }).eq('id', lid).is('avatar_url', null);
   }
 
-  // Which Sleeper users are enrolled pilot testers? (app_user linked by sleeper id)
-  const ownerIds = users.map((u) => String(u.user_id));
-  const { data: appUsers } = await db().from('app_user').select('id, sleeper_user_id').in('sleeper_user_id', ownerIds);
-  const appBySleeper = new Map((appUsers ?? []).map((a) => [a.sleeper_user_id, a.id]));
+  // Memberships go through the guarded chokepoint (0133), not a raw upsert. The
+  // raw version this replaces recomputed app_user_id/enrolled and clobbered both
+  // on conflict — so a RE-import could unlink an enrolled manager whose Sleeper
+  // account wasn't matched that day. _upsert_membership_rows keeps existing
+  // links and only ever moves enrolled false→true, same as the commissioner's
+  // refresh, because it IS the same SQL.
   const userById = new Map(users.map((u) => [String(u.user_id), u]));
-
-  const memberships = rosters.map((r) => {
+  const members = rosters.map((r) => {
     const owner = r.owner_id != null ? String(r.owner_id) : null;
     const u = owner ? userById.get(owner) : null;
-    const appId = owner ? appBySleeper.get(owner) ?? null : null;
-    return {
-      league_id: lid, sleeper_roster_id: r.roster_id, sleeper_owner_id: owner,
-      app_user_id: appId, enrolled: !!appId,
-      team_name: u?.metadata?.team_name || u?.display_name || `Roster ${r.roster_id}`,
-    };
+    return { roster_id: r.roster_id, owner_id: owner, team_name: u?.metadata?.team_name || u?.display_name || `Roster ${r.roster_id}` };
   });
-  await db().from('league_membership').upsert(memberships, { onConflict: 'league_id,sleeper_roster_id' });
+  const { error: memErr } = await db().rpc('_upsert_membership_rows', { p_league_id: lid, p_members: members });
+  if (memErr) throw new Error(`membership upsert failed: ${memErr.message}`);
+  const { data: enrolledRows } = await db().from('league_membership')
+    .select('sleeper_roster_id').eq('league_id', lid).eq('enrolled', true);
   return {
     leagueId: lid, inviteCode: leagueRow.invite_code,
-    rosters: rosters.length, enrolled: memberships.filter((m) => m.enrolled).length,
+    rosters: rosters.length, enrolled: enrolledRows?.length ?? 0,
   };
 }
 
