@@ -3155,8 +3155,8 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
       </div>
     );
   };
-  const toggle = (on: boolean, label: string, onClick: () => void) => (
-    <button onClick={onClick} className="mono" style={{ fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--you)' : 'var(--faint)', background: 'var(--surface)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 3, padding: '2px 6px' }}>{label}</button>
+  const toggle = (on: boolean, label: string, onClick: () => void, title?: string) => (
+    <button onClick={onClick} title={title} className="mono" style={{ fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--you)' : 'var(--faint)', background: 'var(--surface)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 3, padding: '2px 6px' }}>{label}</button>
   );
   // Each side's real NFL game — logos, teams, live score, real game clock — on
   // the toggles row rather than inside the cards, where the line was eating the
@@ -3197,7 +3197,10 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
         <span style={{ justifySelf: 'start', minWidth: 0, overflow: 'hidden' }}>{gameChip(youPlayer)}</span>
         <span style={{ display: 'inline-flex', gap: 4 }}>
           {toggle(minutes, minutes ? 'MINUTES' : 'PLAYS', () => setMinutes((m) => !m))}
-          {toggle(top, top ? 'Newest ↑' : 'Newest ↓', () => setTop((t) => !t))}
+          {/* Order toggle is JUST the arrow (founder's call — one tap teaches
+              it): ↓ newest at the bottom, ↑ newest on top. Tooltip for the
+              desktop hoverer. */}
+          {toggle(top, top ? '↑' : '↓', () => setTop((t) => !t), top ? 'newest on top' : 'newest at the bottom')}
         </span>
         <span style={{ justifySelf: 'end', minWidth: 0, overflow: 'hidden' }}>{sameGame ? null : gameChip(theirPlayer)}</span>
       </div>
