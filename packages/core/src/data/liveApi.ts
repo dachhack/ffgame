@@ -711,7 +711,7 @@ export interface AdminUser { id: string; email: string | null; sleeper_username:
  *  only, and never set for hand-assigned seats (those carry claim_email and are
  *  deliberately independent of Sleeper). Advisory: a refresh flags it, it never
  *  clears the seat on its own. */
-export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; claim_email?: string | null; drifted?: boolean; }
+export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; claim_email?: string | null; drifted?: boolean; /** Drip-coin balance (0130); 0 for a wallet never minted. */ coin?: number; }
 export interface AdminAdmin { email: string; note: string | null; }
 export interface MemberRow { roster_id: number; owner_id: string | null; team_name: string; }
 export interface MatchupRow { sleeper_matchup_id: number | null; home_roster_id: number; away_roster_id: number; }
