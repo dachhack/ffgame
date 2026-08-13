@@ -53,6 +53,9 @@ interface OpenLeague {
    *  there is no lineup to set for a seat that doesn't exist. */
   rosterId: number | null;
   name: string;
+  /** The app_user_id sealed picks are written AS (0125): the seat OWNER's id.
+   *  Differs from the session user exactly when this seat is co-managed. */
+  pickUserId?: string;
   /** Native leagues get the DRAFT / MY TEAM tabs — draft rooms and waivers are
    *  meaningless for a league whose rosters live on Sleeper/ESPN. */
   native: boolean;
@@ -244,7 +247,9 @@ export function App() {
             <LivePicks
               // Remounts when you switch leagues, so no state leaks between them.
               key={`picks-${open.leagueId}-${open.rosterId}`}
-              userId={session.user.id}
+              // Co-managed seat: write picks AS the owner (0125) — the board
+              // and resolver read the seat's lineup under that identity.
+              userId={open.pickUserId ?? session.user.id}
               leagueId={open.leagueId}
               rosterId={open.rosterId}
               onBack={() => setOpen(null)}
@@ -255,7 +260,7 @@ export function App() {
             key={leaguesEpoch}
             userId={session.user.id}
             onBoard={() => setView('board')}
-            onOpen={(leagueId, rosterId, name, native) => {
+            onOpen={(leagueId, rosterId, name, native, pickUserId) => {
               // `live: true` unconditionally: the native app has no sim leagues
               // to open, so this is the same activation step the web reports
               // for a live league and lands in the same funnel.
@@ -263,7 +268,7 @@ export function App() {
               // No seat → no lineup: a seatless commissioner lands on
               // management, not on a MATCHUP tab that cannot render.
               setView(rosterId == null ? 'team' : 'picks');
-              setOpen({ leagueId, rosterId, name, native });
+              setOpen({ leagueId, rosterId, name, native, pickUserId });
             }}
           />
         )}
