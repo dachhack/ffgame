@@ -1,6 +1,64 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-08-13 · Build `v0.167.0`_
+_Last updated: 2026-08-13 · Build `v0.168.0`_
+
+## Members sync themselves — the claim flow self-heals (v0.168.0, 2026-08-13)
+
+**The failure, verbatim from a league chat: "it says im not in the league when I
+try to claim team."** Joins happen on Sleeper; Drip's copy of the member list
+refreshed only when the commissioner pressed **⟳ refresh members** (0105). So
+everyone who joined the Sleeper league after the last press bounced off
+`redeem_invite`'s membership lookup, and during a join rush — the hour before a
+draft, exactly when it matters — the founder was a human cron job, pressing the
+button and apologizing in chat. Migration **0134 is next**.
+
+Same shape as 0132's self-granting allowance: **the button stays, the system
+stops needing it.** Three pieces (0133):
+
+- **`_upsert_membership_rows` is now the ONE membership write.** 0105's
+  semantics verbatim — `app_user_id` keeps any existing link, `enrolled` only
+  ever goes false→true — so no path through it can unseat anybody.
+  `admin_upsert_memberships` (the button) is a permission-checking shell over
+  it. **This also fixed a live foot-gun:** the worker's `importLeague`
+  (`server/src/sync.js`) was raw-upserting recomputed `app_user_id`/`enrolled`
+  values, so a RE-import could silently unlink an enrolled manager. It calls
+  the chokepoint now.
+- **The worker sweeps members** (`server/src/poll/members.js`, every ~25s
+  tick): leagues poked by a bouncing claimant on the next tick, every
+  current-season sleeper league on a slow cadence (`MEMBER_SYNC_STALE_MIN`,
+  default 10). `member_sync_due()` is season-scoped so dead seasons never age
+  back into the sweep, and a league whose Sleeper fetch fails gets its clock
+  stamped anyway (`member_sync_touch`) so a deleted upstream league backs off
+  to the slow cadence instead of retrying-with-retries every tick.
+- **The claim flow heals itself** (`RedeemForm.check()` in `LiveOnboard.tsx`).
+  On exactly the "not a manager in this league" bounce it calls
+  `request_member_sync(code)` — any signed-in invite-code holder may poke;
+  rate-limited server-side to one standing request per 20s per league so a
+  stampede of joiners collapses into one Sleeper fetch — then re-runs the
+  preview every 6s for up to 60s with honest copy on screen ("Checking with
+  Sleeper — if you just joined the league there, this takes about a minute…").
+  Typical heal is one worker tick, well under the minute. 60s rather than
+  longer because a **mistyped username lands in the same branch** and deserves
+  its error promptly; the timeout copy covers both cases.
+
+**The poke deliberately does NOT accept member rows.** An invite code is a weak
+credential; accepting a caller-supplied roster→owner mapping on it would let any
+code holder seat themselves anywhere. The code only asks — the worker fetches
+from Sleeper itself. (This is why the fix needed the worker at all.)
+
+Probes: `scripts/db/member-sync-probes.sql`, the suite runner's **eighth**
+suite — grants (chokepoint + worker helpers refused to `authenticated`), the
+never-unseat guards under a re-pull that fails to resolve a linked owner, the
+poke's rate limit, due/consume/back-off plumbing, and the end-to-end bounce →
+sync → successful redeem. One probe artifact worth remembering: `now()` is
+frozen per transaction, so ordering assertions between two stamps written in
+one DO block need an explicit backdate — in production they're separate
+transactions and strictly ordered.
+
+**Deploy note:** needs BOTH the migration (auto on merge) and a `fly deploy` of
+the worker — until the worker ships, pokes stamp the flag but nothing consumes
+it, and the claim flow's retry loop times out exactly as before. The web half
+is harmless to ship first (it degrades to the old error after 60s).
 
 ## Injury badges, on the live feed at last (v0.167.0, 2026-08-13)
 

@@ -327,6 +327,15 @@ export interface RedeemResult { ok: boolean; error?: string; league_id?: string;
 
 export interface PreviewRedeem { ok: boolean; error?: string; league?: string; team?: string; avatar?: string | null; }
 
+/** Ask the worker to re-pull this league's member list from Sleeper (0133).
+ *  For the claim flow's "your Sleeper account is not a manager in this league"
+ *  bounce — which, when the claimant JUST joined on Sleeper, means our copy of
+ *  the members is behind, not that they're wrong. The poke stamps the league;
+ *  the worker's next tick (~25s) syncs; the caller should retry the preview
+ *  until the seat appears. Rate-limited server-side, so retry loops are cheap. */
+export const requestMemberSync = (code: string) =>
+  rpc<{ ok: boolean; error?: string; league_id?: string }>('request_member_sync', { p_code: code.trim() });
+
 /** Which team a code + Sleeper username would join — without enrolling. */
 export async function redeemPreview(code: string, sleeperUsername: string): Promise<PreviewRedeem> {
   const user = await resolveUser(sleeperUsername);

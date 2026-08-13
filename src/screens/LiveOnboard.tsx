@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../app/store';
 import { SiteSettings, VersionTag, Img } from '../app/ui';
 import { liveConfigured } from '@drip/core/data/liveConfig';
@@ -6,7 +6,7 @@ import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   pendingAuthUrlError, clearAuthUrlError, authErrorMessage, type AuthUrlError,
   getSession, onAuth, signOut, ensureAppUser,
-  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, myLinkedSleeper, claimMyRosters,
+  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, myLinkedSleeper, claimMyRosters, requestMemberSync,
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, type WaitlistRow,
   myMatchup, matchupTeams, leagueResults, defaultOpenWeek,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
@@ -1450,7 +1450,13 @@ function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void
   const [team, setTeam] = useState<PreviewRedeem | null>(null); // confirm step
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Live status while the member re-pull + retry loop runs (0133) — a spinner
+  // with no words here reads as a hang, and the wait is real (~a minute).
+  const [syncNote, setSyncNote] = useState<string | null>(null);
   const [askCode, setAskCode] = useState(false); // "don't have a code?" request sheet
+  // The check() retry loop can outlive the component; don't set state after unmount.
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
 
   // Returning player: pre-fill the Sleeper username they linked on a prior join
   // so they don't have to type it again (still editable via "not me").
@@ -1485,14 +1491,41 @@ function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void
   }, []);
 
   // Resolve the Sleeper username → which team you'd join, before committing.
+  //
+  // "Not a manager in this league" gets a second chance before it's an error,
+  // because for anyone who JUST joined the league on Sleeper it isn't true —
+  // it means our copy of the member list predates them. That was a dead end
+  // that read as a bug ("it says im not in the league when I try to claim
+  // team") until the commissioner manually refreshed members. Now the claim
+  // flow heals itself: poke the worker to re-pull from Sleeper (0133), tell
+  // the player what's happening, and retry the preview until their seat
+  // appears. The worker ticks ~25s and the poke is rate-limited server-side,
+  // so the polling is cheap. 60s covers two ticks plus the Sleeper fetch —
+  // kept tight because a mistyped username lands in this same branch, and the
+  // typo case deserves its error sooner rather than later.
   const check = async () => {
     if (!username.trim() || busy) return;
     setBusy(true); setErr(null);
     try {
       const r = await redeemPreview(code, username);
-      if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not match your account.')); } else setTeam(r);
-    } catch (x) { setErr(friendlyError(x)); }
-    finally { setBusy(false); }
+      if (r.ok) { setTeam(r); return; }
+      if (!/not a manager in this league/i.test(r.error ?? '')) {
+        setErr(friendlyError(r.error ?? 'Could not match your account.'));
+        return;
+      }
+      setSyncNote('Checking with Sleeper — if you just joined the league there, this takes about a minute…');
+      await requestMemberSync(code).catch(() => { /* the retries below still stand a chance */ });
+      const deadline = Date.now() + 60_000;
+      while (Date.now() < deadline) {
+        await new Promise((res) => setTimeout(res, 6000));
+        if (!alive.current) return;
+        const p = await redeemPreview(code, username).catch(() => null);
+        if (p?.ok) { setSyncNote(null); setTeam(p); return; }
+      }
+      setSyncNote(null);
+      setErr('Your Sleeper account isn’t showing as a manager in this league yet. If you joined on Sleeper moments ago, give it a minute and tap NEXT again — otherwise double-check the username, or ask your commissioner.');
+    } catch (x) { setSyncNote(null); setErr(friendlyError(x)); }
+    finally { if (alive.current) setBusy(false); }
   };
 
   const join = async () => {
@@ -1600,6 +1633,7 @@ function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void
             </div>
           </div>
         )}
+        {syncNote && <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 12, lineHeight: 1.5 }}>⟳ {syncNote}</div>}
         {err && <div className="mono" style={errStyle}>{err}</div>}
         {!team && (
           <div style={{ textAlign: 'center', marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
