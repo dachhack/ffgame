@@ -1399,6 +1399,39 @@ export const setTeamAvatar = (leagueId: string, rosterId: number, url: string | 
 export const setLeagueAvatar = (leagueId: string, url: string | null) =>
   rpc<{ ok: boolean; error?: string; avatar?: string | null }>('set_league_avatar', { p_league_id: leagueId, p_url: url });
 
+// ── The league board (0123): post a league that needs managers, browse, join ──
+export interface BoardListing {
+  league_id: string; name: string; season: string; avatar_url: string | null;
+  blurb: string; posted_at: string;
+  seats_total: number; seats_open: number;
+  draft_status: string; draft_mode: string;
+  /** The caller is already enrolled here / commissions it. */
+  mine: boolean; commish: boolean;
+}
+/** Open listings with at least one claimable seat, newest first. Never carries
+ *  invite codes — joining goes through joinFromBoard, which resolves the code
+ *  server-side. */
+export async function leagueBoard(): Promise<BoardListing[]> {
+  const r = await rpc<BoardListing[] | { error?: string }>('league_board');
+  if (!Array.isArray(r)) throw new Error(r?.error ?? 'could not load the board');
+  return r;
+}
+/** Post (or re-open / edit) the caller's league. Null blurb keeps the old one. */
+export const postLeagueListing = (leagueId: string, blurb?: string | null) =>
+  rpc<{ ok: boolean; error?: string }>('post_league_listing', { p_league_id: leagueId, p_blurb: blurb ?? null });
+export const closeLeagueListing = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string }>('close_league_listing', { p_league_id: leagueId });
+/** Claim a seat in a posted league — native_join's seat rules, authorized by
+ *  the open listing instead of a typed code. */
+export const joinFromBoard = (leagueId: string, teamName?: string) =>
+  rpc<{ ok: boolean; error?: string; league_id?: string; roster_id?: number; league?: string }>(
+    'join_from_board', { p_league_id: leagueId, p_team_name: teamName ?? null });
+/** The invite code, for any enrolled member — so recruiting a friend doesn't
+ *  need the commissioner's screen. */
+export const leagueInvite = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; invite_code?: string; name?: string; seats_open?: number }>(
+    'league_invite', { p_league_id: leagueId });
+
 /** Subscribe to live score changes for a matchup. Returns an unsubscribe fn. */
 export function subscribeMatchup(matchupId: string, onChange: () => void): () => void {
   // Lazy SDK: open the channel once the client lands; tear down cleanly if the

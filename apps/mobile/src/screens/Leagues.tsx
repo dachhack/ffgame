@@ -46,9 +46,11 @@ function Crest({ url, name, size }: { url?: string | null; name?: string | null;
   );
 }
 
-export function Leagues({ userId, onOpen }: {
+export function Leagues({ userId, onOpen, onBoard }: {
   userId: string;
-  onOpen: (leagueId: string, rosterId: number, name: string) => void;
+  onOpen: (leagueId: string, rosterId: number, name: string, native: boolean) => void;
+  /** Open the league board — browse open leagues, post yours, recruit. */
+  onBoard: () => void;
 }) {
   const t = useTheme();
   const [rows, setRows] = useState<Enrollment[] | null>(null);
@@ -108,7 +110,7 @@ export function Leagues({ userId, onOpen }: {
         return (
           <Pressable
             key={`${e.league_id}-${e.sleeper_roster_id}`}
-            onPress={() => { tap(); onOpen(e.league_id, e.sleeper_roster_id, lg?.name ?? 'League'); }}
+            onPress={() => { tap(); onOpen(e.league_id, e.sleeper_roster_id, lg?.name ?? 'League', lg?.provider === 'native'); }}
             android_ripple={{ color: alpha(t.you, 16) }}
             style={({ pressed }) => ({
               backgroundColor: t.surface, overflow: 'hidden',
@@ -148,6 +150,28 @@ export function Leagues({ userId, onOpen }: {
           </Pressable>
         );
       })}
+
+      {/* The league board: browse open leagues, post yours, recruit friends.
+          Below the league list because your own leagues are the daily visit;
+          finding a new one is the occasional one. */}
+      <Pressable
+        onPress={() => { tap(); onBoard(); }}
+        android_ripple={{ color: alpha(t.you, 16) }}
+        style={({ pressed }) => ({
+          backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
+          borderStyle: 'dashed', borderRadius: 12, padding: 14,
+          flexDirection: 'row', alignItems: 'center', gap: 11, opacity: pressed ? 0.85 : 1,
+        })}
+      >
+        <View style={{ width: 42, height: 42, borderRadius: 8, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 18 }}>🔎</Text>
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ fontSize: 14.5, fontWeight: '700', color: t.text }}>League board</Text>
+          <Text style={{ fontSize: 11.5, color: t.mid, marginTop: 2 }}>Find an open league · post yours · recruit friends</Text>
+        </View>
+        <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.you }}>→</Text>
+      </Pressable>
 
       <View style={{ alignItems: 'center', marginTop: 8 }}>
         <LinkButton label="↻ refresh" onPress={refresh} />
