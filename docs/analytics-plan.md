@@ -66,7 +66,7 @@ Implemented now (`src/app/analytics.ts`, `Ev.*`, wired in `src/app/store.tsx`):
 | Event | Where | Funnel stage |
 |---|---|---|
 | `app_open {version, standalone}` | `main.tsx` boot — `standalone` = launched from an installed home-screen icon rather than a browser tab | acquisition |
-| `sleeper_connected` + `identify(userId)` | `setSleeperUser` | acquisition |
+| `sleeper_connected` + `setTraits({sleeper_username, sleeper_user_id})` | `setSleeperUser` — traits, never `identify()`: the Sleeper id must not compete with the Supabase id for who the person IS | acquisition |
 | `screen_view {screen}` | `navigate` | (whole funnel) |
 | `league_opened {live, teams}` | `loadSimLeague` | activation |
 | `lineup_set {week, slots}` | `setLineup` | **activation** |
@@ -133,7 +133,15 @@ worker to PostHog's capture API so they don't depend on an open tab.
 The Expo app reports through the **same** core layer and the **same** `VITE_POSTHOG_KEY`
 (read from `expo.extra` — see `apps/mobile/app.config.js`), so one token covers both hosts
 and a person who uses the phone and the browser is one person, not two: both call
-`identify()` with the Supabase user id.
+`identify()` with the **Supabase user id** — the web in `LiveOnboard` on session load, the
+app in `App.tsx` — and both attach the account email as a person trait so the person shows
+as a name in PostHog rather than a UUID. That id is the ONLY thing ever passed to
+`identify()`; every other handle (the Sleeper username) goes through `setTraits()`, because
+two identified ids never merge in PostHog — identifying with a second id doesn't enrich the
+person, it silently splits them in two. (That was a real bug: the web used to identify with
+the Sleeper user id, so the same human was one person on the phone and a different one in
+the browser. Persons split before the fix stay split — PostHog can't merge two identified
+ids retroactively — but all events after it land on the Supabase-id person.)
 
 The sink is `apps/mobile/src/analytics.native.ts` — a dependency-free POST to PostHog's
 `/batch/` capture API rather than `posthog-react-native`, which would drag in a native

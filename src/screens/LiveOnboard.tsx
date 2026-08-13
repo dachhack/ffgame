@@ -12,7 +12,7 @@ import {
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
 } from '@drip/core/data/liveApi';
 import { buildDripTestLeague } from '@drip/core/data/dripTest';
-import { track, Ev } from '@drip/core/analytics';
+import { track, identify, Ev } from '@drip/core/analytics';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { PRESEASON_BASE, isPreseasonWeek, preseasonWeekNum, weekLabel, clearRuntimeSlate } from '@drip/core/data/nflSlate';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
@@ -89,6 +89,13 @@ export function LiveOnboard() {
     if (!session) { setAdmin(false); return; }
     isAdmin().then(setAdmin).catch(() => setAdmin(false));
   }, [session]);
+  // Analytics identity: the Supabase user id, the SAME id the app identifies on
+  // (apps/mobile/App.tsx) — so one person's phone and browser sessions land on
+  // one PostHog person instead of two. The email rides along as a person trait
+  // so that person reads as a name in PostHog, not a UUID.
+  useEffect(() => {
+    if (session?.user.id) identify(session.user.id, session.user.email ? { email: session.user.email } : undefined);
+  }, [session?.user.id, session?.user.email]);
   // Commissioner invite link: once signed in, auto-claim the league from the pending
   // commish code (URL → dripCommishCode) and drop straight into league management —
   // no role chooser, no code re-entry. On failure, fall back to the manual verify
