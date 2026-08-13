@@ -22,6 +22,7 @@ import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
+import { CommishSettings } from '../ui/CommishSettings';
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
@@ -56,6 +57,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   const [claimFor, setClaimFor] = useState<{ p: LeaguePoolPlayer; drop?: string } | null>(null); // FAAB blind bid
   const [bidDraft, setBidDraft] = useState('');
   const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false); // ⚑ commish rules sheet
   const skew = useRef(0);
 
   const refresh = async () => {
@@ -181,9 +183,22 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
         <Pressable onPress={shareInvite} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
           <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>⇪ RECRUIT</Text>
         </Pressable>
+        {team.is_commish && (
+          <Pressable onPress={() => { tap(); setSettingsOpen(true); }}
+            style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.warn }}>⚑ SETTINGS</Text>
+          </Pressable>
+        )}
       </View>
     </Card>
   );
+
+  // The commish rules sheet, mounted in BOTH branches below — waiver systems
+  // get chosen before the draft, not after it.
+  const settingsSheet = team.is_commish ? (
+    <CommishSettings visible={settingsOpen} leagueId={leagueId}
+      onClose={() => setSettingsOpen(false)} onSaved={() => void refresh()} />
+  ) : null;
 
   if (team.draft_status !== 'complete') {
     return (
@@ -204,6 +219,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
             <PrimaryButton label="⛏ TO THE DRAFT ROOM" onPress={onDraft} />
           </View>
         </Card>
+        {settingsSheet}
       </ScrollView>
     );
   }
@@ -380,6 +396,8 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           ))}
         </ScrollView>
       </Overlay>
+
+      {settingsSheet}
     </ScrollView>
   );
 }
