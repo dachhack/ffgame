@@ -52,7 +52,10 @@ import { Overlay } from '../ui/Overlay';
 // one — the setup board only ever displays name/pos/team.
 const ZERO_STATS = { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 };
 function poolToPlayer(p: PoolPlayer): Player {
-  return { id: p.slug, name: shortName(p.full), full: p.full, pos: p.pos as Pos, team: slugMeta(p.slug).team, stats: { ...ZERO_STATS } };
+  // The row's own team FIRST: the pool carries the current team exactly so
+  // 2026 rookies resolve (the baked slugMeta table is 2025 PBP players only —
+  // a rookie like Carson Beck rendered teamless off it).
+  return { id: p.slug, name: shortName(p.full), full: p.full, pos: p.pos as Pos, team: p.team || slugMeta(p.slug).team, stats: { ...ZERO_STATS } };
 }
 
 // The board used to carry a hardcoded LIVE_UNLOCKS trio here. The shop derives
@@ -972,7 +975,9 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
             };
             for (const s of slots.filter((sl) => sl.win === win)) {
               const slug = picks[s.key]?.player_slug;
-              if (slug) put(slugMeta(slug).team, shortName(pool.find((p) => p.slug === slug)?.full ?? slug), 'you');
+              if (!slug) continue;
+              const row = pool.find((p) => p.slug === slug);
+              put(row?.team || slugMeta(slug).team, shortName(row?.full ?? slug), 'you');
             }
             // Theirs ONLY once the window has kicked and their cards are face
             // up. Listing a sealed opponent lineup here would leak exactly what
@@ -981,7 +986,8 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
               for (const rp of revealed.filter((p) => p.app_user_id !== userId && p.game_window === win)) {
                 const slug = rp.player_slug;
                 if (!slug) continue;
-                put(slugMeta(slug).team, shortName(oppPool.find((p) => p.slug === slug)?.full ?? slug), 'their');
+                const row = oppPool.find((p) => p.slug === slug);
+                put(row?.team || slugMeta(slug).team, shortName(row?.full ?? slug), 'their');
               }
             }
             if (!rows.length) return <Mono size={10.5} tone="dim">No games on the slate for this window yet.</Mono>;
