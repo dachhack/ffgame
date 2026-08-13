@@ -14,7 +14,7 @@ import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
 } from '@drip/core/engine/matchup';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, fmtStat, GAME_SECONDS } from '@drip/core/engine/sim';
-import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, realGameEndClock, setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
+import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '@drip/core/data/demoNarration';
 import { slotMoments, MOMENT_COLOR, type Moment } from '@drip/core/engine/moments';
@@ -2943,25 +2943,6 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
       {!isMobile && !cards && <span className="mono" style={{ fontSize: fs(8), color: 'var(--faint)' }}>{player.team}</span>}
     </div>
   );
-  // The player's REAL NFL game this week + its real game clock (quarter +
-  // countdown, HALF / FINAL) — shown under the name on each card.
-  const g = nflGameForTeam(week, player.team);
-  // FINAL once the clock reaches this game's real end (its last play — including
-  // overtime). Falls back to ~regulation when the real end isn't known (synthetic
-  // weeks / not yet loaded), so a window's shared clock running into another
-  // game's OT doesn't read "OT" on a game that already ended in regulation.
-  const gEnd = realGameEndClock(week, player.team);
-  // On a live feed the latest ingested play IS the current clock, so "clock
-  // reached the last play" would read halftime as FINAL — trust the feed's
-  // real game state when present, and never call a pre-late-Q4 clock final.
-  const gFeed = gameFeedFor(week, player.team);
-  const gSt = gFeed?.st;
-  const gameOver = gSt != null
-    ? gSt === 'post'
-    : gEnd > 0 ? clock >= gEnd - 1 && gEnd >= 3300 : clock >= 3595;
-  // Chip clock = the game's LAST REAL PLAY, not the window playback clock —
-  // which can overshoot the real game on the live board (read Q4 as "OT").
-  const gClk = gFeed && gFeed.plays.length ? Math.min(clock, gFeed.plays[gFeed.plays.length - 1].c) : clock;
   // Card-table theme: the SAME dense strip, but the physical mini card (image,
   // name, team — with the bank fill, HOT glow, NUKE scorch) floats over it in
   // the headshot's place; the name row keeps only its chips.
@@ -2972,22 +2953,10 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   ) : (
     <span className="mx-sc-img" style={{ flex: 'none', display: 'inline-flex' }}><PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={isMobile ? 46 : 64} /></span>
   );
-  // flexWrap + per-span nowrap, or this line collides with its neighbors: the
-  // row itself never shrank (nowrap flex spans), so squeezed between the metric
-  // column and the floating mini card it OVERFLOWED the text column — and on
-  // the mirrored side that paints leftward, sliding "Q1" underneath the metric
-  // chip while "15:00" wrapped inside its own span. Wrapping whole units keeps
-  // every piece inside the column; a long squeeze drops the clock to its own
-  // line instead of drawing over the neighbor.
-  const gameLine = g ? (
-    <div className="mono" title="real NFL game · real game clock" style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', flexDirection: side === 'you' ? 'row' : 'row-reverse', fontSize: fs(8.5), letterSpacing: '0.02em', marginTop: 2, minWidth: 0 }}>
-      <Img src={teamLogo(g.away)} size={12} radius={2} fallback={<span />} />
-      <span style={{ fontWeight: 700, color: 'var(--dimstrong)', whiteSpace: 'nowrap' }}>{g.away}@{g.home}</span>
-      <Img src={teamLogo(g.home)} size={12} radius={2} fallback={<span />} />
-      <span style={{ color: 'var(--faint)' }}>·</span>
-      <span style={{ color: 'var(--faint)', fontWeight: 700, whiteSpace: 'nowrap' }}>{gameOver ? 'FINAL' : fmtGameClock(gClk)}</span>
-    </div>
-  ) : null;
+  // The game line (logos · AWY@HOM · clock) moved OFF the card to the slot
+  // log's toggles row (TwoColLog gameChip) — inside the card it ate the stats
+  // column on the first multi-window live night. The card keeps only player
+  // identity, metric, and score.
   // On mobile the chip is anchored to two lines (name over tag) so it's always
   // the same height regardless of label length; desktop keeps it inline.
   const metricChip = (
@@ -3047,11 +3016,6 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
         {imgEl}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3, alignItems: side === 'you' ? 'flex-start' : 'flex-end' }}>
           {(chip || twin) && nameRow}
-          {g && (
-            <div className="mono" title="real NFL game · real game clock" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: fs(8.5), fontWeight: 700, color: 'var(--dimstrong)', letterSpacing: '0.02em' }}>
-              {g.away}@{g.home} · {gameOver ? 'FINAL' : fmtGameClock(gClk)}
-            </div>
-          )}
           {metricChip}
           {fgEl}
           <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'baseline', gap: 6 }}>
@@ -3071,7 +3035,6 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
     return (
       <div onClick={onClick} className={`mx-scorecard mx-sc-${side}`} style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [side === 'you' ? 'borderLeft' : 'borderRight']: `3px solid ${accent}`, borderRadius: 4, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 3, cursor: 'pointer', animation: nuked ? 'flash 1.4s ease-out' : undefined } as React.CSSProperties}>
         {nameRow}
-        {gameLine}
         <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'center', gap: 8 }}>
           {imgEl}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2, alignItems: side === 'you' ? 'flex-end' : 'flex-start' }}>
@@ -3093,7 +3056,6 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
       {imgEl}
       <div style={{ flex: 1, minWidth: 0, textAlign: edge }}>
         {nameRow}
-        {gameLine}
         <div style={{ marginTop: 5 }}>{statLine}</div>
       </div>
       <div style={{ flex: 'none', maxWidth: '48%', alignSelf: 'center', display: 'flex', flexDirection: 'column', alignItems: side === 'you' ? 'flex-end' : 'flex-start', gap: 5 }}>
@@ -3192,11 +3154,40 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
   const toggle = (on: boolean, label: string, onClick: () => void) => (
     <button onClick={onClick} className="mono" style={{ fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--you)' : 'var(--faint)', background: 'var(--surface)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 3, padding: '2px 6px' }}>{label}</button>
   );
+  // Each side's real NFL game — logos, teams, live score, real game clock — on
+  // the toggles row rather than inside the cards, where the line was eating the
+  // stats column (founder's call, first multi-window live night). Score + clock
+  // come from the feed's latest ingested play; without a feed (demo, pregame)
+  // the chip is just the game label.
+  const gameChip = (p?: Player) => {
+    if (!p) return null;
+    const g = nflGameForTeam(week, p.team);
+    if (!g) return null;
+    const f = gameFeedFor(week, p.team);
+    const last = f && f.plays.length ? f.plays[f.plays.length - 1] : null;
+    const over = f?.st === 'post';
+    const qc = last ? (() => { const q = Math.min(5, Math.floor(last.c / 900) + 1); const r = Math.max(0, 900 - (last.c % 900)); return `${q > 4 ? 'OT' : `Q${q}`} ${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')}`; })() : null;
+    return (
+      <span className="mono" title="real NFL game · live score · real game clock" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: fs(8.5), fontWeight: 700, color: 'var(--dimstrong)', whiteSpace: 'nowrap' }}>
+        <Img src={teamLogo(g.away)} size={12} radius={2} fallback={<span />} />
+        <span>{g.away}{last ? ` ${last.as}–${last.hs} ` : '@'}{g.home}</span>
+        <Img src={teamLogo(g.home)} size={12} radius={2} fallback={<span />} />
+        {(over || qc) && <span style={{ color: 'var(--faint)' }}>· {over ? 'FINAL' : qc}</span>}
+      </span>
+    );
+  };
+  const sameGame = youPlayer && theirPlayer
+    && nflGameForTeam(week, youPlayer.team)?.away === nflGameForTeam(week, theirPlayer.team)?.away
+    && nflGameForTeam(week, youPlayer.team)?.home === nflGameForTeam(week, theirPlayer.team)?.home;
   return (
     <div style={{ marginTop: 5, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 6 }}>
-        {toggle(minutes, minutes ? 'MINUTES' : 'PLAYS', () => setMinutes((m) => !m))}
-        {toggle(top, top ? 'NEWest ↑' : 'NEWest ↓', () => setTop((t) => !t))}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+        {gameChip(youPlayer) ?? <span />}
+        <span style={{ display: 'inline-flex', gap: 4 }}>
+          {toggle(minutes, minutes ? 'MINUTES' : 'PLAYS', () => setMinutes((m) => !m))}
+          {toggle(top, top ? 'NEWest ↑' : 'NEWest ↓', () => setTop((t) => !t))}
+        </span>
+        {(sameGame ? null : gameChip(theirPlayer)) ?? <span />}
       </div>
       <div ref={scroller} onScroll={onScroll} style={{ maxHeight: fw(210), overflow: 'auto', paddingRight: 6, scrollbarGutter: 'stable', scrollbarWidth: 'thin' }}>
         {rows.length === 0 && (
