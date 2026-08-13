@@ -62,6 +62,19 @@ export function LiveOnboard() {
   // Honor the gear menu's "Super admin" deep link (view:'admin'); a commissioner
   // invite link is handled by the auto-claim effect below.
   const [view, setView] = useState<OnboardView>(() => (route.name === 'live' && route.view === 'admin' ? 'admin' : 'home'));
+  // …and keep honouring it AFTER mount. A useState initializer runs once, so on
+  // a screen where the gear has no `superAdmin` callback the menu falls back to
+  // navigate({name:'live', view:'admin'}) — which changes the route but not this
+  // state, and if we are already mounted the click does nothing at all. That is
+  // a dead button with no error and no clue, and it strands an admin on any
+  // screen that renders the gear without the callback.
+  //
+  // `navigate` builds a fresh route object every time, so this re-runs even when
+  // the route is nominally the same one — which is the case that was broken:
+  // clicking Super admin, leaving via "← my leagues", then clicking it again.
+  useEffect(() => {
+    if (route.name === 'live' && route.view === 'admin') setView('admin');
+  }, [route]);
 
   useEffect(() => {
     if (!liveConfigured()) { setReady(true); return; }
@@ -387,7 +400,7 @@ interface MatchupCard { matchup: LiveMatchup; teams: Record<number, TeamInfo>; }
 function Enroll({ session, view, setView, commishCode, admin }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void; commishCode?: string | null; admin?: boolean }) {
   // Super-admin support mode: every read below resolves against this user
   // instead of the signed-in one, and the write CTAs are hidden.
-  const { viewAs } = useStore();
+  const { viewAs, route, navigate } = useStore();
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
   const [loadErr, setLoadErr] = useState(false);
   const [commishLeagues, setCommishLeagues] = useState<AdminLeague[]>([]);
@@ -568,7 +581,10 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   );
   if (view === 'board') return <LiveBoard userId={session.user.id} leagueId={target?.leagueId} rosterId={target?.rosterId} onBack={() => setView('home')} />;
   if (view === 'results' && target) return <LeagueResults leagueId={target.leagueId} onBack={() => setView('home')} />;
-  if (view === 'admin') return <AdminPage onBack={() => setView('home')} />;
+  // Leaving also clears `view` from the route. Without that the URL still says
+  // admin while the screen says leagues, and the effect above would bounce you
+  // back into the console on the next route change.
+  if (view === 'admin') return <AdminPage onBack={() => { setView('home'); if (route.name === 'live' && route.view === 'admin') navigate({ name: 'live' }); }} />;
   // Only a first-load failure blanks the screen; a background refresh failure keeps
   // whatever we already showed. Retry rather than mislead an enrolled user.
   if (loadErr && enrollments === null) return (
