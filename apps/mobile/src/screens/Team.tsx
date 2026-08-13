@@ -6,19 +6,18 @@
 // claim (FAAB leagues collect the blind bid first), free agent → instant add,
 // roster full → pick a drop before either.
 //
-// Deliberately not ported (both exist on the web, use them there for now):
-//   · TradeCenter — propose/answer/commish-review is a screen of its own; the
-//     waiver/FAAB path is what a phone needs on a Tuesday night.
-//   · AvatarPicker — the web's art grid; renaming is here, art can wait.
+// Everything the web TeamManage does lives here now — waivers/FAAB, trades
+// (ui/TradeCenter), the avatar grid (ui/AvatarGrid), and the commissioner's
+// whole kit. The old "web only for now" list is empty.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   addFreeAgent, adminAssignRoster, adminLeagueJoiners, adminLeagueMembers, cancelWaiverClaim, commishClaimRoster,
-  commishRuleTrade, commishSeedCoin, commishSetManager, dropPlayer,
-  friendlyError, leagueInvite, leaguePool, leagueTrades, nativeRosters,
+  commishSeedCoin, commishSetManager, dropPlayer,
+  friendlyError, leagueInvite, leaguePool, nativeRosters,
   nativeTeamState, processWaivers, setTeamAvatar, setTeamController, setTeamName, submitWaiverClaim,
   teamManagers, POS_CAP_KEYS,
-  type AdminMember, type LeagueJoiner, type LeaguePoolPlayer, type NativeTeamState, type TeamManagerRow, type TradeRow,
+  type AdminMember, type LeagueJoiner, type LeaguePoolPlayer, type NativeTeamState, type TeamManagerRow,
 } from '@drip/core/data/liveApi';
 import { headshot } from '@drip/core/data/media';
 import { useTheme, MONO } from '../theme.native';
@@ -28,6 +27,7 @@ import { Overlay } from '../ui/Overlay';
 import { CommishSettings } from '../ui/CommishSettings';
 import { AvatarGrid } from '../ui/AvatarGrid';
 import { CommishPlayers, Playoffs, Standings } from '../ui/LeagueExtras';
+import { TradeCenter } from '../ui/TradeCenter';
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
@@ -293,61 +293,6 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
           })}
         </ScrollView>
       </Overlay>
-    </Card>
-  );
-}
-
-/** Trade rulings, for leagues that route accepted trades through the commish.
- *  Read-only list plus the two verdicts — proposing/answering trades stays on
- *  the web (see the screen header). `accepted` = awaiting ruling; `pending` =
- *  still just an offer between managers, shown so the commissioner sees what's
- *  brewing but with nothing to press. */
-function CommishTrades({ leagueId, teamName, playerName }: { leagueId: string; teamName: (rid: number) => string; playerName: (slug: string) => string }) {
-  const t = useTheme();
-  const [trades, setTrades] = useState<TradeRow[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-
-  const load = () => leagueTrades(leagueId).then((r) => { if (Array.isArray(r)) setTrades(r); }).catch(() => {});
-  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
-
-  const rule = async (id: string, approve: boolean) => {
-    if (busy) return;
-    setBusy(true); setNote(null);
-    try {
-      const r = await commishRuleTrade(id, approve);
-      if (r.ok) { commit(); setNote(approve ? '✓ executed' : '✓ vetoed'); } else { warn(); setNote(friendlyError(r.error ?? 'failed')); }
-    } catch (e) { warn(); setNote(friendlyError(e)); }
-    finally { setBusy(false); void load(); }
-  };
-
-  const queue = trades.filter((x) => x.status === 'accepted' || x.status === 'pending');
-  if (queue.length === 0) return null;
-  return (
-    <Card>
-      <Mono size={9} tone="faint" track={0.12}>⚖ TRADES ON YOUR DESK</Mono>
-      {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 4 }}>{note}</Mono>}
-      {queue.map((x) => (
-        <View key={x.id} style={{ paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
-          <Text style={{ fontSize: 11.5, color: t.text, lineHeight: 16 }}>
-            <Text style={{ fontWeight: '700' }}>{teamName(x.from_roster)}</Text> sends {x.give.map(playerName).join(', ') || '—'}{'\n'}
-            <Text style={{ fontWeight: '700' }}>{teamName(x.to_roster)}</Text> sends {x.get.map(playerName).join(', ') || '—'}
-          </Text>
-          {!!x.note && <Mono size={8.5} tone="faint" style={{ marginTop: 2 }}>“{x.note}”</Mono>}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
-            <Mono size={8} tone={x.status === 'accepted' ? 'warn' : 'faint'} track={0.06}>
-              {x.status === 'accepted' ? 'AWAITING YOUR RULING' : 'OFFERED — NOTHING TO DO YET'}
-            </Mono>
-            <View style={{ flex: 1 }} />
-            {x.status === 'accepted' && (
-              <>
-                <Chip label="✓ APPROVE" on disabled={busy} onPress={() => { tap(); void rule(x.id, true); }} />
-                <Chip label="✕ VETO" disabled={busy} onPress={() => { tap(); void rule(x.id, false); }} />
-              </>
-            )}
-          </View>
-        </View>
-      ))}
     </Card>
   );
 }
@@ -723,12 +668,10 @@ export function Team({ leagueId, onBack, onDraft, onLeftSeat }: {
       {/* commissioner player moves — any player, any roster */}
       {team.is_commish && <CommishPlayers leagueId={leagueId} onChanged={() => void refresh()} />}
 
-      {/* trade rulings (commish, when the league routes trades through them) */}
-      {team.is_commish && (
-        <CommishTrades leagueId={leagueId}
-          teamName={(rid) => team.waiver_order.find((w) => w.roster_id === rid)?.team ?? `Roster ${rid}`}
-          playerName={(slug) => poolBySlug.get(slug)?.full_name ?? slug} />
-      )}
+      {/* trades — propose/answer for managers, rulings inline for the commish */}
+      <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order}
+        rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review}
+        isCommish={!!team.is_commish} onChanged={() => void refresh()} />
 
       {/* waiver order */}
       <Card>
@@ -748,7 +691,6 @@ export function Team({ leagueId, onBack, onDraft, onLeftSeat }: {
             : 'Winning a claim sends you to the back of the line.'}
           {team.waiver_clear_min != null && ` Waivers clear daily at ${fmtEtMin(team.waiver_clear_min)} ET (${team.waiver_hold_days ?? 1}-day hold).`}
         </Mono>
-        <Mono size={8.5} tone="faint" style={{ marginTop: 6 }}>Trades live on the web app for now.</Mono>
       </Card>
 
       {/* FAAB claim → collect the blind bid */}
