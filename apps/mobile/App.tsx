@@ -139,7 +139,10 @@ export function App() {
 
           {open && (
             <Pressable
-              onPress={() => setOpen(null)}
+              // Resets the view too, so the button lands where its label says.
+              // Closing only the league would leave you sitting in Admin with
+              // no league open — "← my leagues" that doesn't show your leagues.
+              onPress={() => { setOpen(null); setView('picks'); }}
               hitSlop={8}
               style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: theme.you, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 6, flexShrink: 1 }}
             >
@@ -163,30 +166,40 @@ export function App() {
           {open ? open.name : session.user.email}
         </Text>
 
-        {open ? (
+        {/* The gear's destinations come FIRST, and deliberately are not nested
+            under an open league.
+
+            They used to be — the whole `view` switch sat inside `open ? … :
+            <Leagues/>` — which made every one of them a dead tap from the
+            leagues list. `open` is null there, so tapping Admin set `view` and
+            the tree went on rendering <Leagues/>: no navigation, no error,
+            nothing. It went unnoticed because it only broke once the leagues
+            list became the landing screen; before that a league was always open
+            by the time you could reach the gear. */}
+        {view === 'commish' ? (
+          <View style={{ flex: 1 }}><Commish onBack={() => setView('picks')} /></View>
+        ) : view === 'admin' ? (
+          <View style={{ flex: 1 }}><Admin onBack={() => setView('picks')} /></View>
+        ) : view === 'demo' ? (
           <View style={{ flex: 1 }}>
-            {/* One board. Everything else is opened from the gear. */}
-            {view === 'commish' ? (
-              <Commish onBack={() => setView('picks')} />
-            ) : view === 'admin' ? (
-              <Admin onBack={() => setView('picks')} />
-            ) : view === 'demo' ? (
-              <View style={{ flex: 1 }}>
-                <Pressable onPress={() => setView('picks')} hitSlop={8} style={{ alignSelf: 'flex-start', marginHorizontal: 12, marginBottom: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.bd, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
-                  <Text style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>← back to my matchup</Text>
-                </Pressable>
-                <DemoBoard />
-              </View>
-            ) : (
-              <LivePicks
-                // Remounts when you switch leagues, so no state leaks between them.
-                key={`picks-${open.leagueId}-${open.rosterId}`}
-                userId={session.user.id}
-                leagueId={open.leagueId}
-                rosterId={open.rosterId}
-                onBack={() => setOpen(null)}
-              />
-            )}
+            <Pressable onPress={() => setView('picks')} hitSlop={8} style={{ alignSelf: 'flex-start', marginHorizontal: 12, marginBottom: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.bd, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
+              {/* Where "back" actually goes depends on whether a league is open,
+                  so the label has to say which — otherwise it promises a
+                  matchup and delivers the leagues list. */}
+              <Text style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>{open ? '← back to my matchup' : '← back to my leagues'}</Text>
+            </Pressable>
+            <DemoBoard />
+          </View>
+        ) : open ? (
+          <View style={{ flex: 1 }}>
+            <LivePicks
+              // Remounts when you switch leagues, so no state leaks between them.
+              key={`picks-${open.leagueId}-${open.rosterId}`}
+              userId={session.user.id}
+              leagueId={open.leagueId}
+              rosterId={open.rosterId}
+              onBack={() => setOpen(null)}
+            />
           </View>
         ) : (
           <Leagues
