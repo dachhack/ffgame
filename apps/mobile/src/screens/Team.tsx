@@ -10,292 +10,23 @@
 // (ui/TradeCenter), the avatar grid (ui/AvatarGrid), and the commissioner's
 // whole kit. The old "web only for now" list is empty.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
-  addFreeAgent, adminAssignRoster, adminLeagueJoiners, adminLeagueMembers, cancelWaiverClaim, commishClaimRoster,
-  commishSeedCoin, commishSetManager, dropPlayer,
+  addFreeAgent, cancelWaiverClaim, dropPlayer,
   friendlyError, leagueInvite, leaguePool, nativeRosters,
-  nativeTeamState, processWaivers, setTeamAvatar, setTeamController, setTeamName, submitWaiverClaim,
-  teamManagers, POS_CAP_KEYS,
-  type AdminMember, type LeagueJoiner, type LeaguePoolPlayer, type NativeTeamState, type TeamManagerRow,
+  nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
+  type LeaguePoolPlayer, type NativeTeamState,
 } from '@drip/core/data/liveApi';
 import { headshot } from '@drip/core/data/media';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
-import { CommishSettings } from '../ui/CommishSettings';
 import { AvatarGrid } from '../ui/AvatarGrid';
-import { CommishPlayers, Playoffs, Standings } from '../ui/LeagueExtras';
+import { Playoffs, Standings } from '../ui/LeagueExtras';
 import { TradeCenter } from '../ui/TradeCenter';
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
-
-/** Seat management, for the commissioner: assign a user to a team by email,
- *  unassign (kick) one, take an open seat yourself, or vacate your own —
- *  including the seat you were given at creation, which is how a playing
- *  commissioner becomes a non-playing one.
- *
- *  All three actions are the 0042/0045 RPCs the web console already uses;
- *  admin_assign_roster with a null email IS the kick — the membership row
- *  stays (the team and its players survive), only the person is detached. */
-function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
-  leagueId: string; myRoster: number | null;
-  onChanged: () => void;
-  /** The commissioner vacated their own seat — the screen above must not keep
-   *  rendering a lineup for a roster they no longer hold. */
-  onSelfUnassigned: () => void;
-}) {
-  const t = useTheme();
-  const [seats, setSeats] = useState<AdminMember[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const [assignFor, setAssignFor] = useState<AdminMember | null>(null);
-  const [emailDraft, setEmailDraft] = useState('');
-  const [coinFor, setCoinFor] = useState<AdminMember | null>(null);   // seed-coin target
-  const [coinDraft, setCoinDraft] = useState('');
-  const [coinSign, setCoinSign] = useState<1 | -1>(1);                // grant vs dock
-  const [mgrs, setMgrs] = useState<TeamManagerRow[]>([]);             // co-managers (0125)
-  const [joiners, setJoiners] = useState<LeagueJoiner[]>([]);         // the waiting room
-  const [mgrFor, setMgrFor] = useState<AdminMember | null>(null);     // add-co-manager target
-  const [mgrDraft, setMgrDraft] = useState('');
-  const [renameFor, setRenameFor] = useState<AdminMember | null>(null);
-  const [renameDraft, setRenameDraft] = useState('');
-  const [artFor, setArtFor] = useState<AdminMember | null>(null);     // avatar target
-  const [seatPickFor, setSeatPickFor] = useState<LeagueJoiner | null>(null); // waitlist → seat
-
-  const loadSeats = () => Promise.all([
-    adminLeagueMembers(leagueId).then(setSeats),
-    teamManagers(leagueId).then(setMgrs).catch(() => {}),
-    adminLeagueJoiners(leagueId).then((j) => setJoiners(Array.isArray(j) ? j : [])).catch(() => {}),
-  ]).catch((e) => setNote(friendlyError(e)));
-  useEffect(() => { void loadSeats(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
-
-  const act = async (fn: () => Promise<{ ok: boolean; error?: string; status?: string }>, done: (status?: string) => void) => {
-    if (busy) return;
-    setBusy(true); setNote(null);
-    try {
-      const r = await fn();
-      if (r.ok) { commit(); done(r.status); await loadSeats(); onChanged(); }
-      else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
-    } catch (e) { warn(); setNote(friendlyError(e)); }
-    finally { setBusy(false); }
-  };
-
-  const doAssign = () => {
-    const email = emailDraft.trim().toLowerCase();
-    if (!assignFor || !email) return;
-    const seat = assignFor;
-    setAssignFor(null); setEmailDraft('');
-    void act(() => adminAssignRoster(leagueId, seat.roster_id, email), (status) => {
-      setNote(status === 'pending'
-        ? `✓ seat held for ${email} — theirs the moment they sign in with that address`
-        : `✓ ${email} is in`);
-    });
-  };
-
-  const doKick = (m: AdminMember) => {
-    const self = m.roster_id === myRoster;
-    const who = m.email ?? m.claim_email ?? 'this manager';
-    Alert.alert(
-      self ? 'Leave your team?' : `Remove ${who}?`,
-      self
-        ? 'The team stays in the league with its players; you stay commissioner. You just stop being a manager in it.'
-        : `${who} loses ${m.team ?? 'the team'}. The team and its players stay, unassigned — hand it to someone else or leave it open.`,
-      [
-        { text: 'cancel', style: 'cancel' },
-        {
-          text: self ? 'leave team' : 'remove', style: 'destructive',
-          onPress: () => void act(() => adminAssignRoster(leagueId, m.roster_id, ''), () => {
-            if (self) onSelfUnassigned();
-            else setNote(`✓ ${m.team ?? `roster ${m.roster_id}`} is unassigned`);
-          }),
-        },
-      ],
-    );
-  };
-
-  return (
-    <Card>
-      <Mono size={9} tone="faint" track={0.12}>⚑ TEAMS — ASSIGN, UNASSIGN, KICK</Mono>
-      {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
-      {seats === null ? <ActivityIndicator color={t.you} style={{ marginTop: 8 }} /> : seats.map((m) => {
-        const openSeat = !m.enrolled && !m.claim_email;
-        const self = m.roster_id === myRoster;
-        return (
-          <View key={m.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: '700', color: t.text }}>
-                {m.team ?? `Roster ${m.roster_id}`}{self ? '  (you)' : ''}
-              </Text>
-              <Mono size={8.5} tone={openSeat ? 'warn' : 'faint'}>
-                {m.enrolled ? (m.email ?? m.sleeper ?? 'seated') : m.claim_email ? `held for ${m.claim_email}` : 'open seat'}
-              </Mono>
-            </View>
-            {openSeat && (
-              <>
-                <Chip label="ASSIGN" onPress={() => { tap(); setAssignFor(m); setEmailDraft(''); }} />
-                {myRoster == null && <Chip label="＋ ME" on onPress={() => { tap(); void act(() => commishClaimRoster(leagueId, m.roster_id), () => setNote('✓ the seat is yours')); }} />}
-              </>
-            )}
-            {!openSeat && (
-              <>
-                {/* AI takeover: the resolver runs this seat's lineups until a
-                    human takes it back. The standard AWOL-manager fix. */}
-                <Chip label={m.controller === 'ai' ? '🤖' : '👤'} on={m.controller === 'ai'}
-                  onPress={() => { tap(); void act(() => setTeamController(leagueId, m.roster_id, m.controller === 'ai' ? 'human' : 'ai'),
-                    () => setNote(`✓ ${m.team ?? `roster ${m.roster_id}`} → ${m.controller === 'ai' ? 'human' : '🤖 AI'} control`)); }} />
-                <Chip label="💰" onPress={() => { tap(); setCoinFor(m); setCoinDraft(''); setCoinSign(1); }} />
-                <Chip label={self ? '✕ LEAVE' : '✕'} onPress={() => { tap(); doKick(m); }} />
-              </>
-            )}
-          </View>
-        );
-      })}
-
-      {/* second row of tools per seat: identity + co-managers. Kept separate
-          from the action row above so neither wraps into soup on a 360dp
-          screen. */}
-      {(seats ?? []).filter((m) => m.enrolled || m.claim_email).map((m) => {
-        const seatMgrs = mgrs.filter((g) => g.roster_id === m.roster_id);
-        return (
-          <View key={`x-${m.roster_id}`} style={{ paddingVertical: 4 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <Mono size={8.5} tone="faint" style={{ width: 90 }} >{m.team ?? `Roster ${m.roster_id}`}</Mono>
-              <Chip label="✎ NAME" onPress={() => { tap(); setRenameFor(m); setRenameDraft(m.team ?? ''); }} />
-              <Chip label="🖼 ART" onPress={() => { tap(); setArtFor(m); }} />
-              <Chip label="＋ CO-MGR" onPress={() => { tap(); setMgrFor(m); setMgrDraft(''); }} />
-            </View>
-            {seatMgrs.map((g) => (
-              <View key={g.app_user_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3, paddingLeft: 12 }}>
-                <Mono size={8.5} tone="dim" style={{ flex: 1 }}>⇄ {g.email ?? g.app_user_id.slice(0, 8)}</Mono>
-                <LinkButton label="remove" tone="opp" onPress={() => void act(
-                  () => commishSetManager(leagueId, m.roster_id, { appUserId: g.app_user_id, remove: true }),
-                  () => setNote('✓ co-manager removed'))} />
-              </View>
-            ))}
-          </View>
-        );
-      })}
-
-      {/* the waiting room: joined, no seat yet. Deal them in as owners of an
-          open seat, or attach them to a full team as a co-manager — the two
-          answers to "more people than spots". */}
-      {joiners.length > 0 && (
-        <View style={{ marginTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8 }}>
-          <Mono size={9} tone="warn" track={0.12}>⏳ WAITING ROOM ({joiners.length})</Mono>
-          {joiners.map((j) => (
-            <View key={j.app_user_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 5, flexWrap: 'wrap' }}>
-              <Text numberOfLines={1} style={{ flex: 1, minWidth: 120, fontSize: 12, color: t.text }}>{j.email ?? j.app_user_id.slice(0, 8)}</Text>
-              <Chip label="SEAT →" onPress={() => { tap(); setSeatPickFor(j); }} />
-            </View>
-          ))}
-        </View>
-      )}
-      <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 13 }}>
-        Unassigned teams keep their players and can sit open as long as you like. Assigning by email seats them instantly if they have an account, or holds the seat until they sign in with it.
-      </Mono>
-
-      {/* assign → collect the email */}
-      <Overlay visible={!!assignFor} title={assignFor ? `Assign ${assignFor.team ?? `roster ${assignFor.roster_id}`}` : ''}
-        subtitle="The seat goes to this email — instantly if they have an account, held for them if not." onClose={() => setAssignFor(null)}>
-        <TextInput value={emailDraft} autoFocus autoCapitalize="none" autoCorrect={false} keyboardType="email-address"
-          placeholder="manager@email.com" placeholderTextColor={t.faint} onChangeText={setEmailDraft}
-          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
-        <View style={{ marginTop: 10 }}>
-          <PrimaryButton label={busy ? '…' : '✓ ASSIGN THE SEAT'} disabled={busy || !emailDraft.trim()} onPress={doAssign} />
-        </View>
-      </Overlay>
-
-      {/* manual coin adjustment — commish_seed_coin is signed (only zero is
-          refused), so grant and dock are the same lever with a sign toggle */}
-      <Overlay visible={!!coinFor} title={coinFor ? `Adjust coin — ${coinFor.team ?? `roster ${coinFor.roster_id}`}` : ''}
-        subtitle="Applied to their current balance." onClose={() => setCoinFor(null)}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Chip label="＋ GRANT" on={coinSign === 1} onPress={() => { tap(); setCoinSign(1); }} />
-          <Chip label="− DOCK" on={coinSign === -1} onPress={() => { tap(); setCoinSign(-1); }} />
-          <TextInput value={coinDraft} autoFocus keyboardType="number-pad" placeholder="amount" placeholderTextColor={t.faint}
-            onChangeText={(v) => setCoinDraft(v.replace(/\D/g, ''))}
-            style={{ width: 100, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontFamily: MONO, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
-        </View>
-        <View style={{ marginTop: 10 }}>
-          <PrimaryButton label={busy ? '…' : coinSign === 1 ? '💰 GRANT' : '− DOCK'} disabled={busy || !coinDraft}
-            onPress={() => {
-              const m = coinFor; const amt = parseInt(coinDraft || '0', 10) * coinSign;
-              if (!m || !amt) return;
-              setCoinFor(null); setCoinDraft('');
-              void act(() => commishSeedCoin(leagueId, m.roster_id, amt),
-                () => setNote(`✓ ${amt > 0 ? '+' : ''}${amt} coin — ${m.team ?? `roster ${m.roster_id}`}`));
-            }} />
-        </View>
-      </Overlay>
-
-      {/* rename any team (commish) */}
-      <Overlay visible={!!renameFor} title={renameFor ? `Rename ${renameFor.team ?? `roster ${renameFor.roster_id}`}` : ''} onClose={() => setRenameFor(null)}>
-        <TextInput value={renameDraft} autoFocus maxLength={40} onChangeText={setRenameDraft}
-          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
-        <View style={{ marginTop: 10 }}>
-          <PrimaryButton label={busy ? '…' : '✓ SAVE NAME'} disabled={busy || !renameDraft.trim()}
-            onPress={() => {
-              const m = renameFor; setRenameFor(null);
-              if (m && renameDraft.trim()) void act(() => setTeamName(leagueId, m.roster_id, renameDraft), () => setNote('✓ renamed'));
-            }} />
-        </View>
-      </Overlay>
-
-      {/* team art, any seat (commish; the same set_team_avatar a manager uses) */}
-      <AvatarGrid visible={!!artFor} title={artFor ? `Art for ${artFor.team ?? `roster ${artFor.roster_id}`}` : ''}
-        current={artFor?.avatar} onClose={() => setArtFor(null)}
-        onPick={(url) => {
-          const m = artFor; setArtFor(null);
-          if (m) void act(() => setTeamAvatar(leagueId, m.roster_id, url), () => setNote('✓ art set'));
-        }} />
-
-      {/* add a co-manager by email */}
-      <Overlay visible={!!mgrFor} title={mgrFor ? `Co-manager for ${mgrFor.team ?? `roster ${mgrFor.roster_id}`}` : ''}
-        subtitle="They steer the same lineup as the owner — one team, more thumbs. Must already have an account." onClose={() => setMgrFor(null)}>
-        <TextInput value={mgrDraft} autoFocus autoCapitalize="none" autoCorrect={false} keyboardType="email-address"
-          placeholder="comanager@email.com" placeholderTextColor={t.faint} onChangeText={setMgrDraft}
-          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
-        <View style={{ marginTop: 10 }}>
-          <PrimaryButton label={busy ? '…' : '＋ ADD CO-MANAGER'} disabled={busy || !mgrDraft.trim()}
-            onPress={() => {
-              const m = mgrFor; setMgrFor(null);
-              if (m && mgrDraft.trim()) void act(
-                () => commishSetManager(leagueId, m.roster_id, { email: mgrDraft.trim() }),
-                () => setNote('✓ co-manager added'));
-            }} />
-        </View>
-      </Overlay>
-
-      {/* waitlist → deal them in: open seats seat them as OWNER; taken seats
-          attach them as CO-MANAGER */}
-      <Overlay visible={!!seatPickFor} title={seatPickFor ? `Deal in ${seatPickFor.email ?? 'this joiner'}` : ''}
-        subtitle="An open seat makes them its owner; a taken team adds them as a co-manager." onClose={() => setSeatPickFor(null)}>
-        <ScrollView style={{ maxHeight: 380 }}>
-          {(seats ?? []).map((m) => {
-            const openSeat = !m.enrolled && !m.claim_email;
-            return (
-              <View key={m.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: '700', color: t.text }}>{m.team ?? `Roster ${m.roster_id}`}</Text>
-                  <Mono size={8.5} tone={openSeat ? 'warn' : 'faint'}>{openSeat ? 'open — seat as owner' : `${m.email ?? m.claim_email ?? 'taken'} — add as co-manager`}</Mono>
-                </View>
-                <Chip label={openSeat ? 'OWNER' : '＋ CO-MGR'} on={openSeat} disabled={busy}
-                  onPress={() => {
-                    const j = seatPickFor; setSeatPickFor(null);
-                    if (!j) return;
-                    if (openSeat) void act(() => adminAssignRoster(leagueId, m.roster_id, j.email ?? '', j.app_user_id), () => setNote(`✓ ${j.email ?? 'joiner'} owns ${m.team ?? `roster ${m.roster_id}`}`));
-                    else void act(() => commishSetManager(leagueId, m.roster_id, { appUserId: j.app_user_id }), () => setNote(`✓ ${j.email ?? 'joiner'} co-manages ${m.team ?? `roster ${m.roster_id}`}`));
-                  }} />
-              </View>
-            );
-          })}
-        </ScrollView>
-      </Overlay>
-    </Card>
-  );
-}
 
 function fmtEtMin(m: number): string {
   const h24 = Math.floor(m / 60), mm = m % 60;
@@ -315,12 +46,7 @@ function Face({ slug, pos, size = 24 }: { slug: string; pos: string; size?: numb
   );
 }
 
-export function Team({ leagueId, onBack, onDraft, onLeftSeat }: {
-  leagueId: string; onBack: () => void; onDraft: () => void;
-  /** The commissioner vacated their own seat — leave the league view entirely
-   *  so nothing above keeps rendering the roster they no longer hold. */
-  onLeftSeat: () => void;
-}) {
+export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: () => void; onDraft: () => void }) {
   const t = useTheme();
   const [team, setTeam] = useState<NativeTeamState | null>(null);
   const [rosters, setRosters] = useState<{ roster_id: number; slug: string }[]>([]);
@@ -333,7 +59,6 @@ export function Team({ leagueId, onBack, onDraft, onLeftSeat }: {
   const [claimFor, setClaimFor] = useState<{ p: LeaguePoolPlayer; drop?: string } | null>(null); // FAAB blind bid
   const [bidDraft, setBidDraft] = useState('');
   const [nameDraft, setNameDraft] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false); // ⚑ commish rules sheet
   const [myArtOpen, setMyArtOpen] = useState(false);       // own team art
   const skew = useRef(0);
 
@@ -461,54 +186,16 @@ export function Team({ leagueId, onBack, onDraft, onLeftSeat }: {
         <Pressable onPress={shareInvite} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
           <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>⇪ RECRUIT</Text>
         </Pressable>
-        {team.is_commish && (
-          <Pressable onPress={() => { tap(); setSettingsOpen(true); }}
-            style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
-            <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.warn }}>⚑ SETTINGS</Text>
-          </Pressable>
-        )}
       </View>
     </Card>
   );
 
-  // The commissioner-without-a-team header. identityCard is seat-gated (its
-  // whole content is the seat), so a seatless commissioner needs a card of
-  // their own or the SETTINGS/RECRUIT buttons vanish with the roster.
-  const commishCard = myRoster == null && team.is_commish && (
-    <Card style={{ borderLeftWidth: 3, borderLeftColor: t.warn }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Display size={15}>⚑ Commissioner</Display>
-          <Mono size={9.5} tone="faint" style={{ marginTop: 3 }}>
-            You run this league without a team in it — managing, not competing.
-          </Mono>
-        </View>
-        <Pressable onPress={shareInvite} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>⇪ RECRUIT</Text>
-        </Pressable>
-        <Pressable onPress={() => { tap(); setSettingsOpen(true); }}
-          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.warn }}>⚑ SETTINGS</Text>
-        </Pressable>
-      </View>
-    </Card>
-  );
-
-  // The commish rules sheet, mounted in BOTH branches below — waiver systems
-  // get chosen before the draft, not after it.
-  const settingsSheet = (
-    <>
-      {team.is_commish && (
-        <CommishSettings visible={settingsOpen} leagueId={leagueId}
-          onClose={() => setSettingsOpen(false)} onSaved={() => void refresh()} />
-      )}
-      {myRoster != null && (
-        <AvatarGrid visible={myArtOpen} title="Your team art" current={team.my_avatar}
-          onClose={() => setMyArtOpen(false)}
-          onPick={(url) => { setMyArtOpen(false); void run(() => setTeamAvatar(leagueId, myRoster, url)); }} />
-      )}
-    </>
-  );
+  // Own-team art (the league-rule sheets live on the ⚑ COMMISH tab now).
+  const settingsSheet = myRoster != null ? (
+    <AvatarGrid visible={myArtOpen} title="Your team art" current={team.my_avatar}
+      onClose={() => setMyArtOpen(false)}
+      onPick={(url) => { setMyArtOpen(false); void run(() => setTeamAvatar(leagueId, myRoster, url)); }} />
+  ) : null;
 
   if (team.draft_status !== 'complete') {
     return (
@@ -520,7 +207,6 @@ export function Team({ leagueId, onBack, onDraft, onLeftSeat }: {
         </View>
         {!!err && <Notice tone="opp"><Mono size={10} tone="opp">{err}</Mono></Notice>}
         {identityCard}
-        {commishCard}
         <Card>
           <Display size={15}>Rosters arrive at the draft</Display>
           <Mono size={10} style={{ marginTop: 8, lineHeight: 16 }}>
@@ -530,11 +216,6 @@ export function Team({ leagueId, onBack, onDraft, onLeftSeat }: {
             <PrimaryButton label="⛏ TO THE DRAFT ROOM" onPress={onDraft} />
           </View>
         </Card>
-        {/* Seats get handed out BEFORE the draft — this is when assigning
-            matters most, so the panel lives in this branch too. */}
-        {team.is_commish && (
-          <CommishTeams leagueId={leagueId} myRoster={myRoster} onChanged={() => void refresh()} onSelfUnassigned={onLeftSeat} />
-        )}
         {settingsSheet}
       </ScrollView>
     );
@@ -552,7 +233,6 @@ export function Team({ leagueId, onBack, onDraft, onLeftSeat }: {
       </View>
       {!!err && <Notice tone="opp"><Mono size={10} tone="opp">{err}</Mono></Notice>}
       {identityCard}
-      {commishCard}
 
       {/* over-limit lockout: no adds/claims/weekly lineups until legal */}
       {team.roster_issue && (
@@ -656,17 +336,9 @@ export function Team({ leagueId, onBack, onDraft, onLeftSeat }: {
         {free.length > 60 && <Mono size={9.5} tone="faint" style={{ paddingTop: 8 }}>…{free.length - 60} more — narrow the search.</Mono>}
       </Card>
 
-      {/* seat management (commish) */}
-      {team.is_commish && (
-        <CommishTeams leagueId={leagueId} myRoster={myRoster} onChanged={() => void refresh()} onSelfUnassigned={onLeftSeat} />
-      )}
-
       {/* standings + the bracket — every member's read */}
       <Standings leagueId={leagueId} myRoster={myRoster} />
       <Playoffs leagueId={leagueId} />
-
-      {/* commissioner player moves — any player, any roster */}
-      {team.is_commish && <CommishPlayers leagueId={leagueId} onChanged={() => void refresh()} />}
 
       {/* trades — propose/answer for managers, rulings inline for the commish */}
       <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order}

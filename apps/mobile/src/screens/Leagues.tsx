@@ -49,8 +49,9 @@ function Crest({ url, name, size }: { url?: string | null; name?: string | null;
 export function Leagues({ userId, onOpen, onBoard }: {
   userId: string;
   /** rosterId is null for a league you commission WITHOUT a team — it opens
-   *  into management (draft + team tools), not a lineup it doesn't have. */
-  onOpen: (leagueId: string, rosterId: number | null, name: string, native: boolean, pickUserId?: string) => void;
+   *  into management (draft + team tools), not a lineup it doesn't have.
+   *  `commish` decides whether the ⚑ COMMISH tab renders at all. */
+  onOpen: (leagueId: string, rosterId: number | null, name: string, native: boolean, commish: boolean, pickUserId?: string) => void;
   /** Open the league board — browse open leagues, post yours, recruit. */
   onBoard: () => void;
 }) {
@@ -61,6 +62,9 @@ export function Leagues({ userId, onOpen, onBoard }: {
   // before this list a seatless commissioner had no door into their league on
   // the phone at all: enrollments was the only source.
   const [managed, setManaged] = useState<AdminLeague[]>([]);
+  // Every league this account commissions, seated or not — the enrolled rows
+  // consult this to decide whether opening them should offer the ⚑ COMMISH tab.
+  const [commishIds, setCommishIds] = useState<Set<string>>(new Set());
   // Leagues joined but not seated — full-league joins wait here (0125) until
   // the commissioner deals them in as an owner or a co-manager.
   const [waiting, setWaiting] = useState<WaitlistRow[]>([]);
@@ -80,6 +84,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
       // Only native leagues: they're the ones the app can actually manage. A
       // commissioned Sleeper league's tools live on the web.
       const cl = await commishOverview().catch(() => [] as AdminLeague[]);
+      setCommishIds(new Set(cl.map((l) => l.league_id)));
       setManaged(cl.filter((l) => l.provider === 'native' && !enrolledIds.has(l.league_id)));
       setWaiting(await myWaitlist().catch(() => []));
     } catch (e) {
@@ -127,7 +132,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
         return (
           <Pressable
             key={`${e.league_id}-${e.sleeper_roster_id}`}
-            onPress={() => { tap(); onOpen(e.league_id, e.sleeper_roster_id, lg?.name ?? 'League', lg?.provider === 'native', e.pick_user_id); }}
+            onPress={() => { tap(); onOpen(e.league_id, e.sleeper_roster_id, lg?.name ?? 'League', lg?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id); }}
             android_ripple={{ color: alpha(t.you, 16) }}
             style={({ pressed }) => ({
               backgroundColor: t.surface, overflow: 'hidden',
@@ -175,7 +180,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
       {managed.map((l) => (
         <Pressable
           key={`mgmt-${l.league_id}`}
-          onPress={() => { tap(); onOpen(l.league_id, null, l.name, true); }}
+          onPress={() => { tap(); onOpen(l.league_id, null, l.name, true, true); }}
           android_ripple={{ color: alpha(t.warn, 16) }}
           style={({ pressed }) => ({
             backgroundColor: t.surface, overflow: 'hidden',
