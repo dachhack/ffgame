@@ -46,7 +46,7 @@ const SKIN_OPTS: { id: CardSkin; name: string }[] = [
   { id: 'battalion', name: 'Battalion' },
 ];
 
-export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin, onTheme, onSkin, onCardSize, onDemo, onCommish, onAdmin, onSignOut, onClose }: {
+export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin, onTheme, onSkin, onCardSize, onDemo, onAdmin, onSignOut, onClose }: {
   visible: boolean;
   theme: ThemeName;
   skin: CardSkin;
@@ -59,7 +59,6 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
   onSkin: (s: CardSkin) => void;
   onCardSize: (s: CardSize) => void;
   onDemo: () => void;
-  onCommish: () => void;
   onAdmin: () => void;
   onSignOut: () => void;
   onClose: () => void;
@@ -160,16 +159,9 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
 
         <View style={{ gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 14 }}>
           <Mono size={8.5} weight="700" track={0.16} tone="faint">MORE</Mono>
-          <Pressable
-            onPress={() => { onClose(); onCommish(); }}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 11 }}
-          >
-            <Text style={{ fontSize: 16 }}>⚑</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: t.text }}>Commissioner</Text>
-              <Mono size={9} tone="faint">Invites, who&rsquo;s joined, week sync.</Mono>
-            </View>
-          </Pressable>
+          {/* No Commissioner entry here anymore: commissioner tools are the
+              ⚑ COMMISH tab inside each league you run — where the league is,
+              not in a global menu that then asks which league you meant. */}
           {isAdmin && (
             <Pressable
               onPress={() => { onClose(); onAdmin(); }}
