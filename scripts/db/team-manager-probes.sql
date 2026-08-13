@@ -240,4 +240,35 @@ begin
   perform assert_err(commish_clear_coin(lid), 'forbidden', 'tm46 member cannot clear');
 end $$;
 
+-- ── 7. the allowance grants itself (0132) ────────────────────────────────────
+-- The worker calls auto_weekly_budget(week) every tick; a league is in scope
+-- iff weekly_budget > 0 AND it has a matchup that week (the fixture's is wk 1).
+-- Auto and the manual button share an idem_key, so each pays after the other
+-- is a no-op — one allowance per (league, week, roster), whoever fires first.
+do $$
+declare lid uuid := current_setting('probe.tm_lid')::uuid;
+        bseat int := current_setting('probe.tm_bseat')::int;
+        r jsonb; n numeric;
+begin
+  perform probe_as('a');
+  perform assert_ok(commish_set_weekly_budget(lid, 50), 'tm47 allowance set');
+  reset role;                    -- the worker: service connection, no auth.uid()
+  r := auto_weekly_budget(1);
+  perform assert_true((r ->> 'ok')::boolean and (r ->> 'leagues')::int >= 1, 'tm48 league in scope');
+  select coins into n from team_wallet where league_id = lid and roster_id = bseat;
+  perform assert_true(n = 50, 'tm49 allowance landed (0 + 50)');
+  r := auto_weekly_budget(1);
+  select coins into n from team_wallet where league_id = lid and roster_id = bseat;
+  perform assert_true(n = 50, 'tm50 next tick is a no-op');
+  perform probe_as('a');
+  r := commish_grant_weekly_budget(lid, 1);
+  perform assert_true((r ->> 'ok')::boolean, 'tm51 manual grant still allowed');
+  select coins into n from team_wallet where league_id = lid and roster_id = bseat;
+  perform assert_true(n = 50, 'tm52 manual after auto cannot double-pay');
+  reset role;
+  r := auto_weekly_budget(99);   -- no matchup that week → league out of scope
+  select coins into n from team_wallet where league_id = lid and roster_id = bseat;
+  perform assert_true(n = 50, 'tm53 no matchup, no grant');
+end $$;
+
 select 'ALL TEAM-MANAGER PROBES PASSED' as result;

@@ -1581,8 +1581,10 @@ function CoManagerPanel({ leagueId, members }: { leagueId: string; members: Admi
 }
 
 // Commissioner: the league's flat weekly coin budget + a per-week grant. Setting
-// the amount defines the budget; "grant" credits every team that week's budget
-// (idempotent server-side, so a re-press never double-pays).
+// the amount defines the budget; the worker then credits it automatically as
+// each week's games arrive (0132). "grant" is the manual catch-up — auto and
+// manual share one ledger receipt per (league, week, roster), so neither can
+// double-pay after the other.
 function WeeklyBudget({ l, onGranted }: { l: AdminLeague; onGranted: () => void }) {
   const [amt, setAmt] = useState(String(l.weekly_budget ?? 0));
   const [saved, setSaved] = useState<number>(l.weekly_budget ?? 0);
@@ -1616,7 +1618,7 @@ function WeeklyBudget({ l, onGranted }: { l: AdminLeague; onGranted: () => void 
         <input value={amt} onChange={(e) => { setAmt(e.target.value.replace(/[^\d]/g, '')); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
           placeholder="coin / week" inputMode="numeric" style={{ ...inp, fontSize: 11, padding: '5px 7px', width: 90 }} />
         <button onClick={save} disabled={busy === 'save' || !dirty} className="mono" style={{ ...btn(false), opacity: busy === 'save' || !dirty ? 0.6 : 1 }}>{busy === 'save' ? '…' : 'set budget'}</button>
-        <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>each team, per week</span>
+        <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>each team, per week — drops automatically as the week starts</span>
       </div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 7, flexWrap: 'wrap' }}>
         <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)' }}>grant week</span>
