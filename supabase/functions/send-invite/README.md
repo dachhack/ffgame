@@ -85,6 +85,14 @@ on `GMAIL_SENDER`, or Gmail silently rewrites the From back to the real mailbox.
 The function rejects anything but an admin JWT, and requires a valid `to`, a
 non-empty `code`, and an `http(s)` `link`.
 
+`to` is whatever the lead typed into the anonymous request form, so it can be
+wrong — a mistyped address sends the invite into the void with no bounce back to
+us. The CODE REQUESTS card lets an admin correct it in place (`✎ fix`, or
+`+ add email` on a request that arrived with only a platform username) before
+sending; that writes through `admin_set_code_request_email` (migration 0129),
+which validates the same shape this function does and logs the old value to
+`audit_log`.
+
 ## Test from the CLI
 
 ```bash
