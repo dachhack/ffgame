@@ -835,9 +835,16 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // these surface as a CTA during the locked/live period instead of a forced modal.
   const pendingBackups = useMemo(() => resolved.windows.flatMap((w) => w.slots).filter((s) => {
     if (!s.backup || !s.you) return false;
+    // Live board: "unopposed" is only a FACT once the slot's window has kicked
+    // and the opponent's cards are face-up. Before that their picks are SEALED
+    // — invisible by design — so every future window reads "opponent absent"
+    // and the first multi-window live night counted all of them as backups
+    // ("7 unopposed" over a fully-opposed board). The demo/sim knows the whole
+    // AI lineup up front, so it keeps the pre-kick prompt.
+    if (liveCtx && liveWinState[s.win] !== 'live' && liveWinState[s.win] !== 'final') return false;
     if (ZERO_BANK_METRICS.has(`${s.you.player.pos}:${s.you.metricId}`)) return false;
     return !backupAssign[slotKey(s.win, s.slotIndex)];
-  }), [resolved, backupAssign]);
+  }), [resolved, backupAssign, liveCtx, liveWinState]);
 
   // Everything currently in effect, with a back-out where the store supports it.
   const activeEffects: { key: string; id?: string; icon: string; name: string; detail: string; onRemove?: () => void }[] = [];
@@ -2487,13 +2494,25 @@ const WindowSection = memo(WindowSectionInner, (a, b) => {
 // just the slotted players'. Sourced from the worker's game_feed rows (already
 // polled every 15s for the field visuals), newest first, scoring plays flagged.
 function WindowGameLog({ week, win }: { week: number; win: WindowId }) {
-  const [open, setOpen] = useState(true);
+  // Collapsed by default (founder's call, first multi-window live night): the
+  // expanded log pushed the actual cards below the fold the moment plays
+  // started landing. The header's play count still ticks while closed.
+  const [open, setOpen] = useState(false);
   const feeds = gamesInWindow(week, win)
     .map((g) => gameFeedFor(week, g.home))
     .filter((f): f is TeamGameFeed => !!f && f.plays.length > 0);
+  // Dedupe by (game, clock, text): the feed itself can carry a play twice —
+  // ESPN re-emits under a fresh play id when it restructures a drive — and a
+  // reader's log must not repeat a line however many ids the play arrived as.
+  const seenPlay = new Set<string>();
   const rows = feeds
     .flatMap((f) => f.plays.map((p) => ({ f, p })))
     .sort((a, b) => b.p.c - a.p.c)
+    .filter(({ f, p }) => {
+      const k = `${f.key}|${p.c}|${p.txt}`;
+      if (seenPlay.has(k)) return false;
+      seenPlay.add(k); return true;
+    })
     .slice(0, 250);
   const qc = (c: number) => {
     const q = Math.min(5, Math.floor(c / 900) + 1);
