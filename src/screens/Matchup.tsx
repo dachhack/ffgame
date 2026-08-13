@@ -527,16 +527,16 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     const t = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(t);
   }, [liveCtx]);
-  // Admin lock hold (0134/0135): while this week is held, the wall-clock
+  // Admin lock hold (0136): while THIS league's week is held, the wall-clock
   // derivation below is suspended — every window reads 'setup' and stays
   // editable, kickoff or not, because the SERVER is accepting edits and a board
   // that shows 🔒 over an open database is lying. Polled every 30s so the
-  // admin's release (relock-102.sql) flips the board back without a reload.
-  const [heldWeeks, setHeldWeeks] = useState<Set<number>>(new Set());
+  // admin's LOCK flips the board back without a reload.
+  const [heldPairs, setHeldPairs] = useState<Set<string>>(new Set());
   useEffect(() => {
     if (!liveCtx) return;
     let alive = true;
-    const load = () => { lockHolds().then((h) => { if (alive) setHeldWeeks(h); }); };
+    const load = () => { lockHolds().then((h) => { if (alive) setHeldPairs(h); }); };
     load();
     const t = setInterval(load, 30_000);
     return () => { alive = false; clearInterval(t); };
@@ -548,7 +548,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     const lockLead = testTimelineOn() ? TEST_LOCK_LEAD_MS : LOCK_LEAD_MS;
     const gameDur = testTimelineOn() ? TEST_GAME_MS : GAME_WINDOW_MS;
     const out: Record<string, WinState> = {};
-    const held = heldWeeks.has(week);
+    const held = !!liveCtx && heldPairs.has(`${liveCtx.leagueId}:${week}`);
     for (const w of windowsForWeek(week)) {
       const k = windowKickoffMs(week, w.id);
       let s: WinState = 'setup';
@@ -561,7 +561,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [week, nowMs, livePbpVer, testAnchor, heldWeeks]);
+  }, [week, nowMs, livePbpVer, testAnchor, heldPairs]);
   // Overall live-board phase, derived from its windows (all setup → setup, all
   // final → final, else live). Drives the header + board-level gating; a manual
   // phase tab is disabled on the live board.

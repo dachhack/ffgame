@@ -336,17 +336,27 @@ export interface PreviewRedeem { ok: boolean; error?: string; league?: string; t
 export const requestMemberSync = (code: string) =>
   rpc<{ ok: boolean; error?: string; league_id?: string }>('request_member_sync', { p_code: code.trim() });
 
-/** Board weeks under an admin lock hold (0134/0135) — while a week is listed,
- *  the live board must NOT derive locked/live window states from the wall
- *  clock; the week is open for edits until the admin releases the hold.
- *  Never throws: no hold information degrades to normal kickoff-driven locks. */
-export async function lockHolds(): Promise<Set<number>> {
+/** (league, week) pairs under an admin lock hold (0136) — while a pair is
+ *  listed, that league's board must NOT derive locked/live window states from
+ *  the wall clock; the week is open for edits until the admin relocks it.
+ *  Keyed "leagueId:week" for cheap membership tests. Never throws: no hold
+ *  information degrades to normal kickoff-driven locks. */
+export async function lockHolds(): Promise<Set<string>> {
   try {
     const { data, error } = await (await client()).rpc('lock_holds');
     if (error) return new Set();
-    return new Set((data ?? []) as number[]);
+    const rows = (data ?? []) as { league_id: string; week: number }[];
+    return new Set(rows.map((r) => `${r.league_id}:${r.week}`));
   } catch { return new Set(); }
 }
+
+/** Super-admin week lock switch (0136). locked=false reopens the week (hold +
+ *  matchups back to scheduled with far-future lock_at + picks unsealed);
+ *  locked=true releases the hold and NULLs lock_at so the worker restores the
+ *  natural lock time — immediate when past due, on schedule when not. */
+export const adminSetWeekLock = (leagueId: string, week: number, locked: boolean) =>
+  rpc<{ ok: boolean; error?: string; locked?: boolean; matchups?: number; picks?: number }>(
+    'admin_set_week_lock', { p_league_id: leagueId, p_week: week, p_locked: locked });
 
 /** Which team a code + Sleeper username would join — without enrolling. */
 export async function redeemPreview(code: string, sleeperUsername: string): Promise<PreviewRedeem> {
