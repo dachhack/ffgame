@@ -12,10 +12,11 @@
 // league_listing_state (0124) as the read — league_board() hides full leagues,
 // so it cannot tell a commissioner whether their league is actually listed.
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
-  closeLeagueListing, friendlyError, leagueListingState, postLeagueListing, rosterRules, setTransactionRules,
-  type TradeReview, type WaiverMode,
+  closeLeagueListing, commishGrantWeeklyBudget, commishOverview, commishSetWeeklyBudget, friendlyError,
+  leagueListingState, postLeagueListing, rosterRules, setRosterRules, setTransactionRules, POS_CAP_KEYS,
+  type PosCaps, type TradeReview, type WaiverMode,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
@@ -73,6 +74,16 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
   const [blurbDraft, setBlurbDraft] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Roster rules (0071): position caps any time; roster size pre-draft only.
+  const [caps, setCaps] = useState<PosCaps | null>(null);
+  const [capsInit, setCapsInit] = useState<PosCaps | null>(null);
+  const [rounds, setRounds] = useState<number | null>(null);
+  const [roundsInit, setRoundsInit] = useState<number | null>(null);
+  const [preDraft, setPreDraft] = useState(false);
+  // Drip coin: the league's weekly budget + a one-tap grant for a chosen week.
+  const [weeklyDraft, setWeeklyDraft] = useState('');
+  const [weeklyInit, setWeeklyInit] = useState<number | null>(null);
+  const [grantWeekDraft, setGrantWeekDraft] = useState('');
 
   useEffect(() => {
     if (!visible) return;
@@ -86,10 +97,21 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
       };
       setInit(cur); setMode(cur.mode); setBudgetDraft(String(cur.budget)); setReview(cur.review);
       setClearMin(cur.clearMin); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd);
+      const pc = r.pos_caps ?? ({} as PosCaps);
+      setCaps({ ...pc }); setCapsInit({ ...pc });
+      setRounds(r.rounds ?? null); setRoundsInit(r.rounds ?? null);
+      setPreDraft(r.draft_status === 'pending');
     }).catch((e) => setMsg(friendlyError(e)));
     leagueListingState(leagueId).then((r) => {
       if (r.ok) { setListed(!!r.listed); setBlurbDraft(r.blurb ?? ''); }
     }).catch(() => {});
+    // The weekly budget rides along on commish_overview — the same read the
+    // web's commissioner card uses.
+    commishOverview().then((ls) => {
+      const wb = ls.find((l) => l.league_id === leagueId)?.weekly_budget ?? null;
+      setWeeklyInit(wb); setWeeklyDraft(wb != null ? String(wb) : '');
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, leagueId]);
 
   const budget = Math.max(1, parseInt(budgetDraft || '0', 10) || 0);
@@ -140,12 +162,58 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
     finally { setBusy(false); }
   };
 
+  // Cycle a position cap: ∞ → 0 → 1 … 8 → ∞. One tap per step beats a stepper
+  // pair for a value with nine states and no typing.
+  const cycleCap = (k: keyof PosCaps) => {
+    if (!caps) return;
+    const cur = caps[k] ?? null;
+    const next = cur === null ? 0 : cur >= 8 ? null : cur + 1;
+    setCaps({ ...caps, [k]: next });
+  };
+  const capsChanged = caps && capsInit && POS_CAP_KEYS.some((k) => (caps[k] ?? null) !== (capsInit[k] ?? null));
+  const roundsChanged = rounds !== roundsInit;
+  const saveRoster = async () => {
+    if (busy || !caps) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await setRosterRules(leagueId, roundsChanged ? rounds : null, capsChanged ? caps : null);
+      if (r.ok) { commit(); setCapsInit({ ...caps }); setRoundsInit(rounds); setMsg('✓ roster rules saved'); onSaved(); }
+      else { warn(); setMsg(friendlyError(r.error ?? 'save failed')); }
+    } catch (e) { warn(); setMsg(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
+  const saveWeekly = async () => {
+    const amt = parseInt(weeklyDraft || '0', 10) || 0;
+    if (busy || amt < 0) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishSetWeeklyBudget(leagueId, amt);
+      if (r.ok) { commit(); setWeeklyInit(r.weekly_budget ?? amt); setMsg(`✓ weekly budget ${r.weekly_budget ?? amt}`); onSaved(); }
+      else { warn(); setMsg(friendlyError(r.error ?? 'save failed')); }
+    } catch (e) { warn(); setMsg(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+  const grantWeekly = async () => {
+    const wk = parseInt(grantWeekDraft || '0', 10);
+    if (busy || !wk) return;
+    setBusy(true); setMsg(null);
+    try {
+      // Idempotent server-side: re-granting a week never double-credits.
+      const r = await commishGrantWeeklyBudget(leagueId, wk);
+      if (r.ok) { commit(); setMsg(`✓ credited ${r.credited ?? 0} teams for week ${wk}`); }
+      else { warn(); setMsg(friendlyError(r.error ?? 'grant failed')); }
+    } catch (e) { warn(); setMsg(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
   const sec = (label: string) => <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>{label}</Mono>;
   const changed = init && (mode !== init.mode || (mode === 'faab' && budget !== init.budget) || review !== init.review
     || clearMin !== init.clearMin || holdDays !== init.holdDays || faStart !== init.faStart || faEnd !== init.faEnd);
 
   return (
-    <Overlay visible={visible} title="⚑ League settings" subtitle="Commissioner — waivers, free agency, visibility." onClose={onClose}>
+    <Overlay visible={visible} title="⚑ League settings" subtitle="Commissioner — waivers, rosters, coin, visibility." onClose={onClose}>
+      <ScrollView style={{ flexGrow: 0 }} showsVerticalScrollIndicator={false}>
       {!init && !msg && <Mono size={10} tone="faint">Loading the rules…</Mono>}
       {!!msg && (
         <Notice tone={msg.startsWith('✓') ? 'you' : 'opp'}>
@@ -218,6 +286,50 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
             <PrimaryButton label={busy ? '…' : changed ? 'SAVE RULES' : 'SAVED'} disabled={busy || !changed} onPress={() => void save()} />
           </View>
 
+          {sec('ROSTER RULES')}
+          {preDraft && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+              <Mono size={9} tone="faint">ROSTER SIZE</Mono>
+              {[7, 9, 12, 14, 16].map((n) => (
+                <Chip key={n} label={String(n)} on={rounds === n} onPress={() => { tap(); setRounds(n); }} />
+              ))}
+            </View>
+          )}
+          {!preDraft && <Mono size={8.5} tone="faint" style={{ marginTop: 6 }}>Roster size is locked once the draft starts. Position limits stay adjustable.</Mono>}
+          {caps && (
+            <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+              {POS_CAP_KEYS.map((k) => (
+                <Chip key={k} label={`${k} ${caps[k] ?? '∞'}`} on={(caps[k] ?? null) !== null} onPress={() => { tap(); cycleCap(k); }} />
+              ))}
+            </View>
+          )}
+          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
+            Tap a position to cycle its limit: ∞ → 0 → 1 … 8 → ∞. Enforced at the draft, free agency, waivers, and auction bids; rosters already over a lowered limit keep their players — the limit blocks new adds.
+          </Mono>
+          <View style={{ marginTop: 10 }}>
+            <PrimaryButton label={busy ? '…' : (capsChanged || roundsChanged) ? 'SAVE ROSTER RULES' : 'SAVED'}
+              disabled={busy || !(capsChanged || roundsChanged)} onPress={() => void saveRoster()} />
+          </View>
+
+          {sec('DRIP COIN')}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+            <Mono size={9} tone="faint">WEEKLY BUDGET</Mono>
+            <TextInput value={weeklyDraft} keyboardType="number-pad" placeholder={weeklyInit != null ? String(weeklyInit) : '0'}
+              placeholderTextColor={t.faint} onChangeText={(v) => setWeeklyDraft(v.replace(/\D/g, ''))}
+              style={{ width: 70, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+            <Chip label="SET" on disabled={busy || !weeklyDraft || parseInt(weeklyDraft, 10) === weeklyInit} onPress={() => void saveWeekly()} />
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
+            <Mono size={9} tone="faint">GRANT WEEK</Mono>
+            <TextInput value={grantWeekDraft} keyboardType="number-pad" placeholder="wk#"
+              placeholderTextColor={t.faint} onChangeText={(v) => setGrantWeekDraft(v.replace(/\D/g, ''))}
+              style={{ width: 56, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+            <Chip label="💰 GRANT ALL TEAMS" disabled={busy || !grantWeekDraft} onPress={() => void grantWeekly()} />
+          </View>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
+            Granting credits every team the weekly budget for that week — idempotent, so re-granting a week never double-pays.
+          </Mono>
+
           {sec('LEAGUE VISIBILITY')}
           {listed === null ? (
             <Mono size={9.5} tone="faint" style={{ marginTop: 6 }}>Loading…</Mono>
@@ -246,6 +358,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
           )}
         </>
       )}
+      </ScrollView>
     </Overlay>
   );
 }
