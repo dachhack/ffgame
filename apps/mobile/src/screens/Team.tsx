@@ -11,11 +11,12 @@
 //     waiver/FAAB path is what a phone needs on a Tuesday night.
 //   · AvatarPicker — the web's art grid; renaming is here, art can wait.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
-  addFreeAgent, cancelWaiverClaim, dropPlayer, friendlyError, leagueInvite, leaguePool, nativeRosters,
+  addFreeAgent, adminAssignRoster, adminLeagueMembers, cancelWaiverClaim, commishClaimRoster, dropPlayer,
+  friendlyError, leagueInvite, leaguePool, nativeRosters,
   nativeTeamState, processWaivers, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
-  type LeaguePoolPlayer, type NativeTeamState,
+  type AdminMember, type LeaguePoolPlayer, type NativeTeamState,
 } from '@drip/core/data/liveApi';
 import { headshot } from '@drip/core/data/media';
 import { useTheme, MONO } from '../theme.native';
@@ -25,6 +26,122 @@ import { Overlay } from '../ui/Overlay';
 import { CommishSettings } from '../ui/CommishSettings';
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
+
+/** Seat management, for the commissioner: assign a user to a team by email,
+ *  unassign (kick) one, take an open seat yourself, or vacate your own —
+ *  including the seat you were given at creation, which is how a playing
+ *  commissioner becomes a non-playing one.
+ *
+ *  All three actions are the 0042/0045 RPCs the web console already uses;
+ *  admin_assign_roster with a null email IS the kick — the membership row
+ *  stays (the team and its players survive), only the person is detached. */
+function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
+  leagueId: string; myRoster: number | null;
+  onChanged: () => void;
+  /** The commissioner vacated their own seat — the screen above must not keep
+   *  rendering a lineup for a roster they no longer hold. */
+  onSelfUnassigned: () => void;
+}) {
+  const t = useTheme();
+  const [seats, setSeats] = useState<AdminMember[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [assignFor, setAssignFor] = useState<AdminMember | null>(null);
+  const [emailDraft, setEmailDraft] = useState('');
+
+  const loadSeats = () => adminLeagueMembers(leagueId).then(setSeats).catch((e) => setNote(friendlyError(e)));
+  useEffect(() => { void loadSeats(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+
+  const act = async (fn: () => Promise<{ ok: boolean; error?: string; status?: string }>, done: (status?: string) => void) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await fn();
+      if (r.ok) { commit(); done(r.status); await loadSeats(); onChanged(); }
+      else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
+  const doAssign = () => {
+    const email = emailDraft.trim().toLowerCase();
+    if (!assignFor || !email) return;
+    const seat = assignFor;
+    setAssignFor(null); setEmailDraft('');
+    void act(() => adminAssignRoster(leagueId, seat.roster_id, email), (status) => {
+      setNote(status === 'pending'
+        ? `✓ seat held for ${email} — theirs the moment they sign in with that address`
+        : `✓ ${email} is in`);
+    });
+  };
+
+  const doKick = (m: AdminMember) => {
+    const self = m.roster_id === myRoster;
+    const who = m.email ?? m.claim_email ?? 'this manager';
+    Alert.alert(
+      self ? 'Leave your team?' : `Remove ${who}?`,
+      self
+        ? 'The team stays in the league with its players; you stay commissioner. You just stop being a manager in it.'
+        : `${who} loses ${m.team ?? 'the team'}. The team and its players stay, unassigned — hand it to someone else or leave it open.`,
+      [
+        { text: 'cancel', style: 'cancel' },
+        {
+          text: self ? 'leave team' : 'remove', style: 'destructive',
+          onPress: () => void act(() => adminAssignRoster(leagueId, m.roster_id, ''), () => {
+            if (self) onSelfUnassigned();
+            else setNote(`✓ ${m.team ?? `roster ${m.roster_id}`} is unassigned`);
+          }),
+        },
+      ],
+    );
+  };
+
+  return (
+    <Card>
+      <Mono size={9} tone="faint" track={0.12}>⚑ TEAMS — ASSIGN, UNASSIGN, KICK</Mono>
+      {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
+      {seats === null ? <ActivityIndicator color={t.you} style={{ marginTop: 8 }} /> : seats.map((m) => {
+        const openSeat = !m.enrolled && !m.claim_email;
+        const self = m.roster_id === myRoster;
+        return (
+          <View key={m.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: '700', color: t.text }}>
+                {m.team ?? `Roster ${m.roster_id}`}{self ? '  (you)' : ''}
+              </Text>
+              <Mono size={8.5} tone={openSeat ? 'warn' : 'faint'}>
+                {m.enrolled ? (m.email ?? m.sleeper ?? 'seated') : m.claim_email ? `held for ${m.claim_email}` : 'open seat'}
+              </Mono>
+            </View>
+            {openSeat && (
+              <>
+                <Chip label="ASSIGN" onPress={() => { tap(); setAssignFor(m); setEmailDraft(''); }} />
+                {myRoster == null && <Chip label="＋ ME" on onPress={() => { tap(); void act(() => commishClaimRoster(leagueId, m.roster_id), () => setNote('✓ the seat is yours')); }} />}
+              </>
+            )}
+            {!openSeat && (
+              <Chip label={self ? '✕ LEAVE' : '✕'} onPress={() => { tap(); doKick(m); }} />
+            )}
+          </View>
+        );
+      })}
+      <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 13 }}>
+        Unassigned teams keep their players and can sit open as long as you like. Assigning by email seats them instantly if they have an account, or holds the seat until they sign in with it.
+      </Mono>
+
+      {/* assign → collect the email */}
+      <Overlay visible={!!assignFor} title={assignFor ? `Assign ${assignFor.team ?? `roster ${assignFor.roster_id}`}` : ''}
+        subtitle="The seat goes to this email — instantly if they have an account, held for them if not." onClose={() => setAssignFor(null)}>
+        <TextInput value={emailDraft} autoFocus autoCapitalize="none" autoCorrect={false} keyboardType="email-address"
+          placeholder="manager@email.com" placeholderTextColor={t.faint} onChangeText={setEmailDraft}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
+        <View style={{ marginTop: 10 }}>
+          <PrimaryButton label={busy ? '…' : '✓ ASSIGN THE SEAT'} disabled={busy || !emailDraft.trim()} onPress={doAssign} />
+        </View>
+      </Overlay>
+    </Card>
+  );
+}
 
 function fmtEtMin(m: number): string {
   const h24 = Math.floor(m / 60), mm = m % 60;
@@ -44,7 +161,12 @@ function Face({ slug, pos, size = 24 }: { slug: string; pos: string; size?: numb
   );
 }
 
-export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: () => void; onDraft: () => void }) {
+export function Team({ leagueId, onBack, onDraft, onLeftSeat }: {
+  leagueId: string; onBack: () => void; onDraft: () => void;
+  /** The commissioner vacated their own seat — leave the league view entirely
+   *  so nothing above keeps rendering the roster they no longer hold. */
+  onLeftSeat: () => void;
+}) {
   const t = useTheme();
   const [team, setTeam] = useState<NativeTeamState | null>(null);
   const [rosters, setRosters] = useState<{ roster_id: number; slug: string }[]>([]);
@@ -243,6 +365,11 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
             <PrimaryButton label="⛏ TO THE DRAFT ROOM" onPress={onDraft} />
           </View>
         </Card>
+        {/* Seats get handed out BEFORE the draft — this is when assigning
+            matters most, so the panel lives in this branch too. */}
+        {team.is_commish && (
+          <CommishTeams leagueId={leagueId} myRoster={myRoster} onChanged={() => void refresh()} onSelfUnassigned={onLeftSeat} />
+        )}
         {settingsSheet}
       </ScrollView>
     );
@@ -363,6 +490,11 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
         })}
         {free.length > 60 && <Mono size={9.5} tone="faint" style={{ paddingTop: 8 }}>…{free.length - 60} more — narrow the search.</Mono>}
       </Card>
+
+      {/* seat management (commish) */}
+      {team.is_commish && (
+        <CommishTeams leagueId={leagueId} myRoster={myRoster} onChanged={() => void refresh()} onSelfUnassigned={onLeftSeat} />
+      )}
 
       {/* waiver order */}
       <Card>

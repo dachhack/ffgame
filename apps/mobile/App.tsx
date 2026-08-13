@@ -225,7 +225,10 @@ export function App() {
           // leaving the league, not landing on a lineup that doesn't exist.
           <View style={{ flex: 1 }}><Draft leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('picks'); }} /></View>
         ) : view === 'team' && open?.native ? (
-          <View style={{ flex: 1 }}><Team leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('picks'); }} onDraft={() => setView('draft')} /></View>
+          <View style={{ flex: 1 }}><Team leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('picks'); }} onDraft={() => setView('draft')}
+            // Vacating your own seat invalidates open.rosterId — leave the
+            // league view entirely; Leagues remounts and re-lists it as MANAGE.
+            onLeftSeat={() => { setOpen(null); setView('picks'); setLeaguesEpoch((n) => n + 1); }} /></View>
         ) : view === 'demo' ? (
           <View style={{ flex: 1 }}>
             <Pressable onPress={() => setView('picks')} hitSlop={8} style={{ alignSelf: 'flex-start', marginHorizontal: 12, marginBottom: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.bd, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
