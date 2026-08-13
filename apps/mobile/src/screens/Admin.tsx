@@ -15,15 +15,22 @@
 // requests (people waiting to be let in — time-sensitive, and handling one is a
 // single reversible flag), and the audit tail (what changed recently).
 //
-// NOT here, deliberately: anything that deletes, resets, force-resolves, or
-// rewrites a lineup. Those need a keyboard, a wide screen, and a moment's
-// thought — none of which is what a phone in a pocket provides.
+// MATCHUPS earned its way in after the read-only rule above was written: on a
+// game night the admin question isn't just "is it running" but "did this
+// matchup lock / can I force it" — and the moment that matters most is exactly
+// when only the phone is in reach. Open/Lock/Final mirror the web's three
+// buttons; RESET is the one destructive act here and hides behind a native
+// confirm that says what it erases.
+//
+// Still NOT here: deletion, forced resolution, lineup rewrites. Those keep
+// needing a keyboard and a moment's thought.
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   adminHealth, adminOverview, adminAudit, adminCodeRequests, adminSetCodeRequestHandled, friendlyError,
   adminLeagueMembers, adminAssignRoster, commishOverview, getSession, redeemCommish,
-  type AdminHealth, type AdminLeague, type AdminAudit, type AdminMember, type CodeRequest,
+  adminMatchups, adminSetMatchup, adminResetMatchup, adminPickReadiness,
+  type AdminHealth, type AdminLeague, type AdminAudit, type AdminMatchup, type AdminMember, type CodeRequest, type PickReadiness,
 } from '@drip/core/data/liveApi';
 import { useTheme } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
@@ -41,7 +48,7 @@ const ago = (iso: string | null): string => {
   return h < 48 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`;
 };
 
-type Tab = 'health' | 'leagues' | 'requests' | 'audit';
+type Tab = 'health' | 'leagues' | 'matchups' | 'requests' | 'audit';
 
 export function Admin({ onBack }: { onBack: () => void }) {
   const t = useTheme();
@@ -107,6 +114,48 @@ export function Admin({ onBack }: { onBack: () => void }) {
     finally { setBusy(false); }
   };
 
+  // ── MATCHUPS: game-night controls ──────────────────────────────────────────
+  const [mLeague, setMLeague] = useState<string | null>(null);
+  const [matchups, setMatchups] = useState<AdminMatchup[] | null>(null);
+  const [ready, setReady] = useState<PickReadiness[] | null>(null);
+  const loadMatchups = useCallback((leagueId: string) => {
+    setMLeague(leagueId); setMatchups(null); setReady(null);
+    adminMatchups(leagueId).then((ms) => {
+      setMatchups(ms);
+      // Readiness for the week that's actually in play: the earliest week with
+      // a non-final matchup (finals need no readiness), else the last week.
+      const active = ms.filter((m) => m.status !== 'final').map((m) => m.week);
+      const wk = active.length ? Math.min(...active) : ms.length ? Math.max(...ms.map((m) => m.week)) : null;
+      if (wk != null) adminPickReadiness(leagueId, wk).then(setReady).catch(() => setReady([]));
+      else setReady([]);
+    }).catch((e) => { setNote(friendlyError(e)); setMatchups([]); });
+  }, []);
+  const setStatus = async (m: AdminMatchup, status: string, lockNow = false) => {
+    if (busy || !mLeague) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await adminSetMatchup(m.id, status, lockNow);
+      if (r.ok) { commit(); setNote(`✓ week ${m.week} → ${status}`); } else { warn(); setNote(r.error ?? 'failed'); }
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); if (mLeague) loadMatchups(mLeague); }
+  };
+  const resetMatchup = (m: AdminMatchup) => {
+    Alert.alert(`Reset week ${m.week}?`,
+      'Back to scheduled: seals reopen and this matchup\'s window scores are erased. Picks themselves survive.',
+      [
+        { text: 'cancel', style: 'cancel' },
+        { text: 'reset', style: 'destructive', onPress: async () => {
+          if (busy || !mLeague) return;
+          setBusy(true); setNote(null);
+          try {
+            const r = await adminResetMatchup(m.id);
+            if (r.ok) { commit(); setNote(`✓ week ${m.week} reset → scheduled`); } else { warn(); setNote(r.error ?? 'failed'); }
+          } catch (e) { warn(); setNote(friendlyError(e)); }
+          finally { setBusy(false); if (mLeague) loadMatchups(mLeague); }
+        } },
+      ]);
+  };
+
   const pending = (reqs ?? []).filter((r) => !r.handled).length;
 
   return (
@@ -123,7 +172,7 @@ export function Admin({ onBack }: { onBack: () => void }) {
       {!!err && <Mono size={10.5} tone="opp" style={{ marginBottom: 10 }}>⚠ {err}</Mono>}
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingBottom: 10 }}>
-        {(['health', 'leagues', 'requests', 'audit'] as const).map((id) => (
+        {(['health', 'leagues', 'matchups', 'requests', 'audit'] as const).map((id) => (
           <Chip
             key={id}
             label={id === 'requests' && pending ? `REQUESTS ${pending}` : id.toUpperCase()}
@@ -216,6 +265,68 @@ export function Admin({ onBack }: { onBack: () => void }) {
           </ScrollView>
         )}
       </Overlay>
+
+      {tab === 'matchups' && (
+        <>
+          {!!note && <Mono size={10} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginBottom: 8 }}>{note}</Mono>}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingBottom: 10 }}>
+            {(leagues ?? []).map((l) => (
+              <Chip key={l.league_id} label={l.name} on={mLeague === l.league_id} onPress={() => { tap(); loadMatchups(l.league_id); }} />
+            ))}
+          </ScrollView>
+          {mLeague === null && <Card><Mono size={10} tone="faint">Pick a league.</Mono></Card>}
+          {mLeague !== null && matchups === null && <Card><ActivityIndicator color={t.you} /></Card>}
+
+          {/* pick readiness for the active week — the "is everyone in" read */}
+          {!!ready?.length && (
+            <Card style={{ marginBottom: 8 }}>
+              <Mono size={9} tone="faint" track={0.12}>WEEK {ready[0].week} — PICKS IN?</Mono>
+              {ready.map((r) => (
+                <View key={r.matchup_id} style={{ paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 4 }}>
+                  {([r.home, r.away] as const).map((s, i) => {
+                    const short = s.picks_set < s.lineup_size;
+                    return (
+                      <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text numberOfLines={1} style={{ flex: 1, fontSize: 11.5, color: t.text }}>
+                          {s.team ?? `Roster ${s.roster_id}`}{s.controller === 'ai' ? ' 🤖' : ''}
+                        </Text>
+                        <Mono size={9.5} weight="700" tone={short ? 'warn' : 'you'}>
+                          {s.picks_set}/{s.lineup_size}
+                        </Mono>
+                      </View>
+                    );
+                  })}
+                </View>
+              ))}
+            </Card>
+          )}
+
+          {(matchups ?? []).map((m) => (
+            <Card key={m.id} style={{ marginBottom: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={{ fontSize: 12.5, fontWeight: '700', color: t.text }}>Week {m.week}</Text>
+                <Mono size={8.5} tone={m.status === 'live' ? 'you' : m.status === 'final' ? 'faint' : 'warn'} track={0.08}>
+                  {m.status.toUpperCase()}
+                </Mono>
+                <View style={{ flex: 1 }} />
+                {m.home_final != null && m.away_final != null && (
+                  <Mono size={10} weight="700">{m.home_final}–{m.away_final}</Mono>
+                )}
+              </View>
+              <Mono size={8.5} tone="faint" style={{ marginTop: 3 }}>
+                rosters {m.home_roster_id} vs {m.away_roster_id}
+                {m.lock_at ? ` · locks ${new Date(m.lock_at).toLocaleString()}` : ' · no lock_at'}
+              </Mono>
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                <Chip label="OPEN" on={m.status === 'scheduled'} onPress={() => { tap(); void setStatus(m, 'scheduled'); }} />
+                <Chip label="LOCK" on={m.status === 'live'} onPress={() => { tap(); void setStatus(m, 'live', true); }} />
+                <Chip label="FINAL" on={m.status === 'final'} onPress={() => { tap(); void setStatus(m, 'final'); }} />
+                <Chip label="↺ RESET" onPress={() => { tap(); resetMatchup(m); }} />
+              </View>
+            </Card>
+          ))}
+        </>
+      )}
 
       {tab === 'requests' && (
         (reqs ?? []).length === 0

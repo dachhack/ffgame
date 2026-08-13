@@ -13,10 +13,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
-  addFreeAgent, adminAssignRoster, adminLeagueMembers, cancelWaiverClaim, commishClaimRoster, dropPlayer,
-  friendlyError, leagueInvite, leaguePool, nativeRosters,
-  nativeTeamState, processWaivers, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
-  type AdminMember, type LeaguePoolPlayer, type NativeTeamState,
+  addFreeAgent, adminAssignRoster, adminLeagueMembers, cancelWaiverClaim, commishClaimRoster,
+  commishRuleTrade, commishSeedCoin, dropPlayer,
+  friendlyError, leagueInvite, leaguePool, leagueTrades, nativeRosters,
+  nativeTeamState, processWaivers, setTeamController, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
+  type AdminMember, type LeaguePoolPlayer, type NativeTeamState, type TradeRow,
 } from '@drip/core/data/liveApi';
 import { headshot } from '@drip/core/data/media';
 import { useTheme, MONO } from '../theme.native';
@@ -48,6 +49,8 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
   const [note, setNote] = useState<string | null>(null);
   const [assignFor, setAssignFor] = useState<AdminMember | null>(null);
   const [emailDraft, setEmailDraft] = useState('');
+  const [coinFor, setCoinFor] = useState<AdminMember | null>(null);   // seed-coin target
+  const [coinDraft, setCoinDraft] = useState('');
 
   const loadSeats = () => adminLeagueMembers(leagueId).then(setSeats).catch((e) => setNote(friendlyError(e)));
   useEffect(() => { void loadSeats(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
@@ -120,7 +123,15 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
               </>
             )}
             {!openSeat && (
-              <Chip label={self ? '✕ LEAVE' : '✕'} onPress={() => { tap(); doKick(m); }} />
+              <>
+                {/* AI takeover: the resolver runs this seat's lineups until a
+                    human takes it back. The standard AWOL-manager fix. */}
+                <Chip label={m.controller === 'ai' ? '🤖' : '👤'} on={m.controller === 'ai'}
+                  onPress={() => { tap(); void act(() => setTeamController(leagueId, m.roster_id, m.controller === 'ai' ? 'human' : 'ai'),
+                    () => setNote(`✓ ${m.team ?? `roster ${m.roster_id}`} → ${m.controller === 'ai' ? 'human' : '🤖 AI'} control`)); }} />
+                <Chip label="💰" onPress={() => { tap(); setCoinFor(m); setCoinDraft(''); }} />
+                <Chip label={self ? '✕ LEAVE' : '✕'} onPress={() => { tap(); doKick(m); }} />
+              </>
             )}
           </View>
         );
@@ -139,6 +150,80 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
           <PrimaryButton label={busy ? '…' : '✓ ASSIGN THE SEAT'} disabled={busy || !emailDraft.trim()} onPress={doAssign} />
         </View>
       </Overlay>
+
+      {/* seed coin → collect the amount (additive, can be negative on the web;
+          here additive only — a docked wallet is a keyboard decision) */}
+      <Overlay visible={!!coinFor} title={coinFor ? `Grant coin to ${coinFor.team ?? `roster ${coinFor.roster_id}`}` : ''}
+        subtitle="Added to their current balance." onClose={() => setCoinFor(null)}>
+        <TextInput value={coinDraft} autoFocus keyboardType="number-pad" placeholder="amount" placeholderTextColor={t.faint}
+          onChangeText={(v) => setCoinDraft(v.replace(/\D/g, ''))}
+          style={{ width: 110, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontFamily: MONO, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
+        <View style={{ marginTop: 10 }}>
+          <PrimaryButton label={busy ? '…' : '💰 GRANT'} disabled={busy || !coinDraft}
+            onPress={() => {
+              const m = coinFor; const amt = parseInt(coinDraft || '0', 10);
+              if (!m || !amt) return;
+              setCoinFor(null); setCoinDraft('');
+              void act(() => commishSeedCoin(leagueId, m.roster_id, amt),
+                () => setNote(`✓ +${amt} coin to ${m.team ?? `roster ${m.roster_id}`}`));
+            }} />
+        </View>
+      </Overlay>
+    </Card>
+  );
+}
+
+/** Trade rulings, for leagues that route accepted trades through the commish.
+ *  Read-only list plus the two verdicts — proposing/answering trades stays on
+ *  the web (see the screen header). `accepted` = awaiting ruling; `pending` =
+ *  still just an offer between managers, shown so the commissioner sees what's
+ *  brewing but with nothing to press. */
+function CommishTrades({ leagueId, teamName, playerName }: { leagueId: string; teamName: (rid: number) => string; playerName: (slug: string) => string }) {
+  const t = useTheme();
+  const [trades, setTrades] = useState<TradeRow[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const load = () => leagueTrades(leagueId).then((r) => { if (Array.isArray(r)) setTrades(r); }).catch(() => {});
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+
+  const rule = async (id: string, approve: boolean) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await commishRuleTrade(id, approve);
+      if (r.ok) { commit(); setNote(approve ? '✓ executed' : '✓ vetoed'); } else { warn(); setNote(friendlyError(r.error ?? 'failed')); }
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); void load(); }
+  };
+
+  const queue = trades.filter((x) => x.status === 'accepted' || x.status === 'pending');
+  if (queue.length === 0) return null;
+  return (
+    <Card>
+      <Mono size={9} tone="faint" track={0.12}>⚖ TRADES ON YOUR DESK</Mono>
+      {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 4 }}>{note}</Mono>}
+      {queue.map((x) => (
+        <View key={x.id} style={{ paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
+          <Text style={{ fontSize: 11.5, color: t.text, lineHeight: 16 }}>
+            <Text style={{ fontWeight: '700' }}>{teamName(x.from_roster)}</Text> sends {x.give.map(playerName).join(', ') || '—'}{'\n'}
+            <Text style={{ fontWeight: '700' }}>{teamName(x.to_roster)}</Text> sends {x.get.map(playerName).join(', ') || '—'}
+          </Text>
+          {!!x.note && <Mono size={8.5} tone="faint" style={{ marginTop: 2 }}>“{x.note}”</Mono>}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+            <Mono size={8} tone={x.status === 'accepted' ? 'warn' : 'faint'} track={0.06}>
+              {x.status === 'accepted' ? 'AWAITING YOUR RULING' : 'OFFERED — NOTHING TO DO YET'}
+            </Mono>
+            <View style={{ flex: 1 }} />
+            {x.status === 'accepted' && (
+              <>
+                <Chip label="✓ APPROVE" on disabled={busy} onPress={() => { tap(); void rule(x.id, true); }} />
+                <Chip label="✕ VETO" disabled={busy} onPress={() => { tap(); void rule(x.id, false); }} />
+              </>
+            )}
+          </View>
+        </View>
+      ))}
     </Card>
   );
 }
@@ -494,6 +579,13 @@ export function Team({ leagueId, onBack, onDraft, onLeftSeat }: {
       {/* seat management (commish) */}
       {team.is_commish && (
         <CommishTeams leagueId={leagueId} myRoster={myRoster} onChanged={() => void refresh()} onSelfUnassigned={onLeftSeat} />
+      )}
+
+      {/* trade rulings (commish, when the league routes trades through them) */}
+      {team.is_commish && (
+        <CommishTrades leagueId={leagueId}
+          teamName={(rid) => team.waiver_order.find((w) => w.roster_id === rid)?.team ?? `Roster ${rid}`}
+          playerName={(slug) => poolBySlug.get(slug)?.full_name ?? slug} />
       )}
 
       {/* waiver order */}
