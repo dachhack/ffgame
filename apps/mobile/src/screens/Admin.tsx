@@ -22,10 +22,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   adminHealth, adminOverview, adminAudit, adminCodeRequests, adminSetCodeRequestHandled, friendlyError,
-  type AdminHealth, type AdminLeague, type AdminAudit, type CodeRequest,
+  adminLeagueMembers, adminAssignRoster, commishOverview, getSession, redeemCommish,
+  type AdminHealth, type AdminLeague, type AdminAudit, type AdminMember, type CodeRequest,
 } from '@drip/core/data/liveApi';
 import { useTheme } from '../theme.native';
+import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono } from '../ui/prims';
+import { Overlay } from '../ui/Overlay';
 
 const ago = (iso: string | null): string => {
   if (!iso) return 'never';
@@ -49,6 +52,16 @@ export function Admin({ onBack }: { onBack: () => void }) {
   const [reqs, setReqs] = useState<CodeRequest[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // League ids whose commissioner seat is PERSONALLY mine. Deliberately not
+  // admin_overview's `commissioner` — that is `commissioner_id is not null`,
+  // "somebody runs this league", and gating on it hid the web's take-seat
+  // button in exactly the case that needed it (#336).
+  const [mine, setMine] = useState<Set<string>>(new Set());
+  const [myEmail, setMyEmail] = useState<string | null>(null);
+  const [seatFor, setSeatFor] = useState<AdminLeague | null>(null);   // seat-picker target
+  const [seats, setSeats] = useState<AdminMember[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setErr(null);
@@ -58,8 +71,41 @@ export function Admin({ onBack }: { onBack: () => void }) {
     adminOverview().then(setLeagues).catch(() => setLeagues([]));
     adminAudit(40).then(setAudit).catch(() => setAudit([]));
     adminCodeRequests().then(setReqs).catch(() => setReqs([]));
+    commishOverview().then((ls) => setMine(new Set(ls.map((l) => l.league_id)))).catch(() => {});
+    getSession().then((s) => setMyEmail(s?.user.email ?? null)).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Take a league's commissioner seat — the same redeem_commish spend as the
+  // web console button: the code IS the authorization, and the admin already
+  // holds every code. No second becoming-commissioner path to keep in step.
+  const takeCommish = async (l: AdminLeague) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await redeemCommish(l.commish_code);
+      if (r.ok) { commit(); setNote(`✓ you are the commissioner of ${l.name}`); load(); }
+      else { warn(); setNote(r.error ?? 'could not take the seat'); }
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
+  const openSeats = (l: AdminLeague) => {
+    tap();
+    setSeatFor(l); setSeats(null);
+    adminLeagueMembers(l.league_id).then(setSeats).catch((e) => { setNote(friendlyError(e)); setSeatFor(null); });
+  };
+  // Claim a seat as myself — admin_assign_roster by my own email, any provider.
+  const takeSeat = async (rosterId: number) => {
+    if (busy || !seatFor || !myEmail) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await adminAssignRoster(seatFor.league_id, rosterId, myEmail);
+      if (r.ok) { commit(); setNote(`✓ seated in ${seatFor.name} — it's on your leagues screen`); setSeatFor(null); load(); }
+      else { warn(); setNote(r.error ?? 'could not take the seat'); }
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
 
   const pending = (reqs ?? []).filter((r) => !r.handled).length;
 
@@ -125,6 +171,9 @@ export function Admin({ onBack }: { onBack: () => void }) {
         )
       )}
 
+      {tab === 'leagues' && !!note && (
+        <Mono size={10} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginBottom: 8 }}>{note}</Mono>
+      )}
       {tab === 'leagues' && (leagues ?? []).map((l) => (
         <Card key={l.league_id} style={{ marginBottom: 8 }}>
           <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '700', color: t.text }}>{l.name}</Text>
@@ -132,8 +181,41 @@ export function Admin({ onBack }: { onBack: () => void }) {
             {l.season} · {l.provider ?? 'sleeper'} · {l.enrolled}/{l.rosters} enrolled
             {l.preseason_at ? ' · 🏈 preseason' : ''}
           </Mono>
+          <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {mine.has(l.league_id)
+              ? <Mono size={9} tone="you" weight="700">⚑ you run this</Mono>
+              : <Chip label={l.commissioner ? '⚑ TAKE COMMISH SEAT' : '⚑ MAKE ME COMMISH'} onPress={() => { tap(); void takeCommish(l); }} />}
+            {l.enrolled < l.rosters && <Chip label="＋ TAKE A SEAT" onPress={() => openSeats(l)} />}
+          </View>
         </Card>
       ))}
+
+      {/* seat picker: every seat, open ones tappable — claimed ones shown so
+          the admin can see who holds what before wading in */}
+      <Overlay visible={!!seatFor} title={seatFor ? `Take a seat in ${seatFor.name}` : ''}
+        subtitle={myEmail ? `Assigns the seat to ${myEmail} — the same admin_assign_roster the web console uses.` : undefined}
+        onClose={() => setSeatFor(null)}>
+        {seats === null ? <ActivityIndicator color={t.you} /> : (
+          <ScrollView style={{ maxHeight: 420 }}>
+            {seats.map((m) => {
+              const openSeat = !m.enrolled && !m.claim_email;
+              return (
+                <View key={m.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: '700', color: openSeat ? t.text : t.dim }}>
+                      {m.team ?? `Roster ${m.roster_id}`}
+                    </Text>
+                    <Mono size={8.5} tone="faint">
+                      {m.enrolled ? (m.email ?? m.sleeper ?? 'taken') : m.claim_email ? `pending: ${m.claim_email}` : 'open'}
+                    </Mono>
+                  </View>
+                  {openSeat && <Chip label="＋ ME" on onPress={() => { tap(); void takeSeat(m.roster_id); }} />}
+                </View>
+              );
+            })}
+          </ScrollView>
+        )}
+      </Overlay>
 
       {tab === 'requests' && (
         (reqs ?? []).length === 0

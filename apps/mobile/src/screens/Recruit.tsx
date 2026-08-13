@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   closeLeagueListing, commishOverview, friendlyError, joinFromBoard, leagueBoard, leagueInvite,
-  postLeagueListing, type AdminLeague, type BoardListing,
+  postLeagueListing, redeemCommish, type AdminLeague, type BoardListing,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
@@ -49,6 +49,7 @@ export function Recruit({ onBack, onJoined }: {
   const [postFor, setPostFor] = useState<AdminLeague | null>(null);
   const [blurbDraft, setBlurbDraft] = useState('');
   const [joined, setJoined] = useState<string | null>(null); // league name, for the success note
+  const [commishDraft, setCommishDraft] = useState('');      // commish-code redemption
 
   const load = useCallback(async () => {
     setErr(null);
@@ -94,6 +95,22 @@ export function Recruit({ onBack, onJoined }: {
     setBusy(true);
     try { const r = await closeLeagueListing(leagueId); if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'could not unlist')); } else commit(); }
     catch (e) { warn(); setErr(friendlyError(e)); }
+    finally { setBusy(false); await load(); }
+  };
+
+  // Redeem a commissioner code — whoever redeems it becomes the league's
+  // commissioner (0039), with or without a team. This is how a league gets a
+  // non-playing commissioner: redeem here, never take a seat, and the league
+  // shows up on your leagues screen as ⚑ MANAGE.
+  const doRedeemCommish = async () => {
+    const code = commishDraft.trim();
+    if (!code || busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await redeemCommish(code);
+      if (r.ok) { commit(); setCommishDraft(''); setJoined(`${r.league ?? 'the league'} — as its commissioner`); onJoined(); }
+      else { warn(); setErr(friendlyError(r.error ?? 'invalid commissioner code')); }
+    } catch (e) { warn(); setErr(friendlyError(e)); }
     finally { setBusy(false); await load(); }
   };
 
@@ -201,6 +218,20 @@ export function Recruit({ onBack, onJoined }: {
           </View>
         </Card>
       ))}
+
+      {/* redeem a commish code — the seatless way to run a league */}
+      <Card>
+        <Mono size={9} tone="faint" track={0.12}>COMMISSIONER?</Mono>
+        <Mono size={9.5} style={{ marginTop: 5, lineHeight: 14 }}>
+          Redeem a commissioner code to run a league — you don't need a team in it to be its commissioner.
+        </Mono>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          <TextInput value={commishDraft} autoCapitalize="characters" autoCorrect={false} maxLength={12}
+            placeholder="COMMISH CODE" placeholderTextColor={t.faint} onChangeText={setCommishDraft}
+            style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+          <Chip label={busy ? '…' : '⚑ REDEEM'} on disabled={busy || !commishDraft.trim()} onPress={() => void doRedeemCommish()} />
+        </View>
+      </Card>
 
       {/* join → name your team */}
       <Overlay visible={!!joinFor} title={joinFor ? `Join ${joinFor.name}` : ''}
