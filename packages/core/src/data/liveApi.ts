@@ -1395,9 +1395,9 @@ export const setPlayerFlagsBulk = (leagueId: string, slugs: string[], label: str
 export interface LeagueScoringRow { td_bonus: number; yd_mult: number; to_penalty: number; can_edit: boolean; }
 export const leagueScoringGet = (leagueId: string) =>
   rpc<{ ok?: boolean; error?: string } & Partial<LeagueScoringRow>>('league_scoring', { p_league_id: leagueId });
-export const leagueScoringSet = (leagueId: string, tdBonus: number, ydMult: number, toPenalty: number) =>
+export const leagueScoringSet = (leagueId: string, tdBonus: number, ydMult: number, toPenalty: number, scoped: unknown[] = []) =>
   rpc<{ ok: boolean; error?: string }>('set_league_scoring', {
-    p_league_id: leagueId, p_td_bonus: tdBonus, p_yd_mult: ydMult, p_to_penalty: toPenalty,
+    p_league_id: leagueId, p_td_bonus: tdBonus, p_yd_mult: ydMult, p_to_penalty: toPenalty, p_scoped: scoped,
   });
 
 // ── Playoffs (0073): the endgame for native leagues ───────────────────────────

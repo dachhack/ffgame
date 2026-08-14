@@ -1,6 +1,6 @@
 import type { Player, Pos, PbpEvent, SlotResolution, EffectType, BuffFx } from '../types';
 import { metricById } from '../data/metrics';
-import { leagueScoring } from './leagueScoring';
+import { leagueScoring, scopedAdjustFor } from './leagueScoring';
 import { flagRulesFor } from '../data/commish';
 import { realPbpFor, realPossFor, realWallFor, REAL_WEEKS, type RealPlayKind } from '../data/realPbp';
 import { returnPlaysFor } from '../data/returns';
@@ -604,7 +604,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   // share) but shy of 0.0075 (which dominated once immunity covered TE
   // erasers too). Immune to the
   // pauses and erases that WR/RB opponents lay on a drip (see oppIsDrip below).
-  const dripRateOf = (s: SlotInput): number => (s.player.pos === 'TE' ? 0.0065 : 0.01) * leagueScoring().ydMult * (flagRulesFor(s.player.id).bonusMult ?? 1);
+  // Scoped league bonuses (0145) resolve per PLAYER, once per slot.
+  const youScoped = scopedAdjustFor(you.player);
+  const theirScoped = scopedAdjustFor(their.player);
+  const dripRateOf = (s: SlotInput): number => (s.player.pos === 'TE' ? 0.0065 : 0.01) * leagueScoring().ydMult
+    * (flagRulesFor(s.player.id).bonusMult ?? 1) * (s === you ? youScoped.mult : s === their ? theirScoped.mult : scopedAdjustFor(s.player).mult);
   const youDripRate = dripRateOf(you);
   const theirDripRate = dripRateOf(their);
   const youDripKind = dripKindOf(you);
@@ -943,6 +947,11 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       // Commissioner bonus flag (0144): this player's per-play points scale.
       const bonusMult = flagRulesFor(myPlayer.player.id).bonusMult;
       if (bonusMult != null && pts > 0) pts = Math.round(pts * bonusMult * 10) / 10;
+      // Scoped league bonuses (0145): multiplier on every scoring play, extra
+      // points on TDs — for players matching the rule's pos/team/tenure scope.
+      const myScoped = play.side === 'you' ? youScoped : theirScoped;
+      if (myScoped.mult !== 1 && pts > 0) pts = Math.round(pts * myScoped.mult * 10) / 10;
+      if (myScoped.td !== 0 && play.td && pts > 0) pts = Math.round((pts + myScoped.td) * 10) / 10;
       if (mine.dead) pts = 0;
       if (sideMult !== 1 && pts > 0) { pts *= sideMult; evMult = sideMult; }
       // Garbage Time: points scored in the final 5 game-minutes count double.
@@ -1184,10 +1193,10 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   // bank — after every in-game effect, floored at zero, only when the player
   // actually took the field with plays (a bye/empty slot banks nothing).
   {
-    const yb = flagRulesFor(you.player.id).bonusPts;
-    if (yb != null && (Y.bank > 0 || events.some((e) => e.side === 'you'))) Y.bank = Math.max(0, Y.bank + yb);
-    const tb = flagRulesFor(their.player.id).bonusPts;
-    if (tb != null && (T.bank > 0 || events.some((e) => e.side === 'their'))) T.bank = Math.max(0, T.bank + tb);
+    const yb = (flagRulesFor(you.player.id).bonusPts ?? 0) + youScoped.pts;
+    if (yb !== 0 && (Y.bank > 0 || events.some((e) => e.side === 'you'))) Y.bank = Math.max(0, Y.bank + yb);
+    const tb = (flagRulesFor(their.player.id).bonusPts ?? 0) + theirScoped.pts;
+    if (tb !== 0 && (T.bank > 0 || events.some((e) => e.side === 'their'))) T.bank = Math.max(0, T.bank + tb);
   }
 
   const maxClock = events.length ? Math.max(...events.map((e) => e.clock)) : REG;
