@@ -75,6 +75,21 @@ begin
 
   -- b7. unknown matchup is a calm error
   perform assert_err(set_backup_assign(gen_random_uuid(), 'tnf#0', 'snf#1'), 'no matchup', 'b7 unknown matchup');
+
+  -- ── 0138: backups commit BLIND ──
+  -- One window kicked an hour ago, one kicks tomorrow. Routing a backup onto
+  -- the started window is the hindsight exploit; the future window is fine.
+  insert into nfl_slate (season, week, home, away, win, kickoff) values
+    ('2026', 9, 'KC',  'BUF', 'mnf', now() - interval '1 hour'),
+    ('2026', 9, 'SF',  'DAL', 'snf', now() + interval '1 day')
+  on conflict (season, week, home) do update set kickoff = excluded.kickoff, win = excluded.win;
+  perform set_config('app.uid', '00000000-0000-0000-0000-000000000401', false);
+  perform assert_err(set_backup_assign(mid, 'tnf#0', 'mnf#2'), 'already started', 'b8 started target refused');
+  perform assert_true(coalesce((set_backup_assign(mid, 'tnf#0', 'snf#1') ->> 'ok')::boolean, false),
+    'b8 unstarted target still assignable');
+  -- Clearing an assignment always works — auto is choice-free, so edge-free.
+  perform assert_true(coalesce((set_backup_assign(mid, 'tnf#0', null) ->> 'ok')::boolean, false),
+    'b8 clear-to-auto allowed regardless');
 end $$;
 
 select 'ALL BACKUP-ASSIGN PROBES PASSED' as result;
