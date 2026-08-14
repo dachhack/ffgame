@@ -14,10 +14,112 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   chatPost, chatMessages, chatDelete, chatUnread, chatMembers, dmSend, dmThreads, dmMessages,
+  chatPostPoll, pollCast, chatPin,
   leagueNote, friendlyError,
   type ChatMessage, type DmThreadRow, type DmMessage,
 } from '@drip/core/data/liveApi';
 import { ModalBackdrop } from './ui';
+
+// ── chat v2 (0148): inline media, @mentions, polls, pins ────────────────────
+
+/** Only these hosts (or bare image files) render inline — anything else stays text. */
+const isImageUrl = (s: string): boolean => {
+  const t = s.trim();
+  if (!/^https?:\/\/\S+$/.test(t)) return false;
+  return /^(https?:\/\/)(media\d*\.tenor\.com|media\d*\.giphy\.com|i\.giphy\.com|i\.imgur\.com)\//i.test(t)
+    || /\.(gif|png|jpe?g|webp)(\?\S*)?$/i.test(t);
+};
+const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** A message body: whole-URL images render inline; @TeamName tokens highlight
+ *  against the league's real member names (longest name wins). */
+function Body({ body, names }: { body: string; names: string[] }) {
+  if (isImageUrl(body)) {
+    return <img src={body.trim()} alt="" loading="lazy"
+      style={{ display: 'block', maxWidth: '100%', maxHeight: 200, borderRadius: 8, marginTop: 2 }} />;
+  }
+  if (!names.length || !body.includes('@')) return <>{body}</>;
+  const re = new RegExp(`@(${[...names].sort((a, b) => b.length - a.length).map(escRe).join('|')})`, 'g');
+  const parts: React.ReactNode[] = [];
+  let last = 0; let mm: RegExpExecArray | null; let k = 0;
+  while ((mm = re.exec(body))) {
+    if (mm.index > last) parts.push(body.slice(last, mm.index));
+    parts.push(<b key={k++} style={{ color: 'var(--you)', fontWeight: 700 }}>{mm[0]}</b>);
+    last = mm.index + mm[0].length;
+  }
+  if (last < body.length) parts.push(body.slice(last));
+  return <>{parts}</>;
+}
+
+/** Free Tenor v2 key — set VITE_TENOR_KEY and the GIF picker lights up;
+ *  without it the button hides (pasted GIF links still render inline). */
+const TENOR_KEY = (import.meta.env.VITE_TENOR_KEY as string | undefined) || undefined;
+interface TenorGif { id: string; tiny: string; full: string; }
+function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose: () => void }) {
+  const [q, setQ] = useState('');
+  const [gifs, setGifs] = useState<TenorGif[] | null>(null);
+  useEffect(() => {
+    if (!TENOR_KEY) return;
+    const t = setTimeout(() => {
+      const base = q.trim()
+        ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q.trim())}`
+        : 'https://tenor.googleapis.com/v2/featured?';
+      fetch(`${base}&key=${TENOR_KEY}&limit=12&media_filter=gif,tinygif`)
+        .then((r) => r.json())
+        .then((d: { results?: { id: string; media_formats?: Record<string, { url?: string }> }[] }) => {
+          setGifs((d.results ?? []).map((g) => ({
+            id: g.id,
+            tiny: g.media_formats?.tinygif?.url ?? g.media_formats?.gif?.url ?? '',
+            full: g.media_formats?.gif?.url ?? g.media_formats?.tinygif?.url ?? '',
+          })).filter((g) => g.tiny && g.full));
+        })
+        .catch(() => setGifs([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+  return (
+    <div style={{ borderTop: '1px solid var(--bd)', padding: '8px 14px', maxHeight: 240, overflowY: 'auto' }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <input value={q} autoFocus onChange={(e) => setQ(e.target.value)} placeholder="search GIFs…"
+          style={{ ...input, fontSize: 11.5, padding: '6px 9px' }} />
+        <button onClick={onClose} className="mono" style={linkBtn}>✕</button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginTop: 8 }}>
+        {gifs == null && <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>Loading…</span>}
+        {gifs?.length === 0 && <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>Nothing found.</span>}
+        {gifs?.map((g) => (
+          <img key={g.id} src={g.tiny} alt="" loading="lazy" onClick={() => onPick(g.full)}
+            style={{ width: '100%', height: 74, objectFit: 'cover', borderRadius: 6, cursor: 'pointer' }} />
+        ))}
+      </div>
+      <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', marginTop: 6 }}>via Tenor</div>
+    </div>
+  );
+}
+
+/** A poll message's options — tap to vote, tap another to change. */
+function PollView({ m, leagueId, onVoted }: { m: ChatMessage; leagueId: string; onVoted: () => void }) {
+  const p = m.poll;
+  if (!p) return null;
+  const total = p.total || 0;
+  return (
+    <div style={{ marginTop: 4, maxWidth: 340 }}>
+      {p.options.map((o, i) => {
+        const on = p.mine === i;
+        const pct = total ? Math.round((o.votes / total) * 100) : 0;
+        return (
+          <button key={i} onClick={() => void pollCast(leagueId, m.id, i).then(onVoted).catch(() => {})}
+            style={{ position: 'relative', display: 'block', width: '100%', textAlign: 'left', marginTop: 4, padding: '6px 9px', borderRadius: 6, cursor: 'pointer', background: 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, overflow: 'hidden' }}>
+            <span style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: `${pct}%`, background: 'color-mix(in srgb, var(--you) 14%, transparent)' }} />
+            <span style={{ position: 'relative', fontSize: 12, color: 'var(--text)', fontWeight: on ? 700 : 400 }}>{on ? '● ' : ''}{o.text}</span>
+            <span className="mono" style={{ position: 'relative', float: 'right', fontSize: 9, color: 'var(--dim)' }}>{o.votes}</span>
+          </button>
+        );
+      })}
+      <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3 }}>📊 {total} vote{total === 1 ? '' : 's'} · tap to vote or change</div>
+    </div>
+  );
+}
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 0, width: '100%', maxWidth: 440, height: 'min(560px, 86vh)', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflow: 'hidden' };
 const input: React.CSSProperties = { fontFamily: 'inherit', fontSize: 13, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '9px 11px', outline: 'none', width: '100%', boxSizing: 'border-box' };
@@ -38,10 +140,13 @@ const fmtWhen = (at: string): string => {
 export function ChatButton({ leagueId, style }: { leagueId: string; style?: React.CSSProperties }) {
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [mentioned, setMentioned] = useState(false);
   useEffect(() => {
     let dead = false;
     const poll = () => chatUnread(leagueId)
-      .then((r) => { if (!dead && r.ok) setUnread((r.league ?? 0) + (r.dm ?? 0)); })
+      .then((r) => {
+        if (!dead && r.ok) { setUnread((r.league ?? 0) + (r.dm ?? 0)); setMentioned((r.mention ?? 0) > 0); }
+      })
       .catch(() => {});
     void poll();
     const id = setInterval(() => { if (!document.hidden && !open) void poll(); }, 60_000);
@@ -51,10 +156,10 @@ export function ChatButton({ leagueId, style }: { leagueId: string; style?: Reac
   return (
     <>
       <button onClick={() => setOpen(true)} className="mono" style={style}
-        title="league chat + direct messages">
-        💬 CHAT{unread > 0 ? ` · ${unread > 99 ? '99+' : unread}` : ''}
+        title={mentioned ? 'someone mentioned you' : 'league chat + direct messages'}>
+        💬 CHAT{mentioned ? ' @' : ''}{unread > 0 ? ` · ${unread > 99 ? '99+' : unread}` : ''}
       </button>
-      {open && <ChatPanel leagueId={leagueId} onClose={() => { setOpen(false); setUnread(0); }} />}
+      {open && <ChatPanel leagueId={leagueId} onClose={() => { setOpen(false); setUnread(0); setMentioned(false); }} />}
     </>
   );
 }
@@ -106,26 +211,36 @@ function MessageScroll({ children, dep }: { children: React.ReactNode; dep: unkn
 
 function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: boolean }) {
   const [msgs, setMsgs] = useState<ChatMessage[] | null>(null);
+  const [pins, setPins] = useState<ChatMessage[]>([]);
+  const [pinsOpen, setPinsOpen] = useState(false);
+  const [members, setMembers] = useState<{ id: string; name: string; me: boolean }[]>([]);
   const [draft, setDraft] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pollOpen, setPollOpen] = useState(false);
+  const [gifOpen, setGifOpen] = useState(false);
   const load = () => chatMessages(leagueId)
-    .then((r) => { if (r.ok && r.messages) setMsgs([...r.messages].reverse()); })
+    .then((r) => {
+      if (r.ok && r.messages) { setMsgs([...r.messages].reverse()); setPins(r.pins ?? []); }
+    })
     .catch(() => {});
   useEffect(() => {
     void load();
+    chatMembers(leagueId).then((r) => { if (r.ok && r.members) setMembers(r.members); }).catch(() => {});
     const id = setInterval(() => { if (!document.hidden) void load(); }, 8_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
-  const send = async () => {
-    const body = draft.trim();
+  const names = members.map((m) => m.name);
+  const sendBody = async (body: string) => {
     if (!body || busy) return;
     setBusy(true); setErr(null);
     try {
-      const r = await chatPost(leagueId, body);
+      // mentions travel as ids, derived from the @names still present at send
+      const mentions = members.filter((m) => !m.me && body.includes(`@${m.name}`)).map((m) => m.id);
+      const r = await chatPost(leagueId, body, mentions);
       if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not send.')); return; }
-      setDraft(''); await load();
+      setDraft(''); setGifOpen(false); await load();
     } catch (x) { setErr(friendlyError(x)); }
     finally { setBusy(false); }
   };
@@ -133,26 +248,140 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
     try { const r = await chatDelete(leagueId, id); if (r.ok) await load(); else setErr(friendlyError(r.error ?? '')); }
     catch (x) { setErr(friendlyError(x)); }
   };
+  const pin = async (id: number, on: boolean) => {
+    try { const r = await chatPin(leagueId, id, on); if (r.ok) await load(); else setErr(friendlyError(r.error ?? '')); }
+    catch (x) { setErr(friendlyError(x)); }
+  };
+
+  // @-autocomplete over the tail of the draft: an @ opening a word, with
+  // whatever follows as the query (team names may contain spaces).
+  const at = draft.lastIndexOf('@');
+  const mq = at >= 0 && (at === 0 || /\s/.test(draft[at - 1])) ? draft.slice(at + 1) : null;
+  const sugg = mq != null && mq.length <= 24 && !mq.includes('@')
+    ? members.filter((m) => !m.me && m.name.toLowerCase().startsWith(mq.toLowerCase()) && m.name.toLowerCase() !== mq.toLowerCase().trim()).slice(0, 5)
+    : [];
+
   return (
     <>
+      {pins.length > 0 && (
+        <div style={{ borderBottom: '1px solid var(--bd)', background: 'color-mix(in srgb, var(--warn) 6%, var(--surface))', padding: '6px 14px' }}>
+          <button onClick={() => setPinsOpen((v) => !v)} className="mono"
+            style={{ ...linkBtn, padding: 0, fontSize: 9, color: 'var(--warn)' }}>
+            📌 {pins.length} PINNED {pinsOpen ? '▾' : '▸'}
+          </button>
+          {pinsOpen && pins.map((p) => (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 5 }}>
+              <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--dim)', flex: 'none' }}>{p.author}</span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {p.kind === 'poll' ? `📊 ${p.body}` : isImageUrl(p.body) ? '🖼 GIF' : p.body}
+              </span>
+              {canModerate && (
+                <button onClick={() => void pin(p.id, false)} className="mono" style={{ ...linkBtn, fontSize: 8.5, padding: 0 }} title="unpin">✕</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       <MessageScroll dep={msgs?.length ?? 0}>
         {msgs == null && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading…</div>}
         {msgs?.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Nothing yet — say hello to the league.</div>}
         {msgs?.map((m) => (
-          <div key={m.id} style={{ marginBottom: 10 }}>
+          <div key={m.id} style={{ marginBottom: 10, ...(m.mentions_me ? { background: 'color-mix(in srgb, var(--you) 8%, transparent)', borderRadius: 6, padding: '4px 6px', margin: '0 -6px 10px' } : {}) }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
               <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: m.mine ? 'var(--you)' : 'var(--warn)' }}>{m.author}</span>
               <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{fmtWhen(m.at)}</span>
+              {m.pinned && <span className="mono" style={{ fontSize: 8, color: 'var(--warn)' }}>📌</span>}
+              {canModerate && (
+                <button onClick={() => void pin(m.id, !m.pinned)} className="mono" title={m.pinned ? 'unpin' : 'pin'}
+                  style={{ ...linkBtn, fontSize: 9, padding: '0 2px' }}>{m.pinned ? '📌✕' : '📌'}</button>
+              )}
               {(m.mine || canModerate) && (
                 <button onClick={() => void del(m.id)} className="mono" style={{ ...linkBtn, fontSize: 9, color: 'var(--opp)', padding: '0 2px' }}>✕</button>
               )}
             </div>
-            <div style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{m.body}</div>
+            {m.kind === 'poll'
+              ? <>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>📊 {m.body}</div>
+                  <PollView m={m} leagueId={leagueId} onVoted={() => void load()} />
+                </>
+              : <div style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                  <Body body={m.body} names={names} />
+                </div>}
           </div>
         ))}
       </MessageScroll>
-      <Composer draft={draft} setDraft={setDraft} busy={busy} err={err} onSend={() => void send()} placeholder="message the league…" />
+      {pollOpen && <PollComposer leagueId={leagueId} onDone={() => { setPollOpen(false); void load(); }} onClose={() => setPollOpen(false)} />}
+      {gifOpen && TENOR_KEY && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
+      <div style={{ borderTop: '1px solid var(--bd)', padding: '10px 14px' }}>
+        {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', marginBottom: 6 }}>{err}</div>}
+        {sugg.length > 0 && (
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
+            {sugg.map((s) => (
+              <button key={s.id} onClick={() => setDraft(draft.slice(0, at) + '@' + s.name + ' ')} className="mono"
+                style={{ fontSize: 9, fontWeight: 700, cursor: 'pointer', borderRadius: 999, padding: '3px 9px', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--you)' }}>
+                @{s.name}
+              </button>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 6 }}>
+          {canModerate && (
+            <button onClick={() => { setPollOpen((v) => !v); setGifOpen(false); }} title="post a poll" className="mono"
+              style={{ ...linkBtn, fontSize: 13, padding: '0 2px' }}>📊</button>
+          )}
+          {TENOR_KEY && (
+            <button onClick={() => { setGifOpen((v) => !v); setPollOpen(false); }} title="send a GIF" className="mono"
+              style={{ ...linkBtn, fontSize: 11, padding: '0 2px', alignSelf: 'center' }}>GIF</button>
+          )}
+          <input value={draft} maxLength={500} onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !sugg.length) void sendBody(draft.trim()); }}
+            placeholder="message the league… (@ to mention)" style={{ ...input, fontSize: 12.5 }} />
+          <button onClick={() => void sendBody(draft.trim())} disabled={busy || !draft.trim()} className="mono"
+            style={{ ...btn, padding: '9px 16px', opacity: busy || !draft.trim() ? 0.5 : 1 }}>➤</button>
+        </div>
+      </div>
     </>
+  );
+}
+
+/** The commissioner's poll form: a question and 2–6 options. */
+function PollComposer({ leagueId, onDone, onClose }: { leagueId: string; onDone: () => void; onClose: () => void }) {
+  const [q, setQ] = useState('');
+  const [opts, setOpts] = useState<string[]>(['', '']);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const post = async () => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await chatPostPoll(leagueId, q.trim(), opts.map((o) => o.trim()).filter(Boolean));
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not post the poll.')); return; }
+      onDone();
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ borderTop: '1px solid var(--bd)', padding: '10px 14px' }}>
+      <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700 }}>📊 NEW POLL</div>
+      <input value={q} autoFocus maxLength={500} onChange={(e) => setQ(e.target.value)} placeholder="the question…"
+        style={{ ...input, fontSize: 12, marginTop: 6 }} />
+      {opts.map((o, i) => (
+        <input key={i} value={o} maxLength={60} onChange={(e) => setOpts(opts.map((x, j) => (j === i ? e.target.value : x)))}
+          placeholder={`option ${i + 1}`} style={{ ...input, fontSize: 11.5, marginTop: 5, padding: '6px 9px' }} />
+      ))}
+      {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', marginTop: 6 }}>{err}</div>}
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+        {opts.length < 6 && (
+          <button onClick={() => setOpts([...opts, ''])} className="mono" style={linkBtn}>＋ option</button>
+        )}
+        <div style={{ flex: 1 }} />
+        <button onClick={onClose} className="mono" style={linkBtn}>cancel</button>
+        <button onClick={() => void post()} disabled={busy || !q.trim() || opts.filter((o) => o.trim()).length < 2}
+          className="mono" style={{ ...btn, padding: '7px 14px', opacity: busy || !q.trim() || opts.filter((o) => o.trim()).length < 2 ? 0.5 : 1 }}>
+          POST POLL
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -284,7 +513,7 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
         {msgs?.map((m) => (
           <div key={m.id} style={{ display: 'flex', justifyContent: m.mine ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
             <div style={{ maxWidth: '78%', borderRadius: 10, padding: '7px 11px', background: m.mine ? 'color-mix(in srgb, var(--you) 18%, var(--surface))' : 'var(--bg)', border: '1px solid var(--bd)' }}>
-              <div style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{m.body}</div>
+              <div style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}><Body body={m.body} names={[]} /></div>
               <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', marginTop: 2, textAlign: m.mine ? 'right' : 'left' }}>{fmtWhen(m.at)}</div>
             </div>
           </div>

@@ -1391,15 +1391,25 @@ export const setPlayerFlagsBulk = (leagueId: string, slugs: string[], label: str
     p_league_id: leagueId, p_slugs: slugs, p_label: label, p_rules: rules,
   });
 
-// ── Chat (0147): league chat + member DMs, both league-scoped ────────────────
-export interface ChatMessage { id: number; body: string; at: string; author: string; author_id: string; mine: boolean; }
+// ── Chat (0147, v2 0148): league chat + member DMs, both league-scoped ───────
+export interface ChatPoll { options: { text: string; votes: number }[]; total: number; mine: number | null; }
+export interface ChatMessage {
+  id: number; body: string; at: string; author: string; author_id: string; mine: boolean;
+  kind: 'text' | 'poll'; pinned: boolean; mentions_me: boolean; poll?: ChatPoll;
+}
 export interface DmThreadRow { thread_id: string; peer_id: string; peer: string; last_at: string; preview: string | null; unread: number; }
 export interface DmMessage { id: number; body: string; at: string; mine: boolean; }
-export const chatPost = (leagueId: string, body: string) =>
-  rpc<{ ok: boolean; error?: string; id?: number }>('chat_post', { p_league_id: leagueId, p_body: body });
-/** Latest page (no `before`) marks the channel read; pass `before` to page history. */
+export const chatPost = (leagueId: string, body: string, mentions: string[] = []) =>
+  rpc<{ ok: boolean; error?: string; id?: number }>('chat_post', { p_league_id: leagueId, p_body: body, p_mentions: mentions });
+export const chatPostPoll = (leagueId: string, question: string, options: string[]) =>
+  rpc<{ ok: boolean; error?: string; id?: number }>('chat_post_poll', { p_league_id: leagueId, p_question: question, p_options: options });
+export const pollCast = (leagueId: string, messageId: number, choice: number) =>
+  rpc<{ ok: boolean; error?: string }>('poll_cast', { p_league_id: leagueId, p_message_id: messageId, p_choice: choice });
+export const chatPin = (leagueId: string, id: number, on: boolean) =>
+  rpc<{ ok: boolean; error?: string }>('chat_pin', { p_league_id: leagueId, p_id: id, p_on: on });
+/** Latest page (no `before`) marks the channel read and carries the pin strip. */
 export const chatMessages = (leagueId: string, before?: number) =>
-  rpc<{ ok: boolean; error?: string; messages?: ChatMessage[] }>('chat_messages', {
+  rpc<{ ok: boolean; error?: string; messages?: ChatMessage[]; pins?: ChatMessage[] }>('chat_messages', {
     p_league_id: leagueId, p_before: before ?? null, p_limit: 50,
   });
 export const chatDelete = (leagueId: string, id: number) =>
@@ -1415,9 +1425,9 @@ export const dmMessages = (threadId: string, before?: number) =>
   rpc<{ ok: boolean; error?: string; messages?: DmMessage[]; peer?: string }>('dm_messages', {
     p_thread_id: threadId, p_before: before ?? null, p_limit: 50,
   });
-/** Badge counts only — never marks anything read. */
+/** Badge counts only — never marks anything read. `mention` counts unread messages naming YOU. */
 export const chatUnread = (leagueId: string) =>
-  rpc<{ ok: boolean; error?: string; league?: number; dm?: number }>('chat_unread', { p_league_id: leagueId });
+  rpc<{ ok: boolean; error?: string; league?: number; dm?: number; mention?: number }>('chat_unread', { p_league_id: leagueId });
 export const chatMembers = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; members?: { id: string; name: string; me: boolean }[] }>('chat_members', { p_league_id: leagueId });
 
