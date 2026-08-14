@@ -1176,7 +1176,17 @@ export interface TargetedState {
   emp?: Record<string, number>;
   swaps?: Record<string, { kind: string; toMetric?: string; toPlayer?: string; atClock: number; atRt?: number }>;
   spy?: { win: string; slot: string; reveal: 'player' | 'metric' }[];
+  /** Manual backup assignments (0137): "win#slot" backup → "win#slot" starter. */
+  backups?: Record<string, string>;
 }
+
+/** Record (or clear, with a null target) a manual backup assignment (0137).
+ *  Post-lock is the POINT — backups are auto-assigned at lock and reassigned
+ *  after — so unlike hero_applied this store accepts writes until the matchup
+ *  is final, and the worker's next resolve pass scores the choice. */
+export const setBackupAssign = (matchupId: string, backupKey: string, targetKey: string | null) =>
+  rpc<{ ok: boolean; error?: string; backups?: Record<string, string> }>(
+    'set_backup_assign', { p_matchup_id: matchupId, p_backup_key: backupKey, p_target_key: targetKey });
 /** The caller's recorded targeted power-ups (own applied_state row, readable under RLS). */
 export async function myTargeted(matchupId: string, userId: string): Promise<TargetedState> {
   const { data } = await (await client()).from('applied_state').select('payload_json')

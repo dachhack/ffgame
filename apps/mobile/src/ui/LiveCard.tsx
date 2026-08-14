@@ -146,11 +146,15 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
 }
 
 /** One side of a live duel: the mini card plus everything that changes. */
-export function LiveCard({ side, slug, name, pos, team, sealed = false, gameLabel, metricName, stat, bank, hot = false, nuked = false, coin, idx = 0, onPress }: {
+export function LiveCard({ side, slug, name, pos, team, sealed = false, unopposed = false, gameLabel, metricName, stat, bank, hot = false, nuked = false, coin, idx = 0, onPress }: {
   side: 'you' | 'their';
   slug?: string; name?: string; pos?: string; team?: string | null;
   /** Face-down: the deck's back at the mini footprint, no identity leaked. */
   sealed?: boolean;
+  /** The window kicked and this side genuinely has nobody here — a fact, not a
+   *  secret (0137-era honesty fix). Renders an explicit empty seat instead of
+   *  a card back that promises a flip that will never come. */
+  unopposed?: boolean;
   gameLabel?: string | null;
   metricName?: string | null;
   stat?: string | null;
@@ -168,6 +172,21 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, gameLabe
   // `.ct-live.ct-opp { flex-direction: row-reverse }`.
   const mirror = side === 'their';
 
+  if (unopposed) {
+    return (
+      <View style={[PANEL, { flexDirection: mirror ? 'row-reverse' : 'row' }]}>
+        <View style={{ width: FLOAT_W, height: 106, marginTop: -FLOAT_OVERHANG, marginBottom: -FLOAT_OVERHANG, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: t.bg }}>
+          <Text style={{ fontSize: 17, color: t.faint }}>—</Text>
+        </View>
+        <View style={{ flex: 1, alignItems: mirror ? 'flex-end' : 'flex-start', gap: 3 }}>
+          <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '800', letterSpacing: 1, color: t.dim }}>NO PLAYER</Text>
+          </View>
+          <Text style={{ fontFamily: MONO, fontSize: 8, color: t.faint }}>unopposed — the facing player subs as a backup</Text>
+        </View>
+      </View>
+    );
+  }
   if (sealed) {
     return (
       <View style={[PANEL, { flexDirection: mirror ? 'row-reverse' : 'row' }]}>

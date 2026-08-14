@@ -885,9 +885,14 @@ function applyBackups(windows: ResolvedWindow[], side: 'you' | 'their', assign: 
     // an assigned-but-invalid backup is left unused (respect the explicit choice)
   }
 
-  // 2) Auto-maximize the rest — only when auto (the AI opponent). Your own
-  // backups stay benched until you assign them (it's your choice).
-  if (!auto) return;
+  // 2) Auto-maximize the rest — EVERYONE now, not just the AI. The founder's
+  // ruling on the mechanic: auto at lock (the system subs the best backup and
+  // says so), manual reassignment on top. Humans' backups used to stay benched
+  // until assigned, but the worker's authoritative resolver always auto-subbed,
+  // so "benched until you choose" was a client-side fiction that scored 0 on
+  // screen while the real score maximized — the two now agree. A manual
+  // assignment (step 1) still wins over the auto pass.
+  void auto; // kept in the signature for call-site compatibility; no longer gates
   const remStarters = starters.filter((s) => !used.has(s)).sort((a, b) => getF(a) - getF(b));
   autoBackups.sort((a, b) => (b.backupScore ?? 0) - (a.backupScore ?? 0));
   let si = 0;
