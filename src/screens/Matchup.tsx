@@ -2719,6 +2719,15 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
   kicked?: boolean;
 }) {
   const ownKey = slotKey(slot.win, slot.slotIndex);
+  // Collapse on the final whistle (founder's call, 0182.2): a slot log left
+  // open through a live window closes itself once the window is DONE — the
+  // toggle still reopens it for the post-mortem.
+  const wasDone = useRef(done);
+  useEffect(() => {
+    if (done && !wasDone.current && open) onToggle();
+    wasDone.current = done;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [done]);
   const isMobile = useIsMobile();
   const gridCols = '1fr 1fr'; // no center gutter — cards fill the width; controls go below
   const rowGap = isMobile ? 5 : 8;
