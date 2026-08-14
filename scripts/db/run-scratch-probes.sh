@@ -91,3 +91,4 @@ $RUN -f scripts/db/favorites-probes.sql | grep -E "PROBE FAIL|ALL FAVORITES PROB
 $RUN -f scripts/db/trade-signal-probes.sql | grep -E "PROBE FAIL|ALL TRADE-SIGNAL PROBES" || { echo "TRADE-SIGNAL PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/commish-kit-probes.sql | grep -E "PROBE FAIL|ALL COMMISH-KIT PROBES" || { echo "COMMISH-KIT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/player-team-probes.sql | grep -E "PROBE FAIL|ALL PLAYER-TEAM PROBES" || { echo "PLAYER-TEAM PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/league-scoring-probes.sql | grep -E "PROBE FAIL|ALL LEAGUE-SCORING PROBES" || { echo "LEAGUE-SCORING PROBES FAILED"; exit 1; }

@@ -11,8 +11,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
-  leagueNote, setLeagueNote, playerFlags, setPlayerFlag, friendlyError, type PlayerFlagRow,
+  leagueNote, setLeagueNote, playerFlags, setPlayerFlag, leagueScoringGet, leagueScoringSet,
+  friendlyError, type PlayerFlagRow,
 } from '@drip/core/data/liveApi';
+import {
+  SCORING_BOUNDS, DEFAULT_SCORING, setLeagueScoring, parseScoring, scoringIsDefault, scoringLabel,
+  type LeagueScoring,
+} from '@drip/core/engine/leagueScoring';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { PLAYER_BIO } from '@drip/core/data/playerBio';
 import { headshot } from '@drip/core/data/media';
@@ -34,16 +39,25 @@ export function CommishKit({ leagueId, onChanged }: {
 }) {
   const t = useTheme();
   const [note, setNote] = useState<{ text: string | null; canEdit: boolean } | null>(null);
+  const [scoring, setScoring] = useState<LeagueScoring | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [flagsOpen, setFlagsOpen] = useState(false);
+  const [scoringOpen, setScoringOpen] = useState(false);
 
   const load = async () => {
-    const [n, f] = await Promise.all([
+    const [n, f, sc] = await Promise.all([
       leagueNote(leagueId).catch(() => null),
       playerFlags(leagueId).catch(() => null),
+      leagueScoringGet(leagueId).catch(() => null),
     ]);
     if (n && n.ok) setNote({ text: n.text ?? null, canEdit: !!n.can_edit });
     if (Array.isArray(f)) { setLeagueFlags(leagueId, f); onChanged(); }
+    if (sc && sc.ok) {
+      const knobs = parseScoring(sc);
+      setLeagueScoring(knobs);   // any local resolve/display uses the league's knobs
+      setScoring(knobs);
+      onChanged();
+    }
   };
   useEffect(() => {
     void load();
@@ -52,7 +66,8 @@ export function CommishKit({ leagueId, onChanged }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
 
-  if (!note || (!note.text && !note.canEdit)) return null;
+  const scoringOn = scoring != null && !scoringIsDefault(scoring);
+  if (!note || (!note.text && !note.canEdit && !scoringOn)) return null;
   return (
     <>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap', backgroundColor: alpha(FLAG_PURPLE, 10), borderWidth: StyleSheet.hairlineWidth, borderColor: FLAG_PURPLE, borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 10 }}>
@@ -60,6 +75,11 @@ export function CommishKit({ leagueId, onChanged }: {
         {note.text
           ? <Text style={{ flexBasis: 180, flexGrow: 1, fontSize: 11.5, lineHeight: 16, color: t.text }}>{note.text}</Text>
           : <Mono size={9.5} tone="faint" style={{ flexBasis: 180, flexGrow: 1 }}>nothing posted — say something to the league</Mono>}
+        {scoringOn && (
+          <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.warn }}>⚖ {scoringLabel(scoring)}</Text>
+          </View>
+        )}
         {note.canEdit && (
           <View style={{ flexDirection: 'row', gap: 10, marginLeft: 'auto' }}>
             <Pressable hitSlop={6} onPress={() => { tap(); setNoteOpen(true); }}>
@@ -67,6 +87,9 @@ export function CommishKit({ leagueId, onChanged }: {
             </Pressable>
             <Pressable hitSlop={6} onPress={() => { tap(); setFlagsOpen(true); }}>
               <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.dim }}>⚑ flags</Text>
+            </Pressable>
+            <Pressable hitSlop={6} onPress={() => { tap(); setScoringOpen(true); }}>
+              <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.dim }}>⚖ scoring</Text>
             </Pressable>
           </View>
         )}
@@ -77,7 +100,70 @@ export function CommishKit({ leagueId, onChanged }: {
       <FlagsEditor visible={flagsOpen} leagueId={leagueId}
         onChanged={() => void load()}
         onClose={() => setFlagsOpen(false)} />
+      {scoring && (
+        <ScoringEditor visible={scoringOpen} leagueId={leagueId} initial={scoring}
+          onDone={() => { setScoringOpen(false); void load(); }}
+          onClose={() => setScoringOpen(false)} />
+      )}
     </>
+  );
+}
+
+function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
+  visible: boolean; leagueId: string; initial: LeagueScoring; onDone: () => void; onClose: () => void;
+}) {
+  const t = useTheme();
+  const [td, setTd] = useState(initial.tdBonus);
+  const [yd, setYd] = useState(initial.ydMult);
+  const [to, setTo] = useState(initial.toPenalty);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { if (visible) { setTd(initial.tdBonus); setYd(initial.ydMult); setTo(initial.toPenalty); setErr(null); } }, [visible, initial]);
+  const save = async (tdV: number, ydV: number, toV: number) => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await leagueScoringSet(leagueId, tdV, Math.round(ydV * 10) / 10, toV);
+      if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not save.')); return; }
+      commit(); onDone();
+    } catch (x) { warn(); setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  const stepper = (label: string, hint: string, v: number, set: (n: number) => void,
+    b: { min: number; max: number; step: number }, fmt: (n: number) => string) => (
+    <View style={{ marginTop: 12 }}>
+      <Mono size={9} tone="faint" track={0.12}>{label}</Mono>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 }}>
+        <Pressable onPress={() => { tap(); set(Math.round(Math.max(b.min, v - b.step) * 10) / 10); }}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 13, paddingVertical: 6 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: t.text }}>−</Text>
+        </Pressable>
+        <Text style={{ fontFamily: MONO, fontSize: 16, fontWeight: '700', color: t.text, minWidth: 48, textAlign: 'center' }}>{fmt(v)}</Text>
+        <Pressable onPress={() => { tap(); set(Math.round(Math.min(b.max, v + b.step) * 10) / 10); }}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 13, paddingVertical: 6 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: t.text }}>＋</Text>
+        </Pressable>
+        <Mono size={8.5} tone="faint" style={{ flex: 1, lineHeight: 12 }}>{hint}</Mono>
+      </View>
+    </View>
+  );
+  return (
+    <Overlay visible={visible} title="⚖ League scoring"
+      subtitle="Adjustments layer on the base game and apply to every matchup. Every member sees them." onClose={onClose}>
+      {stepper('TD BONUS', 'extra points on every TD your players score', td, setTd, SCORING_BOUNDS.tdBonus, (n) => `${n > 0 ? '+' : ''}${n}`)}
+      {stepper('YARDAGE MULTIPLIER', 'scales per-yard scoring and drip growth', yd, setYd, SCORING_BOUNDS.ydMult, (n) => `×${n}`)}
+      {stepper('TURNOVER PENALTY', 'points off a player’s own bank per giveaway', to, setTo, SCORING_BOUNDS.toPenalty, (n) => (n === 0 ? 'off' : `−${n}`))}
+      {!!err && <Mono size={9.5} tone="opp" style={{ marginTop: 8 }}>{err}</Mono>}
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
+        <View style={{ flex: 1 }}>
+          <PrimaryButton label={busy ? '…' : 'SAVE'} disabled={busy} onPress={() => void save(td, yd, to)} />
+        </View>
+        <Pressable disabled={busy} onPress={() => { tap(); void save(DEFAULT_SCORING.tdBonus, DEFAULT_SCORING.ydMult, DEFAULT_SCORING.toPenalty); }}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 12, justifyContent: 'center', opacity: busy ? 0.5 : 1 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.dim }}>RESET</Text>
+        </Pressable>
+      </View>
+    </Overlay>
   );
 }
 
