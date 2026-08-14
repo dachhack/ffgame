@@ -80,7 +80,18 @@ begin
   select e -> 'rules' into f from jsonb_array_elements(player_flags(lid)) e where e ->> 'slug' = 'fr3';
   perform assert_true((f ->> 'no_add')::boolean, 'f3 rule stored');
   perform assert_true(f -> 'junk_key' is null, 'f4 junk key stripped');
-  perform assert_true((f ->> 'bonus_mult')::numeric = 3 and (f ->> 'bonus_pts')::int = -10, 'f5 bonuses clamped');
+  perform assert_true((f ->> 'bonus_mult')::numeric = 3 and (f ->> 'bonus_pts')::numeric = -10, 'f5 bonuses clamped');
+  -- decimal bonuses (0146): halves store at scale 1, extra scale rounds off,
+  -- whole values stay trim (no trailing .0)
+  r := set_player_flag(lid, 'fr3', 'do not add', '{"no_add": true, "bonus_pts": 0.5}'::jsonb);
+  perform assert_ok(r, 'f5a half-point flag');
+  select e -> 'rules' into f from jsonb_array_elements(player_flags(lid)) e where e ->> 'slug' = 'fr3';
+  perform assert_true(f ->> 'bonus_pts' = '0.5', 'f5b half-point stored at scale 1');
+  r := set_player_flag(lid, 'fr3', 'do not add', '{"no_add": true, "bonus_pts": 2.26, "bonus_mult": 2.0}'::jsonb);
+  select e -> 'rules' into f from jsonb_array_elements(player_flags(lid)) e where e ->> 'slug' = 'fr3';
+  perform assert_true(f ->> 'bonus_pts' = '2.3' and f ->> 'bonus_mult' = '2', 'f5c rounded to 0.1, whole mult trimmed');
+  -- restore the rules the rest of the suite expects on fr3
+  perform set_player_flag(lid, 'fr3', 'do not add', '{"no_add": true, "junk_key": true, "bonus_mult": 99, "bonus_pts": -50}'::jsonb);
   reset role;
 end $$;
 

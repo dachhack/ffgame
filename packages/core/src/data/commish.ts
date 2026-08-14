@@ -30,7 +30,7 @@ function parseRules(raw: unknown): FlagRules {
   const m = Number(o.bonus_mult);
   if (Number.isFinite(m) && m !== 1) out.bonusMult = Math.min(3, Math.max(0.5, Math.round(m * 10) / 10));
   const b = Number(o.bonus_pts);
-  if (Number.isFinite(b) && b !== 0) out.bonusPts = Math.min(10, Math.max(-10, Math.round(b)));
+  if (Number.isFinite(b) && b !== 0) out.bonusPts = Math.min(10, Math.max(-10, Math.round(b * 10) / 10));
   return out;
 }
 

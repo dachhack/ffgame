@@ -316,7 +316,7 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
         <TeamStrip value={dTeam} set={setDTeam} />
         <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 7 }}>
           {mini('PTS', dMult, setDMult, 0.5, 3, 0.1, 1, (n) => `×${n}`)}
-          {mini('BONUS', dPts, setDPts, -10, 10, 1, 0, (n) => `${n > 0 ? '+' : ''}${n}`)}
+          {mini('BONUS', dPts, setDPts, -10, 10, 0.5, 0, (n) => `${n > 0 ? '+' : ''}${n}`)}
           {mini('TD', dTd, setDTd, -3, 6, 1, 0, (n) => `${n > 0 ? '+' : ''}${n}`)}
           <Pressable onPress={addRule}
             style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 }}>
@@ -555,7 +555,7 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
       <Mono size={8} tone="faint">×</Mono>
       {mini(rulesDraft.bonus_mult ?? 1, 1, 0.5, 3, 0.1, 'bonus_mult', (n) => `×${n}`)}
       <Mono size={8} tone="faint">±</Mono>
-      {mini(rulesDraft.bonus_pts ?? 0, 0, -10, 10, 1, 'bonus_pts', (n) => `${n > 0 ? '+' : ''}${n}`)}
+      {mini(rulesDraft.bonus_pts ?? 0, 0, -10, 10, 0.5, 'bonus_pts', (n) => `${n > 0 ? '+' : ''}${n}`)}
     </View>
   );
   const labelInput = (slug: string) => {

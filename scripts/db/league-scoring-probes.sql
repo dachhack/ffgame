@@ -132,6 +132,11 @@ begin
   perform assert_true(sc -> 0 -> 'pos' = '["QB", "WR"]'::jsonb, 's20 pos codes uppercased, invalid dropped');
   perform assert_true(sc -> 0 ->> 'tenure' = 'rookie' and (sc -> 0 ->> 'bonus_mult')::numeric = 1.5, 's21 scope + values stored');
   perform assert_true((sc -> 1 ->> 'td_bonus')::int = 6, 's22 td bonus clamped to 6');
+  -- decimal bonuses (0146): scoped bonus_pts takes halves at scale 1
+  r := set_league_scoring(lid, 0, 1.0, 0, '[{"pos": ["QB"], "bonus_pts": 0.5}]'::jsonb);
+  perform assert_ok(r, 's22a half-point scoped rule');
+  sc := league_scoring(lid) -> 'scoped';
+  perform assert_true(sc -> 0 ->> 'bonus_pts' = '0.5', 's22b half-point stored at scale 1');
   -- scoped alone keeps the settings key; clearing scoped + defaults removes it
   perform assert_ok(set_league_scoring(lid, 0, 1.0, 0, '[]'::jsonb), 's23 clear scoped');
   perform assert_true((select settings_json -> 'scoring' from league where id = lid) is null
