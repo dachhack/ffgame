@@ -96,6 +96,34 @@ produced each league request — this is what makes the paid-ads spend (e.g. Red
 `?utm_source=reddit&utm_campaign=...`) measurable end to end. First-touch by design:
 a later organic revisit doesn't overwrite the ad that found them.
 
+### The social + league-life layer (0186 sweep — the 0147–0150 sprint instrumented)
+
+Write events fire from **core `liveApi.ts` at the RPC chokepoint** (the `tracked()`
+helper) — on the server's *yes*, never on a failed write — so one seam covers both
+hosts. UI-context events (surfaces opening) fire host-side.
+
+| Event | Seam | Funnel stage |
+|---|---|---|
+| `chat_opened {dm}` | host-side: app chat tab / DM thread mount, web ChatPanel open + tab switch | engagement |
+| `chat_posted {kind:'text'\|'gif'\|'poll', dm, mentions}` | core: `chatPost` / `chatPostPoll` / `dmSend` | **engagement** |
+| `poll_voted` | core: `pollCast` | engagement |
+| `chat_pinned {on}` | core: `chatPin` | engagement |
+| `trade_proposed {players}` | core: `proposeTrade` | **engagement** |
+| `trade_responded {action}` | core: `respondTrade` (accept/reject), `cancelTrade` (cancel) | engagement |
+| `waiver_claimed {type:'waiver'\|'fa', drop, bid?}` | core: `submitWaiverClaim` / `addFreeAgent` | **engagement** |
+| `draft_picked` | core: `makeDraftPick` | activation |
+| `commish_action {tool}` | core: `setLeagueNote` / `setPlayerFlag(sBulk)` / `leagueScoringSet` / `commishRuleTrade` | engagement (commish) |
+| `push_registered {granted}` | app `ui/push.ts` — permission outcome; the push opt-in rate | **retention** |
+| `push_pref_set {kind, muted}` | app Settings — per-kind mute flips | retention |
+| `player_card_opened {pos}` | both hosts' `openPlayerCard` bus | engagement |
+| `player_starred {on, kind:'favorite'\|'block'\|'want'}` | core: `setFavorite` / `setTradeSignal` | engagement |
+| `hub_tile_opened {tile}` | web `LeagueHubPage` Tile, app `LeagueHome` tiles — which hub doors get used | engagement |
+
+What to watch: `chat_posted` per weekly-active league (the social layer is the
+retention bet), the `push_registered` grant rate (a denied permission mutes the
+lineup-alarm win-back loop), and `hub_tile_opened` distribution (which doors earn
+their place on the hub).
+
 To add as the gating/paywall ships (constants already defined):
 | Event | Fire when |
 |---|---|

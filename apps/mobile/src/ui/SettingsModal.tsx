@@ -17,6 +17,7 @@
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { THEMES, type ThemeName, useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
+import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { myPushTokens, setPushPrefs } from '@drip/core/data/liveApi';
 import { registerForPush, registeredPushToken } from './push';
@@ -235,6 +236,7 @@ function PushPrefs() {
     if (!token) return;
     const next = { ...prefs, [key]: prefs[key] === false };
     setPrefs(next);
+    track(Ev.pushPrefSet, { kind: key, muted: next[key] === false });
     void setPushPrefs(token, next).catch(() => {});
   };
   return (

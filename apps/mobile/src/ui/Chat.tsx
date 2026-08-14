@@ -14,6 +14,8 @@ import {
   type ChatMessage, type DmThreadRow, type DmMessage,
 } from '@drip/core/data/liveApi';
 import { gifProvider, type GifResult } from '@drip/core/data/gifs';
+import { Ev, track } from '@drip/core/analytics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Mono } from './prims';
@@ -217,8 +219,11 @@ function Composer({ draft, setDraft, busy, err, onSend, placeholder }: {
   draft: string; setDraft: (v: string) => void; busy: boolean; err: string | null; onSend: () => void; placeholder: string;
 }) {
   const t = useTheme();
+  // App.tsx's SafeAreaView leaves the bottom edge open (the power-up hand owns
+  // it), so every bottom-pinned composer must clear the gesture bar itself.
+  const insets = useSafeAreaInsets();
   return (
-    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 }}>
+    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 + insets.bottom }}>
       {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <TextInput value={draft} maxLength={500} onChangeText={setDraft} onSubmitEditing={onSend}
@@ -235,6 +240,7 @@ function Composer({ draft, setDraft, busy, err, onSend, placeholder }: {
 
 function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: boolean }) {
   const t = useTheme();
+  const insets = useSafeAreaInsets();
   const [msgs, setMsgs] = useState<ChatMessage[] | null>(null);
   const [pins, setPins] = useState<ChatMessage[]>([]);
   const [pinsOpen, setPinsOpen] = useState(false);
@@ -248,6 +254,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   const load = () => chatMessages(leagueId)
     .then((r) => { if (r.ok && r.messages) { setMsgs([...r.messages].reverse()); setPins(r.pins ?? []); } })
     .catch(() => {});
+  useEffect(() => { track(Ev.chatOpened, { dm: false }); }, [leagueId]);
   useEffect(() => {
     void load();
     chatMembers(leagueId).then((r) => { if (r.ok && r.members) setMembers(r.members); }).catch(() => {});
@@ -336,7 +343,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
       </ScrollView>
       {pollOpen && <PollComposer leagueId={leagueId} onDone={() => { setPollOpen(false); void load(); }} onClose={() => setPollOpen(false)} />}
       {gifOpen && !!GIF && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
-      <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 }}>
+      <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 + insets.bottom }}>
         {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
         {sugg.length > 0 && (
           <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
@@ -374,6 +381,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
 
 function DmHome({ leagueId }: { leagueId: string }) {
   const t = useTheme();
+  const insets = useSafeAreaInsets();
   const [openThread, setOpenThread] = useState<{ threadId: string | null; peerId: string; peer: string } | null>(null);
   const [threads, setThreads] = useState<DmThreadRow[] | null>(null);
   const [pick, setPick] = useState(false);
@@ -435,7 +443,7 @@ function DmHome({ leagueId }: { leagueId: string }) {
         )}
       </ScrollView>
       {!pick && (
-        <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 }}>
+        <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 + insets.bottom }}>
           <Pressable onPress={() => { tap(); setPick(true); }}
             style={{ backgroundColor: t.you, borderRadius: 8, paddingVertical: 10, alignItems: 'center' }}>
             <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.onAccent }}>＋ NEW MESSAGE</Text>
@@ -468,6 +476,7 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.threadId]);
+  useEffect(() => { track(Ev.chatOpened, { dm: true }); }, []);
   const send = async () => {
     const body = draft.trim();
     if (!body || busy) return;

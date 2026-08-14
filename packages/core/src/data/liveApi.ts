@@ -3,12 +3,23 @@
 // redeem_invite RPC (migration 0002), never a direct membership write.
 import { getSupabase } from './supabaseClient';
 import { platform, storeGet } from '../platform';
+import { track, Ev, type Props } from '../analytics';
 import { readPool, type PoolGroup } from './poolEntry';
 import { setLiveInjuries, type InjuryRow } from './injuries';
 import { setTeamOverrides } from './playerTeam';
 import { resolveUser } from './sleeper';
 import { PRESEASON_BOARD_WEEKS } from './nflSlate';
 import type { Session } from '@supabase/supabase-js';
+
+// ── Analytics at the chokepoint (0186) ───────────────────────────────────────
+// The write RPCs both hosts share fire their product event HERE, on the
+// server's yes — one seam instead of two UIs, and a failed write never
+// counts. UI-context events (screens, tiles, sheets) stay host-side.
+const tracked = <T,>(p: Promise<T>, event: string, props?: Props): Promise<T> =>
+  p.then((r) => { if ((r as { ok?: boolean } | null)?.ok) track(event, props); return r; });
+/** GIF-vs-text for chat_posted: a whole-URL body that renders inline. */
+const looksImage = (s: string): boolean =>
+  /^https?:\/\/\S+$/.test(s.trim()) && (/(tenor|giphy|imgur)\.com\//i.test(s) || /\.(gif|png|jpe?g|webp)(\?\S*)?$/i.test(s));
 
 async function client() {
   const sb = await getSupabase();
@@ -340,6 +351,7 @@ export async function setFavorite(userId: string, slug: string, on: boolean): Pr
   const c = await client();
   if (on) await c.from('favorite_player').upsert({ app_user_id: userId, player_slug: slug }, { onConflict: 'app_user_id,player_slug' });
   else await c.from('favorite_player').delete().eq('app_user_id', userId).eq('player_slug', slug);
+  track(Ev.playerStarred, { on, kind: 'favorite' });
 }
 
 /** Ask the worker to re-pull this league's member list from Sleeper (0133).
@@ -1349,16 +1361,19 @@ export interface TradeRow {
 export const leagueTrades = (leagueId: string, limit = 30) =>
   rpc<TradeRow[] | { error: string }>('league_trades', { p_league_id: leagueId, p_limit: limit });
 export const proposeTrade = (leagueId: string, fromRoster: number, toRoster: number, give: string[], get: string[], note?: string) =>
-  rpc<{ ok: boolean; error?: string; trade_id?: string }>('propose_trade', {
+  tracked(rpc<{ ok: boolean; error?: string; trade_id?: string }>('propose_trade', {
     p_league_id: leagueId, p_from_roster: fromRoster, p_to_roster: toRoster,
     p_give: give, p_get: get, p_note: note ?? null,
-  });
+  }), Ev.tradeProposed, { players: give.length + get.length });
 export const respondTrade = (tradeId: string, accept: boolean) =>
-  rpc<{ ok: boolean; error?: string; status?: string }>('respond_trade', { p_trade_id: tradeId, p_accept: accept });
+  tracked(rpc<{ ok: boolean; error?: string; status?: string }>('respond_trade', { p_trade_id: tradeId, p_accept: accept }),
+    Ev.tradeResponded, { action: accept ? 'accept' : 'reject' });
 export const cancelTrade = (tradeId: string) =>
-  rpc<{ ok: boolean; error?: string; status?: string }>('cancel_trade', { p_trade_id: tradeId });
+  tracked(rpc<{ ok: boolean; error?: string; status?: string }>('cancel_trade', { p_trade_id: tradeId }),
+    Ev.tradeResponded, { action: 'cancel' });
 export const commishRuleTrade = (tradeId: string, approve: boolean) =>
-  rpc<{ ok: boolean; error?: string; status?: string }>('commish_rule_trade', { p_trade_id: tradeId, p_approve: approve });
+  tracked(rpc<{ ok: boolean; error?: string; status?: string }>('commish_rule_trade', { p_trade_id: tradeId, p_approve: approve }),
+    Ev.commishAction, { tool: approve ? 'trade_approve' : 'trade_veto' });
 
 /** A standing trade signal (0140): 'block' = roster_id flags its OWN player as
  *  available; 'want' = roster_id flags ANOTHER team's player as one it would
@@ -1372,16 +1387,17 @@ export interface TradeSignalRow {
 export const tradeSignals = (leagueId: string) =>
   rpc<TradeSignalRow[] | { error: string }>('trade_signals', { p_league_id: leagueId });
 export const setTradeSignal = (leagueId: string, rosterId: number, slug: string, kind: 'block' | 'want', on: boolean) =>
-  rpc<{ ok: boolean; error?: string; on?: boolean }>('set_trade_signal', {
+  tracked(rpc<{ ok: boolean; error?: string; on?: boolean }>('set_trade_signal', {
     p_league_id: leagueId, p_roster_id: rosterId, p_slug: slug, p_kind: kind, p_on: on,
-  });
+  }), Ev.playerStarred, { on, kind });
 
 // ── Commish kit (0141): the league note + player flags, any league kind ──────
 export const leagueNote = (leagueId: string) =>
   rpc<{ ok?: boolean; error?: string; text?: string | null; at?: string | null; can_edit?: boolean }>(
     'league_note', { p_league_id: leagueId });
 export const setLeagueNote = (leagueId: string, text: string | null) =>
-  rpc<{ ok: boolean; error?: string; text?: string | null }>('set_league_note', { p_league_id: leagueId, p_text: text });
+  tracked(rpc<{ ok: boolean; error?: string; text?: string | null }>('set_league_note', { p_league_id: leagueId, p_text: text }),
+    Ev.commishAction, { tool: 'note', cleared: !text });
 /** Raw rule keys as stored (0144) — see docs/flag-rules.md. */
 export interface FlagRulesRaw {
   no_trade?: boolean; no_add?: boolean; no_start?: boolean; no_powerups?: boolean; immune?: boolean;
@@ -1391,13 +1407,13 @@ export interface PlayerFlagRow { slug: string; label: string; rules?: FlagRulesR
 export const playerFlags = (leagueId: string) =>
   rpc<PlayerFlagRow[] | { error: string }>('player_flags', { p_league_id: leagueId });
 export const setPlayerFlag = (leagueId: string, slug: string, label: string | null, rules: FlagRulesRaw = {}) =>
-  rpc<{ ok: boolean; error?: string; on?: boolean; label?: string }>('set_player_flag', {
+  tracked(rpc<{ ok: boolean; error?: string; on?: boolean; label?: string }>('set_player_flag', {
     p_league_id: leagueId, p_slug: slug, p_label: label, p_rules: rules,
-  });
+  }), Ev.commishAction, { tool: label === null ? 'unflag' : 'flag' });
 export const setPlayerFlagsBulk = (leagueId: string, slugs: string[], label: string | null, rules: FlagRulesRaw = {}) =>
-  rpc<{ ok: boolean; error?: string; count?: number }>('set_player_flags_bulk', {
+  tracked(rpc<{ ok: boolean; error?: string; count?: number }>('set_player_flags_bulk', {
     p_league_id: leagueId, p_slugs: slugs, p_label: label, p_rules: rules,
-  });
+  }), Ev.commishAction, { tool: label === null ? 'unflag_bulk' : 'flags_bulk', n: slugs.length });
 
 // ── Chat (0147, v2 0148): league chat + member DMs, both league-scoped ───────
 export interface ChatPoll { options: { text: string; votes: number }[]; total: number; mine: number | null; }
@@ -1408,13 +1424,17 @@ export interface ChatMessage {
 export interface DmThreadRow { thread_id: string; peer_id: string; peer: string; last_at: string; preview: string | null; unread: number; }
 export interface DmMessage { id: number; body: string; at: string; mine: boolean; }
 export const chatPost = (leagueId: string, body: string, mentions: string[] = []) =>
-  rpc<{ ok: boolean; error?: string; id?: number }>('chat_post', { p_league_id: leagueId, p_body: body, p_mentions: mentions });
+  tracked(rpc<{ ok: boolean; error?: string; id?: number }>('chat_post', { p_league_id: leagueId, p_body: body, p_mentions: mentions }),
+    Ev.chatPosted, { kind: looksImage(body) ? 'gif' : 'text', dm: false, mentions: mentions.length });
 export const chatPostPoll = (leagueId: string, question: string, options: string[]) =>
-  rpc<{ ok: boolean; error?: string; id?: number }>('chat_post_poll', { p_league_id: leagueId, p_question: question, p_options: options });
+  tracked(rpc<{ ok: boolean; error?: string; id?: number }>('chat_post_poll', { p_league_id: leagueId, p_question: question, p_options: options }),
+    Ev.chatPosted, { kind: 'poll', dm: false, options: options.length });
 export const pollCast = (leagueId: string, messageId: number, choice: number) =>
-  rpc<{ ok: boolean; error?: string }>('poll_cast', { p_league_id: leagueId, p_message_id: messageId, p_choice: choice });
+  tracked(rpc<{ ok: boolean; error?: string }>('poll_cast', { p_league_id: leagueId, p_message_id: messageId, p_choice: choice }),
+    Ev.pollVoted);
 export const chatPin = (leagueId: string, id: number, on: boolean) =>
-  rpc<{ ok: boolean; error?: string }>('chat_pin', { p_league_id: leagueId, p_id: id, p_on: on });
+  tracked(rpc<{ ok: boolean; error?: string }>('chat_pin', { p_league_id: leagueId, p_id: id, p_on: on }),
+    Ev.chatPinned, { on });
 /** Latest page (no `before`) marks the channel read and carries the pin strip. */
 export const chatMessages = (leagueId: string, before?: number) =>
   rpc<{ ok: boolean; error?: string; messages?: ChatMessage[]; pins?: ChatMessage[] }>('chat_messages', {
@@ -1423,9 +1443,9 @@ export const chatMessages = (leagueId: string, before?: number) =>
 export const chatDelete = (leagueId: string, id: number) =>
   rpc<{ ok: boolean; error?: string }>('chat_delete', { p_league_id: leagueId, p_id: id });
 export const dmSend = (leagueId: string, to: string, body: string) =>
-  rpc<{ ok: boolean; error?: string; thread_id?: string; id?: number }>('dm_send', {
+  tracked(rpc<{ ok: boolean; error?: string; thread_id?: string; id?: number }>('dm_send', {
     p_league_id: leagueId, p_to: to, p_body: body,
-  });
+  }), Ev.chatPosted, { kind: looksImage(body) ? 'gif' : 'text', dm: true, mentions: 0 });
 export const dmThreads = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; threads?: DmThreadRow[] }>('dm_threads', { p_league_id: leagueId });
 /** Latest page (no `before`) marks the thread read. */
@@ -1454,9 +1474,9 @@ export interface LeagueScoringRow { td_bonus: number; yd_mult: number; to_penalt
 export const leagueScoringGet = (leagueId: string) =>
   rpc<{ ok?: boolean; error?: string } & Partial<LeagueScoringRow>>('league_scoring', { p_league_id: leagueId });
 export const leagueScoringSet = (leagueId: string, tdBonus: number, ydMult: number, toPenalty: number, scoped: unknown[] = []) =>
-  rpc<{ ok: boolean; error?: string }>('set_league_scoring', {
+  tracked(rpc<{ ok: boolean; error?: string }>('set_league_scoring', {
     p_league_id: leagueId, p_td_bonus: tdBonus, p_yd_mult: ydMult, p_to_penalty: toPenalty, p_scoped: scoped,
-  });
+  }), Ev.commishAction, { tool: 'scoring', scoped: scoped.length });
 
 // ── Playoffs (0073): the endgame for native leagues ───────────────────────────
 export interface StandingsRow { roster_id: number; team: string | null; wins: number; losses: number; ties: number; pf: number; pa: number; }
@@ -1579,8 +1599,8 @@ export const placeBid = (leagueId: string, rosterId: number, amount: number, lot
 export const setLotProxy = (leagueId: string, rosterId: number, max: number | null, lotId?: string) =>
   rpc<{ ok: boolean; error?: string; max?: number | null }>('set_lot_proxy', { p_league_id: leagueId, p_roster_id: rosterId, p_max: max, p_lot_id: lotId ?? null });
 export const makeDraftPick = (leagueId: string, slug: string) =>
-  rpc<{ ok: boolean; error?: string; overall?: number; roster_id?: number; slug?: string; complete?: boolean }>(
-    'make_draft_pick', { p_league_id: leagueId, p_slug: slug });
+  tracked(rpc<{ ok: boolean; error?: string; overall?: number; roster_id?: number; slug?: string; complete?: boolean }>(
+    'make_draft_pick', { p_league_id: leagueId, p_slug: slug }), Ev.draftPicked);
 /** Advance the draft: snake autopicks (queue → best available) and auction lot
  *  awards + auto-nominations. Idempotent — any member's poll may call it. */
 export const draftTick = (leagueId: string) => rpc<{ ok: boolean; error?: string; autopicks?: number; lots_awarded?: number }>('draft_tick', { p_league_id: leagueId });
@@ -1604,9 +1624,11 @@ export async function nativeRosters(leagueId: string): Promise<NativeRosterRow[]
 export const dropPlayer = (leagueId: string, rosterId: number, slug: string) =>
   rpc<{ ok: boolean; error?: string }>('drop_player', { p_league_id: leagueId, p_roster_id: rosterId, p_slug: slug });
 export const addFreeAgent = (leagueId: string, rosterId: number, addSlug: string, dropSlug?: string) =>
-  rpc<{ ok: boolean; error?: string }>('add_free_agent', { p_league_id: leagueId, p_roster_id: rosterId, p_add_slug: addSlug, p_drop_slug: dropSlug ?? null });
+  tracked(rpc<{ ok: boolean; error?: string }>('add_free_agent', { p_league_id: leagueId, p_roster_id: rosterId, p_add_slug: addSlug, p_drop_slug: dropSlug ?? null }),
+    Ev.waiverClaimed, { type: 'fa', drop: !!dropSlug });
 export const submitWaiverClaim = (leagueId: string, rosterId: number, addSlug: string, dropSlug?: string, bid = 0) =>
-  rpc<{ ok: boolean; error?: string; claim_id?: string; clears_at?: string; bid?: number }>('submit_waiver_claim', { p_league_id: leagueId, p_roster_id: rosterId, p_add_slug: addSlug, p_drop_slug: dropSlug ?? null, p_bid: bid });
+  tracked(rpc<{ ok: boolean; error?: string; claim_id?: string; clears_at?: string; bid?: number }>('submit_waiver_claim', { p_league_id: leagueId, p_roster_id: rosterId, p_add_slug: addSlug, p_drop_slug: dropSlug ?? null, p_bid: bid }),
+    Ev.waiverClaimed, { type: 'waiver', drop: !!dropSlug, bid });
 export const cancelWaiverClaim = (claimId: string) =>
   rpc<{ ok: boolean; error?: string }>('cancel_waiver_claim', { p_claim_id: claimId });
 /** Resolve every due claim in waiver-priority order. Idempotent — safe to call on load. */

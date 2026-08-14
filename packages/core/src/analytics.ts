@@ -56,6 +56,21 @@ export const Ev = {
   splitContributed: 'split_contributed',            // {amount}
   splitCompleted: 'split_completed',                // pool reached $30 → league unlocked
   commishPremiumToggled: 'commish_premium_toggled', // {on}
+  // social + league-life layer (the 0147–0150 sprint: chat, trades, push)
+  chatOpened: 'chat_opened',              // {dm} — a chat surface came up (league channel or a DM thread)
+  chatPosted: 'chat_posted',              // {kind:'text'|'gif'|'poll', dm, mentions} — message accepted by the server
+  pollVoted: 'poll_voted',                // cast or changed a vote on a league poll
+  chatPinned: 'chat_pinned',              // {on} — commish pinned/unpinned a message
+  tradeProposed: 'trade_proposed',        // native league: offer sent
+  tradeResponded: 'trade_responded',      // {action:'accept'|'reject'|'cancel'} — answered an offer
+  waiverClaimed: 'waiver_claimed',        // {type:'waiver'|'fa'} — claim placed / free agent added
+  draftPicked: 'draft_picked',            // made a pick in the draft room
+  commishAction: 'commish_action',        // {tool:'note'|'flags'|'scoring'|'unflag'|...} — used a commish kit tool
+  pushRegistered: 'push_registered',      // {granted} — push permission outcome (app-only; token registered when true)
+  pushPrefSet: 'push_pref_set',           // {kind, muted} — flipped a per-kind push mute
+  playerCardOpened: 'player_card_opened', // opened a player bio card
+  playerStarred: 'player_starred',        // {on} — starred/unstarred a player (watchlist/trade signal)
+  hubTileOpened: 'hub_tile_opened',       // {tile} — league home hub navigation
   // install funnel (the PWA "add to home screen" banner — src/app/pwa.ts)
   pwaInstallShown: 'pwa_install_shown',         // {ios} — banner rendered
   pwaInstallAccepted: 'pwa_install_accepted',   // took the native install dialog
