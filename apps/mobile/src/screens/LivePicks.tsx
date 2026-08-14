@@ -93,7 +93,7 @@ const fmtLock = (iso: string | null) => {
   catch { return iso; }
 };
 
-export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShopSignal }: {
+export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShopSignal, openFieldsSignal }: {
   userId: string; leagueId?: string; rosterId?: number;
   /** Native league: check roster legality — an over-limit roster is locked out
    *  of picks and power-ups (0072/0128), and the ban deserves a banner here,
@@ -102,6 +102,8 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   onBack: () => void;
   /** League-home SHOP tile (0182): each bump opens the power-up shop. */
   openShopSignal?: number;
+  /** Tab-strip ▦ FIELDS (0182.3): each bump opens the all-fields sheet. */
+  openFieldsSignal?: number;
 }) {
   const t = useTheme();
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
@@ -136,6 +138,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   const [shopOpen, setShopOpen] = useState(false);
   useEffect(() => { if (openShopSignal) setShopOpen(true); }, [openShopSignal]);
+  useEffect(() => { if (openFieldsSignal) setFieldsOpen(true); }, [openFieldsSignal]);
   const [matchPremium, setMatchPremium] = useState(true); // default true = no false locks until we know
   const [weekSel, setWeekSel] = useState<number | null>(null);
   const [winKickIso, setWinKickIso] = useState<Record<string, string>>({});
@@ -731,18 +734,8 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           Each label carries its own side's colour, which is the only thing that
           needs distinguishing here. */}
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
-        {/* Third door, live only: the all-fields board (founder's ask — the web
-            got its ▦ FIELDS onto the live header the same day). Hidden until a
-            feed exists because an empty fields sheet answers nothing. */}
-        {gameFeeds.length > 0 && (
-          <Pressable
-            onPress={() => { tap(); setFieldsOpen(true); }}
-            android_ripple={{ color: alpha(t.text, 20) }}
-            style={({ pressed }) => ({ flex: 0.6, alignItems: 'center', justifyContent: 'center', paddingVertical: 11, borderRadius: 10, overflow: 'hidden', backgroundColor: t.surface, opacity: pressed ? 0.8 : 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd })}
-          >
-            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.8, color: t.text }}>▦ FIELDS</Text>
-          </Pressable>
-        )}
+        {/* ▦ FIELDS moved to the tab strip (0182.3, founder's call) — the
+            board keeps just the two roster doors here. */}
         {([['you', 'YOUR ROSTER', t.you, pool.length], ['their', 'OPPONENT ROSTER', t.opp, oppPool.length]] as const).map(([side, label, accent, n]) => (
           <Pressable
             key={side}
