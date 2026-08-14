@@ -359,6 +359,20 @@ export const ruleGlyphs = (r?: FlagRulesRaw | null): string => {
   return g.join(' ');
 };
 
+/** A flag's label, derived from its rules — so "pick rules, hit FLAG" works
+ *  without inventing a name (the second playtest stall on the label field).
+ *  Null when there are no rules to name it by: a flag must say or do
+ *  SOMETHING, since a label-less save is the delete gesture server-side. */
+export const autoLabel = (r?: FlagRulesRaw | null): string | null => {
+  if (!r) return null;
+  const parts: string[] = [];
+  if (r.no_trade) parts.push('no trades'); if (r.no_add) parts.push('no adds'); if (r.no_start) parts.push('no starts');
+  if (r.no_powerups) parts.push('no powerups'); if (r.immune) parts.push('immune');
+  if (r.bonus_mult != null && r.bonus_mult !== 1) parts.push(`×${r.bonus_mult} pts`);
+  if (r.bonus_pts != null && r.bonus_pts !== 0) parts.push(`${r.bonus_pts > 0 ? '+' : ''}${r.bonus_pts} pts`);
+  return parts.length ? parts.join(' · ').slice(0, 40) : null;
+};
+
 function RuleControls({ draft, set }: { draft: FlagRulesRaw; set: (r: FlagRulesRaw) => void }) {
   const mini = (v: number, dflt: number, min: number, max: number, step: number, key: 'bonus_mult' | 'bonus_pts', fmt: (n: number) => string) => (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -441,29 +455,50 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
   };
   const saveBulk = async () => {
     if (busy || !selected.size) return;
-    if (!labelDraft.trim()) { setErr('Give the flag a label — it’s what the league sees on every chip.'); return; }
+    // Empty label + rules set → the rules name the flag (autoLabel). Only a
+    // flag with nothing to say at all is refused.
+    const lbl = labelDraft.trim() || autoLabel(rulesDraft);
+    if (!lbl) { setErr('Give the flag a label or a rule — the label is what the league sees on every chip.'); return; }
     setBusy(true); setErr(null);
     try {
-      const r = await setPlayerFlagsBulk(leagueId, [...selected], labelDraft, rulesDraft);
+      const r = await setPlayerFlagsBulk(leagueId, [...selected], lbl, rulesDraft);
       if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not save the flags.')); return; }
       setSelected(new Set()); setLabelDraft(''); setRulesDraft({}); setQ(''); setBulk(false);
       await load(); onChanged();
     } catch (x) { setErr(friendlyError(x)); }
     finally { setBusy(false); }
   };
+  // BULK REMOVE (playtest ask): the same RPC with a null label — its delete
+  // gesture — chunked to the 500-slug cap so "clear all" survives any count.
+  const unflag = async (slugs: string[]) => {
+    if (busy || !slugs.length) return;
+    setBusy(true); setErr(null);
+    try {
+      for (let i = 0; i < slugs.length; i += 500) {
+        const r = await setPlayerFlagsBulk(leagueId, slugs.slice(i, i + 500), null);
+        if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not remove the flags.')); return; }
+      }
+      setSelected(new Set());
+      await load(); onChanged();
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
 
-  const labelInput = (slug: string) => (
-    <div style={{ flex: '1 1 100%', marginTop: 4 }}>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <input value={labelDraft} autoFocus maxLength={40} onChange={(e) => setLabelDraft(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && labelDraft.trim()) void save(slug, labelDraft, rulesDraft); if (e.key === 'Escape') setLabelFor(null); }}
-          placeholder="keeper · out for season · ineligible…" style={{ ...input, padding: '5px 8px', fontSize: 11 }} />
-        <button onClick={() => labelDraft.trim() && void save(slug, labelDraft, rulesDraft)} disabled={busy || !labelDraft.trim()}
-          className="mono" style={{ ...btn, padding: '5px 10px', fontSize: 9 }}>SET</button>
+  const labelInput = (slug: string) => {
+    const effective = labelDraft.trim() || autoLabel(rulesDraft);
+    return (
+      <div style={{ flex: '1 1 100%', marginTop: 4 }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input value={labelDraft} autoFocus maxLength={40} onChange={(e) => setLabelDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && effective) void save(slug, effective, rulesDraft); if (e.key === 'Escape') setLabelFor(null); }}
+            placeholder="keeper · out for season · ineligible…" style={{ ...input, padding: '5px 8px', fontSize: 11 }} />
+          <button onClick={() => effective && void save(slug, effective, rulesDraft)} disabled={busy || !effective}
+            className="mono" style={{ ...btn, padding: '5px 10px', fontSize: 9 }}>SET</button>
+        </div>
+        <RuleControls draft={rulesDraft} set={setRulesDraft} />
       </div>
-      <RuleControls draft={rulesDraft} set={setRulesDraft} />
-    </div>
-  );
+    );
+  };
 
   return (
     <ModalBackdrop onClick={onClose}>
@@ -477,9 +512,21 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
         <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 4, lineHeight: 1.5 }}>
           A label the whole league sees — and RULES that bite: block trades/adds/starts/powerups, grant immunity, or pay a scoring bonus (docs in the chip tooltips). Rules apply from the next tick.
         </div>
-        {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8 }}>{err}</div>}
+        {/* bulk errors render at the BUTTON, not up here — up here they sit
+            scrolled out of view above a 500-row list, and a click that only
+            writes an invisible error reads as a dead button. */}
+        {!bulk && err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8 }}>{err}</div>}
 
-        <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginTop: 12 }}>CURRENT FLAGS</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 12 }}>
+          <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700 }}>CURRENT FLAGS</div>
+          {(rows?.length ?? 0) > 1 && (
+            <button disabled={busy}
+              onClick={() => { if (window.confirm(`Remove all ${rows!.length} flags from this league?`)) void unflag(rows!.map((f) => f.slug)); }}
+              className="mono" style={{ ...linkBtn, color: 'var(--opp)', marginLeft: 'auto', opacity: busy ? 0.5 : 1 }}>
+              ✕ CLEAR ALL {rows!.length}
+            </button>
+          )}
+        </div>
         {rows == null && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 6 }}>Loading…</div>}
         {rows?.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 6 }}>None yet.</div>}
         {rows?.map((f) => (
@@ -544,16 +591,28 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
         {bulk && (
           <div style={{ marginTop: 10, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
             <input value={labelDraft} maxLength={40} onChange={(e) => setLabelDraft(e.target.value)}
-              placeholder="one label for all selected…" style={{ ...input, fontSize: 11 }} />
+              placeholder="label — leave empty and the rules name it…" style={{ ...input, fontSize: 11 }} />
             <RuleControls draft={rulesDraft} set={setRulesDraft} />
-            <button onClick={() => void saveBulk()} disabled={busy || !selected.size}
-              className="mono" style={{ ...btn, width: '100%', marginTop: 8, opacity: busy || !selected.size ? 0.5 : 1 }}>
-              ⚑ FLAG {selected.size} PLAYER{selected.size === 1 ? '' : 'S'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button onClick={() => void saveBulk()} disabled={busy || !selected.size}
+                className="mono" style={{ ...btn, flex: 1, opacity: busy || !selected.size ? 0.5 : 1 }}>
+                ⚑ FLAG {selected.size} PLAYER{selected.size === 1 ? '' : 'S'}
+              </button>
+              <button onClick={() => void unflag([...selected])} disabled={busy || !selected.size}
+                title="remove whatever flag each selected player carries"
+                className="mono" style={{ ...ghostBtn, color: 'var(--opp)', opacity: busy || !selected.size ? 0.5 : 1 }}>
+                ✕ UNFLAG
+              </button>
+            </div>
+            {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 5, lineHeight: 1.4 }}>{err}</div>}
             {!labelDraft.trim() && selected.size > 0 && (
-              <div className="mono" style={{ fontSize: 9, color: 'var(--warn)', marginTop: 5, lineHeight: 1.4 }}>
-                ↑ add a label first — it’s what the league sees on every flagged player’s chip
-              </div>
+              autoLabel(rulesDraft)
+                ? <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 5, lineHeight: 1.4 }}>
+                    no label — the flag will read “{autoLabel(rulesDraft)}”
+                  </div>
+                : <div className="mono" style={{ fontSize: 9, color: 'var(--warn)', marginTop: 5, lineHeight: 1.4 }}>
+                    ↑ give it a label or a rule — the label is what the league sees on every flagged player’s chip
+                  </div>
             )}
           </div>
         )}
