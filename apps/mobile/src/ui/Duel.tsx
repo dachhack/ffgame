@@ -6,8 +6,8 @@
 // rather than a screen you navigate to. Two callers share it — the board's live
 // windows in LivePicks, and DemoBoard's scripted replay — which is exactly why
 // it was worth lifting out instead of inlining.
-import { useRef, type ReactNode } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { useRef, useState, type ReactNode } from 'react';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, windowKickoffMs } from '@drip/core/data/nflSlate';
 import { WINDOW_WIN_BONUS } from '@drip/core/engine/matchup';
 import { teamLogo } from '@drip/core/data/media';
@@ -78,6 +78,9 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
   } | null;
 }) {
   const t = useTheme();
+  // Which DONE windows have their field + play log expanded (0182.2) —
+  // collapsed by default once a window is decided.
+  const [detailOpen, setDetailOpen] = useState<Record<string, boolean>>({});
   const youSide = youAreHome ? 'home' : 'away';
   const oppSide = youAreHome ? 'away' : 'home';
 
@@ -208,6 +211,11 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
             : sealedBacks > 0 && !hasRows && !winKicked(win) ? 'SEALED'
             : status === 'live' ? '● LIVE' : winKicked(win) ? '● LIVE' : 'SEALED');
         const pairs = Math.max(my.length, th.length, sealedBacks);
+        // Done window (founder's call, 0182.2): the field + play log collapse
+        // once the window is decided — they're the story of a game that's
+        // over, one tap away instead of a screen of dead weight.
+        const winDone = st === 'FINAL';
+        const showDetail = !winDone || !!detailOpen[win];
 
         return (
           // Card's default 16 padding, the felt's 10 and the panel's 7 stacked
@@ -323,11 +331,20 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
                         it's here rather than in a panel below the board: the
                         field only means anything next to the cards whose score
                         it explains. */}
-                    {slotDetail?.(win, slot)}
+                    {showDetail && slotDetail?.(win, slot)}
                   </View>
                 );
               })}
             </View>
+            {winDone && !!slotDetail && (
+              <Pressable hitSlop={6}
+                onPress={() => setDetailOpen((cur) => ({ ...cur, [win]: !cur[win] }))}
+                style={{ alignSelf: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 11, paddingVertical: 5, marginTop: 2 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.dim }}>
+                  {detailOpen[win] ? '▾ HIDE FIELD & PLAY LOG' : '▸ FIELD & PLAY LOG'}
+                </Text>
+              </Pressable>
+            )}
           </Card>
         );
       })}
