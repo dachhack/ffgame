@@ -901,8 +901,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
 // ─────────────────────────────────────────────────────────────────────────────
 // Team management — roster / free agents / waivers
 // ─────────────────────────────────────────────────────────────────────────────
-export function TeamManage({ leagueId, onBack, onDraft }: {
-  leagueId: string; onBack: () => void; onDraft: () => void;
+/** Where a league-home tile wants the team screen to land (0182). */
+export type TeamFocus = 'trades' | 'waivers' | 'options';
+
+export function TeamManage({ leagueId, onBack, onDraft, focus }: {
+  leagueId: string; onBack: () => void; onDraft: () => void; focus?: TeamFocus;
 }) {
   const [team, setTeam] = useState<NativeTeamState | null>(null);
   const [rosters, setRosters] = useState<{ roster_id: number; slug: string }[]>([]);
@@ -921,6 +924,18 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
   const [picking, setPicking] = useState<'team' | 'league' | null>(null);      // avatar picker target
   const [nameDraft, setNameDraft] = useState<string | null>(null);             // non-null ⇒ renaming
   const skew = useRef(0);
+  // League-home deep links (0182): scroll the asked-for section into view once
+  // the screen has data. One shot — the user scrolls freely afterwards.
+  const optionsRef = useRef<HTMLDivElement>(null);
+  const waiversRef = useRef<HTMLDivElement>(null);
+  const tradesRef = useRef<HTMLDivElement>(null);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focus || focused.current || team == null) return;
+    focused.current = true;
+    const el = focus === 'trades' ? tradesRef.current : focus === 'waivers' ? waiversRef.current : optionsRef.current;
+    requestAnimationFrame(() => el?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }, [focus, team]);
 
   const refresh = async () => {
     try {
@@ -1058,7 +1073,7 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
       <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>
       <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>⇄ Team management</div>
       {err && <div className="mono" style={{ ...errStyle, marginBottom: 10 }}>{err}</div>}
-      {identityCard}
+      <div ref={optionsRef}>{identityCard}</div>
       <div style={card}>
         <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>Rosters arrive at the draft</div>
         <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Waivers and free agency open once the draft is complete. Set your team name and avatar now — they show on the draft board.</div>
@@ -1077,7 +1092,7 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
       <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>⇄ Team management</div>
       {err && <div className="mono" style={{ ...errStyle, marginBottom: 10 }}>{err}</div>}
 
-      {identityCard}
+      <div ref={optionsRef}>{identityCard}</div>
 
       {/* over-limit lockout: no adds/claims/weekly lineups until legal */}
       {team.roster_issue && (
@@ -1145,7 +1160,7 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
 
       </div>{/* /my-team column */}
 
-      <div style={{ flex: '1 1 380px', minWidth: 320 }}>
+      <div ref={waiversRef} style={{ flex: '1 1 380px', minWidth: 320 }}>
       {/* free agents / waiver wire */}
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={hdr}>
@@ -1212,6 +1227,7 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
         </div>
       </div>
 
+      <div ref={tradesRef} />
       <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order}
         rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review} onChanged={refresh} />
       </div>{/* /market column */}

@@ -51,7 +51,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
   /** rosterId is null for a league you commission WITHOUT a team — it opens
    *  into management (draft + team tools), not a lineup it doesn't have.
    *  `commish` decides whether the ⚑ COMMISH tab renders at all. */
-  onOpen: (leagueId: string, rosterId: number | null, name: string, native: boolean, commish: boolean, pickUserId?: string) => void;
+  onOpen: (leagueId: string, rosterId: number | null, name: string, native: boolean, commish: boolean, pickUserId?: string, landing?: 'home' | 'picks') => void;
   /** Open the league board — browse open leagues, post yours, recruit. */
   onBoard: () => void;
 }) {
@@ -180,7 +180,14 @@ export function Leagues({ userId, onOpen, onBoard }: {
                 {lg?.season ?? ''}{lg?.provider ? ` · ${lg.provider.toUpperCase()}` : ''}
               </Mono>
               <View style={{ flex: 1 }} />
-              <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.you }}>SET LINEUP →</Text>
+              {/* straight to the board — the founder's quick link on the chip
+                  (0182); the card itself opens the LEAGUE HOME. */}
+              <Pressable hitSlop={6}
+                onPress={() => { tap(); onOpen(e.league_id, e.sleeper_roster_id, lg?.name ?? 'League', lg?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id, 'picks'); }}
+                style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 4 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>▶ MATCHUP</Text>
+              </Pressable>
+              <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.you }}>OPEN →</Text>
             </View>
           </Pressable>
         );
