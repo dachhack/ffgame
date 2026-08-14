@@ -14,7 +14,8 @@
 // anyone, and the flag renders with the real name wherever the player appears.
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from './store';
-import { setLeagueNote, setPlayerFlag, playerFlags, friendlyError, type PlayerFlagRow } from '@drip/core/data/liveApi';
+import { setLeagueNote, setPlayerFlag, playerFlags, leagueScoringSet, friendlyError, type PlayerFlagRow } from '@drip/core/data/liveApi';
+import { SCORING_BOUNDS, DEFAULT_SCORING, scoringIsDefault, scoringLabel, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 import { PLAYER_BIO } from '@drip/core/data/playerBio';
 import { headshot } from '@drip/core/data/media';
 import { ModalBackdrop, Img } from './ui';
@@ -32,23 +33,34 @@ const prettify = (slug: string) =>
 /** The banner + its editors. Renders nothing off the live board; renders
  *  nothing for members while no note stands. */
 export function CommishNoteBanner() {
-  const { liveCtx, liveNote, reloadCommish } = useStore();
+  const { liveCtx, liveNote, liveScoring, reloadCommish } = useStore();
   const [noteOpen, setNoteOpen] = useState(false);
   const [flagsOpen, setFlagsOpen] = useState(false);
+  const [scoringOpen, setScoringOpen] = useState(false);
   if (!liveCtx || !liveNote) return null;
   const { text, canEdit } = liveNote;
-  if (!text && !canEdit) return null;
+  const scoringOn = liveScoring != null && !scoringIsDefault(liveScoring);
+  if (!text && !canEdit && !scoringOn) return null;
   return (
     <>
       <div className="mono" style={{ marginTop: 7, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', fontSize: 10.5, lineHeight: 1.5, color: 'var(--text)', background: `color-mix(in srgb, ${FLAG_PURPLE} 10%, var(--surface))`, border: `1px solid ${FLAG_PURPLE}`, borderRadius: 6, padding: '7px 11px' }}>
         <span style={{ fontWeight: 700, letterSpacing: '0.1em', fontSize: 9, color: FLAG_PURPLE, flex: 'none' }}>⚑ LEAGUE NOTE</span>
         {text
           ? <span style={{ minWidth: 0, flex: '1 1 200px', whiteSpace: 'pre-wrap' }}>{text}</span>
-          : <span style={{ color: 'var(--faint)', flex: '1 1 200px' }}>nothing posted — say something to the league</span>}
+          : <span style={{ color: 'var(--faint)', flex: '1 1 200px' }}>{canEdit ? 'nothing posted — say something to the league' : ''}</span>}
+        {/* Non-default scoring is ALWAYS visible to every member — nobody
+            should discover a turnover penalty from a score dropping. */}
+        {scoringOn && (
+          <span title="commissioner scoring adjustments in force — every matchup in this league scores with these"
+            style={{ flex: 'none', fontWeight: 700, fontSize: 9.5, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 7px' }}>
+            ⚖ {scoringLabel(liveScoring)}
+          </span>
+        )}
         {canEdit && (
           <span style={{ display: 'inline-flex', gap: 6, flex: 'none', marginLeft: 'auto' }}>
             <button onClick={() => setNoteOpen(true)} className="mono" style={linkBtn}>✎ {text ? 'edit' : 'write'}</button>
             <button onClick={() => setFlagsOpen(true)} className="mono" style={linkBtn}>⚑ player flags</button>
+            <button onClick={() => setScoringOpen(true)} className="mono" style={linkBtn}>⚖ scoring</button>
           </span>
         )}
       </div>
@@ -62,7 +74,63 @@ export function CommishNoteBanner() {
           onChanged={() => void reloadCommish()}
           onClose={() => setFlagsOpen(false)} />
       )}
+      {scoringOpen && liveScoring && (
+        <ScoringEditor leagueId={liveCtx.leagueId} initial={liveScoring}
+          onDone={() => { setScoringOpen(false); void reloadCommish(); }}
+          onClose={() => setScoringOpen(false)} />
+      )}
     </>
+  );
+}
+
+function ScoringEditor({ leagueId, initial, onDone, onClose }: {
+  leagueId: string; initial: LeagueScoring; onDone: () => void; onClose: () => void;
+}) {
+  const [td, setTd] = useState(initial.tdBonus);
+  const [yd, setYd] = useState(initial.ydMult);
+  const [to, setTo] = useState(initial.toPenalty);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const save = async (tdV: number, ydV: number, toV: number) => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await leagueScoringSet(leagueId, tdV, Math.round(ydV * 10) / 10, toV);
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not save.')); return; }
+      onDone();
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  const stepper = (label: string, hint: string, v: number, set: (n: number) => void,
+    b: { min: number; max: number; step: number }, fmt: (n: number) => string) => (
+    <div style={{ marginTop: 12 }}>
+      <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700 }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+        <button onClick={() => set(Math.round(Math.max(b.min, v - b.step) * 10) / 10)} className="mono" style={{ ...ghostBtn, padding: '6px 12px' }}>−</button>
+        <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', minWidth: 52, textAlign: 'center' }}>{fmt(v)}</span>
+        <button onClick={() => set(Math.round(Math.min(b.max, v + b.step) * 10) / 10)} className="mono" style={{ ...ghostBtn, padding: '6px 12px' }}>＋</button>
+        <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.4, flex: 1 }}>{hint}</span>
+      </div>
+    </div>
+  );
+  return (
+    <ModalBackdrop onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={card}>
+        <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>⚖ League scoring</div>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 4, lineHeight: 1.5 }}>
+          Adjustments layer on the base game — the metric catalog stays as written; these apply on top, to every matchup in this league. Every member sees them on their board. Changing them mid-week changes how the current week scores from the next tick.
+        </div>
+        {stepper('TD BONUS', 'extra points on every touchdown your players score (defensive TDs included)', td, setTd, SCORING_BOUNDS.tdBonus, (n) => `${n > 0 ? '+' : ''}${n}`)}
+        {stepper('YARDAGE MULTIPLIER', 'scales all per-yard scoring AND drip-rate growth', yd, setYd, SCORING_BOUNDS.ydMult, (n) => `×${n}`)}
+        {stepper('TURNOVER PENALTY', 'points removed from a player’s own bank on an INT thrown / fumble lost (never below zero)', to, setTo, SCORING_BOUNDS.toPenalty, (n) => (n === 0 ? 'off' : `−${n}`))}
+        {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 10 }}>{err}</div>}
+        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+          <button onClick={() => save(td, yd, to)} disabled={busy} className="mono" style={{ ...btn, flex: 1, opacity: busy ? 0.5 : 1 }}>SAVE</button>
+          <button onClick={() => save(DEFAULT_SCORING.tdBonus, DEFAULT_SCORING.ydMult, DEFAULT_SCORING.toPenalty)} disabled={busy} className="mono" style={{ ...ghostBtn }}>RESET TO BASE</button>
+        </div>
+        <div style={{ textAlign: 'center', marginTop: 8 }}><button onClick={onClose} className="mono" style={linkBtn}>cancel</button></div>
+      </div>
+    </ModalBackdrop>
   );
 }
 

@@ -26,6 +26,7 @@ import { starterSlugs } from '../../packages/core/src/data/poolEntry.ts';
 // Shared with the client and migration 0110: board weeks above PRESEASON_BASE
 // are throwaway practice and never move real coin.
 import { isPreseasonWeek as isPracticeWeek } from '../../packages/core/src/data/nflSlate.ts';
+import { setLeagueScoring, parseScoring } from '../../packages/core/src/engine/leagueScoring.ts';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
 export function baseScore(plays) {
@@ -121,6 +122,13 @@ async function loadout(matchupId, appUserId, ctx) {
     .eq('matchup_id', matchupId).eq('app_user_id', appUserId).maybeSingle();
   return data?.payload_json ?? {};
 }
+/** The league's scoring adjustments (0143) — raw settings_json.scoring or null. */
+async function leagueScoringOf(leagueId, ctx) {
+  if (ctx) return ctx.scoring?.get(leagueId) ?? null;
+  const { data } = await db().from('league').select('settings_json').eq('id', leagueId).maybeSingle();
+  return data?.settings_json?.scoring ?? null;
+}
+
 /** The league's missed-pick policy: 'best_lineup' (default) | 'ai' | 'empty'. */
 async function lineupPolicy(leagueId, ctx) {
   if (ctx) return ctx.policy.get(leagueId) ?? 'best_lineup';
@@ -139,7 +147,7 @@ export async function prefetchTick(live, week) {
   const matchupIds = live.map((m) => m.id);
   const [mem, lg, lu, ap, pk] = await Promise.all([
     db().from('league_membership').select('league_id,sleeper_roster_id,app_user_id,enrolled,controller').in('league_id', leagueIds),
-    db().from('league').select('id,lineup_policy').in('id', leagueIds),
+    db().from('league').select('id,lineup_policy,settings_json').in('id', leagueIds),
     db().from('sleeper_lineup').select('league_id,roster_id,starters_json').in('league_id', leagueIds).eq('week', week),
     db().from('applied_state').select('matchup_id,app_user_id,payload_json').in('matchup_id', matchupIds),
     db().from('sealed_pick').select('matchup_id,app_user_id,game_window,roster_slot,player_slug,metric_id,locked').in('matchup_id', matchupIds).not('player_slug', 'is', null),
@@ -150,6 +158,7 @@ export async function prefetchTick(live, week) {
     members.get(m.league_id).set(m.sleeper_roster_id, m);
   }
   const policy = new Map((lg.data ?? []).map((r) => [r.id, r.lineup_policy ?? 'best_lineup']));
+  const scoring = new Map((lg.data ?? []).map((r) => [r.id, r.settings_json?.scoring ?? null]));
   const lineups = new Map();   // `${leagueId}:${roster}` -> slugs[]
   // Starters only — same reasoning as lineupSlugs. The prefetch path and the
   // per-matchup path MUST agree; they are the same rule read two ways, and a
@@ -166,7 +175,7 @@ export async function prefetchTick(live, week) {
     if (!picks.has(k)) picks.set(k, []);
     picks.get(k).push({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id });
   }
-  return { members, policy, lineups, applied, picks, hasPicks };
+  return { members, policy, scoring, lineups, applied, picks, hasPicks };
 }
 
 /** Resolve one matchup → write matchup_state (per game_window) + finals when final.
@@ -192,6 +201,12 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   }
   const byRoster = new Map((members ?? []).map((m) => [m.sleeper_roster_id, m]));
   const policy = await lineupPolicy(matchup.league_id, ctx);
+  // League scoring adjustments (0143): FETCHED here with the other awaits,
+  // INSTALLED synchronously right before each resolve call below. The tick
+  // resolves matchups 20-at-a-time under Promise.all, so an install separated
+  // from its resolve by an await could be overwritten by a sibling matchup —
+  // set-then-resolve in one synchronous run is what keeps leagues isolated.
+  const scoringKnobs = parseScoring(await leagueScoringOf(matchup.league_id, ctx));
 
   // A side's effective lineup AND its armed in-slot buffs. Power-ups (buffs +
   // metric unlocks) are PAID and live in applied_state, keyed by app_user — so any
@@ -318,6 +333,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
 
   if (homePicks && awayPicks) {
     // ── Both sides have a lineup (human, AI, or auto-backup): real H2H engine ──
+    setLeagueScoring(scoringKnobs); // sync install — no await between here and the resolve
     const r = resolveLiveMatchup(homePicks.map(toLive), awayPicks.map(toLive), matchup.week,
       { homeBuffs: new Set(homeBuffs), awayBuffs: new Set(awayBuffs),
         homeComboQty: home.comboQty, awayComboQty: away.comboQty },
@@ -337,6 +353,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       }
       return { byWin, total: round(total) };
     };
+    setLeagueScoring(scoringKnobs); // sync install — solo() resolves synchronously below
     const h = solo(homePicks, 'home'), a = solo(awayPicks, 'away');
     const wins = new Set([...Object.keys(h.byWin), ...Object.keys(a.byWin)]);
     for (const w of wins) states.push({ game_window: w, home_score: h.byWin[w] ?? 0, away_score: a.byWin[w] ?? 0 });

@@ -1,5 +1,6 @@
 import type { Player, Pos, PbpEvent, SlotResolution, EffectType, BuffFx } from '../types';
 import { metricById } from '../data/metrics';
+import { leagueScoring } from './leagueScoring';
 import { realPbpFor, realPossFor, realWallFor, REAL_WEEKS, type RealPlayKind } from '../data/realPbp';
 import { returnPlaysFor } from '../data/returns';
 
@@ -48,12 +49,19 @@ interface RawPlay {
 
 // Effect family of a metric → how it scores a single play and what it does.
 function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): number {
+  // League adjustments (0143) LAYER on the tuned base numbers below: A.ydMult
+  // scales every yardage-derived term, A.tdBonus adds to every TD's points.
+  // Defaults are the identity, so an unadjusted league scores exactly the
+  // catalog text. Per-event scoring (receptions/targets/carries/splash/FG)
+  // is deliberately untouched — see engine/leagueScoring.ts.
+  const A = leagueScoring();
+  const tdPts = (base: number) => (play.td ? base + A.tdBonus : 0);
   // Return Yards (retyd) is a drip — it scores via rate accrual, never here.
   if (pos === 'QB') {
     if (metricId === 'fg') return 0; // Field General scores nothing — it multiplies your other window players (see windowFgMult / resolveSlot opts)
-    if (metricId === 'pass') return play.kind === 'pass' ? play.yards * 0.04 + (play.td ? 4 : 0) : 0; // yards + TD points, but no nuke/erase (flat family)
-    if (metricId === 'passbig') return play.kind === 'pass' ? play.yards * 0.04 + (play.td ? 10 : 0) : 0; // Air Raid unlock: 10 pts / passing TD
-    if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0;  // yards + TD points, flat
+    if (metricId === 'pass') return play.kind === 'pass' ? play.yards * 0.04 * A.ydMult + tdPts(4) : 0; // yards + TD points, but no nuke/erase (flat family)
+    if (metricId === 'passbig') return play.kind === 'pass' ? play.yards * 0.04 * A.ydMult + tdPts(10) : 0; // Air Raid unlock: 10 pts / passing TD
+    if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 * A.ydMult + tdPts(6) : 0;  // yards + TD points, flat
   }
   // NUKE metrics also score scrimmage yards (0.04/yd) under a SPIKE profile
   // (big per-TD, discounted yardage). Measured (findings §2/§10/§11): pure
@@ -61,25 +69,25 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
   // NUKE a trap and foreclosing the trailing-team gamble; the spike profile
   // prices its variance+denial at a fair single-flip discount (~46% blind)
   // while keeping the boom big enough to gamble on.
-  const scrimmage = (play.kind === 'rush' || play.kind === 'rec') ? play.yards * 0.04 : 0;
+  const scrimmage = (play.kind === 'rush' || play.kind === 'rec') ? play.yards * 0.04 * A.ydMult : 0;
   if (pos === 'RB') {
-    if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 : 0; // drip, no TD
+    if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 * A.ydMult : 0; // drip, no TD
     if (metricId === 'carries') return play.kind === 'rush' ? 0.85 : 0; // COMPRESSION (0.5 → 0.85: measured dead at 0.5 — 0% best-pick share)
     if (metricId === 'rec') return play.catch ? 1 : 0;
-    if (metricId === 'td') return scrimmage + (play.td ? 10 : 0); // NUKE
-    if (metricId === 'underdog') return play.kind === 'rush' ? play.yards * 0.1 + (play.td ? 6 : 0) : 0; // UNDERDOG: flat rushing base; the trailing-side ×1.5 layers on top (resolveSlot)
+    if (metricId === 'td') return scrimmage + tdPts(10); // NUKE
+    if (metricId === 'underdog') return play.kind === 'rush' ? play.yards * 0.1 * A.ydMult + tdPts(6) : 0; // UNDERDOG: flat rushing base; the trailing-side ×1.5 layers on top (resolveSlot)
   }
   if (pos === 'WR') {
-    if (metricId === 'recyd') return play.catch ? play.yards * 0.1 * (hot ? 2 : 1) : 0;
+    if (metricId === 'recyd') return play.catch ? play.yards * 0.1 * A.ydMult * (hot ? 2 : 1) : 0;
     if (metricId === 'rec') return play.catch ? 1 : 0;
     if (metricId === 'tgt') return play.target ? 1 : 0;
-    if (metricId === 'td') return scrimmage + (play.td ? 10 : 0);
-    if (metricId === 'underdog') return play.catch ? play.yards * 0.1 + (play.td ? 6 : 0) : 0; // UNDERDOG: flat receiving base; the trailing-side ×1.5 layers on top (resolveSlot)
+    if (metricId === 'td') return scrimmage + tdPts(10);
+    if (metricId === 'underdog') return play.catch ? play.yards * 0.1 * A.ydMult + tdPts(6) : 0; // UNDERDOG: flat receiving base; the trailing-side ×1.5 layers on top (resolveSlot)
   }
   if (pos === 'TE') {
     if (metricId === 'tgt') return play.target ? 1 : 0;
     if (metricId === 'rec') return play.catch ? 1.5 : 0;
-    if (metricId === 'td') return scrimmage + (play.td ? 12 : 0); // NUKE
+    if (metricId === 'td') return scrimmage + tdPts(12); // NUKE
   }
   if (pos === 'K') {
     // 'neg' (SHUTDOWN) scores 0 directly — it's a pure effect. 'banker' scores
@@ -96,7 +104,7 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
     if (play.kind === 'sack') return 1;
     if (play.kind === 'int') return 3;
     if (play.kind === 'fumrec') return 2;
-    if (play.kind === 'dst_td') return 6;
+    if (play.kind === 'dst_td') return 6 + A.tdBonus;
     if (play.kind === 'safety') return 2;
     return 0;
   }
@@ -107,7 +115,7 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
       if (play.kind === 'sack') return 4;
       if (play.kind === 'int') return 6;
       if (play.kind === 'fumrec') return 4;
-      if (play.kind === 'dst_td') return 6;
+      if (play.kind === 'dst_td') return 6 + A.tdBonus;
       if (play.kind === 'safety') return 2;
       if (play.kind === 'tackle') return 0.5;
       return 0;
@@ -116,7 +124,7 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
     if (play.kind === 'sack') return 2;
     if (play.kind === 'int') return 3;
     if (play.kind === 'fumrec') return 2;
-    if (play.kind === 'dst_td') return 6;
+    if (play.kind === 'dst_td') return 6 + A.tdBonus;
     if (play.kind === 'safety') return 2;
     return 0;
   }
@@ -498,7 +506,7 @@ export function dstDripTotal(player: Player, week: number): number {
   for (const p of splash) {
     total += rate * ((p.clock - last) / 60); // accrue at the current rate up to this splash
     last = p.clock;
-    rate += splashWeight(p.kind) * DST_DRIP_RATE; // then the splash bumps the rate
+    rate += splashWeight(p.kind) * DST_DRIP_RATE * leagueScoring().ydMult; // then the splash bumps the rate
   }
   total += rate * (Math.max(0, REG - last) / 60); // and on to the end of the game
   return Math.round(total * 10) / 10;
@@ -595,7 +603,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   // share) but shy of 0.0075 (which dominated once immunity covered TE
   // erasers too). Immune to the
   // pauses and erases that WR/RB opponents lay on a drip (see oppIsDrip below).
-  const dripRateOf = (s: SlotInput): number => (s.player.pos === 'TE' ? 0.0065 : 0.01);
+  const dripRateOf = (s: SlotInput): number => (s.player.pos === 'TE' ? 0.0065 : 0.01) * leagueScoring().ydMult;
   const youDripRate = dripRateOf(you);
   const theirDripRate = dripRateOf(their);
   const youDripKind = dripKindOf(you);
@@ -940,7 +948,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       // game (accrueYou/accrueTheir feed it through accrueRange). Marshal (the
       // shield DST) does NOT drip — that's the distinction between the two.
       const iAmDstEarn = play.side === 'you' ? dstEarnYou : dstEarnTheir;
-      if (iAmDstEarn && SPLASH_KINDS.includes(play.kind) && !mine.dead) mine.rate += splashWeight(play.kind) * DST_DRIP_RATE;
+      if (iAmDstEarn && SPLASH_KINDS.includes(play.kind) && !mine.dead) mine.rate += splashWeight(play.kind) * DST_DRIP_RATE * leagueScoring().ydMult;
     }
     // Field General QB: scores nothing itself, but each pass grows the window
     // multiplier — surface it in the QB's own log so you can watch it build.
@@ -1119,7 +1127,15 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     if (!effect && surgeBoost) effect = { type: 'streak', text: `⚡ SURGE ×${SURGE_MULT}` };
     if (!effect && frozenThis) effect = { type: 'stop', text: '🧊 COLD SNAP — frozen' };
     if (encoreThis) { effect = { type: 'streak', text: `🎬 ENCORE +${DOUBLE_TD_BONUS}` }; sig = true; }
-    if (play.turnover) effect = { type: 'nuke', text: '✕ TURNOVER → opp' }; // giveaway: coin to the opponent
+    if (play.turnover) {
+      // League turnover penalty (0143): the giveaway bites the player's OWN
+      // bank, clamped at zero — banks never go negative in this game (nukes
+      // wipe TO zero), so the penalty takes what's there.
+      const toPen = leagueScoring().toPenalty;
+      const cut = toPen > 0 && !mine.dead ? Math.min(toPen, Math.max(0, mine.bank)) : 0;
+      if (cut > 0) mine.bank = Math.round((mine.bank - cut) * 10) / 10;
+      effect = { type: 'nuke', text: cut > 0 ? `✕ TURNOVER −${cut.toFixed(1)} → opp` : '✕ TURNOVER → opp' }; // giveaway: coin to the opponent
+    }
 
     events.push({
       clock: play.clock,

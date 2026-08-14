@@ -1382,6 +1382,15 @@ export const setPlayerFlag = (leagueId: string, slug: string, label: string | nu
     p_league_id: leagueId, p_slug: slug, p_label: label,
   });
 
+// ── League scoring adjustments (0143): the commissioner's layering knobs ─────
+export interface LeagueScoringRow { td_bonus: number; yd_mult: number; to_penalty: number; can_edit: boolean; }
+export const leagueScoringGet = (leagueId: string) =>
+  rpc<{ ok?: boolean; error?: string } & Partial<LeagueScoringRow>>('league_scoring', { p_league_id: leagueId });
+export const leagueScoringSet = (leagueId: string, tdBonus: number, ydMult: number, toPenalty: number) =>
+  rpc<{ ok: boolean; error?: string }>('set_league_scoring', {
+    p_league_id: leagueId, p_td_bonus: tdBonus, p_yd_mult: ydMult, p_to_penalty: toPenalty,
+  });
+
 // ── Playoffs (0073): the endgame for native leagues ───────────────────────────
 export interface StandingsRow { roster_id: number; team: string | null; wins: number; losses: number; ties: number; pf: number; pa: number; }
 export interface PlayoffMatchup {
