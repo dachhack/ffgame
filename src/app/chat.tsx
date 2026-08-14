@@ -19,6 +19,7 @@ import {
   type ChatMessage, type DmThreadRow, type DmMessage,
 } from '@drip/core/data/liveApi';
 import { ModalBackdrop } from './ui';
+import { gifProvider, type GifResult } from '@drip/core/data/gifs';
 
 // ── chat v2 (0148): inline media, @mentions, polls, pins ────────────────────
 
@@ -51,29 +52,20 @@ function Body({ body, names }: { body: string; names: string[] }) {
   return <>{parts}</>;
 }
 
-/** Free Tenor v2 key — set VITE_TENOR_KEY and the GIF picker lights up;
- *  without it the button hides (pasted GIF links still render inline). */
-const TENOR_KEY = (import.meta.env.VITE_TENOR_KEY as string | undefined) || undefined;
-interface TenorGif { id: string; tiny: string; full: string; }
+/** GIF search provider (0182.4): Tenor if VITE_TENOR_KEY is set, else Giphy
+ *  via VITE_GIPHY_KEY; with neither the button hides (pasted GIF links still
+ *  render inline). */
+const GIF = gifProvider(
+  (import.meta.env.VITE_TENOR_KEY as string | undefined) || undefined,
+  (import.meta.env.VITE_GIPHY_KEY as string | undefined) || undefined,
+);
 function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose: () => void }) {
   const [q, setQ] = useState('');
-  const [gifs, setGifs] = useState<TenorGif[] | null>(null);
+  const [gifs, setGifs] = useState<GifResult[] | null>(null);
   useEffect(() => {
-    if (!TENOR_KEY) return;
+    if (!GIF) return;
     const t = setTimeout(() => {
-      const base = q.trim()
-        ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q.trim())}`
-        : 'https://tenor.googleapis.com/v2/featured?';
-      fetch(`${base}&key=${TENOR_KEY}&limit=12&media_filter=gif,tinygif`)
-        .then((r) => r.json())
-        .then((d: { results?: { id: string; media_formats?: Record<string, { url?: string }> }[] }) => {
-          setGifs((d.results ?? []).map((g) => ({
-            id: g.id,
-            tiny: g.media_formats?.tinygif?.url ?? g.media_formats?.gif?.url ?? '',
-            full: g.media_formats?.gif?.url ?? g.media_formats?.tinygif?.url ?? '',
-          })).filter((g) => g.tiny && g.full));
-        })
-        .catch(() => setGifs([]));
+      GIF.search(q).then(setGifs).catch(() => setGifs([]));
     }, 300);
     return () => clearTimeout(t);
   }, [q]);
@@ -92,7 +84,7 @@ function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose
             style={{ width: '100%', height: 74, objectFit: 'cover', borderRadius: 6, cursor: 'pointer' }} />
         ))}
       </div>
-      <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', marginTop: 6 }}>via Tenor</div>
+      <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', marginTop: 6 }}>{GIF?.attribution}</div>
     </div>
   );
 }
@@ -311,7 +303,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
         ))}
       </MessageScroll>
       {pollOpen && <PollComposer leagueId={leagueId} onDone={() => { setPollOpen(false); void load(); }} onClose={() => setPollOpen(false)} />}
-      {gifOpen && TENOR_KEY && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
+      {gifOpen && GIF && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
       <div style={{ borderTop: '1px solid var(--bd)', padding: '10px 14px' }}>
         {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', marginBottom: 6 }}>{err}</div>}
         {sugg.length > 0 && (
@@ -329,7 +321,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
             <button onClick={() => { setPollOpen((v) => !v); setGifOpen(false); }} title="post a poll" className="mono"
               style={{ ...linkBtn, fontSize: 13, padding: '0 2px' }}>📊</button>
           )}
-          {TENOR_KEY && (
+          {GIF && (
             <button onClick={() => { setGifOpen((v) => !v); setPollOpen(false); }} title="send a GIF" className="mono"
               style={{ ...linkBtn, fontSize: 11, padding: '0 2px', alignSelf: 'center' }}>GIF</button>
           )}

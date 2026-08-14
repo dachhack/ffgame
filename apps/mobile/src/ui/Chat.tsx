@@ -13,6 +13,7 @@ import {
   leagueNote, friendlyError,
   type ChatMessage, type DmThreadRow, type DmMessage,
 } from '@drip/core/data/liveApi';
+import { gifProvider, type GifResult } from '@drip/core/data/gifs';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Mono } from './prims';
@@ -37,9 +38,10 @@ const isImageUrl = (s: string): boolean => {
 };
 const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** Free Tenor v2 key — set EXPO_PUBLIC_TENOR_KEY and the GIF picker lights
- *  up; without it the button hides (pasted GIF links still render inline). */
-const TENOR_KEY = process.env.EXPO_PUBLIC_TENOR_KEY || undefined;
+/** GIF search provider (0182.4): Tenor if EXPO_PUBLIC_TENOR_KEY is set, else
+ *  Giphy via EXPO_PUBLIC_GIPHY_KEY; with neither the button hides (pasted GIF
+ *  links still render inline). */
+const GIF = gifProvider(process.env.EXPO_PUBLIC_TENOR_KEY || undefined, process.env.EXPO_PUBLIC_GIPHY_KEY || undefined);
 
 /** A message body: whole-URL images render inline; @TeamName tokens highlight
  *  against the league's real member names (longest name wins). */
@@ -90,27 +92,14 @@ function PollView({ m, leagueId, onVoted }: { m: ChatMessage; leagueId: string; 
   );
 }
 
-interface TenorGif { id: string; tiny: string; full: string; }
 function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose: () => void }) {
   const t = useTheme();
   const [q, setQ] = useState('');
-  const [gifs, setGifs] = useState<TenorGif[] | null>(null);
+  const [gifs, setGifs] = useState<GifResult[] | null>(null);
   useEffect(() => {
-    if (!TENOR_KEY) return;
+    if (!GIF) return;
     const id = setTimeout(() => {
-      const base = q.trim()
-        ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q.trim())}`
-        : 'https://tenor.googleapis.com/v2/featured?';
-      fetch(`${base}&key=${TENOR_KEY}&limit=12&media_filter=gif,tinygif`)
-        .then((r) => r.json())
-        .then((d: { results?: { id: string; media_formats?: Record<string, { url?: string }> }[] }) => {
-          setGifs((d.results ?? []).map((g) => ({
-            id: g.id,
-            tiny: g.media_formats?.tinygif?.url ?? g.media_formats?.gif?.url ?? '',
-            full: g.media_formats?.gif?.url ?? g.media_formats?.tinygif?.url ?? '',
-          })).filter((g) => g.tiny && g.full));
-        })
-        .catch(() => setGifs([]));
+      GIF.search(q).then(setGifs).catch(() => setGifs([]));
     }, 300);
     return () => clearTimeout(id);
   }, [q]);
@@ -133,7 +122,7 @@ function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose
             </Pressable>
           ))}
         </View>
-        <Text style={{ fontFamily: MONO, fontSize: 7.5, color: t.faint, marginTop: 6, marginBottom: 8 }}>via Tenor</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 7.5, color: t.faint, marginTop: 6, marginBottom: 8 }}>{GIF?.attribution}</Text>
       </ScrollView>
     </View>
   );
@@ -346,7 +335,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
         <View style={{ height: 6 }} />
       </ScrollView>
       {pollOpen && <PollComposer leagueId={leagueId} onDone={() => { setPollOpen(false); void load(); }} onClose={() => setPollOpen(false)} />}
-      {gifOpen && !!TENOR_KEY && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
+      {gifOpen && !!GIF && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
       <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 }}>
         {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
         {sugg.length > 0 && (
@@ -365,7 +354,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
               <Text style={{ fontSize: 15 }}>📊</Text>
             </Pressable>
           )}
-          {!!TENOR_KEY && (
+          {!!GIF && (
             <Pressable hitSlop={6} onPress={() => { tap(); setGifOpen((v) => !v); setPollOpen(false); }}>
               <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.dim }}>GIF</Text>
             </Pressable>
