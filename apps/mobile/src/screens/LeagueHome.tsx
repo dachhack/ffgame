@@ -3,6 +3,7 @@
 // board, a league opens HERE, and the board / team desk / chat / shop /
 // commissioner's tools are each one tile away. The tab strip stays — the hub
 // is the 🏠 LEAGUE tab, and the strip is still the fast lane between rooms.
+import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { leagueNote, chatUnread } from '@drip/core/data/liveApi';
@@ -88,13 +89,13 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
         </View>
       )}
 
-      {rosterId != null && tile('▦', 'My matchup', 'your board — set the lineup, watch it live', () => onGo('picks'), { accent: true })}
-      {tile('💬', 'Chat', 'league channel · direct messages', () => onGo('chat'),
+      {rosterId != null && tile('▦', 'My matchup', 'your board — set the lineup, watch it live', () => { track(Ev.hubTileOpened, { tile: 'matchup' }); onGo('picks'); }, { accent: true })}
+      {tile('💬', 'Chat', 'league channel · direct messages', () => { track(Ev.hubTileOpened, { tile: 'chat' }); onGo('chat'); },
         unread.n > 0 ? { badge: `${unread.mention ? '@ ' : ''}${unread.n > 99 ? '99+' : unread.n}` } : undefined)}
-      {rosterId != null && tile('◈', 'Power-up shop', 'spend drip coin — opens on your board', onShop)}
-      {native && rosterId != null && tile('⇄', 'My team', 'waivers · trades · standings · team options', () => onGo('team'))}
-      {native && tile('⛏', 'Draft room', 'live on draft night, the record after', () => onGo('draft'))}
-      {commish && tile('⚑', 'Commissioner', 'seats · rules · kit · scoring', () => onGo('commishtools'), { accent: true })}
+      {rosterId != null && tile('◈', 'Power-up shop', 'spend drip coin — opens on your board', () => { track(Ev.hubTileOpened, { tile: 'shop' }); onShop(); })}
+      {native && rosterId != null && tile('⇄', 'My team', 'waivers · trades · standings · team options', () => { track(Ev.hubTileOpened, { tile: 'team' }); onGo('team'); })}
+      {native && tile('⛏', 'Draft room', 'live on draft night, the record after', () => { track(Ev.hubTileOpened, { tile: 'draft' }); onGo('draft'); })}
+      {commish && tile('⚑', 'Commissioner', 'seats · rules · kit · scoring', () => { track(Ev.hubTileOpened, { tile: 'commish' }); onGo('commishtools'); }, { accent: true })}
     </ScrollView>
   );
 }

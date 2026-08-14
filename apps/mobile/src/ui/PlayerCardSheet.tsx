@@ -18,6 +18,7 @@ import { headshot, teamLogo } from '@drip/core/data/media';
 import { myFavorites, setFavorite } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
+import { Ev, track } from '@drip/core/analytics';
 import { Overlay } from './Overlay';
 import { InjuryBadge } from './rosterGroup';
 
@@ -27,7 +28,7 @@ export interface PlayerCardReq {
 }
 
 let listener: ((p: PlayerCardReq) => void) | null = null;
-export const openPlayerCard = (p: PlayerCardReq): void => { listener?.(p); };
+export const openPlayerCard = (p: PlayerCardReq): void => { track(Ev.playerCardOpened, { pos: p.pos }); listener?.(p); };
 
 const INJURY_LABEL: Record<string, string> = { O: 'Out', IR: 'Injured Reserve', D: 'Doubtful', Q: 'Questionable' };
 

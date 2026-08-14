@@ -10,6 +10,7 @@
 // home already holds — a cold-loadable #/hub/:id route can come later.
 //
 // (Not to be confused with screens/LeagueHub.tsx, the demo-era portfolio.)
+import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
 import { Img } from '../app/ui';
@@ -71,7 +72,7 @@ function Tile({ icon, title, sub, badge, onClick, disabled, accent }: {
   onClick: () => void; disabled?: boolean; accent?: boolean;
 }) {
   return (
-    <button onClick={onClick} disabled={disabled}
+    <button onClick={() => { track(Ev.hubTileOpened, { tile: title.toLowerCase() }); onClick(); }} disabled={disabled}
       style={{ ...tile, ...(accent ? { borderLeft: '3px solid var(--you)' } : {}), opacity: disabled ? 0.55 : 1, cursor: disabled ? 'default' : 'pointer' }}>
       <span style={{ fontSize: 19, flexShrink: 0, width: 26, textAlign: 'center' }}>{icon}</span>
       <span style={{ flex: 1, minWidth: 0 }}>

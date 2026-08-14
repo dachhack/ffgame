@@ -11,6 +11,7 @@
 // matchup wire and chat doesn't need to be faster than the scoreboard.
 // Opening a surface marks it read server-side (fetching the latest page IS
 // the read); the badge poll never marks anything.
+import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useRef, useState } from 'react';
 import {
   chatPost, chatMessages, chatDelete, chatUnread, chatMembers, dmSend, dmThreads, dmMessages,
@@ -160,6 +161,7 @@ export function ChatPanel({ leagueId, onClose }: { leagueId: string; onClose: ()
   const [tab, setTab] = useState<'league' | 'dm'>('league');
   const [canModerate, setCanModerate] = useState(false);
   useEffect(() => { leagueNote(leagueId).then((r) => setCanModerate(!!r.can_edit)).catch(() => {}); }, [leagueId]);
+  useEffect(() => { track(Ev.chatOpened, { dm: tab === 'dm' }); }, [tab]);
   return (
     <ModalBackdrop onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={card}>

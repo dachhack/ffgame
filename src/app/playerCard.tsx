@@ -20,6 +20,7 @@ import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import { teamLogo } from '@drip/core/data/media';
 import { myFavorites, setFavorite } from '@drip/core/data/liveApi';
 import { ModalBackdrop, PlayerImg, Img, InjuryBadge } from './ui';
+import { Ev, track } from '@drip/core/analytics';
 
 export interface PlayerCardReq {
   slug: string; name: string; pos: string; team: string;
@@ -30,7 +31,7 @@ export interface PlayerCardReq {
 }
 
 let listener: ((p: PlayerCardReq) => void) | null = null;
-export const openPlayerCard = (p: PlayerCardReq): void => { listener?.(p); };
+export const openPlayerCard = (p: PlayerCardReq): void => { track(Ev.playerCardOpened, { pos: p.pos }); listener?.(p); };
 
 const INJURY_LABEL: Record<string, string> = { O: 'Out', IR: 'Injured Reserve', D: 'Doubtful', Q: 'Questionable' };
 
