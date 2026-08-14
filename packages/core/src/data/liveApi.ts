@@ -567,6 +567,14 @@ export async function myEnrollments(_userId: string): Promise<Enrollment[]> {
   if (!Array.isArray(r)) throw new Error((r as { error?: string })?.error ?? 'could not load teams');
   return r;
 }
+/** my_teams() for an arbitrary user — the browse-as twin (0149). my_teams
+ *  keys on auth.uid(), so a browse-as session calling it gets the ADMIN's
+ *  teams; this reads the VIEWED user's, admin-gated server-side. */
+export async function adminUserTeams(appUserId: string): Promise<Enrollment[]> {
+  const r = await rpc<Enrollment[] | { error?: string }>('admin_user_teams', { p_app_user_id: appUserId });
+  if (!Array.isArray(r)) throw new Error((r as { error?: string })?.error ?? 'could not load teams');
+  return r;
+}
 
 // ── Commissioner verification (migration 0003) ──────────────────────────────────
 export interface StartCommish { ok: boolean; error?: string; tag?: string; league?: string; }
@@ -1681,6 +1689,11 @@ export interface WaitlistRow { league_id: string; name: string; season: string; 
  *  land here (native_join v3) until the commissioner deals them in. */
 export async function myWaitlist(): Promise<WaitlistRow[]> {
   const r = await rpc<WaitlistRow[] | { error?: string }>('my_waitlist');
+  return Array.isArray(r) ? r : [];
+}
+/** my_waitlist() for an arbitrary user — the browse-as twin (0149). */
+export async function adminUserWaitlist(appUserId: string): Promise<WaitlistRow[]> {
+  const r = await rpc<WaitlistRow[] | { error?: string }>('admin_user_waitlist', { p_app_user_id: appUserId });
   return Array.isArray(r) ? r : [];
 }
 

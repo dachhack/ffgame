@@ -6,8 +6,8 @@ import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   pendingAuthUrlError, clearAuthUrlError, authErrorMessage, type AuthUrlError,
   getSession, onAuth, signOut, ensureAppUser,
-  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, myLinkedSleeper, claimMyRosters, requestMemberSync,
-  redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, type WaitlistRow,
+  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync,
+  redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, adminUserWaitlist, type WaitlistRow,
   myMatchup, matchupTeams, leagueResults, defaultOpenWeek,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
 } from '@drip/core/data/liveApi';
@@ -410,7 +410,9 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
   const [waiting, setWaiting] = useState<WaitlistRow[]>([]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { myWaitlist().then(setWaiting).catch(() => {}); }, [enrollments === null ? 0 : (enrollments as Enrollment[]).length]);
+  useEffect(() => {
+    (viewAs ? adminUserWaitlist(viewAs.userId) : myWaitlist()).then(setWaiting).catch(() => {});
+  }, [enrollments === null ? 0 : (enrollments as Enrollment[]).length, viewAs?.userId]);
   const [loadErr, setLoadErr] = useState(false);
   const [commishLeagues, setCommishLeagues] = useState<AdminLeague[]>([]);
   const [commishLoaded, setCommishLoaded] = useState(false);
@@ -467,7 +469,11 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       // act in their name. Skip claimMyRosters — that writes, and it would
       // claim pending seats for the ADMIN, not the user being viewed.
       if (!viewAs) await claimMyRosters().catch(() => {});
-      rows = await myEnrollments(viewAs?.userId ?? session.user.id); setEnrollments(rows);
+      // my_teams() keys on auth.uid() (0125) — a browse-as session must go
+      // through the admin twin or these cards are the ADMIN's own leagues,
+      // under a banner claiming otherwise (the founder's screenshot).
+      rows = viewAs ? await adminUserTeams(viewAs.userId) : await myEnrollments(session.user.id);
+      setEnrollments(rows);
     } catch {
       // Don't fake an empty enrollment on failure — that shows an already-enrolled
       // user the "how are you joining?" form. Surface a retry instead (see below).
