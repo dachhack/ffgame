@@ -77,12 +77,16 @@ interface SlotRes {
 
 /** Best-ball backups for one side: unopposed players (present, no opponent in
  *  the slot) don't score in place; the biggest backup subs for the lowest
- *  beatable starter. All-or-nothing — a backup that doesn't sub in scores 0. */
-function applyBackups(slots: SlotRes[], side: 'home' | 'away'): void {
+ *  beatable starter. All-or-nothing — a backup that doesn't sub in scores 0.
+ *  Manual assignments (0137, "win#slot" → "win#slot") are honored FIRST and
+ *  win over the auto pass; an assigned backup that doesn't beat its chosen
+ *  target is left unused — the explicit choice is respected, not overridden. */
+function applyBackups(slots: SlotRes[], side: 'home' | 'away', assign: Record<string, string> = {}): void {
   const meP = (s: SlotRes) => (side === 'home' ? s.homeP : s.awayP);
   const opP = (s: SlotRes) => (side === 'home' ? s.awayP : s.homeP);
   const getF = (s: SlotRes) => (side === 'home' ? s.home : s.away);
   const setF = (s: SlotRes, v: number) => { if (side === 'home') s.home = v; else s.away = v; };
+  const keyOf = (s: SlotRes) => `${s.win}#${s.slot}`;
 
   const backups = slots.filter((s) => meP(s) && !opP(s));
   if (!backups.length) return;
@@ -90,15 +94,27 @@ function applyBackups(slots: SlotRes[], side: 'home' | 'away'): void {
   const score = new Map<SlotRes, number>();
   for (const b of backups) { score.set(b, getF(b)); setF(b, 0); }
 
-  // Greedily sub the biggest backups into the lowest beatable starters.
-  const starters = slots.filter((s) => meP(s) && opP(s)).sort((a, b) => getF(a) - getF(b));
-  const ranked = [...backups].sort((a, b) => (score.get(b)! - score.get(a)!));
+  const starters = slots.filter((s) => meP(s) && opP(s));
   const used = new Set<SlotRes>();
+
+  // 1) Manual assignments — same semantics as the client engine (matchup.ts).
+  const autoBackups: SlotRes[] = [];
+  for (const b of backups) {
+    const targetKey = assign[keyOf(b)];
+    const st = targetKey ? starters.find((s) => keyOf(s) === targetKey) : undefined;
+    if (st && !used.has(st) && score.get(b)! > getF(st)) { setF(st, round(score.get(b)!)); used.add(st); }
+    else if (!targetKey) autoBackups.push(b);
+  }
+
+  // 2) Auto-maximize the unassigned rest: biggest backups into the lowest
+  //    beatable remaining starters.
+  const remStarters = starters.filter((s) => !used.has(s)).sort((a, b) => getF(a) - getF(b));
+  const ranked = autoBackups.sort((a, b) => (score.get(b)! - score.get(a)!));
   let si = 0;
   for (const b of ranked) {
-    if (si >= starters.length) break;
-    const st = starters[si];
-    if (score.get(b)! > getF(st)) { setF(st, round(score.get(b)!)); used.add(b); si++; } else break;
+    if (si >= remStarters.length) break;
+    const st = remStarters[si];
+    if (score.get(b)! > getF(st)) { setF(st, round(score.get(b)!)); si++; } else break;
   }
   // All-or-nothing: backups that didn't sub in stay 0 (zeroed above).
 }
@@ -146,6 +162,12 @@ export interface LiveSwap { toMetricId?: string; toPlayer?: Player; atClock: num
 /** Targeted power-ups one side has applied (the live counterpart of the demo's
  *  buildMatchup extras). All optional; keys of `swaps`/`don` are `${win}|${slot}`. */
 export interface LiveExtras {
+  /** Manual backup assignments (0137): "win#slot" of the unopposed backup →
+   *  "win#slot" of the starter it should sub for. Auto at lock, reassignable
+   *  after — an assignment wins over the auto pass but only lands when the
+   *  backup actually outscores its target (all-or-nothing, like every sub);
+   *  an assigned-but-losing backup is left unused, respecting the choice. */
+  backups?: Record<string, string>;
   /** Double or Nothing: the staked slot scores ×2 if it wins its head-to-head at
    *  FINAL, 0 if it loses. Resolved after backups/suppress/banker, baked into
    *  the slot so window sums still equal the totals. */
@@ -399,8 +421,8 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     }
   }
 
-  applyBackups(slots, 'home');
-  applyBackups(slots, 'away');
+  applyBackups(slots, 'home', hx.backups ?? {});
+  applyBackups(slots, 'away', ax.backups ?? {});
 
   // DEF SUPPRESS (HALVING): apply after backups so a subbed-in starter score is
   // the one tested. Each side's threshold halves every OPPOSING slot (any

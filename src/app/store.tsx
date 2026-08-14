@@ -11,7 +11,7 @@ import { powerupById, isAmplifier, ampCapacity, capAmplifiers } from '@drip/core
 import { DEMO_WEEK } from '@drip/core/config';
 import { type ProviderUser, type ProviderId } from '@drip/core/data/providers';
 import { track, setTraits, Ev } from '@drip/core/analytics';
-import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, hasAuthTokensInUrl, loadLiveInjuries, type TargetedState } from '@drip/core/data/liveApi';
+import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, setBackupAssign, hasAuthTokensInUrl, loadLiveInjuries, type TargetedState } from '@drip/core/data/liveApi';
 
 import type { SlotSwap } from '@drip/core/engine/matchup';
 export type { SlotSwap };
@@ -466,7 +466,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
           const lastSpy = tgt.spy?.length ? tgt.spy[tgt.spy.length - 1] : undefined;
           setApplied({ [wk]: {
-            extraSlots: b.extraSlots ?? {}, swaps, backups: b.backups ?? {},
+            // Backups: the server's targeted record wins (0137 — it's the store
+            // the worker scores and the only one writable post-lock), the
+            // pre-lock hero blob fills any older entries.
+            extraSlots: b.extraSlots ?? {}, swaps, backups: { ...(b.backups ?? {}), ...(tgt.backups ?? {}) },
             doubleOrNothing: tgt.don ? sk(tgt.don) : b.doubleOrNothing,
             spy: lastSpy ? { slotKey: sk(lastSpy), reveal: lastSpy.reveal } : b.spy,
             byeSteal: tgt.byeSteal ? { slotKey: sk(tgt.byeSteal), playerId: tgt.byeSteal.slug } : b.byeSteal,
@@ -694,6 +697,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (targetKey) backups[backupKey] = targetKey; else delete backups[backupKey];
     const nextApplied = { ...applied, [week]: { extraSlots: cur.extraSlots ?? {}, swaps: cur.swaps ?? {}, backups } };
     setApplied(nextApplied); persist({ applied: nextApplied });
+    // Live board: ALSO record it server-side (0137). This is the write that
+    // makes the choice real — hero_applied refuses writes once the matchup
+    // leaves 'scheduled' (and swallows the refusal), which is how a backup
+    // assigned on one device was invisible on every other AND to the worker's
+    // scoring. The RPC accepts until 'final'; the worker's next pass scores it.
+    if (liveCtx && liveCtx.week === week) setBackupAssign(liveCtx.matchupId, backupKey, targetKey).catch(() => {});
   };
 
   const setLineup = (week: number, lineup: Record<string, Pick>): void => {

@@ -86,3 +86,4 @@ $RUN -f scripts/db/waiver-rules-probes.sql | grep -E "PROBE FAIL|ALL WAIVER-RULE
 $RUN -f scripts/db/code-request-email-probes.sql | grep -E "PROBE FAIL|ALL CODE-REQUEST-EMAIL PROBES" || { echo "CODE-REQUEST-EMAIL PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/member-sync-probes.sql | grep -E "PROBE FAIL|ALL MEMBER-SYNC PROBES" || { echo "MEMBER-SYNC PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/lock-hold-probes.sql | grep -E "PROBE FAIL|ALL LOCK-HOLD PROBES" || { echo "LOCK-HOLD PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/backup-assign-probes.sql | grep -E "PROBE FAIL|ALL BACKUP-ASSIGN PROBES" || { echo "BACKUP-ASSIGN PROBES FAILED"; exit 1; }

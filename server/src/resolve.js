@@ -276,6 +276,12 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     if (!t) return undefined;
     const ex = {};
     if (t.don?.win != null && t.don?.slot != null) ex.don = { win: String(t.don.win), slot: String(t.don.slot) };
+    // Manual backup assignments (0137): "win#slot" → "win#slot", RPC-validated;
+    // re-stringified defensively like everything else in this payload.
+    if (t.backups && Object.keys(t.backups).length) {
+      ex.backups = {};
+      for (const [bk, tk] of Object.entries(t.backups)) ex.backups[String(bk)] = String(tk);
+    }
     if (t.byeSteal?.slug) ex.byeSteal = {
       win: String(t.byeSteal.win), slot: String(t.byeSteal.slot),
       // Defensive re-clamp; the engine clamps again at BYE_STEAL_CAP (16, §19).

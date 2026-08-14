@@ -1457,7 +1457,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               <button
                 onClick={() => { const s0 = pendingBackups[0]; setBackupMenu({ key: slotKey(s0.win, s0.slotIndex) }); }}
                 className="mono" style={{ marginTop: 7, display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, var(--surface))', border: '1px solid var(--you)', borderRadius: 6, padding: '7px 11px', cursor: 'pointer' }}>
-                🔁 {pendingBackups.length} unopposed {pendingBackups.length === 1 ? 'player' : 'players'} can sub in — assign {pendingBackups.length === 1 ? 'a backup' : 'backups'} →
+                🔁 {pendingBackups.length} {pendingBackups.length === 1 ? 'backup' : 'backups'} auto-subbed for best score — reassign →
               </button>
             )}
             {phase === 'live' && !liveCtx && (

@@ -8,7 +8,7 @@
 // it was worth lifting out instead of inlining.
 import { useRef, type ReactNode } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
-import { windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow } from '@drip/core/data/nflSlate';
+import { windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, windowKickoffMs } from '@drip/core/data/nflSlate';
 import { WINDOW_WIN_BONUS } from '@drip/core/engine/matchup';
 import { teamLogo } from '@drip/core/data/media';
 import { metricById } from '@drip/core/data/metrics';
@@ -129,12 +129,23 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
     scores.find((x) => x.game_window === p.game_window)?.slot_scores
       ?.find((r) => r.side === side && (r.slot === p.roster_slot || (!!p.player_slug && r.slug === p.player_slug)));
 
+  /** True once the window's first game has kicked — from then on the opponent's
+   *  picks are face-up by rule, so an empty half is a FACT (nobody fielded),
+   *  not a secret still to reveal. Before kickoff, absence and secrecy look
+   *  identical on purpose and the sealed back covers both. */
+  const winKicked = (win: string) => {
+    const k = windowKickoffMs(week, win as never);
+    return k != null && Date.now() >= k;
+  };
+
   /** A slot's live row — what the card becomes once the window is scoring.
-   *  A missing or unresolvable pick renders the sealed variant rather than a
-   *  gap, so an opponent who hasn't revealed still occupies their half. */
+   *  A missing or unresolvable pick renders the sealed variant BEFORE kickoff
+   *  (an opponent who hasn't revealed still occupies their half) and the
+   *  explicit NO PLAYER seat after — a back that says "flips at kickoff" on a
+   *  window that kicked hours ago is a promise the board can't keep. */
   const liveFor = (p: RevealedPick | undefined, side: 'home' | 'away', who: 'you' | 'their', win: string, slot: string, idx: number) => {
     const player = p?.player_slug ? pool[p.player_slug] : null;
-    if (!p || !player) return <LiveCard key={`${win}-${slot}-${who}`} side={who} sealed idx={idx} />;
+    if (!p || !player) return <LiveCard key={`${win}-${slot}-${who}`} side={who} sealed={!winKicked(win)} unopposed={winKicked(win)} idx={idx} />;
     const metric = metricById(player.pos as Pos, p.metric_id);
     const row = rowOf(p, side);
     const ex = liveExtras?.(win, p.roster_slot, who);
@@ -185,8 +196,12 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
         const them = s ? round1(Number(youAreHome ? s.away_score : s.home_score)) : null;
         const sealedBacks = !th.length && status !== 'final' ? Math.max(my.length, 1) : 0;
         const hasRows = !!s?.slot_scores?.length;
+        // A kicked window is never "SEALED" — from kickoff the reveal has, by
+        // rule, happened; an empty opposing half from here on means UNOPPOSED.
         const st = winStatus?.(win)
-          ?? (status === 'final' ? 'FINAL' : sealedBacks > 0 && !hasRows ? 'SEALED' : status === 'live' ? '● LIVE' : 'SEALED');
+          ?? (status === 'final' ? 'FINAL'
+            : sealedBacks > 0 && !hasRows && !winKicked(win) ? 'SEALED'
+            : status === 'live' ? '● LIVE' : winKicked(win) ? '● LIVE' : 'SEALED');
         const pairs = Math.max(my.length, th.length, sealedBacks);
 
         return (
@@ -292,7 +307,10 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
                     ) : (
                     <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
                       {my[i] ? faceFor(my[i], youSide, t.you, i) : <CardBack label="—" idx={i} />}
-                      {th[i] ? faceFor(th[i], oppSide, t.opp, i) : <CardBack idx={i} />}
+                      {/* Post-kick, an empty opposing half is a fact: NO PICK,
+                          not a SEALED back promising a flip that never comes
+                          (the founder watched one promise all night). */}
+                      {th[i] ? faceFor(th[i], oppSide, t.opp, i) : <CardBack label={winKicked(win) ? 'NO PICK' : 'SEALED'} idx={i} />}
                     </View>
                     )}
                     {/* The duel's game(s) and play log, directly under the pair
