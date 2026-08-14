@@ -26,13 +26,15 @@ import {
   myUnlocks, armUnlock, disarmUnlock, myComboQty,
   myWallet, ensureWallet,
   liveSlate, matchupTeams, matchupPremium, startCheckout, friendlyError,
-  getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, weekGameFeeds,
+  getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, weekGameFeeds, weekLivePlays,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
   type WindowScore, type RevealedPick, type GameFeedRow,
   nativeTeamState, loadLiveInjuries,
 } from '@drip/core/data/liveApi';
 import { clearLiveInjuries } from '@drip/core/data/injuries';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/gameFeed';
+import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
+import { statlineAt, metricDriver } from '@drip/core/engine/sim';
 import { Ev, track } from '@drip/core/analytics';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
 import type { GameWindow, Player, Pos, WindowId } from '@drip/core/types';
@@ -254,13 +256,17 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
         // writes matchup_state and Supabase pushes, which is also why the score
         // on the phone cannot drift from the score on the web.
         const refreshLive = async () => {
-          const [mm, ss, pk2, gf] = await Promise.all([
+          const [mm, ss, pk2, gf, lp] = await Promise.all([
             getMatchup(m.id), getMatchupState(m.id), getRevealedPicks(m.id),
             weekGameFeeds(m.week).catch(() => [] as GameFeedRow[]),
+            // The week's ingested plays: what lets the duel cards compute the
+            // metric DRIVER ("127 pass yd") locally, same engine as the web.
+            weekLivePlays(m.week).catch(() => []),
           ]);
           if (!alive) return;
           if (mm) setMatchup(mm);
           setScores(ss); setRevealed(pk2);
+          if (lp.length) setLivePlays(m.week, liveRowsToPbp(lp));
           // Install the week's feeds so gameFeedFor() resolves them. The live
           // overlay is exclusive per week — a live board must never fall through
           // to baked 2025 drives, which would draw a plausible, wrong field.
@@ -802,6 +808,18 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
               mine={myLive} theirs={theirLive} pool={duelPool} scores={winScores}
               youAreHome={youAreHome} status={matchup!.status} week={week} winLabel={winLabelFor}
               slotDetail={slotDetail}
+              // The stat DRIVING the metric ("127 pass yd"), in the card's stat
+              // slot. No full statline on the app (founder's call) — just the
+              // number the fielded metric is actually counting.
+              liveExtras={(win, slot, who) => {
+                const rp = revealed.find((p) => p.game_window === win && p.roster_slot === slot
+                  && (who === 'you' ? p.app_user_id === userId : p.app_user_id !== userId));
+                const pl = rp?.player_slug ? duelPool[rp.player_slug] : null;
+                if (!rp || !pl) return null;
+                const player = poolToPlayer(pl);
+                const d = metricDriver(player.pos, rp.metric_id, statlineAt(player, week, Number.MAX_SAFE_INTEGER, rp.metric_id ?? undefined));
+                return d ? { stat: d } : null;
+              }}
             />
           );
         }
