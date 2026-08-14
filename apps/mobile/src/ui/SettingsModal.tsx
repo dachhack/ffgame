@@ -15,8 +15,11 @@
 // the tab bar is a lot of screen to spend on a button one person presses.
 
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { THEMES, type ThemeName, useTheme, MONO } from '../theme.native';
+import { THEMES, type ThemeName, useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
+import { useEffect, useState } from 'react';
+import { myPushTokens, setPushPrefs } from '@drip/core/data/liveApi';
+import { registerForPush, registeredPushToken } from './push';
 import { Overlay } from './Overlay';
 import { CARD_BACKS, CARD_SIZES, type CardSkin, type CardSize } from './cards';
 
@@ -67,6 +70,8 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
   return (
     <Overlay visible={visible} title="Settings" subtitle={`DRIP FANTASY ${version.toUpperCase()}`} onClose={onClose}>
       <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, gap: 18 }}>
+        <PushPrefs />
+
         <View style={{ gap: 8 }}>
           <Mono size={8.5} weight="700" track={0.16} tone="faint">COLOUR THEME</Mono>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
@@ -193,5 +198,66 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
         </View>
       </ScrollView>
     </Overlay>
+  );
+}
+
+
+// ── Push notification prefs (0150) ──────────────────────────────────────────
+// Per-device mutes for the four push kinds; the toggles bite the token this
+// device registered this session. Without one (permission denied, or a build
+// with no Firebase config) the section offers a single ENABLE button.
+const PUSH_KINDS: { key: string; label: string }[] = [
+  { key: 'lineup', label: '⚠ lineup locks soon' },
+  { key: 'chat', label: '💬 mentions & DMs' },
+  { key: 'trades', label: '⇄ trade offers' },
+  { key: 'waivers', label: '✚ waiver results' },
+];
+
+function PushPrefs() {
+  const t = useTheme();
+  const [token, setToken] = useState<string | null>(registeredPushToken());
+  const [prefs, setPrefs] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!token) return;
+    myPushTokens().then((rows) => {
+      const mine = rows.find((r) => r.token === token);
+      if (mine) setPrefs(mine.prefs ?? {});
+    }).catch(() => {});
+  }, [token]);
+  const enable = async () => {
+    if (busy) return;
+    setBusy(true);
+    try { if (await registerForPush()) setToken(registeredPushToken()); }
+    finally { setBusy(false); }
+  };
+  const toggle = (key: string) => {
+    if (!token) return;
+    const next = { ...prefs, [key]: prefs[key] === false };
+    setPrefs(next);
+    void setPushPrefs(token, next).catch(() => {});
+  };
+  return (
+    <View style={{ gap: 8 }}>
+      <Mono size={8.5} weight="700" track={0.16} tone="faint">NOTIFICATIONS</Mono>
+      {!token ? (
+        <Pressable onPress={() => void enable()} disabled={busy}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingVertical: 9, alignItems: 'center', opacity: busy ? 0.6 : 1 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.you }}>🔔 ENABLE PUSH NOTIFICATIONS</Text>
+        </Pressable>
+      ) : (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+          {PUSH_KINDS.map((k) => {
+            const on = prefs[k.key] !== false;
+            return (
+              <Pressable key={k.key} onPress={() => toggle(k.key)}
+                style={{ borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, backgroundColor: on ? alpha(t.you, 12) : t.surface }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: on ? t.you : t.dim }}>{k.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+    </View>
   );
 }

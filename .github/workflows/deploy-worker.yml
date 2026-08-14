@@ -135,6 +135,17 @@ jobs:
           echo "ref:    ${{ github.ref_name }}"
           echo "commit: $(git rev-parse --short HEAD) — $(git log -1 --pretty=%s)"
 
+      # Push notifications (0150): stage the FCM service-account credential as
+      # a Fly secret when the repo secret exists. --stage defers the restart to
+      # the deploy right below, so this never causes its own rollout. Absent
+      # secret → skipped; the worker enqueues but cannot send, by design.
+      - name: stage FCM credential
+        if: ${{ secrets.FCM_SERVICE_ACCOUNT != '' }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FCM: ${{ secrets.FCM_SERVICE_ACCOUNT }}
+        run: flyctl secrets set --stage FCM_SERVICE_ACCOUNT="$FCM"
+
       - name: fly deploy
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

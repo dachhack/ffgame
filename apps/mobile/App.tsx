@@ -28,6 +28,7 @@ import { CommishTools } from './src/screens/CommishTools';
 import { ChatScreen } from './src/ui/Chat';
 import { LeagueHome } from './src/screens/LeagueHome';
 import { ChatChipDot } from './src/ui/unread';
+import { registerForPush } from './src/ui/push';
 import { Admin } from './src/screens/Admin';
 import { Draft } from './src/screens/Draft';
 import { Team } from './src/screens/Team';
@@ -108,6 +109,12 @@ export function App() {
     if (!session) { setAdmin(false); return; }
     isAdmin().then((v) => setAdmin(!!v)).catch(() => setAdmin(false));
   }, [session]);
+
+  // Push registration (0150): once signed in, ask permission and register the
+  // device token. No-ops in builds without Firebase config, and when denied.
+  useEffect(() => {
+    if (session) void registerForPush();
+  }, [session?.user.id]);
 
   // Analytics identity. Tying events to the Supabase user id — the same id the
   // web identifies on (LiveOnboard) — is what lets one person be followed across

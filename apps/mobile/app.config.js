@@ -76,9 +76,17 @@ module.exports = ({ config }) => {
     // kind of thing that reads as "configured" when you inspect the config.
     if (process.env[k]) extra[k] = process.env[k];
   }
+  // FCM (0150): google-services.json is founder-provisioned and not committed
+  // until it exists. Gating on the file keeps every build green — without it
+  // the app builds fine and push registration no-ops at runtime.
+  const fs = require('fs');
+  const path = require('path');
+  const gsPath = path.join(__dirname, 'google-services.json');
+  const android = { ...config.android, versionCode: androidVersionCode(config.version) };
+  if (fs.existsSync(gsPath)) android.googleServicesFile = './google-services.json';
   return {
     ...config,
     extra,
-    android: { ...config.android, versionCode: androidVersionCode(config.version) },
+    android,
   };
 };
