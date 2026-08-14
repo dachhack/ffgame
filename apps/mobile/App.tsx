@@ -90,6 +90,7 @@ export function App() {
   const [view, setView] = useState<'home' | 'picks' | 'demo' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board'>('picks');
   // League-home SHOP tile (0182): bumping this opens the shop on the board.
   const [shopSignal, setShopSignal] = useState(0);
+  const [fieldsSignal, setFieldsSignal] = useState(0);
 
   useEffect(() => {
     if (!liveConfigured()) { setReady(true); return; }
@@ -199,7 +200,7 @@ export function App() {
             league, so an open league always has a strip now: a play-only
             platform league shows ▦ MATCHUP + 💬 CHAT. */}
         {open && (view === 'home' || view === 'picks' || view === 'draft' || view === 'team' || view === 'chat' || view === 'commishtools') && (
-          <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 14, paddingTop: 8 }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 14, paddingTop: 8 }}>
             {([
               ['home', '🏠 LEAGUE', true],                             // the hub (0182)
               ['picks', '▦ MATCHUP', open.rosterId != null],           // no seat → no lineup
@@ -219,6 +220,15 @@ export function App() {
                 <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: view === id ? theme.you : theme.dim }}>{label}</Text>
               </Pressable>
             ))}
+            {/* ▦ FIELDS — an action chip, not a view: opens the all-fields
+                sheet on the board (0182.3, founder's call). Seat required —
+                the sheet is built from the board's feeds. */}
+            {open.rosterId != null && (
+              <Pressable onPress={() => { setFieldsSignal((n) => n + 1); setView('picks'); }}
+                style={{ borderWidth: StyleSheet.hairlineWidth, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, borderColor: theme.bd, backgroundColor: theme.surface }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: theme.dim }}>▦ FIELDS</Text>
+              </Pressable>
+            )}
           </View>
         )}
 
@@ -285,6 +295,7 @@ export function App() {
               native={open.native}
               onBack={() => setView('home')}
               openShopSignal={shopSignal}
+              openFieldsSignal={fieldsSignal}
             />
           </View>
         ) : (
