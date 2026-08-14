@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore, PHOTO_SKINS } from '../app/store';
 import type { Phase } from '../app/store';
-import { PlayerImg, InjuryBadge, useIsMobile, ModalBackdrop } from '../app/ui';
+import { PlayerImg, InjuryBadge, FlagChip, useIsMobile, ModalBackdrop } from '../app/ui';
 import { windowsForWeek, gamesInWindow } from '@drip/core/data/nflSlate';
 import { METRICS, metricById } from '@drip/core/data/metrics';
 import { powerupById } from '@drip/core/data/powerups';
@@ -231,7 +231,7 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, sealed, colla
               >
                 <PlayerImg playerId={p.id} team={p.team} pos={p.pos} size={18} />
                 <span className="grotesk" style={{ fontSize: 11.5, fontWeight: 700, color: side === 'you' ? 'var(--text)' : 'var(--dimstrong)', flex: 1, textDecoration: assigned ? 'line-through' : 'none', opacity: assigned ? 0.55 : 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                <InjuryBadge week={week} slug={p.id} />
+                <InjuryBadge week={week} slug={p.id} /><FlagChip slug={p.id} />
                 <InfoDot player={p} week={week} />
                 <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.team}</span>
               </button>
@@ -397,7 +397,7 @@ export function SetupRow(props: {
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
                   <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>
-                  <InjuryBadge week={week} slug={player.id} />
+                  <InjuryBadge week={week} slug={player.id} /><FlagChip slug={player.id} />
                 </div>
                 <span className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)' }}>{player.pos} · {player.team}</span>
               </div>
@@ -594,7 +594,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
                 return (
                   <PlayerCard key={p.id} slug={p.id} name={p.name} pos={p.pos} team={p.team} slot={p.team ?? undefined} idx={i}
                     selected={sel} locked={isGated}
-                    badge={<><InjuryBadge week={week} slug={p.id} /><InfoDot player={p} week={week} /></>}
+                    badge={<><InjuryBadge week={week} slug={p.id} /><FlagChip slug={p.id} /><InfoDot player={p} week={week} /></>}
                     onClick={() => (isGated ? onGated?.(p) : onPick(p.id))} />
                 );
               })}
@@ -612,7 +612,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                     <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                    <InjuryBadge week={week} slug={p.id} />
+                    <InjuryBadge week={week} slug={p.id} /><FlagChip slug={p.id} />
                     <InfoDot player={p} week={week} />
                   </div>
                   <span className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
@@ -664,7 +664,7 @@ export function ScoutModal({ win, week, pool, oppName, onClose }: {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                   <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>{p.name}</span>
-                  <InjuryBadge week={week} slug={p.id} />
+                  <InjuryBadge week={week} slug={p.id} /><FlagChip slug={p.id} />
                 </div>
                 <span className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
               </div>

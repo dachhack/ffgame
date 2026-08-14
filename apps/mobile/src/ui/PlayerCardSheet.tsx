@@ -10,6 +10,7 @@ import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import type { Pos } from '@drip/core/types';
 import { PLAYER_BIO, tenureLabel } from '@drip/core/data/playerBio';
 import { injuryFor, injuryRowFor } from '@drip/core/data/injuries';
+import { flagFor } from '@drip/core/data/commish';
 import { statsForName } from '@drip/core/data/players';
 import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import { headshot, teamLogo } from '@drip/core/data/media';
@@ -114,6 +115,7 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
           {(tenure || bio?.college || bio?.age != null) ? row('CAREER', [tenure, bio?.college, bio?.age != null ? `age ${bio.age}` : null].filter(Boolean).join(' · ')) : null}
           {inj ? row('INJURY', `${INJURY_LABEL[inj.status] ?? inj.status}${inj.comment ? ` — ${inj.comment}` : ''}${inj.returnDate ? ` · est. return ${inj.returnDate}` : ''}`)
             : injTag ? row('INJURY', INJURY_LABEL[injTag] ?? injTag) : null}
+          {flagFor(slug) ? row('COMMISH', `\u2691 ${flagFor(slug)}`) : null}
           {weekLine ? row('THIS WK', weekLine) : null}
           {seasonLine ? row('2025', seasonLine) : null}
         </View>

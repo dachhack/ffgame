@@ -15,7 +15,7 @@ import type { GameWindow, Player } from '@drip/core/types';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
 import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
-import { GROUP_TABS, GroupBadge, InjuryBadge } from './rosterGroup';
+import { GROUP_TABS, GroupBadge, InjuryBadge, FlagChip } from './rosterGroup';
 import { openPlayerCard } from './PlayerCardSheet';
 import { injuryFor } from '@drip/core/data/injuries';
 
@@ -221,6 +221,7 @@ function RosterRow({ player, group, week, userId }: { player: Player; group: Poo
       </View>
       <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: t.text }}>{player.full}</Text>
       <InjuryBadge status={injuryFor(week, player.id)} />
+      <FlagChip slug={player.id} />
       <GroupBadge group={group} />
       <Mono size={9} tone="faint">{player.team}</Mono>
     </Pressable>

@@ -19,6 +19,7 @@ import { Mono } from './prims';
 import { Overlay } from './Overlay';
 import { GROUP_TABS, groupTag } from './rosterGroup';
 import { openPlayerCard } from './PlayerCardSheet';
+import { flagFor } from '@drip/core/data/commish';
 import { injuryFor } from '@drip/core/data/injuries';
 
 const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
@@ -208,6 +209,11 @@ function MiniPlayerCard({ player, current, group, injury, gated, onPress, onInfo
         {injury ? (
           <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: injFg, borderRadius: 3, paddingHorizontal: 3 }}>
             <Text style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '700', color: injFg }}>{injury}</Text>
+          </View>
+        ) : null}
+        {flagFor(player.id) ? (
+          <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: '#7B5AA6', borderRadius: 3, paddingHorizontal: 3, maxWidth: 64 }}>
+            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '700', color: '#7B5AA6' }}>⚑ {flagFor(player.id)}</Text>
           </View>
         ) : null}
         {onInfo && (
