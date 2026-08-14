@@ -23,9 +23,11 @@ import { buildDraftPool } from '@drip/core/data/nativeLeague';
 import { ADP_2026 } from '@drip/core/data/adp2026';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
 import { headshot } from '@drip/core/data/media';
+import { myFavorites } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton } from '../ui/prims';
+import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
@@ -59,6 +61,8 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   const [teamView, setTeamView] = useState<number | null>(null);
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
+  const [favs, setFavs] = useState<Set<string>>(new Set());
+  const [starMode, setStarMode] = useState<StarMode>('off');
   const [proxyDraft, setProxyDraft] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -77,6 +81,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   useEffect(() => {
     void refresh();
     leaguePool(leagueId).then(setPool).catch(() => {});
+    myFavorites().then(setFavs).catch(() => {});
     nativeTeamState(leagueId).then((tm) => {
       setTeam(tm);
       if (tm.my_roster_id != null) myDraftQueue(leagueId, tm.my_roster_id).then(setQueue).catch(() => {});
@@ -146,10 +151,11 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
 
   const avail = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return pool.filter((p) => !taken.has(p.slug)
+    const base = pool.filter((p) => !taken.has(p.slug)
       && (pos === 'ALL' || p.pos === pos)
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
-  }, [pool, taken, q, pos]);
+    return starApply(base, starMode, favs, (p) => p.slug);
+  }, [pool, taken, q, pos, starMode, favs]);
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     if (busy) return;
@@ -383,6 +389,8 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                 : ` ${myPosCount[p] ?? 0}/${st.pos_caps?.[p as keyof PosCaps] ?? '∞'}`;
               return <Chip key={p} label={`${p}${fill}`} on={pos === p} onPress={() => { tap(); setPos(p); }} />;
             })}
+            <Chip label="★ FIRST" on={starMode === 'first'} onPress={() => { tap(); setStarMode(starMode === 'first' ? 'off' : 'first'); }} />
+            <Chip label="★ ONLY" on={starMode === 'only'} onPress={() => { tap(); setStarMode(starMode === 'only' ? 'off' : 'only'); }} />
           </View>
           {avail.slice(0, 60).map((p) => {
             const adp = ADP_2026.get(p.slug); const proj = PROJ_2026.get(p.slug);
@@ -399,7 +407,9 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                 </Pressable>
                 <Face slug={p.slug} pos={p.pos} />
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: '700', color: t.text }}>{p.full_name}</Text>
+                  <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: '700', color: t.text }}>
+                    {favs.has(p.slug) && <Text style={{ color: STAR_GOLD }}>★ </Text>}{p.full_name}
+                  </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
                     <PosPill pos={p.pos} size={8} />
                     <Mono size={8.5} tone="faint">{p.team} · #{p.rank}</Mono>

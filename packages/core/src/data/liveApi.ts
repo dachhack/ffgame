@@ -1337,6 +1337,22 @@ export const cancelTrade = (tradeId: string) =>
 export const commishRuleTrade = (tradeId: string, approve: boolean) =>
   rpc<{ ok: boolean; error?: string; status?: string }>('commish_rule_trade', { p_trade_id: tradeId, p_approve: approve });
 
+/** A standing trade signal (0140): 'block' = roster_id flags its OWN player as
+ *  available; 'want' = roster_id flags ANOTHER team's player as one it would
+ *  trade for. League-visible. holder_roster is the player's CURRENT seat —
+ *  the server filters out signals whose premise broke (player moved), so every
+ *  row returned is live. */
+export interface TradeSignalRow {
+  kind: 'block' | 'want'; roster_id: number; slug: string;
+  holder_roster: number; created_at: string;
+}
+export const tradeSignals = (leagueId: string) =>
+  rpc<TradeSignalRow[] | { error: string }>('trade_signals', { p_league_id: leagueId });
+export const setTradeSignal = (leagueId: string, rosterId: number, slug: string, kind: 'block' | 'want', on: boolean) =>
+  rpc<{ ok: boolean; error?: string; on?: boolean }>('set_trade_signal', {
+    p_league_id: leagueId, p_roster_id: rosterId, p_slug: slug, p_kind: kind, p_on: on,
+  });
+
 // ── Playoffs (0073): the endgame for native leagues ───────────────────────────
 export interface StandingsRow { roster_id: number; team: string | null; wins: number; losses: number; ties: number; pf: number; pa: number; }
 export interface PlayoffMatchup {
