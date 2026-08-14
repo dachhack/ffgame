@@ -14,7 +14,8 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   cancelTrade, commishRuleTrade, friendlyError, leagueTrades, proposeTrade, respondTrade,
-  type LeaguePoolPlayer, type TradeRow,
+  tradeSignals, setTradeSignal,
+  type LeaguePoolPlayer, type TradeRow, type TradeSignalRow,
 } from '@drip/core/data/liveApi';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, commit, warn } from './feedback';
@@ -32,6 +33,8 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
 }) {
   const t = useTheme();
   const [trades, setTrades] = useState<TradeRow[]>([]);
+  const [signals, setSignals] = useState<TradeSignalRow[]>([]);
+  const [blockEdit, setBlockEdit] = useState(false);
   const [open, setOpen] = useState(false);
   const [partner, setPartner] = useState<number | null>(null);
   const [give, setGive] = useState<string[]>([]);
@@ -40,7 +43,10 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const load = () => leagueTrades(leagueId).then((x) => { if (Array.isArray(x)) setTrades(x); }).catch(() => {});
+  const load = () => Promise.all([
+    leagueTrades(leagueId).then((x) => { if (Array.isArray(x)) setTrades(x); }),
+    tradeSignals(leagueId).then((s) => { if (Array.isArray(s)) setSignals(s); }),
+  ]).catch(() => {});
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
 
   const teamName = (rid: number) => teams.find((x) => x.roster_id === rid)?.team ?? `Team ${rid}`;
@@ -48,6 +54,24 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   const toggle = (list: string[], set: (v: string[]) => void, slug: string) => {
     tap();
     set(list.includes(slug) ? list.filter((s) => s !== slug) : [...list, slug]);
+  };
+
+  // Standing signals (0140): the shared block and the interest marks. All
+  // league-visible; the server already filtered out anything stale.
+  const blocks = signals.filter((s) => s.kind === 'block');
+  const wants = signals.filter((s) => s.kind === 'want');
+  const myBlocked = new Set(blocks.filter((s) => s.roster_id === myRoster).map((s) => s.slug));
+  const myWants = new Set(wants.filter((s) => s.roster_id === myRoster).map((s) => s.slug));
+  const wantCount = (slug: string) => wants.filter((w) => w.slug === slug).length;
+  const interestInMine = wants.filter((w) => w.holder_roster === myRoster);
+  const toggleSignal = (slug: string, kind: 'block' | 'want', on: boolean) => {
+    if (myRoster != null) { tap(); void act(() => setTradeSignal(leagueId, myRoster, slug, kind, on)); }
+  };
+  // A signal's natural next step is an offer: open the propose sheet already
+  // pointed at the right team with the right player checked.
+  const openPreset = (partnerRid: number, giveSlugs: string[], getSlugs: string[]) => {
+    tap();
+    setPartner(partnerRid); setGive(giveSlugs); setGet(getSlugs); setErr(null); setOpen(true);
   };
 
   const act = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
@@ -88,8 +112,11 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     );
   };
 
-  // The proposer's / partner's roster as a tappable checklist.
-  const pickList = (rid: number | null, sel: string[], set: (v: string[]) => void) => (
+  // The proposer's / partner's roster as a tappable checklist. wantable: the
+  // partner's list — each row grows a 👀 mark-interest toggle, so browsing a
+  // roster mid-propose doubles as scouting (close without sending and the
+  // marks stand).
+  const pickList = (rid: number | null, sel: string[], set: (v: string[]) => void, wantable = false) => (
     <ScrollView style={{ maxHeight: 180, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 4 }} nestedScrollEnabled>
       {rosters.filter((r) => r.roster_id === rid).map((r) => {
         const p = poolBySlug.get(r.slug);
@@ -101,6 +128,11 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
               {on ? '☑' : '☐'} {p?.full_name ?? r.slug}
             </Text>
             <Mono size={8} tone="faint">{p?.pos}</Mono>
+            {wantable && myRoster != null && (
+              <Pressable hitSlop={6} onPress={() => toggleSignal(r.slug, 'want', !myWants.has(r.slug))}>
+                <Text style={{ fontSize: 12, opacity: myWants.has(r.slug) ? 1 : 0.35 }}>👀</Text>
+              </Pressable>
+            )}
           </Pressable>
         );
       })}
@@ -158,6 +190,88 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
         </View>
       ))}
 
+      {/* THE TRADE BLOCK — standing "I'd listen on this player" flags (0140).
+          Every member sees the whole block; the 👀 count shows a shopped
+          player's market before anyone commits to an offer. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 }}>
+        <Mono size={9} tone="faint" track={0.12}>🔁 TRADE BLOCK</Mono>
+        <View style={{ flex: 1 }} />
+        {myRoster != null && (
+          <Chip label={blockEdit ? '✓ DONE' : '✎ SHOP MY PLAYERS'} on={blockEdit}
+            onPress={() => { tap(); setBlockEdit((v) => !v); }} />
+        )}
+      </View>
+      {blockEdit && myRoster != null && (
+        <ScrollView style={{ maxHeight: 180, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 4, marginTop: 7 }} nestedScrollEnabled>
+          {rosters.filter((r) => r.roster_id === myRoster).map((r) => {
+            const p = poolBySlug.get(r.slug);
+            const on = myBlocked.has(r.slug);
+            return (
+              <Pressable key={r.slug} disabled={busy} onPress={() => toggleSignal(r.slug, 'block', !on)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 5, backgroundColor: on ? alpha(t.warn, 14) : 'transparent' }}>
+                <Text numberOfLines={1} style={{ flex: 1, fontSize: 11.5, color: on ? t.warn : t.text, fontWeight: on ? '700' : '400' }}>
+                  {on ? '🔁' : '☐'} {p?.full_name ?? r.slug}
+                </Text>
+                <Mono size={8} tone="faint">{p?.pos}{on ? ' · ON THE BLOCK' : ''}</Mono>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
+      {blocks.length === 0 && !blockEdit && (
+        <Mono size={10} tone="faint" style={{ marginTop: 6, lineHeight: 15 }}>
+          Nobody is shopping anyone yet. Put a player on the block and the whole league sees it here.
+        </Mono>
+      )}
+      {blocks.map((s) => {
+        const p = poolBySlug.get(s.slug);
+        const mineRow = s.roster_id === myRoster;
+        const n = wantCount(s.slug);
+        return (
+          <View key={`blk-${s.roster_id}-${s.slug}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '700', color: t.text }}>{pname(s.slug)}</Text>
+              <Mono size={8.5} tone="faint">{p?.pos} · {mineRow ? 'your player' : teamName(s.roster_id)}</Mono>
+            </View>
+            {n > 0 && <Mono size={9} tone="you" weight="700">👀 {n}</Mono>}
+            {mineRow
+              ? <Chip label="✕ OFF" disabled={busy} onPress={() => toggleSignal(s.slug, 'block', false)} />
+              : myRoster != null && (
+                <>
+                  <Chip label={myWants.has(s.slug) ? '👀 ✓' : '👀'} on={myWants.has(s.slug)} disabled={busy}
+                    onPress={() => toggleSignal(s.slug, 'want', !myWants.has(s.slug))} />
+                  <Chip label="⇄ OFFER" onPress={() => openPreset(s.roster_id, [], [s.slug])} />
+                </>
+              )}
+          </View>
+        );
+      })}
+
+      {/* INTEREST — who's eyeing whom. Your players with suitors float first;
+          your own marks follow, each one tap from a real offer. */}
+      {(interestInMine.length > 0 || myWants.size > 0) && (
+        <>
+          <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>👀 TRADE INTEREST</Mono>
+          {interestInMine.map((w) => (
+            <View key={`in-${w.roster_id}-${w.slug}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
+              <Text numberOfLines={2} style={{ flex: 1, fontSize: 11.5, color: t.text, lineHeight: 16 }}>
+                <Text style={{ fontWeight: '700', color: t.you }}>{teamName(w.roster_id)}</Text> is interested in your <Text style={{ fontWeight: '700' }}>{pname(w.slug)}</Text>
+              </Text>
+              {myRoster != null && <Chip label="⇄ TALK" onPress={() => openPreset(w.roster_id, [w.slug], [])} />}
+            </View>
+          ))}
+          {wants.filter((w) => w.roster_id === myRoster).map((w) => (
+            <View key={`my-${w.slug}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: 11.5, color: t.text }}>
+                You 👀 <Text style={{ fontWeight: '700' }}>{pname(w.slug)}</Text> <Text style={{ color: t.dim, fontSize: 10 }}>({teamName(w.holder_roster)})</Text>
+              </Text>
+              <Chip label="✕" disabled={busy} onPress={() => toggleSignal(w.slug, 'want', false)} />
+              <Chip label="⇄ OFFER" onPress={() => openPreset(w.holder_roster, [], [w.slug])} />
+            </View>
+          ))}
+        </>
+      )}
+
       {/* propose: partner → two checklists → note → send */}
       <Overlay visible={open && myRoster != null} title="Propose a trade"
         subtitle={tradeReview === 'commish' ? 'Accepted trades go to the commissioner for a ruling.' : 'Accepted trades execute immediately.'}
@@ -177,7 +291,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
             </View>
             <View style={{ flex: 1 }}>
               <Mono size={9} tone="faint" track={0.1} style={{ marginBottom: 4 }}>YOU GET</Mono>
-              {pickList(partner, get, setGet)}
+              {pickList(partner, get, setGet, true)}
             </View>
           </View>
         )}

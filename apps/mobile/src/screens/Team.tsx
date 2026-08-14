@@ -15,6 +15,7 @@ import {
   addFreeAgent, cancelWaiverClaim, dropPlayer,
   friendlyError, leagueInvite, leaguePool, nativeRosters,
   nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
+  myFavorites,
   type LeaguePoolPlayer, type NativeTeamState,
 } from '@drip/core/data/liveApi';
 import { headshot } from '@drip/core/data/media';
@@ -25,6 +26,7 @@ import { Overlay } from '../ui/Overlay';
 import { AvatarGrid } from '../ui/AvatarGrid';
 import { Playoffs, Standings } from '../ui/LeagueExtras';
 import { TradeCenter } from '../ui/TradeCenter';
+import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
@@ -53,6 +55,8 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
+  const [favs, setFavs] = useState<Set<string>>(new Set());
+  const [starMode, setStarMode] = useState<StarMode>('off');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pendingAdd, setPendingAdd] = useState<LeaguePoolPlayer | null>(null); // roster full → pick a drop
@@ -75,6 +79,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   };
   useEffect(() => {
     void refresh();
+    myFavorites().then(setFavs).catch(() => {});
     const id = setInterval(refresh, 15000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -90,10 +95,11 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
 
   const free = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return pool.filter((p) => !rostered.has(p.slug)
+    const base = pool.filter((p) => !rostered.has(p.slug)
       && (pos === 'ALL' || p.pos === pos)
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
-  }, [pool, rostered, q, pos]);
+    return starApply(base, starMode, favs, (p) => p.slug);
+  }, [pool, rostered, q, pos, starMode, favs]);
 
   const waivedFor = (p: LeaguePoolPlayer): number | null => {
     if (!p.waived_until) return null;
@@ -306,6 +312,8 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg, marginVertical: 8 }} />
         <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
           {POS_FILTERS.map((p) => <Chip key={p} label={p} on={pos === p} onPress={() => { tap(); setPos(p); }} />)}
+          <Chip label="★ FIRST" on={starMode === 'first'} onPress={() => { tap(); setStarMode(starMode === 'first' ? 'off' : 'first'); }} />
+          <Chip label="★ ONLY" on={starMode === 'only'} onPress={() => { tap(); setStarMode(starMode === 'only' ? 'off' : 'only'); }} />
         </View>
         {free.slice(0, 60).map((p) => {
           const left = waivedFor(p);
@@ -317,7 +325,9 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
               <Mono size={8.5} tone="faint" style={{ width: 28 }}>#{p.rank}</Mono>
               <Face slug={p.slug} pos={p.pos} />
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text numberOfLines={1} style={{ fontSize: 12.5, color: t.text }}>{p.full_name}</Text>
+                <Text numberOfLines={1} style={{ fontSize: 12.5, color: t.text }}>
+                  {favs.has(p.slug) && <Text style={{ color: STAR_GOLD }}>★ </Text>}{p.full_name}
+                </Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
                   <PosPill pos={p.pos} size={7.5} />
                   <Mono size={8.5} tone="faint">{p.team}</Mono>

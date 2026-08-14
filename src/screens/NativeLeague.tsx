@@ -25,7 +25,8 @@ import {
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick,
   nominate, placeBid, setLotProxy,
   leagueTrades, proposeTrade, respondTrade, cancelTrade,
-  type DraftState, type LeaguePoolPlayer, type NativeTeamState, type TradeRow,
+  myFavorites, tradeSignals, setTradeSignal,
+  type DraftState, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow,
 } from '@drip/core/data/liveApi';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
@@ -67,6 +68,29 @@ function Chip({ on, children, onClick }: { on?: boolean; children: React.ReactNo
     }}>{children}</button>
   );
 }
+
+// ★ sort/filter over a player list, driven by the account's favorite stars
+// (0139 — the same stars the player card sets). 'first' floats starred players
+// to the top of whatever order the list already has; 'only' hides everyone
+// else. Distinct from the draft queue's ☆ (a per-draft ranked wishlist):
+// favorites follow the ACCOUNT across every league and both hosts.
+type StarMode = 'off' | 'first' | 'only';
+function starApply<T>(list: T[], mode: StarMode, favs: Set<string>, slugOf: (x: T) => string): T[] {
+  if (mode === 'only') return list.filter((x) => favs.has(slugOf(x)));
+  if (mode === 'first') return list.slice().sort((a, b) => (favs.has(slugOf(b)) ? 1 : 0) - (favs.has(slugOf(a)) ? 1 : 0));
+  return list;
+}
+function StarChips({ mode, setMode }: { mode: StarMode; setMode: (m: StarMode) => void }) {
+  return (
+    <>
+      <Chip on={mode === 'first'} onClick={() => setMode(mode === 'first' ? 'off' : 'first')}>★ FIRST</Chip>
+      <Chip on={mode === 'only'} onClick={() => setMode(mode === 'only' ? 'off' : 'only')}>★ ONLY</Chip>
+    </>
+  );
+}
+const STAR_GOLD = '#E8B23A';
+const starMark = (favs: Set<string>, slug: string) =>
+  favs.has(slug) ? <span title="a favorite of yours" style={{ color: STAR_GOLD, fontSize: 10, marginRight: 3 }}>★</span> : null;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Create wizard
@@ -352,6 +376,8 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   const [cardFor, setCardFor] = useState<LeaguePoolPlayer | null>(null);
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
+  const [favs, setFavs] = useState<Set<string>>(new Set());
+  const [starMode, setStarMode] = useState<StarMode>('off');
   const [proxyDraft, setProxyDraft] = useState<Record<string, string>>({});   // per-lot hidden-max inputs
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -375,6 +401,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   useEffect(() => {
     refresh();
     leaguePool(leagueId).then(setPool).catch(() => {});
+    myFavorites().then(setFavs).catch(() => {});
     nativeTeamState(leagueId).then((t) => {
       setTeam(t);
       if (t.my_roster_id != null) myDraftQueue(leagueId, t.my_roster_id).then(setQueue).catch(() => {});
@@ -445,10 +472,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
 
   const avail = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return pool.filter((p) => !taken.has(p.slug)
+    const base = pool.filter((p) => !taken.has(p.slug)
       && (pos === 'ALL' || p.pos === pos)
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
-  }, [pool, taken, q, pos]);
+    return starApply(base, starMode, favs, (p) => p.slug);
+  }, [pool, taken, q, pos, starMode, favs]);
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     if (busy) return;
@@ -751,6 +779,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                 : ` ${myPosCount[p] ?? 0}/${st.pos_caps?.[p as keyof PosCaps] ?? '∞'}`;
               return <Chip key={p} on={pos === p} onClick={() => setPos(p)}>{posLabel(p)}{fill}</Chip>;
             })}
+            <StarChips mode={starMode} setMode={setStarMode} />
           </div>
           <div className="mono" style={{ display: 'flex', gap: 8, padding: '0 0 4px 62px', fontSize: 7.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>
             <span style={{ flex: 1 }}>PLAYER</span><span style={{ width: 38, textAlign: 'right' }}>ADP</span><span style={{ width: 38, textAlign: 'right' }}>PROJ</span><span style={{ width: 20 }} />
@@ -769,7 +798,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                   <button onClick={() => setCardFor(p)} style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
                     <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={28} />
                     <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</div>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{starMark(favs, p.slug)}{p.full_name}</div>
                       <div style={{ display: 'flex', gap: 5, alignItems: 'center', marginTop: 2 }}>
                         <PosPill pos={p.pos as Pos} />
                         <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.team} · #{p.rank}</span>
@@ -874,6 +903,8 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
+  const [favs, setFavs] = useState<Set<string>>(new Set());
+  const [starMode, setStarMode] = useState<StarMode>('off');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pendingAdd, setPendingAdd] = useState<LeaguePoolPlayer | null>(null); // roster full → pick a drop
@@ -897,6 +928,7 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
   };
   useEffect(() => {
     refresh();
+    myFavorites().then(setFavs).catch(() => {});
     const id = setInterval(refresh, 15000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -912,10 +944,11 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
 
   const free = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return pool.filter((p) => !rostered.has(p.slug)
+    const base = pool.filter((p) => !rostered.has(p.slug)
       && (pos === 'ALL' || p.pos === pos)
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
-  }, [pool, rostered, q, pos]);
+    return starApply(base, starMode, favs, (p) => p.slug);
+  }, [pool, rostered, q, pos, starMode, favs]);
 
   const waivedFor = (p: LeaguePoolPlayer): number | null => {
     if (!p.waived_until) return null;
@@ -1114,6 +1147,7 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players or teams…" style={{ ...input, marginBottom: 10 }} />
         <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
           {POS_FILTERS.map((p) => <Chip key={p} on={pos === p} onClick={() => setPos(p)}>{posLabel(p)}</Chip>)}
+          <StarChips mode={starMode} setMode={setStarMode} />
         </div>
         <div style={{ maxHeight: 380, overflowY: 'auto' }}>
           {free.slice(0, 100).map((p) => {
@@ -1123,7 +1157,7 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
                 <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 30 }}>#{p.rank}</span>
                 <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
                 <PosPill pos={p.pos as Pos} />
-                <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
+                <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{starMark(favs, p.slug)}{p.full_name}</span>
                 {left != null && <span className="mono" style={{ fontSize: 8.5, color: 'var(--warn)' }} title="on waivers">⏳ {fmtLeft(left)}</span>}
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 34 }}>{p.team}</span>
                 {(() => {
@@ -1233,6 +1267,8 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
   onChanged: () => void;
 }) {
   const [trades, setTrades] = useState<TradeRow[]>([]);
+  const [signals, setSignals] = useState<TradeSignalRow[]>([]);
+  const [blockEdit, setBlockEdit] = useState(false);
   const [open, setOpen] = useState(false);
   const [partner, setPartner] = useState<number | null>(null);
   const [give, setGive] = useState<string[]>([]);
@@ -1241,13 +1277,33 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const load = () => leagueTrades(leagueId).then((t) => { if (Array.isArray(t)) setTrades(t); }).catch(() => {});
+  const load = () => Promise.all([
+    leagueTrades(leagueId).then((t) => { if (Array.isArray(t)) setTrades(t); }),
+    tradeSignals(leagueId).then((s) => { if (Array.isArray(s)) setSignals(s); }),
+  ]).catch(() => {});
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
 
   const teamName = (rid: number) => teams.find((t) => t.roster_id === rid)?.team ?? `Team ${rid}`;
   const pname = (s: string) => poolBySlug.get(s)?.full_name ?? s;
   const toggle = (list: string[], set: (v: string[]) => void, slug: string) =>
     set(list.includes(slug) ? list.filter((s) => s !== slug) : [...list, slug]);
+
+  // Standing signals (0140): the shared block and the interest marks. All
+  // league-visible; the server already filtered out anything stale.
+  const blocks = signals.filter((s) => s.kind === 'block');
+  const wants = signals.filter((s) => s.kind === 'want');
+  const myBlocked = new Set(blocks.filter((s) => s.roster_id === myRoster).map((s) => s.slug));
+  const myWants = new Set(wants.filter((s) => s.roster_id === myRoster).map((s) => s.slug));
+  const wantCount = (slug: string) => wants.filter((w) => w.slug === slug).length;
+  const interestInMine = wants.filter((w) => w.holder_roster === myRoster);
+  const toggleSignal = (slug: string, kind: 'block' | 'want', on: boolean) => {
+    if (myRoster != null) act(() => setTradeSignal(leagueId, myRoster, slug, kind, on));
+  };
+  // A signal's natural next step is an offer: open the propose modal already
+  // pointed at the right team with the right player checked.
+  const openPreset = (partnerRid: number, giveSlugs: string[], getSlugs: string[]) => {
+    setPartner(partnerRid); setGive(giveSlugs); setGet(getSlugs); setErr(null); setOpen(true);
+  };
 
   const act = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     if (busy) return;
@@ -1281,7 +1337,10 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
     return <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color, border: `1px solid ${color}`, borderRadius: 3, padding: '2px 5px', whiteSpace: 'nowrap' }}>{label}</span>;
   };
   const shown = trades.slice(0, 8);
-  const pickList = (rid: number | null, sel: string[], set: (v: string[]) => void) => (
+  // wantable: the partner's list — each row grows a 👀 mark-interest toggle, so
+  // browsing a roster mid-propose doubles as scouting (close without sending
+  // and the marks stand).
+  const pickList = (rid: number | null, sel: string[], set: (v: string[]) => void, wantable = false) => (
     <div style={{ flex: '1 1 150px', minWidth: 140, maxHeight: 220, overflowY: 'auto', border: '1px solid var(--bd)', borderRadius: 6, padding: 6 }}>
       {rosters.filter((r) => r.roster_id === rid).map((r) => {
         const p = poolBySlug.get(r.slug);
@@ -1291,6 +1350,11 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
             style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', background: on ? 'color-mix(in srgb, var(--you) 14%, transparent)' : 'none', border: 'none', borderRadius: 4, padding: '4px 5px', cursor: 'pointer' }}>
             <span style={{ fontSize: 11, color: on ? 'var(--you)' : 'var(--text)', fontWeight: on ? 700 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{on ? '☑' : '☐'} {p?.full_name ?? r.slug}</span>
             <span style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p?.pos}</span>
+            {wantable && myRoster != null && (
+              <span onClick={(e) => { e.stopPropagation(); toggleSignal(r.slug, 'want', !myWants.has(r.slug)); }}
+                title={myWants.has(r.slug) ? 'remove your interest mark' : 'mark trade interest — the league sees it'}
+                style={{ fontSize: 11, opacity: myWants.has(r.slug) ? 1 : 0.35 }}>👀</span>
+            )}
           </button>
         );
       })}
@@ -1333,6 +1397,90 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
         </div>
       ))}
 
+      {/* THE TRADE BLOCK — standing "I'd listen on this player" flags (0140).
+          Every member sees the whole block; the 👀 count shows a shopped
+          player's market before anyone commits to an offer. */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 14 }}>
+        <div style={{ ...hdr, marginBottom: 0 }}>🔁 TRADE BLOCK</div>
+        {myRoster != null && (
+          <button onClick={() => setBlockEdit((v) => !v)} className="mono" style={{ ...ghostBtn, padding: '5px 9px', fontSize: 9 }}>
+            {blockEdit ? '✓ DONE' : '✎ SHOP MY PLAYERS'}
+          </button>
+        )}
+      </div>
+      {blockEdit && myRoster != null && (
+        <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid var(--bd)', borderRadius: 6, padding: 6, marginTop: 7 }}>
+          {rosters.filter((r) => r.roster_id === myRoster).map((r) => {
+            const p = poolBySlug.get(r.slug);
+            const on = myBlocked.has(r.slug);
+            return (
+              <button key={r.slug} onClick={() => toggleSignal(r.slug, 'block', !on)} disabled={busy} className="mono"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', background: on ? 'color-mix(in srgb, var(--warn) 14%, transparent)' : 'none', border: 'none', borderRadius: 4, padding: '4px 5px', cursor: 'pointer' }}>
+                <span style={{ fontSize: 11, color: on ? 'var(--warn)' : 'var(--text)', fontWeight: on ? 700 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{on ? '🔁' : '☐'} {p?.full_name ?? r.slug}</span>
+                <span style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p?.pos}{on ? ' · ON THE BLOCK' : ''}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {blocks.length === 0 && !blockEdit && (
+        <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+          Nobody is shopping anyone yet. Put a player on the block and the whole league sees it here.
+        </div>
+      )}
+      {blocks.map((s) => {
+        const p = poolBySlug.get(s.slug);
+        const mineRow = s.roster_id === myRoster;
+        const n = wantCount(s.slug);
+        return (
+          <div key={`blk-${s.roster_id}-${s.slug}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)', marginTop: 5 }}>
+            <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <b>{pname(s.slug)}</b>
+              <span className="mono" style={{ fontSize: 9, color: 'var(--dim)' }}> {p?.pos} · {mineRow ? 'your player' : teamName(s.roster_id)}</span>
+            </span>
+            {n > 0 && <span className="mono" title={`${n} team${n === 1 ? '' : 's'} interested`} style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--you)' }}>👀 {n}</span>}
+            {mineRow
+              ? <button onClick={() => toggleSignal(s.slug, 'block', false)} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>✕ off the block</button>
+              : myRoster != null && <>
+                  <button onClick={() => toggleSignal(s.slug, 'want', !myWants.has(s.slug))} disabled={busy}
+                    title={myWants.has(s.slug) ? 'remove your interest mark' : 'mark trade interest — the league sees it'}
+                    className="mono" style={{ ...linkBtn, color: myWants.has(s.slug) ? 'var(--you)' : 'var(--faint)' }}>
+                    👀 {myWants.has(s.slug) ? 'interested ✓' : 'interested?'}
+                  </button>
+                  <button onClick={() => openPreset(s.roster_id, [], [s.slug])} className="mono" style={{ ...ghostBtn, padding: '5px 9px', fontSize: 9 }}>⇄ OFFER</button>
+                </>}
+          </div>
+        );
+      })}
+
+      {/* INTEREST — who's eyeing whom. Your players with suitors float first;
+          your own marks follow, each one tap from a real offer. */}
+      {(interestInMine.length > 0 || myWants.size > 0) && (
+        <>
+          <div style={{ ...hdr, marginTop: 14, marginBottom: 0 }}>👀 TRADE INTEREST</div>
+          {interestInMine.map((w) => (
+            <div key={`in-${w.roster_id}-${w.slug}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)', marginTop: 5 }}>
+              <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, minWidth: 0 }}>
+                <b style={{ color: 'var(--you)' }}>{teamName(w.roster_id)}</b> is interested in your <b>{pname(w.slug)}</b>
+              </span>
+              {myRoster != null && (
+                <button onClick={() => openPreset(w.roster_id, [w.slug], [])} className="mono" style={{ ...ghostBtn, padding: '5px 9px', fontSize: 9 }}>⇄ TALK</button>
+              )}
+            </div>
+          ))}
+          {wants.filter((w) => w.roster_id === myRoster).map((w) => (
+            <div key={`my-${w.slug}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)', marginTop: 5 }}>
+              <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, minWidth: 0 }}>
+                You 👀 <b>{pname(w.slug)}</b>
+                <span className="mono" style={{ fontSize: 9, color: 'var(--dim)' }}> ({teamName(w.holder_roster)})</span>
+              </span>
+              <button onClick={() => toggleSignal(w.slug, 'want', false)} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>✕</button>
+              <button onClick={() => openPreset(w.holder_roster, [], [w.slug])} className="mono" style={{ ...ghostBtn, padding: '5px 9px', fontSize: 9 }}>⇄ OFFER</button>
+            </div>
+          ))}
+        </>
+      )}
+
       {open && myRoster != null && (
         <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 460, maxHeight: '85vh', overflowY: 'auto' }}>
@@ -1353,7 +1501,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
                 </div>
                 <div style={{ flex: '1 1 150px', minWidth: 140 }}>
                   <div className="mono" style={{ ...label, marginBottom: 5 }}>YOU GET</div>
-                  {pickList(partner, get, setGet)}
+                  {pickList(partner, get, setGet, true)}
                 </div>
               </div>
             )}

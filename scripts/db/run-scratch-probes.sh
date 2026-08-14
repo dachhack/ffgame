@@ -88,3 +88,4 @@ $RUN -f scripts/db/member-sync-probes.sql | grep -E "PROBE FAIL|ALL MEMBER-SYNC 
 $RUN -f scripts/db/lock-hold-probes.sql | grep -E "PROBE FAIL|ALL LOCK-HOLD PROBES" || { echo "LOCK-HOLD PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/backup-assign-probes.sql | grep -E "PROBE FAIL|ALL BACKUP-ASSIGN PROBES" || { echo "BACKUP-ASSIGN PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/favorites-probes.sql | grep -E "PROBE FAIL|ALL FAVORITES PROBES" || { echo "FAVORITES PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/trade-signal-probes.sql | grep -E "PROBE FAIL|ALL TRADE-SIGNAL PROBES" || { echo "TRADE-SIGNAL PROBES FAILED"; exit 1; }
