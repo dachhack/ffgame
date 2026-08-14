@@ -26,6 +26,7 @@ import { LivePicks } from './src/screens/LivePicks';
 import { DemoBoard } from './src/screens/DemoBoard';
 import { CommishTools } from './src/screens/CommishTools';
 import { ChatScreen } from './src/ui/Chat';
+import { LeagueHome } from './src/screens/LeagueHome';
 import { Admin } from './src/screens/Admin';
 import { Draft } from './src/screens/Draft';
 import { Team } from './src/screens/Team';
@@ -86,7 +87,9 @@ export function App() {
   // Bumped when a board join lands a new seat — remounts Leagues so the fresh
   // league is there when the user backs out of the board.
   const [leaguesEpoch, setLeaguesEpoch] = useState(0);
-  const [view, setView] = useState<'picks' | 'demo' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board'>('picks');
+  const [view, setView] = useState<'home' | 'picks' | 'demo' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board'>('picks');
+  // League-home SHOP tile (0182): bumping this opens the shop on the board.
+  const [shopSignal, setShopSignal] = useState(0);
 
   useEffect(() => {
     if (!liveConfigured()) { setReady(true); return; }
@@ -195,9 +198,10 @@ export function App() {
             stay on Sleeper) — but CHAT (0147) is for every member of any
             league, so an open league always has a strip now: a play-only
             platform league shows ▦ MATCHUP + 💬 CHAT. */}
-        {open && (view === 'picks' || view === 'draft' || view === 'team' || view === 'chat' || view === 'commishtools') && (
+        {open && (view === 'home' || view === 'picks' || view === 'draft' || view === 'team' || view === 'chat' || view === 'commishtools') && (
           <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 14, paddingTop: 8 }}>
             {([
+              ['home', '🏠 LEAGUE', true],                             // the hub (0182)
               ['picks', '▦ MATCHUP', open.rosterId != null],           // no seat → no lineup
               ['draft', '⛏ DRAFT', open.native],                       // draft rooms are native-only
               ['team', '⇄ MY TEAM', open.native && open.rosterId != null],
@@ -237,16 +241,16 @@ export function App() {
         ) : view === 'draft' && open?.native ? (
           // A seatless commissioner has no MATCHUP to go back to — back means
           // leaving the league, not landing on a lineup that doesn't exist.
-          <View style={{ flex: 1 }}><Draft leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('picks'); }} /></View>
+          <View style={{ flex: 1 }}><Draft leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }} /></View>
         ) : view === 'team' && open?.native ? (
-          <View style={{ flex: 1 }}><Team leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('picks'); }} onDraft={() => setView('draft')} /></View>
+          <View style={{ flex: 1 }}><Team leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }} onDraft={() => setView('draft')} /></View>
         ) : view === 'chat' && open ? (
           <View style={{ flex: 1 }}><ChatScreen key={`chat-${open.leagueId}`} leagueId={open.leagueId} /></View>
         ) : view === 'commishtools' && open ? (
           <View style={{ flex: 1 }}><CommishTools leagueId={open.leagueId} native={open.native} rosterId={open.rosterId}
             // A seatless commissioner has nowhere else in the league to land —
             // back means back to the leagues list.
-            onBack={() => { setOpen(null); setView('picks'); }}
+            onBack={() => { if (open.rosterId == null) { setOpen(null); setView('picks'); } else setView('home'); }}
             // Vacating your own seat invalidates open.rosterId — leave the
             // league view entirely; Leagues remounts with the fresh shape.
             onSelfUnassigned={() => { setOpen(null); setView('picks'); setLeaguesEpoch((n) => n + 1); }} /></View>
@@ -260,6 +264,14 @@ export function App() {
             </Pressable>
             <DemoBoard />
           </View>
+        ) : view === 'home' && open ? (
+          <View style={{ flex: 1 }}>
+            <LeagueHome leagueId={open.leagueId} name={open.name} teamName={undefined}
+              rosterId={open.rosterId} native={open.native} commish={!!open.commish}
+              onGo={(room) => setView(room)}
+              onShop={() => { setShopSignal((n) => n + 1); setView('picks'); }}
+              onBack={() => setOpen(null)} />
+          </View>
         ) : open && open.rosterId != null ? (
           <View style={{ flex: 1 }}>
             <LivePicks
@@ -271,7 +283,8 @@ export function App() {
               leagueId={open.leagueId}
               rosterId={open.rosterId}
               native={open.native}
-              onBack={() => setOpen(null)}
+              onBack={() => setView('home')}
+              openShopSignal={shopSignal}
             />
           </View>
         ) : (
@@ -279,14 +292,14 @@ export function App() {
             key={leaguesEpoch}
             userId={session.user.id}
             onBoard={() => setView('board')}
-            onOpen={(leagueId, rosterId, name, native, commish, pickUserId) => {
+            onOpen={(leagueId, rosterId, name, native, commish, pickUserId, landing) => {
               // `live: true` unconditionally: the native app has no sim leagues
               // to open, so this is the same activation step the web reports
               // for a live league and lands in the same funnel.
               track(Ev.leagueOpened, { live: true });
               // No seat → no lineup: a seatless commissioner lands on
               // management, not on a MATCHUP tab that cannot render.
-              setView(rosterId == null ? 'commishtools' : 'picks');
+              setView(rosterId == null ? 'commishtools' : (landing ?? 'home'));
               setOpen({ leagueId, rosterId, name, native, commish, pickUserId });
             }}
           />

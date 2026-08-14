@@ -10,6 +10,7 @@ import { METRICS, metricById } from '@drip/core/data/metrics';
 import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '@drip/core/data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '@drip/core/data/league';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
+import { consumeShopOnBoard } from './LeagueHubPage';
 import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
 } from '@drip/core/engine/matchup';
@@ -202,6 +203,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   const [puView, setPuView] = useState<'active' | 'apply' | null>(null);
   const [shopOpen, setShopOpen] = useState(false);
+  // League-home SHOP tile (0182): the hub builds the board and leaves a
+  // one-shot intent; consume it on mount and open the shop.
+  useEffect(() => { if (consumeShopOnBoard()) setShopOpen(true); }, []);
   const [scoutWin, setScoutWin] = useState<WindowId | null>(null); // sealed opponent spot tapped — show candidate pool
   const [pendingApply, setPendingApply] = useState<string | null>(null); // a targeted powerup awaiting a spot tap
   const [byeStealSlot, setByeStealSlot] = useState<string | null>(null); // empty slot chosen for Bye Steal, awaiting a player

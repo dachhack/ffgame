@@ -93,13 +93,15 @@ const fmtLock = (iso: string | null) => {
   catch { return iso; }
 };
 
-export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
+export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShopSignal }: {
   userId: string; leagueId?: string; rosterId?: number;
   /** Native league: check roster legality — an over-limit roster is locked out
    *  of picks and power-ups (0072/0128), and the ban deserves a banner here,
    *  not just an error after a tap. */
   native?: boolean;
   onBack: () => void;
+  /** League-home SHOP tile (0182): each bump opens the power-up shop. */
+  openShopSignal?: number;
 }) {
   const t = useTheme();
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
@@ -133,6 +135,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
   const [err, setErr] = useState<string | null>(null);
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   const [shopOpen, setShopOpen] = useState(false);
+  useEffect(() => { if (openShopSignal) setShopOpen(true); }, [openShopSignal]);
   const [matchPremium, setMatchPremium] = useState(true); // default true = no false locks until we know
   const [weekSel, setWeekSel] = useState<number | null>(null);
   const [winKickIso, setWinKickIso] = useState<Record<string, string>>({});
