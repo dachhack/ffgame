@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from './store';
 import { setLeagueNote, setPlayerFlag, setPlayerFlagsBulk, playerFlags, leagueNote, leagueScoringGet, leagueScoringSet, friendlyError, type PlayerFlagRow, type FlagRulesRaw } from '@drip/core/data/liveApi';
-import { SCORING_BOUNDS, DEFAULT_SCORING, scoringIsDefault, scoringLabel, parseScoring, type LeagueScoring } from '@drip/core/engine/leagueScoring';
+import { SCORING_BOUNDS, DEFAULT_SCORING, scoringIsDefault, scoringLabel, scopedRuleLabel, parseScoring, type LeagueScoring, type ScopedBonus } from '@drip/core/engine/leagueScoring';
 import { PLAYER_BIO } from '@drip/core/data/playerBio';
 import { headshot } from '@drip/core/data/media';
 import { ModalBackdrop, Img } from './ui';
@@ -29,6 +29,22 @@ const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontS
 
 const prettify = (slug: string) =>
   slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
+
+// Directory-filter axes for bulk flagging + scoped bonuses (0145): position
+// and team straight off the bio bake, tenure from accrued seasons.
+const FILTER_POS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
+const TENURES = [
+  { id: 'rookie', label: 'ROOKIES' },
+  { id: 'y2_3', label: '2ND–3RD YR' },
+  { id: 'vet4', label: 'VETS 4+' },
+] as const;
+const ALL_TEAMS: string[] = [...new Set(Object.values(PLAYER_BIO).map((b) => b.team).filter((t): t is string => !!t))].sort();
+const tenureMatch = (exp: number | undefined, ten: string): boolean => {
+  if (exp == null) return false;
+  if (ten === 'rookie') return exp === 0;
+  if (ten === 'y2_3') return exp >= 1 && exp <= 2;
+  return exp >= 3;
+};
 
 /** The banner + its editors. Renders nothing off the live board; renders
  *  nothing for members while no note stands. */
@@ -158,13 +174,43 @@ function ScoringEditor({ leagueId, initial, onDone, onClose }: {
   const [td, setTd] = useState(initial.tdBonus);
   const [yd, setYd] = useState(initial.ydMult);
   const [to, setTo] = useState(initial.toPenalty);
+  const [scoped, setScoped] = useState<ScopedBonus[]>(initial.scoped ?? []);
+  // draft rule being built in the ADD row
+  const [dPos, setDPos] = useState<Set<string>>(new Set());
+  const [dTeam, setDTeam] = useState('ALL');
+  const [dTen, setDTen] = useState('ALL');
+  const [dMult, setDMult] = useState(1);
+  const [dPts, setDPts] = useState(0);
+  const [dTd, setDTd] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const save = async (tdV: number, ydV: number, toV: number) => {
+  const toWire = (r: ScopedBonus) => ({
+    ...(r.pos?.length ? { pos: r.pos } : {}),
+    ...(r.team?.length ? { team: r.team } : {}),
+    ...(r.tenure ? { tenure: r.tenure } : {}),
+    ...(r.bonusMult != null ? { bonus_mult: r.bonusMult } : {}),
+    ...(r.bonusPts != null ? { bonus_pts: r.bonusPts } : {}),
+    ...(r.tdBonus != null ? { td_bonus: r.tdBonus } : {}),
+  });
+  const addRule = () => {
+    if (dMult === 1 && dPts === 0 && dTd === 0) { setErr('Give the rule a value — a multiplier, flat points, or a TD bonus.'); return; }
+    if (scoped.length >= 12) { setErr('At most 12 scoped rules.'); return; }
+    setErr(null);
+    setScoped([...scoped, {
+      ...(dPos.size ? { pos: [...dPos] } : {}),
+      ...(dTeam !== 'ALL' ? { team: [dTeam] } : {}),
+      ...(dTen !== 'ALL' ? { tenure: dTen as ScopedBonus['tenure'] } : {}),
+      ...(dMult !== 1 ? { bonusMult: dMult } : {}),
+      ...(dPts !== 0 ? { bonusPts: dPts } : {}),
+      ...(dTd !== 0 ? { tdBonus: dTd } : {}),
+    }]);
+    setDPos(new Set()); setDTeam('ALL'); setDTen('ALL'); setDMult(1); setDPts(0); setDTd(0);
+  };
+  const save = async (tdV: number, ydV: number, toV: number, scopedV: ScopedBonus[] = scoped) => {
     if (busy) return;
     setBusy(true); setErr(null);
     try {
-      const r = await leagueScoringSet(leagueId, tdV, Math.round(ydV * 10) / 10, toV);
+      const r = await leagueScoringSet(leagueId, tdV, Math.round(ydV * 10) / 10, toV, scopedV.map(toWire));
       if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not save.')); return; }
       onDone();
     } catch (x) { setErr(friendlyError(x)); }
@@ -192,10 +238,63 @@ function ScoringEditor({ leagueId, initial, onDone, onClose }: {
         {stepper('TD BONUS', 'extra points on every touchdown your players score (defensive TDs included)', td, setTd, SCORING_BOUNDS.tdBonus, (n) => `${n > 0 ? '+' : ''}${n}`)}
         {stepper('YARDAGE MULTIPLIER', 'scales all per-yard scoring AND drip-rate growth', yd, setYd, SCORING_BOUNDS.ydMult, (n) => `×${n}`)}
         {stepper('TURNOVER PENALTY', 'points removed from a player’s own bank on an INT thrown / fumble lost (never below zero)', to, setTo, SCORING_BOUNDS.toPenalty, (n) => (n === 0 ? 'off' : `−${n}`))}
+
+        {/* SCOPED BONUSES (0145): the founder's "team, position, tenure"
+            filters — rules that pay only players matching the scope. */}
+        <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginTop: 16, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>SCOPED BONUSES</div>
+        <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
+          Bonuses for players matching a position / team / tenure scope. Rules stack — multipliers multiply, points sum.
+        </div>
+        {scoped.map((r, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--bd)' }}>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--warn)', fontWeight: 700, flex: 1, minWidth: 0 }}>⚖ {scopedRuleLabel(r)}</span>
+            <button onClick={() => setScoped(scoped.filter((_, j) => j !== i))} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>✕</button>
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
+          {FILTER_POS.map((p) => {
+            const on = dPos.has(p);
+            return (
+              <button key={p} onClick={() => setDPos((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; })} className="mono"
+                style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 999, padding: '3px 8px', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}` }}>{p}</button>
+            );
+          })}
+          <select value={dTeam} onChange={(e) => setDTeam(e.target.value)} className="mono"
+            style={{ fontSize: 9.5, background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, padding: '3px 6px' }}>
+            <option value="ALL">ANY TEAM</option>
+            {ALL_TEAMS.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          {TENURES.map((t) => (
+            <button key={t.id} onClick={() => setDTen(dTen === t.id ? 'ALL' : t.id)} className="mono"
+              style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 999, padding: '3px 8px', color: dTen === t.id ? 'var(--on-accent)' : 'var(--dim)', background: dTen === t.id ? 'var(--warn)' : 'var(--bg)', border: `1px solid ${dTen === t.id ? 'var(--warn)' : 'var(--bd)'}` }}>{t.label}</button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 7 }}>
+          <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>PTS ×</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <button onClick={() => setDMult(Math.round(Math.max(0.5, dMult - 0.1) * 10) / 10)} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>−</button>
+            <span className="mono" style={{ fontSize: 10, fontWeight: 700, minWidth: 30, textAlign: 'center', color: dMult !== 1 ? 'var(--warn)' : 'var(--dim)' }}>×{dMult}</span>
+            <button onClick={() => setDMult(Math.round(Math.min(3, dMult + 0.1) * 10) / 10)} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>＋</button>
+          </span>
+          <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>BONUS</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <button onClick={() => setDPts(Math.max(-10, dPts - 1))} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>−</button>
+            <span className="mono" style={{ fontSize: 10, fontWeight: 700, minWidth: 26, textAlign: 'center', color: dPts !== 0 ? 'var(--warn)' : 'var(--dim)' }}>{dPts > 0 ? '+' : ''}{dPts}</span>
+            <button onClick={() => setDPts(Math.min(10, dPts + 1))} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>＋</button>
+          </span>
+          <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>TD</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <button onClick={() => setDTd(Math.max(-3, dTd - 1))} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>−</button>
+            <span className="mono" style={{ fontSize: 10, fontWeight: 700, minWidth: 26, textAlign: 'center', color: dTd !== 0 ? 'var(--warn)' : 'var(--dim)' }}>{dTd > 0 ? '+' : ''}{dTd}</span>
+            <button onClick={() => setDTd(Math.min(6, dTd + 1))} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>＋</button>
+          </span>
+          <button onClick={addRule} className="mono" style={{ ...ghostBtn, padding: '4px 10px', fontSize: 9 }}>＋ ADD RULE</button>
+        </div>
+
         {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 10 }}>{err}</div>}
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
           <button onClick={() => save(td, yd, to)} disabled={busy} className="mono" style={{ ...btn, flex: 1, opacity: busy ? 0.5 : 1 }}>SAVE</button>
-          <button onClick={() => save(DEFAULT_SCORING.tdBonus, DEFAULT_SCORING.ydMult, DEFAULT_SCORING.toPenalty)} disabled={busy} className="mono" style={{ ...ghostBtn }}>RESET TO BASE</button>
+          <button onClick={() => save(DEFAULT_SCORING.tdBonus, DEFAULT_SCORING.ydMult, DEFAULT_SCORING.toPenalty, [])} disabled={busy} className="mono" style={{ ...ghostBtn }}>RESET TO BASE</button>
         </div>
         <div style={{ textAlign: 'center', marginTop: 8 }}><button onClick={onClose} className="mono" style={linkBtn}>cancel</button></div>
       </div>
@@ -306,11 +405,28 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
   const load = () => playerFlags(leagueId).then((r) => { if (Array.isArray(r)) setRows(r); }).catch(() => {});
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
 
+  // Bulk filters (playtest finding): position / team / tenure narrow the
+  // directory alongside (or instead of) the search box.
+  const [fPos, setFPos] = useState<string>('ALL');
+  const [fTeam, setFTeam] = useState<string>('ALL');
+  const [fTen, setFTen] = useState<string>('ALL');
+  const filtersOn = fPos !== 'ALL' || fTeam !== 'ALL' || fTen !== 'ALL';
   const matches = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (needle.length < 2) return [];
-    return Object.keys(PLAYER_BIO).filter((s) => s.replace(/-/g, ' ').includes(needle)).slice(0, bulk ? 30 : 12);
-  }, [q, bulk]);
+    if (needle.length < 2 && !(bulk && filtersOn)) return [];
+    const out: string[] = [];
+    for (const [slug, b] of Object.entries(PLAYER_BIO)) {
+      if (needle.length >= 2 && !slug.replace(/-/g, ' ').includes(needle)) continue;
+      if (bulk) {
+        if (fPos !== 'ALL' && b.pos !== fPos) continue;
+        if (fTeam !== 'ALL' && b.team !== fTeam) continue;
+        if (fTen !== 'ALL' && !tenureMatch(b.exp, fTen)) continue;
+      }
+      out.push(slug);
+      if (out.length >= (bulk ? 500 : 12)) break;
+    }
+    return out;
+  }, [q, bulk, fPos, fTeam, fTen, filtersOn]);
 
   const save = async (slug: string, label: string | null, rules: FlagRulesRaw = {}) => {
     if (busy) return;
@@ -324,7 +440,8 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
     finally { setBusy(false); }
   };
   const saveBulk = async () => {
-    if (busy || !selected.size || !labelDraft.trim()) return;
+    if (busy || !selected.size) return;
+    if (!labelDraft.trim()) { setErr('Give the flag a label — it’s what the league sees on every chip.'); return; }
     setBusy(true); setErr(null);
     try {
       const r = await setPlayerFlagsBulk(leagueId, [...selected], labelDraft, rulesDraft);
@@ -383,6 +500,31 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
           {bulk ? `FLAG MANY — ${selected.size} SELECTED` : 'FLAG A PLAYER'}
         </div>
         <input value={q} onChange={(e) => { setQ(e.target.value); if (!bulk) setLabelFor(null); }} placeholder="search any NFL player…" style={{ ...input, marginTop: 6 }} />
+        {bulk && (
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginTop: 7 }}>
+            {['ALL', ...FILTER_POS].map((p) => (
+              <button key={p} onClick={() => setFPos(p)} className="mono"
+                style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 999, padding: '3px 8px', color: fPos === p ? 'var(--on-accent)' : 'var(--dim)', background: fPos === p ? 'var(--you)' : 'var(--bg)', border: `1px solid ${fPos === p ? 'var(--you)' : 'var(--bd)'}` }}>{p}</button>
+            ))}
+            <select value={fTeam} onChange={(e) => setFTeam(e.target.value)} className="mono"
+              style={{ fontSize: 9.5, background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, padding: '3px 6px' }}>
+              <option value="ALL">ALL TEAMS</option>
+              {ALL_TEAMS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            {TENURES.map((t) => (
+              <button key={t.id} onClick={() => setFTen(fTen === t.id ? 'ALL' : t.id)} className="mono"
+                style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 999, padding: '3px 8px', color: fTen === t.id ? 'var(--on-accent)' : 'var(--dim)', background: fTen === t.id ? 'var(--warn)' : 'var(--bg)', border: `1px solid ${fTen === t.id ? 'var(--warn)' : 'var(--bd)'}` }}>{t.label}</button>
+            ))}
+            {matches.length > 0 && (
+              <button onClick={() => setSelected(new Set(matches))} className="mono" style={{ ...ghostBtn, padding: '3px 9px', fontSize: 8.5 }}>
+                ☑ SELECT ALL {matches.length}
+              </button>
+            )}
+            {selected.size > 0 && (
+              <button onClick={() => setSelected(new Set())} className="mono" style={{ ...linkBtn, fontSize: 8.5 }}>clear</button>
+            )}
+          </div>
+        )}
         {matches.map((slug) => (
           <div key={slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--bd)', flexWrap: 'wrap' }}>
             {bulk && (
@@ -404,10 +546,15 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
             <input value={labelDraft} maxLength={40} onChange={(e) => setLabelDraft(e.target.value)}
               placeholder="one label for all selected…" style={{ ...input, fontSize: 11 }} />
             <RuleControls draft={rulesDraft} set={setRulesDraft} />
-            <button onClick={() => void saveBulk()} disabled={busy || !selected.size || !labelDraft.trim()}
-              className="mono" style={{ ...btn, width: '100%', marginTop: 8, opacity: busy || !selected.size || !labelDraft.trim() ? 0.5 : 1 }}>
+            <button onClick={() => void saveBulk()} disabled={busy || !selected.size}
+              className="mono" style={{ ...btn, width: '100%', marginTop: 8, opacity: busy || !selected.size ? 0.5 : 1 }}>
               ⚑ FLAG {selected.size} PLAYER{selected.size === 1 ? '' : 'S'}
             </button>
+            {!labelDraft.trim() && selected.size > 0 && (
+              <div className="mono" style={{ fontSize: 9, color: 'var(--warn)', marginTop: 5, lineHeight: 1.4 }}>
+                ↑ add a label first — it’s what the league sees on every flagged player’s chip
+              </div>
+            )}
           </div>
         )}
         <div style={{ textAlign: 'center', marginTop: 10 }}><button onClick={onClose} className="mono" style={linkBtn}>done</button></div>

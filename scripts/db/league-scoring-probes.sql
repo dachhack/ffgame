@@ -114,4 +114,30 @@ begin
   reset role;
 end $$;
 
+-- ── 4. scoped bonus rules (0145): sanitize, store, read back ────────────────
+do $$
+declare lid uuid := current_setting('probe.sc_lid')::uuid; r jsonb; sc jsonb;
+begin
+  set local role authenticated;
+  perform probe_as('b');
+  r := set_league_scoring(lid, 0, 1.0, 0, '[
+    {"pos": ["qb", "WR", "??"], "team": ["dal"], "tenure": "rookie", "bonus_mult": 1.5, "bonus_pts": 3},
+    {"tenure": "vet4", "td_bonus": 99},
+    {"pos": ["TE"]},
+    "junk"
+  ]'::jsonb);
+  perform assert_ok(r, 's18 scoped set accepted');
+  sc := league_scoring(lid) -> 'scoped';
+  perform assert_true(jsonb_array_length(sc) = 2, 's19 valueless + junk rules dropped');
+  perform assert_true(sc -> 0 -> 'pos' = '["QB", "WR"]'::jsonb, 's20 pos codes uppercased, invalid dropped');
+  perform assert_true(sc -> 0 ->> 'tenure' = 'rookie' and (sc -> 0 ->> 'bonus_mult')::numeric = 1.5, 's21 scope + values stored');
+  perform assert_true((sc -> 1 ->> 'td_bonus')::int = 6, 's22 td bonus clamped to 6');
+  -- scoped alone keeps the settings key; clearing scoped + defaults removes it
+  perform assert_ok(set_league_scoring(lid, 0, 1.0, 0, '[]'::jsonb), 's23 clear scoped');
+  perform assert_true((select settings_json -> 'scoring' from league where id = lid) is null
+    or jsonb_typeof((select settings_json -> 'scoring' from league where id = lid)) = 'null',
+    's24 all-default + no scoped stores nothing');
+  reset role;
+end $$;
+
 select 'ALL LEAGUE-SCORING PROBES PASSED' as result;
