@@ -327,6 +327,20 @@ export interface RedeemResult { ok: boolean; error?: string; league_id?: string;
 
 export interface PreviewRedeem { ok: boolean; error?: string; league?: string; team?: string; avatar?: string | null; }
 
+/** ★ favorites (0139): plain RLS table ops — the row is the feature. Never
+ *  throws; a failed read renders an unlit star, not an error. */
+export async function myFavorites(): Promise<Set<string>> {
+  try {
+    const { data } = await (await client()).from('favorite_player').select('player_slug');
+    return new Set(((data ?? []) as { player_slug: string }[]).map((r) => r.player_slug));
+  } catch { return new Set(); }
+}
+export async function setFavorite(userId: string, slug: string, on: boolean): Promise<void> {
+  const c = await client();
+  if (on) await c.from('favorite_player').upsert({ app_user_id: userId, player_slug: slug }, { onConflict: 'app_user_id,player_slug' });
+  else await c.from('favorite_player').delete().eq('app_user_id', userId).eq('player_slug', slug);
+}
+
 /** Ask the worker to re-pull this league's member list from Sleeper (0133).
  *  For the claim flow's "your Sleeper account is not a manager in this league"
  *  bounce — which, when the claimant JUST joined on Sleeper, means our copy of

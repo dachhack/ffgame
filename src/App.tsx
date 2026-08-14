@@ -6,6 +6,7 @@ import { yahooExchange } from '@drip/core/data/providers/yahooClient';
 import { getSession, hasAuthTokensInUrl, captureAuthUrlError } from '@drip/core/data/liveApi';
 import { RequestCodeFab } from './screens/RequestCode';
 import { InstallPrompt } from './app/InstallPrompt';
+import { PlayerCardHost } from './app/playerCard';
 import { DEMO_WEEK } from '@drip/core/config';
 
 // Route screens are code-split: only the active screen's chunk loads, keeping the
@@ -151,6 +152,8 @@ export function App() {
           bottom banner would sit on top of the live playout. Self-gating: renders
           nothing unless the browser can install and the visitor is warmed up. */}
       {!['matchup', 'final'].includes(route.name) && <InstallPrompt raised={fab} />}
+      {/* Player card modal — any surface opens it via openPlayerCard() */}
+      <PlayerCardHost />
     </div>
   );
 }
