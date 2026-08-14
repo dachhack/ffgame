@@ -498,7 +498,11 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     let hot = false, nuked = false;
     for (const e of s.events) {
       if (e.side === me && (e.effect?.type === 'streak' || e.drip) && (e.effect?.text ?? e.play).includes('HOT')) hot = true;
-      if (e.effect?.type === 'nuke' && (e.sig ? e.side !== me : e.side === me)) nuked = true;
+      // Giveaways are typed 'nuke' for the log's red ✕ (coin to the opponent),
+      // but a turnover is NOT a nuke — without this guard (which buildMatchup's
+      // liveCardFlags has had all along) an interception scorched the QB's own
+      // card and struck through his points. Insult to injury, per the founder.
+      if (e.effect?.type === 'nuke' && !(e.effect.text ?? '').includes('TURNOVER') && (e.sig ? e.side !== me : e.side === me)) nuked = true;
     }
     return { hot: hot || undefined, nuked: nuked || undefined };
   };
