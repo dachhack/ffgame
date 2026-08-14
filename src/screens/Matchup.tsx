@@ -148,12 +148,23 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     if (!liveCtx || !heroHydrated) return;
     const t = setTimeout(() => {
       const rows: PickRow[] = [];
+      // A KICKED window's rows stay out of the save (unless the week is under
+      // an admin hold, where post-kick editing is the point). They're immutable
+      // on both ends — the UI can't edit them and enforce_window_lock refuses
+      // changes — but re-sending them made the save fragile: any refusal is a
+      // whole-batch rejection, so one locked window painted a permanent
+      // "NOT SAVED" banner over a fully-saved board AND vetoed the legitimate
+      // unkicked edits riding in the same batch.
+      const held = !!liveCtx && heldPairs.has(`${liveCtx.leagueId}:${week}`);
       for (const [key, p] of Object.entries(picks)) {
         if (!p?.playerId) continue;
         const [win, slot] = key.split('#');
         if (win == null || slot == null) continue;
+        const k = windowKickoffMs(week, win as WindowId);
+        if (!held && k != null && k <= Date.now()) continue;
         rows.push({ game_window: win, roster_slot: slot, player_slug: p.playerId, metric_id: p.metricId ?? null });
       }
+      if (!rows.length) { setSaveErr(null); return; }
       // A swallowed failure here is the worst kind: the board keeps showing the
       // lineup you built while the server has an older one, and you only find out
       // on reload. The slot-cap trigger rejects the WHOLE upsert, so one pick past
