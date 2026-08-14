@@ -142,6 +142,10 @@ jobs:
       # (Guarded in the script, not in `if:` — the secrets context isn't
       # available in step-level if conditions, and referencing it there makes
       # the whole workflow file unparseable: zero jobs, silent no-deploy.)
+      # Timing gotcha: secrets are snapshotted when the job starts, so a
+      # secret added while a run is in flight is invisible to it — the skip
+      # line in this step's log is the tell, and the fix is simply the next
+      # deploy (any merge touching server/ or packages/core re-runs this).
       - name: stage FCM credential
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
