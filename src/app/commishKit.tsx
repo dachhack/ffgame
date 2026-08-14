@@ -278,9 +278,9 @@ function ScoringEditor({ leagueId, initial, onDone, onClose }: {
           </span>
           <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>BONUS</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <button onClick={() => setDPts(Math.max(-10, dPts - 1))} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>−</button>
+            <button onClick={() => setDPts(Math.round(Math.max(-10, dPts - 0.5) * 10) / 10)} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>−</button>
             <span className="mono" style={{ fontSize: 10, fontWeight: 700, minWidth: 26, textAlign: 'center', color: dPts !== 0 ? 'var(--warn)' : 'var(--dim)' }}>{dPts > 0 ? '+' : ''}{dPts}</span>
-            <button onClick={() => setDPts(Math.min(10, dPts + 1))} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>＋</button>
+            <button onClick={() => setDPts(Math.round(Math.min(10, dPts + 0.5) * 10) / 10)} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>＋</button>
           </span>
           <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>TD</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -395,7 +395,7 @@ function RuleControls({ draft, set }: { draft: FlagRulesRaw; set: (r: FlagRulesR
       <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>PTS ×</span>
       {mini(draft.bonus_mult ?? 1, 1, 0.5, 3, 0.1, 'bonus_mult', (n) => `×${n}`)}
       <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>BONUS</span>
-      {mini(draft.bonus_pts ?? 0, 0, -10, 10, 1, 'bonus_pts', (n) => `${n > 0 ? '+' : ''}${n}`)}
+      {mini(draft.bonus_pts ?? 0, 0, -10, 10, 0.5, 'bonus_pts', (n) => `${n > 0 ? '+' : ''}${n}`)}
     </div>
   );
 }

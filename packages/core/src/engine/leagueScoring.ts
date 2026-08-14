@@ -95,7 +95,7 @@ export function parseScoring(raw: unknown): LeagueScoring {
       if (r.tenure === 'rookie' || r.tenure === 'y2_3' || r.tenure === 'vet4') rule.tenure = r.tenure;
       const bm = Math.round(num(r.bonus_mult ?? r.bonusMult, 1, 0.5, 3) * 10) / 10;
       if (bm !== 1) rule.bonusMult = bm;
-      const bp = Math.round(num(r.bonus_pts ?? r.bonusPts, 0, -10, 10));
+      const bp = Math.round(num(r.bonus_pts ?? r.bonusPts, 0, -10, 10) * 10) / 10;
       if (bp !== 0) rule.bonusPts = bp;
       const td = Math.round(num(r.td_bonus ?? r.tdBonus, 0, -3, 6));
       if (td !== 0) rule.tdBonus = td;
@@ -134,6 +134,7 @@ export function scopedAdjustFor(player: { id: string; pos: string; team?: string
     if (r.tdBonus != null) out.td += r.tdBonus;
   }
   out.mult = Math.round(out.mult * 100) / 100;
+  out.pts = Math.round(out.pts * 10) / 10;   // halves sum clean (0146)
   return out;
 }
 
