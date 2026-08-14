@@ -1179,6 +1179,43 @@ export { GAME_SECONDS, fmtClock };
  *  "N car · M rush yd" to "N-M ru" (and the receiving pair likewise) so the
  *  line fits a phone without ellipsing — which is the only reason the compact
  *  variant exists. */
+/** The stat actually DRIVING a metric's score, compact ("127 pass yd · 1 TD").
+ *
+ *  The full statline (fmtStat) answers "what has he done"; this answers "what
+ *  is my metric counting" — rendered under the metric chip on the live cards,
+ *  both hosts. Per (position, metric id) because ids repeat across positions
+ *  with different meanings (QB 'fg' is Field General; K would be kicks).
+ *  Unknown ids return null and the card simply shows nothing extra. */
+export function metricDriver(pos: Pos, metricId: string | null | undefined, s: StatLine): string | null {
+  if (!metricId) return null;
+  const td = (n: number) => (n ? ` · ${n} TD` : '');
+  if (pos === 'QB') {
+    if (metricId === 'fg') return `${s.passYds} pass yd`;                      // multiplier fuel
+    if (metricId === 'pass' || metricId === 'passbig') return `${s.passYds} pass yd${td(s.passTds)}`;
+    if (metricId === 'rush') return `${s.rushYds} ru yd${td(s.rushTds)}`;
+  }
+  if (pos === 'RB' || pos === 'WR' || pos === 'TE') {
+    if (metricId === 'rush') return `${s.rushYds} ru yd`;
+    if (metricId === 'recyd') return `${s.recYds} rec yd`;
+    if (metricId === 'carries') return `${s.carries} car`;
+    if (metricId === 'rec') return `${s.rec} rec`;
+    if (metricId === 'tgt') return `${s.targets} tgt`;
+    if (metricId === 'td') return `${s.rushYds + s.recYds} scr yd${td(s.rushTds + s.recTds)}`;
+    if (metricId === 'underdog') return pos === 'RB'
+      ? `${s.rushYds} ru yd${td(s.rushTds)}` : `${s.recYds} rec yd${td(s.recTds)}`;
+    if (metricId === 'combodrip') return `${s.rushYds + s.recYds} yd`;
+    if (metricId === 'retyd') return `${(pos === 'RB' ? s.rushYds : s.recYds) + s.retYds} yd`;
+  }
+  if (pos === 'K') return `${s.fg} FG · ${s.xp} XP`;
+  if (pos === 'DEF') {
+    const bits = [`${s.sacks} sk`, `${s.ints} int`, `${s.fumrec} FR`];
+    if (s.dtd) bits.push(`${s.dtd} TD`);
+    return bits.join(' · ');
+  }
+  if (metricId.startsWith('idp_')) return `${s.tackles} tkl · ${s.sacks} sk · ${s.ints} int`;
+  return null;
+}
+
 export function fmtStat(pos: Pos, s: StatLine, compact = false): string {
   // Compact (mobile): collapse "N car · M rush yd" → "N-M ru" and
   // "R/T rec · Y rec yd" → "R/T-Y rec" so the line fits without ellipsing.

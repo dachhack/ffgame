@@ -13,7 +13,7 @@ import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
 } from '@drip/core/engine/matchup';
-import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, fmtStat, GAME_SECONDS } from '@drip/core/engine/sim';
+import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, fmtStat, metricDriver, GAME_SECONDS } from '@drip/core/engine/sim';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '@drip/core/data/demoNarration';
@@ -2942,8 +2942,12 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   const nuked = fx === 'nuke' && bank === 0 && !subName && suppressSpent == null;
   // Always the COMPACT statline convention ("12-58 ru · 3/4-31 rec"), desktop
   // included — founder's call once the verbose form ("12 car · 58 rush yd · …")
-  // proved too long for one line even across the card's full width.
-  const stat = useMemo(() => fmtStat(player.pos, statlineAt(player, week, clock, metricId), true), [player, week, clock, metricId]);
+  // proved too long for one line even across the card's full width. The same
+  // StatLine also feeds the metric DRIVER — the one stat the fielded metric is
+  // actually counting, shown under the metric chip.
+  const sline = useMemo(() => statlineAt(player, week, clock, metricId), [player, week, clock, metricId]);
+  const stat = useMemo(() => fmtStat(player.pos, sline, true), [player, sline]);
+  const driver = useMemo(() => metricDriver(player.pos, metricId, sline), [player, metricId, sline]);
   const edge = side === 'you' ? 'left' : 'right';
   const nameRow = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexDirection: side === 'you' ? 'row' : 'row-reverse' }}>
@@ -2972,10 +2976,15 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // the same height regardless of label length; desktop keeps it inline.
   const metricChip = (
     <div title={metricEf || undefined} style={{ display: 'inline-flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? (side === 'you' ? 'flex-end' : 'flex-start') : 'baseline', maxWidth: '100%', gap: isMobile ? 0 : 5, marginTop: isMobile ? 2 : 0, padding: isMobile ? '2px 7px' : '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)`, cursor: metricEf ? 'help' : undefined }}>
-      <span className="grotesk" style={{ fontSize: isMobile ? 10.5 : 13, fontWeight: 700, color: accent, letterSpacing: '0.01em', lineHeight: 1.25, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{metricName}</span>
+      <span className="grotesk" style={{ fontSize: isMobile ? 9.5 : 13, fontWeight: 700, color: accent, letterSpacing: '0.01em', lineHeight: 1.25, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{metricName}</span>
       <span className="mono" style={{ fontSize: fs(7), fontWeight: 700, letterSpacing: '0.1em', color: accent, opacity: 0.85, whiteSpace: 'nowrap', lineHeight: 1.25 }}>{tag}</span>
     </div>
   );
+  // The metric's driving stat, right under the chip — "what is my metric
+  // counting" (the statline below answers "what has he done overall").
+  const driverEl = driver ? (
+    <div className="mono" style={{ fontSize: fs(8), fontWeight: 700, letterSpacing: '0.04em', color: 'var(--dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', textAlign: isMobile ? (side === 'you' ? 'right' : 'left') : (side === 'you' ? 'right' : 'left') }}>{driver}</div>
+  ) : null;
   // Statline: justified to the card's outer edge. Mobile uses a small fixed size
   // (not bumped by bigText) and wraps rather than ellipsing — so it never truncates.
   const statLine = suppressSpent != null
@@ -3031,6 +3040,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3, alignItems: side === 'you' ? 'flex-start' : 'flex-end' }}>
           {(chip || twin) && nameRow}
           {metricChip}
+          {driverEl}
           {fgEl}
           <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'baseline', gap: 6 }}>
             {bigNum}
@@ -3052,7 +3062,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
         <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'center', gap: 8 }}>
           {imgEl}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2, alignItems: side === 'you' ? 'flex-end' : 'flex-start' }}>
-            <div style={{ minHeight: 18, display: 'flex', alignItems: 'center', width: '100%', justifyContent: side === 'you' ? 'flex-end' : 'flex-start' }}>{metricChip}</div>
+            <div style={{ minHeight: 18, display: 'flex', flexDirection: 'column', width: '100%', alignItems: side === 'you' ? 'flex-end' : 'flex-start' }}>{metricChip}{driverEl}</div>
             {fgEl}
             <div style={{ display: 'flex', flexDirection: side === 'you' ? 'row' : 'row-reverse', alignItems: 'baseline', gap: 6 }}>
               {coinEl}
@@ -3074,6 +3084,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
         </div>
         <div style={{ flex: 'none', maxWidth: '60%', alignSelf: 'center', display: 'flex', flexDirection: 'column', alignItems: side === 'you' ? 'flex-end' : 'flex-start', gap: 5 }}>
           {metricChip}
+          {driverEl}
           {fgEl}
           {bigNum}
           {coinEl}
