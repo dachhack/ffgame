@@ -14,6 +14,7 @@ import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
 } from '@drip/core/engine/matchup';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, fmtStat, metricDriver, GAME_SECONDS } from '@drip/core/engine/sim';
+import { openPlayerCard } from '../app/playerCard';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '@drip/core/data/demoNarration';
@@ -2969,7 +2970,8 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // NOTE: `fullStats` (the settings toggle) used to gate wrap-vs-ellipsis on
   // this statline and nothing else; statlines now always wrap, so the setting
   // is vestigial — worth retiring from SiteSettings in a quiet moment.
-  const { bigText } = useStore();
+  const { bigText, liveCtx: cardLiveCtx } = useStore();
+  const liveUserId = cardLiveCtx?.userId;
   const fs = (n: number) => bigText ? Math.round(n * 1.3 * 10) / 10 : n; // larger-text mode bumps the small card labels
   const nuked = fx === 'nuke' && bank === 0 && !subName && suppressSpent == null;
   // Always the COMPACT statline convention ("12-58 ru · 3/4-31 rec"), desktop
@@ -2993,12 +2995,23 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // Card-table theme: the SAME dense strip, but the physical mini card (image,
   // name, team — with the bank fill, HOT glow, NUKE scorch) floats over it in
   // the headshot's place; the name row keeps only its chips.
-  const imgEl = cards ? (
-    <MiniCard float side={side} slug={player.id} name={player.name} pos={player.pos} team={player.team}
-      bank={bank} hot={hot} nuked={!!scorched && !subName && suppressSpent == null}
-      badge={<InjuryBadge week={week} slug={player.id} />} />
-  ) : (
-    <span className="mx-sc-img" style={{ flex: 'none', display: 'inline-flex' }}><PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={isMobile ? 46 : 64} /></span>
+  // Tapping the player's IMAGE opens the player card; stopPropagation because
+  // the strip's own onClick toggles the slot log — two different questions
+  // ("who is this" vs "what happened here") on two different targets.
+  const openCard = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    openPlayerCard({ slug: player.id, name: player.full ?? player.name, pos: player.pos, team: player.team, week, userId: liveUserId });
+  };
+  const imgEl = (
+    <span onClick={openCard} title={`${player.name} — player card`} style={{ cursor: 'pointer', display: 'inline-flex', flex: 'none' }}>
+      {cards ? (
+        <MiniCard float side={side} slug={player.id} name={player.name} pos={player.pos} team={player.team}
+          bank={bank} hot={hot} nuked={!!scorched && !subName && suppressSpent == null}
+          badge={<InjuryBadge week={week} slug={player.id} />} />
+      ) : (
+        <span className="mx-sc-img" style={{ display: 'inline-flex' }}><PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={isMobile ? 46 : 64} /></span>
+      )}
+    </span>
   );
   // The game line (logos · AWY@HOM · clock) moved OFF the card to the slot
   // log's toggles row (TwoColLog gameChip) — inside the card it ate the stats
