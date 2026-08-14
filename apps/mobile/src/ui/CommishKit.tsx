@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
-  leagueNote, setLeagueNote, playerFlags, setPlayerFlag, leagueScoringGet, leagueScoringSet,
+  leagueNote, setLeagueNote, playerFlags, setPlayerFlag, setPlayerFlagsBulk, leagueScoringGet, leagueScoringSet,
   friendlyError, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
 import {
@@ -233,6 +233,10 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
   const [labelFor, setLabelFor] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState('');
   const [rulesDraft, setRulesDraft] = useState<FlagRulesRaw>({});
+  // BULK (0144): multi-select over the search results, one label + one rule
+  // set in a single call — parity with the web editor.
+  const [bulk, setBulk] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const load = () => playerFlags(leagueId).then((r) => { if (Array.isArray(r)) setRows(r); }).catch(() => {});
   useEffect(() => { if (visible) { void load(); setQ(''); setLabelFor(null); setErr(null); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [visible, leagueId]);
@@ -251,6 +255,19 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
       if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not save the flag.')); return; }
       commit();
       setLabelFor(null); setLabelDraft(''); setQ('');
+      await load(); onChanged();
+    } catch (x) { warn(); setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+
+  const saveBulk = async () => {
+    if (busy || !selected.size || !labelDraft.trim()) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await setPlayerFlagsBulk(leagueId, [...selected], labelDraft, rulesDraft);
+      if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not save the flags.')); return; }
+      commit();
+      setSelected(new Set()); setLabelDraft(''); setRulesDraft({}); setQ(''); setBulk(false);
       await load(); onChanged();
     } catch (x) { warn(); setErr(friendlyError(x)); }
     finally { setBusy(false); }
@@ -330,7 +347,13 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
         </View>
       ))}
 
-      <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>FLAG A PLAYER</Mono>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 }}>
+        <Mono size={9} tone="faint" track={0.12}>{bulk ? `FLAG MANY — ${selected.size} SELECTED` : 'FLAG A PLAYER'}</Mono>
+        <View style={{ flex: 1 }} />
+        <Pressable hitSlop={6} onPress={() => { tap(); setBulk((v) => !v); setSelected(new Set()); setLabelFor(null); }}>
+          <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: bulk ? t.warn : t.dim }}>{bulk ? '✓ BULK ON' : '⧉ BULK'}</Text>
+        </Pressable>
+      </View>
       <TextInput value={q} onChangeText={(v) => { setQ(v); setLabelFor(null); }}
         placeholder="search any NFL player…" placeholderTextColor={t.faint}
         autoCapitalize="none" autoCorrect={false}
@@ -341,17 +364,33 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
             {face(slug)}
             <Text style={{ fontSize: 12, color: t.text, flexShrink: 1 }} numberOfLines={1}>{prettify(slug)}</Text>
             {labelFor !== slug && <View style={{ flex: 1 }} />}
-            {labelFor === slug
-              ? <>{labelInput(slug)}{ruleControls}</>
-              : <Pressable onPress={() => { tap(); setLabelFor(slug); setLabelDraft(''); setRulesDraft({}); }}
-                  style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 4 }}>
-                  <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: FLAG_PURPLE }}>⚑ FLAG</Text>
-                </Pressable>}
+            {bulk
+              ? <Pressable hitSlop={6} onPress={() => { tap(); setSelected((cur) => { const n = new Set(cur); if (n.has(slug)) n.delete(slug); else n.add(slug); return n; }); }}>
+                  <Text style={{ fontSize: 15, color: selected.has(slug) ? t.you : t.faint }}>{selected.has(slug) ? '☑' : '☐'}</Text>
+                </Pressable>
+              : labelFor === slug
+                ? <>{labelInput(slug)}{ruleControls}</>
+                : <Pressable onPress={() => { tap(); setLabelFor(slug); setLabelDraft(''); setRulesDraft({}); }}
+                    style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 4 }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: FLAG_PURPLE }}>⚑ FLAG</Text>
+                  </Pressable>}
           </View>
         ))}
       </ScrollView>
       {q.trim().length >= 2 && matches.length === 0 && (
         <Mono size={10} tone="faint" style={{ marginTop: 6 }}>No player matches that.</Mono>
+      )}
+      {bulk && (
+        <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
+          <TextInput value={labelDraft} maxLength={40} onChangeText={setLabelDraft}
+            placeholder="one label for all selected…" placeholderTextColor={t.faint}
+            style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12.5, color: t.text, backgroundColor: t.bg }} />
+          {ruleControls}
+          <View style={{ marginTop: 8 }}>
+            <PrimaryButton label={busy ? '…' : `⚑ FLAG ${selected.size} PLAYER${selected.size === 1 ? '' : 'S'}`}
+              disabled={busy || !selected.size || !labelDraft.trim()} onPress={() => void saveBulk()} />
+          </View>
+        </View>
       )}
     </Overlay>
   );

@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore, PHOTO_SKINS } from '../app/store';
 import type { Phase } from '../app/store';
 import { PlayerImg, InjuryBadge, FlagChip, useIsMobile, ModalBackdrop } from '../app/ui';
+import { flagFor, flagRulesFor } from '@drip/core/data/commish';
 import { windowsForWeek, gamesInWindow } from '@drip/core/data/nflSlate';
 import { METRICS, metricById } from '@drip/core/data/metrics';
 import { powerupById } from '@drip/core/data/powerups';
@@ -572,6 +573,17 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
   const needsFilter = players.length > FILTER_AT;
   const shownPlayers = needsFilter ? applyPoolFilter(players, filter, teamsOfGame) : players;
   const emptyNote = players.length === 0 ? '— no eligible players in this window —' : '— nothing matches those filters —';
+  // no_start flag (0144): the DB trigger refuses the save either way — this is
+  // the courtesy layer, so a manager learns from the picker (with the
+  // commissioner's reason), not from a rejected autosave.
+  const [barredMsg, setBarredMsg] = useState<string | null>(null);
+  const tryPick = (p: Player, gatedNow: boolean) => {
+    if (flagRulesFor(p.id).noStart) {
+      setBarredMsg(`${p.name} is flagged not startable — ${flagFor(p.id) ?? 'commissioner ruling'}`);
+      return;
+    }
+    if (gatedNow) onGated?.(p); else onPick(p.id);
+  };
   return (
     <ModalBackdrop onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
@@ -583,6 +595,9 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
         </div>
         {needsFilter && <PoolFilterBar filter={filter} setFilter={setFilter} players={players} shown={shownPlayers.length} games={games} />}
+        {barredMsg && (
+          <div className="mono" style={{ fontSize: fs(9.5), color: '#A87BD8', border: '1px solid #A87BD8', borderRadius: 5, margin: '8px 12px 0', padding: '6px 9px', lineHeight: 1.4 }}>⚑ {barredMsg}</div>
+        )}
         {cards ? (
           // The felt spread: candidates dealt as tappable player cards.
           <div className="ctable" style={{ maxHeight: 440, overflowY: 'auto', overflowX: 'hidden', borderRadius: 0 }}>
@@ -593,9 +608,9 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
                 const isGated = !sel && !!gated?.(p);
                 return (
                   <PlayerCard key={p.id} slug={p.id} name={p.name} pos={p.pos} team={p.team} slot={p.team ?? undefined} idx={i}
-                    selected={sel} locked={isGated}
+                    selected={sel} locked={isGated || !!flagRulesFor(p.id).noStart}
                     badge={<><InjuryBadge week={week} slug={p.id} /><FlagChip slug={p.id} /><InfoDot player={p} week={week} /></>}
-                    onClick={() => (isGated ? onGated?.(p) : onPick(p.id))} />
+                    onClick={() => tryPick(p, isGated)} />
                 );
               })}
             </div>
@@ -607,7 +622,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
             const sel = p.id === currentId;
             const isGated = !sel && !!gated?.(p); // premium position → locked
             return (
-              <button key={p.id} onClick={() => (isGated ? onGated?.(p) : onPick(p.id))} style={{ display: 'flex', alignItems: 'center', gap: 10, background: sel ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${sel ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '8px 10px', color: 'var(--text)', textAlign: 'left', cursor: 'pointer', opacity: isGated ? 0.6 : 1 }}>
+              <button key={p.id} onClick={() => tryPick(p, isGated)} style={{ display: 'flex', alignItems: 'center', gap: 10, background: sel ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${sel ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '8px 10px', color: 'var(--text)', textAlign: 'left', cursor: 'pointer', opacity: isGated || flagRulesFor(p.id).noStart ? 0.55 : 1 }}>
                 <PlayerImg playerId={p.id} team={p.team} pos={p.pos} size={34} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
