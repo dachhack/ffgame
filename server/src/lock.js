@@ -222,12 +222,19 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
     for (const rosterId of [m.home_roster_id, m.away_roster_id]) {
       const mem = (mems ?? []).find((x) => x.sleeper_roster_id === rosterId);
       if (!mem?.app_user_id) continue; // empty seat → resolver auto-backup (can't store picks)
-      const { data: existing } = await db().from('sealed_pick').select('id')
-        .eq('matchup_id', m.id).eq('app_user_id', mem.app_user_id).not('player_slug', 'is', null).limit(1);
-      const hasPicks = !!(existing && existing.length);
+      // PER WINDOW, not per matchup (the Joeggernaut hole): a seat that set the
+      // 7:00 window but left the 9:00 empty used to read as "has picks" and be
+      // skipped wholesale, so its later windows played nobody and the opponent
+      // sat unopposed. Now a window counts as set only if it has a pick, and
+      // the fill below targets exactly the empty ones.
+      const { data: existing } = await db().from('sealed_pick').select('game_window')
+        .eq('matchup_id', m.id).eq('app_user_id', mem.app_user_id).not('player_slug', 'is', null);
+      const setWins = new Set((existing ?? []).map((r) => r.game_window));
+      const hasPicks = setWins.size > 0;
       const isAi = mem.controller === 'ai';
       const missed = mem.enrolled && !hasPicks;
-      if (!(isAi || (missed && policy !== 'empty'))) continue;
+      const partial = mem.enrolled && hasPicks && !isAi; // some windows set, fill the rest
+      if (!(isAi || ((missed || partial) && policy !== 'empty'))) continue;
       // An AI-controlled seat (always, or a missed manager flipped to AI for the
       // week) plays the economy: it earns + spends coin. A missed 'best_lineup'
       // manager just gets auto-filled with whatever they already own — we never
@@ -246,7 +253,12 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       // 8-PT NUKE (EV-neutral drama, see aiPersonaNuker). A missed human's
       // autofill — even one flipped to AI policy for the week — stays vanilla.
       const persona = isAi ? `${m.league_id}:${rosterId}` : undefined;
-      const rows = autoLineup(slugs, m.week, owned, extra, persona).map((p) => {
+      const rows = autoLineup(slugs, m.week, owned, extra, persona)
+        // A partially-set human keeps every window they touched — the fill
+        // covers only their EMPTY windows (an AI seat still rewrites in full;
+        // its old rows were deleted above).
+        .filter((p) => isAi || !setWins.has(p.win))
+        .map((p) => {
         const sealNow = !dueWins || dueWins.has(p.win);
         return {
           matchup_id: m.id, app_user_id: mem.app_user_id, game_window: p.win, roster_slot: p.slot,

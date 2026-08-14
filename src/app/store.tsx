@@ -702,7 +702,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // leaves 'scheduled' (and swallows the refusal), which is how a backup
     // assigned on one device was invisible on every other AND to the worker's
     // scoring. The RPC accepts until 'final'; the worker's next pass scores it.
-    if (liveCtx && liveCtx.week === week) setBackupAssign(liveCtx.matchupId, backupKey, targetKey).catch(() => {});
+    //
+    // The write is optimistic and the REFUSAL REVERTS IT — a swallowed refusal
+    // leaves the UI claiming an assignment the worker will never score, which
+    // reads as "not saving" a hydrate later (it did save… locally… nowhere).
+    if (liveCtx && liveCtx.week === week) {
+      const prevTarget = (applied[week]?.backups ?? {})[backupKey] ?? null;
+      setBackupAssign(liveCtx.matchupId, backupKey, targetKey)
+        .then((r) => { if (!r.ok) throw new Error(r.error || 'refused'); })
+        .catch((e: unknown) => {
+          console.warn('[backup-assign] server refused; reverting:', e instanceof Error ? e.message : e);
+          setApplied((cur) => {
+            const w = cur[week] ?? { extraSlots: {}, swaps: {}, backups: {} };
+            const bk = { ...(w.backups ?? {}) };
+            if (prevTarget) bk[backupKey] = prevTarget; else delete bk[backupKey];
+            return { ...cur, [week]: { ...w, backups: bk } };
+          });
+        });
+    }
   };
 
   const setLineup = (week: number, lineup: Record<string, Pick>): void => {
