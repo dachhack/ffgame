@@ -3079,12 +3079,15 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
           {coinEl}
         </div>
       </div>
-      {/* Statline lies ACROSS the card, edge to edge (founder's call — the
-          v0.169.9 inset past the floating mini card over-shrank it; the
-          compact fmtStat convention keeps it to one line instead). Pinned to
-          the BOTTOM (marginTop auto) so the pair's statlines sit level when
-          top halves differ in height. */}
-      <div style={{ marginTop: 'auto' }}>{statLine}</div>
+      {/* Statline pinned to the BOTTOM (marginTop auto — the pair's statlines
+          sit level when top halves differ) and, in the card-table theme, inset
+          to the INSIDE of the floating mini card so the two never overlap.
+          History, because this line has now been tuned three times: the
+          verbose statline wrapped (v0.169.8) → 84px inset fixed overlap but
+          over-shrank the verbose text (v0.169.9) → compact convention went
+          edge-to-edge and slid back under the card (v0.169.10) → compact AND
+          inset, which is the stable pair: short text, clear of the card. */}
+      <div style={{ marginTop: 'auto', ...(cards ? { [side === 'you' ? 'paddingLeft' : 'paddingRight']: 84 } : {}) }}>{statLine}</div>
     </div>
   );
 }
