@@ -1439,6 +1439,16 @@ export const chatUnread = (leagueId: string) =>
 export const chatMembers = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; members?: { id: string; name: string; me: boolean }[] }>('chat_members', { p_league_id: leagueId });
 
+// ── App push notifications (0150): device token registry + per-device mutes ──
+export interface PushTokenRow { token: string; platform: string; prefs: Record<string, boolean>; last_seen_at: string; }
+export const registerPushToken = (token: string, platform = 'android', prefs?: Record<string, boolean>) =>
+  rpc<{ ok: boolean; error?: string }>('register_push_token', { p_token: token, p_platform: platform, p_prefs: prefs ?? null });
+export const removePushToken = (token: string) =>
+  rpc<{ ok: boolean; removed?: boolean }>('remove_push_token', { p_token: token });
+export const setPushPrefs = (token: string, prefs: Record<string, boolean>) =>
+  rpc<{ ok: boolean; error?: string; prefs?: Record<string, boolean> }>('set_push_prefs', { p_token: token, p_prefs: prefs });
+export const myPushTokens = () => rpc<PushTokenRow[]>('my_push_tokens');
+
 // ── League scoring adjustments (0143): the commissioner's layering knobs ─────
 export interface LeagueScoringRow { td_bonus: number; yd_mult: number; to_penalty: number; can_edit: boolean; }
 export const leagueScoringGet = (leagueId: string) =>

@@ -20,6 +20,7 @@ import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues } from './sync.js';
 import { sweepNative } from './native.js';
 import { sweepPots } from './pot.js';
+import { sweepPush } from './push.js';
 import { db } from './supabase.js';
 import { ensurePods } from './pods.js';
 import { PRESEASON, REGULAR_SEASON } from './seasonType.js';
@@ -297,6 +298,11 @@ async function main() {
 
   await tick().catch((e) => log('tick error', e.message));
   setInterval(() => tick().catch((e) => log('tick error', e.message)), config.playsPollMs);
+
+  // App push notifications (0150): detect + deliver on a 60s sweep, its own
+  // loop — a slow FCM round must never stretch a play tick.
+  await sweepPush().catch((e) => log('push sweep error', e.message));
+  setInterval(() => sweepPush().catch((e) => log('push sweep error', e.message)), 60_000);
 
   // Weekly schedule + lineup auto-sync for all configured leagues (separate, slower
   // loop — a 100-league sync can outlast one play tick).

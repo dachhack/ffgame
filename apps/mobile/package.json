@@ -27,6 +27,7 @@
     "expo-haptics": "^57.0.1",
     "expo-linking": "~57.0.5",
     "expo-localization": "~57.0.1",
+    "expo-notifications": "^0.32.17",
     "expo-splash-screen": "~57.0.6",
     "expo-status-bar": "~57.0.1",
     "expo-web-browser": "~57.0.2",

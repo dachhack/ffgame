@@ -1,0 +1,288 @@
+// App push notifications (0150) — the worker half.
+//
+// Every sweep (60s): DETECT the four notify-worthy moments into push_outbox
+// (each detector re-scans a trailing window; the outbox's unique dedupe_key +
+// ignoreDuplicates makes re-scans idempotent), then SEND unsent rows to each
+// recipient's registered devices via FCM HTTP v1.
+//
+// Delivery is raw FCM — no Expo push service in the middle. Credentials are a
+// Firebase service account (JSON) in the FCM_SERVICE_ACCOUNT env (Fly secret);
+// without it the sweep still ENQUEUES (the record accrues) and logs once that
+// sending is off. Dead tokens (UNREGISTERED) are deleted on sight.
+//
+// The four kinds, and where each is detected:
+//   lineup  — a window's lock (kickoff − 1h) is 55–65 min out and a manager
+//             still has empty base slots in it (slotsFor; extra powerup slots
+//             never alarm — you shouldn't be paged over a slot you'd buy).
+//   chat    — an @mention names you, or a DM lands in your thread.
+//   trades  — a trade offer is created with you as the recipient.
+//   waivers — your waiver claim processed to WON or LOST.
+import { createSign } from 'node:crypto';
+import { db } from './supabase.js';
+import { slotsFor } from '../../packages/core/src/engine/matchup.ts';
+
+const log = (...a) => console.log(new Date().toISOString(), '[push]', ...a);
+
+const SCAN_MS = 10 * 60_000;          // detector trailing window
+const LOCK_LEAD_MS = 3_600_000;       // picks lock 1h before kickoff (nflSlate.LOCK_LEAD_MS)
+const ALARM_MIN_MS = 55 * 60_000;     // notify when the lock is 55–65 min out —
+const ALARM_MAX_MS = 65 * 60_000;     // one sweep-width band, so each window fires once
+
+// ── FCM auth: service-account JWT → OAuth token, cached ─────────────────────
+let sa = null;
+let saWarned = false;
+function serviceAccount() {
+  if (sa) return sa;
+  const raw = process.env.FCM_SERVICE_ACCOUNT;
+  if (!raw) {
+    if (!saWarned) { log('FCM_SERVICE_ACCOUNT unset — enqueuing only, sending off'); saWarned = true; }
+    return null;
+  }
+  try { sa = JSON.parse(raw); } catch { if (!saWarned) { log('FCM_SERVICE_ACCOUNT unparsable — sending off'); saWarned = true; } return null; }
+  return sa;
+}
+
+let cachedToken = null; // { token, expMs }
+async function fcmAccessToken() {
+  const acct = serviceAccount();
+  if (!acct) return null;
+  if (cachedToken && cachedToken.expMs - Date.now() > 5 * 60_000) return cachedToken.token;
+  const now = Math.floor(Date.now() / 1000);
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const unsigned = `${b64({ alg: 'RS256', typ: 'JWT' })}.${b64({
+    iss: acct.client_email,
+    scope: 'https://www.googleapis.com/auth/firebase.messaging',
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now, exp: now + 3600,
+  })}`;
+  const sig = createSign('RSA-SHA256').update(unsigned).sign(acct.private_key).toString('base64url');
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=${encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer')}&assertion=${unsigned}.${sig}`,
+  });
+  if (!res.ok) { log('oauth token failed', res.status, (await res.text()).slice(0, 200)); return null; }
+  const j = await res.json();
+  cachedToken = { token: j.access_token, expMs: Date.now() + (j.expires_in ?? 3600) * 1000 };
+  return cachedToken.token;
+}
+
+async function fcmSend(token, deviceToken, { title, body, data }) {
+  const acct = serviceAccount();
+  const res = await fetch(`https://fcm.googleapis.com/v1/projects/${acct.project_id}/messages:send`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      message: {
+        token: deviceToken,
+        notification: { title, body },
+        data: Object.fromEntries(Object.entries(data ?? {}).map(([k, v]) => [k, String(v)])),
+        android: { priority: 'high', notification: { channel_id: 'drip-default' } },
+      },
+    }),
+  });
+  if (res.ok) return { ok: true };
+  const text = await res.text();
+  const dead = res.status === 404 || text.includes('UNREGISTERED') || text.includes('INVALID_ARGUMENT');
+  return { ok: false, dead, error: `${res.status} ${text.slice(0, 160)}` };
+}
+
+// ── enqueue with dedupe ─────────────────────────────────────────────────────
+async function enqueue(rows) {
+  if (!rows.length) return;
+  const { error } = await db().from('push_outbox')
+    .upsert(rows, { onConflict: 'dedupe_key', ignoreDuplicates: true });
+  if (error) log('enqueue error', error.message);
+}
+
+const sinceIso = () => new Date(Date.now() - SCAN_MS).toISOString();
+
+/** roster → enrolled app_user_id for a set of (league, roster) pairs. */
+async function ownersFor(pairs) {
+  const byLeague = new Map();
+  for (const [lid, rid] of pairs) {
+    if (!byLeague.has(lid)) byLeague.set(lid, new Set());
+    byLeague.get(lid).add(rid);
+  }
+  const out = new Map(); // `${lid}:${rid}` → app_user_id
+  for (const [lid, rids] of byLeague) {
+    const { data } = await db().from('league_membership')
+      .select('sleeper_roster_id, app_user_id')
+      .eq('league_id', lid).eq('enrolled', true).in('sleeper_roster_id', [...rids]);
+    for (const m of data ?? []) if (m.app_user_id) out.set(`${lid}:${m.sleeper_roster_id}`, m.app_user_id);
+  }
+  return out;
+}
+
+async function leagueNames(ids) {
+  if (!ids.length) return new Map();
+  const { data } = await db().from('league').select('id, name').in('id', ids);
+  return new Map((data ?? []).map((l) => [l.id, l.name]));
+}
+
+// ── detectors ───────────────────────────────────────────────────────────────
+
+async function detectChat() {
+  const rows = [];
+  const { data: msgs } = await db().from('league_message')
+    .select('id, league_id, body, mentions, author_id, created_at')
+    .gt('created_at', sinceIso()).neq('mentions', '{}');
+  const names = await leagueNames([...new Set((msgs ?? []).map((m) => m.league_id))]);
+  for (const m of msgs ?? []) {
+    for (const uid of m.mentions ?? []) {
+      rows.push({
+        app_user_id: uid, kind: 'chat',
+        title: `You were mentioned · ${names.get(m.league_id) ?? 'your league'}`,
+        body: m.body.slice(0, 140),
+        data: { league_id: m.league_id, open: 'chat' },
+        dedupe_key: `chat:m${m.id}:${uid}`,
+      });
+    }
+  }
+  const { data: dms } = await db().from('dm_message')
+    .select('id, body, author_id, created_at, thread:dm_thread(id, league_id, user_lo, user_hi)')
+    .gt('created_at', sinceIso());
+  for (const d of dms ?? []) {
+    const t = d.thread;
+    if (!t) continue;
+    const to = d.author_id === t.user_lo ? t.user_hi : t.user_lo;
+    rows.push({
+      app_user_id: to, kind: 'chat',
+      title: 'New direct message',
+      body: d.body.slice(0, 140),
+      data: { league_id: t.league_id, open: 'chat' },
+      dedupe_key: `chat:d${d.id}`,
+    });
+  }
+  await enqueue(rows);
+}
+
+async function detectTrades() {
+  const { data: trades } = await db().from('trade_proposal')
+    .select('id, league_id, to_roster, created_at')
+    .eq('status', 'pending').gt('created_at', sinceIso());
+  if (!trades?.length) return;
+  const owners = await ownersFor(trades.map((t) => [t.league_id, t.to_roster]));
+  const names = await leagueNames([...new Set(trades.map((t) => t.league_id))]);
+  await enqueue(trades.flatMap((t) => {
+    const uid = owners.get(`${t.league_id}:${t.to_roster}`);
+    if (!uid) return [];
+    return [{
+      app_user_id: uid, kind: 'trades',
+      title: `Trade offer · ${names.get(t.league_id) ?? 'your league'}`,
+      body: 'A trade is waiting on your answer.',
+      data: { league_id: t.league_id, open: 'team' },
+      dedupe_key: `trade:${t.id}`,
+    }];
+  }));
+}
+
+async function detectWaivers() {
+  const { data: claims } = await db().from('waiver_claim')
+    .select('id, league_id, roster_id, add_slug, status, processed_at')
+    .in('status', ['won', 'lost']).gt('processed_at', sinceIso());
+  if (!claims?.length) return;
+  const owners = await ownersFor(claims.map((c) => [c.league_id, c.roster_id]));
+  const names = await leagueNames([...new Set(claims.map((c) => c.league_id))]);
+  const pretty = (slug) => slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
+  await enqueue(claims.flatMap((c) => {
+    const uid = owners.get(`${c.league_id}:${c.roster_id}`);
+    if (!uid) return [];
+    return [{
+      app_user_id: uid, kind: 'waivers',
+      title: `Waivers · ${names.get(c.league_id) ?? 'your league'}`,
+      body: c.status === 'won' ? `Your claim WON — ${pretty(c.add_slug)} is yours.` : `Your claim for ${pretty(c.add_slug)} lost.`,
+      data: { league_id: c.league_id, open: 'team' },
+      dedupe_key: `waiver:${c.id}:${c.status}`,
+    }];
+  }));
+}
+
+async function detectLineup() {
+  // Windows whose LOCK sits inside the alarm band, from the synced slate.
+  const { data: slate } = await db().from('nfl_slate').select('season, week, win, kickoff').not('kickoff', 'is', null);
+  const now = Date.now();
+  const winKick = new Map(); // `${season}:${week}:${win}` → earliest kickoff ms
+  for (const g of slate ?? []) {
+    const k = `${g.season}:${g.week}:${g.win}`;
+    const ms = Date.parse(g.kickoff);
+    if (!winKick.has(k) || ms < winKick.get(k)) winKick.set(k, ms);
+  }
+  const due = [...winKick.entries()].filter(([, kick]) => {
+    const toLock = kick - LOCK_LEAD_MS - now;
+    return toLock > ALARM_MIN_MS && toLock <= ALARM_MAX_MS;
+  });
+  if (!due.length) return;
+  const rows = [];
+  for (const [key, kick] of due) {
+    const [season, weekStr, win] = key.split(':');
+    const week = Number(weekStr);
+    const cap = slotsFor(win, week);
+    if (!cap) continue;
+    const { data: matchups } = await db().from('matchup')
+      .select('id, league_id, week, status, home_roster_id, away_roster_id, league:league_id(name, season)')
+      .eq('week', week).in('status', ['scheduled', 'live']);
+    const lockLabel = new Date(kick - LOCK_LEAD_MS)
+      .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+    for (const m of matchups ?? []) {
+      if (m.league?.season && String(m.league.season) !== String(season)) continue;
+      const owners = await ownersFor([[m.league_id, m.home_roster_id], [m.league_id, m.away_roster_id]]);
+      for (const rid of [m.home_roster_id, m.away_roster_id]) {
+        const uid = owners.get(`${m.league_id}:${rid}`);
+        if (!uid) continue;
+        const { count } = await db().from('sealed_pick')
+          .select('roster_slot', { count: 'exact', head: true })
+          .eq('matchup_id', m.id).eq('app_user_id', uid).eq('game_window', win).not('player_slug', 'is', null);
+        const empty = cap - (count ?? 0);
+        if (empty <= 0) continue;
+        rows.push({
+          app_user_id: uid, kind: 'lineup',
+          title: `⚠ Lineup locks ${lockLabel} ET`,
+          body: `${empty} empty slot${empty === 1 ? '' : 's'} in ${m.league?.name ?? 'your league'} — set your picks.`,
+          data: { league_id: m.league_id, open: 'picks' },
+          dedupe_key: `lineup:${m.id}:${win}:${uid}`,
+        });
+      }
+    }
+  }
+  await enqueue(rows);
+}
+
+// ── sender ──────────────────────────────────────────────────────────────────
+async function flush() {
+  const { data: pending } = await db().from('push_outbox')
+    .select('id, app_user_id, kind, title, body, data')
+    .is('sent_at', null).order('id').limit(50);
+  if (!pending?.length) return;
+  const token = await fcmAccessToken();
+  if (!token) return; // creds absent — leave the queue standing
+  const uids = [...new Set(pending.map((p) => p.app_user_id))];
+  const { data: toks } = await db().from('push_token').select('token, app_user_id, prefs').in('app_user_id', uids);
+  const byUser = new Map();
+  for (const t of toks ?? []) {
+    if (!byUser.has(t.app_user_id)) byUser.set(t.app_user_id, []);
+    byUser.get(t.app_user_id).push(t);
+  }
+  let sent = 0;
+  for (const p of pending) {
+    const devices = (byUser.get(p.app_user_id) ?? []).filter((t) => t.prefs?.[p.kind] !== false);
+    let err = devices.length ? null : 'no devices';
+    for (const d of devices) {
+      const r = await fcmSend(token, d.token, p);
+      if (r.ok) { sent += 1; continue; }
+      err = r.error;
+      if (r.dead) await db().from('push_token').delete().eq('token', d.token);
+    }
+    await db().from('push_outbox').update({ sent_at: new Date().toISOString(), error: err }).eq('id', p.id);
+  }
+  if (sent) log(`delivered ${sent} push${sent === 1 ? '' : 'es'}`);
+}
+
+/** One sweep: detect everything, then deliver. Called on its own interval. */
+export async function sweepPush() {
+  await detectChat().catch((e) => log('chat detector error', e.message));
+  await detectTrades().catch((e) => log('trades detector error', e.message));
+  await detectWaivers().catch((e) => log('waivers detector error', e.message));
+  await detectLineup().catch((e) => log('lineup detector error', e.message));
+  await flush().catch((e) => log('flush error', e.message));
+}
