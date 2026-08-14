@@ -314,8 +314,19 @@ export function gameToFeed(summary) {
       as: Number(p?.awayScore ?? 0) || 0,
     });
   }
-  plays.sort((a, b) => a.c - b.c || (a.pid ?? 0) - (b.pid ?? 0));
-  return [`${away}@${home}`, [away, home], plays];
+  // ESPN re-emits the SAME play under a fresh id when it restructures drives
+  // (observed live at the 2026 preseason opener, at halftime): same clock,
+  // same text, new pid and drive index. This is the whole-doc feed the worker
+  // persists to game_feed, so without this the duplicate is stored forever and
+  // every consumer must dedupe for itself (the web game log already does, on
+  // exactly this key — keep that as belt and braces for docs written before
+  // this shipped). Identity is (clock, text); the LAST copy wins because the
+  // re-listed play is the restructured revision.
+  const byIdent = new Map();
+  for (const p of plays) byIdent.set(`${p.c}|${p.txt}`, p);
+  const uniq = [...byIdent.values()];
+  uniq.sort((a, b) => a.c - b.c || (a.pid ?? 0) - (b.pid ?? 0));
+  return [`${away}@${home}`, [away, home], uniq];
 }
 
 // ── whole-game entry point ──────────────────────────────────────────────────────
