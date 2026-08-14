@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "607370212191",
+    "project_id": "dripfantasy-6e332",
+    "storage_bucket": "dripfantasy-6e332.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:607370212191:android:1852eb52f13c940adafcea",
+        "android_client_info": {
+          "package_name": "com.dripfantasy.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBFwkEBM3gA_3VhnFRsv6E_fKI9oLP9ObI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
