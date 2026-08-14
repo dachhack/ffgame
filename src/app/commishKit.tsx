@@ -14,8 +14,8 @@
 // anyone, and the flag renders with the real name wherever the player appears.
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from './store';
-import { setLeagueNote, setPlayerFlag, setPlayerFlagsBulk, playerFlags, leagueScoringSet, friendlyError, type PlayerFlagRow, type FlagRulesRaw } from '@drip/core/data/liveApi';
-import { SCORING_BOUNDS, DEFAULT_SCORING, scoringIsDefault, scoringLabel, type LeagueScoring } from '@drip/core/engine/leagueScoring';
+import { setLeagueNote, setPlayerFlag, setPlayerFlagsBulk, playerFlags, leagueNote, leagueScoringGet, leagueScoringSet, friendlyError, type PlayerFlagRow, type FlagRulesRaw } from '@drip/core/data/liveApi';
+import { SCORING_BOUNDS, DEFAULT_SCORING, scoringIsDefault, scoringLabel, parseScoring, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 import { PLAYER_BIO } from '@drip/core/data/playerBio';
 import { headshot } from '@drip/core/data/media';
 import { ModalBackdrop, Img } from './ui';
@@ -80,6 +80,75 @@ export function CommishNoteBanner() {
           onClose={() => setScoringOpen(false)} />
       )}
     </>
+  );
+}
+
+/** The same three tools, as a DASHBOARD panel (founder's ask: the board
+ *  banner stays, but the commissioner's desk gets them too). Self-loading by
+ *  leagueId — no live board or store required, so CommishDash / AdminPage can
+ *  mount it for any league. Edits here reach open boards on their next poll. */
+export function CommishToolsPanel({ leagueId }: { leagueId: string }) {
+  const [note, setNote] = useState<{ text: string | null; canEdit: boolean } | null>(null);
+  const [scoring, setScoring] = useState<LeagueScoring | null>(null);
+  const [flags, setFlags] = useState<PlayerFlagRow[] | null>(null);
+  const [openTool, setOpenTool] = useState<null | 'note' | 'flags' | 'scoring'>(null);
+  const load = async () => {
+    const [n, f, sc] = await Promise.all([
+      leagueNote(leagueId).catch(() => null),
+      playerFlags(leagueId).catch(() => null),
+      leagueScoringGet(leagueId).catch(() => null),
+    ]);
+    if (n && n.ok) setNote({ text: n.text ?? null, canEdit: !!n.can_edit });
+    if (Array.isArray(f)) setFlags(f);
+    if (sc && sc.ok) setScoring(parseScoring(sc));
+  };
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+
+  const section: React.CSSProperties = { border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' };
+  const sHdr: React.CSSProperties = { fontSize: 9, letterSpacing: '0.12em', color: FLAG_PURPLE, fontWeight: 700, flex: 'none' };
+  const editBtn = (tool: 'note' | 'flags' | 'scoring', label: string) => (
+    <button onClick={() => setOpenTool(tool)} className="mono" style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9, marginLeft: 'auto', flex: 'none' }}>{label}</button>
+  );
+  return (
+    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.5 }}>
+        The commissioner's kit — the same tools as the live board's ⚑ banner. Everything here is league-visible; scoring and flag rules apply from the worker's next tick.
+      </div>
+      <div style={section}>
+        <span className="mono" style={sHdr}>⚑ LEAGUE NOTE</span>
+        <span className="mono" style={{ fontSize: 10.5, color: note?.text ? 'var(--text)' : 'var(--faint)', flex: '1 1 200px', minWidth: 0, whiteSpace: 'pre-wrap' }}>
+          {note == null ? 'loading…' : note.text ?? 'nothing posted'}
+        </span>
+        {editBtn('note', note?.text ? '✎ EDIT' : '✎ WRITE')}
+      </div>
+      <div style={section}>
+        <span className="mono" style={sHdr}>⚑ PLAYER FLAGS</span>
+        <span className="mono" style={{ fontSize: 10.5, color: flags?.length ? 'var(--text)' : 'var(--faint)', flex: '1 1 200px', minWidth: 0 }}>
+          {flags == null ? 'loading…'
+            : flags.length === 0 ? 'none'
+            : flags.slice(0, 4).map((f) => `${prettify(f.slug)} (${f.label}${ruleGlyphs(f.rules) ? ` ${ruleGlyphs(f.rules)}` : ''})`).join(' · ') + (flags.length > 4 ? ` · +${flags.length - 4} more` : '')}
+        </span>
+        {editBtn('flags', '⚑ MANAGE')}
+      </div>
+      <div style={section}>
+        <span className="mono" style={sHdr}>⚖ SCORING</span>
+        <span className="mono" style={{ fontSize: 10.5, color: scoring && !scoringIsDefault(scoring) ? 'var(--warn)' : 'var(--faint)', flex: '1 1 200px', minWidth: 0 }}>
+          {scoring == null ? 'loading…' : scoringIsDefault(scoring) ? 'base rules — no adjustments' : scoringLabel(scoring)}
+        </span>
+        {editBtn('scoring', '⚖ ADJUST')}
+      </div>
+      {openTool === 'note' && note && (
+        <NoteEditor leagueId={leagueId} initial={note.text ?? ''}
+          onDone={() => { setOpenTool(null); void load(); }} onClose={() => setOpenTool(null)} />
+      )}
+      {openTool === 'flags' && (
+        <FlagsEditor leagueId={leagueId} onChanged={() => void load()} onClose={() => { setOpenTool(null); void load(); }} />
+      )}
+      {openTool === 'scoring' && scoring && (
+        <ScoringEditor leagueId={leagueId} initial={scoring}
+          onDone={() => { setOpenTool(null); void load(); }} onClose={() => setOpenTool(null)} />
+      )}
+    </div>
   );
 }
 

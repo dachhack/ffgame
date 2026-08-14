@@ -181,6 +181,60 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
   );
 }
 
+/** The same three tools as a COMMISH-SCREEN card (founder's ask: the board
+ *  banner stays, but the commissioner's desk gets them too). Self-loading by
+ *  leagueId — no live board required. Web sibling: CommishToolsPanel. */
+export function CommishToolsCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [note, setNote] = useState<{ text: string | null; canEdit: boolean } | null>(null);
+  const [scoring, setScoring] = useState<LeagueScoring | null>(null);
+  const [flagCount, setFlagCount] = useState<number | null>(null);
+  const [openTool, setOpenTool] = useState<null | 'note' | 'flags' | 'scoring'>(null);
+  const load = async () => {
+    const [n, f, sc] = await Promise.all([
+      leagueNote(leagueId).catch(() => null),
+      playerFlags(leagueId).catch(() => null),
+      leagueScoringGet(leagueId).catch(() => null),
+    ]);
+    if (n && n.ok) setNote({ text: n.text ?? null, canEdit: !!n.can_edit });
+    if (Array.isArray(f)) setFlagCount(f.length);
+    if (sc && sc.ok) setScoring(parseScoring(sc));
+  };
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+
+  const row = (icon: string, label: string, value: string, warnTone: boolean, tool: 'note' | 'flags' | 'scoring', cta: string) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+      <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.8, color: FLAG_PURPLE, width: 74 }}>{icon} {label}</Text>
+      <Text numberOfLines={2} style={{ flex: 1, fontFamily: MONO, fontSize: 9.5, lineHeight: 13, color: warnTone ? t.warn : t.dim }}>{value}</Text>
+      <Pressable onPress={() => { tap(); setOpenTool(tool); }}
+        style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 4 }}>
+        <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.dim }}>{cta}</Text>
+      </Pressable>
+    </View>
+  );
+  return (
+    <>
+      <View style={{ backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 10, padding: 12 }}>
+        <Mono size={9} tone="faint" track={0.12}>⚑ COMMISH KIT</Mono>
+        <Mono size={8.5} tone="faint" style={{ marginTop: 3, marginBottom: 6, lineHeight: 12 }}>
+          The board banner's tools, here too. League-visible; rules and scoring apply from the next tick.
+        </Mono>
+        {row('⚑', 'NOTE', note == null ? 'loading…' : note.text ?? 'nothing posted', false, 'note', note?.text ? '✎ EDIT' : '✎ WRITE')}
+        {row('⚑', 'FLAGS', flagCount == null ? 'loading…' : flagCount === 0 ? 'none' : `${flagCount} player${flagCount === 1 ? '' : 's'} flagged`, false, 'flags', '⚑ MANAGE')}
+        {row('⚖', 'SCORING', scoring == null ? 'loading…' : scoringIsDefault(scoring) ? 'base rules' : scoringLabel(scoring), scoring != null && !scoringIsDefault(scoring), 'scoring', '⚖ ADJUST')}
+      </View>
+      <NoteEditor visible={openTool === 'note'} leagueId={leagueId} initial={note?.text ?? ''}
+        onDone={() => { setOpenTool(null); void load(); }} onClose={() => setOpenTool(null)} />
+      <FlagsEditor visible={openTool === 'flags'} leagueId={leagueId}
+        onChanged={() => void load()} onClose={() => { setOpenTool(null); void load(); }} />
+      {scoring && (
+        <ScoringEditor visible={openTool === 'scoring'} leagueId={leagueId} initial={scoring}
+          onDone={() => { setOpenTool(null); void load(); }} onClose={() => setOpenTool(null)} />
+      )}
+    </>
+  );
+}
+
 function NoteEditor({ visible, leagueId, initial, onDone, onClose }: {
   visible: boolean; leagueId: string; initial: string; onDone: () => void; onClose: () => void;
 }) {

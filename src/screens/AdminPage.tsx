@@ -26,6 +26,7 @@ import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
 import { Avatar } from '../app/ui';
 import { useStore } from '../app/store';
 import { AvatarPicker } from '../app/AvatarPicker';
+import { CommishToolsPanel } from '../app/commishKit';
 import { FeedSheet } from './FeedSheet';
 import { WINDOWS, defaultMetric } from '@drip/core/data/metrics';
 import { NFL_CODES } from '@drip/core/data/kdst';
@@ -262,7 +263,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 // One league's management card — the whole commissioner/admin toolset for a
 // league, organized under a tab strip (Setup / Members / Picks / Matchups /
 // K-DST / Audit). Used by both the super-admin Leagues tab and CommishDash.
-export type LeagueTab = 'overview' | 'draft' | 'rosters' | 'playoffs' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst';
+export type LeagueTab = 'overview' | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst';
 
 // ── Roster rules editor (native leagues, 0071): per-position limits any time,
 // roster size while the draft is still pending. ∞ = uncapped (stored null).
@@ -818,6 +819,9 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
   const statusChip = (color: string): React.CSSProperties => ({ ...mono, fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color, border: `1px solid ${color}`, borderRadius: 4, padding: '2px 5px', whiteSpace: 'nowrap' });
   const leagueTabs: TabDef<LeagueTab>[] = [
     { id: 'overview', label: 'SETUP' },
+    // The commissioner's kit (0141/0143/0144) — note, flags, scoring. Any
+    // league kind; the same editors the live board's ⚑ banner opens.
+    { id: 'kit', label: '⚑ KIT' },
     // Native leagues draft, manage rosters, and run playoffs in-app.
     ...(l.provider === 'native' ? [
       { id: 'draft', label: '⛏ DRAFT' } as TabDef<LeagueTab>,
@@ -877,6 +881,9 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       {busy && busy !== 'sync' && busy !== 'members' && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{busy}</div>}
 
       <TabBar tabs={leagueTabs} active={tab} onSelect={showTab} style={{ margin: '10px -14px 0', padding: '0 8px' }} />
+
+      {/* the commissioner's kit — note / player flags / scoring adjustments */}
+      {tab === 'kit' && <CommishToolsPanel leagueId={l.league_id} />}
 
       {/* the in-app draft room, embedded (native leagues only) */}
       {tab === 'draft' && l.provider === 'native' && (
