@@ -25,10 +25,14 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
   onBack: () => void;
 }) {
   const t = useTheme();
-  const [note, setNote] = useState<string | null>(null);
+  // The note lives HERE now (0182.1 — off the board, founder's call), so the
+  // commissioner's empty-state prompt shows too, not just a standing note.
+  const [note, setNote] = useState<{ text: string; canEdit: boolean } | null>(null);
   const [unread, setUnread] = useState<{ n: number; mention: boolean }>({ n: 0, mention: false });
   useEffect(() => {
-    leagueNote(leagueId).then((r) => { if (r.ok && r.text) setNote(r.text); }).catch(() => {});
+    leagueNote(leagueId)
+      .then((r) => { if (r.ok && (r.text || r.can_edit)) setNote({ text: r.text ?? '', canEdit: !!r.can_edit }); })
+      .catch(() => {});
     chatUnread(leagueId)
       .then((r) => { if (r.ok) setUnread({ n: (r.league ?? 0) + (r.dm ?? 0), mention: (r.mention ?? 0) > 0 }); })
       .catch(() => {});
@@ -73,7 +77,14 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
       {!!note && (
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: alpha('#A87BD8', 10), borderWidth: StyleSheet.hairlineWidth, borderColor: '#A87BD8', borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8 }}>
           <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 1, color: '#A87BD8', paddingTop: 1 }}>⚑ LEAGUE NOTE</Text>
-          <Text style={{ flex: 1, fontSize: 11.5, lineHeight: 16, color: t.text }}>{note}</Text>
+          {note.text
+            ? <Text style={{ flex: 1, fontSize: 11.5, lineHeight: 16, color: t.text }}>{note.text}</Text>
+            : <Text style={{ flex: 1, fontFamily: MONO, fontSize: 9.5, lineHeight: 13, color: t.faint }}>nothing posted — say something to the league</Text>}
+          {note.canEdit && (
+            <Pressable hitSlop={6} onPress={() => { tap(); onGo('commishtools'); }}>
+              <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.dim }}>✎ {note.text ? 'edit' : 'write'}</Text>
+            </Pressable>
+          )}
         </View>
       )}
 

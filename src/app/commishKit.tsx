@@ -46,56 +46,23 @@ const tenureMatch = (exp: number | undefined, ten: string): boolean => {
   return exp >= 3;
 };
 
-/** The banner + its editors. Renders nothing off the live board; renders
- *  nothing for members while no note stands. */
+/** What's left of the board banner (0182): the note moved to the LEAGUE HOME
+ *  (founder's call — one place, not two), and the editors live on the hub's
+ *  ⚑ MANAGE → KIT tab. What stays on the board is the one thing that must
+ *  never be out of sight while scores move: the non-default-scoring chip —
+ *  nobody should discover a turnover penalty from a score dropping. */
 export function CommishNoteBanner() {
-  const { liveCtx, liveNote, liveScoring, reloadCommish } = useStore();
-  const [noteOpen, setNoteOpen] = useState(false);
-  const [flagsOpen, setFlagsOpen] = useState(false);
-  const [scoringOpen, setScoringOpen] = useState(false);
-  if (!liveCtx || !liveNote) return null;
-  const { text, canEdit } = liveNote;
+  const { liveCtx, liveScoring } = useStore();
+  if (!liveCtx) return null;
   const scoringOn = liveScoring != null && !scoringIsDefault(liveScoring);
-  if (!text && !canEdit && !scoringOn) return null;
+  if (!scoringOn) return null;
   return (
-    <>
-      <div className="mono" style={{ marginTop: 7, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', fontSize: 10.5, lineHeight: 1.5, color: 'var(--text)', background: `color-mix(in srgb, ${FLAG_PURPLE} 10%, var(--surface))`, border: `1px solid ${FLAG_PURPLE}`, borderRadius: 6, padding: '7px 11px' }}>
-        <span style={{ fontWeight: 700, letterSpacing: '0.1em', fontSize: 9, color: FLAG_PURPLE, flex: 'none' }}>⚑ LEAGUE NOTE</span>
-        {text
-          ? <span style={{ minWidth: 0, flex: '1 1 200px', whiteSpace: 'pre-wrap' }}>{text}</span>
-          : <span style={{ color: 'var(--faint)', flex: '1 1 200px' }}>{canEdit ? 'nothing posted — say something to the league' : ''}</span>}
-        {/* Non-default scoring is ALWAYS visible to every member — nobody
-            should discover a turnover penalty from a score dropping. */}
-        {scoringOn && (
-          <span title="commissioner scoring adjustments in force — every matchup in this league scores with these"
-            style={{ flex: 'none', fontWeight: 700, fontSize: 9.5, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 7px' }}>
-            ⚖ {scoringLabel(liveScoring)}
-          </span>
-        )}
-        {canEdit && (
-          <span style={{ display: 'inline-flex', gap: 6, flex: 'none', marginLeft: 'auto' }}>
-            <button onClick={() => setNoteOpen(true)} className="mono" style={linkBtn}>✎ {text ? 'edit' : 'write'}</button>
-            <button onClick={() => setFlagsOpen(true)} className="mono" style={linkBtn}>⚑ player flags</button>
-            <button onClick={() => setScoringOpen(true)} className="mono" style={linkBtn}>⚖ scoring</button>
-          </span>
-        )}
-      </div>
-      {noteOpen && (
-        <NoteEditor leagueId={liveCtx.leagueId} initial={text ?? ''}
-          onDone={() => { setNoteOpen(false); void reloadCommish(); }}
-          onClose={() => setNoteOpen(false)} />
-      )}
-      {flagsOpen && (
-        <FlagsEditor leagueId={liveCtx.leagueId}
-          onChanged={() => void reloadCommish()}
-          onClose={() => setFlagsOpen(false)} />
-      )}
-      {scoringOpen && liveScoring && (
-        <ScoringEditor leagueId={liveCtx.leagueId} initial={liveScoring}
-          onDone={() => { setScoringOpen(false); void reloadCommish(); }}
-          onClose={() => setScoringOpen(false)} />
-      )}
-    </>
+    <div className="mono" style={{ marginTop: 7, display: 'flex', justifyContent: 'flex-end' }}>
+      <span title="commissioner scoring adjustments in force — every matchup in this league scores with these"
+        style={{ fontWeight: 700, fontSize: 9.5, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 7px' }}>
+        ⚖ {scoringLabel(liveScoring)}
+      </span>
+    </div>
   );
 }
 

@@ -106,8 +106,10 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   const [rostersOpen, setRostersOpen] = useState(false);
 
   useEffect(() => {
+    // The note lives HERE now (0182.1 — off the board, founder's call), so the
+    // commissioner's empty-state prompt shows too, not just a standing note.
     leagueNote(e.league_id)
-      .then((r) => { if (r.ok && r.text) setNote({ text: r.text, canEdit: !!r.can_edit }); })
+      .then((r) => { if (r.ok && (r.text || r.can_edit)) setNote({ text: r.text ?? '', canEdit: !!r.can_edit }); })
       .catch(() => {});
     chatUnread(e.league_id)
       .then((r) => { if (r.ok) setUnread({ n: (r.league ?? 0) + (r.dm ?? 0), mention: (r.mention ?? 0) > 0 }); })
@@ -148,8 +150,10 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
       {note && (
         <div className="mono" style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 11, lineHeight: 1.5, color: 'var(--text)', background: 'color-mix(in srgb, #A87BD8 10%, var(--surface))', border: '1px solid #A87BD8', borderRadius: 6, padding: '7px 11px', margin: '10px 0 0' }}>
           <span style={{ fontWeight: 700, letterSpacing: '0.1em', fontSize: 9, color: '#A87BD8', flex: 'none' }}>⚑ LEAGUE NOTE</span>
-          <span style={{ minWidth: 0, flex: 1, whiteSpace: 'pre-wrap' }}>{note.text}</span>
-          {note.canEdit && <button onClick={onManage} className="mono" style={{ ...linkBtn, flex: 'none', padding: 0 }}>✎</button>}
+          {note.text
+            ? <span style={{ minWidth: 0, flex: 1, whiteSpace: 'pre-wrap' }}>{note.text}</span>
+            : <span style={{ minWidth: 0, flex: 1, color: 'var(--faint)' }}>nothing posted — say something to the league</span>}
+          {note.canEdit && <button onClick={onManage} className="mono" style={{ ...linkBtn, flex: 'none', padding: 0 }}>✎ {note.text ? 'edit' : 'write'}</button>}
         </div>
       )}
 

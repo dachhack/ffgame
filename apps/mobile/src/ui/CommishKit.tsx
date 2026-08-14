@@ -21,7 +21,7 @@ import {
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { PLAYER_BIO } from '@drip/core/data/playerBio';
 import { headshot } from '@drip/core/data/media';
-import { useTheme, alpha, MONO } from '../theme.native';
+import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Mono, PrimaryButton } from './prims';
 import { Overlay } from './Overlay';
@@ -106,19 +106,13 @@ export function CommishKit({ leagueId, onChanged }: {
   onChanged: () => void;
 }) {
   const t = useTheme();
-  const [note, setNote] = useState<{ text: string | null; canEdit: boolean } | null>(null);
   const [scoring, setScoring] = useState<LeagueScoring | null>(null);
-  const [noteOpen, setNoteOpen] = useState(false);
-  const [flagsOpen, setFlagsOpen] = useState(false);
-  const [scoringOpen, setScoringOpen] = useState(false);
 
   const load = async () => {
-    const [n, f, sc] = await Promise.all([
-      leagueNote(leagueId).catch(() => null),
+    const [f, sc] = await Promise.all([
       playerFlags(leagueId).catch(() => null),
       leagueScoringGet(leagueId).catch(() => null),
     ]);
-    if (n && n.ok) setNote({ text: n.text ?? null, canEdit: !!n.can_edit });
     if (Array.isArray(f)) { setLeagueFlags(leagueId, f); onChanged(); }
     if (sc && sc.ok) {
       const knobs = parseScoring(sc);
@@ -134,46 +128,19 @@ export function CommishKit({ leagueId, onChanged }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
 
+  // The note moved to the LEAGUE HOME (0182.1 — founder's call: one place,
+  // not two) and the editors live on the COMMISH screen's kit card. This
+  // component stays mounted on the board for its SIDE EFFECTS — it is what
+  // loads the flag + scoring caches the board renders from — plus the one
+  // thing that must never leave the board: the non-default-scoring chip.
   const scoringOn = scoring != null && !scoringIsDefault(scoring);
-  if (!note || (!note.text && !note.canEdit && !scoringOn)) return null;
+  if (!scoringOn) return null;
   return (
-    <>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap', backgroundColor: alpha(FLAG_PURPLE, 10), borderWidth: StyleSheet.hairlineWidth, borderColor: FLAG_PURPLE, borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 10 }}>
-        <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 1, color: FLAG_PURPLE, paddingTop: 1 }}>⚑ LEAGUE NOTE</Text>
-        {note.text
-          ? <Text style={{ flexBasis: 180, flexGrow: 1, fontSize: 11.5, lineHeight: 16, color: t.text }}>{note.text}</Text>
-          : <Mono size={9.5} tone="faint" style={{ flexBasis: 180, flexGrow: 1 }}>nothing posted — say something to the league</Mono>}
-        {scoringOn && (
-          <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
-            <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.warn }}>⚖ {scoringLabel(scoring)}</Text>
-          </View>
-        )}
-        {note.canEdit && (
-          <View style={{ flexDirection: 'row', gap: 10, marginLeft: 'auto' }}>
-            <Pressable hitSlop={6} onPress={() => { tap(); setNoteOpen(true); }}>
-              <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.dim }}>✎ {note.text ? 'edit' : 'write'}</Text>
-            </Pressable>
-            <Pressable hitSlop={6} onPress={() => { tap(); setFlagsOpen(true); }}>
-              <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.dim }}>⚑ flags</Text>
-            </Pressable>
-            <Pressable hitSlop={6} onPress={() => { tap(); setScoringOpen(true); }}>
-              <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.dim }}>⚖ scoring</Text>
-            </Pressable>
-          </View>
-        )}
+    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 10 }}>
+      <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+        <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.warn }}>⚖ {scoringLabel(scoring)}</Text>
       </View>
-      <NoteEditor visible={noteOpen} leagueId={leagueId} initial={note.text ?? ''}
-        onDone={() => { setNoteOpen(false); void load(); }}
-        onClose={() => setNoteOpen(false)} />
-      <FlagsEditor visible={flagsOpen} leagueId={leagueId}
-        onChanged={() => void load()}
-        onClose={() => setFlagsOpen(false)} />
-      {scoring && (
-        <ScoringEditor visible={scoringOpen} leagueId={leagueId} initial={scoring}
-          onDone={() => { setScoringOpen(false); void load(); }}
-          onClose={() => setScoringOpen(false)} />
-      )}
-    </>
+    </View>
   );
 }
 
