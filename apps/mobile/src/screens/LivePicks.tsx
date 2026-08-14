@@ -843,6 +843,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
               key={w.id}
               mine={myLive} theirs={theirLive} pool={duelPool} scores={winScores}
               youAreHome={youAreHome} status={matchup!.status} week={week} winLabel={winLabelFor}
+              userId={userId}
               slotDetail={slotDetail}
               // The stat DRIVING the metric ("127 pass yd"), in the card's stat
               // slot. No full statline on the app (founder's call) — just the
@@ -996,6 +997,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
             players={oppPool.map(poolToPlayer)}
             wins={wins}
             week={week}
+            userId={userId}
             windowOf={(id) => oppWinBySlug[id] ?? null}
             groupOf={(id) => oppGrpBySlug[id] ?? 'start'}
             accent={t.opp}
@@ -1007,6 +1009,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
             players={pool.map(poolToPlayer)}
             wins={wins}
             week={week}
+            userId={userId}
             // Same resolver the slate gating uses, so the grouping here and the
             // eligibility counts on each window can never disagree.
             windowOf={(id) => winBySlug[id] ?? null}
@@ -1166,6 +1169,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
             players={players}
             currentId={cur}
             week={week}
+            userId={userId}
             windowLabel={wins.find((w) => w.id === pickerSlot.win)?.label}
             groupOf={(id) => grpBySlug[id] ?? 'start'}
             gated={(p) => !matchPremium && !isFreePosition(p.pos)}

@@ -13,8 +13,25 @@ import { powerupById } from '@drip/core/data/powerups';
 import { getPlayer } from '@drip/core/data/league';
 import { PlayerCard } from '../app/cardTable';
 import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
+import { openPlayerCard } from '../app/playerCard';
 import { FX_COLOR } from '@drip/core/data/demoNarration';
 import type { Pick, Player, Pos, WindowId, Metric } from '@drip/core/types';
+
+/** ⓘ — opens the player card without stealing the row's own tap (pick/assign).
+ *  A span, not a button: several hosts are already <button> rows and nested
+ *  buttons are invalid HTML that some browsers "fix" by splitting the row. */
+function InfoDot({ player, week }: { player: Player; week: number }) {
+  const { liveCtx } = useStore();
+  return (
+    <span
+      role="button"
+      title={`${player.name} — player card`}
+      onClick={(e) => { e.stopPropagation(); openPlayerCard({ slug: player.id, name: player.full ?? player.name, pos: player.pos, team: player.team, week, userId: liveCtx?.userId }); }}
+      className="mono"
+      style={{ flex: 'none', width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: '50%', cursor: 'pointer' }}
+    >i</span>
+  );
+}
 
 // ── Pool filtering ───────────────────────────────────────────────────────────
 // A normal fantasy roster is 8-20 players, so every pool list here used to render
@@ -215,6 +232,7 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, sealed, colla
                 <PlayerImg playerId={p.id} team={p.team} pos={p.pos} size={18} />
                 <span className="grotesk" style={{ fontSize: 11.5, fontWeight: 700, color: side === 'you' ? 'var(--text)' : 'var(--dimstrong)', flex: 1, textDecoration: assigned ? 'line-through' : 'none', opacity: assigned ? 0.55 : 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                 <InjuryBadge week={week} slug={p.id} />
+                <InfoDot player={p} week={week} />
                 <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.team}</span>
               </button>
             );
@@ -576,7 +594,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
                 return (
                   <PlayerCard key={p.id} slug={p.id} name={p.name} pos={p.pos} team={p.team} slot={p.team ?? undefined} idx={i}
                     selected={sel} locked={isGated}
-                    badge={<InjuryBadge week={week} slug={p.id} />}
+                    badge={<><InjuryBadge week={week} slug={p.id} /><InfoDot player={p} week={week} /></>}
                     onClick={() => (isGated ? onGated?.(p) : onPick(p.id))} />
                 );
               })}
@@ -595,6 +613,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                     <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                     <InjuryBadge week={week} slug={p.id} />
+                    <InfoDot player={p} week={week} />
                   </div>
                   <span className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
                 </div>

@@ -13,6 +13,7 @@ import { WINDOW_WIN_BONUS } from '@drip/core/engine/matchup';
 import { teamLogo } from '@drip/core/data/media';
 import { metricById } from '@drip/core/data/metrics';
 import { slugMeta } from '@drip/core/data/slugMeta';
+import { openPlayerCard } from './PlayerCardSheet';
 import type { WindowScore, RevealedPick, PoolPlayer, TeamInfo } from '@drip/core/data/liveApi';
 import type { Pos } from '@drip/core/types';
 import { useTheme, MONO } from "../theme.native";
@@ -46,7 +47,7 @@ export function Big({ label, value, color, team }: { label: string; value: numbe
  *  The sealed-back count MIRRORS YOUR OWN card count, never the opponent's real
  *  one. Showing their true count before reveal would leak how many slots they
  *  filled in a window, which is information the game deliberately withholds. */
-export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus, slotDetail, liveExtras }: {
+export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus, slotDetail, liveExtras, userId }: {
   mine: RevealedPick[];
   theirs: RevealedPick[];
   pool: Record<string, PoolPlayer>;
@@ -54,6 +55,8 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
   youAreHome: boolean;
   status: string;
   week: number;
+  /** Signed-in account — lights the ★ on the card a duel-card tap opens. */
+  userId?: string;
   winLabel: (id: string) => string;
   /** Per-window override of the status chip. The board has one status for the
    *  whole matchup, so it doesn't pass this; a replay does, because it walks
@@ -161,6 +164,7 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
         gameLabel={ex?.gameLabel}
         stat={ex?.stat}
         coin={ex?.coin}
+        onPress={() => openPlayerCard({ slug: player.slug, name: player.full, pos: player.pos, team: slugTeam(player), week, userId })}
       />
     );
   };
