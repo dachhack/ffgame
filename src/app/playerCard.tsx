@@ -14,6 +14,7 @@ import type { Pos } from '@drip/core/types';
 import { PLAYER_BIO, tenureLabel } from '@drip/core/data/playerBio';
 import { injuryFor, injuryRowFor } from '@drip/core/data/injuries';
 import { flagFor } from '@drip/core/data/commish';
+import { displayTeam } from '@drip/core/data/playerTeam';
 import { statsForName } from '@drip/core/data/players';
 import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import { teamLogo } from '@drip/core/data/media';
@@ -42,6 +43,10 @@ export function PlayerCardHost() {
 
 function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => void }) {
   const { slug, name, pos, team, week, userId } = req;
+  // The card is where a stale team is most visible — prefer the live layer
+  // (fresh directory bake + worker overrides, 0142) over whatever the opening
+  // surface happened to know.
+  const showTeam = displayTeam(slug, team);
   const bio = PLAYER_BIO[slug];
   const tenure = tenureLabel(slug);
   const inj = week != null ? injuryRowFor(week, slug) : null;
@@ -100,8 +105,8 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             </div>
             <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--dim)', marginTop: 3 }}>
               <span style={{ fontWeight: 700 }}>{pos}</span>
-              <Img src={teamLogo(team)} size={13} radius={2} fallback={<span />} />
-              <span>{team}</span>
+              <Img src={teamLogo(showTeam)} size={13} radius={2} fallback={<span />} />
+              <span>{showTeam || 'FA'}</span>
               {bio?.num != null && <span>· #{bio.num}</span>}
             </div>
           </div>

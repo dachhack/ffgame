@@ -23,7 +23,9 @@ import { buildDraftPool } from '@drip/core/data/nativeLeague';
 import { ADP_2026 } from '@drip/core/data/adp2026';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
 import { headshot } from '@drip/core/data/media';
-import { myFavorites } from '@drip/core/data/liveApi';
+import { myFavorites, loadTeamOverrides, playerFlags } from '@drip/core/data/liveApi';
+import { setLeagueFlags } from '@drip/core/data/commish';
+import { FlagChip } from '../ui/rosterGroup';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton } from '../ui/prims';
@@ -63,6 +65,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
   const [favs, setFavs] = useState<Set<string>>(new Set());
   const [starMode, setStarMode] = useState<StarMode>('off');
+  const [, setFlagVer] = useState(0); // commish flags landed in the cache (0141)
   const [proxyDraft, setProxyDraft] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -82,6 +85,8 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     void refresh();
     leaguePool(leagueId).then(setPool).catch(() => {});
     myFavorites().then(setFavs).catch(() => {});
+    void loadTeamOverrides();
+    playerFlags(leagueId).then((f) => { if (Array.isArray(f)) { setLeagueFlags(leagueId, f); setFlagVer((v) => v + 1); } }).catch(() => {});
     nativeTeamState(leagueId).then((tm) => {
       setTeam(tm);
       if (tm.my_roster_id != null) myDraftQueue(leagueId, tm.my_roster_id).then(setQueue).catch(() => {});
@@ -413,6 +418,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
                     <PosPill pos={p.pos} size={8} />
                     <Mono size={8.5} tone="faint">{p.team} · #{p.rank}</Mono>
+                    <FlagChip slug={p.slug} size={7.5} />
                   </View>
                 </View>
                 <View style={{ alignItems: 'flex-end', width: 52 }}>

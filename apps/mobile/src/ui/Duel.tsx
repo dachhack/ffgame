@@ -13,6 +13,7 @@ import { WINDOW_WIN_BONUS } from '@drip/core/engine/matchup';
 import { teamLogo } from '@drip/core/data/media';
 import { metricById } from '@drip/core/data/metrics';
 import { slugMeta } from '@drip/core/data/slugMeta';
+import { teamFor } from '@drip/core/data/playerTeam';
 import { openPlayerCard } from './PlayerCardSheet';
 import type { WindowScore, RevealedPick, PoolPlayer, TeamInfo } from '@drip/core/data/liveApi';
 import type { Pos } from '@drip/core/types';
@@ -335,7 +336,8 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
 }
 
 /** The entry's own team first (rookies aren't in the baked 2025 table), then
- *  the bake — the same order the setup board resolves in. */
+ *  the LIVE layer (fresh directory bake + worker overrides, 0142), then the
+ *  2025 bake as the last resort. */
 function slugTeam(p: PoolPlayer): string {
-  return p.team || slugMeta(p.slug).team;
+  return p.team || teamFor(p.slug) || slugMeta(p.slug).team;
 }

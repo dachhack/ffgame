@@ -29,7 +29,7 @@ import {
   getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, weekGameFeeds, weekLivePlays,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
   type WindowScore, type RevealedPick, type GameFeedRow,
-  nativeTeamState, loadLiveInjuries,
+  nativeTeamState, loadLiveInjuries, loadTeamOverrides,
 } from '@drip/core/data/liveApi';
 import { clearLiveInjuries } from '@drip/core/data/injuries';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/gameFeed';
@@ -208,6 +208,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
         // board; `injuryVer` bumps to re-render the badges once it lands.
         clearLiveInjuries();
         clearLeagueFlags();
+        void loadTeamOverrides(); // global player→team drift (0142); cheap, auth-gated
         loadLiveInjuries(m.week).then((n) => { if (alive && n) setInjuryVer((v) => v + 1); }).catch(() => {});
         {
           const oppRoster = m.home_roster_id === r.rosterId ? m.away_roster_id : m.home_roster_id;

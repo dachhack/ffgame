@@ -12,7 +12,7 @@ import { powerupById, isAmplifier, ampCapacity, capAmplifiers } from '@drip/core
 import { DEMO_WEEK } from '@drip/core/config';
 import { type ProviderUser, type ProviderId } from '@drip/core/data/providers';
 import { track, setTraits, Ev } from '@drip/core/analytics';
-import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, setBackupAssign, hasAuthTokensInUrl, loadLiveInjuries, leagueNote, playerFlags, type TargetedState } from '@drip/core/data/liveApi';
+import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, setBackupAssign, hasAuthTokensInUrl, loadLiveInjuries, loadTeamOverrides, leagueNote, playerFlags, type TargetedState } from '@drip/core/data/liveApi';
 
 import type { SlotSwap } from '@drip/core/engine/matchup';
 export type { SlotSwap };
@@ -135,8 +135,6 @@ interface Store {
   /** Larger-text mode (zooms the whole UI ~20% for readability). */
   bigText: boolean;
   setBigText: (v: boolean) => void;
-  fullStats: boolean;
-  setFullStats: (v: boolean) => void;
   /** Super-admin "browse as" (0108): render the player surfaces against another
    *  user's id for support. READ ONLY — every write policy is
    *  `app_user_id = auth.uid()`, so nothing can be written in their name; the
@@ -252,7 +250,6 @@ const THEME_KEY = 'gc-theme';
 const ICONSET_KEY = 'gc-iconset';
 const CARDSKIN_KEY = 'gc-cardskin';
 const BIGTEXT_KEY = 'gc-bigtext';
-const FULLSTATS_KEY = 'gc-fullstats';
 const SLEEPER_KEY = 'gc-sleeper';
 const SAVE_KEY = 'gc-coins';
 
@@ -375,6 +372,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => { alive = false; clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
   }, [liveCtx]);
 
+  // Player→team live layer (0142): global, tiny, auth-gated. Once at mount
+  // (covers a signed-in reload) and again when a live board opens (covers the
+  // first sign-in of the session, when the mount-time read saw no rows).
+  useEffect(() => { void loadTeamOverrides(); }, []);
+  useEffect(() => { if (liveCtx) void loadTeamOverrides(); }, [liveCtx]);
+
   // Commish kit (0141): the league note + player flags, live leagues only —
   // same shape as the injury poll (module cache + version counter) and the
   // same reason: flagFor() feeds deep render paths that cannot await.
@@ -430,13 +433,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const setBigText = (v: boolean) => {
     setBigTextState(v);
     try { localStorage.setItem(BIGTEXT_KEY, v ? '1' : '0'); } catch { /* ignore */ }
-  };
-  const [fullStats, setFullStatsState] = useState<boolean>(() => {
-    try { return localStorage.getItem(FULLSTATS_KEY) === '1'; } catch { return false; }
-  });
-  const setFullStats = (v: boolean) => {
-    setFullStatsState(v);
-    try { localStorage.setItem(FULLSTATS_KEY, v ? '1' : '0'); } catch { /* ignore */ }
   };
   // Not persisted, on purpose — a support session shouldn't outlive the tab.
   const [viewAs, setViewAs] = useState<{ userId: string; label: string } | null>(null);
@@ -770,8 +766,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, fullStats, setFullStats, viewAs, setViewAs, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, injuryVer, liveNote, commishVer, reloadCommish, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
-    [theme, iconSet, cardSkin, bigText, fullStats, viewAs, route, sleeperUser, activeLeague, isSimLeague, liveCtx, injuryVer, liveNote, commishVer, youTeamId, demoWeek, coins, inventory, applied],
+    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, viewAs, setViewAs, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, injuryVer, liveNote, commishVer, reloadCommish, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    [theme, iconSet, cardSkin, bigText, viewAs, route, sleeperUser, activeLeague, isSimLeague, liveCtx, injuryVer, liveNote, commishVer, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

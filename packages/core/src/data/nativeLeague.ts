@@ -21,6 +21,7 @@ import { STAT_PLAYERS, normName } from './players';
 import { NFL_CODES } from './kdst';
 import { ADP_2026 } from './adp2026';
 import { loadPlayerDirectory } from './sleeperPlayers';
+import { teamFor } from './playerTeam';
 
 export interface DraftPoolEntry { slug: string; full: string; pos: string; team: string; espnId?: string; }
 
@@ -60,14 +61,16 @@ function kdstEntries(): (DraftPoolEntry & { score: number })[] {
   return out;
 }
 
-/** The 2025 baked-PBP pool — offline fallback only (no rookies, 2025 teams). */
+/** The 2025 baked-PBP pool — offline fallback only (no rookies). Teams go
+ *  through the live layer (fresh bio bake + worker overrides), so even the
+ *  fallback shows current teams for anyone the directory knows. */
 function bakedPool2025(): DraftPoolEntry[] {
   const ppr = pprBySlug();
   const rows: (DraftPoolEntry & { score: number })[] = [];
   for (const [slug, meta] of Object.entries(BAKED_SLUGS)) {
     const st = ppr.get(slug);
     rows.push({
-      slug, full: titleFromSlug(slug), pos: meta.pos, team: meta.team,
+      slug, full: titleFromSlug(slug), pos: meta.pos, team: teamFor(slug) ?? meta.team,
       score: ADP_2026.get(slug) ?? (st != null ? VET_BASE + Math.max(0, 350 - st) : BENCH_BASE),
     });
   }

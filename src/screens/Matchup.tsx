@@ -2969,9 +2969,6 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // Plain-English explanation of the (often jargony) metric, for a hover tooltip
   // on the chip — the board otherwise shows only the tag (DRIP/NUKE/SUPPRESS…).
   const metricEf = metricId ? (metricById(player.pos, metricId)?.ef ?? '') : '';
-  // NOTE: `fullStats` (the settings toggle) used to gate wrap-vs-ellipsis on
-  // this statline and nothing else; statlines now always wrap, so the setting
-  // is vestigial — worth retiring from SiteSettings in a quiet moment.
   const { bigText, liveCtx: cardLiveCtx } = useStore();
   const liveUserId = cardLiveCtx?.userId;
   const fs = (n: number) => bigText ? Math.round(n * 1.3 * 10) / 10 : n; // larger-text mode bumps the small card labels

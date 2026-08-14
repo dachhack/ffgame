@@ -11,6 +11,7 @@ import type { Pos } from '@drip/core/types';
 import { PLAYER_BIO, tenureLabel } from '@drip/core/data/playerBio';
 import { injuryFor, injuryRowFor } from '@drip/core/data/injuries';
 import { flagFor } from '@drip/core/data/commish';
+import { displayTeam } from '@drip/core/data/playerTeam';
 import { statsForName } from '@drip/core/data/players';
 import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import { headshot, teamLogo } from '@drip/core/data/media';
@@ -40,6 +41,9 @@ export function PlayerCardHost() {
 function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => void }) {
   const t = useTheme();
   const { slug, name, pos, team, week, userId } = req;
+  // Prefer the live team layer (fresh bake + worker overrides, 0142) over
+  // whatever the opening surface happened to know — see the web card.
+  const showTeam = displayTeam(slug, team);
   const bio = PLAYER_BIO[slug];
   const tenure = tenureLabel(slug);
   const inj = week != null ? injuryRowFor(week, slug) : null;
@@ -77,7 +81,7 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   };
 
   const photo = headshot(slug);
-  const logo = teamLogo(team);
+  const logo = teamLogo(showTeam);
   const row = (label: string, value: string) => (
     <View key={label} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
       <Text style={{ fontFamily: MONO, width: 58, fontSize: 8.5, fontWeight: '700', letterSpacing: 1, color: t.faint, paddingTop: 1 }}>{label}</Text>
@@ -102,7 +106,7 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
               <Mono size={9.5} weight="700">{pos}</Mono>
               {!!logo && <Image source={{ uri: logo }} style={{ width: 13, height: 13 }} resizeMode="contain" />}
-              <Mono size={9.5} tone="dim">{team}{bio?.num != null ? ` · #${bio.num}` : ''}</Mono>
+              <Mono size={9.5} tone="dim">{showTeam || 'FA'}{bio?.num != null ? ` · #${bio.num}` : ''}</Mono>
             </View>
           </View>
           {userId && starred != null && (
