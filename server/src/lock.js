@@ -222,18 +222,21 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
     for (const rosterId of [m.home_roster_id, m.away_roster_id]) {
       const mem = (mems ?? []).find((x) => x.sleeper_roster_id === rosterId);
       if (!mem?.app_user_id) continue; // empty seat → resolver auto-backup (can't store picks)
-      // PER WINDOW, not per matchup (the Joeggernaut hole): a seat that set the
-      // 7:00 window but left the 9:00 empty used to read as "has picks" and be
-      // skipped wholesale, so its later windows played nobody and the opponent
-      // sat unopposed. Now a window counts as set only if it has a pick, and
-      // the fill below targets exactly the empty ones.
-      const { data: existing } = await db().from('sealed_pick').select('game_window')
+      // PER SLOT, not per matchup or even per window (founder's rule, refined
+      // twice on live fire): any empty card spot with an eligible player
+      // available gets the optimal fill at lock — human seats included. First
+      // the Joeggernaut hole (a seat that set the 7:00 window read as "has
+      // picks" and was skipped wholesale), then its little sibling (a window
+      // with 2 of 3 slots set kept its empty slot). A slot counts as set only
+      // if it holds a pick; the fill below targets exactly the empty ones.
+      const { data: existing } = await db().from('sealed_pick').select('game_window,roster_slot,player_slug')
         .eq('matchup_id', m.id).eq('app_user_id', mem.app_user_id).not('player_slug', 'is', null);
-      const setWins = new Set((existing ?? []).map((r) => r.game_window));
-      const hasPicks = setWins.size > 0;
+      const setSlots = new Set((existing ?? []).map((r) => `${r.game_window}#${r.roster_slot}`));
+      const fieldedSlugs = new Set((existing ?? []).map((r) => r.player_slug));
+      const hasPicks = setSlots.size > 0;
       const isAi = mem.controller === 'ai';
       const missed = mem.enrolled && !hasPicks;
-      const partial = mem.enrolled && hasPicks && !isAi; // some windows set, fill the rest
+      const partial = mem.enrolled && hasPicks && !isAi; // some slots set, fill the rest
       if (!(isAi || ((missed || partial) && policy !== 'empty'))) continue;
       // An AI-controlled seat (always, or a missed manager flipped to AI for the
       // week) plays the economy: it earns + spends coin. A missed 'best_lineup'
@@ -241,7 +244,11 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       // spend their coin for them.
       const aiDriven = isAi || (missed && policy === 'ai');
       const starters = (startersByRoster.get(rosterId)) ?? [];
-      const slugs = starters.map((s) => s.player_slug).filter(Boolean);
+      // The fill must never duplicate a player the manager already fielded:
+      // autoLineup builds blind from the pool it's given, so give it the pool
+      // MINUS the fielded players (AI seats rewrite in full and keep it all).
+      const slugs = starters.map((s) => s.player_slug).filter(Boolean)
+        .filter((slug) => isAi || !fieldedSlugs.has(slug));
       let owned, extra;
       if (aiDriven) { ({ owned, extra } = await aiBudgetPass(m, rosterId, mem.app_user_id, starters, seed)); }
       else { const l = await ownedLoadout(m.id, mem.app_user_id); owned = l.unlocks; extra = l.extra; }
@@ -254,10 +261,10 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       // autofill — even one flipped to AI policy for the week — stays vanilla.
       const persona = isAi ? `${m.league_id}:${rosterId}` : undefined;
       const rows = autoLineup(slugs, m.week, owned, extra, persona)
-        // A partially-set human keeps every window they touched — the fill
-        // covers only their EMPTY windows (an AI seat still rewrites in full;
-        // its old rows were deleted above).
-        .filter((p) => isAi || !setWins.has(p.win))
+        // A partially-set human keeps every SLOT they touched — the fill
+        // covers only the empty ones (an AI seat still rewrites in full; its
+        // old rows were deleted above).
+        .filter((p) => isAi || !setSlots.has(`${p.win}#${p.slot}`))
         .map((p) => {
         const sealNow = !dueWins || dueWins.has(p.win);
         return {
