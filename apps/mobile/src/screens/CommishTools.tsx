@@ -28,6 +28,7 @@ import { Overlay } from '../ui/Overlay';
 import { AvatarGrid } from '../ui/AvatarGrid';
 import { CommishSettings } from '../ui/CommishSettings';
 import { CommishPlayers } from '../ui/LeagueExtras';
+import { CommishToolsCard } from '../ui/CommishKit';
 
 export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassigned }: {
   leagueId: string;
@@ -122,6 +123,9 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
         </View>
         {!!err && <Mono size={10} tone="opp" style={{ marginTop: 6 }}>⚠ {err}</Mono>}
       </Card>
+
+      {/* the commissioner's kit — note / player flags / scoring (0141/0143/0144) */}
+      <CommishToolsCard leagueId={leagueId} />
 
       <CommishTeams key={`teams-${epoch}`} leagueId={leagueId} myRoster={myRoster}
         onChanged={() => void refresh()} onSelfUnassigned={onSelfUnassigned} />
