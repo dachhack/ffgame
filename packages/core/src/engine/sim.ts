@@ -1,6 +1,7 @@
 import type { Player, Pos, PbpEvent, SlotResolution, EffectType, BuffFx } from '../types';
 import { metricById } from '../data/metrics';
 import { leagueScoring } from './leagueScoring';
+import { flagRulesFor } from '../data/commish';
 import { realPbpFor, realPossFor, realWallFor, REAL_WEEKS, type RealPlayKind } from '../data/realPbp';
 import { returnPlaysFor } from '../data/returns';
 
@@ -603,7 +604,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   // share) but shy of 0.0075 (which dominated once immunity covered TE
   // erasers too). Immune to the
   // pauses and erases that WR/RB opponents lay on a drip (see oppIsDrip below).
-  const dripRateOf = (s: SlotInput): number => (s.player.pos === 'TE' ? 0.0065 : 0.01) * leagueScoring().ydMult;
+  const dripRateOf = (s: SlotInput): number => (s.player.pos === 'TE' ? 0.0065 : 0.01) * leagueScoring().ydMult * (flagRulesFor(s.player.id).bonusMult ?? 1);
   const youDripRate = dripRateOf(you);
   const theirDripRate = dripRateOf(their);
   const youDripKind = dripKindOf(you);
@@ -939,6 +940,9 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       }
     } else {
       pts = scorePlay(play, myPlayer.player.pos, myPlayer.metricId, myFam === 'streak' && mine.hot);
+      // Commissioner bonus flag (0144): this player's per-play points scale.
+      const bonusMult = flagRulesFor(myPlayer.player.id).bonusMult;
+      if (bonusMult != null && pts > 0) pts = Math.round(pts * bonusMult * 10) / 10;
       if (mine.dead) pts = 0;
       if (sideMult !== 1 && pts > 0) { pts *= sideMult; evMult = sideMult; }
       // Garbage Time: points scored in the final 5 game-minutes count double.
@@ -1000,12 +1004,17 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       if (play.side === 'you') youBankerXp++; else theirBankerXp++;
     }
 
+    // Commissioner immunity flag (0144): opponent denial — shutdown, erase,
+    // reset, clock stop, nuke wipe, compression grind, carry wipe — does not
+    // touch this player's bank or drip. The TE-drip precedent, generalized.
+    const oppImmune = !!flagRulesFor(oppPlayer.player.id).immune;
+
     let effect: { type: EffectType; text: string } | undefined;
 
     if (myPlayer.player.pos === 'K' && myPlayer.metricId === 'neg' && (play.kind === 'fg' || play.kind === 'xp')) {
       // K NEG (SHUTDOWN): 6th made kick zeroes + negates the matched opponent.
       mine.kicks++;
-      if (mine.kicks >= 6 && !opp.dead) {
+      if (mine.kicks >= 6 && !opp.dead && !oppImmune) {
         const wiped = opp.bank;
         opp.bank = 0; opp.hist = []; opp.dead = true; opp.paused = true;
         effect = { type: 'nuke', text: `✕ SHUTDOWN — negated ${wiped.toFixed(1)}` }; sig = true;
@@ -1024,7 +1033,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       // Floodgates: the drip owner (the non-acting side) shrugs off all opponent
       // pauses/erases this week. The owner is `opp` here; its buffs gate immunity.
       const ownerFloodgates = (play.side === 'you' ? theirBuffs : youBuffs).has('floodgates');
-      if (!teDripImmune && !ownerFloodgates && (play.kind === 'rec' || play.kind === 'incomplete')) {
+      if (!teDripImmune && !ownerFloodgates && !oppImmune && (play.kind === 'rec' || play.kind === 'incomplete')) {
         if (eraseTrigger) {
           opp.paused = true;
           const cutoff = play.clock - eraseWindow;
@@ -1047,16 +1056,16 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
       }
       // Only the dedicated TD (nuke) metric wipes a drip. A flat QB/RB TD under
       // a yardage metric scores its points but does not nuke the opponent.
-      if (play.td && myFam === 'nuke') {
+      if (play.td && myFam === 'nuke' && !oppImmune) {
         const wiped = opp.bank;
         const suffix = nukeWipe(wiped); opp.paused = true;
         effect = { type: 'nuke', text: `✕ TD — wiped drip ${wiped.toFixed(1)}${suffix}` }; sig = true;
       }
-    } else if (myFam === 'nuke' && play.td && opp.bank > 0) {
+    } else if (myFam === 'nuke' && play.td && opp.bank > 0 && !oppImmune) {
       const wiped = opp.bank;
       const suffix = nukeWipe(wiped);
       effect = { type: 'nuke', text: `✕ NUKE — wiped ${wiped.toFixed(1)}${suffix}` }; sig = true;
-    } else if (eraseTrigger) {
+    } else if (eraseTrigger && !oppImmune) {
       const cutoff = play.clock - eraseWindow;
       let erased = 0;
       opp.hist = opp.hist.filter((h) => {
@@ -1070,14 +1079,14 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
         const shieldNote = victimShield > 0 ? ` · 🛡 ${Math.round(victimShield * 100)}% blunted` : '';
         effect = { type: 'erase', text: `ERASE −${eff.toFixed(1)}${stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : ''}${shieldNote}` }; sig = true;
       }
-    } else if (myFam === 'reset' && play.catch) {
+    } else if (myFam === 'reset' && play.catch && !oppImmune) {
       const last = opp.hist[opp.hist.length - 1];
       if (last) {
         const cut = last.pts * 0.5; opp.bank = Math.max(0, opp.bank - cut); last.pts -= cut;
         const stolen = stealCut(cut);
         effect = { type: 'reset', text: `RATE RESET${stolen > 0 ? ` · steal +${stolen.toFixed(1)}` : ''}` }; sig = true;
       }
-    } else if (myFam === 'stop' && play.target && opp.hist.length) {
+    } else if (myFam === 'stop' && play.target && opp.hist.length && !oppImmune) {
       effect = { type: 'stop', text: 'CLOCK STOP' };
     }
 
@@ -1085,7 +1094,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     // drip opponent). A 3+ carry streak with no opponent score trims their
     // most-recent banked score by 35% per carry (25% → 35% in the same
     // rebalance that took carries to 0.75 — the grind has to bite).
-    if (myFam === 'compression' && play.kind === 'rush' && mine.streak >= 3 && opp.hist.length) {
+    if (myFam === 'compression' && play.kind === 'rush' && mine.streak >= 3 && opp.hist.length && !oppImmune) {
       const last = opp.hist[opp.hist.length - 1];
       const cut = Math.round(last.pts * 0.35 * 10) / 10;
       if (cut > 0) {
@@ -1102,7 +1111,7 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     // zeroes the opponent ON TOP of whatever metric the slot is scoring. Fires
     // against any opponent (drip included), like compression.
     const myBuffs = play.side === 'you' ? youBuffs : theirBuffs;
-    if ((myPlayer.player.pos === 'WR' || myPlayer.player.pos === 'TE') && myBuffs.has('unlock-carries-wipe') && play.kind === 'rush' && opp.bank > 0) {
+    if ((myPlayer.player.pos === 'WR' || myPlayer.player.pos === 'TE') && myBuffs.has('unlock-carries-wipe') && play.kind === 'rush' && opp.bank > 0 && !oppImmune) {
       const wiped = opp.bank;
       const suffix = nukeWipe(wiped, 0); opp.paused = true; // no steal — the wipe pays its own coin bounty
       if (!effect) effect = { type: 'nuke', text: `✕ CARRY WIPE −${wiped.toFixed(1)}${suffix}` };
@@ -1170,6 +1179,16 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
 
   // DEF SUPPRESS (HALVING) resolves globally in buildMatchup — it reaches every
   // opponent slot across every window — so it is not applied here.
+
+  // Commissioner raw-bonus flag (0144): flat points onto the player's final
+  // bank — after every in-game effect, floored at zero, only when the player
+  // actually took the field with plays (a bye/empty slot banks nothing).
+  {
+    const yb = flagRulesFor(you.player.id).bonusPts;
+    if (yb != null && (Y.bank > 0 || events.some((e) => e.side === 'you'))) Y.bank = Math.max(0, Y.bank + yb);
+    const tb = flagRulesFor(their.player.id).bonusPts;
+    if (tb != null && (T.bank > 0 || events.some((e) => e.side === 'their'))) T.bank = Math.max(0, T.bank + tb);
+  }
 
   const maxClock = events.length ? Math.max(...events.map((e) => e.clock)) : REG;
   return {

@@ -14,7 +14,7 @@
 // anyone, and the flag renders with the real name wherever the player appears.
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from './store';
-import { setLeagueNote, setPlayerFlag, playerFlags, leagueScoringSet, friendlyError, type PlayerFlagRow } from '@drip/core/data/liveApi';
+import { setLeagueNote, setPlayerFlag, setPlayerFlagsBulk, playerFlags, leagueScoringSet, friendlyError, type PlayerFlagRow, type FlagRulesRaw } from '@drip/core/data/liveApi';
 import { SCORING_BOUNDS, DEFAULT_SCORING, scoringIsDefault, scoringLabel, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 import { PLAYER_BIO } from '@drip/core/data/playerBio';
 import { headshot } from '@drip/core/data/media';
@@ -171,6 +171,53 @@ function NoteEditor({ leagueId, initial, onDone, onClose }: {
   );
 }
 
+// Rule controls shared by single-flag and bulk editing (0144): five toggle
+// chips + the two bonus steppers. Rules LAYER like everything commish —
+// the server sanitizes again, this just mirrors its bounds.
+const RULE_DEFS: { key: keyof FlagRulesRaw; label: string; hint: string }[] = [
+  { key: 'no_trade', label: '🚫⇄ trade', hint: 'cannot be traded' },
+  { key: 'no_add', label: '🚫＋ add', hint: 'cannot be added / claimed' },
+  { key: 'no_start', label: '🚫▶ start', hint: 'cannot be fielded' },
+  { key: 'no_powerups', label: '🚫◈ powerups', hint: 'no powerup may target his slot' },
+  { key: 'immune', label: '🛡 immune', hint: 'opponent attacks cannot touch him' },
+];
+export const ruleGlyphs = (r?: FlagRulesRaw | null): string => {
+  if (!r) return '';
+  const g: string[] = [];
+  if (r.no_trade) g.push('🚫⇄'); if (r.no_add) g.push('🚫＋'); if (r.no_start) g.push('🚫▶');
+  if (r.no_powerups) g.push('🚫◈'); if (r.immune) g.push('🛡');
+  if (r.bonus_mult != null && r.bonus_mult !== 1) g.push(`×${r.bonus_mult}`);
+  if (r.bonus_pts != null && r.bonus_pts !== 0) g.push(`${r.bonus_pts > 0 ? '+' : ''}${r.bonus_pts}`);
+  return g.join(' ');
+};
+
+function RuleControls({ draft, set }: { draft: FlagRulesRaw; set: (r: FlagRulesRaw) => void }) {
+  const mini = (v: number, dflt: number, min: number, max: number, step: number, key: 'bonus_mult' | 'bonus_pts', fmt: (n: number) => string) => (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      <button onClick={() => set({ ...draft, [key]: Math.round(Math.max(min, v - step) * 10) / 10 })} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>−</button>
+      <span className="mono" style={{ fontSize: 10, fontWeight: 700, minWidth: 30, textAlign: 'center', color: v !== dflt ? 'var(--warn)' : 'var(--dim)' }}>{fmt(v)}</span>
+      <button onClick={() => set({ ...draft, [key]: Math.round(Math.min(max, v + step) * 10) / 10 })} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>＋</button>
+    </span>
+  );
+  return (
+    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+      {RULE_DEFS.map((d) => {
+        const on = draft[d.key] === true;
+        return (
+          <button key={d.key} onClick={() => set({ ...draft, [d.key]: on ? undefined : true })} title={d.hint} className="mono"
+            style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 999, padding: '3px 8px', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? FLAG_PURPLE : 'var(--bg)', border: `1px solid ${on ? FLAG_PURPLE : 'var(--bd)'}` }}>
+            {d.label}
+          </button>
+        );
+      })}
+      <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>PTS ×</span>
+      {mini(draft.bonus_mult ?? 1, 1, 0.5, 3, 0.1, 'bonus_mult', (n) => `×${n}`)}
+      <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>BONUS</span>
+      {mini(draft.bonus_pts ?? 0, 0, -10, 10, 1, 'bonus_pts', (n) => `${n > 0 ? '+' : ''}${n}`)}
+    </div>
+  );
+}
+
 function FlagsEditor({ leagueId, onChanged, onClose }: {
   leagueId: string; onChanged: () => void; onClose: () => void;
 }) {
@@ -178,9 +225,14 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // slug being labeled (new or re-label) + the draft text
   const [labelFor, setLabelFor] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState('');
+  const [rulesDraft, setRulesDraft] = useState<FlagRulesRaw>({});
+  // BULK (0144): multi-select over the search results, one label + one rule
+  // set applied in a single call — the founder's "individually or in bulk
+  // with a filter". The filter IS the search box (plus your eyes).
+  const [bulk, setBulk] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const load = () => playerFlags(leagueId).then((r) => { if (Array.isArray(r)) setRows(r); }).catch(() => {});
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
@@ -188,72 +240,106 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
   const matches = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (needle.length < 2) return [];
-    return Object.keys(PLAYER_BIO).filter((s) => s.replace(/-/g, ' ').includes(needle)).slice(0, 12);
-  }, [q]);
+    return Object.keys(PLAYER_BIO).filter((s) => s.replace(/-/g, ' ').includes(needle)).slice(0, bulk ? 30 : 12);
+  }, [q, bulk]);
 
-  const save = async (slug: string, label: string | null) => {
+  const save = async (slug: string, label: string | null, rules: FlagRulesRaw = {}) => {
     if (busy) return;
     setBusy(true); setErr(null);
     try {
-      const r = await setPlayerFlag(leagueId, slug, label);
+      const r = await setPlayerFlag(leagueId, slug, label, rules);
       if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not save the flag.')); return; }
-      setLabelFor(null); setLabelDraft(''); setQ('');
+      setLabelFor(null); setLabelDraft(''); setRulesDraft({}); setQ('');
+      await load(); onChanged();
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  const saveBulk = async () => {
+    if (busy || !selected.size || !labelDraft.trim()) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await setPlayerFlagsBulk(leagueId, [...selected], labelDraft, rulesDraft);
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not save the flags.')); return; }
+      setSelected(new Set()); setLabelDraft(''); setRulesDraft({}); setQ(''); setBulk(false);
       await load(); onChanged();
     } catch (x) { setErr(friendlyError(x)); }
     finally { setBusy(false); }
   };
 
   const labelInput = (slug: string) => (
-    <span style={{ display: 'inline-flex', gap: 6, flex: '1 1 160px' }}>
-      <input value={labelDraft} autoFocus maxLength={40} onChange={(e) => setLabelDraft(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter' && labelDraft.trim()) void save(slug, labelDraft); if (e.key === 'Escape') setLabelFor(null); }}
-        placeholder="keeper · out for season · ineligible…" style={{ ...input, padding: '5px 8px', fontSize: 11 }} />
-      <button onClick={() => labelDraft.trim() && void save(slug, labelDraft)} disabled={busy || !labelDraft.trim()}
-        className="mono" style={{ ...btn, padding: '5px 10px', fontSize: 9 }}>SET</button>
-    </span>
+    <div style={{ flex: '1 1 100%', marginTop: 4 }}>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input value={labelDraft} autoFocus maxLength={40} onChange={(e) => setLabelDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && labelDraft.trim()) void save(slug, labelDraft, rulesDraft); if (e.key === 'Escape') setLabelFor(null); }}
+          placeholder="keeper · out for season · ineligible…" style={{ ...input, padding: '5px 8px', fontSize: 11 }} />
+        <button onClick={() => labelDraft.trim() && void save(slug, labelDraft, rulesDraft)} disabled={busy || !labelDraft.trim()}
+          className="mono" style={{ ...btn, padding: '5px 10px', fontSize: 9 }}>SET</button>
+      </div>
+      <RuleControls draft={rulesDraft} set={setRulesDraft} />
+    </div>
   );
 
   return (
     <ModalBackdrop onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={card}>
-        <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>⚑ Player flags</div>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...card, maxWidth: 470 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', flex: 1 }}>⚑ Player flags</div>
+          <button onClick={() => { setBulk((v) => !v); setSelected(new Set()); setLabelFor(null); }} className="mono" style={{ ...ghostBtn, padding: '4px 9px', fontSize: 9, color: bulk ? 'var(--warn)' : 'var(--text)' }}>
+            {bulk ? '✓ BULK ON' : '⧉ BULK'}
+          </button>
+        </div>
         <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 4, lineHeight: 1.5 }}>
-          A short label pinned on a player, shown to the whole league wherever he appears — “keeper”, “out for season”, “ruled ineligible”.
+          A label the whole league sees — and RULES that bite: block trades/adds/starts/powerups, grant immunity, or pay a scoring bonus (docs in the chip tooltips). Rules apply from the next tick.
         </div>
         {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8 }}>{err}</div>}
 
-        {/* standing flags */}
         <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginTop: 12 }}>CURRENT FLAGS</div>
         {rows == null && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 6 }}>Loading…</div>}
         {rows?.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 6 }}>None yet.</div>}
         {rows?.map((f) => (
-          <div key={f.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--bd)' }}>
+          <div key={f.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--bd)', flexWrap: 'wrap' }}>
             <Img src={headshot(f.slug)} size={22} radius={11} fallback={<span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>?</span>} />
             <span style={{ fontSize: 12, color: 'var(--text)', flex: 'none' }}>{prettify(f.slug)}</span>
             {labelFor === f.slug
               ? labelInput(f.slug)
               : <>
-                  <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: FLAG_PURPLE, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>⚑ {f.label}</span>
-                  <button onClick={() => { setLabelFor(f.slug); setLabelDraft(f.label); }} className="mono" style={linkBtn}>✎</button>
+                  <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: FLAG_PURPLE, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>⚑ {f.label}{ruleGlyphs(f.rules) ? ` · ${ruleGlyphs(f.rules)}` : ''}</span>
+                  <button onClick={() => { setLabelFor(f.slug); setLabelDraft(f.label); setRulesDraft(f.rules ?? {}); }} className="mono" style={linkBtn}>✎</button>
                   <button onClick={() => void save(f.slug, null)} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>✕</button>
                 </>}
           </div>
         ))}
 
-        {/* add: search the directory */}
-        <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginTop: 14 }}>FLAG A PLAYER</div>
-        <input value={q} onChange={(e) => { setQ(e.target.value); setLabelFor(null); }} placeholder="search any NFL player…" style={{ ...input, marginTop: 6 }} />
+        <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginTop: 14 }}>
+          {bulk ? `FLAG MANY — ${selected.size} SELECTED` : 'FLAG A PLAYER'}
+        </div>
+        <input value={q} onChange={(e) => { setQ(e.target.value); if (!bulk) setLabelFor(null); }} placeholder="search any NFL player…" style={{ ...input, marginTop: 6 }} />
         {matches.map((slug) => (
-          <div key={slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--bd)' }}>
+          <div key={slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--bd)', flexWrap: 'wrap' }}>
+            {bulk && (
+              <input type="checkbox" checked={selected.has(slug)}
+                onChange={() => setSelected((cur) => { const n = new Set(cur); if (n.has(slug)) n.delete(slug); else n.add(slug); return n; })} />
+            )}
             <Img src={headshot(slug)} size={22} radius={11} fallback={<span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>?</span>} />
-            <span style={{ fontSize: 12, color: 'var(--text)', flex: labelFor === slug ? 'none' : 1 }}>{prettify(slug)}</span>
-            {labelFor === slug
+            <span style={{ fontSize: 12, color: 'var(--text)', flex: !bulk && labelFor === slug ? 'none' : 1 }}>{prettify(slug)}</span>
+            {!bulk && (labelFor === slug
               ? labelInput(slug)
-              : <button onClick={() => { setLabelFor(slug); setLabelDraft(''); }} className="mono" style={{ ...ghostBtn, padding: '4px 9px', fontSize: 9 }}>⚑ FLAG</button>}
+              : <button onClick={() => { setLabelFor(slug); setLabelDraft(''); setRulesDraft({}); }} className="mono" style={{ ...ghostBtn, padding: '4px 9px', fontSize: 9 }}>⚑ FLAG</button>)}
           </div>
         ))}
         {q.trim().length >= 2 && matches.length === 0 && (
           <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 6 }}>No player matches that.</div>
+        )}
+        {bulk && (
+          <div style={{ marginTop: 10, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+            <input value={labelDraft} maxLength={40} onChange={(e) => setLabelDraft(e.target.value)}
+              placeholder="one label for all selected…" style={{ ...input, fontSize: 11 }} />
+            <RuleControls draft={rulesDraft} set={setRulesDraft} />
+            <button onClick={() => void saveBulk()} disabled={busy || !selected.size || !labelDraft.trim()}
+              className="mono" style={{ ...btn, width: '100%', marginTop: 8, opacity: busy || !selected.size || !labelDraft.trim() ? 0.5 : 1 }}>
+              ⚑ FLAG {selected.size} PLAYER{selected.size === 1 ? '' : 'S'}
+            </button>
+          </div>
         )}
         <div style={{ textAlign: 'center', marginTop: 10 }}><button onClick={onClose} className="mono" style={linkBtn}>done</button></div>
       </div>
