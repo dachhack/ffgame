@@ -1442,6 +1442,16 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                     <button onClick={() => setShopOpen(true)} className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 11px' }}>
                       <Emoji e="🛒" size="1.3em" /> SHOP
                     </button>
+                    {/* The all-games field board lived only on the demo board's
+                        playback controls — a row the LIVE board never renders
+                        (the wall clock drives it, no ▶/speed to hang it off).
+                        The founder went looking for it mid-slate; it belongs
+                        here, beside the other live-board tools. */}
+                    {liveCtx && hasGameFeed(week) && (
+                      <button onClick={() => setFieldsOpen(true)} title="Every game with a slotted player, as live field visuals" className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 11px' }}>
+                        ▦ FIELDS
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
