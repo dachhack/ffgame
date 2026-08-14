@@ -49,6 +49,8 @@ import { PowerupHand, HAND_TAB_H, type HandCard } from '../ui/PowerupHand';
 import { Duel, round1 } from '../ui/Duel';
 import { FieldView } from '../ui/FieldView';
 import { Overlay } from '../ui/Overlay';
+import { CommishKit } from '../ui/CommishKit';
+import { clearLeagueFlags } from '@drip/core/data/commish';
 
 // Live pool entries are slug/full/pos; SetupRow wants a Player. Build a light
 // one — the setup board only ever displays name/pos/team.
@@ -139,6 +141,9 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
   // so a report landing after first paint would never reach the badges on its
   // own. Bumping this state re-renders the board, and the badges with it.
   const [, setInjuryVer] = useState(0);
+  // Same contract for commissioner flags: flagFor is a synchronous module-cache
+  // read; CommishKit bumps this when the league's flags land or change.
+  const [, setCommishVer] = useState(0);
   const [lockedWins, setLockedWins] = useState<Set<string>>(new Set());
   const [nowTs, setNowTs] = useState(() => Date.now());
   // Set only after the live slate is installed below — windowsForWeek() reads
@@ -202,6 +207,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
         // resolves into a module cache, so a slow feed delays no part of the
         // board; `injuryVer` bumps to re-render the badges once it lands.
         clearLiveInjuries();
+        clearLeagueFlags();
         loadLiveInjuries(m.week).then((n) => { if (alive && n) setInjuryVer((v) => v + 1); }).catch(() => {});
         {
           const oppRoster = m.home_roster_id === r.rosterId ? m.away_roster_id : m.home_roster_id;
@@ -761,6 +767,10 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
           </Mono>
         </Notice>
       )}
+
+      {/* Commish kit (0141): the league note + the editors behind it, plus the
+          player-flag cache load — chips on roster rows re-render off the bump. */}
+      {roster && <CommishKit leagueId={roster.leagueId} onChanged={() => setCommishVer((v) => v + 1)} />}
 
       {/* Header — mirrors the web's title block: who is playing, how much of
           the lineup is set, and the week you are looking at. */}

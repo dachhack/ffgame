@@ -6,12 +6,13 @@ import { clearSyntheticWeeks, clearLivePlays } from '@drip/core/data/realPbp';
 import { clearLiveGameFeeds } from '@drip/core/data/gameFeed';
 import { clearRuntimeHeadshots } from '@drip/core/data/media';
 import { clearLiveInjuries } from '@drip/core/data/injuries';
+import { setLeagueFlags, clearLeagueFlags } from '@drip/core/data/commish';
 import type { League } from '@drip/core/types';
 import { powerupById, isAmplifier, ampCapacity, capAmplifiers } from '@drip/core/data/powerups';
 import { DEMO_WEEK } from '@drip/core/config';
 import { type ProviderUser, type ProviderId } from '@drip/core/data/providers';
 import { track, setTraits, Ev } from '@drip/core/analytics';
-import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, setBackupAssign, hasAuthTokensInUrl, loadLiveInjuries, type TargetedState } from '@drip/core/data/liveApi';
+import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, setBackupAssign, hasAuthTokensInUrl, loadLiveInjuries, leagueNote, playerFlags, type TargetedState } from '@drip/core/data/liveApi';
 
 import type { SlotSwap } from '@drip/core/engine/matchup';
 export type { SlotSwap };
@@ -165,6 +166,15 @@ interface Store {
    *  it exists so the badges, which pull from a synchronous module cache,
    *  re-render when the report changes under them. */
   injuryVer: number;
+  /** The commissioner's standing league note for the live league (0141);
+   *  null while none is set (or on the demo board). */
+  liveNote: { text: string | null; at: string | null; canEdit: boolean } | null;
+  /** Bumps when the live league's player flags land in the module cache
+   *  (flagFor) — same re-render contract as injuryVer. */
+  commishVer: number;
+  /** Re-pull the note + flags now — call after a commissioner edit so the
+   *  board reflects it without waiting out the poll. */
+  reloadCommish: () => Promise<void>;
   /** Demo: which league team you're playing as (any team in the league). */
   youTeamId: string;
   setYouTeam: (id: string) => void;
@@ -335,7 +345,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     persist({ coins: DEMO_GRANT, inv: {}, applied: {} });
   };
   const exitSimLeague = () => {
-    resetToDemoLeague(); clearSyntheticWeeks(); clearLivePlays(); clearLiveGameFeeds(); clearRuntimeHeadshots(); clearLiveInjuries();
+    resetToDemoLeague(); clearSyntheticWeeks(); clearLivePlays(); clearLiveGameFeeds(); clearRuntimeHeadshots(); clearLiveInjuries(); clearLeagueFlags();
     setActiveLeagueState(LEAGUE); setIsSimLeague(false); setYouTeam(YOU_TEAM_ID); setLiveCtx(null);
   };
   // The live injury report, for a PILOT board only — the demo replays 2025 and is
@@ -363,6 +373,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const onVis = () => { if (!document.hidden) void load(); };
     document.addEventListener('visibilitychange', onVis);
     return () => { alive = false; clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
+  }, [liveCtx]);
+
+  // Commish kit (0141): the league note + player flags, live leagues only —
+  // same shape as the injury poll (module cache + version counter) and the
+  // same reason: flagFor() feeds deep render paths that cannot await.
+  const [liveNote, setLiveNote] = useState<{ text: string | null; at: string | null; canEdit: boolean } | null>(null);
+  const [commishVer, setCommishVer] = useState(0);
+  const reloadCommish = async () => {
+    const ctx = liveCtx;
+    if (!ctx) return;
+    const [n, f] = await Promise.all([
+      leagueNote(ctx.leagueId).catch(() => null),
+      playerFlags(ctx.leagueId).catch(() => null),
+    ]);
+    if (n && n.ok) setLiveNote({ text: n.text ?? null, at: n.at ?? null, canEdit: !!n.can_edit });
+    if (Array.isArray(f)) { setLeagueFlags(ctx.leagueId, f); setCommishVer((v) => v + 1); }
+  };
+  useEffect(() => {
+    if (!liveCtx) { setLiveNote(null); return; }
+    let alive = true;
+    const load = async () => { if (!document.hidden && alive) await reloadCommish(); };
+    void load();
+    const t = setInterval(load, 300_000); // notes and flags move slowly
+    return () => { alive = false; clearInterval(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveCtx]);
   const [iconSet, setIconSetState] = useState<IconSetName>(() => {
     try {
@@ -735,8 +770,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, fullStats, setFullStats, viewAs, setViewAs, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, injuryVer, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
-    [theme, iconSet, cardSkin, bigText, fullStats, viewAs, route, sleeperUser, activeLeague, isSimLeague, liveCtx, injuryVer, youTeamId, demoWeek, coins, inventory, applied],
+    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, fullStats, setFullStats, viewAs, setViewAs, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, injuryVer, liveNote, commishVer, reloadCommish, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    [theme, iconSet, cardSkin, bigText, fullStats, viewAs, route, sleeperUser, activeLeague, isSimLeague, liveCtx, injuryVer, liveNote, commishVer, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

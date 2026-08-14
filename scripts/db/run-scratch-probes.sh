@@ -89,3 +89,4 @@ $RUN -f scripts/db/lock-hold-probes.sql | grep -E "PROBE FAIL|ALL LOCK-HOLD PROB
 $RUN -f scripts/db/backup-assign-probes.sql | grep -E "PROBE FAIL|ALL BACKUP-ASSIGN PROBES" || { echo "BACKUP-ASSIGN PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/favorites-probes.sql | grep -E "PROBE FAIL|ALL FAVORITES PROBES" || { echo "FAVORITES PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/trade-signal-probes.sql | grep -E "PROBE FAIL|ALL TRADE-SIGNAL PROBES" || { echo "TRADE-SIGNAL PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/commish-kit-probes.sql | grep -E "PROBE FAIL|ALL COMMISH-KIT PROBES" || { echo "COMMISH-KIT PROBES FAILED"; exit 1; }

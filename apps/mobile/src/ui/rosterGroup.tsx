@@ -12,6 +12,7 @@
 // three that matter harder to spot, not easier.
 import { StyleSheet, Text, View } from 'react-native';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
+import { flagFor } from '@drip/core/data/commish';
 import { useTheme, MONO } from '../theme.native';
 
 /** Filter-chip order and wording. 'start' is included here because as a FILTER
@@ -65,6 +66,20 @@ export function InjuryBadge({ status, size = 8 }: { status: string | null; size?
   return (
     <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: fg, borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
       <Text style={{ fontFamily: MONO, fontSize: size, fontWeight: '700', color: fg }}>{status}</Text>
+    </View>
+  );
+}
+
+/** The commissioner's flag on a player (0141), or nothing. Same anatomy as
+ *  the injury badge so the two sit side by side; purple so it never reads as
+ *  a medical designation. Reads the core module cache (flagFor) directly —
+ *  the host bumps a version counter when flags land, same as injuries. */
+export function FlagChip({ slug, size = 8 }: { slug: string; size?: number }) {
+  const label = flagFor(slug);
+  if (!label) return null;
+  return (
+    <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: '#A87BD8', borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1, maxWidth: 96 }}>
+      <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: size, fontWeight: '700', color: '#A87BD8' }}>⚑ {label}</Text>
     </View>
   );
 }

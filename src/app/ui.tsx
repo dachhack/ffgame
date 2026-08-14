@@ -5,6 +5,7 @@ import type { Pos, ThemeName } from '@drip/core/theme';
 import { useStore, type CardSkin } from './store';
 import { headshot, espnHeadshot, teamLogo } from '@drip/core/data/media';
 import { injuryFor } from '@drip/core/data/injuries';
+import { flagFor } from '@drip/core/data/commish';
 import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 import { APP_VERSION, DATA_SOURCE } from '@drip/core/version';
 import { Rulebook } from '../screens/Rulebook';
@@ -84,6 +85,17 @@ export function InjuryBadge({ week, slug, style }: { week: number; slug: string;
   const c = INJURY_COLOR[s];
   return (
     <span className="mono" title={INJURY_LABEL[s]} style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.04em', color: c, border: `1px solid ${c}`, borderRadius: 2, padding: '0 3px', lineHeight: 1.5, flex: 'none', ...style }}>{s}</span>
+  );
+}
+
+/** The commissioner's flag on a player (0141), or nothing. Same anatomy as
+ *  the injury badge so the two sit side by side; purple so it never reads as
+ *  a medical designation. */
+export function FlagChip({ slug, style }: { slug: string; style?: CSSProperties }) {
+  const label = flagFor(slug);
+  if (!label) return null;
+  return (
+    <span className="mono" title={`commissioner: ${label}`} style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.04em', color: '#A87BD8', border: '1px solid #A87BD8', borderRadius: 2, padding: '0 3px', lineHeight: 1.5, flex: 'none', maxWidth: 92, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...style }}>⚑ {label}</span>
   );
 }
 

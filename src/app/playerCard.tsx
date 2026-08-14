@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import type { Pos } from '@drip/core/types';
 import { PLAYER_BIO, tenureLabel } from '@drip/core/data/playerBio';
 import { injuryFor, injuryRowFor } from '@drip/core/data/injuries';
+import { flagFor } from '@drip/core/data/commish';
 import { statsForName } from '@drip/core/data/players';
 import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import { teamLogo } from '@drip/core/data/media';
@@ -44,6 +45,7 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   const bio = PLAYER_BIO[slug];
   const tenure = tenureLabel(slug);
   const inj = week != null ? injuryRowFor(week, slug) : null;
+  const flag = flagFor(slug);
   const injTag = week != null ? injuryFor(week, slug) : null;
   const season = statsForName(name, pos as Pos);
   // This week so far, from whatever plays are loaded (live board installs them;
@@ -111,6 +113,7 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
           {(tenure || bio?.college || bio?.age != null) && row('CAREER', [tenure, bio?.college, bio?.age != null ? `age ${bio.age}` : null].filter(Boolean).join(' · '))}
           {inj && row('INJURY', `${INJURY_LABEL[inj.status] ?? inj.status}${inj.comment ? ` — ${inj.comment}` : ''}${inj.returnDate ? ` · est. return ${inj.returnDate}` : ''}`)}
           {!inj && injTag && row('INJURY', INJURY_LABEL[injTag] ?? injTag)}
+          {flag && row('COMMISH', `\u2691 ${flag}`)}
           {weekLine && row('THIS WK', weekLine)}
           {seasonLine && row('2025', seasonLine)}
         </div>

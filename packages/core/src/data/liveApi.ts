@@ -1353,6 +1353,20 @@ export const setTradeSignal = (leagueId: string, rosterId: number, slug: string,
     p_league_id: leagueId, p_roster_id: rosterId, p_slug: slug, p_kind: kind, p_on: on,
   });
 
+// ── Commish kit (0141): the league note + player flags, any league kind ──────
+export const leagueNote = (leagueId: string) =>
+  rpc<{ ok?: boolean; error?: string; text?: string | null; at?: string | null; can_edit?: boolean }>(
+    'league_note', { p_league_id: leagueId });
+export const setLeagueNote = (leagueId: string, text: string | null) =>
+  rpc<{ ok: boolean; error?: string; text?: string | null }>('set_league_note', { p_league_id: leagueId, p_text: text });
+export interface PlayerFlagRow { slug: string; label: string; created_at: string; }
+export const playerFlags = (leagueId: string) =>
+  rpc<PlayerFlagRow[] | { error: string }>('player_flags', { p_league_id: leagueId });
+export const setPlayerFlag = (leagueId: string, slug: string, label: string | null) =>
+  rpc<{ ok: boolean; error?: string; on?: boolean; label?: string }>('set_player_flag', {
+    p_league_id: leagueId, p_slug: slug, p_label: label,
+  });
+
 // ── Playoffs (0073): the endgame for native leagues ───────────────────────────
 export interface StandingsRow { roster_id: number; team: string | null; wins: number; losses: number; ties: number; pf: number; pa: number; }
 export interface PlayoffMatchup {
