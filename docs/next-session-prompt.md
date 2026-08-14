@@ -65,6 +65,14 @@ functions deploy from `main` automatically; latest sideloaded APK is
    Playtest`; `versionCode` in `assets/app.config`; PostHog key in
    `assets/app.config`; new version string present and old one ABSENT in the
    Hermes bundle — check **both ASCII and UTF-16-LE** encodings.
+   **THE TREE IS FROZEN WHILE GRADLE RUNS.** Metro bundles from the working
+   tree AS IT IS during the build, not from the commit you launched at —
+   editing mid-build produced two hybrid APKs on 2026-08-14 (caught only by
+   the version-string check). Background the build if you like, but commit
+   nothing, bump nothing, and edit nothing until it exits. Also: this remote
+   env has NO Android SDK baked in — install JDK 17 + cmdline-tools + accept
+   licenses first (see HANDOFF 2026-08-13), or bake them into a SessionStart
+   hook.
 
 ## Load-bearing design decisions (don't re-derive)
 
