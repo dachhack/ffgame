@@ -153,6 +153,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
   const [slateWin, setSlateWin] = useState<GameWindow | null>(null);
   /** Which roster is expanded — one at a time, so the board stays reachable. */
   const [rosterOpen, setRosterOpen] = useState<'you' | 'their' | null>(null);
+  const [fieldsOpen, setFieldsOpen] = useState(false); // ▦ all-fields overlay (web FieldBoard's sibling)
 
   // ── Live state ──────────────────────────────────────────────────────────────
   // What the WORKER published, not anything resolved here. This screen used to
@@ -366,6 +367,29 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
   const slots = useMemo(() => slotsFor(wins), [wins]);
 
   const week = matchup?.week ?? 0;
+  /** Every NFL game with a slotted player, deduped by game and ordered by the
+   *  board's windows — the ▦ FIELDS overlay's list. Sources: revealed picks
+   *  (both sides, kicked windows) plus YOUR own picks (all windows — the
+   *  opponent's unkicked picks are sealed and stay out by design). */
+  const fieldGames = (() => {
+    if (!gameFeeds.length) return [] as { key: string; away: string; home: string; team: string; win: string }[];
+    const slugs = new Set<string>();
+    for (const rp of revealed) if (rp.player_slug) slugs.add(rp.player_slug);
+    for (const v of Object.values(picks)) if (v.player_slug) slugs.add(v.player_slug);
+    const seen = new Set<string>();
+    const out: { key: string; away: string; home: string; team: string; win: string }[] = [];
+    for (const sl of slugs) {
+      const tm = duelPool[sl]?.team || pool.find((p) => p.slug === sl)?.team || slugMeta(sl).team;
+      if (!tm) continue;
+      const f = gameFeedFor(week, tm);
+      if (!f || seen.has(f.key)) continue;
+      seen.add(f.key);
+      out.push({ key: f.key, away: f.away, home: f.home, team: tm, win: String(windowForTeam(week, tm)) });
+    }
+    const order = (w: string) => { const i = wins.findIndex((x) => String(x.id) === w); return i < 0 ? 99 : i; };
+    return out.sort((a, b) => order(a.win) - order(b.win));
+  })();
+
   const gateOn = hasSlate(week);
   // readPool resolves the team (the synced row's own first, then the baked 2025
   // table) — this used to consult slugMeta alone, which knows only players who
@@ -697,6 +721,18 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
           Each label carries its own side's colour, which is the only thing that
           needs distinguishing here. */}
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+        {/* Third door, live only: the all-fields board (founder's ask — the web
+            got its ▦ FIELDS onto the live header the same day). Hidden until a
+            feed exists because an empty fields sheet answers nothing. */}
+        {gameFeeds.length > 0 && (
+          <Pressable
+            onPress={() => { tap(); setFieldsOpen(true); }}
+            android_ripple={{ color: alpha(t.text, 20) }}
+            style={({ pressed }) => ({ flex: 0.6, alignItems: 'center', justifyContent: 'center', paddingVertical: 11, borderRadius: 10, overflow: 'hidden', backgroundColor: t.surface, opacity: pressed ? 0.8 : 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd })}
+          >
+            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.8, color: t.text }}>▦ FIELDS</Text>
+          </Pressable>
+        )}
         {([['you', 'YOUR ROSTER', t.you, pool.length], ['their', 'OPPONENT ROSTER', t.opp, oppPool.length]] as const).map(([side, label, accent, n]) => (
           <Pressable
             key={side}
@@ -914,6 +950,25 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack }: {
           reason ABOUT — off the screen. In a sheet the board stays where it
           was, and the two sides become one place you switch between rather
           than two panels competing for the same column. */}
+      <Overlay
+        visible={fieldsOpen}
+        title="All fields"
+        subtitle="EVERY GAME WITH A SLOTTED PLAYER · LIVE DRIVES"
+        onClose={() => setFieldsOpen(false)}
+      >
+        <ScrollView contentContainerStyle={{ padding: 12, gap: 12 }}>
+          {fieldGames.length === 0 && (
+            <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>No live games with slotted players yet.</Mono>
+          )}
+          {fieldGames.map((g) => (
+            <View key={g.key} style={{ gap: 4 }}>
+              <Mono size={9.5} weight="700" track={0.08}>{g.away}@{g.home} · {winLabelFor(g.win)}</Mono>
+              <FieldView week={week} team={g.team} clock={Number.MAX_SAFE_INTEGER} />
+            </View>
+          ))}
+        </ScrollView>
+      </Overlay>
+
       <Overlay
         visible={!!rosterOpen}
         title={rosterOpen === 'their' ? 'Opponent roster' : 'Your roster'}
