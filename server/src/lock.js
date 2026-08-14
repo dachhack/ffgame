@@ -204,7 +204,13 @@ export async function lockDueWindows(week, winKicks, now = new Date()) {
  *  manager — until their own kickoff seals them (lockDueWindows). With no
  *  dueWins map (unknown slate) every row locks, the safe pre-0058 behavior.
  *  Empty seats with no app_user are left to the resolver's auto-backup. */
-export async function materializeAutoLineups(matchupIds, iso = new Date().toISOString(), dueWins = null) {
+/** fillOnly (0170.8): the per-tick variant for ALREADY-LIVE matchups — later
+ *  windows of a multi-window week come due long after the scheduled→live
+ *  transition that runs the full pass, so without this they never fill. In
+ *  fillOnly mode every seat (AI included) takes the plain empty-slot fill from
+ *  what it owns: no AI delete/rewrite, no budget pass, no coin — so calling it
+ *  every tick is a no-op once the slots are filled. */
+export async function materializeAutoLineups(matchupIds, iso = new Date().toISOString(), dueWins = null, fillOnly = false) {
   const { data: ms } = await db().from('matchup')
     .select('id,league_id,week,home_roster_id,away_roster_id').in('id', matchupIds);
   // The season starting balance, authoritative from the DB so the AI seeds the
@@ -242,29 +248,30 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       // week) plays the economy: it earns + spends coin. A missed 'best_lineup'
       // manager just gets auto-filled with whatever they already own — we never
       // spend their coin for them.
-      const aiDriven = isAi || (missed && policy === 'ai');
+      const aiDriven = !fillOnly && (isAi || (missed && policy === 'ai'));
+      const fullRewrite = !fillOnly && isAi;
       const starters = (startersByRoster.get(rosterId)) ?? [];
       // The fill must never duplicate a player the manager already fielded:
       // autoLineup builds blind from the pool it's given, so give it the pool
-      // MINUS the fielded players (AI seats rewrite in full and keep it all).
+      // MINUS the fielded players (a full AI rewrite keeps it all).
       const slugs = starters.map((s) => s.player_slug).filter(Boolean)
-        .filter((slug) => isAi || !fieldedSlugs.has(slug));
+        .filter((slug) => fullRewrite || !fieldedSlugs.has(slug));
       let owned, extra;
       if (aiDriven) { ({ owned, extra } = await aiBudgetPass(m, rosterId, mem.app_user_id, starters, seed)); }
       else { const l = await ownedLoadout(m.id, mem.app_user_id); owned = l.unlocks; extra = l.extra; }
       // Arm-before-write: applied_state (owned unlocks + the extra-slot count) is
       // upserted by the budget pass BEFORE these rows, so a `combodrip` pick
       // clears enforce_locked_metric and the extra 'x' rows clear enforce_slot_cap.
-      if (isAi && hasPicks) await db().from('sealed_pick').delete().eq('matchup_id', m.id).eq('app_user_id', mem.app_user_id);
+      if (fullRewrite && hasPicks) await db().from('sealed_pick').delete().eq('matchup_id', m.id).eq('app_user_id', mem.app_user_id);
       // Persona key ONLY for permanent AI seats: some weeks their TE hides an
       // 8-PT NUKE (EV-neutral drama, see aiPersonaNuker). A missed human's
       // autofill — even one flipped to AI policy for the week — stays vanilla.
-      const persona = isAi ? `${m.league_id}:${rosterId}` : undefined;
+      const persona = fullRewrite ? `${m.league_id}:${rosterId}` : undefined;
       const rows = autoLineup(slugs, m.week, owned, extra, persona)
         // A partially-set human keeps every SLOT they touched — the fill
         // covers only the empty ones (an AI seat still rewrites in full; its
         // old rows were deleted above).
-        .filter((p) => isAi || !setSlots.has(`${p.win}#${p.slot}`))
+        .filter((p) => fullRewrite || !setSlots.has(`${p.win}#${p.slot}`))
         .map((p) => {
         const sealNow = !dueWins || dueWins.has(p.win);
         return {
