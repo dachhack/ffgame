@@ -25,6 +25,7 @@ import { isAdmin } from '@drip/core/data/liveApi';
 import { LivePicks } from './src/screens/LivePicks';
 import { DemoBoard } from './src/screens/DemoBoard';
 import { CommishTools } from './src/screens/CommishTools';
+import { ChatScreen } from './src/ui/Chat';
 import { Admin } from './src/screens/Admin';
 import { Draft } from './src/screens/Draft';
 import { Team } from './src/screens/Team';
@@ -85,7 +86,7 @@ export function App() {
   // Bumped when a board join lands a new seat — remounts Leagues so the fresh
   // league is there when the user backs out of the board.
   const [leaguesEpoch, setLeaguesEpoch] = useState(0);
-  const [view, setView] = useState<'picks' | 'demo' | 'admin' | 'draft' | 'team' | 'commishtools' | 'board'>('picks');
+  const [view, setView] = useState<'picks' | 'demo' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board'>('picks');
 
   useEffect(() => {
     if (!liveConfigured()) { setReady(true); return; }
@@ -190,15 +191,17 @@ export function App() {
 
         {/* Native leagues carry their whole season in-app — matchup, draft
             room, waivers — so they get the full tab strip. Platform leagues
-            only earn one when you commission them: MATCHUP + ⚑ COMMISH (seat
-            management works anywhere; rosters/waivers stay on Sleeper). A
-            platform league you merely play in keeps its stripless board. */}
-        {open && (open.native || open.commish) && (view === 'picks' || view === 'draft' || view === 'team' || view === 'commishtools') && (
+            only earn management tabs when you commission them (rosters/waivers
+            stay on Sleeper) — but CHAT (0147) is for every member of any
+            league, so an open league always has a strip now: a play-only
+            platform league shows ▦ MATCHUP + 💬 CHAT. */}
+        {open && (view === 'picks' || view === 'draft' || view === 'team' || view === 'chat' || view === 'commishtools') && (
           <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 14, paddingTop: 8 }}>
             {([
               ['picks', '▦ MATCHUP', open.rosterId != null],           // no seat → no lineup
               ['draft', '⛏ DRAFT', open.native],                       // draft rooms are native-only
               ['team', '⇄ MY TEAM', open.native && open.rosterId != null],
+              ['chat', '💬 CHAT', true],                               // any member, any league kind
               ['commishtools', '⚑ COMMISH', !!open.commish],
             ] as const)
               .filter(([, , show]) => show)
@@ -237,6 +240,8 @@ export function App() {
           <View style={{ flex: 1 }}><Draft leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('picks'); }} /></View>
         ) : view === 'team' && open?.native ? (
           <View style={{ flex: 1 }}><Team leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('picks'); }} onDraft={() => setView('draft')} /></View>
+        ) : view === 'chat' && open ? (
+          <View style={{ flex: 1 }}><ChatScreen key={`chat-${open.leagueId}`} leagueId={open.leagueId} /></View>
         ) : view === 'commishtools' && open ? (
           <View style={{ flex: 1 }}><CommishTools leagueId={open.leagueId} native={open.native} rosterId={open.rosterId}
             // A seatless commissioner has nowhere else in the league to land —

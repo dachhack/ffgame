@@ -28,6 +28,7 @@ import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx } from '@drip/core/t
 import { RosterAside, SetupRow, PlayerPicker, ScoutModal, buffAppliesToSpot, TwinChip } from './boardParts';
 import { usePot, WindowPotChip, potOutcomeLine } from './WindowPot';
 import { CommishNoteBanner } from '../app/commishKit';
+import { ChatButton } from '../app/chat';
 
 const TICK_MS = 700;
 const TICK_SECONDS = 20;
@@ -1464,6 +1465,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                       <button onClick={() => setFieldsOpen(true)} title="Every game with a slotted player, as live field visuals" className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 11px' }}>
                         ▦ FIELDS
                       </button>
+                    )}
+                    {/* chat (0147): league channel + DMs, right beside the other board tools */}
+                    {liveCtx && (
+                      <ChatButton leagueId={liveCtx.leagueId}
+                        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 11px', cursor: 'pointer' }} />
                     )}
                   </div>
                 </div>
