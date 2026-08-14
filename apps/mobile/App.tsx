@@ -27,6 +27,7 @@ import { DemoBoard } from './src/screens/DemoBoard';
 import { CommishTools } from './src/screens/CommishTools';
 import { ChatScreen } from './src/ui/Chat';
 import { LeagueHome } from './src/screens/LeagueHome';
+import { ChatChipDot } from './src/ui/unread';
 import { Admin } from './src/screens/Admin';
 import { Draft } from './src/screens/Draft';
 import { Team } from './src/screens/Team';
@@ -218,6 +219,7 @@ export function App() {
                   backgroundColor: view === id ? alpha(theme.you, 12) : theme.surface,
                 }}>
                 <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: view === id ? theme.you : theme.dim }}>{label}</Text>
+                {id === 'chat' && <ChatChipDot leagueId={open.leagueId} active={view === 'chat'} />}
               </Pressable>
             ))}
             {/* ▦ FIELDS — an action chip, not a view: opens the all-fields

@@ -8,7 +8,7 @@ import {
   getSession, onAuth, signOut, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync,
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, adminUserWaitlist, type WaitlistRow,
-  myMatchup, matchupTeams, leagueResults, defaultOpenWeek,
+  myMatchup, matchupTeams, leagueResults, defaultOpenWeek, chatUnread,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
 } from '@drip/core/data/liveApi';
 import { buildDripTestLeague } from '@drip/core/data/dripTest';
@@ -418,6 +418,28 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   const [commishLeagues, setCommishLeagues] = useState<AdminLeague[]>([]);
   const [commishLoaded, setCommishLoaded] = useState(false);
   const [cards, setCards] = useState<Record<string, MatchupCard>>({});
+  // Unread-chat badges on the league cards (0183). Polled on the badge
+  // cadence; chat_unread never marks anything read. Skipped under browse-as
+  // (it would answer for the ADMIN, or refuse).
+  const [unreads, setUnreads] = useState<Record<string, { n: number; mention: boolean }>>({});
+  useEffect(() => {
+    if (viewAs || !enrollments?.length) return;
+    let dead = false;
+    const ids = [...new Set(enrollments.filter((e) => !e.league?.is_mock).map((e) => e.league_id))];
+    const poll = () => Promise.all(ids.map((id) => chatUnread(id).then((r) => [id, r] as const).catch(() => null)))
+      .then((rows) => {
+        if (dead) return;
+        const m: Record<string, { n: number; mention: boolean }> = {};
+        for (const row of rows) {
+          if (row && row[1].ok) m[row[0]] = { n: (row[1].league ?? 0) + (row[1].dm ?? 0), mention: (row[1].mention ?? 0) > 0 };
+        }
+        setUnreads(m);
+      });
+    void poll();
+    const t = setInterval(() => { if (!document.hidden) void poll(); }, 60_000);
+    return () => { dead = true; clearInterval(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enrollments, viewAs?.userId]);
   // A commissioner's share link (?code=…) stashes dripInviteCode and promises
   // "just sign in and confirm — no code to type." Honor that by skipping the
   // role chooser and going straight to the pre-filled redeem form.
@@ -694,6 +716,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       onDraft={(leagueId, rosterId) => guard(() => { setHomeFor(null); setTarget({ leagueId, rosterId }); setView('draft'); })()}
       onTeam={(leagueId, rosterId) => guard(() => { setHomeFor(null); setTarget({ leagueId, rosterId }); setView('team'); })()}
       onOpen={(e) => { setHomeFor(e); setView('leaguehome'); }}
+      unreads={unreads}
       onAdd={guard(() => setView('add'))}
       onDeleted={refresh}
       isCommish={isCommish}
@@ -719,7 +742,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onPodBuild, onResults, onManage, onDraft, onTeam, onAdd, onDeleted, isCommish, onOpen }: {
+function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onPodBuild, onResults, onManage, onDraft, onTeam, onAdd, onDeleted, isCommish, onOpen, unreads }: {
   enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
   onPodBuild: (leagueId: string, rosterId: number, week?: number, name?: string) => void;
   onResults: (leagueId: string) => void; onManage: (leagueId: string) => void;
@@ -727,6 +750,8 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
   onDeleted: () => void; isCommish: boolean;
   /** Open the league's HOME page (0182) — the card's primary action. */
   onOpen: (e: Enrollment) => void;
+  /** league_id → unread chat counts, for the card badges (0183). */
+  unreads: Record<string, { n: number; mention: boolean }>;
 }) {
   const [filter, setFilter] = useState<'all' | 'commish'>('all');
   const enrolledIds = new Set(enrollments.map((e) => e.league_id));
@@ -764,11 +789,11 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} onResults={() => onResults(l.league_id)} />)}
         {enrolledCommish.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} />
+          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} />
         )}
         {filter === 'all' && enrolledPlayer.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} />
+          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} />
         )}
       </div>
       <div style={{ textAlign: 'center', marginTop: 18 }}>
@@ -898,10 +923,11 @@ function MockLeagueCard({ e, onDraft, onDeleted }: { e: Enrollment; onDraft: () 
   );
 }
 
-function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage, onDraft, onTeam, onOpen }: {
+function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage, onDraft, onTeam, onOpen, unread }: {
   e: Enrollment; card?: MatchupCard; commish: boolean; userId: string;
   onPodBuild: () => void; onResults: () => void; onManage: () => void; onDraft: () => void; onTeam: () => void;
   onOpen: () => void;
+  unread?: { n: number; mention: boolean };
 }) {
   const { loadSimLeague, navigate, setDemoWeek } = useStore();
   const [building, setBuilding] = useState(false);
@@ -999,6 +1025,13 @@ function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage,
                 badging a real matchup "practice" would be a lie about a game that
                 counts. In August the two agree; at the rollover only this is right. */}
             {practice && <span className="mono" title="Preseason practice — a real preseason game on live play-by-play. Nothing carries over: no standings, no seeding, no coin, no power-up inventory." style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--you)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', borderRadius: 4, padding: '2px 6px' }}>🏈 PRACTICE</span>}
+            {/* unread chat (0183) — @ + warn tone when someone said your name */}
+            {unread && unread.n > 0 && (
+              <span className="mono" title={unread.mention ? 'unread chat — you were mentioned' : 'unread chat'}
+                style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: unread.mention ? 'var(--on-accent)' : 'var(--you)', background: unread.mention ? 'var(--warn)' : 'color-mix(in srgb, var(--you) 14%, transparent)', border: `1px solid ${unread.mention ? 'var(--warn)' : 'var(--you)'}`, borderRadius: 999, padding: '2px 7px' }}>
+                💬 {unread.mention ? '@ ' : ''}{unread.n > 99 ? '99+' : unread.n}
+              </span>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, minWidth: 0 }}>
             {e.league?.avatar_url && <img src={e.league.avatar_url} alt="" width={14} height={14} style={{ borderRadius: 3, flexShrink: 0 }} />}

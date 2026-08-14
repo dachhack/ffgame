@@ -10,6 +10,7 @@ import { myEnrollments, claimMyRosters, commishOverview, friendlyError, myWaitli
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono } from '../ui/prims';
+import { CardUnreadPill } from '../ui/unread';
 import { BrandLoading } from '../ui/BrandLoading';
 
 /** A league or team crest.
@@ -164,6 +165,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
                   {!!e.comanager && <Mono size={8.5} tone="warn" track={0.08}>CO-MGR</Mono>}
                   {!!lg?.is_mock && <Mono size={8.5} tone="faint" track={0.08}>MOCK</Mono>}
                   {!!kind && <Mono size={8.5} tone="warn" track={0.08}>{kind}</Mono>}
+                  {!lg?.is_mock && <CardUnreadPill leagueId={e.league_id} />}
                 </View>
                 {/* Your own team crest, small, beside the team it belongs to —
                     the same pairing the web's league card uses, with the sizes
