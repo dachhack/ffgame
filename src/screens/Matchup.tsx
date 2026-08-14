@@ -1568,10 +1568,17 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         // the finals). At kickoff these are all 0 — it's a blind commitment.
         const liveOf = (s: typeof b) => banksAtClock(s.events, effWinClock(s.win)).you;
         const starters = all
-          .filter((s) => s.you && s.their)
-          // Live board (0138): a starter whose game already started is off the
-          // menu — routing a backup with the score on the screen is hindsight,
-          // and the server refuses it anyway. Assignments made before kickoff
+          // Live board: a target needs only YOUR player — the opponent's picks
+          // in unkicked windows are SEALED (invisible by design), so requiring
+          // s.their here left the menu permanently empty on any multi-window
+          // live week: future windows never showed opponents and kicked ones
+          // are barred below. If a target later proves unopposed itself, the
+          // engine leaves the assignment unused (all-or-nothing holds). The
+          // demo keeps the both-sides check — it knows the whole AI lineup.
+          .filter((s) => s.you && (liveCtx ? slotKey(s.win, s.slotIndex) !== backupMenu.key : !!s.their))
+          // 0138: a starter whose game already started is off the menu —
+          // routing a backup with the score on the screen is hindsight, and
+          // the server refuses it anyway. Assignments made before kickoff
           // stay valid and still score; they committed blind.
           .filter((s) => !liveCtx || liveWinState[s.win] === 'setup' || liveWinState[s.win] === 'locked')
           .map((s) => ({ key: slotKey(s.win, s.slotIndex), name: s.you!.player.name, score: liveOf(s), win: s.win }));

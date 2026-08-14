@@ -14,7 +14,7 @@ import { getGames, gamesToPollFrom, slateFromGames, espnCurrentWeek } from './po
 import { pollGame } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
 import { sweepMembers } from './poll/members.js';
-import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt } from './lock.js';
+import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups } from './lock.js';
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues } from './sync.js';
 import { sweepNative } from './native.js';
@@ -199,6 +199,12 @@ async function tickContext(ctx, season) {
     const rctx = await prefetchTick(live, week);
     const nowMs = Date.now();
     const startedWins = wk ? new Set(Object.keys(wk).filter((w) => wk[w] <= nowMs)) : null;
+    // Fill-only auto-lineups (0170.8): later windows of an ALREADY-live week
+    // come due long after the scheduled→live pass ran, so empty slots (a
+    // partial human, an AI seat's later windows) fill here as the week runs.
+    // Idempotent — a seat with no empty slots writes nothing.
+    try { await materializeAutoLineups(live.map((m) => m.id), new Date(nowMs).toISOString(), startedWins, true); }
+    catch (e) { log(`[${ctx.tag}] window fill`, e.message); }
     let done = 0;
     for (let i = 0; i < live.length; i += 20) {
       await Promise.all(live.slice(i, i + 20).map((m) =>
