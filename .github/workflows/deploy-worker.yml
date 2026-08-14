@@ -139,12 +139,19 @@ jobs:
       # a Fly secret when the repo secret exists. --stage defers the restart to
       # the deploy right below, so this never causes its own rollout. Absent
       # secret → skipped; the worker enqueues but cannot send, by design.
+      # (Guarded in the script, not in `if:` — the secrets context isn't
+      # available in step-level if conditions, and referencing it there makes
+      # the whole workflow file unparseable: zero jobs, silent no-deploy.)
       - name: stage FCM credential
-        if: ${{ secrets.FCM_SERVICE_ACCOUNT != '' }}
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
           FCM: ${{ secrets.FCM_SERVICE_ACCOUNT }}
-        run: flyctl secrets set --stage FCM_SERVICE_ACCOUNT="$FCM"
+        run: |
+          if [ -z "$FCM" ]; then
+            echo "FCM_SERVICE_ACCOUNT secret not set — skipping (worker will enqueue only)"
+            exit 0
+          fi
+          flyctl secrets set --stage FCM_SERVICE_ACCOUNT="$FCM"
 
       - name: fly deploy
         env:
