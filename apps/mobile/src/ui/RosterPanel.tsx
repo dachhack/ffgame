@@ -16,11 +16,12 @@ import type { PoolGroup } from '@drip/core/data/poolEntry';
 import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
 import { GROUP_TABS, GroupBadge, InjuryBadge } from './rosterGroup';
+import { openPlayerCard } from './PlayerCardSheet';
 import { injuryFor } from '@drip/core/data/injuries';
 
 const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
-export function RosterPanel({ title, players, wins, week, windowOf, groupOf, accent, open: openProp, onToggle }: {
+export function RosterPanel({ title, players, wins, week, userId, windowOf, groupOf, accent, open: openProp, onToggle }: {
   title: string;
   players: Player[];
   /** The week's windows, in order — the grouping and its labels. */
@@ -28,6 +29,8 @@ export function RosterPanel({ title, players, wins, week, windowOf, groupOf, acc
   /** The week the list is for — scopes the injury report, which only ever
    *  speaks for the week being played. 0 on a board with no week yet. */
   week: number;
+  /** Signed-in account — lights the ★ on the player card a row tap opens. */
+  userId?: string;
   /** Which window a player's real game falls in ('any' when unresolvable). */
   windowOf: (playerId: string) => string | null;
   /** Which part of the roster a player sits on. Optional: the demo board and
@@ -182,7 +185,7 @@ export function RosterPanel({ title, players, wins, week, windowOf, groupOf, acc
                   <Mono size={9.5} weight="700" track={0.1}>{g.label}</Mono>
                   <Mono size={9} tone="faint">{g.players.length}</Mono>
                 </View>
-                {g.players.map((p) => <RosterRow key={p.id} player={p} group={groupOf?.(p.id) ?? 'start'} week={week} />)}
+                {g.players.map((p) => <RosterRow key={p.id} player={p} group={groupOf?.(p.id) ?? 'start'} week={week} userId={userId} />)}
               </View>
             ))}
             {!groups.length && (
@@ -197,13 +200,15 @@ export function RosterPanel({ title, players, wins, week, windowOf, groupOf, acc
   );
 }
 
-function RosterRow({ player, group, week }: { player: Player; group: PoolGroup; week: number }) {
+function RosterRow({ player, group, week, userId }: { player: Player; group: PoolGroup; week: number; userId?: string }) {
   const t = useTheme();
   const pc = t.pos[player.pos as keyof typeof t.pos] ?? { bg: t.sh, fg: t.dim, bd: t.bd };
   const photo = headshot(player.id);
   const logo = teamLogo(player.team);
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
+    <Pressable
+      onPress={() => openPlayerCard({ slug: player.id, name: player.full ?? player.name, pos: player.pos, team: player.team, week: week || undefined, userId })}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
       <View style={{ width: 26, height: 26, borderRadius: 13, overflow: 'hidden', backgroundColor: t.sh, alignItems: 'center', justifyContent: 'center' }}>
         {photo
           ? <Image source={{ uri: photo }} style={{ width: 26, height: 26 }} resizeMode="cover" />
@@ -218,6 +223,6 @@ function RosterRow({ player, group, week }: { player: Player; group: PoolGroup; 
       <InjuryBadge status={injuryFor(week, player.id)} />
       <GroupBadge group={group} />
       <Mono size={9} tone="faint">{player.team}</Mono>
-    </View>
+    </Pressable>
   );
 }

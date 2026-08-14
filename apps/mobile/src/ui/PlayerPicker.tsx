@@ -18,11 +18,12 @@ import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
 import { Overlay } from './Overlay';
 import { GROUP_TABS, groupTag } from './rosterGroup';
+import { openPlayerCard } from './PlayerCardSheet';
 import { injuryFor } from '@drip/core/data/injuries';
 
 const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
-export function PlayerPicker({ visible, windowLabel, players, currentId, week, groupOf, gated, onGated, onPick, onRemove, onClose }: {
+export function PlayerPicker({ visible, windowLabel, players, currentId, week, userId, groupOf, gated, onGated, onPick, onRemove, onClose }: {
   visible: boolean;
   windowLabel?: string;
   players: Player[];
@@ -31,6 +32,8 @@ export function PlayerPicker({ visible, windowLabel, players, currentId, week, g
    *  This is the surface where the designation actually changes a decision: it
    *  is the last thing a manager sees before committing a player to a slot. */
   week: number;
+  /** Signed-in account — lights the ★ on the ⓘ player card. */
+  userId?: string;
   /** Which part of the roster a player sits on, when the caller knows. */
   groupOf?: (playerId: string) => PoolGroup;
   gated?: (p: Player) => boolean;
@@ -143,6 +146,7 @@ export function PlayerPicker({ visible, windowLabel, players, currentId, week, g
             current={p.id === currentId}
             group={groupOf?.(p.id) ?? 'start'}
             injury={injuryFor(week, p.id)}
+            onInfo={() => openPlayerCard({ slug: p.id, name: p.full ?? p.name, pos: p.pos, team: p.team, week, userId })}
             gated={gated?.(p) ?? false}
             onPress={() => (gated?.(p) ? onGated?.(p) : onPick(p.id))}
           />
@@ -161,8 +165,8 @@ export function PlayerPicker({ visible, windowLabel, players, currentId, week, g
 
 /** A dealt mini card: position badge, team crest, headshot, name. Same cream
  *  stock as the board's cards so the picker reads as the same deck. */
-function MiniPlayerCard({ player, current, group, injury, gated, onPress }: {
-  player: Player; current: boolean; group: PoolGroup; injury: string | null; gated: boolean; onPress: () => void;
+function MiniPlayerCard({ player, current, group, injury, gated, onPress, onInfo }: {
+  player: Player; current: boolean; group: PoolGroup; injury: string | null; gated: boolean; onPress: () => void; onInfo?: () => void;
 }) {
   const t = useTheme();
   const pc = t.pos[player.pos as keyof typeof t.pos] ?? { bg: t.sh, fg: t.dim, bd: t.bd };
@@ -206,6 +210,11 @@ function MiniPlayerCard({ player, current, group, injury, gated, onPress }: {
             <Text style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '700', color: injFg }}>{injury}</Text>
           </View>
         ) : null}
+        {onInfo && (
+          <Pressable onPress={onInfo} hitSlop={8} style={{ width: 15, height: 15, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: '#8A7C55', alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: '#8A7C55' }}>i</Text>
+          </Pressable>
+        )}
         {!!logo
           ? <Image source={{ uri: logo }} style={{ width: 13, height: 13 }} resizeMode="contain" />
           : <Text style={{ fontFamily: MONO, fontSize: 8, color: '#6B6047' }}>{player.team}</Text>}

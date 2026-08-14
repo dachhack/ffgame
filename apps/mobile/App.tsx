@@ -18,6 +18,7 @@ import { APP_VERSION } from '@drip/core/version';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { THEMES, ThemeCtx, loadTheme, saveTheme, isLight, MONO, alpha } from './src/theme.native';
 import { SettingsModal } from './src/ui/SettingsModal';
+import { PlayerCardHost } from './src/ui/PlayerCardSheet';
 import { loadCardSkin, saveCardSkin, loadCardSize, saveCardSize, type CardSkin, type CardSize } from './src/ui/cards';
 import { Leagues } from './src/screens/Leagues';
 import { isAdmin } from '@drip/core/data/liveApi';
@@ -295,6 +296,7 @@ export function App() {
         <StatusBar style={isLight(themeName) ? 'dark' : 'light'} />
         <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }} edges={['top', 'left', 'right']}>
           <ErrorBoundary>{body()}</ErrorBoundary>
+          <PlayerCardHost />
           <SettingsModal
             visible={settingsOpen}
             theme={themeName}
