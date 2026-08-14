@@ -1569,6 +1569,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         const liveOf = (s: typeof b) => banksAtClock(s.events, effWinClock(s.win)).you;
         const starters = all
           .filter((s) => s.you && s.their)
+          // Live board (0138): a starter whose game already started is off the
+          // menu — routing a backup with the score on the screen is hindsight,
+          // and the server refuses it anyway. Assignments made before kickoff
+          // stay valid and still score; they committed blind.
+          .filter((s) => !liveCtx || liveWinState[s.win] === 'setup' || liveWinState[s.win] === 'locked')
           .map((s) => ({ key: slotKey(s.win, s.slotIndex), name: s.you!.player.name, score: liveOf(s), win: s.win }));
         return (
           <BackupMenu
