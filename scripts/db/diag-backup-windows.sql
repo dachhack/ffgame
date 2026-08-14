@@ -8,13 +8,18 @@
 
 \set league_name 'Turf Warriors'
 
+-- The league's fill policy — 'empty' means missed/partial seats are NEVER
+-- auto-filled, whatever the materializer thinks.
+select name, lineup_policy from league where name = :'league_name';
+
 select l.name league, m.week, m.status, m.id matchup_id
   from matchup m join league l on l.id = m.league_id
   where l.name = :'league_name' and m.week >= 100 order by m.week;
 
 -- Seats: who controls them, enrollment, per-window pick counts.
 select l.name league, m.week, lm.sleeper_roster_id seat, lm.team_name,
-       lm.controller, lm.enrolled, sp.game_window, count(sp.id) picks,
+       lm.controller, lm.enrolled, (lm.app_user_id is not null) has_account,
+       sp.game_window, count(sp.id) picks,
        bool_or(sp.locked) any_locked
   from matchup m
   join league l on l.id = m.league_id
@@ -23,7 +28,7 @@ select l.name league, m.week, lm.sleeper_roster_id seat, lm.team_name,
   left join sealed_pick sp on sp.matchup_id = m.id and sp.app_user_id = lm.app_user_id
     and sp.player_slug is not null
   where l.name = :'league_name' and m.week >= 100
-  group by l.name, m.week, lm.sleeper_roster_id, lm.team_name, lm.controller, lm.enrolled, sp.game_window
+  group by l.name, m.week, lm.sleeper_roster_id, lm.team_name, lm.controller, lm.enrolled, lm.app_user_id, sp.game_window
   order by m.week, seat, sp.game_window;
 
 -- Pool depth per seat for the practice weeks (can the auto-fill even field
