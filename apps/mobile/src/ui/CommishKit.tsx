@@ -252,7 +252,23 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
   );
   return (
     <Overlay visible={visible} title="⚖ League scoring"
-      subtitle="Adjustments layer on the base game and apply to every matchup. Every member sees them." onClose={onClose}>
+      subtitle="Adjustments layer on the base game and apply to every matchup. Every member sees them." onClose={onClose}
+      footer={
+        // Pinned below the scroll — SAVE must never be the thing the sheet
+        // clips (first thing the founder's phone did with the scoped section).
+        <>
+          {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 8 }}>{err}</Mono>}
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <View style={{ flex: 1 }}>
+              <PrimaryButton label={busy ? '…' : 'SAVE'} disabled={busy} onPress={() => void save(td, yd, to)} />
+            </View>
+            <Pressable disabled={busy} onPress={() => { tap(); void save(DEFAULT_SCORING.tdBonus, DEFAULT_SCORING.ydMult, DEFAULT_SCORING.toPenalty, []); }}
+              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 12, justifyContent: 'center', opacity: busy ? 0.5 : 1 }}>
+              <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.dim }}>RESET</Text>
+            </Pressable>
+          </View>
+        </>
+      }>
       <ScrollView style={{ flexGrow: 0 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
       {stepper('TD BONUS', 'extra points on every TD your players score', td, setTd, SCORING_BOUNDS.tdBonus, (n) => `${n > 0 ? '+' : ''}${n}`)}
       {stepper('YARDAGE MULTIPLIER', 'scales per-yard scoring and drip growth', yd, setYd, SCORING_BOUNDS.ydMult, (n) => `×${n}`)}
@@ -294,17 +310,7 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
           </Pressable>
         </View>
       </View>
-
-      {!!err && <Mono size={9.5} tone="opp" style={{ marginTop: 8 }}>{err}</Mono>}
-      <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
-        <View style={{ flex: 1 }}>
-          <PrimaryButton label={busy ? '…' : 'SAVE'} disabled={busy} onPress={() => void save(td, yd, to)} />
-        </View>
-        <Pressable disabled={busy} onPress={() => { tap(); void save(DEFAULT_SCORING.tdBonus, DEFAULT_SCORING.ydMult, DEFAULT_SCORING.toPenalty, []); }}
-          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 12, justifyContent: 'center', opacity: busy ? 0.5 : 1 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.dim }}>RESET</Text>
-        </Pressable>
-      </View>
+      <View style={{ height: 12 }} />
       </ScrollView>
     </Overlay>
   );
@@ -531,10 +537,33 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
     </View>
   );
 
+  // Pinned below the scroll — the bulk save controls must never be the thing
+  // the sheet clips, however long the flag list or the filtered matches run.
+  const bulkFooter = (
+    <>
+      <TextInput value={labelDraft} maxLength={40} onChangeText={setLabelDraft}
+        placeholder="one label for all selected…" placeholderTextColor={t.faint}
+        style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12.5, color: t.text, backgroundColor: t.bg }} />
+      {ruleControls}
+      {!!err && <Mono size={9.5} tone="opp" style={{ marginTop: 6 }}>{err}</Mono>}
+      <View style={{ marginTop: 8 }}>
+        <PrimaryButton label={busy ? '…' : `⚑ FLAG ${selected.size} PLAYER${selected.size === 1 ? '' : 'S'}`}
+          disabled={busy || !selected.size} onPress={() => void saveBulk()} />
+      </View>
+      {!labelDraft.trim() && selected.size > 0 && (
+        <Text style={{ fontFamily: MONO, fontSize: 8.5, color: t.warn, marginTop: 5, lineHeight: 12 }}>
+          ↑ add a label first — it’s what the league sees on every flagged player’s chip
+        </Text>
+      )}
+    </>
+  );
+
   return (
     <Overlay visible={visible} title="⚑ Player flags"
-      subtitle="A short label the whole league sees wherever the player appears." onClose={onClose}>
-      {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
+      subtitle="A short label the whole league sees wherever the player appears." onClose={onClose}
+      footer={bulk ? bulkFooter : undefined}>
+      <ScrollView style={{ flexGrow: 0 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+      {!bulk && !!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
       <Mono size={9} tone="faint" track={0.12}>CURRENT FLAGS</Mono>
       {rows == null && <Mono size={10} tone="faint" style={{ marginTop: 6 }}>Loading…</Mono>}
       {rows?.length === 0 && <Mono size={10} tone="faint" style={{ marginTop: 6 }}>None yet.</Mono>}
@@ -596,7 +625,7 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
           )}
         </>
       )}
-      <ScrollView style={{ maxHeight: 260, flexGrow: 0 }} nestedScrollEnabled>
+      <View>
         {matches.map((slug) => (
           <View key={slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd, flexWrap: 'wrap' }}>
             {face(slug)}
@@ -614,27 +643,12 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
                   </Pressable>}
           </View>
         ))}
-      </ScrollView>
+      </View>
       {q.trim().length >= 2 && matches.length === 0 && (
         <Mono size={10} tone="faint" style={{ marginTop: 6 }}>No player matches that.</Mono>
       )}
-      {bulk && (
-        <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
-          <TextInput value={labelDraft} maxLength={40} onChangeText={setLabelDraft}
-            placeholder="one label for all selected…" placeholderTextColor={t.faint}
-            style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12.5, color: t.text, backgroundColor: t.bg }} />
-          {ruleControls}
-          <View style={{ marginTop: 8 }}>
-            <PrimaryButton label={busy ? '…' : `⚑ FLAG ${selected.size} PLAYER${selected.size === 1 ? '' : 'S'}`}
-              disabled={busy || !selected.size} onPress={() => void saveBulk()} />
-          </View>
-          {!labelDraft.trim() && selected.size > 0 && (
-            <Text style={{ fontFamily: MONO, fontSize: 8.5, color: t.warn, marginTop: 5, lineHeight: 12 }}>
-              ↑ add a label first — it’s what the league sees on every flagged player’s chip
-            </Text>
-          )}
-        </View>
-      )}
+      <View style={{ height: 12 }} />
+      </ScrollView>
     </Overlay>
   );
 }
