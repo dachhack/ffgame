@@ -8,12 +8,13 @@ import {
   getSession, onAuth, signOut, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync,
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, adminUserWaitlist, type WaitlistRow,
-  myMatchup, matchupTeams, leagueResults, defaultOpenWeek, chatUnread,
+  myMatchup, matchupTeams, leagueResults, defaultOpenWeek, chatUnread, leagueTrades,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
 } from '@drip/core/data/liveApi';
 import { buildDripTestLeague } from '@drip/core/data/dripTest';
 import { track, identify, Ev } from '@drip/core/analytics';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
+import { lineupAlarmFor, alarmLabel, type LineupAlarm } from '@drip/core/data/lineupAlarm';
 import { PRESEASON_BASE, isPreseasonWeek, preseasonWeekNum, weekLabel, clearRuntimeSlate } from '@drip/core/data/nflSlate';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { AdminPage, type LeagueTab } from './AdminPage';
@@ -422,6 +423,11 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // cadence; chat_unread never marks anything read. Skipped under browse-as
   // (it would answer for the ADMIN, or refuse).
   const [unreads, setUnreads] = useState<Record<string, { n: number; mention: boolean }>>({});
+  // Lineup alarms + trade offers (0184), keyed by enrollment. Alarms need the
+  // card's matchup (id + week), so they compute once `cards` fills; offers are
+  // native-league trades sitting on YOUR answer (pending, to_roster = yours).
+  const [alarms, setAlarms] = useState<Record<string, LineupAlarm>>({});
+  const [offers, setOffers] = useState<Record<string, number>>({});
   useEffect(() => {
     if (viewAs || !enrollments?.length) return;
     let dead = false;
@@ -440,6 +446,34 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     return () => { dead = true; clearInterval(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enrollments, viewAs?.userId]);
+  useEffect(() => {
+    if (viewAs || !enrollments?.length) return;
+    let dead = false;
+    const poll = async () => {
+      const nextAlarms: Record<string, LineupAlarm> = {};
+      const nextOffers: Record<string, number> = {};
+      await Promise.all(enrollments.filter((e) => !e.league?.is_mock).map(async (e) => {
+        const key = enrollKey(e);
+        const card = cards[key];
+        if (card?.matchup && card.matchup.status !== 'final') {
+          const a = await lineupAlarmFor(card.matchup.id, card.matchup.week, e.pick_user_id ?? session.user.id).catch(() => null);
+          if (a) nextAlarms[key] = a;
+        }
+        if (e.league?.provider === 'native') {
+          const ts = await leagueTrades(e.league_id, 30).catch(() => null);
+          if (Array.isArray(ts)) {
+            const n = ts.filter((tr) => tr.status === 'pending' && tr.to_roster === e.sleeper_roster_id).length;
+            if (n > 0) nextOffers[key] = n;
+          }
+        }
+      }));
+      if (!dead) { setAlarms(nextAlarms); setOffers(nextOffers); }
+    };
+    void poll();
+    const t = setInterval(() => { if (!document.hidden) void poll(); }, 120_000);
+    return () => { dead = true; clearInterval(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enrollments, cards, viewAs?.userId]);
   // A commissioner's share link (?code=…) stashes dripInviteCode and promises
   // "just sign in and confirm — no code to type." Honor that by skipping the
   // role chooser and going straight to the pre-filled redeem form.
@@ -717,6 +751,8 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       onTeam={(leagueId, rosterId) => guard(() => { setHomeFor(null); setTarget({ leagueId, rosterId }); setView('team'); })()}
       onOpen={(e) => { setHomeFor(e); setView('leaguehome'); }}
       unreads={unreads}
+      alarms={alarms}
+      offers={offers}
       onAdd={guard(() => setView('add'))}
       onDeleted={refresh}
       isCommish={isCommish}
@@ -742,7 +778,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onPodBuild, onResults, onManage, onDraft, onTeam, onAdd, onDeleted, isCommish, onOpen, unreads }: {
+function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onPodBuild, onResults, onManage, onDraft, onTeam, onAdd, onDeleted, isCommish, onOpen, unreads, alarms, offers }: {
   enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
   onPodBuild: (leagueId: string, rosterId: number, week?: number, name?: string) => void;
   onResults: (leagueId: string) => void; onManage: (leagueId: string) => void;
@@ -752,6 +788,9 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
   onOpen: (e: Enrollment) => void;
   /** league_id → unread chat counts, for the card badges (0183). */
   unreads: Record<string, { n: number; mention: boolean }>;
+  /** enrollKey → soonest lock alarm / trade offers awaiting answer (0184). */
+  alarms: Record<string, LineupAlarm>;
+  offers: Record<string, number>;
 }) {
   const [filter, setFilter] = useState<'all' | 'commish'>('all');
   const enrolledIds = new Set(enrollments.map((e) => e.league_id));
@@ -789,11 +828,11 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} onResults={() => onResults(l.league_id)} />)}
         {enrolledCommish.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} />
+          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} />
         )}
         {filter === 'all' && enrolledPlayer.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} />
+          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} />
         )}
       </div>
       <div style={{ textAlign: 'center', marginTop: 18 }}>
@@ -923,11 +962,13 @@ function MockLeagueCard({ e, onDraft, onDeleted }: { e: Enrollment; onDraft: () 
   );
 }
 
-function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage, onDraft, onTeam, onOpen, unread }: {
+function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage, onDraft, onTeam, onOpen, unread, alarm, offers = 0 }: {
   e: Enrollment; card?: MatchupCard; commish: boolean; userId: string;
   onPodBuild: () => void; onResults: () => void; onManage: () => void; onDraft: () => void; onTeam: () => void;
   onOpen: () => void;
   unread?: { n: number; mention: boolean };
+  alarm?: LineupAlarm;
+  offers?: number;
 }) {
   const { loadSimLeague, navigate, setDemoWeek } = useStore();
   const [building, setBuilding] = useState(false);
@@ -1030,6 +1071,19 @@ function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage,
               <span className="mono" title={unread.mention ? 'unread chat — you were mentioned' : 'unread chat'}
                 style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: unread.mention ? 'var(--on-accent)' : 'var(--you)', background: unread.mention ? 'var(--warn)' : 'color-mix(in srgb, var(--you) 14%, transparent)', border: `1px solid ${unread.mention ? 'var(--warn)' : 'var(--you)'}`, borderRadius: 999, padding: '2px 7px' }}>
                 💬 {unread.mention ? '@ ' : ''}{unread.n > 99 ? '99+' : unread.n}
+              </span>
+            )}
+            {/* the week-saver (0184): a window locks soon and slots sit empty */}
+            {alarm && (
+              <span className="mono" title="pick a player for every slot before the window locks — empty slots score nothing until auto-fill"
+                style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--opp)', border: '1px solid var(--opp)', borderRadius: 999, padding: '2px 7px' }}>
+                ⚠ {alarmLabel(alarm)}
+              </span>
+            )}
+            {offers > 0 && (
+              <span className="mono" title="trade offers waiting on your answer"
+                style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 999, padding: '2px 7px' }}>
+                ⇄ {offers} OFFER{offers === 1 ? '' : 'S'}
               </span>
             )}
           </div>
