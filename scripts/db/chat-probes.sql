@@ -176,4 +176,89 @@ begin
   reset role;
 end $$;
 
+-- ── 6. polls (0148): commish-only create, bounds, vote + re-vote, counts ────
+do $$
+declare lid uuid := current_setting('probe.ch_lid')::uuid; r jsonb; pid bigint; m jsonb;
+begin
+  perform _probe_age_chat();
+  set local role authenticated;
+  perform probe_as('c');
+  perform assert_err(chat_post_poll(lid, 'sneaky?', array['a','b']), 'commissioner', 'pl0 member cannot post a poll');
+  perform probe_as('b');
+  perform assert_err(chat_post_poll(lid, 'thin?', array['only']), '2–6', 'pl1 one option refused');
+  perform assert_err(chat_post_poll(lid, 'long?', array['a', repeat('x', 61)]), '60', 'pl2 long option refused');
+  r := chat_post_poll(lid, 'draft night: which day?', array['Fri', 'Sat', '  ', 'Sun']);
+  perform assert_ok(r, 'pl3 poll posted');
+  pid := (r ->> 'id')::bigint;
+  perform probe_as('c');
+  select v into m from jsonb_array_elements(chat_messages(lid) -> 'messages') v where (v ->> 'id')::bigint = pid;
+  perform assert_true(m ->> 'kind' = 'poll', 'pl4 kind poll');
+  perform assert_true(jsonb_array_length(m -> 'poll' -> 'options') = 3, 'pl5 blank option dropped');
+  perform assert_err(poll_cast(lid, pid, 9), 'options', 'pl6 out-of-range choice refused');
+  perform assert_ok(poll_cast(lid, pid, 0), 'pl7 vote');
+  perform assert_ok(poll_cast(lid, pid, 2), 'pl8 re-vote');
+  perform probe_as('b'); perform assert_ok(poll_cast(lid, pid, 2), 'pl9 second voter');
+  select v into m from jsonb_array_elements(chat_messages(lid) -> 'messages') v where (v ->> 'id')::bigint = pid;
+  perform assert_true((m -> 'poll' ->> 'total')::int = 2, 'pl10 two votes total');
+  perform assert_true((m -> 'poll' -> 'options' -> 2 ->> 'votes')::int = 2, 'pl11 both on Sun (re-vote moved)');
+  perform assert_true((m -> 'poll' ->> 'mine')::int = 2, 'pl12 my choice echoed');
+  perform probe_as('d');
+  perform assert_err(poll_cast(lid, pid, 0), 'forbidden', 'pl13 outsider cannot vote');
+  perform set_config('probe.ch_pid', pid::text, false);
+  reset role;
+end $$;
+
+-- ── 7. pins (0148): commish-only, cap 5, strip on latest page ───────────────
+do $$
+declare lid uuid := current_setting('probe.ch_lid')::uuid; pid bigint := current_setting('probe.ch_pid')::bigint; r jsonb; i int; mid bigint;
+begin
+  perform _probe_age_chat();
+  set local role authenticated;
+  perform probe_as('c');
+  perform assert_err(chat_pin(lid, pid, true), 'commissioner', 'pn0 member cannot pin');
+  perform probe_as('b');
+  perform assert_ok(chat_pin(lid, pid, true), 'pn1 commish pins the poll');
+  r := chat_messages(lid);
+  perform assert_true(jsonb_array_length(r -> 'pins') = 1, 'pn2 pin strip has it');
+  perform assert_true((r -> 'pins' -> 0 ->> 'id')::bigint = pid, 'pn3 the right one');
+  -- fill to the cap: pin 4 more, then a 6th refuses
+  for i in 1..5 loop
+    reset role; perform _probe_age_chat(); set local role authenticated; perform probe_as('b');
+    r := chat_post(lid, 'pin fodder ' || i);
+    perform assert_ok(r, 'pn4 fodder ' || i);
+    mid := (r ->> 'id')::bigint;
+    if i <= 4 then perform assert_ok(chat_pin(lid, mid, true), 'pn5 pin ' || i);
+    else perform assert_err(chat_pin(lid, mid, true), 'plenty', 'pn6 sixth pin refused'); end if;
+  end loop;
+  perform assert_ok(chat_pin(lid, pid, false), 'pn7 unpin');
+  perform assert_true(jsonb_array_length(chat_messages(lid) -> 'pins') = 4, 'pn8 strip follows');
+  reset role;
+end $$;
+
+-- ── 8. mentions (0148): validated, badge counts them apart ──────────────────
+do $$
+declare lid uuid := current_setting('probe.ch_lid')::uuid; r jsonb; m jsonb; mid bigint;
+begin
+  perform _probe_age_chat();
+  set local role authenticated;
+  perform probe_as('b');
+  r := chat_post(lid, '@CH-C you seeing this? (@nobody too)', array[
+    '00000000-0000-0000-0000-00000000000c',
+    '00000000-0000-0000-0000-00000000000d',   -- outsider: must be stripped
+    '00000000-0000-0000-0000-00000000000b'    -- self: must be stripped
+  ]::uuid[]);
+  perform assert_ok(r, 'mn0 post with mentions');
+  mid := (r ->> 'id')::bigint;
+  perform probe_as('c');
+  r := chat_unread(lid);
+  perform assert_true((r ->> 'league')::int >= 1 and (r ->> 'mention')::int = 1, 'mn1 mention counted apart for c');
+  select v into m from jsonb_array_elements(chat_messages(lid) -> 'messages') v where (v ->> 'id')::bigint = mid;
+  perform assert_true((m ->> 'mentions_me')::boolean, 'mn2 mentions_me flags for c');
+  perform assert_true((chat_unread(lid) ->> 'mention')::int = 0, 'mn3 reading clears the mention count');
+  perform probe_as('b');
+  select v into m from jsonb_array_elements(chat_messages(lid) -> 'messages') v where (v ->> 'id')::bigint = mid;
+  perform assert_true(not (m ->> 'mentions_me')::boolean, 'mn4 not for the author');
+  reset role;
+end $$;
+
 select 'ALL CHAT PROBES PASSED' as result;

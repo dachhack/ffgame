@@ -5,10 +5,11 @@
 // (fetching the latest page IS the read). Deleting your own message — or any
 // message, as the commissioner — is a long-press, the phone idiom for "act on
 // this thing" (the web shows a ✕; a ✕ per bubble on a phone is clutter).
-import { useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   chatPost, chatMessages, chatDelete, chatMembers, dmSend, dmThreads, dmMessages,
+  chatPostPoll, pollCast, chatPin,
   leagueNote, friendlyError,
   type ChatMessage, type DmThreadRow, type DmMessage,
 } from '@drip/core/data/liveApi';
@@ -24,6 +25,168 @@ const fmtWhen = (at: string): string => {
     ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
+
+// ── chat v2 (0148): inline media, @mentions, polls, pins ────────────────────
+
+/** Only these hosts (or bare image files) render inline — anything else stays text. */
+const isImageUrl = (s: string): boolean => {
+  const t = s.trim();
+  if (!/^https?:\/\/\S+$/.test(t)) return false;
+  return /^(https?:\/\/)(media\d*\.tenor\.com|media\d*\.giphy\.com|i\.giphy\.com|i\.imgur\.com)\//i.test(t)
+    || /\.(gif|png|jpe?g|webp)(\?\S*)?$/i.test(t);
+};
+const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Free Tenor v2 key — set EXPO_PUBLIC_TENOR_KEY and the GIF picker lights
+ *  up; without it the button hides (pasted GIF links still render inline). */
+const TENOR_KEY = process.env.EXPO_PUBLIC_TENOR_KEY || undefined;
+
+/** A message body: whole-URL images render inline; @TeamName tokens highlight
+ *  against the league's real member names (longest name wins). */
+function MsgBody({ body, names, size = 13 }: { body: string; names: string[]; size?: number }) {
+  const t = useTheme();
+  if (isImageUrl(body)) {
+    return <Image source={{ uri: body.trim() }} resizeMode="cover"
+      style={{ width: 200, height: 150, borderRadius: 8, marginTop: 2, backgroundColor: t.sh }} />;
+  }
+  const base = { fontSize: size, lineHeight: size + 5, color: t.text } as const;
+  if (!names.length || !body.includes('@')) return <Text style={base}>{body}</Text>;
+  const re = new RegExp(`@(${[...names].sort((a, b) => b.length - a.length).map(escRe).join('|')})`, 'g');
+  const parts: ReactNode[] = [];
+  let last = 0; let mm: RegExpExecArray | null; let k = 0;
+  while ((mm = re.exec(body))) {
+    if (mm.index > last) parts.push(body.slice(last, mm.index));
+    parts.push(<Text key={k++} style={{ color: t.you, fontWeight: '700' }}>{mm[0]}</Text>);
+    last = mm.index + mm[0].length;
+  }
+  if (last < body.length) parts.push(body.slice(last));
+  return <Text style={base}>{parts}</Text>;
+}
+
+/** A poll message's options — tap to vote, tap another to change. */
+function PollView({ m, leagueId, onVoted }: { m: ChatMessage; leagueId: string; onVoted: () => void }) {
+  const t = useTheme();
+  const p = m.poll;
+  if (!p) return null;
+  const total = p.total || 0;
+  return (
+    <View style={{ marginTop: 4, maxWidth: 320 }}>
+      {p.options.map((o, i) => {
+        const on = p.mine === i;
+        const pct = total ? o.votes / total : 0;
+        return (
+          <Pressable key={i} onPress={() => { tap(); void pollCast(leagueId, m.id, i).then(onVoted).catch(() => {}); }}
+            style={{ marginTop: 4, borderRadius: 7, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, backgroundColor: t.bg, overflow: 'hidden' }}>
+            <View style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: `${Math.round(pct * 100)}%`, backgroundColor: alpha(t.you, 14) }} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 9, paddingVertical: 7 }}>
+              <Text style={{ flex: 1, fontSize: 12.5, color: t.text, fontWeight: on ? '700' : '400' }}>{on ? '● ' : ''}{o.text}</Text>
+              <Text style={{ fontFamily: MONO, fontSize: 9, color: t.dim }}>{o.votes}</Text>
+            </View>
+          </Pressable>
+        );
+      })}
+      <Text style={{ fontFamily: MONO, fontSize: 8.5, color: t.faint, marginTop: 3 }}>📊 {total} vote{total === 1 ? '' : 's'} · tap to vote or change</Text>
+    </View>
+  );
+}
+
+interface TenorGif { id: string; tiny: string; full: string; }
+function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose: () => void }) {
+  const t = useTheme();
+  const [q, setQ] = useState('');
+  const [gifs, setGifs] = useState<TenorGif[] | null>(null);
+  useEffect(() => {
+    if (!TENOR_KEY) return;
+    const id = setTimeout(() => {
+      const base = q.trim()
+        ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q.trim())}`
+        : 'https://tenor.googleapis.com/v2/featured?';
+      fetch(`${base}&key=${TENOR_KEY}&limit=12&media_filter=gif,tinygif`)
+        .then((r) => r.json())
+        .then((d: { results?: { id: string; media_formats?: Record<string, { url?: string }> }[] }) => {
+          setGifs((d.results ?? []).map((g) => ({
+            id: g.id,
+            tiny: g.media_formats?.tinygif?.url ?? g.media_formats?.gif?.url ?? '',
+            full: g.media_formats?.gif?.url ?? g.media_formats?.tinygif?.url ?? '',
+          })).filter((g) => g.tiny && g.full));
+        })
+        .catch(() => setGifs([]));
+    }, 300);
+    return () => clearTimeout(id);
+  }, [q]);
+  return (
+    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, maxHeight: 230 }}>
+      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <TextInput value={q} autoFocus onChangeText={setQ} placeholder="search GIFs…" placeholderTextColor={t.faint}
+          style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 9, paddingVertical: 6, fontSize: 12, color: t.text, backgroundColor: t.bg }} />
+        <Pressable hitSlop={8} onPress={() => { tap(); onClose(); }}>
+          <Text style={{ fontSize: 14, color: t.dim }}>✕</Text>
+        </Pressable>
+      </View>
+      <ScrollView style={{ marginTop: 8, flexGrow: 0 }} nestedScrollEnabled>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+          {gifs == null && <Mono size={9} tone="faint">Loading…</Mono>}
+          {gifs?.length === 0 && <Mono size={9} tone="faint">Nothing found.</Mono>}
+          {gifs?.map((g) => (
+            <Pressable key={g.id} onPress={() => { tap(); onPick(g.full); }}>
+              <Image source={{ uri: g.tiny }} style={{ width: 104, height: 74, borderRadius: 6, backgroundColor: t.sh }} resizeMode="cover" />
+            </Pressable>
+          ))}
+        </View>
+        <Text style={{ fontFamily: MONO, fontSize: 7.5, color: t.faint, marginTop: 6, marginBottom: 8 }}>via Tenor</Text>
+      </ScrollView>
+    </View>
+  );
+}
+
+/** The commissioner's poll form: a question and 2–6 options. */
+function PollComposer({ leagueId, onDone, onClose }: { leagueId: string; onDone: () => void; onClose: () => void }) {
+  const t = useTheme();
+  const [q, setQ] = useState('');
+  const [opts, setOpts] = useState<string[]>(['', '']);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const filled = opts.filter((o) => o.trim()).length;
+  const post = async () => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await chatPostPoll(leagueId, q.trim(), opts.map((o) => o.trim()).filter(Boolean));
+      if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not post the poll.')); return; }
+      commit(); onDone();
+    } catch (x) { warn(); setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  const field = (v: string, set: (s: string) => void, ph: string, max: number, fs: number) => (
+    <TextInput value={v} maxLength={max} onChangeText={set} placeholder={ph} placeholderTextColor={t.faint}
+      style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 9, paddingVertical: 6, fontSize: fs, color: t.text, backgroundColor: t.bg, marginTop: 5 }} />
+  );
+  return (
+    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8 }}>
+      <Mono size={9} tone="faint" track={0.12}>📊 NEW POLL</Mono>
+      {field(q, setQ, 'the question…', 500, 12.5)}
+      {opts.map((o, i) => (
+        <View key={i}>{field(o, (v) => setOpts(opts.map((x, j) => (j === i ? v : x))), `option ${i + 1}`, 60, 12)}</View>
+      ))}
+      {!!err && <Mono size={9.5} tone="opp" style={{ marginTop: 6 }}>{err}</Mono>}
+      <View style={{ flexDirection: 'row', gap: 12, marginTop: 8, alignItems: 'center', paddingBottom: 10 }}>
+        {opts.length < 6 && (
+          <Pressable hitSlop={6} onPress={() => { tap(); setOpts([...opts, '']); }}>
+            <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.dim }}>＋ OPTION</Text>
+          </Pressable>
+        )}
+        <View style={{ flex: 1 }} />
+        <Pressable hitSlop={6} onPress={() => { tap(); onClose(); }}>
+          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.dim }}>CANCEL</Text>
+        </Pressable>
+        <Pressable disabled={busy || !q.trim() || filled < 2} onPress={() => void post()}
+          style={{ backgroundColor: t.you, borderRadius: 7, paddingHorizontal: 12, paddingVertical: 7, opacity: busy || !q.trim() || filled < 2 ? 0.5 : 1 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.onAccent }}>POST POLL</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
 
 export function ChatScreen({ leagueId }: { leagueId: string }) {
   const t = useTheme();
@@ -84,57 +247,138 @@ function Composer({ draft, setDraft, busy, err, onSend, placeholder }: {
 function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: boolean }) {
   const t = useTheme();
   const [msgs, setMsgs] = useState<ChatMessage[] | null>(null);
+  const [pins, setPins] = useState<ChatMessage[]>([]);
+  const [pinsOpen, setPinsOpen] = useState(false);
+  const [members, setMembers] = useState<{ id: string; name: string; me: boolean }[]>([]);
   const [draft, setDraft] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pollOpen, setPollOpen] = useState(false);
+  const [gifOpen, setGifOpen] = useState(false);
   const sticky = useStickyScroll();
   const load = () => chatMessages(leagueId)
-    .then((r) => { if (r.ok && r.messages) setMsgs([...r.messages].reverse()); })
+    .then((r) => { if (r.ok && r.messages) { setMsgs([...r.messages].reverse()); setPins(r.pins ?? []); } })
     .catch(() => {});
   useEffect(() => {
     void load();
+    chatMembers(leagueId).then((r) => { if (r.ok && r.members) setMembers(r.members); }).catch(() => {});
     const id = setInterval(load, 8_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
-  const send = async () => {
-    const body = draft.trim();
+  const names = members.map((m) => m.name);
+  const sendBody = async (body: string) => {
     if (!body || busy) return;
     setBusy(true); setErr(null);
     try {
-      const r = await chatPost(leagueId, body);
+      // mentions travel as ids, derived from the @names still present at send
+      const mentions = members.filter((m) => !m.me && body.includes(`@${m.name}`)).map((m) => m.id);
+      const r = await chatPost(leagueId, body, mentions);
       if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not send.')); return; }
-      commit(); setDraft(''); await load();
+      commit(); setDraft(''); setGifOpen(false); await load();
     } catch (x) { warn(); setErr(friendlyError(x)); }
     finally { setBusy(false); }
   };
-  const del = (m: ChatMessage) => {
-    if (!m.mine && !canModerate) return;
-    Alert.alert('Delete message?', `“${m.body.slice(0, 80)}”`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => {
-          chatDelete(leagueId, m.id).then((r) => { if (r.ok) { commit(); void load(); } else { warn(); setErr(friendlyError(r.error ?? '')); } }).catch(() => warn());
-        } },
-    ]);
+  const pinToggle = (m: ChatMessage) =>
+    chatPin(leagueId, m.id, !m.pinned)
+      .then((r) => { if (r.ok) { commit(); void load(); } else { warn(); setErr(friendlyError(r.error ?? '')); } })
+      .catch(() => warn());
+  const menu = (m: ChatMessage) => {
+    const buttons: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [];
+    if (canModerate) buttons.push({ text: m.pinned ? '📌 Unpin' : '📌 Pin', onPress: () => void pinToggle(m) });
+    if (m.mine || canModerate) buttons.push({
+      text: 'Delete', style: 'destructive',
+      onPress: () => {
+        chatDelete(leagueId, m.id).then((r) => { if (r.ok) { commit(); void load(); } else { warn(); setErr(friendlyError(r.error ?? '')); } }).catch(() => warn());
+      },
+    });
+    if (!buttons.length) return;
+    buttons.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert(m.author, m.kind === 'poll' ? `📊 ${m.body.slice(0, 80)}` : m.body.slice(0, 80), buttons);
   };
+
+  // @-autocomplete over the tail of the draft: an @ opening a word, with
+  // whatever follows as the query (team names may contain spaces).
+  const at = draft.lastIndexOf('@');
+  const mq = at >= 0 && (at === 0 || /\s/.test(draft[at - 1])) ? draft.slice(at + 1) : null;
+  const sugg = mq != null && mq.length <= 24 && !mq.includes('@')
+    ? members.filter((m) => !m.me && m.name.toLowerCase().startsWith(mq.toLowerCase()) && m.name.toLowerCase() !== mq.toLowerCase().trim()).slice(0, 5)
+    : [];
+
   return (
     <View style={{ flex: 1 }}>
+      {pins.length > 0 && (
+        <View style={{ borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, backgroundColor: alpha(t.warn, 7), paddingHorizontal: 10, paddingVertical: 6, marginBottom: 8 }}>
+          <Pressable hitSlop={6} onPress={() => { tap(); setPinsOpen((v) => !v); }}>
+            <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.warn }}>📌 {pins.length} PINNED {pinsOpen ? '▾' : '▸'}</Text>
+          </Pressable>
+          {pinsOpen && pins.map((p) => (
+            <Pressable key={p.id} onLongPress={() => menu(p)} delayLongPress={350}
+              style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 5 }}>
+              <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.dim }}>{p.author}</Text>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: t.text }}>
+                {p.kind === 'poll' ? `📊 ${p.body}` : isImageUrl(p.body) ? '🖼 GIF' : p.body}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
       <ScrollView ref={sticky.ref} onScroll={sticky.onScroll} onContentSizeChange={sticky.onContentSizeChange}
         scrollEventThrottle={64} style={{ flex: 1 }}>
         {msgs == null && <Mono size={10} tone="faint">Loading…</Mono>}
         {msgs?.length === 0 && <Mono size={10} tone="faint">Nothing yet — say hello to the league.</Mono>}
         {msgs?.map((m) => (
-          <Pressable key={m.id} onLongPress={() => del(m)} delayLongPress={350} style={{ marginBottom: 10 }}>
+          <Pressable key={m.id} onLongPress={() => menu(m)} delayLongPress={350}
+            style={{ marginBottom: 10, ...(m.mentions_me ? { backgroundColor: alpha(t.you, 8), borderRadius: 8, paddingHorizontal: 6, paddingVertical: 4, marginHorizontal: -6 } : {}) }}>
             <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
               <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: m.mine ? t.you : t.warn }}>{m.author}</Text>
               <Text style={{ fontFamily: MONO, fontSize: 8, color: t.faint }}>{fmtWhen(m.at)}</Text>
+              {m.pinned && <Text style={{ fontSize: 8 }}>📌</Text>}
             </View>
-            <Text style={{ fontSize: 13, lineHeight: 18, color: t.text }}>{m.body}</Text>
+            {m.kind === 'poll'
+              ? <>
+                  <Text style={{ fontSize: 13, lineHeight: 18, fontWeight: '700', color: t.text }}>📊 {m.body}</Text>
+                  <PollView m={m} leagueId={leagueId} onVoted={() => void load()} />
+                </>
+              : <MsgBody body={m.body} names={names} />}
           </Pressable>
         ))}
         <View style={{ height: 6 }} />
       </ScrollView>
-      <Composer draft={draft} setDraft={setDraft} busy={busy} err={err} onSend={() => void send()} placeholder="message the league…" />
+      {pollOpen && <PollComposer leagueId={leagueId} onDone={() => { setPollOpen(false); void load(); }} onClose={() => setPollOpen(false)} />}
+      {gifOpen && !!TENOR_KEY && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
+      <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 }}>
+        {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
+        {sugg.length > 0 && (
+          <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
+            {sugg.map((s) => (
+              <Pressable key={s.id} onPress={() => { tap(); setDraft(draft.slice(0, at) + '@' + s.name + ' '); }}
+                style={{ borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, backgroundColor: t.bg }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.you }}>@{s.name}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          {canModerate && (
+            <Pressable hitSlop={6} onPress={() => { tap(); setPollOpen((v) => !v); setGifOpen(false); }}>
+              <Text style={{ fontSize: 15 }}>📊</Text>
+            </Pressable>
+          )}
+          {!!TENOR_KEY && (
+            <Pressable hitSlop={6} onPress={() => { tap(); setGifOpen((v) => !v); setPollOpen(false); }}>
+              <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.dim }}>GIF</Text>
+            </Pressable>
+          )}
+          <TextInput value={draft} maxLength={500} onChangeText={setDraft} onSubmitEditing={() => void sendBody(draft.trim())}
+            placeholder="message the league… (@ to mention)" placeholderTextColor={t.faint} returnKeyType="send"
+            style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+          <Pressable disabled={busy || !draft.trim()} onPress={() => { tap(); void sendBody(draft.trim()); }}
+            style={{ backgroundColor: t.you, borderRadius: 8, paddingHorizontal: 14, justifyContent: 'center', opacity: busy || !draft.trim() ? 0.5 : 1, alignSelf: 'stretch' }}>
+            <Text style={{ fontSize: 14, color: t.onAccent }}>➤</Text>
+          </Pressable>
+        </View>
+      </View>
     </View>
   );
 }
@@ -262,7 +506,7 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
         {msgs?.map((m) => (
           <View key={m.id} style={{ flexDirection: 'row', justifyContent: m.mine ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
             <View style={{ maxWidth: '78%', borderRadius: 12, paddingHorizontal: 11, paddingVertical: 7, backgroundColor: m.mine ? alpha(t.you, 18) : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd }}>
-              <Text style={{ fontSize: 13, lineHeight: 18, color: t.text }}>{m.body}</Text>
+              <MsgBody body={m.body} names={[]} />
               <Text style={{ fontFamily: MONO, fontSize: 7.5, color: t.faint, marginTop: 2, textAlign: m.mine ? 'right' : 'left' }}>{fmtWhen(m.at)}</Text>
             </View>
           </View>
