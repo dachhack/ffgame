@@ -1391,6 +1391,36 @@ export const setPlayerFlagsBulk = (leagueId: string, slugs: string[], label: str
     p_league_id: leagueId, p_slugs: slugs, p_label: label, p_rules: rules,
   });
 
+// ── Chat (0147): league chat + member DMs, both league-scoped ────────────────
+export interface ChatMessage { id: number; body: string; at: string; author: string; author_id: string; mine: boolean; }
+export interface DmThreadRow { thread_id: string; peer_id: string; peer: string; last_at: string; preview: string | null; unread: number; }
+export interface DmMessage { id: number; body: string; at: string; mine: boolean; }
+export const chatPost = (leagueId: string, body: string) =>
+  rpc<{ ok: boolean; error?: string; id?: number }>('chat_post', { p_league_id: leagueId, p_body: body });
+/** Latest page (no `before`) marks the channel read; pass `before` to page history. */
+export const chatMessages = (leagueId: string, before?: number) =>
+  rpc<{ ok: boolean; error?: string; messages?: ChatMessage[] }>('chat_messages', {
+    p_league_id: leagueId, p_before: before ?? null, p_limit: 50,
+  });
+export const chatDelete = (leagueId: string, id: number) =>
+  rpc<{ ok: boolean; error?: string }>('chat_delete', { p_league_id: leagueId, p_id: id });
+export const dmSend = (leagueId: string, to: string, body: string) =>
+  rpc<{ ok: boolean; error?: string; thread_id?: string; id?: number }>('dm_send', {
+    p_league_id: leagueId, p_to: to, p_body: body,
+  });
+export const dmThreads = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; threads?: DmThreadRow[] }>('dm_threads', { p_league_id: leagueId });
+/** Latest page (no `before`) marks the thread read. */
+export const dmMessages = (threadId: string, before?: number) =>
+  rpc<{ ok: boolean; error?: string; messages?: DmMessage[]; peer?: string }>('dm_messages', {
+    p_thread_id: threadId, p_before: before ?? null, p_limit: 50,
+  });
+/** Badge counts only — never marks anything read. */
+export const chatUnread = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; league?: number; dm?: number }>('chat_unread', { p_league_id: leagueId });
+export const chatMembers = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; members?: { id: string; name: string; me: boolean }[] }>('chat_members', { p_league_id: leagueId });
+
 // ── League scoring adjustments (0143): the commissioner's layering knobs ─────
 export interface LeagueScoringRow { td_bonus: number; yd_mult: number; to_penalty: number; can_edit: boolean; }
 export const leagueScoringGet = (leagueId: string) =>
