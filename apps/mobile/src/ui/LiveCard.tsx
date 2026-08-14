@@ -175,9 +175,10 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
   if (unopposed) {
     return (
       <View style={[PANEL, { flexDirection: mirror ? 'row-reverse' : 'row' }]}>
-        <View style={{ width: FLOAT_W, height: 106, marginTop: -FLOAT_OVERHANG, marginBottom: -FLOAT_OVERHANG, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: t.bg }}>
-          <Text style={{ fontSize: 17, color: t.faint }}>—</Text>
-        </View>
+        {/* A plain BLANK card, not a dashed cutout — matched to the web's
+            treatment so an unopposed slot reads as the same widget as an
+            opposed one, just with an empty seat. */}
+        <View style={{ width: FLOAT_W, height: 106, marginTop: -FLOAT_OVERHANG, marginBottom: -FLOAT_OVERHANG, borderRadius: 8, borderWidth: 2, borderColor: alpha(t.text, 25), alignItems: 'center', justifyContent: 'center', backgroundColor: alpha(t.text, 5), opacity: 0.55 }} />
         <View style={{ flex: 1, alignItems: mirror ? 'flex-end' : 'flex-start', gap: 3 }}>
           <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2 }}>
             <Text style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '800', letterSpacing: 1, color: t.dim }}>NO PLAYER</Text>

@@ -2741,13 +2741,17 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
         cards={cards} hot={bFlags?.hot} scorched={bFlags?.nuked}
       />
     );
-    const blankBox = cards ? (
-      <div className="ct-liveempty">
-        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.14em', color: 'rgba(233,185,89,.75)' }}>— NO OPPONENT —</span>
-      </div>
-    ) : (
-      <div style={{ flex: 1, minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--text) 3%, var(--surface))', border: '1px dashed var(--bd)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)' }}>— NO OPPONENT —</span>
+    // The empty side is built from the SAME strip anatomy as an opposed slot —
+    // surface, border, the absent side's accent spine — with a muted BLANK
+    // card where the player card would sit (founder's call: the old dashed
+    // gold box made unopposed slots read as a different widget entirely).
+    const emptyIsYou = !mineBackup; // which side of the pair is vacant
+    const blankBox = (
+      <div style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', [emptyIsYou ? 'borderLeft' : 'borderRight']: `3px solid color-mix(in srgb, ${emptyIsYou ? 'var(--you)' : 'var(--opp)'} 45%, transparent)`, borderRadius: 4, padding: '8px 10px', display: 'flex', flexDirection: emptyIsYou ? 'row' : 'row-reverse', gap: 9, alignItems: 'center' }}>
+        {cards && (
+          <div aria-hidden style={{ flex: 'none', width: 72, height: 96, boxSizing: 'border-box', borderRadius: 8, border: '2px solid color-mix(in srgb, var(--text) 25%, transparent)', background: 'color-mix(in srgb, var(--text) 5%, var(--surface))', opacity: 0.55 }} />
+        )}
+        <span className="mono" style={{ flex: 1, textAlign: 'center', fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)' }}>— NO OPPONENT —</span>
       </div>
     );
 
