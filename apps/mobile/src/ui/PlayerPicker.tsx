@@ -19,7 +19,7 @@ import { Mono } from './prims';
 import { Overlay } from './Overlay';
 import { GROUP_TABS, groupTag } from './rosterGroup';
 import { openPlayerCard } from './PlayerCardSheet';
-import { flagFor } from '@drip/core/data/commish';
+import { flagFor, flagRulesFor } from '@drip/core/data/commish';
 import { injuryFor } from '@drip/core/data/injuries';
 
 const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
@@ -47,6 +47,9 @@ export function PlayerPicker({ visible, windowLabel, players, currentId, week, u
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<string>('ALL');
   const [grp, setGrp] = useState<PoolGroup | 'ALL'>('ALL');
+  // no_start flag (0144): the DB refuses the save regardless — this is the
+  // courtesy layer, with the commissioner's reason shown in the sheet.
+  const [barredMsg, setBarredMsg] = useState<string | null>(null);
 
   // Same reasoning as the roster panel: no chips unless there is something for
   // them to separate.
@@ -133,6 +136,9 @@ export function PlayerPicker({ visible, windowLabel, players, currentId, week, u
           </ScrollView>
         )}
         <Mono size={10} tone="faint">{shown.length} player{shown.length === 1 ? '' : 's'}</Mono>
+        {!!barredMsg && (
+          <Text style={{ fontFamily: MONO, fontSize: 9.5, lineHeight: 14, color: '#A87BD8', borderWidth: StyleSheet.hairlineWidth, borderColor: '#A87BD8', borderRadius: 5, paddingHorizontal: 9, paddingVertical: 5 }}>⚑ {barredMsg}</Text>
+        )}
       </View>
 
       {/* Bounded like every other sheet body. Unbounded, a 342-player
@@ -149,7 +155,10 @@ export function PlayerPicker({ visible, windowLabel, players, currentId, week, u
             injury={injuryFor(week, p.id)}
             onInfo={() => openPlayerCard({ slug: p.id, name: p.full ?? p.name, pos: p.pos, team: p.team, week, userId })}
             gated={gated?.(p) ?? false}
-            onPress={() => (gated?.(p) ? onGated?.(p) : onPick(p.id))}
+            onPress={() => {
+              if (flagRulesFor(p.id).noStart) { setBarredMsg(`${p.full ?? p.name} is flagged not startable — ${flagFor(p.id) ?? 'commissioner ruling'}`); return; }
+              if (gated?.(p)) onGated?.(p); else onPick(p.id);
+            }}
           />
         ))}
         {!shown.length && (
@@ -169,6 +178,7 @@ export function PlayerPicker({ visible, windowLabel, players, currentId, week, u
 function MiniPlayerCard({ player, current, group, injury, gated, onPress, onInfo }: {
   player: Player; current: boolean; group: PoolGroup; injury: string | null; gated: boolean; onPress: () => void; onInfo?: () => void;
 }) {
+  const barred = !!flagRulesFor(player.id).noStart;
   const t = useTheme();
   const pc = t.pos[player.pos as keyof typeof t.pos] ?? { bg: t.sh, fg: t.dim, bd: t.bd };
   const photo = headshot(player.id);
@@ -191,7 +201,7 @@ function MiniPlayerCard({ player, current, group, injury, gated, onPress, onInfo
         borderWidth: current ? 2 : StyleSheet.hairlineWidth,
         borderColor: current ? '#E0B24E' : '#D8C9A4',
         borderRadius: 8, padding: 6, gap: 5, alignItems: 'center',
-        opacity: gated ? 0.5 : 1,
+        opacity: gated || barred ? 0.5 : 1,
       }}
     >
       <View style={{ flexDirection: 'row', alignSelf: 'stretch', alignItems: 'center', justifyContent: 'space-between' }}>
