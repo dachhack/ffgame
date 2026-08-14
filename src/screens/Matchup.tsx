@@ -2935,7 +2935,10 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   const { bigText } = useStore();
   const fs = (n: number) => bigText ? Math.round(n * 1.3 * 10) / 10 : n; // larger-text mode bumps the small card labels
   const nuked = fx === 'nuke' && bank === 0 && !subName && suppressSpent == null;
-  const stat = useMemo(() => fmtStat(player.pos, statlineAt(player, week, clock, metricId), isMobile), [player, week, clock, metricId, isMobile]);
+  // Always the COMPACT statline convention ("12-58 ru · 3/4-31 rec"), desktop
+  // included — founder's call once the verbose form ("12 car · 58 rush yd · …")
+  // proved too long for one line even across the card's full width.
+  const stat = useMemo(() => fmtStat(player.pos, statlineAt(player, week, clock, metricId), true), [player, week, clock, metricId]);
   const edge = side === 'you' ? 'left' : 'right';
   const nameRow = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexDirection: side === 'you' ? 'row' : 'row-reverse' }}>
@@ -2978,8 +2981,10 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
           ? { fontSize: 8.5, lineHeight: 1.3, color: 'var(--dimstrong)', whiteSpace: 'normal', textAlign: edge }
           // Wrap, never truncate — desktop too. The game line's departure
           // (v0.169.4) freed the stats area, and "0 pa…" was the one thing
-          // still spending it on an ellipsis.
-          : { fontSize: fs(9.5), lineHeight: 1.3, color: 'var(--dimstrong)', whiteSpace: 'normal', textAlign: edge }}>{stat}</div>;
+          // still spending it on an ellipsis. Negative word-spacing shrinks
+          // the mono space glyph so the " · " separators read tighter without
+          // rewriting the shared fmtStat strings the app renders too.
+          : { fontSize: fs(9.5), lineHeight: 1.3, color: 'var(--dimstrong)', whiteSpace: 'normal', textAlign: edge, wordSpacing: '-2.5px' }}>{stat}</div>;
   const bigNum = suppressSpent != null ? (
     <div className="grotesk mx-sc-big" style={{ fontSize: 22, fontWeight: 700, color: 'var(--dim)', lineHeight: 1, textDecoration: 'line-through' }}>{suppressSpent.toFixed(1)}</div>
   ) : halvedFrom != null ? (
@@ -3069,14 +3074,12 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
           {coinEl}
         </div>
       </div>
-      {/* Statline lies ACROSS the card (founder's call): stacked in the middle
-          column it wrapped one word per line, starving the metric chip too.
-          Pinned to the BOTTOM (marginTop auto) so the pair's statlines sit
-          level when top halves differ in height. In the card-table theme the
-          outer edge is inset past the FLOATING mini card (72px + gap): the
-          card deliberately pokes below the strip at z-index 2, and without
-          the inset a long statline ran underneath it and wrapped. */}
-      <div style={{ marginTop: 'auto', ...(cards ? { [side === 'you' ? 'paddingLeft' : 'paddingRight']: 84 } : {}) }}>{statLine}</div>
+      {/* Statline lies ACROSS the card, edge to edge (founder's call — the
+          v0.169.9 inset past the floating mini card over-shrank it; the
+          compact fmtStat convention keeps it to one line instead). Pinned to
+          the BOTTOM (marginTop auto) so the pair's statlines sit level when
+          top halves differ in height. */}
+      <div style={{ marginTop: 'auto' }}>{statLine}</div>
     </div>
   );
 }
