@@ -17,7 +17,13 @@ export interface GifProvider {
   search: (q: string) => Promise<GifResult[]>;
 }
 
-export function gifProvider(tenorKey?: string, giphyKey?: string): GifProvider | null {
+/** The founder's Giphy key (created for DripFantasy, 2026-08-14). Baked as
+ *  the default because it ships inside the client bundle regardless — an env
+ *  override (VITE_GIPHY_KEY / EXPO_PUBLIC_GIPHY_KEY) still wins, which is the
+ *  rotation path if this key is ever cycled. */
+const DEFAULT_GIPHY_KEY = 'v4jKcksOph8mdcIh8RiLrYUZcdrgc4Q2';
+
+export function gifProvider(tenorKey?: string, giphyKey: string = DEFAULT_GIPHY_KEY): GifProvider | null {
   if (tenorKey) {
     return {
       name: 'tenor',
