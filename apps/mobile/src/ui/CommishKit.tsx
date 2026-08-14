@@ -9,7 +9,7 @@
 // and calls onChanged after every load/edit so the host board re-renders
 // its flag chips — the injuryVer contract, one prop instead of threading.
 import { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   leagueNote, setLeagueNote, playerFlags, setPlayerFlag, setPlayerFlagsBulk, leagueScoringGet, leagueScoringSet,
   friendlyError, type PlayerFlagRow, type FlagRulesRaw,
@@ -40,6 +40,20 @@ const ruleGlyphs = (r?: FlagRulesRaw | null): string => {
   if (r.bonus_mult != null && r.bonus_mult !== 1) g.push(`×${r.bonus_mult}`);
   if (r.bonus_pts != null && r.bonus_pts !== 0) g.push(`${r.bonus_pts > 0 ? '+' : ''}${r.bonus_pts}`);
   return g.join(' ');
+};
+
+/** A flag's label, derived from its rules — so "pick rules, hit FLAG" works
+ *  without inventing a name (the second playtest stall on the label field).
+ *  Null when there are no rules to name it by: a flag must say or do
+ *  SOMETHING, since a label-less save is the delete gesture server-side. */
+const autoLabel = (r?: FlagRulesRaw | null): string | null => {
+  if (!r) return null;
+  const parts: string[] = [];
+  if (r.no_trade) parts.push('no trades'); if (r.no_add) parts.push('no adds'); if (r.no_start) parts.push('no starts');
+  if (r.no_powerups) parts.push('no powerups'); if (r.immune) parts.push('immune');
+  if (r.bonus_mult != null && r.bonus_mult !== 1) parts.push(`×${r.bonus_mult} pts`);
+  if (r.bonus_pts != null && r.bonus_pts !== 0) parts.push(`${r.bonus_pts > 0 ? '+' : ''}${r.bonus_pts} pts`);
+  return parts.length ? parts.join(' · ').slice(0, 40) : null;
 };
 
 const prettify = (slug: string) =>
@@ -474,15 +488,34 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
 
   const saveBulk = async () => {
     if (busy || !selected.size) return;
-    // The button stays live and TELLS you what's missing — a silently greyed
-    // button read as "the flag doesn't take" in the founder's first playtest.
-    if (!labelDraft.trim()) { warn(); setErr('Give the flag a label — it’s what the league sees on every chip.'); return; }
+    // Empty label + rules set → the rules name the flag (autoLabel). Only a
+    // flag with nothing to say at all is refused — and the button TELLS you,
+    // right where you're looking: a silently greyed button read as "the flag
+    // doesn't take" in the founder's first playtest.
+    const lbl = labelDraft.trim() || autoLabel(rulesDraft);
+    if (!lbl) { warn(); setErr('Give the flag a label or a rule — the label is what the league sees on every chip.'); return; }
     setBusy(true); setErr(null);
     try {
-      const r = await setPlayerFlagsBulk(leagueId, [...selected], labelDraft, rulesDraft);
+      const r = await setPlayerFlagsBulk(leagueId, [...selected], lbl, rulesDraft);
       if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not save the flags.')); return; }
       commit();
       setSelected(new Set()); setLabelDraft(''); setRulesDraft({}); setQ(''); setBulk(false);
+      await load(); onChanged();
+    } catch (x) { warn(); setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  // BULK REMOVE (playtest ask): the same RPC with a null label — its delete
+  // gesture — chunked to the 500-slug cap so "clear all" survives any count.
+  const unflag = async (slugs: string[]) => {
+    if (busy || !slugs.length) return;
+    setBusy(true); setErr(null);
+    try {
+      for (let i = 0; i < slugs.length; i += 500) {
+        const r = await setPlayerFlagsBulk(leagueId, slugs.slice(i, i + 500), null);
+        if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not remove the flags.')); return; }
+      }
+      commit();
+      setSelected(new Set());
       await load(); onChanged();
     } catch (x) { warn(); setErr(friendlyError(x)); }
     finally { setBusy(false); }
@@ -525,35 +558,48 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
       {mini(rulesDraft.bonus_pts ?? 0, 0, -10, 10, 1, 'bonus_pts', (n) => `${n > 0 ? '+' : ''}${n}`)}
     </View>
   );
-  const labelInput = (slug: string) => (
-    <View style={{ flexDirection: 'row', gap: 6, flex: 1 }}>
-      <TextInput value={labelDraft} autoFocus maxLength={40} onChangeText={setLabelDraft}
-        placeholder="keeper · out for season…" placeholderTextColor={t.faint}
-        style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: 11.5, color: t.text, backgroundColor: t.bg }} />
-      <Pressable disabled={busy || !labelDraft.trim()} onPress={() => { tap(); labelDraft.trim() && void save(slug, labelDraft); }}
-        style={{ backgroundColor: t.you, borderRadius: 6, paddingHorizontal: 10, justifyContent: 'center', opacity: busy || !labelDraft.trim() ? 0.5 : 1 }}>
-        <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.onAccent }}>SET</Text>
-      </Pressable>
-    </View>
-  );
+  const labelInput = (slug: string) => {
+    const effective = labelDraft.trim() || autoLabel(rulesDraft);
+    return (
+      <View style={{ flexDirection: 'row', gap: 6, flex: 1 }}>
+        <TextInput value={labelDraft} autoFocus maxLength={40} onChangeText={setLabelDraft}
+          placeholder="keeper · out for season…" placeholderTextColor={t.faint}
+          style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: 11.5, color: t.text, backgroundColor: t.bg }} />
+        <Pressable disabled={busy || !effective} onPress={() => { tap(); effective && void save(slug, effective); }}
+          style={{ backgroundColor: t.you, borderRadius: 6, paddingHorizontal: 10, justifyContent: 'center', opacity: busy || !effective ? 0.5 : 1 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.onAccent }}>SET</Text>
+        </Pressable>
+      </View>
+    );
+  };
 
   // Pinned below the scroll — the bulk save controls must never be the thing
   // the sheet clips, however long the flag list or the filtered matches run.
   const bulkFooter = (
     <>
       <TextInput value={labelDraft} maxLength={40} onChangeText={setLabelDraft}
-        placeholder="one label for all selected…" placeholderTextColor={t.faint}
+        placeholder="label — leave empty and the rules name it…" placeholderTextColor={t.faint}
         style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12.5, color: t.text, backgroundColor: t.bg }} />
       {ruleControls}
       {!!err && <Mono size={9.5} tone="opp" style={{ marginTop: 6 }}>{err}</Mono>}
-      <View style={{ marginTop: 8 }}>
-        <PrimaryButton label={busy ? '…' : `⚑ FLAG ${selected.size} PLAYER${selected.size === 1 ? '' : 'S'}`}
-          disabled={busy || !selected.size} onPress={() => void saveBulk()} />
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+        <View style={{ flex: 1 }}>
+          <PrimaryButton label={busy ? '…' : `⚑ FLAG ${selected.size} PLAYER${selected.size === 1 ? '' : 'S'}`}
+            disabled={busy || !selected.size} onPress={() => void saveBulk()} />
+        </View>
+        <Pressable disabled={busy || !selected.size} onPress={() => { tap(); void unflag([...selected]); }}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 12, justifyContent: 'center', opacity: busy || !selected.size ? 0.5 : 1 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.opp }}>✕ UNFLAG</Text>
+        </Pressable>
       </View>
       {!labelDraft.trim() && selected.size > 0 && (
-        <Text style={{ fontFamily: MONO, fontSize: 8.5, color: t.warn, marginTop: 5, lineHeight: 12 }}>
-          ↑ add a label first — it’s what the league sees on every flagged player’s chip
-        </Text>
+        autoLabel(rulesDraft)
+          ? <Text style={{ fontFamily: MONO, fontSize: 8.5, color: t.dim, marginTop: 5, lineHeight: 12 }}>
+              no label — the flag will read “{autoLabel(rulesDraft)}”
+            </Text>
+          : <Text style={{ fontFamily: MONO, fontSize: 8.5, color: t.warn, marginTop: 5, lineHeight: 12 }}>
+              ↑ give it a label or a rule — the label is what the league sees on every flagged player’s chip
+            </Text>
       )}
     </>
   );
@@ -564,7 +610,22 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
       footer={bulk ? bulkFooter : undefined}>
       <ScrollView style={{ flexGrow: 0 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
       {!bulk && !!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
-      <Mono size={9} tone="faint" track={0.12}>CURRENT FLAGS</Mono>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Mono size={9} tone="faint" track={0.12}>CURRENT FLAGS</Mono>
+        <View style={{ flex: 1 }} />
+        {(rows?.length ?? 0) > 1 && (
+          <Pressable hitSlop={6} disabled={busy}
+            onPress={() => {
+              tap();
+              Alert.alert('Clear all flags?', `Remove all ${rows!.length} flags from this league?`, [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Remove', style: 'destructive', onPress: () => void unflag(rows!.map((f) => f.slug)) },
+              ]);
+            }}>
+            <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.opp, opacity: busy ? 0.5 : 1 }}>✕ CLEAR ALL {rows!.length}</Text>
+          </Pressable>
+        )}
+      </View>
       {rows == null && <Mono size={10} tone="faint" style={{ marginTop: 6 }}>Loading…</Mono>}
       {rows?.length === 0 && <Mono size={10} tone="faint" style={{ marginTop: 6 }}>None yet.</Mono>}
       {rows?.map((f) => (
