@@ -15,7 +15,7 @@ import {
   addFreeAgent, cancelWaiverClaim, dropPlayer,
   friendlyError, leagueInvite, leaguePool, nativeRosters,
   nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
-  myFavorites,
+  myFavorites, loadTeamOverrides, playerFlags,
   type LeaguePoolPlayer, type NativeTeamState,
 } from '@drip/core/data/liveApi';
 import { headshot } from '@drip/core/data/media';
@@ -27,6 +27,8 @@ import { AvatarGrid } from '../ui/AvatarGrid';
 import { Playoffs, Standings } from '../ui/LeagueExtras';
 import { TradeCenter } from '../ui/TradeCenter';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
+import { FlagChip } from '../ui/rosterGroup';
+import { setLeagueFlags } from '@drip/core/data/commish';
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
@@ -57,6 +59,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
   const [favs, setFavs] = useState<Set<string>>(new Set());
   const [starMode, setStarMode] = useState<StarMode>('off');
+  const [, setFlagVer] = useState(0); // commish flags landed in the cache (0141)
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pendingAdd, setPendingAdd] = useState<LeaguePoolPlayer | null>(null); // roster full → pick a drop
@@ -80,6 +83,8 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   useEffect(() => {
     void refresh();
     myFavorites().then(setFavs).catch(() => {});
+    void loadTeamOverrides();
+    playerFlags(leagueId).then((f) => { if (Array.isArray(f)) { setLeagueFlags(leagueId, f); setFlagVer((v) => v + 1); } }).catch(() => {});
     const id = setInterval(refresh, 15000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -264,6 +269,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
             <Face slug={p.slug} pos={p.pos} />
             <PosPill pos={p.pos} size={8} />
             <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, color: t.text }}>{p.full_name}</Text>
+            <FlagChip slug={p.slug} size={7.5} />
             <Mono size={9} tone="faint">{p.team}</Mono>
             <Pressable disabled={busy} onPress={() => { tap(); myRoster != null && void run(() => dropPlayer(leagueId, myRoster, p.slug)); }}
               style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 9, paddingVertical: 5, opacity: busy ? 0.5 : 1 }}>
@@ -331,6 +337,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
                   <PosPill pos={p.pos} size={7.5} />
                   <Mono size={8.5} tone="faint">{p.team}</Mono>
+                  <FlagChip slug={p.slug} size={7.5} />
                   {left != null && <Mono size={8.5} tone="warn">⏳ {fmtLeft(left)}</Mono>}
                 </View>
               </View>

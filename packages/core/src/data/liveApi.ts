@@ -5,6 +5,7 @@ import { getSupabase } from './supabaseClient';
 import { platform, storeGet } from '../platform';
 import { readPool, type PoolGroup } from './poolEntry';
 import { setLiveInjuries, type InjuryRow } from './injuries';
+import { setTeamOverrides } from './playerTeam';
 import { resolveUser } from './sleeper';
 import { PRESEASON_BOARD_WEEKS } from './nflSlate';
 import type { Session } from '@supabase/supabase-js';
@@ -463,6 +464,20 @@ export async function podSalaries(week: number, season = '2026'): Promise<PodSal
  *  Never throws. A missing report has to degrade to "no badges", exactly as it
  *  behaved before, rather than taking down the league open that called it.
  *  Returns how many designations landed (0 on failure) for the caller to log. */
+/** Load the worker-published player→team drift (0142) into the playerTeam
+ *  module cache. Small by construction (only players whose team differs from
+ *  the bake). Returns rows loaded; never throws — a failed load just leaves
+ *  the baked answers standing. */
+export async function loadTeamOverrides(): Promise<number> {
+  try {
+    const { data, error } = await (await client()).from('player_team_override').select('slug, team');
+    if (error) return 0;
+    const rows = (data ?? []) as { slug: string; team: string | null }[];
+    setTeamOverrides(rows);
+    return rows.length;
+  } catch { return 0; }
+}
+
 export async function loadLiveInjuries(week: number): Promise<number> {
   try {
     const { data, error } = await (await client()).from('injury_status')

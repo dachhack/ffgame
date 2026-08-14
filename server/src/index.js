@@ -14,6 +14,7 @@ import { getGames, gamesToPollFrom, slateFromGames, espnCurrentWeek } from './po
 import { pollGame } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
 import { sweepMembers } from './poll/members.js';
+import { syncTeamOverrides } from './poll/teamOverrides.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups } from './lock.js';
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues } from './sync.js';
@@ -274,8 +275,25 @@ async function main() {
   log('worker starting; season', config.season);
   playerIndex = await buildPlayerIndex();
   log('player index built:', playerIndex.size, 'players');
+  // Publish baked-vs-live team drift (0142) whenever the directory is fresh —
+  // at boot (a deploy may carry a new bake that shrinks the table) and on the
+  // daily refresh below. Failures only log: team display drift never blocks
+  // game ops.
+  const pushTeams = async () => {
+    try {
+      const r = await syncTeamOverrides(playerIndex);
+      log(`team overrides: ${r.standing} standing (${r.changed} changed, ${r.cleared} cleared)`);
+    } catch (e) { log('team override sync', e.message); }
+  };
+  await pushTeams();
   // Refresh the player directory daily.
-  setInterval(async () => { try { playerIndex = await buildPlayerIndex(); log('player index refreshed'); } catch (e) { log('index refresh', e.message); } }, 86400e3);
+  setInterval(async () => {
+    try {
+      playerIndex = await buildPlayerIndex();
+      log('player index refreshed');
+      await pushTeams();
+    } catch (e) { log('index refresh', e.message); }
+  }, 86400e3);
 
   await tick().catch((e) => log('tick error', e.message));
   setInterval(() => tick().catch((e) => log('tick error', e.message)), config.playsPollMs);

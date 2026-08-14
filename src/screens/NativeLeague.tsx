@@ -7,7 +7,7 @@
 //     seats (any client's poll advances it via draft_tick), searchable board.
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PosPill, PlayerImg, Avatar } from '../app/ui';
+import { PosPill, PlayerImg, Avatar, FlagChip } from '../app/ui';
 import { AvatarPicker } from '../app/AvatarPicker';
 import type { Pos } from '@drip/core/types';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
@@ -25,9 +25,10 @@ import {
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick,
   nominate, placeBid, setLotProxy,
   leagueTrades, proposeTrade, respondTrade, cancelTrade,
-  myFavorites, tradeSignals, setTradeSignal,
+  myFavorites, tradeSignals, setTradeSignal, playerFlags,
   type DraftState, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow,
 } from '@drip/core/data/liveApi';
+import { setLeagueFlags } from '@drip/core/data/commish';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
 const label: React.CSSProperties = { fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)', fontWeight: 700 };
@@ -379,6 +380,9 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   const [favs, setFavs] = useState<Set<string>>(new Set());
   const [starMode, setStarMode] = useState<StarMode>('off');
   const [proxyDraft, setProxyDraft] = useState<Record<string, string>>({});   // per-lot hidden-max inputs
+  // Commish player flags (0141): loaded into the module cache; the bump
+  // re-renders the FlagChips (same contract as the live board).
+  const [, setFlagVer] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -402,6 +406,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
     refresh();
     leaguePool(leagueId).then(setPool).catch(() => {});
     myFavorites().then(setFavs).catch(() => {});
+    playerFlags(leagueId).then((f) => { if (Array.isArray(f)) { setLeagueFlags(leagueId, f); setFlagVer((v) => v + 1); } }).catch(() => {});
     nativeTeamState(leagueId).then((t) => {
       setTeam(t);
       if (t.my_roster_id != null) myDraftQueue(leagueId, t.my_roster_id).then(setQueue).catch(() => {});
@@ -802,6 +807,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                       <div style={{ display: 'flex', gap: 5, alignItems: 'center', marginTop: 2 }}>
                         <PosPill pos={p.pos as Pos} />
                         <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.team} · #{p.rank}</span>
+                        <FlagChip slug={p.slug} />
                       </div>
                     </div>
                   </button>
@@ -905,6 +911,7 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
   const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
   const [favs, setFavs] = useState<Set<string>>(new Set());
   const [starMode, setStarMode] = useState<StarMode>('off');
+  const [, setFlagVer] = useState(0); // commish flags landed in the cache (0141)
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pendingAdd, setPendingAdd] = useState<LeaguePoolPlayer | null>(null); // roster full → pick a drop
@@ -929,6 +936,7 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
   useEffect(() => {
     refresh();
     myFavorites().then(setFavs).catch(() => {});
+    playerFlags(leagueId).then((f) => { if (Array.isArray(f)) { setLeagueFlags(leagueId, f); setFlagVer((v) => v + 1); } }).catch(() => {});
     const id = setInterval(refresh, 15000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1100,6 +1108,7 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
             <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
             <PosPill pos={p.pos as Pos} />
             <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
+            <FlagChip slug={p.slug} />
             <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 34 }}>{p.team}</span>
             <button onClick={() => myRoster != null && run(() => dropPlayer(leagueId, myRoster, p.slug))} disabled={busy}
               className="mono" style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9.5, color: 'var(--opp)' }}>DROP</button>
@@ -1158,6 +1167,7 @@ export function TeamManage({ leagueId, onBack, onDraft }: {
                 <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
                 <PosPill pos={p.pos as Pos} />
                 <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{starMark(favs, p.slug)}{p.full_name}</span>
+                <FlagChip slug={p.slug} />
                 {left != null && <span className="mono" style={{ fontSize: 8.5, color: 'var(--warn)' }} title="on waivers">⏳ {fmtLeft(left)}</span>}
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 34 }}>{p.team}</span>
                 {(() => {

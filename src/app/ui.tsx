@@ -178,7 +178,7 @@ export function Avatar({ name, accent = 'var(--you)', size = 30, src }: { name: 
  *  nobody customizes before they're convinced. Accessibility toggles and the
  *  Rulebook / FAQ / sign-in links stay. Signed-in screens keep the full menu. */
 export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void; minimal?: boolean }) {
-  const { theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, fullStats, setFullStats, setSleeperUser, navigate } = useStore();
+  const { theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, setSleeperUser, navigate } = useStore();
   const [open, setOpen] = useState(false);
   // Which side the dropdown opens toward — chosen on open so it never flies off
   // screen when the gear sits near an edge (e.g. wrapped to the far left on the
@@ -320,9 +320,6 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
             <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
               <button onClick={() => setBigText(!bigText)} aria-pressed={bigText} title="Bigger fine print" style={toggle(bigText)}>
                 <span style={{ fontSize: 9 }}>A</span><span style={{ fontSize: 12 }}>A</span><span>Bigger</span>
-              </button>
-              <button onClick={() => setFullStats(!fullStats)} aria-pressed={fullStats} title="Show full stat lines instead of truncating" style={toggle(fullStats)}>
-                Full stats
               </button>
             </div>
           </div>
