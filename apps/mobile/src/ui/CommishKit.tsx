@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   leagueNote, setLeagueNote, playerFlags, setPlayerFlag, leagueScoringGet, leagueScoringSet,
-  friendlyError, type PlayerFlagRow,
+  friendlyError, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
 import {
   SCORING_BOUNDS, DEFAULT_SCORING, setLeagueScoring, parseScoring, scoringIsDefault, scoringLabel,
@@ -27,6 +27,20 @@ import { Mono, PrimaryButton } from './prims';
 import { Overlay } from './Overlay';
 
 export const FLAG_PURPLE = '#A87BD8';
+
+const RULE_DEFS: { key: keyof FlagRulesRaw; label: string }[] = [
+  { key: 'no_trade', label: '🚫⇄' }, { key: 'no_add', label: '🚫＋' }, { key: 'no_start', label: '🚫▶' },
+  { key: 'no_powerups', label: '🚫◈' }, { key: 'immune', label: '🛡' },
+];
+const ruleGlyphs = (r?: FlagRulesRaw | null): string => {
+  if (!r) return '';
+  const g: string[] = [];
+  if (r.no_trade) g.push('🚫⇄'); if (r.no_add) g.push('🚫＋'); if (r.no_start) g.push('🚫▶');
+  if (r.no_powerups) g.push('🚫◈'); if (r.immune) g.push('🛡');
+  if (r.bonus_mult != null && r.bonus_mult !== 1) g.push(`×${r.bonus_mult}`);
+  if (r.bonus_pts != null && r.bonus_pts !== 0) g.push(`${r.bonus_pts > 0 ? '+' : ''}${r.bonus_pts}`);
+  return g.join(' ');
+};
 
 const prettify = (slug: string) =>
   slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
@@ -218,6 +232,7 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
   const [err, setErr] = useState<string | null>(null);
   const [labelFor, setLabelFor] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState('');
+  const [rulesDraft, setRulesDraft] = useState<FlagRulesRaw>({});
 
   const load = () => playerFlags(leagueId).then((r) => { if (Array.isArray(r)) setRows(r); }).catch(() => {});
   useEffect(() => { if (visible) { void load(); setQ(''); setLabelFor(null); setErr(null); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [visible, leagueId]);
@@ -232,7 +247,7 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
     if (busy) return;
     setBusy(true); setErr(null);
     try {
-      const r = await setPlayerFlag(leagueId, slug, label);
+      const r = await setPlayerFlag(leagueId, slug, label, rulesDraft);
       if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not save the flag.')); return; }
       commit();
       setLabelFor(null); setLabelDraft(''); setQ('');
@@ -250,6 +265,34 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
       </View>
     );
   };
+  const mini = (v: number, dflt: number, min: number, max: number, step: number, key: 'bonus_mult' | 'bonus_pts', fmt: (n: number) => string) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+      <Pressable hitSlop={4} onPress={() => { tap(); setRulesDraft({ ...rulesDraft, [key]: Math.round(Math.max(min, v - step) * 10) / 10 }); }}>
+        <Text style={{ fontFamily: MONO, fontSize: 12, color: t.dim, paddingHorizontal: 4 }}>−</Text>
+      </Pressable>
+      <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', minWidth: 26, textAlign: 'center', color: v !== dflt ? t.warn : t.dim }}>{fmt(v)}</Text>
+      <Pressable hitSlop={4} onPress={() => { tap(); setRulesDraft({ ...rulesDraft, [key]: Math.round(Math.min(max, v + step) * 10) / 10 }); }}>
+        <Text style={{ fontFamily: MONO, fontSize: 12, color: t.dim, paddingHorizontal: 4 }}>＋</Text>
+      </Pressable>
+    </View>
+  );
+  const ruleControls = (
+    <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginTop: 6, flexBasis: '100%' }}>
+      {RULE_DEFS.map((d) => {
+        const on = rulesDraft[d.key] === true;
+        return (
+          <Pressable key={d.key} onPress={() => { tap(); setRulesDraft({ ...rulesDraft, [d.key]: on ? undefined : true }); }}
+            style={{ borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: on ? FLAG_PURPLE : t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? FLAG_PURPLE : t.bd }}>
+            <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: on ? t.onAccent : t.dim }}>{d.label}</Text>
+          </Pressable>
+        );
+      })}
+      <Mono size={8} tone="faint">×</Mono>
+      {mini(rulesDraft.bonus_mult ?? 1, 1, 0.5, 3, 0.1, 'bonus_mult', (n) => `×${n}`)}
+      <Mono size={8} tone="faint">±</Mono>
+      {mini(rulesDraft.bonus_pts ?? 0, 0, -10, 10, 1, 'bonus_pts', (n) => `${n > 0 ? '+' : ''}${n}`)}
+    </View>
+  );
   const labelInput = (slug: string) => (
     <View style={{ flexDirection: 'row', gap: 6, flex: 1 }}>
       <TextInput value={labelDraft} autoFocus maxLength={40} onChangeText={setLabelDraft}
@@ -270,14 +313,14 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
       {rows == null && <Mono size={10} tone="faint" style={{ marginTop: 6 }}>Loading…</Mono>}
       {rows?.length === 0 && <Mono size={10} tone="faint" style={{ marginTop: 6 }}>None yet.</Mono>}
       {rows?.map((f) => (
-        <View key={f.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
+        <View key={f.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd, flexWrap: 'wrap' }}>
           {face(f.slug)}
           <Text style={{ fontSize: 12, color: t.text }}>{prettify(f.slug)}</Text>
           {labelFor === f.slug
-            ? labelInput(f.slug)
+            ? <>{labelInput(f.slug)}{ruleControls}</>
             : <>
-                <Text numberOfLines={1} style={{ flex: 1, fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: FLAG_PURPLE }}>⚑ {f.label}</Text>
-                <Pressable hitSlop={6} onPress={() => { tap(); setLabelFor(f.slug); setLabelDraft(f.label); }}>
+                <Text numberOfLines={1} style={{ flex: 1, fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: FLAG_PURPLE }}>⚑ {f.label}{ruleGlyphs(f.rules) ? ` · ${ruleGlyphs(f.rules)}` : ''}</Text>
+                <Pressable hitSlop={6} onPress={() => { tap(); setLabelFor(f.slug); setLabelDraft(f.label); setRulesDraft(f.rules ?? {}); }}>
                   <Text style={{ fontSize: 12, color: t.dim }}>✎</Text>
                 </Pressable>
                 <Pressable hitSlop={6} disabled={busy} onPress={() => { tap(); void save(f.slug, null); }}>
@@ -294,13 +337,13 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
         style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg, marginTop: 6 }} />
       <ScrollView style={{ maxHeight: 260, flexGrow: 0 }} nestedScrollEnabled>
         {matches.map((slug) => (
-          <View key={slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
+          <View key={slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd, flexWrap: 'wrap' }}>
             {face(slug)}
             <Text style={{ fontSize: 12, color: t.text, flexShrink: 1 }} numberOfLines={1}>{prettify(slug)}</Text>
             {labelFor !== slug && <View style={{ flex: 1 }} />}
             {labelFor === slug
-              ? labelInput(slug)
-              : <Pressable onPress={() => { tap(); setLabelFor(slug); setLabelDraft(''); }}
+              ? <>{labelInput(slug)}{ruleControls}</>
+              : <Pressable onPress={() => { tap(); setLabelFor(slug); setLabelDraft(''); setRulesDraft({}); }}
                   style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 4 }}>
                   <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: FLAG_PURPLE }}>⚑ FLAG</Text>
                 </Pressable>}

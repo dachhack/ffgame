@@ -219,6 +219,11 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
   let n = 0;
   for (const m of ms ?? []) {
     const policy = (await db().from('league').select('lineup_policy').eq('id', m.league_id).maybeSingle()).data?.lineup_policy ?? 'best_lineup';
+    // no_start flags (0144): the auto-fill must never field a player the
+    // commissioner has barred — the sealed_pick trigger exempts the server
+    // (game ops must not jam), so the exclusion has to happen HERE.
+    const { data: flagRows } = await db().from('player_flag').select('slug,rules').eq('league_id', m.league_id);
+    const noStart = new Set((flagRows ?? []).filter((f) => f.rules?.no_start === true).map((f) => f.slug));
     const { data: mems } = await db().from('league_membership')
       .select('sleeper_roster_id,app_user_id,enrolled,controller').eq('league_id', m.league_id)
       .in('sleeper_roster_id', [m.home_roster_id, m.away_roster_id]);
@@ -255,6 +260,7 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       // autoLineup builds blind from the pool it's given, so give it the pool
       // MINUS the fielded players (a full AI rewrite keeps it all).
       const slugs = starters.map((s) => s.player_slug).filter(Boolean)
+        .filter((slug) => !noStart.has(slug))
         .filter((slug) => fullRewrite || !fieldedSlugs.has(slug));
       let owned, extra;
       if (aiDriven) { ({ owned, extra } = await aiBudgetPass(m, rosterId, mem.app_user_id, starters, seed)); }

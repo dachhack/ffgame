@@ -27,6 +27,7 @@ import type { Player, PbpEvent, Pos } from '../types';
 import { metricById } from '../data/metrics';
 import { capAmplifiers } from '../data/powerups';
 import { REAL_WEEKS } from '../data/realPbp';
+import { flagRulesFor } from '../data/commish';
 import { resolveSlot, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, hadDefTd, hadLongPassTd, clockAtRealTime, EMPTY_PLAYER, GHOST_PLAYER, GHOST_POINTS, type SlotInput } from './sim';
 import { banksAtClock, threwTrickTd } from './matchup';
 
@@ -241,6 +242,35 @@ function awardFor(buffs: Set<string>, picks: LivePick[], week: number): { pick: 
  *  `extras` carries each side's applied targeted power-ups (swaps / EMP /
  *  Double-or-Nothing / Bye Steal) — the live counterpart of buildMatchup's. */
 export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[], week: number, buffs: LiveBuffs = {}, extras: LiveExtrasBySide = {}): LiveResult {
+  // NO-POWERUPS flag (0144, docs/flag-rules.md): strip every SLOT-TARGETED
+  // effect aimed at a slot occupied by a flagged player — own boosts and
+  // opponent attacks alike. Window-wide area effects (EMP, Rivalry) stay:
+  // they target the window, not the player. Ghost/ByeSteal target EMPTY
+  // slots so they can never match a protected key; included for uniformity.
+  {
+    const protKeys = (picks: LivePick[]) =>
+      new Set(picks.filter((p) => flagRulesFor(p.player.id).noPowerups).map((p) => `${p.win}|${p.slot}`));
+    const homeProt = protKeys(homePicks), awayProt = protKeys(awayPicks);
+    if (homeProt.size || awayProt.size) {
+      const strip = (x: LiveExtras | undefined, own: Set<string>, opp: Set<string>) => {
+        if (!x) return;
+        const delKeys = (m: Record<string, unknown> | undefined, keys: Set<string>) => {
+          if (m) for (const k of Object.keys(m)) if (keys.has(k)) delete m[k];
+        };
+        const filt = (a: string[] | undefined, keys: Set<string>) => a?.filter((k) => !keys.has(k));
+        delKeys(x.swaps, own); delKeys(x.surge, own); delKeys(x.bunker, own);
+        delKeys(x.clutchEncore, own); delKeys(x.clutchCounter, own);
+        delKeys(x.coldSnap, opp); delKeys(x.napalm, opp);
+        x.ghost = filt(x.ghost, own); x.leadChange = filt(x.leadChange, own);
+        x.grudge = filt(x.grudge, own); x.redHerring = filt(x.redHerring, own);
+        x.clutchDon = filt(x.clutchDon, own); x.jinx = filt(x.jinx, opp);
+        if (x.don && own.has(`${x.don.win}|${x.don.slot}`)) delete x.don;
+        if (x.byeSteal && own.has(`${x.byeSteal.win}|${x.byeSteal.slot}`)) delete x.byeSteal;
+      };
+      strip(extras.home, homeProt, awayProt);
+      strip(extras.away, awayProt, homeProt);
+    }
+  }
   // COMBO DRIP is ONE-FOR-ONE: one combodrip slot per unlock PURCHASED (buy
   // two, field two — the coin economy limits the stack, not a hard cap).
   // Picks beyond the purchased quantity downgrade to the position's standard

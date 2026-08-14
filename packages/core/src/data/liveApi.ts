@@ -1374,12 +1374,21 @@ export const leagueNote = (leagueId: string) =>
     'league_note', { p_league_id: leagueId });
 export const setLeagueNote = (leagueId: string, text: string | null) =>
   rpc<{ ok: boolean; error?: string; text?: string | null }>('set_league_note', { p_league_id: leagueId, p_text: text });
-export interface PlayerFlagRow { slug: string; label: string; created_at: string; }
+/** Raw rule keys as stored (0144) — see docs/flag-rules.md. */
+export interface FlagRulesRaw {
+  no_trade?: boolean; no_add?: boolean; no_start?: boolean; no_powerups?: boolean; immune?: boolean;
+  bonus_mult?: number; bonus_pts?: number;
+}
+export interface PlayerFlagRow { slug: string; label: string; rules?: FlagRulesRaw; created_at: string; }
 export const playerFlags = (leagueId: string) =>
   rpc<PlayerFlagRow[] | { error: string }>('player_flags', { p_league_id: leagueId });
-export const setPlayerFlag = (leagueId: string, slug: string, label: string | null) =>
+export const setPlayerFlag = (leagueId: string, slug: string, label: string | null, rules: FlagRulesRaw = {}) =>
   rpc<{ ok: boolean; error?: string; on?: boolean; label?: string }>('set_player_flag', {
-    p_league_id: leagueId, p_slug: slug, p_label: label,
+    p_league_id: leagueId, p_slug: slug, p_label: label, p_rules: rules,
+  });
+export const setPlayerFlagsBulk = (leagueId: string, slugs: string[], label: string | null, rules: FlagRulesRaw = {}) =>
+  rpc<{ ok: boolean; error?: string; count?: number }>('set_player_flags_bulk', {
+    p_league_id: leagueId, p_slugs: slugs, p_label: label, p_rules: rules,
   });
 
 // ── League scoring adjustments (0143): the commissioner's layering knobs ─────
