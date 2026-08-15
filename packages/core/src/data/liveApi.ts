@@ -1729,6 +1729,22 @@ export const closeLeagueListing = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string }>('close_league_listing', { p_league_id: leagueId });
 /** Claim a seat in a posted league — native_join's seat rules, authorized by
  *  the open listing instead of a typed code. */
+/** Look before you join (0156): the full shape of a LISTED league — seats,
+ *  draft, rules, scoring, the seat map (team names + taken, no identities). */
+export interface BoardPreview {
+  ok: boolean; error?: string;
+  name?: string; season?: string; avatar_url?: string | null; blurb?: string | null;
+  seats_total?: number; seats_open?: number;
+  draft?: { status: string; mode: string; rounds: number; pick_seconds: number;
+            budget?: number | null; night?: { start_min: number; end_min: number } | null } | null;
+  rules?: { waiver_mode: string; faab_budget?: number | null; trade_review: string;
+            pos_caps?: Record<string, number> | null; live_buffs: boolean };
+  scoring?: { td_bonus: number; yd_mult: number; to_penalty: number } | null;
+  teams?: { roster_id: number; team_name: string; taken: boolean }[];
+}
+export const leaguePreview = (leagueId: string) =>
+  rpc<BoardPreview>('league_preview', { p_league_id: leagueId });
+
 export const joinFromBoard = (leagueId: string, teamName?: string) =>
   rpc<{ ok: boolean; error?: string; league_id?: string; roster_id?: number; league?: string }>(
     'join_from_board', { p_league_id: leagueId, p_team_name: teamName ?? null });
