@@ -26,7 +26,7 @@ export const METRICS: Record<Pos, Metric[]> = {
   QB: [
     { id: 'fg', name: 'Field General', tag: '×', fx: 'mult', sc: '0 direct pts', hook: 'Scores nothing himself — his passing yards multiply ALL your other drips in the window', ef: 'Passing yards set a window-wide drip multiplier on all your skill players. 300 yds = 2.8×. The QB scores nothing himself.' },
     { id: 'pass', name: 'Passing Yards', tag: 'FLAT', fx: 'sys', sc: '0.04 pts / yd + 4 / TD', hook: 'Simple, steady points for passing yards and TDs — no tricks', ef: 'Flat points on passing yards and TDs. No drip, no nuke, no interaction. Predictable.' },
-    { id: 'rush', name: 'Rush Yards', tag: 'FLAT', fx: 'sys', sc: '0.1 pts / yd + 6 / TD', hook: 'Simple, steady points for QB runs — no tricks', ef: 'Flat points on your scrambles and rushing TDs. Purely additive — no nuke, no erase, no interaction.' },
+    { id: 'rush', name: 'Rush Yards', tag: 'FLAT', fx: 'sys', sc: '0.15 pts / yd + 8 / TD', hook: 'Simple, steady points for QB runs — no tricks', ef: 'Flat points on your scrambles and rushing TDs. Purely additive — no nuke, no erase, no interaction.' },
     { id: 'passbig', name: 'Air Raid', tag: 'TD HEAVY', fx: 'sys', sc: '0.04 / yd + 10 / TD', hook: 'Huge 10-point passing touchdowns — boom-or-bust', ef: 'Unlock (1 wk): passing yards at 0.04/yd plus a huge 10 pts per passing TD. Flat — no nuke or erase.', lock: 'unlock-pass-td10' },
   ],
   RB: [

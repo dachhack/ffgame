@@ -62,7 +62,12 @@ function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): num
     if (metricId === 'fg') return 0; // Field General scores nothing — it multiplies your other window players (see windowFgMult / resolveSlot opts)
     if (metricId === 'pass') return play.kind === 'pass' ? play.yards * 0.04 * A.ydMult + tdPts(4) : 0; // yards + TD points, but no nuke/erase (flat family)
     if (metricId === 'passbig') return play.kind === 'pass' ? play.yards * 0.04 * A.ydMult + tdPts(10) : 0; // Air Raid unlock: 10 pts / passing TD
-    if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.1 * A.ydMult + tdPts(6) : 0;  // yards + TD points, flat
+    // 0.15/yd + 8/TD (founder's balance call, v0.193.1 — was 0.1 + 6): a
+    // scrambler's 50-yd night read ~8 pts against pass-flat's ~16, so the
+    // metric was never a real pick. The TD spike keeps the boom-bust
+    // identity; an ordinary night still trails pass-flat, so it stays a
+    // deliberate call FOR a running QB, not a free upgrade.
+    if (metricId === 'rush') return play.kind === 'rush' ? play.yards * 0.15 * A.ydMult + tdPts(8) : 0;
   }
   // NUKE metrics also score scrimmage yards (0.04/yd) under a SPIKE profile
   // (big per-TD, discounted yardage). Measured (findings §2/§10/§11): pure
