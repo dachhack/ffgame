@@ -467,16 +467,22 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     homeTotal = h.total; awayTotal = a.total;
   }
 
-  // Zero-resolve probe (0199.3): a started matchup with fielded picks scoring
-  // 0–0 is the play-store failure signature (the 8/15 clobber). Log what the
-  // engine's store held for one pick at compute time — visible in the deploy
-  // tail — so a recurrence is diagnosable without a database archaeology chain.
-  if (!homeTotal && !awayTotal && opts.startedWins?.size
-      && ((homePicks?.length ?? 0) + (awayPicks?.length ?? 0)) > 0) {
-    const probe = (homePicks ?? awayPicks ?? [])[0];
-    if (probe) {
-      console.log(new Date().toISOString(), 'zero-resolve', matchup.id.slice(0, 8),
-        'wk', matchup.week, 'probe', probe.slug, 'store-plays', playsFor(matchup.week, probe.slug));
+  // Zero-window probe (0199.3, widened same-day): a STARTED window scoring 0–0
+  // while it has fielded picks is the failure signature — whether the cause is
+  // a clobbered play store (the first 8/15 find) or something pick-shaped. Log
+  // each side's first pick for the window with its metric and how many plays
+  // the engine's store held at compute time — visible in the deploy tail.
+  if (opts.startedWins?.size) {
+    for (const s of states) {
+      if (s.home_score || s.away_score || !opts.startedWins.has(s.game_window)) continue;
+      const wp = (side, picks) => {
+        const p = (picks ?? []).find((x) => x.win === s.game_window);
+        return p ? `${side}=${p.slug}/${p.metric ?? 'null'}/${playsFor(matchup.week, p.slug)}p` : `${side}=—`;
+      };
+      const line = `${wp('H', homePicks)} ${wp('A', awayPicks)}`;
+      if (!line.includes('/')) continue; // no picks in this window at all — quiet
+      console.log(new Date().toISOString(), 'zero-window', matchup.id.slice(0, 8),
+        'wk', matchup.week, s.game_window, line);
     }
   }
 
