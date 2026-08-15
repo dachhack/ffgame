@@ -19,6 +19,7 @@
 //   waivers — your waiver claim processed to WON or LOST.
 import { createSign } from 'node:crypto';
 import { db } from './supabase.js';
+import { webPushSend, vapidKeys } from './webpush.js';
 import { slotsFor } from '../../packages/core/src/engine/matchup.ts';
 
 const log = (...a) => console.log(new Date().toISOString(), '[push]', ...a);
@@ -354,15 +355,21 @@ async function detectLineup() {
 }
 
 // ── sender ──────────────────────────────────────────────────────────────────
+// Two channels, per device platform: 'web' rows hold a browser subscription
+// JSON and go out via the Web Push protocol (webpush.js, VAPID creds); every
+// other platform is an FCM device token. A row is only marked sent once at
+// least one of its devices' channels had credentials — with a channel's creds
+// absent, its devices wait in the queue rather than being burned.
 async function flush() {
   const { data: pending } = await db().from('push_outbox')
     .select('id, app_user_id, kind, title, body, data')
     .is('sent_at', null).order('id').limit(50);
   if (!pending?.length) return;
   const token = await fcmAccessToken();
-  if (!token) return; // creds absent — leave the queue standing
+  const vapid = vapidKeys();
+  if (!token && !vapid) return; // no creds on either channel — leave the queue standing
   const uids = [...new Set(pending.map((p) => p.app_user_id))];
-  const { data: toks } = await db().from('push_token').select('token, app_user_id, prefs').in('app_user_id', uids);
+  const { data: toks } = await db().from('push_token').select('token, app_user_id, platform, prefs').in('app_user_id', uids);
   const byUser = new Map();
   for (const t of toks ?? []) {
     if (!byUser.has(t.app_user_id)) byUser.set(t.app_user_id, []);
@@ -372,12 +379,17 @@ async function flush() {
   for (const p of pending) {
     const devices = (byUser.get(p.app_user_id) ?? []).filter((t) => t.prefs?.[p.kind] !== false);
     let err = devices.length ? null : 'no devices';
+    let attempted = devices.length === 0; // deviceless rows resolve immediately
     for (const d of devices) {
-      const r = await fcmSend(token, d.token, p);
+      const web = d.platform === 'web';
+      if (web ? !vapid : !token) { err = `${web ? 'vapid' : 'fcm'} creds absent`; continue; }
+      attempted = true;
+      const r = web ? await webPushSend(d.token, p) : await fcmSend(token, d.token, p);
       if (r.ok) { sent += 1; continue; }
       err = r.error;
       if (r.dead) await db().from('push_token').delete().eq('token', d.token);
     }
+    if (!attempted) continue; // every device is on a credless channel — retry next sweep
     await db().from('push_outbox').update({ sent_at: new Date().toISOString(), error: err }).eq('id', p.id);
   }
   if (sent) log(`delivered ${sent} push${sent === 1 ? '' : 'es'}`);

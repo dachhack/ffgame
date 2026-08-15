@@ -30,6 +30,7 @@ import {
   type DraftState, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow,
 } from '@drip/core/data/liveApi';
 import { setLeagueFlags } from '@drip/core/data/commish';
+import { webPushState, enableWebPush, disableWebPush, type WebPushState } from '../app/webPush';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
 const label: React.CSSProperties = { fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)', fontWeight: 700 };
@@ -1602,10 +1603,10 @@ function NightEditorWeb({ current, busy, onSet, onClear }: {
   );
 }
 
-// ── notification mutes in the options (0153), web ───────────────────────────
-// The phone's push prefs, editable from the browser: prefs live server-side
-// per registered device, so this lists your devices and flips their mutes.
-// No device yet → a pointer at the app, where registration happens.
+// ── notification mutes in the options (0153 + 0194), web ────────────────────
+// Prefs live server-side per registered device; this lists your devices and
+// flips their mutes. Since v0.194.0 the browser itself can be one of those
+// devices — the enable row below subscribes THIS browser via web push.
 const NOTIF_KINDS: { key: string; label: string }[] = [
   { key: 'lineup', label: '⚠ lineup locks soon' },
   { key: 'chat', label: '💬 mentions & DMs' },
@@ -1616,25 +1617,51 @@ const NOTIF_KINDS: { key: string; label: string }[] = [
 
 function NotifPrefsCard() {
   const [tokens, setTokens] = useState<PushTokenRow[] | null>(null);
-  useEffect(() => { myPushTokens().then(setTokens).catch(() => setTokens([])); }, []);
+  const [web, setWeb] = useState<WebPushState>('unsupported');
+  const reload = () => myPushTokens().then(setTokens).catch(() => setTokens([]));
+  useEffect(() => {
+    void reload();
+    webPushState().then(setWeb).catch(() => {});
+  }, []);
   const toggle = (tok: PushTokenRow, key: string) => {
     const next = { ...(tok.prefs ?? {}), [key]: tok.prefs?.[key] === false };
     setTokens((cur) => (cur ?? []).map((x) => (x.token === tok.token ? { ...x, prefs: next } : x)));
     void setPushPrefs(tok.token, next).catch(() => {});
   };
+  const flipWeb = async () => {
+    setWeb(await (web === 'subscribed' ? disableWebPush() : enableWebPush()));
+    void reload();
+  };
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: '12px 14px' }}>
       <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 8 }}>🔔 NOTIFICATIONS</div>
+      {web !== 'unsupported' && (
+        <div style={{ marginBottom: 8 }}>
+          {web === 'denied' ? (
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', lineHeight: 1.5 }}>
+              Notifications are blocked for this site in your browser settings — allow them there to get pushes here.
+            </div>
+          ) : (
+            <button onClick={() => { void flipWeb(); }} className="mono"
+              style={{ fontSize: 9.5, fontWeight: 700, borderRadius: 6, padding: '6px 12px', cursor: 'pointer',
+                color: web === 'subscribed' ? 'var(--dim)' : 'var(--you)',
+                background: web === 'subscribed' ? 'var(--bg)' : 'color-mix(in srgb, var(--you) 12%, transparent)',
+                border: `1px solid ${web === 'subscribed' ? 'var(--bd)' : 'var(--you)'}` }}>
+              {web === 'subscribed' ? '✓ THIS BROWSER GETS PUSHES — tap to turn off' : '🔔 ENABLE PUSHES ON THIS BROWSER'}
+            </button>
+          )}
+        </div>
+      )}
       {tokens === null && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading…</div>}
-      {tokens?.length === 0 && (
+      {tokens?.length === 0 && web !== 'off' && (
         <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', lineHeight: 1.5 }}>
-          No phone registered — push notifications come from the Drip Fantasy app. Sign in there once and your device shows up here.
+          No device registered — sign in on the Drip Fantasy app{web === 'unsupported' ? '' : ' or enable this browser above'} and it shows up here.
         </div>
       )}
       {tokens?.map((tok) => (
         <div key={tok.token} style={{ marginBottom: 6 }}>
           {(tokens.length > 1) && (
-            <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginBottom: 4 }}>{tok.platform} · seen {new Date(tok.last_seen_at).toLocaleDateString()}</div>
+            <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginBottom: 4 }}>{tok.platform === 'web' ? 'browser' : 'phone'} · seen {new Date(tok.last_seen_at).toLocaleDateString()}</div>
           )}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {NOTIF_KINDS.map((k) => {

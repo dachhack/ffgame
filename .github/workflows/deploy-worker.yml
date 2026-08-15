@@ -157,6 +157,20 @@ jobs:
           fi
           flyctl secrets set --stage FCM_SERVICE_ACCOUNT="$FCM"
 
+      # Web push (v0.194.0): same staging dance for the VAPID private key — a
+      # base64url 32-byte P-256 scalar whose public half is committed in
+      # src/app/webPush.ts. Same guards and the same timing gotcha as above.
+      - name: stage VAPID credential
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          VAPID: ${{ secrets.VAPID_PRIVATE_KEY }}
+        run: |
+          if [ -z "$VAPID" ]; then
+            echo "VAPID_PRIVATE_KEY secret not set — skipping (web pushes will wait in the outbox)"
+            exit 0
+          fi
+          flyctl secrets set --stage VAPID_PRIVATE_KEY="$VAPID"
+
       - name: fly deploy
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
