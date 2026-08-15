@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
-  advancePlayoffs, commishMovePlayer, commishRemovePlayer, friendlyError, generatePlayoffs, leaguePool,
+  advancePlayoffs, autoGeneratePlayoffs, commishMovePlayer, commishRemovePlayer, friendlyError, generatePlayoffs, leaguePool,
   leagueStandings, nativeRosters, playoffState, setPlayoffRules,
   type LeaguePoolPlayer, type PlayoffState, type StandingsRow,
 } from '@drip/core/data/liveApi';
@@ -83,7 +83,12 @@ export function PlayoffControls({ leagueId, onChanged }: { leagueId: string; onC
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const load = () => playoffState(leagueId).then(setSt).catch(() => {});
-  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  useEffect(() => {
+    void load();
+    // The season closes itself (0162): once the last regular-season game is
+    // final, any member's visit here builds round 1 — the advance poke's twin.
+    autoGeneratePlayoffs(leagueId).then((r) => { if (r.ok && r.generated !== false) void load(); }).catch(() => {});
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, done: string) => {
     if (busy) return;
     setBusy(true); setNote(null);

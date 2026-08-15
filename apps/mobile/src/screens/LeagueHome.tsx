@@ -6,7 +6,7 @@
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { leagueNote, chatUnread, leagueSignals, nativeRosters, leaguePool, matchupTeams, type TeamInfo } from '@drip/core/data/liveApi';
+import { leagueNote, chatUnread, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, type TeamInfo } from '@drip/core/data/liveApi';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Mono } from '../ui/prims';
@@ -34,6 +34,7 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
   const [unread, setUnread] = useState<{ n: number; mention: boolean }>({ n: 0, mention: false });
   const [teamsOpen, setTeamsOpen] = useState(false);
   const [sig, setSig] = useState<{ polls: number; waivers: number; commish: { waiting: number; review: number } | null }>({ polls: 0, waivers: 0, commish: null });
+  const [champion, setChampion] = useState<string | null>(null);
   useEffect(() => {
     leagueNote(leagueId)
       .then((r) => { if (r.ok && (r.text || r.can_edit)) setNote({ text: r.text ?? '', canEdit: !!r.can_edit }); })
@@ -43,6 +44,10 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
       .catch(() => {});
     leagueSignals(leagueId)
       .then((r) => { if (r.ok) setSig({ polls: r.polls_unvoted ?? 0, waivers: r.waiver_results ?? 0, commish: r.commish ?? null }); })
+      .catch(() => {});
+    // Season's end (0162): once a champion is crowned, the hub says so.
+    playoffState(leagueId)
+      .then((st) => { if (st.champion_team) setChampion(st.champion_team); })
       .catch(() => {});
   }, [leagueId]);
 
@@ -72,6 +77,12 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}>
+      {!!champion && (
+        <View style={{ backgroundColor: alpha(t.you, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11 }}>
+          <Text style={{ fontSize: 14.5, fontWeight: '800', color: t.text }}>🏆 {champion}</Text>
+          <Mono size={9} tone="faint" style={{ marginTop: 2 }}>LEAGUE CHAMPIONS — the season is in the books</Mono>
+        </View>
+      )}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text numberOfLines={1} style={{ fontSize: 19, fontWeight: '700', color: t.text }}>{name}</Text>
