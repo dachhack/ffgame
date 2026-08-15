@@ -143,9 +143,27 @@ begin
   perform assert_true((league_game_mode(lid) -> 'bestball') = '[]'::jsonb, 'bb6 reads off after clear');
   perform assert_ok(set_league_bestball(lid, '["FLEX"]'::jsonb), 'bb7 re-arm for freeze probe');
 
-  -- best ball has no meaning in a drip league
+  -- classic scoring (0160): commish-only, classic-only, clamped, member-readable
+  perform probe_as('c');
+  perform assert_err(set_league_classic_scoring(lid, '{"passTd": 6}'::jsonb), 'commissioner', 'cs0 member cannot set scoring');
+  perform probe_as('b');
+  r := set_league_classic_scoring(lid, '{"passTd": 6, "int": -99, "passYd": 5, "bogus": 9, "sack": "junk"}'::jsonb);
+  perform assert_ok(r, 'cs1 commish sets scoring');
+  perform assert_true((r -> 'scoring' ->> 'passTd')::numeric = 6, 'cs2 passTd stored');
+  perform assert_true((r -> 'scoring' ->> 'int')::numeric = -10, 'cs3 int clamped to -10');
+  perform assert_true((r -> 'scoring' ->> 'passYd')::numeric = 1, 'cs4 per-yard clamped to 1');
+  perform assert_true(not (r -> 'scoring') ? 'bogus', 'cs5 unknown key dropped');
+  perform assert_true(not (r -> 'scoring') ? 'sack', 'cs6 non-numeric dropped');
+  perform probe_as('c');
+  perform assert_true((league_game_mode(lid) -> 'scoring' ->> 'passTd')::numeric = 6, 'cs7 member reads overrides');
+  perform probe_as('b');
+  perform assert_ok(set_league_classic_scoring(lid, '{}'::jsonb), 'cs8 clear to defaults');
+  perform assert_true((league_game_mode(lid) -> 'scoring') = '{}'::jsonb, 'cs9 reads empty after clear');
+
+  -- best ball + classic scoring have no meaning in a drip league
   perform assert_ok(set_league_game_mode(lid, 'drip'), 'bb8 back to drip');
   perform assert_err(set_league_bestball(lid, '["FLEX"]'::jsonb), 'classic-league setting', 'bb9 refused in drip');
+  perform assert_err(set_league_classic_scoring(lid, '{"passTd": 6}'::jsonb), 'classic-league setting', 'cs10 scoring refused in drip');
   perform assert_ok(set_league_game_mode(lid, 'classic'), 'bb10 back to classic');
 
   -- the mode AND best ball freeze once the draft leaves pending

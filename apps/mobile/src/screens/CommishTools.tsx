@@ -21,9 +21,9 @@ import {
   setTeamAvatar, setTeamController, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
-  leagueGameMode, setLeagueGameMode, setLeagueBestball,
+  leagueGameMode, setLeagueGameMode, setLeagueBestball, setLeagueClassicScoring,
 } from '@drip/core/data/liveApi';
-import { CLASSIC_SLOTS } from '@drip/core/engine/classic';
+import { CLASSIC_SLOTS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING } from '@drip/core/engine/classic';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
@@ -612,9 +612,34 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
   const [bestball, setBestballSlots] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Full classic scoring (0160): string drafts; parse + diff on save.
+  const [scOpen, setScOpen] = useState(false);
+  const [scDraft, setScDraft] = useState<Record<string, string>>({});
+  const scInit = (over: Record<string, number>) => {
+    const d: Record<string, string> = {};
+    for (const f of CLASSIC_SCORING_FIELDS) d[f.key] = String(over[f.key] ?? DEFAULT_CLASSIC_SCORING[f.key]);
+    setScDraft(d);
+  };
   useEffect(() => {
-    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setBestballSlots(r.bestball ?? []); } }).catch(() => {});
+    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setBestballSlots(r.bestball ?? []); scInit(r.scoring ?? {}); } }).catch(() => {});
   }, [leagueId]);
+  const saveScoring = async (reset = false) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    const over: Record<string, number> = {};
+    if (!reset) {
+      for (const f of CLASSIC_SCORING_FIELDS) {
+        const v = Number(scDraft[f.key]);
+        if (Number.isFinite(v) && v !== DEFAULT_CLASSIC_SCORING[f.key]) over[f.key] = v;
+      }
+    }
+    try {
+      const r = await setLeagueClassicScoring(leagueId, over);
+      if (r.ok) { commit(); scInit(r.scoring ?? {}); setNote('✓ scoring saved'); }
+      else { warn(); setNote(r.error ?? 'failed'); }
+    } catch { warn(); }
+    finally { setBusy(false); }
+  };
   const saveBestball = async (slots: string[]) => {
     if (busy) return;
     setBusy(true); setNote(null);
@@ -684,7 +709,35 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
           </Mono>
         </View>
       )}
-      {note && <Mono size={9} tone="warn" style={{ marginTop: 8 }}>{note}</Mono>}
+      {mode === 'classic' && (
+        <View style={{ marginTop: 10 }}>
+          <Pressable onPress={() => { tap(); setScOpen((o) => !o); }}>
+            <Mono size={8.5} tone="faint" weight="700">⚖ SCORING {scOpen ? '▾' : '▸'}  every value is yours to set</Mono>
+          </Pressable>
+          {scOpen && (
+            <>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                {CLASSIC_SCORING_FIELDS.map((f) => {
+                  const changed = Number(scDraft[f.key]) !== DEFAULT_CLASSIC_SCORING[f.key];
+                  return (
+                    <View key={f.key} style={{ width: '22%', minWidth: 74 }}>
+                      <Mono size={7} tone={changed ? 'you' : 'faint'} weight="700">{f.label}{f.perYard ? ' /YD' : ''}</Mono>
+                      <TextInput value={scDraft[f.key] ?? ''} keyboardType="numbers-and-punctuation"
+                        onChangeText={(v) => setScDraft((d) => ({ ...d, [f.key]: v }))}
+                        style={{ fontFamily: MONO, fontSize: 11, color: t.text, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: changed ? t.you : t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 5, marginTop: 2 }} />
+                    </View>
+                  );
+                })}
+              </View>
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
+                <Pill on label="SAVE SCORING" onPress={() => void saveScoring()} />
+                <Pill on={false} label="RESET TO STANDARD" onPress={() => void saveScoring(true)} />
+              </View>
+            </>
+          )}
+        </View>
+      )}
+      {note && <Mono size={9} tone={note.startsWith('✓') ? 'faint' : 'warn'} style={{ marginTop: 8 }}>{note}</Mono>}
     </Card>
   );
 }

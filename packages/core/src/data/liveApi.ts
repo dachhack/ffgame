@@ -1203,7 +1203,7 @@ export const leagueLiveBuffs = (leagueId: string) =>
 /** 'drip' (default) or 'classic' — classic = standard scoring, one weekly
  *  QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses, no power-ups. Frozen once
  *  the draft starts. `ppr` (0 | 0.5 | 1, default 1) applies in classic only. */
-export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; can_edit?: boolean }
+export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; can_edit?: boolean }
 export const setLeagueGameMode = (leagueId: string, mode: 'drip' | 'classic', ppr?: number) =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_game_mode',
     { p_league_id: leagueId, p_mode: mode, p_ppr: ppr ?? null }),
@@ -1222,6 +1222,12 @@ export const setLeagueBestball = (leagueId: string, slots: string[]) =>
   tracked(rpc<{ ok: boolean; error?: string; bestball?: string[] }>('set_league_bestball',
     { p_league_id: leagueId, p_slots: slots }),
     Ev.commishAction, { tool: 'bestball', count: slots.length });
+/** Full classic scoring overrides (0160) — camelCase ClassicScoring keys,
+ *  sanitized + clamped server-side; {} resets to the engine defaults. */
+export const setLeagueClassicScoring = (leagueId: string, scoring: Record<string, number>) =>
+  tracked(rpc<{ ok: boolean; error?: string; scoring?: Record<string, number> }>('set_league_classic_scoring',
+    { p_league_id: leagueId, p_scoring: scoring }),
+    Ev.commishAction, { tool: 'classic_scoring', count: Object.keys(scoring).length });
 
 export const LIVE_BUFFS = ['overtime', 'ot-shield', 'momentum', 'garbage-time', 'amp-2', 'amp-3', 'floodgates', 'counter-nuke', 'insurance', 'fg-stack'] as const;
 export const armBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; detail?: string; buffs?: string[] }>('arm_buff', { p_matchup_id: matchupId, p_buff: buff });
