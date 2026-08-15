@@ -20,6 +20,7 @@ import {
   leagueInvite, nativeTeamState,
   setTeamAvatar, setTeamController, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
+  leagueLastSeen, seenAgoLabel, type LeagueSeenRow,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
@@ -129,6 +130,9 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
 
       <CommishTeams key={`teams-${epoch}`} leagueId={leagueId} myRoster={myRoster}
         onChanged={() => void refresh()} onSelfUnassigned={onSelfUnassigned} />
+
+      {/* who's actually been in the league (0151) — collapsed, loads on open */}
+      <CommishSeen leagueId={leagueId} />
 
       {/* league-wide coin: the allowance and the bulk levers, right under the
           seat rows whose 💰 chips they move. onChanged remounts the cards so
@@ -533,6 +537,54 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
           })}
         </ScrollView>
       </Overlay>
+    </Card>
+  );
+}
+
+
+// ── Last opened (0151) ───────────────────────────────────────────────────────
+// Every member with when they last OPENED the league — the commissioner's
+// pulse check a week before lineups matter. Collapsed by default; loads on
+// first expand. "Never" = claimed a seat, hasn't been in.
+function CommishSeen({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<LeagueSeenRow[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open || rows !== null) return;
+    leagueLastSeen(leagueId)
+      .then((r) => { if (r.ok && r.members) setRows(r.members); else setErr(friendlyError(r.error ?? 'load failed')); })
+      .catch((x) => setErr(friendlyError(x)));
+  }, [open, rows, leagueId]);
+  const tone = (lastAt: string | null): string => {
+    if (!lastAt) return t.opp;
+    const d = Date.now() - Date.parse(lastAt);
+    return d < 24 * 3600_000 ? t.you : d < 4 * 24 * 3600_000 ? t.text : t.warn;
+  };
+  return (
+    <Card>
+      <Pressable onPress={() => { tap(); setOpen((o) => !o); }}
+        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <Mono size={9.5} weight="700" track={0.12} tone="faint">👁 LAST OPENED · who's been in the league</Mono>
+        <Mono size={9.5} weight="700" tone="dim">{open ? '▾' : '▸'}</Mono>
+      </Pressable>
+      {open && (
+        <View style={{ marginTop: 8, gap: 6 }}>
+          {!!err && <Mono size={10} tone="opp">⚠ {err}</Mono>}
+          {!err && rows === null && <Mono size={10} tone="faint">Loading…</Mono>}
+          {rows?.length === 0 && <Mono size={10} tone="faint">No members yet.</Mono>}
+          {rows?.map((m) => (
+            <View key={m.id} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+              <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: t.text }}>{m.name}</Text>
+              <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: tone(m.last_at) }}>{seenAgoLabel(m.last_at)}</Text>
+            </View>
+          ))}
+          <Mono size={8.5} tone="faint" style={{ marginTop: 2, lineHeight: 13 }}>
+            When each member last opened this league — web or app. NEVER means a claimed seat that hasn't been in yet.
+          </Mono>
+        </View>
+      )}
     </Card>
   );
 }

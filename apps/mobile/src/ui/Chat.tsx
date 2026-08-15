@@ -47,12 +47,25 @@ const GIF = gifProvider(process.env.EXPO_PUBLIC_TENOR_KEY || undefined, process.
 
 /** A message body: whole-URL images render inline; @TeamName tokens highlight
  *  against the league's real member names (longest name wins). */
+/** An inline chat image at its TRUE aspect ratio. The fixed 200×150 cover
+ *  box cropped every non-4:3 GIF (the founder's Napoleon lost his head) —
+ *  measure the image, keep the width, and give it the height it asks for,
+ *  clamped so a tall GIF can't take the whole screen. */
+function InlineImage({ uri }: { uri: string }) {
+  const t = useTheme();
+  const [ar, setAr] = useState(4 / 3);
+  useEffect(() => {
+    let dead = false;
+    Image.getSize(uri, (w, h) => { if (!dead && w > 0 && h > 0) setAr(w / h); }, () => {});
+    return () => { dead = true; };
+  }, [uri]);
+  return <Image source={{ uri }} resizeMode="cover"
+    style={{ width: 200, height: Math.round(Math.max(100, Math.min(300, 200 / ar))), borderRadius: 8, marginTop: 2, backgroundColor: t.sh }} />;
+}
+
 function MsgBody({ body, names, size = 13 }: { body: string; names: string[]; size?: number }) {
   const t = useTheme();
-  if (isImageUrl(body)) {
-    return <Image source={{ uri: body.trim() }} resizeMode="cover"
-      style={{ width: 200, height: 150, borderRadius: 8, marginTop: 2, backgroundColor: t.sh }} />;
-  }
+  if (isImageUrl(body)) return <InlineImage uri={body.trim()} />;
   const base = { fontSize: size, lineHeight: size + 5, color: t.text } as const;
   if (!names.length || !body.includes('@')) return <Text style={base}>{body}</Text>;
   const re = new RegExp(`@(${[...names].sort((a, b) => b.length - a.length).map(escRe).join('|')})`, 'g');

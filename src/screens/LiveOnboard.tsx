@@ -10,6 +10,7 @@ import {
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, adminUserWaitlist, type WaitlistRow,
   myMatchup, matchupTeams, leagueResults, defaultOpenWeek, chatUnread, leagueTrades,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
+  leagueTouch,
 } from '@drip/core/data/liveApi';
 import { buildDripTestLeague } from '@drip/core/data/dripTest';
 import { track, identify, Ev } from '@drip/core/analytics';
@@ -749,7 +750,12 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       onManage={(id) => guard(() => { setHomeFor(null); setManageId(id); setManageTab(undefined); setView('commishdash'); })()}
       onDraft={(leagueId, rosterId) => guard(() => { setHomeFor(null); setTarget({ leagueId, rosterId }); setView('draft'); })()}
       onTeam={(leagueId, rosterId) => guard(() => { setHomeFor(null); setTarget({ leagueId, rosterId }); setView('team'); })()}
-      onOpen={(e) => { setHomeFor(e); setView('leaguehome'); }}
+      onOpen={(e) => {
+        // Presence (0151) — skipped under browse-as: the admin looking is
+        // not the member opening.
+        if (!viewAs) void leagueTouch(e.league_id).catch(() => {});
+        setHomeFor(e); setView('leaguehome');
+      }}
       unreads={unreads}
       alarms={alarms}
       offers={offers}
@@ -979,6 +985,9 @@ function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage,
   // as a live pilot (real sealed picks + opponent reveal) when a matchup exists.
   const playHeroBoard = async () => {
     if (building) return;
+    // Presence (0151): the quick-link is a league open too. The server
+    // no-ops a non-member (the browsing admin), so this can fire blind.
+    void leagueTouch(e.league_id).catch(() => {});
     setBuilding(true); setBuildErr(null); setBuildNote('Loading your board…');
     try {
       // Open to the current NFL week (or the next upcoming if none is live) across
