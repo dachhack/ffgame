@@ -1466,6 +1466,12 @@ export function seenAgoLabel(lastAt: string | null): string {
 export const leagueLastSeen = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; members?: LeagueSeenRow[] }>('league_last_seen', { p_league_id: leagueId });
 
+/** The league's badge counts in one ask (0154): unvoted polls, my waiver
+ *  results since I last opened the league, and (commish only) the inbox. */
+export const leagueSignals = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; polls_unvoted?: number; waiver_results?: number;
+        commish?: { waiting: number; review: number } | null }>('league_signals', { p_league_id: leagueId });
+
 export const dmThreads = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; threads?: DmThreadRow[] }>('dm_threads', { p_league_id: leagueId });
 /** Latest page (no `before`) marks the thread read. */
