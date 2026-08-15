@@ -1446,6 +1446,26 @@ export const dmSend = (leagueId: string, to: string, body: string) =>
   tracked(rpc<{ ok: boolean; error?: string; thread_id?: string; id?: number }>('dm_send', {
     p_league_id: leagueId, p_to: to, p_body: body,
   }), Ev.chatPosted, { kind: looksImage(body) ? 'gif' : 'text', dm: true, mentions: 0 });
+// ── League presence (0151): touch on open, commish reads last-seen ──────────
+export const leagueTouch = (leagueId: string) =>
+  rpc<{ ok: boolean; seen?: boolean }>('league_touch', { p_league_id: leagueId });
+export interface LeagueSeenRow { id: string; name: string; last_at: string | null; }
+/** "just now" / "35m ago" / "6h ago" / "3d ago" / "never" — the commissioner's
+ *  last-seen list speaks in coarse, honest units; the exact timestamp is noise. */
+export function seenAgoLabel(lastAt: string | null): string {
+  if (!lastAt) return 'never';
+  const ms = Date.now() - Date.parse(lastAt);
+  if (!Number.isFinite(ms) || ms < 0) return 'just now';
+  const m = Math.floor(ms / 60_000);
+  if (m < 2) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 48) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+export const leagueLastSeen = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; members?: LeagueSeenRow[] }>('league_last_seen', { p_league_id: leagueId });
+
 export const dmThreads = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; threads?: DmThreadRow[] }>('dm_threads', { p_league_id: leagueId });
 /** Latest page (no `before`) marks the thread read. */

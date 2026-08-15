@@ -12,7 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
-import { getSession, onAuth, signOut } from '@drip/core/data/liveApi';
+import { getSession, onAuth, signOut, leagueTouch } from '@drip/core/data/liveApi';
 import { Ev, identify, track } from '@drip/core/analytics';
 import { APP_VERSION } from '@drip/core/version';
 import { liveConfigured } from '@drip/core/data/liveConfig';
@@ -317,6 +317,9 @@ export function App() {
               // to open, so this is the same activation step the web reports
               // for a live league and lands in the same funnel.
               track(Ev.leagueOpened, { live: true });
+              // Presence (0151): the commissioner's last-seen list. Fire and
+              // forget — an outsider's touch is a server-side no-op.
+              void leagueTouch(leagueId).catch(() => {});
               // No seat → no lineup: a seatless commissioner lands on
               // management, not on a MATCHUP tab that cannot render.
               setView(rosterId == null ? 'commishtools' : (landing ?? 'home'));

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { commishOverview, type AdminLeague } from '@drip/core/data/liveApi';
+import { commishOverview, leagueLastSeen, seenAgoLabel, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { LeagueRow, type LeagueTab } from './AdminPage';
 import { card, linkBtn, mono, Muted, errMsg } from './adminUi';
 
@@ -46,14 +46,64 @@ export function CommishDash({ onBack, focusId, defaultTab }: {
           // With several leagues, cards collapse to just their header (first one
           // starts open) so the list stays scannable; a lone/focused league is
           // always expanded.
-          <LeagueRow key={l.league_id} l={l} reload={load} admin={false} mine defaultTab={defaultTab ?? 'members'}
-            collapsible={shown.length > 1} defaultOpen={i === 0} />
+          <div key={l.league_id}>
+            <LeagueRow l={l} reload={load} admin={false} mine defaultTab={defaultTab ?? 'members'}
+              collapsible={shown.length > 1} defaultOpen={i === 0} />
+            <LastSeenCard leagueId={l.league_id} />
+          </div>
         ))}
 
       <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', margin: '10px 4px', lineHeight: 1.5 }}>
         Share the invite link with your players, see who’s joined, sync each week’s matchups, and run the live windows — all for the leagues you commission.
       </div>
       <div style={{ textAlign: 'center', marginTop: 6 }}><button onClick={onBack} className="mono" style={linkBtn}>← all leagues</button></div>
+    </div>
+  );
+}
+
+
+// ── Last opened (0151) ───────────────────────────────────────────────────────
+// The commissioner's "is anyone actually here?" — every member with when they
+// last OPENED the league (the hub or the board; badge polls don't count).
+// Collapsed by default; loads on first expand.
+function LastSeenCard({ leagueId }: { leagueId: string }) {
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<LeagueSeenRow[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open || rows !== null) return;
+    leagueLastSeen(leagueId)
+      .then((r) => { if (r.ok && r.members) setRows(r.members); else setErr(r.error ?? 'load failed'); })
+      .catch((e) => setErr(errMsg(e, 'load failed')));
+  }, [open, rows, leagueId]);
+  const tone = (lastAt: string | null): string => {
+    if (!lastAt) return 'var(--opp)';
+    const d = Date.now() - Date.parse(lastAt);
+    return d < 24 * 3600_000 ? 'var(--you)' : d < 4 * 24 * 3600_000 ? 'var(--text)' : 'var(--warn)';
+  };
+  return (
+    <div style={{ ...card, marginTop: 8 }}>
+      <button onClick={() => setOpen((o) => !o)} className="mono"
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+        <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>👁 LAST OPENED · who's been in the league</span>
+        <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--dim)' }}>{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>⚠ {err}</div>}
+          {!err && rows === null && <Muted text="Loading…" />}
+          {rows?.length === 0 && <Muted text="No members yet." />}
+          {rows?.map((m) => (
+            <div key={m.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 12, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+              <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: tone(m.last_at), flexShrink: 0 }}>{seenAgoLabel(m.last_at)}</span>
+            </div>
+          ))}
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
+            When each member last opened this league — on the web or the app. "Never" means they've claimed a seat but not been in yet.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
