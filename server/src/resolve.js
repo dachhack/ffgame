@@ -277,8 +277,14 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   };
   const sideLineup = async (rosterId) => {
     const mem = byRoster.get(rosterId);
-    if (mem?.controller === 'ai') return aiSide(rosterId, mem);
     const picks = await enrolledPicks(matchup, mem, ctx);
+    // SEALED-FIRST (the 8/15 ruling, completed): locked sealed rows are the
+    // lineup for ANY seat that has them — AI/auto-pilot seats included, whose
+    // rows were materialized at lock. The aiSide rebuild is for seats with NO
+    // sealed rows; letting it override real rows is how an AI seat in a week
+    // with no sleeper_lineup (preseason) scored 0 while the board showed its
+    // picks. The AI's bought buffs still ride along via the loadout below.
+    if (mem?.controller === 'ai' && !(picks && picks.length)) return aiSide(rosterId, mem);
     if (picks) {
       // Buffs + targeted power-ups (swaps / EMP / DoN / Bye Steal) come from the
       // same applied_state payload the arm/apply RPCs write. comboQty = combo
