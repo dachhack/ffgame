@@ -5,7 +5,7 @@ import { slugMeta } from '@drip/core/data/slugMeta';
 import type { Pos, WindowId } from '@drip/core/types';
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
-  myBuffs, armBuff, disarmBuff, LIVE_BUFFS, leagueLiveBuffs,
+  myBuffs, armBuff, disarmBuff, LIVE_BUFFS, leagueLiveBuffs, leagueGameMode,
   myUnlocks, armUnlock, disarmUnlock, myComboQty,
   myWallet, ensureWallet,
   myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium, startCheckout,
@@ -17,6 +17,7 @@ import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } fr
 import { shortName } from '@drip/core/data/players';
 import type { Player } from '@drip/core/types';
 import { SetupRow, PlayerPicker } from './boardParts';
+import { ClassicBoard } from './ClassicBoard';
 import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 
 // Live pool entries are slug/full/pos; the reused setup card wants a Player. Build
@@ -45,6 +46,8 @@ const fmtLock = (iso: string | null) => {
 };
 
 export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: string; leagueId?: string; rosterId?: number; onBack: () => void }) {
+  // Classic leagues (0157) get the traditional board — no windows, no metrics.
+  const [gameMode, setGameMode] = useState<'drip' | 'classic' | null>(null);
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
   const [myTeam, setMyTeam] = useState<TeamInfo | null>(null);
   const [roster, setRoster] = useState<{ leagueId: string; rosterId: number } | null>(null);
@@ -87,6 +90,9 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
         const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
         if (!r) { setState('none'); return; }
         setRoster(r);
+        const gm = await leagueGameMode(r.leagueId).catch(() => null);
+        if (gm?.ok && gm.mode === 'classic') { setGameMode('classic'); setState('ready'); return; }
+        setGameMode('drip');
         myMembership(r.leagueId, r.rosterId).then((mm) => { if (mm?.controller) setController(mm.controller); }).catch(() => {});
         leagueLiveBuffs(r.leagueId).then((lb) => { if (lb.ok) setBuffsOn(lb.on !== false); }).catch(() => {});
         const m = await myMatchup(r.leagueId, r.rosterId, weekSel ?? undefined);
@@ -351,6 +357,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
   );
 
   if (state === 'loading') return <Muted text="Loading your matchup…" />;
+  if (gameMode === 'classic') return <ClassicBoard userId={userId} leagueId={roster?.leagueId ?? leagueId} rosterId={roster?.rosterId ?? rosterId} onBack={onBack} />;
   if (state === 'error') return (
     <div style={card}>
       <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Couldn’t load your matchup</div>

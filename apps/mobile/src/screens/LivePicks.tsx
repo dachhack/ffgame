@@ -22,7 +22,7 @@ import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } from '@drip/core/data/premiumClient';
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
-  myBuffs, heroSetBuffs, myInventory, consumeInventory, refundInventory, leagueLiveBuffs,
+  myBuffs, heroSetBuffs, myInventory, consumeInventory, refundInventory, leagueLiveBuffs, leagueGameMode,
   myUnlocks, armUnlock, disarmUnlock, myComboQty,
   myWallet, ensureWallet,
   liveSlate, matchupTeams, matchupPremium, startCheckout, friendlyError,
@@ -52,6 +52,7 @@ import { PlayLog } from '../ui/PlayLog';
 import { liveDuelEvents } from '@drip/core/data/duelLog';
 import { Overlay } from '../ui/Overlay';
 import { CommishKit } from '../ui/CommishKit';
+import { ClassicBoard } from '../ui/ClassicBoard';
 import { clearLeagueFlags } from '@drip/core/data/commish';
 
 // Live pool entries are slug/full/pos; SetupRow wants a Player. Build a light
@@ -109,6 +110,8 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
 }) {
   const t = useTheme();
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
+  // Classic leagues (0157) swap the whole drip board for the traditional one.
+  const [gameMode, setGameMode] = useState<'drip' | 'classic' | null>(null);
   const [myTeam, setMyTeam] = useState<TeamInfo | null>(null);
   const [oppTeam, setOppTeam] = useState<TeamInfo | null>(null);
   const [roster, setRoster] = useState<{ leagueId: string; rosterId: number } | null>(null);
@@ -200,6 +203,11 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
         if (!r) { setState('none'); return; }
         setRoster(r);
+        // Classic leagues (0157) branch to the traditional board — the drip
+        // load below (windows, buffs, shop) never runs for them.
+        const gm = await leagueGameMode(r.leagueId).catch(() => null);
+        if (gm?.ok && gm.mode === 'classic') { if (alive) { setGameMode('classic'); setState('ready'); } return; }
+        if (alive) setGameMode('drip');
         leagueLiveBuffs(r.leagueId).then((lb) => { if (lb.ok) setLiveBuffsOn(lb.on !== false); }).catch(() => {});
         myMembership(r.leagueId, r.rosterId).then((mm) => { if (mm?.controller) setController(mm.controller); }).catch(() => {});
         const m = await myMatchup(r.leagueId, r.rosterId, weekSel ?? undefined);
@@ -699,6 +707,14 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       <View style={{ flex: 1, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
         <ActivityIndicator color={t.you} />
         <Mono size={11}>Loading your matchup…</Mono>
+      </View>
+    );
+  }
+
+  if (gameMode === 'classic' && roster) {
+    return (
+      <View style={{ flex: 1, backgroundColor: t.bg }}>
+        <ClassicBoard userId={userId} leagueId={roster.leagueId} rosterId={roster.rosterId} />
       </View>
     );
   }

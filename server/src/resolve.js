@@ -19,7 +19,7 @@
 // cross-window TE-TD nukes, and the K banker bonus remain simplified there.
 import { db } from './supabase.js';
 import { config } from './config.js';
-import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY } from './engine.js';
+import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY, resolveClassicMatchup, CLASSIC_WIN } from './engine.js';
 import { matchupPremium, premiumTier, hasPremiumContent, gateSide, hasPremiumTargeted, gateTargeted } from './premium.js';
 import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
 import { starterSlugs } from '../../packages/core/src/data/poolEntry.ts';
@@ -130,6 +130,15 @@ async function leagueScoringOf(leagueId, ctx) {
   return data?.settings_json?.scoring ?? null;
 }
 
+/** The league's game mode (0157): 'drip' (default) | 'classic', plus the
+ *  classic PPR knob. Classic resolves through resolveClassicMatchup below. */
+async function leagueModeOf(leagueId, ctx) {
+  if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1 };
+  const { data } = await db().from('league').select('settings_json').eq('id', leagueId).maybeSingle();
+  const s = data?.settings_json ?? {};
+  return { mode: s.game_mode === 'classic' ? 'classic' : 'drip', ppr: Number.isFinite(Number(s.ppr)) ? Number(s.ppr) : 1 };
+}
+
 /** The league's player flags (0144) — rows for the engine cache, [] when none. */
 async function leagueFlagsOf(leagueId, ctx) {
   if (ctx) return ctx.flags?.get(leagueId) ?? [];
@@ -168,6 +177,10 @@ export async function prefetchTick(live, week) {
   }
   const policy = new Map((lg.data ?? []).map((r) => [r.id, r.lineup_policy ?? 'best_lineup']));
   const scoring = new Map((lg.data ?? []).map((r) => [r.id, r.settings_json?.scoring ?? null]));
+  const mode = new Map((lg.data ?? []).map((r) => [r.id, {
+    mode: r.settings_json?.game_mode === 'classic' ? 'classic' : 'drip',
+    ppr: Number.isFinite(Number(r.settings_json?.ppr)) ? Number(r.settings_json.ppr) : 1,
+  }]));
   const flags = new Map();     // leagueId -> [{slug,label,rules}] (0144 rules ride the resolve)
   for (const r of fl.data ?? []) {
     if (!flags.has(r.league_id)) flags.set(r.league_id, []);
@@ -189,7 +202,7 @@ export async function prefetchTick(live, week) {
     if (!picks.has(k)) picks.set(k, []);
     picks.get(k).push({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id });
   }
-  return { members, policy, scoring, flags, lineups, applied, picks, hasPicks };
+  return { members, policy, scoring, mode, flags, lineups, applied, picks, hasPicks };
 }
 
 /** Resolve one matchup → write matchup_state (per game_window) + finals when final.
@@ -297,6 +310,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   const states = []; // { game_window, home_score, away_score }
   let slotRows = []; // per-slot detail: { win, side, slot, slug, metric, score }
   let homeTotal = 0, awayTotal = 0;
+  const gameMode = await leagueModeOf(matchup.league_id, ctx);
   let coin = null; // weekly drip-coin per side (only the real-engine H2H path earns it)
   const toLive = (p) => ({ win: p.win, slot: p.slot, player: player(p.slug), metricId: p.metric || 'rush' });
 
@@ -346,7 +360,20 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     return Object.keys(ex).length ? ex : undefined;
   };
 
-  if (homePicks && awayPicks) {
+  if (gameMode.mode === 'classic') {
+    // ── CLASSIC league (0157): standard fantasy, one weekly lineup, no buffs,
+    //    no bonuses, no coin. Only 'wk' picks count — a drip-shaped auto-lineup
+    //    from the fallback paths must not leak into a classic score, so a side
+    //    with no 'wk' rows simply fields nothing (classic's honest missed-lineup:
+    //    empty slots score zero, present slots still score). ──
+    const classify = (picks) => (picks ?? [])
+      .filter((p) => p.win === CLASSIC_WIN && p.slug)
+      .map((p) => ({ slot: p.slot, player: player(p.slug) }));
+    const r = resolveClassicMatchup(classify(homePicks), classify(awayPicks), matchup.week, gameMode.ppr);
+    for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
+    slotRows = r.slots;
+    homeTotal = r.home; awayTotal = r.away;
+  } else if (homePicks && awayPicks) {
     // ── Both sides have a lineup (human, AI, or auto-backup): real H2H engine ──
     setLeagueScoring(scoringKnobs); // sync install — no await between here and the resolve
     setLeagueFlags(matchup.league_id, flagRows); // flags ride the same isolation rule
@@ -384,7 +411,11 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   // windows that have kicked off (opts.startedWins, from the tick's slate). A null
   // set means the slate has no kickoffs; then everything seals at lock_at anyway
   // (lock.js falls back the same way) and all rows are safe to write.
-  const visSlots = opts.startedWins ? slotRows.filter((s) => opts.startedWins.has(s.win)) : slotRows;
+  // Classic 'wk' rows have no single window: they reveal once ANY window has
+  // kicked off — the same moment lock.js seals them (dueWindows adds 'wk').
+  const visSlots = opts.startedWins
+    ? slotRows.filter((s) => (s.win === CLASSIC_WIN ? opts.startedWins.size > 0 : opts.startedWins.has(s.win)))
+    : slotRows;
   const slotsFor = (win) => visSlots
     .filter((s) => s.win === win)
     .sort((x, y) => String(x.slot).localeCompare(String(y.slot)))

@@ -150,7 +150,12 @@ export async function backfillLockAt(week, kickoffMs) {
 function dueWindows(winKicks, now) {
   if (!winKicks) return null;
   const t = now.getTime();
-  return new Set(Object.keys(winKicks).filter((w) => Number.isFinite(winKicks[w]) && winKicks[w] <= t));
+  const due = new Set(Object.keys(winKicks).filter((w) => Number.isFinite(winKicks[w]) && winKicks[w] <= t));
+  // Classic leagues (0157) store their one weekly lineup under the pseudo-window
+  // 'wk'. Its lock moment is the week's FIRST kickoff — i.e. the instant any
+  // real window is due. Harmless for drip leagues: no 'wk' rows exist there.
+  if (due.size) due.add('wk');
+  return due;
 }
 
 /** Lock any scheduled matchups whose lock_at has passed: flip status → 'live' and
@@ -218,7 +223,13 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
   const seed = Number((await db().rpc('wallet_seed')).data ?? 150);
   let n = 0;
   for (const m of ms ?? []) {
-    const policy = (await db().from('league').select('lineup_policy').eq('id', m.league_id).maybeSingle()).data?.lineup_policy ?? 'best_lineup';
+    const { data: lg } = await db().from('league').select('lineup_policy,settings_json').eq('id', m.league_id).maybeSingle();
+    // Classic leagues (0157): the auto-fill below builds a DRIP lineup (windows
+    // + metrics), which is junk under classic's 'wk' rows — and its rows would
+    // eat the 9-slot classic cap. Missed classic lineups score their honest
+    // zeros instead (the resolver's classic branch fields only 'wk' picks).
+    if (lg?.settings_json?.game_mode === 'classic') continue;
+    const policy = lg?.lineup_policy ?? 'best_lineup';
     // no_start flags (0144): the auto-fill must never field a player the
     // commissioner has barred — the sealed_pick trigger exempts the server
     // (game ops must not jam), so the exclusion has to happen HERE.

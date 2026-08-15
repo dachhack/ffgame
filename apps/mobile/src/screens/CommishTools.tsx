@@ -21,6 +21,7 @@ import {
   setTeamAvatar, setTeamController, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
+  leagueGameMode, setLeagueGameMode,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
@@ -135,6 +136,7 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
       <CommishSeen leagueId={leagueId} />
 
       {/* the real-time power-up switch (0155) */}
+      <GameModeCard leagueId={leagueId} />
       <LiveBuffsCard leagueId={leagueId} />
 
       {/* league-wide coin: the allowance and the bulk levers, right under the
@@ -598,6 +600,60 @@ function CommishSeen({ leagueId }: { leagueId: string }) {
 // counters…). Off refuses new arms server-side before any coin moves; buffs
 // armed before the flip stay reclaimable. The shop's pre-game power-ups are a
 // different lever and are untouched.
+// Normie mode (0157): DRIP ⇄ CLASSIC + the PPR knob while classic. The server
+// freezes the mode once the draft starts; its refusal shows inline.
+function GameModeCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
+  const [ppr, setPpr] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); } }).catch(() => {});
+  }, [leagueId]);
+  const set = async (m: 'drip' | 'classic', p?: number) => {
+    if (busy || mode === null) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueGameMode(leagueId, m, p);
+      if (r.ok) { commit(); setMode(m); if (p != null) setPpr(p); }
+      else { warn(); setNote(r.error ?? 'failed'); }
+    } catch { warn(); }
+    finally { setBusy(false); }
+  };
+  const Pill = ({ on, label, onPress }: { on: boolean; label: string; onPress: () => void }) => (
+    <Pressable disabled={busy || mode === null} onPress={() => { tap(); onPress(); }}
+      style={{ borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: on ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, opacity: busy || mode === null ? 0.5 : 1 }}>
+      <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: on ? t.onAccent : t.dim }}>{label}</Text>
+    </Pressable>
+  );
+  return (
+    <Card>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Mono size={9.5} weight="700" track={0.12} tone="faint">🎮 GAME MODE</Mono>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 3, lineHeight: 12 }}>
+            DRIP is the full game. CLASSIC is traditional fantasy — standard scoring, one weekly QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses or power-ups. Locks once the draft starts.
+          </Mono>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          <Pill on={mode === 'drip'} label="DRIP" onPress={() => void set('drip')} />
+          <Pill on={mode === 'classic'} label="CLASSIC" onPress={() => void set('classic')} />
+        </View>
+      </View>
+      {mode === 'classic' && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
+          <Mono size={8.5} tone="faint" weight="700">RECEPTIONS</Mono>
+          <Pill on={ppr === 0} label="NON-PPR" onPress={() => void set('classic', 0)} />
+          <Pill on={ppr === 0.5} label="½ PPR" onPress={() => void set('classic', 0.5)} />
+          <Pill on={ppr === 1} label="FULL PPR" onPress={() => void set('classic', 1)} />
+        </View>
+      )}
+      {note && <Mono size={9} tone="warn" style={{ marginTop: 8 }}>{note}</Mono>}
+    </Card>
+  );
+}
+
 function LiveBuffsCard({ leagueId }: { leagueId: string }) {
   const t = useTheme();
   const [on, setOn] = useState<boolean | null>(null);

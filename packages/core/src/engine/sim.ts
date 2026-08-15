@@ -35,7 +35,7 @@ export function projectedPoints(p: Player, _week: number): number {
   ) / g;
 }
 
-interface RawPlay {
+export interface RawPlay {
   clock: number;
   t?: number;       // real wall-clock time of the play, in seconds since the
                     // game's first snap (from MCP time_of_day). Absent on
@@ -323,7 +323,7 @@ function returnPlays(player: Player, week: number): RawPlay[] {
 /** Real plays when available, otherwise the deterministic simulation. Return
  *  plays are folded in only when the player is actually scoring Return Yards —
  *  otherwise they must not perturb another metric's mechanics. */
-function playsForPlayer(player: Player, week: number, metricId?: string, projection = false): { plays: RawPlay[]; real: boolean } {
+export function playsForPlayer(player: Player, week: number, metricId?: string, projection = false): { plays: RawPlay[]; real: boolean } {
   if (player.id === EMPTY_PLAYER.id) return { plays: [], real: false };
   if (projection) return { plays: projectedPlays(player), real: false }; // historical expectation, not the week's box score
   const r = realRawPlays(player.id, week);
