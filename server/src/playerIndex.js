@@ -27,26 +27,55 @@ const slugRank = (p) => {
   return (FANTASY_POS.has(p.position) ? 0 : 1e9) + (Number.isFinite(sr) ? sr : 1e8);
 };
 
-/** Build an index from the Sleeper player directory. */
-export async function buildPlayerIndex() {
-  const players = await getPlayers();
-  const byEspnId = new Map(); // "12345" -> slug
-  const byName = new Map();   // normName(full) -> slug
-  const bySleeperId = new Map(); // sleeper player_id -> { slug, full, pos, team, espnId }
-  const bySlug = new Map();    // slug -> { full, pos, team } (for engine Player objects)
-  const slugBest = new Map();  // slug -> best rank seen (collision policy above)
-  const nameBest = new Map();  // normName -> best rank seen (same policy)
+/** Build an index from the Sleeper player directory.
+ *
+ *  Slugs are UNIQUE per player (0200): entries are grouped by their
+ *  name-derived slug; each group's PRIMARY (best slugRank) keeps the clean
+ *  slug — which is what every stored pick/roster/bake already means by it —
+ *  and every namesake/duplicate gets a deterministic suffixed slug
+ *  (`josh-allen-lb`, or `-<sleeperId>` when the position doesn't
+ *  disambiguate). byEspnId maps each ESPN id to ITS OWN player's slug, so
+ *  id-resolved feed plays can never land in a namesake's timeline. */
+export async function buildPlayerIndex(directory) {
+  const players = directory ?? await getPlayers(); // injectable for tests
+  const entries = [];
   for (const [sid, p] of Object.entries(players)) {
     const full = p.full_name || [p.first_name, p.last_name].filter(Boolean).join(' ');
     if (!full) continue;
-    const slug = slugOf(full);
-    const rank = slugRank(p);
-    bySleeperId.set(sid, { slug, full, pos: p.position, team: p.team, espnId: p.espn_id ? String(p.espn_id) : null });
-    if (p.espn_id) byEspnId.set(String(p.espn_id), slug);
-    const nk = normName(full);
-    if (!nameBest.has(nk) || rank < nameBest.get(nk)) { nameBest.set(nk, rank); byName.set(nk, slug); }
-    if (!slugBest.has(slug) || rank < slugBest.get(slug)) { slugBest.set(slug, rank); bySlug.set(slug, { full, pos: p.position, team: p.team, sid }); }
+    entries.push({ sid, p, full, base: slugOf(full), rank: slugRank(p) });
   }
+  const groups = new Map(); // base slug -> entries sharing it
+  for (const e of entries) {
+    if (!groups.has(e.base)) groups.set(e.base, []);
+    groups.get(e.base).push(e);
+  }
+  const byEspnId = new Map(); // "12345" -> that player's own minted slug
+  const byName = new Map();   // normName(full) -> the PRIMARY holder's slug
+  const bySleeperId = new Map(); // sleeper player_id -> { slug, full, pos, team, espnId }
+  const bySlug = new Map();    // minted slug -> { full, pos, team } (engine Player objects)
+  const nameBest = new Map();  // normName -> best rank seen
+  let collisions = 0;
+  for (const [base, g] of groups) {
+    // Deterministic primary: rank, then sleeper id as a stable tiebreak.
+    g.sort((a, b) => a.rank - b.rank || String(a.sid).localeCompare(String(b.sid)));
+    const used = new Set();
+    for (let i = 0; i < g.length; i++) {
+      const e = g[i];
+      let slug = base;
+      if (i > 0) {
+        collisions++;
+        const posSfx = e.p.position ? `${base}-${String(e.p.position).toLowerCase()}` : null;
+        slug = posSfx && !used.has(posSfx) ? posSfx : `${base}-${e.sid}`;
+      }
+      used.add(slug);
+      bySleeperId.set(e.sid, { slug, full: e.full, pos: e.p.position, team: e.p.team, espnId: e.p.espn_id ? String(e.p.espn_id) : null });
+      if (e.p.espn_id) byEspnId.set(String(e.p.espn_id), slug);
+      bySlug.set(slug, { full: e.full, pos: e.p.position, team: e.p.team, sid: e.sid });
+      const nk = normName(e.full);
+      if (!nameBest.has(nk) || e.rank < nameBest.get(nk)) { nameBest.set(nk, e.rank); byName.set(nk, slug); }
+    }
+  }
+  console.log(new Date().toISOString(), `player index: ${bySleeperId.size} players, ${collisions} colliding slugs disambiguated`);
   return {
     slugForEspnId: (id) => (id != null ? byEspnId.get(String(id)) ?? null : null),
     slugForName: (name) => byName.get(normName(name)) ?? null,

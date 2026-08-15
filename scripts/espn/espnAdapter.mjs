@@ -72,7 +72,10 @@ export function buildRoster(summary, resolveSlug = slugOf) {
         const dn = a?.athlete?.displayName;
         if (!dn) continue;
         const abbr = abbrevOf(dn); // "Dak Prescott" -> "D.Prescott"
-        if (!byAbbrev.has(abbr)) byAbbrev.set(abbr, { name: dn, team, slug: resolveSlug(dn) || slugOf(dn) });
+        // The ESPN athlete id rides along (0200): an id-aware resolver matches
+        // by id FIRST — the athlete in THIS game, not whoever shares the name —
+        // and one-arg resolvers (slugOf, the validators) just ignore it.
+        if (!byAbbrev.has(abbr)) byAbbrev.set(abbr, { name: dn, team, slug: resolveSlug(dn, a?.athlete?.id ?? null) || slugOf(dn) });
       }
     }
   }
