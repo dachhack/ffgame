@@ -6,7 +6,7 @@
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { leagueNote, chatUnread, nativeRosters, leaguePool, matchupTeams, type TeamInfo } from '@drip/core/data/liveApi';
+import { leagueNote, chatUnread, leagueSignals, nativeRosters, leaguePool, matchupTeams, type TeamInfo } from '@drip/core/data/liveApi';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Mono } from '../ui/prims';
@@ -33,12 +33,16 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
   const [note, setNote] = useState<{ text: string; canEdit: boolean } | null>(null);
   const [unread, setUnread] = useState<{ n: number; mention: boolean }>({ n: 0, mention: false });
   const [teamsOpen, setTeamsOpen] = useState(false);
+  const [sig, setSig] = useState<{ polls: number; waivers: number; commish: { waiting: number; review: number } | null }>({ polls: 0, waivers: 0, commish: null });
   useEffect(() => {
     leagueNote(leagueId)
       .then((r) => { if (r.ok && (r.text || r.can_edit)) setNote({ text: r.text ?? '', canEdit: !!r.can_edit }); })
       .catch(() => {});
     chatUnread(leagueId)
       .then((r) => { if (r.ok) setUnread({ n: (r.league ?? 0) + (r.dm ?? 0), mention: (r.mention ?? 0) > 0 }); })
+      .catch(() => {});
+    leagueSignals(leagueId)
+      .then((r) => { if (r.ok) setSig({ polls: r.polls_unvoted ?? 0, waivers: r.waiver_results ?? 0, commish: r.commish ?? null }); })
       .catch(() => {});
   }, [leagueId]);
 
@@ -94,12 +98,16 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
 
       {rosterId != null && tile('▦', 'My matchup', 'your board — set the lineup, watch it live', () => { track(Ev.hubTileOpened, { tile: 'matchup' }); onGo('picks'); }, { accent: true })}
       {tile('💬', 'Chat', 'league channel · direct messages', () => { track(Ev.hubTileOpened, { tile: 'chat' }); onGo('chat'); },
-        unread.n > 0 ? { badge: `${unread.mention ? '@ ' : ''}${unread.n > 99 ? '99+' : unread.n}` } : undefined)}
+        unread.n > 0 || sig.polls > 0
+          ? { badge: [unread.n > 0 ? `${unread.mention ? '@ ' : ''}${unread.n > 99 ? '99+' : unread.n}` : '', sig.polls > 0 ? `📊 ${sig.polls}` : ''].filter(Boolean).join(' · ') }
+          : undefined)}
       {rosterId != null && tile('◈', 'Power-up shop', 'spend drip coin — opens on your board', () => { track(Ev.hubTileOpened, { tile: 'shop' }); onShop(); })}
-      {native && rosterId != null && tile('⇄', 'My team', 'waivers · trades · standings · team options', () => { track(Ev.hubTileOpened, { tile: 'team' }); onGo('team'); })}
+      {native && rosterId != null && tile('⇄', 'My team', 'waivers · trades · standings · team options', () => { track(Ev.hubTileOpened, { tile: 'team' }); onGo('team'); },
+        sig.waivers > 0 ? { badge: `✚ ${sig.waivers}` } : undefined)}
       {native && tile('👥', 'Teams & rosters', "every team in the league and who they're holding", () => { track(Ev.hubTileOpened, { tile: 'teams' }); setTeamsOpen(true); })}
       {native && tile('⛏', 'Draft room', 'live on draft night, the record after', () => { track(Ev.hubTileOpened, { tile: 'draft' }); onGo('draft'); })}
-      {commish && tile('⚑', 'Commissioner', 'seats · rules · kit · scoring', () => { track(Ev.hubTileOpened, { tile: 'commish' }); onGo('commishtools'); }, { accent: true })}
+      {commish && tile('⚑', 'Commissioner', 'seats · rules · kit · scoring', () => { track(Ev.hubTileOpened, { tile: 'commish' }); onGo('commishtools'); },
+        { accent: true, ...(sig.commish && sig.commish.waiting + sig.commish.review > 0 ? { badge: `${sig.commish.waiting + sig.commish.review} waiting` } : {}) })}
 
       {native && <TeamsSheet visible={teamsOpen} leagueId={leagueId} myRoster={rosterId} onClose={() => setTeamsOpen(false)} />}
     </ScrollView>

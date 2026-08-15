@@ -6,7 +6,10 @@
 // it gave you no way to reach the others.
 import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { myEnrollments, claimMyRosters, commishOverview, friendlyError, myWaitlist, type AdminLeague, type Enrollment, type WaitlistRow } from '@drip/core/data/liveApi';
+import {
+  myEnrollments, claimMyRosters, commishOverview, friendlyError, myWaitlist, chatUnread,
+  type AdminLeague, type Enrollment, type WaitlistRow,
+} from '@drip/core/data/liveApi';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono } from '../ui/prims';
@@ -52,7 +55,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
   /** rosterId is null for a league you commission WITHOUT a team — it opens
    *  into management (draft + team tools), not a lineup it doesn't have.
    *  `commish` decides whether the ⚑ COMMISH tab renders at all. */
-  onOpen: (leagueId: string, rosterId: number | null, name: string, native: boolean, commish: boolean, pickUserId?: string, landing?: 'home' | 'picks') => void;
+  onOpen: (leagueId: string, rosterId: number | null, name: string, native: boolean, commish: boolean, pickUserId?: string, landing?: 'home' | 'picks' | 'chat') => void;
   /** Open the league board — browse open leagues, post yours, recruit. */
   onBoard: () => void;
 }) {
@@ -119,6 +122,11 @@ export function Leagues({ userId, onOpen, onBoard }: {
         <Display size={22}>Your leagues</Display>
         <Mono size={9.5} tone="faint">Pull down to refresh.</Mono>
       </View>
+
+      {/* cross-league chat inbox (0154 polish): every league with unread chat,
+          one tap from anywhere to the conversation it belongs to. */}
+      <InboxStrip rows={rows.filter((e) => !e.league?.is_mock)}
+        onOpenChat={(e) => onOpen(e.league_id, e.sleeper_roster_id, e.league?.name ?? 'League', e.league?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id, 'chat')} />
 
       {(commishIds.size > 0 || managed.length > 0) && (
         <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 4 }}>
@@ -272,5 +280,58 @@ export function Leagues({ userId, onOpen, onBoard }: {
         <LinkButton label="↻ refresh" onPress={refresh} />
       </View>
     </ScrollView>
+  );
+}
+
+
+// ── cross-league chat inbox (0154 polish) ────────────────────────────────────
+// One strip over the league list: every league carrying unread chat, with its
+// count (@ marked when mentioned), each chip a straight tap into that
+// league's chat. Renders nothing when the slate is clean — a permanent inbox
+// header would just be furniture.
+function InboxStrip({ rows, onOpenChat }: {
+  rows: Enrollment[];
+  onOpenChat: (e: Enrollment) => void;
+}) {
+  const t = useTheme();
+  const [counts, setCounts] = useState<Record<string, { n: number; mention: boolean }>>({});
+  useEffect(() => {
+    let dead = false;
+    const poll = () => {
+      for (const e of rows) {
+        chatUnread(e.league_id)
+          .then((r) => {
+            if (dead || !r.ok) return;
+            const n = (r.league ?? 0) + (r.dm ?? 0);
+            setCounts((cur) => ({ ...cur, [e.league_id]: { n, mention: (r.mention ?? 0) > 0 } }));
+          })
+          .catch(() => {});
+      }
+    };
+    poll();
+    const id = setInterval(poll, 60_000);
+    return () => { dead = true; clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows.map((e) => e.league_id).join(',')]);
+  const loud = rows.filter((e) => (counts[e.league_id]?.n ?? 0) > 0);
+  if (!loud.length) return null;
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingHorizontal: 4 }}>
+      <Mono size={8.5} weight="700" track={0.14} tone="faint">💬 INBOX</Mono>
+      {loud.map((e) => {
+        const c = counts[e.league_id]!;
+        return (
+          <Pressable key={e.league_id} onPress={() => { tap(); onOpenChat(e); }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: c.mention ? t.warn : alpha(t.you, 12), borderWidth: StyleSheet.hairlineWidth, borderColor: c.mention ? t.warn : t.you, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 }}>
+            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', maxWidth: 130, color: c.mention ? t.onAccent : t.you }}>
+              {e.league?.name ?? 'League'}
+            </Text>
+            <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: c.mention ? t.onAccent : t.you }}>
+              {c.mention ? '@ ' : ''}{c.n > 99 ? '99+' : c.n}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }

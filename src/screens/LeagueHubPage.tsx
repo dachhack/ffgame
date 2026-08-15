@@ -15,7 +15,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
 import { Img } from '../app/ui';
 import {
-  myMatchup, defaultOpenWeek, matchupTeams, leagueNote, chatUnread, nativeRosters, leaguePool,
+  myMatchup, defaultOpenWeek, matchupTeams, leagueNote, chatUnread, leagueSignals, nativeRosters, leaguePool,
   type Enrollment, type LiveMatchup, type TeamInfo,
 } from '@drip/core/data/liveApi';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
@@ -103,6 +103,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   const native = e.league?.provider === 'native';
   const [note, setNote] = useState<{ text: string; canEdit: boolean } | null>(null);
   const [unread, setUnread] = useState<{ n: number; mention: boolean }>({ n: 0, mention: false });
+  const [sig, setSig] = useState<{ polls: number; waivers: number; commish: { waiting: number; review: number } | null }>({ polls: 0, waivers: 0, commish: null });
   const [chatOpen, setChatOpen] = useState(false);
   const [rostersOpen, setRostersOpen] = useState(false);
 
@@ -114,6 +115,9 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
       .catch(() => {});
     chatUnread(e.league_id)
       .then((r) => { if (r.ok) setUnread({ n: (r.league ?? 0) + (r.dm ?? 0), mention: (r.mention ?? 0) > 0 }); })
+      .catch(() => {});
+    leagueSignals(e.league_id)
+      .then((r) => { if (r.ok) setSig({ polls: r.polls_unvoted ?? 0, waivers: r.waiver_results ?? 0, commish: r.commish ?? null }); })
       .catch(() => {});
   }, [e.league_id]);
 
@@ -166,8 +170,11 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
         {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', lineHeight: 1.4 }}>{buildErr}</div>}
 
         <Tile icon="💬" title="Chat"
-          badge={unread.n > 0
-            ? <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--you)', borderRadius: 999, padding: '2px 7px' }}>{unread.mention ? '@ ' : ''}{unread.n > 99 ? '99+' : unread.n}</span>
+          badge={(unread.n > 0 || sig.polls > 0)
+            ? <>
+                {unread.n > 0 && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--you)', borderRadius: 999, padding: '2px 7px' }}>{unread.mention ? '@ ' : ''}{unread.n > 99 ? '99+' : unread.n}</span>}
+                {sig.polls > 0 && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 999, padding: '2px 7px' }}>📊 {sig.polls}</span>}
+              </>
             : undefined}
           sub="league channel · direct messages"
           onClick={guard(() => { setChatOpen(true); setUnread({ n: 0, mention: false }); })} />
@@ -180,7 +187,8 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
         {native && (
           <>
             <Tile icon="⇄" title="Trades" sub="propose, review, and the league's trade block" onClick={guard(() => onTeam('trades'))} />
-            <Tile icon="✚" title="Waivers & free agents" sub="claims, the wire, and who's unclaimed" onClick={guard(() => onTeam('waivers'))} />
+            <Tile icon="✚" title="Waivers & free agents" sub="claims, the wire, and who's unclaimed" onClick={guard(() => onTeam('waivers'))}
+              badge={sig.waivers > 0 ? <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 999, padding: '2px 7px' }}>✚ {sig.waivers} resolved</span> : undefined} />
             <Tile icon="👥" title="Teams & rosters" sub="every team in the league and who they're holding"
               onClick={() => setRostersOpen((v) => !v)} />
             {rostersOpen && <TeamsRosters leagueId={e.league_id} myRoster={e.sleeper_roster_id} />}
@@ -190,7 +198,10 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
         )}
 
         {commish && (
-          <Tile icon="⚑" title="Manage league" sub="members · commish kit · scoring · rules" onClick={onManage} accent />
+          <Tile icon="⚑" title="Manage league" sub="members · commish kit · scoring · rules" onClick={onManage} accent
+            badge={sig.commish && sig.commish.waiting + sig.commish.review > 0
+              ? <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--warn)', borderRadius: 999, padding: '2px 7px' }}>{sig.commish.waiting + sig.commish.review} waiting</span>
+              : undefined} />
         )}
       </div>
 

@@ -10,7 +10,7 @@ import {
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, adminUserWaitlist, type WaitlistRow,
   myMatchup, matchupTeams, leagueResults, defaultOpenWeek, chatUnread, leagueTrades,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
-  leagueTouch,
+  leagueTouch, leagueSignals,
 } from '@drip/core/data/liveApi';
 import { buildDripTestLeague } from '@drip/core/data/dripTest';
 import { track, identify, Ev } from '@drip/core/analytics';
@@ -50,6 +50,9 @@ function GoogleG() {
     </svg>
   );
 }
+
+/** Per-league badge counts from league_signals (0154). */
+interface LeagueSignalCounts { polls: number; waivers: number; commish: { waiting: number; review: number } | null; }
 
 type OnboardView = 'home' | 'leaguehome' | 'commish' | 'commishdash' | 'picks' | 'admin' | 'add' | 'join' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass';
 
@@ -429,6 +432,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // native-league trades sitting on YOUR answer (pending, to_roster = yours).
   const [alarms, setAlarms] = useState<Record<string, LineupAlarm>>({});
   const [offers, setOffers] = useState<Record<string, number>>({});
+  const [signals, setSignals] = useState<Record<string, LeagueSignalCounts>>({});
   useEffect(() => {
     if (viewAs || !enrollments?.length) return;
     let dead = false;
@@ -453,6 +457,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     const poll = async () => {
       const nextAlarms: Record<string, LineupAlarm> = {};
       const nextOffers: Record<string, number> = {};
+      const nextSignals: Record<string, LeagueSignalCounts> = {};
       await Promise.all(enrollments.filter((e) => !e.league?.is_mock).map(async (e) => {
         const key = enrollKey(e);
         const card = cards[key];
@@ -467,8 +472,17 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
             if (n > 0) nextOffers[key] = n;
           }
         }
+        const sig = await leagueSignals(e.league_id).catch(() => null);
+        if (sig?.ok) {
+          const c = sig.commish;
+          nextSignals[e.league_id] = {
+            polls: sig.polls_unvoted ?? 0,
+            waivers: sig.waiver_results ?? 0,
+            commish: c && (c.waiting > 0 || c.review > 0) ? c : null,
+          };
+        }
       }));
-      if (!dead) { setAlarms(nextAlarms); setOffers(nextOffers); }
+      if (!dead) { setAlarms(nextAlarms); setOffers(nextOffers); setSignals(nextSignals); }
     };
     void poll();
     const t = setInterval(() => { if (!document.hidden) void poll(); }, 120_000);
@@ -759,6 +773,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       unreads={unreads}
       alarms={alarms}
       offers={offers}
+      signals={signals}
       onAdd={guard(() => setView('add'))}
       onDeleted={refresh}
       isCommish={isCommish}
@@ -784,7 +799,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onPodBuild, onResults, onManage, onDraft, onTeam, onAdd, onDeleted, isCommish, onOpen, unreads, alarms, offers }: {
+function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onPodBuild, onResults, onManage, onDraft, onTeam, onAdd, onDeleted, isCommish, onOpen, unreads, alarms, offers, signals }: {
   enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
   onPodBuild: (leagueId: string, rosterId: number, week?: number, name?: string) => void;
   onResults: (leagueId: string) => void; onManage: (leagueId: string) => void;
@@ -797,6 +812,7 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
   /** enrollKey → soonest lock alarm / trade offers awaiting answer (0184). */
   alarms: Record<string, LineupAlarm>;
   offers: Record<string, number>;
+  signals: Record<string, LeagueSignalCounts>;
 }) {
   const [filter, setFilter] = useState<'all' | 'commish'>('all');
   const enrolledIds = new Set(enrollments.map((e) => e.league_id));
@@ -822,6 +838,29 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
         <img src={`${import.meta.env.BASE_URL}brand/hero-mark.png`} alt="" style={{ height: 224, width: 'auto' }} />
         <img src={`${import.meta.env.BASE_URL}brand/hero-wordmark.png`} alt="Drip Fantasy" style={{ height: 69, width: 'auto', marginTop: 8 }} />
       </div>
+
+      {/* cross-league chat inbox (0154 polish): every league with unread chat,
+          one click straight into its hub. Renders nothing when clean. */}
+      {(() => {
+        const loud = enrollments.filter((e) => (unreads[e.league_id]?.n ?? 0) > 0);
+        if (!loud.length) return null;
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', margin: '0 0 12px' }}>
+            <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)' }}>💬 INBOX</span>
+            {loud.map((e) => {
+              const c = unreads[e.league_id]!;
+              return (
+                <button key={enrollKey(e)} onClick={() => onOpen(e)} className="mono"
+                  title={c.mention ? 'unread chat — you were mentioned' : 'unread chat'}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, cursor: 'pointer', borderRadius: 999, padding: '4px 10px', color: c.mention ? 'var(--on-accent)' : 'var(--you)', background: c.mention ? 'var(--warn)' : 'color-mix(in srgb, var(--you) 12%, transparent)', border: `1px solid ${c.mention ? 'var(--warn)' : 'var(--you)'}` }}>
+                  <span style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'League'}</span>
+                  {c.mention ? '@ ' : ''}{c.n > 99 ? '99+' : c.n}
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
       <SeasonCountdown />
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
         <div className="grotesk" style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>Your {total === 1 ? 'league' : 'leagues'}</div>
@@ -834,11 +873,11 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} onResults={() => onResults(l.league_id)} />)}
         {enrolledCommish.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} />
+          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} sig={signals[e.league_id]} />
         )}
         {filter === 'all' && enrolledPlayer.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} />
+          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} sig={signals[e.league_id]} />
         )}
       </div>
       <div style={{ textAlign: 'center', marginTop: 18 }}>
@@ -968,13 +1007,14 @@ function MockLeagueCard({ e, onDraft, onDeleted }: { e: Enrollment; onDraft: () 
   );
 }
 
-function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage, onDraft, onTeam, onOpen, unread, alarm, offers = 0 }: {
+function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage, onDraft, onTeam, onOpen, unread, alarm, offers = 0, sig }: {
   e: Enrollment; card?: MatchupCard; commish: boolean; userId: string;
   onPodBuild: () => void; onResults: () => void; onManage: () => void; onDraft: () => void; onTeam: () => void;
   onOpen: () => void;
   unread?: { n: number; mention: boolean };
   alarm?: LineupAlarm;
   offers?: number;
+  sig?: LeagueSignalCounts;
 }) {
   const { loadSimLeague, navigate, setDemoWeek } = useStore();
   const [building, setBuilding] = useState(false);
@@ -1093,6 +1133,25 @@ function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage,
               <span className="mono" title="trade offers waiting on your answer"
                 style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 999, padding: '2px 7px' }}>
                 ⇄ {offers} OFFER{offers === 1 ? '' : 'S'}
+              </span>
+            )}
+            {/* the polish trio (0154): unvoted polls · waiver results · commish inbox */}
+            {(sig?.polls ?? 0) > 0 && (
+              <span className="mono" title="league polls you haven't voted in"
+                style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 999, padding: '2px 7px' }}>
+                📊 {sig!.polls} POLL{sig!.polls === 1 ? '' : 'S'}
+              </span>
+            )}
+            {(sig?.waivers ?? 0) > 0 && (
+              <span className="mono" title="waiver claims resolved since you last opened this league"
+                style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 999, padding: '2px 7px' }}>
+                ✚ WAIVERS IN
+              </span>
+            )}
+            {sig?.commish && (
+              <span className="mono" title="waiting room joiners + trades awaiting your ruling"
+                style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 14%, transparent)', border: '1px solid var(--warn)', borderRadius: 999, padding: '2px 7px' }}>
+                ⚑ {sig.commish.waiting + sig.commish.review} FOR YOU
               </span>
             )}
           </div>
