@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
+import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueBestball, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
+import { CLASSIC_SLOTS } from '@drip/core/engine/classic';
 import { LeagueRow, type LeagueTab } from './AdminPage';
 import { card, linkBtn, mono, Muted, errMsg } from './adminUi';
 
@@ -119,11 +120,21 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
   const [ppr, setPpr] = useState(1);
   const [classicOk, setClassicOk] = useState(false);
+  const [bestball, setBestball] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   useEffect(() => {
-    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); } }).catch(() => {});
+    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setBestball(r.bestball ?? []); } }).catch(() => {});
   }, [leagueId]);
+  const saveBestball = async (slots: string[]) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueBestball(leagueId, slots);
+      if (r.ok) setBestball(r.bestball ?? slots);
+      else setNote(r.error ?? 'failed');
+    } finally { setBusy(false); }
+  };
   const set = async (m: 'drip' | 'classic', p?: number) => {
     if (busy || mode === null) return;
     setBusy(true); setNote(null);
@@ -162,6 +173,29 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
               {p === 0 ? 'NON-PPR' : p === 0.5 ? '½ PPR' : 'FULL PPR'}
             </button>
           ))}
+        </div>
+      )}
+      {mode === 'classic' && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', fontWeight: 700 }}>🎯 BEST BALL</span>
+            <button onClick={() => void saveBestball(CLASSIC_SLOTS.map((d) => d.slot))} disabled={busy} className="mono" style={pill(bestball.length === CLASSIC_SLOTS.length)}>ENTIRE ROSTER</button>
+            <button onClick={() => void saveBestball([])} disabled={busy} className="mono" style={pill(bestball.length === 0)}>OFF</button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+            {CLASSIC_SLOTS.map((d) => {
+              const on = bestball.includes(d.slot);
+              return (
+                <button key={d.slot} onClick={() => void saveBestball(on ? bestball.filter((s) => s !== d.slot) : [...bestball, d.slot])}
+                  disabled={busy} className="mono" style={{ ...pill(on), padding: '4px 9px', fontSize: 9 }}>
+                  {d.slot}
+                </button>
+              );
+            })}
+          </div>
+          <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
+            Lit slots fill themselves with the highest-scoring rostered player not already started by hand. All nine = pure best ball: nothing to set, ever.
+          </div>
         </div>
       )}
       {note && <div className="mono" style={{ fontSize: 9, color: 'var(--warn, #c66)', marginTop: 8 }}>{note}</div>}

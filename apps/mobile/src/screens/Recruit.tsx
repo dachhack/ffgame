@@ -265,7 +265,7 @@ export function Recruit({ onBack, onJoined }: {
                   <Mono size={8.5} weight="700" track={0.12} tone="faint">⚖ HOUSE RULES</Mono>
                   <Mono size={10} style={{ marginTop: 4, lineHeight: 15 }}>
                     Game: {preview.game_mode === 'classic'
-                      ? `CLASSIC — traditional fantasy, ${preview.ppr === 1 ? 'full PPR' : preview.ppr === 0.5 ? 'half PPR' : 'non-PPR'}, no power-ups`
+                      ? `CLASSIC — traditional fantasy, ${preview.ppr === 1 ? 'full PPR' : preview.ppr === 0.5 ? 'half PPR' : 'non-PPR'}, no power-ups${(preview.bestball?.length ?? 0) === 9 ? ', FULL BEST BALL' : (preview.bestball?.length ?? 0) > 0 ? `, best ball ×${preview.bestball!.length}` : ''}`
                       : 'DRIP — live metric battles, windows, power-ups'}
                     {'\n'}Waivers: {preview.rules.waiver_mode === 'faab' ? `FAAB · $${preview.rules.faab_budget ?? 100} budget` : 'rolling priority'}
                     {'\n'}Trades: {preview.rules.trade_review === 'commish' ? 'commissioner reviews each trade' : 'execute on accept'}

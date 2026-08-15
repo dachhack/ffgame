@@ -21,8 +21,9 @@ import {
   setTeamAvatar, setTeamController, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
-  leagueGameMode, setLeagueGameMode,
+  leagueGameMode, setLeagueGameMode, setLeagueBestball,
 } from '@drip/core/data/liveApi';
+import { CLASSIC_SLOTS } from '@drip/core/engine/classic';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
@@ -608,11 +609,22 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
   const [ppr, setPpr] = useState(1);
   const [classicOk, setClassicOk] = useState(false);
+  const [bestball, setBestballSlots] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   useEffect(() => {
-    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); } }).catch(() => {});
+    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setBestballSlots(r.bestball ?? []); } }).catch(() => {});
   }, [leagueId]);
+  const saveBestball = async (slots: string[]) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueBestball(leagueId, slots);
+      if (r.ok) { commit(); setBestballSlots(r.bestball ?? slots); }
+      else { warn(); setNote(r.error ?? 'failed'); }
+    } catch { warn(); }
+    finally { setBusy(false); }
+  };
   const set = async (m: 'drip' | 'classic', p?: number) => {
     if (busy || mode === null) return;
     setBusy(true); setNote(null);
@@ -651,6 +663,25 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
           <Pill on={ppr === 0} label="NON-PPR" onPress={() => void set('classic', 0)} />
           <Pill on={ppr === 0.5} label="½ PPR" onPress={() => void set('classic', 0.5)} />
           <Pill on={ppr === 1} label="FULL PPR" onPress={() => void set('classic', 1)} />
+        </View>
+      )}
+      {mode === 'classic' && (
+        <View style={{ marginTop: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Mono size={8.5} tone="faint" weight="700">🎯 BEST BALL</Mono>
+            <Pill on={bestball.length === CLASSIC_SLOTS.length} label="ENTIRE ROSTER" onPress={() => void saveBestball(CLASSIC_SLOTS.map((d) => d.slot))} />
+            <Pill on={bestball.length === 0} label="OFF" onPress={() => void saveBestball([])} />
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+            {CLASSIC_SLOTS.map((d) => {
+              const on = bestball.includes(d.slot);
+              return <Pill key={d.slot} on={on} label={d.slot}
+                onPress={() => void saveBestball(on ? bestball.filter((x) => x !== d.slot) : [...bestball, d.slot])} />;
+            })}
+          </View>
+          <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
+            Lit slots fill themselves with the highest-scoring rostered player not already started by hand. All nine = pure best ball.
+          </Mono>
         </View>
       )}
       {note && <Mono size={9} tone="warn" style={{ marginTop: 8 }}>{note}</Mono>}

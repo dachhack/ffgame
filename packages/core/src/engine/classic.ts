@@ -87,19 +87,60 @@ export interface ClassicResult {
   states: { window: string; home: number; away: number }[];
 }
 
+/** BEST BALL (0159): fill the flagged slots with the highest-scoring eligible
+ *  roster players NOT manually started — the founder's rule verbatim. Any
+ *  stored pick in a best-ball slot is ignored (the slot fills itself), and a
+ *  best-ball slot never blocks a manual pick: the manual set is what reserves
+ *  players. Dedicated slots fill before FLEX so the superset slot chases the
+ *  leftovers — greedy is optimal here because FLEX's eligibility contains
+ *  every other skill slot's. Ties break toward roster order (stable). */
+export function bestballFill(manual: ClassicPick[], bestball: string[], roster: Player[], week: number, ppr = 1): ClassicPick[] {
+  const bb = new Set(bestball);
+  if (!bb.size) return [];
+  const started = new Set(manual.filter((p) => !bb.has(p.slot)).map((p) => p.player.id));
+  const cands = roster.filter((p) => !started.has(p.id));
+  const score = new Map(cands.map((p) => [p.id, classicPoints(p, week, ppr)]));
+  const order = [...CLASSIC_SLOTS.filter((d) => d.slot !== 'FLEX'), ...CLASSIC_SLOTS.filter((d) => d.slot === 'FLEX')];
+  const used = new Set<string>();
+  const fills: ClassicPick[] = [];
+  for (const d of order) {
+    if (!bb.has(d.slot)) continue;
+    let best: Player | null = null;
+    for (const c of cands) {
+      if (used.has(c.id) || !d.pos.includes(c.pos)) continue;
+      if (!best || (score.get(c.id) ?? 0) > (score.get(best.id) ?? 0)) best = c;
+    }
+    if (best) { used.add(best.id); fills.push({ slot: d.slot, player: best }); }
+  }
+  return fills;
+}
+
+/** One side of a classic matchup. `bestball` + `roster` drive the auto-fill;
+ *  without them the side is fully manual (the 0157 behavior, unchanged). */
+export interface ClassicSide { picks: ClassicPick[]; roster?: Player[]; bestball?: string[] }
+
+/** A side's EFFECTIVE lineup: manual picks (best-ball slots' stored rows
+ *  ignored) + the best-ball fills. Exported so the boards can render exactly
+ *  what the resolver scores. */
+export function classicLineup(s: ClassicSide, week: number, ppr = 1): ClassicPick[] {
+  const bb = new Set(s.bestball ?? []);
+  const manual = s.picks.filter((p) => !bb.has(p.slot));
+  return [...manual, ...bestballFill(manual, s.bestball ?? [], s.roster ?? [], week, ppr)];
+}
+
 /** Resolve one classic matchup: each starter's standard points, summed —
  *  nothing else. Slot order follows CLASSIC_SLOTS so both boards render the
  *  lineup in the shape everyone expects. */
-export function resolveClassicMatchup(home: ClassicPick[], away: ClassicPick[], week: number, ppr = 1): ClassicResult {
+export function resolveClassicMatchup(home: ClassicSide, away: ClassicSide, week: number, ppr = 1): ClassicResult {
   const order = new Map(CLASSIC_SLOTS.map((s, i) => [s.slot, i]));
-  const side = (picks: ClassicPick[], which: 'home' | 'away') => {
-    const rows = [...picks]
+  const side = (s: ClassicSide, which: 'home' | 'away') => {
+    const rows = classicLineup(s, week, ppr)
       .sort((a, b) => (order.get(a.slot) ?? 99) - (order.get(b.slot) ?? 99))
       .map((p) => ({
         win: CLASSIC_WIN, side: which, slot: p.slot, slug: p.player.id, metric: null as null,
         score: classicPoints(p.player, week, ppr),
       }));
-    return { rows, total: round1(rows.reduce((s, r) => s + r.score, 0)) };
+    return { rows, total: round1(rows.reduce((s2, r) => s2 + r.score, 0)) };
   };
   const h = side(home, 'home'), a = side(away, 'away');
   return {

@@ -127,12 +127,34 @@ begin
   delete from nfl_slate where season = '2026' and week = 1 and away = 'AAA';
   set local role authenticated;
 
-  -- the mode freezes once the draft leaves pending
+  -- best ball (0159): classic-only, commish-only, sanitized, member-readable
+  perform probe_as('c');
+  perform assert_err(set_league_bestball(lid, '["FLEX"]'::jsonb), 'commissioner', 'bb0 member cannot set best ball');
+  perform probe_as('b');
+  r := set_league_bestball(lid, '["FLEX", "BOGUS", "FLEX", "K"]'::jsonb);
+  perform assert_ok(r, 'bb1 commish sets best ball');
+  perform assert_true(r -> 'bestball' = '["FLEX","K"]'::jsonb, 'bb2 sanitized to known slots, canonical order (got ' || (r -> 'bestball')::text || ')');
+  perform probe_as('c');
+  perform assert_true((league_game_mode(lid) -> 'bestball') = '["FLEX","K"]'::jsonb, 'bb3 member reads the set');
+  perform probe_as('b');
+  r := set_league_bestball(lid, '["QB","RB1","RB2","WR1","WR2","TE","FLEX","K","DEF"]'::jsonb);
+  perform assert_true(jsonb_array_length(r -> 'bestball') = 9, 'bb4 entire roster accepted');
+  perform assert_ok(set_league_bestball(lid, '[]'::jsonb), 'bb5 clear back to off');
+  perform assert_true((league_game_mode(lid) -> 'bestball') = '[]'::jsonb, 'bb6 reads off after clear');
+  perform assert_ok(set_league_bestball(lid, '["FLEX"]'::jsonb), 'bb7 re-arm for freeze probe');
+
+  -- best ball has no meaning in a drip league
+  perform assert_ok(set_league_game_mode(lid, 'drip'), 'bb8 back to drip');
+  perform assert_err(set_league_bestball(lid, '["FLEX"]'::jsonb), 'classic-league setting', 'bb9 refused in drip');
+  perform assert_ok(set_league_game_mode(lid, 'classic'), 'bb10 back to classic');
+
+  -- the mode AND best ball freeze once the draft leaves pending
   reset role;
   update draft set status = 'live' where league_id = lid;
   set local role authenticated;
   perform probe_as('b');
   perform assert_err(set_league_game_mode(lid, 'drip'), 'locks once the draft starts', 'gm13 frozen after draft start');
+  perform assert_err(set_league_bestball(lid, '[]'::jsonb), 'locks once the draft starts', 'bb11 best ball frozen after draft start');
   reset role;
 end $$;
 

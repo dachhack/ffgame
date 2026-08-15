@@ -1203,7 +1203,7 @@ export const leagueLiveBuffs = (leagueId: string) =>
 /** 'drip' (default) or 'classic' — classic = standard scoring, one weekly
  *  QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses, no power-ups. Frozen once
  *  the draft starts. `ppr` (0 | 0.5 | 1, default 1) applies in classic only. */
-export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; can_edit?: boolean }
+export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; can_edit?: boolean }
 export const setLeagueGameMode = (leagueId: string, mode: 'drip' | 'classic', ppr?: number) =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_game_mode',
     { p_league_id: leagueId, p_mode: mode, p_ppr: ppr ?? null }),
@@ -1216,6 +1216,12 @@ export const setLeagueClassicAccess = (leagueId: string, on: boolean) =>
   tracked(rpc<{ ok: boolean; error?: string; on?: boolean }>('set_league_classic_access',
     { p_league_id: leagueId, p_on: on }),
     Ev.commishAction, { tool: 'classic_access', on });
+/** Best ball (0159): which classic slots fill themselves. All nine = full
+ *  best ball; a subset = hybrid; [] = off. Classic leagues only, commish. */
+export const setLeagueBestball = (leagueId: string, slots: string[]) =>
+  tracked(rpc<{ ok: boolean; error?: string; bestball?: string[] }>('set_league_bestball',
+    { p_league_id: leagueId, p_slots: slots }),
+    Ev.commishAction, { tool: 'bestball', count: slots.length });
 
 export const LIVE_BUFFS = ['overtime', 'ot-shield', 'momentum', 'garbage-time', 'amp-2', 'amp-3', 'floodgates', 'counter-nuke', 'insurance', 'fg-stack'] as const;
 export const armBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; detail?: string; buffs?: string[] }>('arm_buff', { p_matchup_id: matchupId, p_buff: buff });
@@ -1752,7 +1758,7 @@ export const closeLeagueListing = (leagueId: string) =>
 export interface BoardPreview {
   ok: boolean; error?: string;
   name?: string; season?: string; avatar_url?: string | null; blurb?: string | null;
-  game_mode?: 'drip' | 'classic'; ppr?: number;
+  game_mode?: 'drip' | 'classic'; ppr?: number; bestball?: string[];
   seats_total?: number; seats_open?: number;
   draft?: { status: string; mode: string; rounds: number; pick_seconds: number;
             budget?: number | null; night?: { start_min: number; end_min: number } | null } | null;
