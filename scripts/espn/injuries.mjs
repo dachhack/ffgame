@@ -42,7 +42,9 @@ export function normalizeInjuries(feed, resolveSlug = (n) => normName(n).replace
       if (!status) continue; // skip Active
       const name = item?.athlete?.displayName;
       if (!name) continue;
-      const slug = resolveSlug(name);
+      // Athlete id first where the resolver understands it (0200); one-arg
+      // resolvers ignore the extra argument.
+      const slug = resolveSlug(name, item?.athlete?.id ?? null);
       if (!slug) continue; // not a league player we track
       const prev = out[slug];
       const date = item?.date || null;

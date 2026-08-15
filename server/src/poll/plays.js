@@ -18,10 +18,12 @@ async function getJson(url, tries = 3) {
 /** Poll one game and upsert its normalized plays. Returns rows written. */
 export async function pollGame(eventId, week, playerIndex) {
   const sum = await getJson(SUM(eventId));
-  // ESPN play text only has names → resolve via the directory name index. (When
-  // we later thread boxscore athlete ids through buildRoster, prefer
-  // slugForEspnId to kill the residual initials collisions.)
-  const resolveSlug = (name) => playerIndex.slugForName(name);
+  // ID-FIRST (0200): buildRoster hands us each boxscore athlete's ESPN id
+  // alongside the display name — the id names the athlete actually in THIS
+  // game, so a namesake elsewhere in the league can never absorb these plays.
+  // Players Sleeper carries without an espn_id (real ones exist — e.g. a
+  // starting kicker) fall back to the ranked name index, same as before.
+  const resolveSlug = (name, espnId) => playerIndex.slugForEspnId(espnId) ?? playerIndex.slugForName(name);
   const pbp = gameToRealPlays(sum, resolveSlug);
 
   const rows = [];
