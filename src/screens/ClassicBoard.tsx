@@ -10,7 +10,7 @@
 // stream the drip boards run on, refreshed every 60s.
 import { useEffect, useMemo, useState } from 'react';
 import type { Pos } from '@drip/core/types';
-import { CLASSIC_SLOTS, CLASSIC_WIN, classicPoints } from '@drip/core/engine/classic';
+import { CLASSIC_SLOTS, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick } from '@drip/core/engine/classic';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
@@ -48,8 +48,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   const [state, setState] = useState<'loading' | 'ready' | 'none' | 'error'>('loading');
   const [err, setErr] = useState<string | null>(null);
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
+  const [ros, setRos] = useState<{ leagueId: string; rosterId: number } | null>(null);
   const [ppr, setPpr] = useState(1);
+  const [bestball, setBestball] = useState<string[]>([]);
   const [pool, setPool] = useState<PoolPlayer[]>([]);
+  const [oppPool, setOppPool] = useState<PoolPlayer[]>([]);
   const [mine, setMine] = useState<Record<string, string | null>>({});
   const [lockedRow, setLockedRow] = useState(false); // server sealed any 'wk' row
   const [theirs, setTheirs] = useState<Record<string, string>>({});
@@ -66,10 +69,14 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         setState('loading'); setErr(null);
         const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
         if (!r) { setState('none'); return; }
+        setRos(r);
         const m = await myMatchup(r.leagueId, r.rosterId);
         if (!m) { setState('none'); return; }
         setMatchup(m);
-        leagueGameMode(r.leagueId).then((gm) => { if (gm.ok && gm.ppr != null) setPpr(Number(gm.ppr)); }).catch(() => {});
+        leagueGameMode(r.leagueId).then((gm) => {
+          if (gm.ok && gm.ppr != null) setPpr(Number(gm.ppr));
+          if (gm.ok) setBestball(gm.bestball ?? []);
+        }).catch(() => {});
         const oppRoster = m.home_roster_id === r.rosterId ? m.away_roster_id : m.home_roster_id;
         matchupTeams(r.leagueId, [r.rosterId, oppRoster]).then((t: Record<number, TeamInfo>) => setNames({
           me: t[r.rosterId]?.team_name || 'YOU', opp: t[oppRoster]?.team_name || 'OPPONENT',
@@ -98,10 +105,13 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     return () => window.clearInterval(t);
   }, []);
 
-  // Post-lock: opponent's revealed lineup + the week's live plays, minute cadence.
+  // Post-lock: opponent's revealed lineup + roster (best ball fills from it)
+  // + the week's live plays, minute cadence.
   useEffect(() => {
-    if (!locked || !matchup) return;
+    if (!locked || !matchup || !ros) return;
     let stop = false;
+    const oppRoster = matchup.home_roster_id === ros.rosterId ? matchup.away_roster_id : matchup.home_roster_id;
+    if (bestball.length) myPool(ros.leagueId, matchup.week, oppRoster).then((p) => { if (!stop) setOppPool(p); }).catch(() => {});
     const load = async () => {
       try {
         const [rev, rows] = await Promise.all([getRevealedPicks(matchup.id), weekLivePlays(matchup.week)]);
@@ -119,7 +129,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     void load();
     const t = window.setInterval(() => { void load(); }, 60_000);
     return () => { stop = true; window.clearInterval(t); };
-  }, [locked, matchup, userId]);
+  }, [locked, matchup, userId, ros, bestball.length]);
 
   const pts = useMemo(() => {
     void playsAt;
@@ -127,7 +137,35 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     return (slug: string | null | undefined) => (slug ? classicPoints(mkPlayer(slug), matchup.week, ppr) : 0);
   }, [matchup, ppr, playsAt]);
 
-  const used = useMemo(() => new Set(Object.values(mine).filter(Boolean) as string[]), [mine]);
+  const bb = useMemo(() => new Set(bestball), [bestball]);
+  // The EFFECTIVE lineup per side: manual picks in non-best-ball slots, plus
+  // the engine's fills — the same bestballFill the worker scores with. Fills
+  // only exist once locked (pre-lock there are no scores to chase).
+  const effective = useMemo(() => {
+    void playsAt;
+    const build = (manual: Record<string, string | null | undefined>, rosterSlugs: string[]) => {
+      const out: Record<string, string | null> = {};
+      const manualPicks: ClassicPick[] = [];
+      for (const d of CLASSIC_SLOTS) {
+        if (bb.has(d.slot)) { out[d.slot] = null; continue; }
+        out[d.slot] = manual[d.slot] ?? null;
+        if (manual[d.slot]) manualPicks.push({ slot: d.slot, player: mkPlayer(manual[d.slot]!) });
+      }
+      if (locked && matchup && bb.size) {
+        for (const f of bestballFill(manualPicks, bestball, rosterSlugs.map(mkPlayer), matchup.week, ppr)) out[f.slot] = f.player.id;
+      }
+      return out;
+    };
+    return {
+      mine: build(mine, pool.map((p) => p.slug)),
+      theirs: build(theirs, oppPool.map((p) => p.slug)),
+    };
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, ppr, playsAt]);
+
+  // Only MANUAL starters reserve players; best-ball slots never block the picker.
+  const used = useMemo(() => new Set(
+    CLASSIC_SLOTS.filter((d) => !bb.has(d.slot)).map((d) => mine[d.slot]).filter(Boolean) as string[],
+  ), [mine, bb]);
   const bench = useMemo(() => pool.filter((p) => !used.has(p.slug)), [pool, used]);
 
   const assign = async (slot: string, slug: string | null) => {
@@ -152,8 +190,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     </div>
   );
 
-  const myTotal = CLASSIC_SLOTS.reduce((s, d) => s + pts(mine[d.slot]), 0);
-  const oppTotal = CLASSIC_SLOTS.reduce((s, d) => s + pts(theirs[d.slot]), 0);
+  const myTotal = CLASSIC_SLOTS.reduce((s, d) => s + pts(effective.mine[d.slot]), 0);
+  const oppTotal = CLASSIC_SLOTS.reduce((s, d) => s + pts(effective.theirs[d.slot]), 0);
   const r1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
 
   const PlayerCell = ({ slug, right }: { slug: string | null | undefined; right?: boolean }) => {
@@ -192,20 +230,27 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
 
       {/* Lineup: one row per classic slot */}
       <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
-        {CLASSIC_SLOTS.map((d, i) => (
-          <div key={d.slot} style={{ display: 'grid', gridTemplateColumns: '44px 1fr 52px 52px 1fr', alignItems: 'center', gap: 6, padding: '8px 12px', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
-            <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--dim)' }}>{d.slot}</span>
-            {locked ? <PlayerCell slug={mine[d.slot]} /> : (
-              <button onClick={() => setPickerSlot(pickerSlot === d.slot ? null : d.slot)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0, color: 'inherit' }}>
-                {mine[d.slot] ? <PlayerCell slug={mine[d.slot]} /> : <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>+ SET {d.slot}</span>}
-              </button>
-            )}
-            <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, textAlign: 'right', color: 'var(--you)' }}>{locked || mine[d.slot] ? r1(pts(mine[d.slot])) : ''}</span>
-            <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, textAlign: 'right', color: 'var(--dim)' }}>{locked ? r1(pts(theirs[d.slot])) : ''}</span>
-            <div style={{ textAlign: 'right' }}>{locked && <PlayerCell slug={theirs[d.slot]} right />}</div>
-          </div>
-        ))}
+        {CLASSIC_SLOTS.map((d, i) => {
+          const auto = bb.has(d.slot);
+          const my = effective.mine[d.slot];
+          const their = effective.theirs[d.slot];
+          return (
+            <div key={d.slot} style={{ display: 'grid', gridTemplateColumns: '44px 1fr 52px 52px 1fr', alignItems: 'center', gap: 6, padding: '8px 12px', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
+              <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: auto ? 'var(--you)' : 'var(--dim)' }}>{d.slot}{auto ? ' 🎯' : ''}</span>
+              {auto && !locked ? (
+                <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>BEST BALL — fills itself with your top scorer</span>
+              ) : locked || auto ? <PlayerCell slug={my} /> : (
+                <button onClick={() => setPickerSlot(pickerSlot === d.slot ? null : d.slot)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0, color: 'inherit' }}>
+                  {my ? <PlayerCell slug={my} /> : <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>+ SET {d.slot}</span>}
+                </button>
+              )}
+              <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, textAlign: 'right', color: 'var(--you)' }}>{locked || my ? r1(pts(my)) : ''}</span>
+              <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, textAlign: 'right', color: 'var(--dim)' }}>{locked ? r1(pts(their)) : ''}</span>
+              <div style={{ textAlign: 'right' }}>{locked && <PlayerCell slug={their} right />}</div>
+            </div>
+          );
+        })}
       </div>
       {saveNote && <div className="mono" style={{ fontSize: 9.5, color: saveNote === 'saved' ? 'var(--faint)' : 'var(--warn, #c66)' }}>{saveNote === 'saved' ? (saving ? 'saving…' : '✓ lineup saved') : saveNote}</div>}
 
@@ -250,6 +295,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
       <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', lineHeight: 1.6 }}>
         CLASSIC MODE — standard scoring across every stat ({ppr === 1 ? '1 pt' : ppr === 0.5 ? '½ pt' : 'no points'} per catch), live play by play.
         The whole lineup locks at the week's first kickoff. No windows, no power-ups, no bonuses.
+        {bb.size > 0 && (bb.size === CLASSIC_SLOTS.length
+          ? ' FULL BEST BALL: every slot takes your highest scorer automatically — nothing to set.'
+          : ' 🎯 slots are BEST BALL: they automatically take your highest-scoring player who isn\'t already started.')}
       </div>
     </div>
   );

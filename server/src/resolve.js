@@ -131,12 +131,17 @@ async function leagueScoringOf(leagueId, ctx) {
 }
 
 /** The league's game mode (0157): 'drip' (default) | 'classic', plus the
- *  classic PPR knob. Classic resolves through resolveClassicMatchup below. */
+ *  classic PPR knob and the best-ball slot set (0159). Classic resolves
+ *  through resolveClassicMatchup below. */
+const modeOfSettings = (s) => ({
+  mode: s?.game_mode === 'classic' ? 'classic' : 'drip',
+  ppr: Number.isFinite(Number(s?.ppr)) ? Number(s.ppr) : 1,
+  bestball: Array.isArray(s?.bestball) ? s.bestball.map(String) : [],
+});
 async function leagueModeOf(leagueId, ctx) {
-  if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1 };
+  if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1, bestball: [] };
   const { data } = await db().from('league').select('settings_json').eq('id', leagueId).maybeSingle();
-  const s = data?.settings_json ?? {};
-  return { mode: s.game_mode === 'classic' ? 'classic' : 'drip', ppr: Number.isFinite(Number(s.ppr)) ? Number(s.ppr) : 1 };
+  return modeOfSettings(data?.settings_json);
 }
 
 /** The league's player flags (0144) — rows for the engine cache, [] when none. */
@@ -177,10 +182,7 @@ export async function prefetchTick(live, week) {
   }
   const policy = new Map((lg.data ?? []).map((r) => [r.id, r.lineup_policy ?? 'best_lineup']));
   const scoring = new Map((lg.data ?? []).map((r) => [r.id, r.settings_json?.scoring ?? null]));
-  const mode = new Map((lg.data ?? []).map((r) => [r.id, {
-    mode: r.settings_json?.game_mode === 'classic' ? 'classic' : 'drip',
-    ppr: Number.isFinite(Number(r.settings_json?.ppr)) ? Number(r.settings_json.ppr) : 1,
-  }]));
+  const mode = new Map((lg.data ?? []).map((r) => [r.id, modeOfSettings(r.settings_json)]));
   const flags = new Map();     // leagueId -> [{slug,label,rules}] (0144 rules ride the resolve)
   for (const r of fl.data ?? []) {
     if (!flags.has(r.league_id)) flags.set(r.league_id, []);
@@ -369,7 +371,25 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     const classify = (picks) => (picks ?? [])
       .filter((p) => p.win === CLASSIC_WIN && p.slug)
       .map((p) => ({ slot: p.slot, player: player(p.slug) }));
-    const r = resolveClassicMatchup(classify(homePicks), classify(awayPicks), matchup.week, gameMode.ppr);
+    // Best ball (0159): the flagged slots pick from the FULL drafted roster,
+    // so those sides carry it. One 2-row query, only for best-ball leagues.
+    const rosters = new Map();
+    if (gameMode.bestball.length) {
+      const { data: ros } = await db().from('native_roster').select('roster_id,slug')
+        .eq('league_id', matchup.league_id).in('roster_id', [matchup.home_roster_id, matchup.away_roster_id]);
+      for (const row of ros ?? []) {
+        if (!rosters.has(row.roster_id)) rosters.set(row.roster_id, []);
+        rosters.get(row.roster_id).push(player(row.slug));
+      }
+    }
+    const sideOf = (picks, rosterId) => ({
+      picks: classify(picks),
+      roster: rosters.get(rosterId) ?? [],
+      bestball: gameMode.bestball,
+    });
+    const r = resolveClassicMatchup(
+      sideOf(homePicks, matchup.home_roster_id), sideOf(awayPicks, matchup.away_roster_id),
+      matchup.week, gameMode.ppr);
     for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
     slotRows = r.slots;
     homeTotal = r.home; awayTotal = r.away;
