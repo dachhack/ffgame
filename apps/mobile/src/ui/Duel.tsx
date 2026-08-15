@@ -22,6 +22,7 @@ import { Card, Mono } from "./prims";
 import { CardFace, CardBack } from "./cards";
 import { LiveCard } from "./LiveCard";
 import { LivePulse } from "./animations";
+import { WindowGameLog } from './PlayLog';
 
 
 export const round1 = (n: number) => Math.round(Number(n) * 10) / 10;
@@ -292,6 +293,12 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
                 </View>
               );
             })()}
+
+            {/* The window's TV feed — every ingested play, collapsed by
+                default (the founder's "where is the log under each match").
+                Only once the window kicked: before that there are no plays
+                and the closed header is an empty promise. */}
+            {winKicked(win) && <WindowGameLog week={week} win={win} />}
 
             {/* Row gap and padding both allow for the floating cards, which
                 overhang their panels by 12 — without the clearance adjacent
