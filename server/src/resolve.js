@@ -19,7 +19,7 @@
 // cross-window TE-TD nukes, and the K banker bonus remain simplified there.
 import { db } from './supabase.js';
 import { config } from './config.js';
-import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY, resolveClassicMatchup, CLASSIC_WIN, classicSlots } from './engine.js';
+import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY, resolveClassicMatchup, CLASSIC_WIN, classicSlots, assignSealedRows } from './engine.js';
 import { matchupPremium, premiumTier, hasPremiumContent, gateSide, hasPremiumTargeted, gateTargeted } from './premium.js';
 import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
 import { starterSlugs } from '../../packages/core/src/data/poolEntry.ts';
@@ -91,19 +91,28 @@ export async function injectWeekPlays(week) {
 // Enrollment still gates everything else it gated; it just no longer zeroes a
 // lineup somebody actually set. Truly empty/absent seats keep the aiSide /
 // policy fallbacks below.
-async function enrolledPicks(matchup, membership, ctx) {
-  if (!(membership?.app_user_id && matchup.status !== 'scheduled')) return null;
-  const key = `${matchup.id}:${membership.app_user_id}`;
-  if (ctx) {
-    const ps = ctx.picks.get(key);
-    if (ps && ps.length) return ps;
-    return ctx.hasPicks.has(key) ? [] : null;
-  }
-  const { data } = await db().from('sealed_pick').select('game_window,roster_slot,player_slug,metric_id,locked')
-    .eq('matchup_id', matchup.id).eq('app_user_id', membership.app_user_id).not('player_slug', 'is', null);
-  if (!data || !data.length) return null;
-  return data.filter((p) => p.locked).map((p) => ({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id }));
+/** Every sealed row on a matchup, ALL authors — the seat-assignment pass
+ *  (assignSealedRows) decides which seat each row belongs to. Fetching by
+ *  author was the vacated-seat bug: rows outlive a seat reassignment, so a
+ *  previous occupant's locked lineup rendered on the board (getRevealedPicks
+ *  reads by matchup) while the resolver, matching rows to the CURRENT
+ *  membership, fielded nothing. */
+async function matchupSealedRows(matchup, ctx) {
+  if (ctx) return ctx.allPicks.get(matchup.id) ?? [];
+  const { data } = await db().from('sealed_pick')
+    .select('app_user_id,game_window,roster_slot,player_slug,metric_id,locked')
+    .eq('matchup_id', matchup.id).not('player_slug', 'is', null);
+  return data ?? [];
 }
+
+/** A seat's rows → the resolver's pick shape. null = the seat has NO rows at
+ *  all (fallbacks apply); [] = rows exist but none locked yet (a set-but-unsealed
+ *  lineup fields empty rather than getting an AI rebuild — same distinction
+ *  enrolledPicks drew). */
+const seatPicks = (rows) => {
+  if (!rows.length) return null;
+  return rows.filter((p) => p.locked).map((p) => ({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id }));
+};
 
 /** A roster's real Sleeper STARTERS (the unenrolled-opponent fallback / player pool).
  *
@@ -206,16 +215,12 @@ export async function prefetchTick(live, week) {
   for (const r of lu.data ?? []) lineups.set(`${r.league_id}:${r.roster_id}`, starterSlugs(r.starters_json));
   const applied = new Map();   // `${matchupId}:${appUser}` -> payload
   for (const r of ap.data ?? []) applied.set(`${r.matchup_id}:${r.app_user_id}`, r.payload_json ?? {});
-  const picks = new Map();     // `${matchupId}:${appUser}` -> [{win,slot,slug,metric}] (LOCKED rows)
-  const hasPicks = new Set();  // `${matchupId}:${appUser}` — has ANY pick rows, locked or not
+  const allPicks = new Map();  // matchupId -> raw sealed rows, ALL authors (seat assignment happens per-resolve)
   for (const p of pk.data ?? []) {
-    const k = `${p.matchup_id}:${p.app_user_id}`;
-    hasPicks.add(k);
-    if (!p.locked) continue; // unsealed window — not revealed, not scored yet
-    if (!picks.has(k)) picks.set(k, []);
-    picks.get(k).push({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id });
+    if (!allPicks.has(p.matchup_id)) allPicks.set(p.matchup_id, []);
+    allPicks.get(p.matchup_id).push(p);
   }
-  return { members, policy, scoring, mode, flags, lineups, applied, picks, hasPicks };
+  return { members, policy, scoring, mode, flags, lineups, applied, allPicks };
 }
 
 /** Resolve one matchup → write matchup_state (per game_window) + finals when final.
@@ -275,9 +280,20 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       targeted: load.targeted,
     };
   };
+  // Seat assignment (0199.2): every sealed row on the matchup, split between
+  // the two seats by CURRENT occupant — with an orphaned lineup (author on
+  // neither seat: a reassigned/vacated seat) adopted by the seat that plainly
+  // owns it (single foreign author, exactly one seat without rows of its own).
+  // The boards run the SAME rule inside getRevealedPicks, so what renders is
+  // what scores. Ambiguous orphans are dropped on both sides of that contract.
+  const homeMem = byRoster.get(matchup.home_roster_id);
+  const awayMem = byRoster.get(matchup.away_roster_id);
+  const seatRows = (matchup.status !== 'scheduled' && !override)
+    ? assignSealedRows(await matchupSealedRows(matchup, ctx), homeMem?.app_user_id ?? null, awayMem?.app_user_id ?? null)
+    : { home: [], away: [] };
   const sideLineup = async (rosterId) => {
     const mem = byRoster.get(rosterId);
-    const picks = await enrolledPicks(matchup, mem, ctx);
+    const picks = seatPicks(rosterId === matchup.home_roster_id ? seatRows.home : seatRows.away);
     // SEALED-FIRST (the 8/15 ruling, completed): locked sealed rows are the
     // lineup for ANY seat that has them — AI/auto-pilot seats included, whose
     // rows were materialized at lock. The aiSide rebuild is for seats with NO
@@ -290,7 +306,9 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       // same applied_state payload the arm/apply RPCs write. comboQty = combo
       // drip unlocks purchased (one combodrip slot per purchase; a legacy set
       // flag without a qty reads as 1).
-      const load = await loadout(matchup.id, mem.app_user_id, ctx);
+      // mem can be absent when an orphaned lineup was adopted by a seat whose
+      // membership row is gone — the picks score, with no purchased extras.
+      const load = await loadout(matchup.id, mem?.app_user_id, ctx);
       const unlocks = Array.isArray(load.unlocks) ? load.unlocks : [];
       const comboQty = Number(load.unlockQty?.['unlock-combo-drip'] ?? (unlocks.includes('unlock-combo-drip') ? 1 : 0));
       return { picks, buffs: Array.isArray(load.buffs) ? load.buffs : [], targeted: load.targeted, comboQty };

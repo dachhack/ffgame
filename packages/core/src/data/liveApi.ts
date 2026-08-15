@@ -9,6 +9,7 @@ import { setLiveInjuries, type InjuryRow } from './injuries';
 import { setTeamOverrides } from './playerTeam';
 import { resolveUser } from './sleeper';
 import { PRESEASON_BOARD_WEEKS } from './nflSlate';
+import { assignSealedRows } from '../engine/seatPicks';
 import type { Session } from '@supabase/supabase-js';
 
 // ── Analytics at the chokepoint (0186) ───────────────────────────────────────
@@ -770,14 +771,14 @@ export async function matchupTeams(leagueId: string, rosterIds: number[]): Promi
 
 /** Sealed picks visible under RLS: always yours; the opponent's only once locked.
  *
- *  Filtered to the seats' CURRENT occupants. sealed_pick rows outlive a seat
- *  reassignment — a previous manager's saved lineup stays in the table under
- *  their app_user_id — and the resolver only fields rows matching the
- *  membership's app_user_id today (enrolledPicks). Without this filter the
- *  board renders those ghost picks with live yardage while the worker scores
- *  the seat as empty: a player "with passing yards but no points". If the
- *  membership read fails (offline blip), return unfiltered rather than blank
- *  the whole board. */
+ *  Passed through the SAME seat-assignment rule the worker's resolver runs
+ *  (assignSealedRows): rows outlive a seat reassignment — they key on the
+ *  saving account with no roster column — so a reassigned seat's lineup is
+ *  ADOPTED by the seat that plainly owns it (and rendered under its current
+ *  occupant's id, so the boards place it on the right side), while ambiguous
+ *  orphans are dropped rather than rendered as if they will score. What
+ *  members watch is what the worker fields. If the matchup/membership read
+ *  fails (offline blip), return unfiltered rather than blank the board. */
 export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[]> {
   const c = await client();
   const { data } = await c.from('sealed_pick')
@@ -788,11 +789,17 @@ export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[
     const { data: m } = await c.from('matchup')
       .select('league_id, home_roster_id, away_roster_id').eq('id', matchupId).maybeSingle();
     if (!m) return rows;
-    const { data: mems } = await c.from('league_membership').select('app_user_id')
+    const { data: mems } = await c.from('league_membership').select('sleeper_roster_id, app_user_id')
       .eq('league_id', m.league_id).in('sleeper_roster_id', [m.home_roster_id, m.away_roster_id]);
-    const current = new Set((mems ?? []).map((r: { app_user_id: string | null }) => r.app_user_id).filter(Boolean));
-    if (!current.size) return rows;
-    return rows.filter((p) => current.has(p.app_user_id));
+    const userOf = (rid: number) =>
+      (mems ?? []).find((x: { sleeper_roster_id: number; app_user_id: string | null }) => x.sleeper_roster_id === rid)?.app_user_id ?? null;
+    const homeUser = userOf(m.home_roster_id);
+    const awayUser = userOf(m.away_roster_id);
+    if (homeUser == null && awayUser == null) return rows; // memberships unreadable — leave the board alone
+    const { home, away } = assignSealedRows(rows, homeUser, awayUser);
+    const rehome = (rs: RevealedPick[], uid: string | null) =>
+      rs.map((r) => (uid && r.app_user_id !== uid ? { ...r, app_user_id: uid } : r));
+    return [...rehome(home, homeUser), ...rehome(away, awayUser)];
   } catch {
     return rows;
   }
