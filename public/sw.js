@@ -123,6 +123,37 @@ self.addEventListener('fetch', (e) => {
   // Everything else: straight to the network, uncached.
 });
 
+// ── Web push (v0.194.0) ──────────────────────────────────────────────────────
+// Payloads arrive aes128gcm-encrypted from the Fly worker (server/src/webpush.js)
+// and decrypt to the same {title, body, data} JSON the app's FCM pushes carry.
+// Not behind KILL: a kill deploy unregisters this worker anyway, and a push
+// that arrives in the gap should still be shown rather than dropped —
+// browsers may revoke the subscription of a worker that eats push events.
+self.addEventListener('push', (e) => {
+  let p = {};
+  try { p = e.data?.json() ?? {}; } catch { /* non-JSON push — show the fallback */ }
+  e.waitUntil(self.registration.showNotification(p.title || 'Drip Fantasy', {
+    body: p.body || '',
+    icon: new URL('./icons/pwa/icon-192.png', ROOT).href,
+    badge: new URL('./icons/pwa/icon-192.png', ROOT).href,
+    data: p.data || {},
+    // One notification per kind: a newer chat push replaces the older one
+    // instead of stacking — mirrors the phone's channel behavior.
+    tag: `drip-${(p.data && p.data.kind) || 'default'}`,
+  }));
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  // Focus an open tab if there is one; otherwise open the app at its root.
+  e.waitUntil((async () => {
+    const tabs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const tab = tabs.find((t) => t.url.startsWith(ROOT));
+    if (tab) { await tab.focus(); return; }
+    await self.clients.openWindow(ROOT);
+  })());
+});
+
 /** Keep the media cache bounded — oldest insertion first (keys() is in put order). */
 async function trim(cache) {
   try {
