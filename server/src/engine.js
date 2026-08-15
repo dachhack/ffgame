@@ -14,7 +14,12 @@ import { resolveSlot, EMPTY_PLAYER } from '../../packages/core/src/engine/sim.ts
 import { resolveLiveMatchup } from '../../packages/core/src/engine/liveResolve.ts';
 import { resolveClassicMatchup, CLASSIC_WIN, classicSlots } from '../../packages/core/src/engine/classic.ts';
 import { assignSealedRows } from '../../packages/core/src/engine/seatPicks.ts';
-import { setSyntheticWeeks, clearSyntheticWeeks } from '../../packages/core/src/data/realPbp.ts';
+import { setSyntheticWeeks, clearSyntheticWeeks, realPbpFor } from '../../packages/core/src/data/realPbp.ts';
+
+/** Diagnostic: how many plays the ENGINE would see for (week, slug) right now. */
+export function playsFor(week, slug) {
+  return realPbpFor(week, slug)?.length ?? 0;
+}
 import { aiLineup, aiLiveBuffs } from '../../packages/core/src/data/aiLineup.ts';
 
 const ZERO_STATS = {
@@ -42,8 +47,18 @@ export function autoLineup(slugs, week = 0, owned = new Set(), extra = 0, person
 
 /** Inject a week's plays so the engine sees them via realPbpFor(week, slug).
  *  bySlug: { [slug]: RealPlay[] } (the live_play rows in RealPlay shape). */
+// ADDITIVE across weeks (0199.3). setSyntheticWeeks CLEARS the whole synth
+// store and installs only what it's handed — correct for the client (one board,
+// one week) but a live trap here: the tick runs one context per active week
+// (preseason + regular share this process), so a single-week install means the
+// second context's injection erased the first's plays. With no tick overlap
+// that was masked by ordering; the moment ticks ran long enough to overlap on
+// the 8/15 Saturday slate, week 102's plays vanished mid-resolve and every
+// live window wrote honest-looking zeros. Keep every injected week installed.
+const injectedWeeks = new Map();
 export function injectWeek(week, bySlug, points = {}) {
-  setSyntheticWeeks([{ week, pbp: bySlug, points }]);
+  injectedWeeks.set(week, { week, pbp: bySlug, points });
+  setSyntheticWeeks([...injectedWeeks.values()]);
 }
 
 /** Resolve one window slot (you vs their) with full metric effects.

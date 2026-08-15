@@ -296,8 +296,19 @@ async function main() {
     } catch (e) { log('index refresh', e.message); }
   }, 86400e3);
 
-  await tick().catch((e) => log('tick error', e.message));
-  setInterval(() => tick().catch((e) => log('tick error', e.message)), config.playsPollMs);
+  // NON-REENTRANT (0199.3). On a busy slate a tick (many games polled, ESPN
+  // slow) can outlast playsPollMs; overlapping ticks interleave their contexts'
+  // play injections and resolves against the shared engine store, which is how
+  // the 8/15 Saturday windows resolved to zeros while their plays sat in the
+  // database. A tick that's still running simply absorbs the next firing.
+  let ticking = false;
+  const guardedTick = async () => {
+    if (ticking) { log('tick skipped — previous tick still running'); return; }
+    ticking = true;
+    try { await tick(); } catch (e) { log('tick error', e.message); } finally { ticking = false; }
+  };
+  await guardedTick();
+  setInterval(() => { void guardedTick(); }, config.playsPollMs);
 
   // App push notifications (0150): detect + deliver on a 60s sweep, its own
   // loop — a slow FCM round must never stretch a play tick.
