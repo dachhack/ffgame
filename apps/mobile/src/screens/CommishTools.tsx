@@ -20,7 +20,7 @@ import {
   leagueInvite, nativeTeamState,
   setTeamAvatar, setTeamController, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
-  leagueLastSeen, seenAgoLabel, type LeagueSeenRow,
+  leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
@@ -133,6 +133,9 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
 
       {/* who's actually been in the league (0151) — collapsed, loads on open */}
       <CommishSeen leagueId={leagueId} />
+
+      {/* the real-time power-up switch (0155) */}
+      <LiveBuffsCard leagueId={leagueId} />
 
       {/* league-wide coin: the allowance and the bulk levers, right under the
           seat rows whose 💰 chips they move. onChanged remounts the cards so
@@ -585,6 +588,48 @@ function CommishSeen({ leagueId }: { leagueId: string }) {
           </Mono>
         </View>
       )}
+    </Card>
+  );
+}
+
+
+// ── real-time power-ups switch (0155) ────────────────────────────────────────
+// One league-wide on/off on the ARMED live buffs (overtime, momentum, amps,
+// counters…). Off refuses new arms server-side before any coin moves; buffs
+// armed before the flip stay reclaimable. The shop's pre-game power-ups are a
+// different lever and are untouched.
+function LiveBuffsCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    leagueLiveBuffs(leagueId).then((r) => { if (r.ok) setOn(r.on !== false); }).catch(() => {});
+  }, [leagueId]);
+  const flip = async () => {
+    if (on === null || busy) return;
+    setBusy(true);
+    try {
+      const r = await setLeagueLiveBuffs(leagueId, !on);
+      if (r.ok) { commit(); setOn(!on); } else warn();
+    } catch { warn(); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Card>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Mono size={9.5} weight="700" track={0.12} tone="faint">◈ REAL-TIME POWER-UPS</Mono>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 3, lineHeight: 12 }}>
+            The armed live buffs — overtime, momentum, amps, counters. Off blocks new arms league-wide; already-armed buffs stay reclaimable.
+          </Mono>
+        </View>
+        <Pressable disabled={on === null || busy} onPress={() => { tap(); void flip(); }}
+          style={{ borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: on ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, opacity: on === null || busy ? 0.5 : 1 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: on ? t.onAccent : t.dim }}>
+            {on === null ? '…' : on ? 'ON' : 'OFF'}
+          </Text>
+        </Pressable>
+      </View>
     </Card>
   );
 }

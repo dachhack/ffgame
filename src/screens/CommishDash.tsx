@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { commishOverview, leagueLastSeen, seenAgoLabel, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
+import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { LeagueRow, type LeagueTab } from './AdminPage';
 import { card, linkBtn, mono, Muted, errMsg } from './adminUi';
 
@@ -50,6 +50,7 @@ export function CommishDash({ onBack, focusId, defaultTab }: {
             <LeagueRow l={l} reload={load} admin={false} mine defaultTab={defaultTab ?? 'members'}
               collapsible={shown.length > 1} defaultOpen={i === 0} />
             <LastSeenCard leagueId={l.league_id} />
+            <LiveBuffsCard leagueId={l.league_id} />
           </div>
         ))}
 
@@ -104,6 +105,36 @@ function LastSeenCard({ leagueId }: { leagueId: string }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+
+// ── real-time power-ups switch (0155) ────────────────────────────────────────
+function LiveBuffsCard({ leagueId }: { leagueId: string }) {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    leagueLiveBuffs(leagueId).then((r) => { if (r.ok) setOn(r.on !== false); }).catch(() => {});
+  }, [leagueId]);
+  const flip = async () => {
+    if (on === null || busy) return;
+    setBusy(true);
+    try { const r = await setLeagueLiveBuffs(leagueId, !on); if (r.ok) setOn(!on); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ ...card, marginTop: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>◈ REAL-TIME POWER-UPS</div>
+        <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
+          The armed live buffs — overtime, momentum, amps, counters. Off blocks new arms league-wide; already-armed buffs stay reclaimable.
+        </div>
+      </div>
+      <button onClick={() => void flip()} disabled={on === null || busy} className="mono"
+        style={{ fontSize: 10, fontWeight: 700, borderRadius: 999, padding: '7px 16px', cursor: 'pointer', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, opacity: on === null || busy ? 0.5 : 1, flexShrink: 0 }}>
+        {on === null ? '…' : on ? 'ON' : 'OFF'}
+      </button>
     </div>
   );
 }

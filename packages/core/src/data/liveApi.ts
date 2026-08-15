@@ -1192,6 +1192,13 @@ export const adminUserFeatures = (appUserId: string) =>
   rpc<Record<string, boolean>>('admin_user_features', { p_app_user_id: appUserId });
 
 // ── Live power-up loadout (M1): arm/disarm in-slot team buffs, pre-lock ──────────
+/** Commissioner switch on the real-time (armed) power-ups (0155). */
+export const setLeagueLiveBuffs = (leagueId: string, on: boolean) =>
+  tracked(rpc<{ ok: boolean; error?: string; on?: boolean }>('set_league_live_buffs', { p_league_id: leagueId, p_on: on }),
+    Ev.commishAction, { tool: 'live_buffs', on });
+export const leagueLiveBuffs = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; on?: boolean }>('league_live_buffs', { p_league_id: leagueId });
+
 export const LIVE_BUFFS = ['overtime', 'ot-shield', 'momentum', 'garbage-time', 'amp-2', 'amp-3', 'floodgates', 'counter-nuke', 'insurance', 'fg-stack'] as const;
 export const armBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; detail?: string; buffs?: string[] }>('arm_buff', { p_matchup_id: matchupId, p_buff: buff });
 export const disarmBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; detail?: string; buffs?: string[] }>('disarm_buff', { p_matchup_id: matchupId, p_buff: buff });

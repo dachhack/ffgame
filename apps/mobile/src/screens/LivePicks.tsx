@@ -22,7 +22,7 @@ import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } from '@drip/core/data/premiumClient';
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
-  myBuffs, heroSetBuffs, myInventory, consumeInventory, refundInventory,
+  myBuffs, heroSetBuffs, myInventory, consumeInventory, refundInventory, leagueLiveBuffs,
   myUnlocks, armUnlock, disarmUnlock, myComboQty,
   myWallet, ensureWallet,
   liveSlate, matchupTeams, matchupPremium, startCheckout, friendlyError,
@@ -110,6 +110,8 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   const [myTeam, setMyTeam] = useState<TeamInfo | null>(null);
   const [oppTeam, setOppTeam] = useState<TeamInfo | null>(null);
   const [roster, setRoster] = useState<{ leagueId: string; rosterId: number } | null>(null);
+  // Real-time power-ups league switch (0155) — off refuses arms with a clear line.
+  const [liveBuffsOn, setLiveBuffsOn] = useState(true);
   const [controller, setController] = useState<Controller>('human');
   // Why this roster is locked out of picks/power-ups (native leagues; null = legal).
   const [rosterIssue, setRosterIssue] = useState<string | null>(null);
@@ -192,6 +194,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
         if (!r) { setState('none'); return; }
         setRoster(r);
+        leagueLiveBuffs(r.leagueId).then((lb) => { if (lb.ok) setLiveBuffsOn(lb.on !== false); }).catch(() => {});
         myMembership(r.leagueId, r.rosterId).then((mm) => { if (mm?.controller) setController(mm.controller); }).catch(() => {});
         const m = await myMatchup(r.leagueId, r.rosterId, weekSel ?? undefined);
         if (!m) { setMatchup(null); setState('none'); return; }
@@ -537,6 +540,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
    *  impossible arm is refused before it spends a card. */
   const armFromHand = async (id: string) => {
     if (!matchup || locked || buffBusy) return;
+    if (!liveBuffsOn) { setErr("Real-time power-ups are turned off in this league (commissioner's setting)."); return; }
     if (buffs.has(id)) return;
     const armed = new Set(buffs);
     if (id === 'amp-3' && !armed.has('amp-2')) { setErr('Third Amp needs Second Amp armed first.'); return; }
