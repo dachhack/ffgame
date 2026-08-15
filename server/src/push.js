@@ -114,6 +114,15 @@ async function ownersFor(pairs) {
   return out;
 }
 
+/** Every enrolled member of a league — the broadcast list for league-wide
+ *  moments (draft live/complete, a new poll, a fresh commish note). */
+async function leagueMembers(lid) {
+  const { data } = await db().from('league_membership')
+    .select('app_user_id')
+    .eq('league_id', lid).eq('enrolled', true).not('app_user_id', 'is', null);
+  return [...new Set((data ?? []).map((m) => m.app_user_id))];
+}
+
 async function leagueNames(ids) {
   if (!ids.length) return new Map();
   const { data } = await db().from('league').select('id, name').in('id', ids);
@@ -139,6 +148,43 @@ async function detectChat() {
       });
     }
   }
+  // New polls (0152): the whole league hears about a question, not just the
+  // mentioned. Author excluded — you asked it.
+  const { data: polls } = await db().from('league_message')
+    .select('id, league_id, body, author_id, created_at')
+    .eq('kind', 'poll').gt('created_at', sinceIso());
+  const pollNames = await leagueNames([...new Set((polls ?? []).map((p) => p.league_id))]);
+  for (const p of polls ?? []) {
+    for (const uid of await leagueMembers(p.league_id)) {
+      if (uid === p.author_id) continue;
+      rows.push({
+        app_user_id: uid, kind: 'chat',
+        title: `📊 New poll · ${pollNames.get(p.league_id) ?? 'your league'}`,
+        body: p.body.slice(0, 140),
+        data: { league_id: p.league_id, open: 'chat' },
+        dedupe_key: `poll:${p.id}:${uid}`,
+      });
+    }
+  }
+  // A fresh commish note (0152): the league's standing word changed.
+  const { data: noted } = await db().from('league')
+    .select('id, name, commissioner_id, settings_json')
+    .gt('settings_json->commish_note->>at', sinceIso());
+  for (const l of noted ?? []) {
+    const note = l.settings_json?.commish_note;
+    if (!note?.text) continue;
+    const stamp = Date.parse(note.at ?? '') || 0;
+    for (const uid of await leagueMembers(l.id)) {
+      if (uid === l.commissioner_id) continue;
+      rows.push({
+        app_user_id: uid, kind: 'chat',
+        title: `⚑ League note · ${l.name}`,
+        body: String(note.text).slice(0, 140),
+        data: { league_id: l.id },
+        dedupe_key: `note:${l.id}:${stamp}:${uid}`,
+      });
+    }
+  }
   const { data: dms } = await db().from('dm_message')
     .select('id, body, author_id, created_at, thread:dm_thread(id, league_id, user_lo, user_hi)')
     .gt('created_at', sinceIso());
@@ -153,6 +199,65 @@ async function detectChat() {
       data: { league_id: t.league_id, open: 'chat' },
       dedupe_key: `chat:d${d.id}`,
     });
+  }
+  await enqueue(rows);
+}
+
+// ── draft night (0152) ──────────────────────────────────────────────────────
+// The clock itself is already driven — sweepNative ticks every live draft, so
+// an unattended room autopicks without us. This detector is the VOICE:
+// "the draft is LIVE" and "the draft is complete" to every member (dedupe
+// makes them once-ever), and "you're ON THE CLOCK" to the snake picker
+// (dedupe per overall). Auction lots have no single on-clock target, so
+// auction leagues get the live/complete brackets only.
+async function detectDraft() {
+  const { data: drafts } = await db().from('draft')
+    .select('league_id, status, mode, draft_order, current_overall, paused, completed_at')
+    .in('status', ['live', 'complete']);
+  const fresh = (drafts ?? []).filter((d) =>
+    d.status === 'live' || (d.completed_at && Date.now() - Date.parse(d.completed_at) < 15 * 60_000));
+  if (!fresh.length) return;
+  const names = await leagueNames(fresh.map((d) => d.league_id));
+  const rows = [];
+  for (const d of fresh) {
+    const name = names.get(d.league_id) ?? 'your league';
+    if (d.status === 'live') {
+      for (const uid of await leagueMembers(d.league_id)) {
+        rows.push({
+          app_user_id: uid, kind: 'draft', title: `⛏ ${name}`,
+          body: 'The draft is LIVE — get in the room.',
+          data: { league_id: d.league_id, open: 'draft' },
+          dedupe_key: `draft:${d.league_id}:live`,
+        });
+      }
+      // the snake picker on the clock — same reversal as SQL draft_on_clock
+      const order = Array.isArray(d.draft_order) ? d.draft_order : [];
+      if (!d.paused && d.mode === 'snake' && order.length) {
+        const n = order.length; const o = d.current_overall;
+        const rnd = Math.floor((o - 1) / n) + 1;
+        let idx = (o - 1) % n;
+        if (rnd % 2 === 0) idx = n - 1 - idx;
+        const rid = Number(order[idx]);
+        const owner = (await ownersFor([[d.league_id, rid]])).get(`${d.league_id}:${rid}`);
+        if (owner) {
+          rows.push({
+            app_user_id: owner, kind: 'draft', title: `⛏ ${name}`,
+            body: `You're ON THE CLOCK — pick ${o} is yours.`,
+            data: { league_id: d.league_id, open: 'draft' },
+            dedupe_key: `draft:${d.league_id}:${o}`,
+          });
+        }
+      }
+    } else {
+      for (const uid of await leagueMembers(d.league_id)) {
+        rows.push({
+          app_user_id: uid, kind: 'draft', title: `⛏ ${name}`,
+          body: 'The draft is complete — rosters are set.',
+          data: { league_id: d.league_id, open: 'draft' },
+          dedupe_key: `draft:${d.league_id}:complete`,
+        });
+      }
+    }
   }
   await enqueue(rows);
 }
@@ -282,6 +387,7 @@ async function flush() {
 export async function sweepPush() {
   await detectChat().catch((e) => log('chat detector error', e.message));
   await detectTrades().catch((e) => log('trades detector error', e.message));
+  await detectDraft().catch((e) => log('draft detector error', e.message));
   await detectWaivers().catch((e) => log('waivers detector error', e.message));
   await detectLineup().catch((e) => log('lineup detector error', e.message));
   await flush().catch((e) => log('flush error', e.message));

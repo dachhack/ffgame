@@ -49,6 +49,10 @@ begin
   perform assert_ok(set_push_prefs('device-token-abc123', '{"chat": false, "lineup": true}'::jsonb), 'pu5 set prefs');
   perform assert_true(my_push_tokens() -> 0 -> 'prefs' = '{"chat": false, "lineup": true}'::jsonb, 'pu6 prefs replaced');
 
+  -- 0152: the draft mute key is a known key now
+  perform assert_ok(set_push_prefs('device-token-abc123', '{"draft": false, "junk": true}'::jsonb), 'pu6a set draft pref');
+  perform assert_true(my_push_tokens() -> 0 -> 'prefs' = '{"draft": false}'::jsonb, 'pu6b draft key survives sanitize');
+
   -- the same phone signs into another account: the token MOVES
   perform probe_as('c');
   perform assert_ok(register_push_token('device-token-abc123'), 'pu7 c registers same device');
