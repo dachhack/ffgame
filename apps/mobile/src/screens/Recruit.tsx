@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
-  closeLeagueListing, commishOverview, friendlyError, joinFromBoard, leagueBoard, leagueInvite,
+  closeLeagueListing, commishOverview, friendlyError, joinFromBoard, leagueBoard, leagueInvite, leaguePreview, type BoardPreview,
   postLeagueListing, redeemCommish, type AdminLeague, type BoardListing,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
@@ -45,6 +45,8 @@ export function Recruit({ onBack, onJoined }: {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [joinFor, setJoinFor] = useState<BoardListing | null>(null);
+  const [previewFor, setPreviewFor] = useState<BoardListing | null>(null);
+  const [preview, setPreview] = useState<BoardPreview | null>(null);
   const [teamDraft, setTeamDraft] = useState('');
   const [postFor, setPostFor] = useState<AdminLeague | null>(null);
   const [blurbDraft, setBlurbDraft] = useState('');
@@ -213,8 +215,11 @@ export function Recruit({ onBack, onJoined }: {
               </>
             ) : (
               <View style={{ flex: 1 }}>
-                <PrimaryButton label="JOIN THIS LEAGUE" disabled={busy}
-                  onPress={() => { tap(); setJoinFor(r); setTeamDraft(''); }} />
+                {/* Look before you join (0156): the door is a REVIEW, and the
+                    seat is only taken from inside it — the founder's rule that
+                    only committed users take a spot. */}
+                <PrimaryButton label="⌕ REVIEW THIS LEAGUE" disabled={busy}
+                  onPress={() => { tap(); setPreviewFor(r); setPreview(null); void leaguePreview(r.league_id).then(setPreview).catch(() => setPreview({ ok: false, error: 'could not load' })); }} />
               </View>
             )}
           </View>
@@ -234,6 +239,60 @@ export function Recruit({ onBack, onJoined }: {
           <Chip label={busy ? '…' : '⚑ REDEEM'} on disabled={busy || !commishDraft.trim()} onPress={() => void doRedeemCommish()} />
         </View>
       </Card>
+
+      {/* review → the whole league before a seat is taken (0156) */}
+      <Overlay visible={!!previewFor} title={previewFor?.name ?? ''}
+        subtitle={previewFor ? `${previewFor.season} · ${previewFor.seats_open} of ${previewFor.seats_total} seats open` : undefined}
+        onClose={() => setPreviewFor(null)}>
+        <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 28, gap: 10 }}>
+          {preview === null && <Mono size={10} tone="faint">Loading the league…</Mono>}
+          {preview !== null && !preview.ok && <Mono size={10} tone="opp">⚠ {friendlyError(preview.error ?? 'could not load')}</Mono>}
+          {preview?.ok && (
+            <>
+              {!!preview.blurb && <Mono size={10.5} style={{ lineHeight: 16 }}>{preview.blurb}</Mono>}
+              {preview.draft && (
+                <View>
+                  <Mono size={8.5} weight="700" track={0.12} tone="faint">⛏ DRAFT</Mono>
+                  <Mono size={10} style={{ marginTop: 4, lineHeight: 15 }}>
+                    {preview.draft.mode === 'auction' ? `Auction · $${preview.draft.budget ?? 200} budget` : 'Snake'} · {preview.draft.rounds} rounds · {preview.draft.pick_seconds >= 3600 ? `${Math.round(preview.draft.pick_seconds / 3600)}h` : `${preview.draft.pick_seconds}s`} clock
+                    {preview.draft.night ? ` · overnight pause ${fmtNightHour(preview.draft.night.start_min)}–${fmtNightHour(preview.draft.night.end_min)} ET` : ''}
+                    {'\n'}{preview.draft.status === 'pending' ? 'Draft not started — you would draft with the league.' : preview.draft.status === 'live' ? 'Draft is LIVE right now.' : 'Draft complete — open seats take over existing rosters.'}
+                  </Mono>
+                </View>
+              )}
+              {preview.rules && (
+                <View>
+                  <Mono size={8.5} weight="700" track={0.12} tone="faint">⚖ HOUSE RULES</Mono>
+                  <Mono size={10} style={{ marginTop: 4, lineHeight: 15 }}>
+                    Waivers: {preview.rules.waiver_mode === 'faab' ? `FAAB · $${preview.rules.faab_budget ?? 100} budget` : 'rolling priority'}
+                    {'\n'}Trades: {preview.rules.trade_review === 'commish' ? 'commissioner reviews each trade' : 'execute on accept'}
+                    {'\n'}Real-time power-ups: {preview.rules.live_buffs ? 'on' : 'off (commissioner disabled)'}
+                    {preview.scoring ? `\nScoring: ${preview.scoring.td_bonus >= 0 ? '+' : ''}${preview.scoring.td_bonus} per TD · ×${preview.scoring.yd_mult} yards · ${preview.scoring.to_penalty} per turnover` : ''}
+                  </Mono>
+                </View>
+              )}
+              {!!preview.teams?.length && (
+                <View>
+                  <Mono size={8.5} weight="700" track={0.12} tone="faint">👥 SEATS</Mono>
+                  {preview.teams.map((tm) => (
+                    <View key={tm.roster_id} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
+                      <Text style={{ flex: 1, fontSize: 12, color: tm.taken ? t.text : t.faint }}>{tm.team_name}</Text>
+                      <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: tm.taken ? t.dim : t.you }}>{tm.taken ? 'TAKEN' : 'OPEN'}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              <View style={{ marginTop: 6 }}>
+                <PrimaryButton label="✓ I'M IN — TAKE A SEAT" disabled={busy}
+                  onPress={() => { tap(); const r = previewFor!; setPreviewFor(null); setJoinFor(r); setTeamDraft(''); }} />
+              </View>
+              <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>
+                Joining takes one of the open seats. Browse freely — nothing is committed until you take one.
+              </Mono>
+            </>
+          )}
+        </ScrollView>
+      </Overlay>
 
       {/* join → name your team */}
       <Overlay visible={!!joinFor} title={joinFor ? `Join ${joinFor.name}` : ''}
@@ -265,3 +324,10 @@ export function Recruit({ onBack, onJoined }: {
     </ScrollView>
   );
 }
+
+
+/** "10p" / "9a" from minutes-since-midnight ET — the preview's night label. */
+const fmtNightHour = (m: number) => {
+  const h = Math.floor(m / 60) % 24;
+  return `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? 'a' : 'p'}`;
+};
