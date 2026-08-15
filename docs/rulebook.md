@@ -121,7 +121,7 @@ its own.
 |---|---|---|---|
 | **Field General** | × | 0 direct pts | Passing yards set a window-wide drip multiplier on all your skill players. 300 yds = 2.8×. The QB scores nothing himself. |
 | **Passing Yards** | FLAT | 0.04 pts / yd + 4 / TD | Flat points on passing yards and TDs. No drip, no nuke, no interaction. Predictable. |
-| **Rush Yards** | FLAT | 0.15 pts / yd + 8 / TD | Flat points on your scrambles and rushing TDs. Purely additive — no nuke, no erase, no interaction. |
+| **Rush Yards** | FLAT | 0.2 pts / yd + 8 / TD | Flat points on your scrambles and rushing TDs. Purely additive — no nuke, no erase, no interaction. |
 | **Air Raid** | TD HEAVY | 0.04 / yd + 10 / TD | Unlock (1 wk): passing yards at 0.04/yd plus a huge 10 pts per passing TD. Flat — no nuke or erase. |
 
 ### Running Back
