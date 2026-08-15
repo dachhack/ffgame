@@ -35,10 +35,12 @@ begin
 end $$;
 
 insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-00000000000a', 'a@test.dev'),
   ('00000000-0000-0000-0000-00000000000b', 'b@test.dev'),
   ('00000000-0000-0000-0000-00000000000c', 'c@test.dev'),
   ('00000000-0000-0000-0000-00000000000d', 'd@test.dev')
 on conflict (id) do nothing;
+insert into app_admin (email, note) values ('a@test.dev', 'probe admin') on conflict (email) do nothing;
 
 do $$
 declare r jsonb; lid uuid; code text; mid uuid; i int;
@@ -62,6 +64,15 @@ begin
   perform probe_as('b');
   perform assert_err(set_league_game_mode(lid, 'chaos'), 'drip or classic', 'gm5 unknown mode refused');
   perform assert_err(set_league_game_mode(lid, 'classic', 0.75), 'ppr', 'gm5a bad ppr refused');
+
+  -- the feature flag (0158): classic is refused until the ADMIN unlocks it
+  perform assert_err(set_league_game_mode(lid, 'classic', 0.5), 'not enabled', 'gm5b classic gated behind the flag');
+  perform assert_err(set_league_classic_access(lid, true), 'admin', 'gm5c commish cannot flip the flag');
+  perform assert_true(not (league_game_mode(lid) ->> 'classic_ok')::boolean, 'gm5d flag reads off');
+  perform probe_as('a');
+  perform assert_ok(set_league_classic_access(lid, true), 'gm5e admin unlocks classic');
+  perform probe_as('b');
+  perform assert_true((league_game_mode(lid) ->> 'classic_ok')::boolean, 'gm5f flag reads on');
 
   -- commissioner sets classic + half PPR; member reads both
   perform assert_ok(set_league_game_mode(lid, 'classic', 0.5), 'gm6 commish sets classic');

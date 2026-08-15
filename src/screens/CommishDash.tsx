@@ -113,14 +113,16 @@ function LastSeenCard({ leagueId }: { leagueId: string }) {
 
 // ── real-time power-ups switch (0155) ────────────────────────────────────────
 // Normie mode (0157): DRIP ⇄ CLASSIC, plus the PPR knob while classic. Frozen
-// once the draft starts — the server refuses and the card says why.
+// once the draft starts — the server refuses and the card says why. CLASSIC
+// only appears where the founder has flagged it available (0158).
 function GameModeCard({ leagueId }: { leagueId: string }) {
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
   const [ppr, setPpr] = useState(1);
+  const [classicOk, setClassicOk] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   useEffect(() => {
-    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); } }).catch(() => {});
+    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); } }).catch(() => {});
   }, [leagueId]);
   const set = async (m: 'drip' | 'classic', p?: number) => {
     if (busy || mode === null) return;
@@ -147,7 +149,9 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
           <button onClick={() => void set('drip')} disabled={busy || mode === null} className="mono" style={pill(mode === 'drip')}>DRIP</button>
-          <button onClick={() => void set('classic')} disabled={busy || mode === null} className="mono" style={pill(mode === 'classic')}>CLASSIC</button>
+          {(classicOk || mode === 'classic')
+            ? <button onClick={() => void set('classic')} disabled={busy || mode === null} className="mono" style={pill(mode === 'classic')}>CLASSIC</button>
+            : <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', alignSelf: 'center' }}>CLASSIC not unlocked</span>}
         </div>
       </div>
       {mode === 'classic' && (

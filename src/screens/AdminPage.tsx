@@ -13,6 +13,7 @@ import {
   commishSetManager, teamManagers, type TeamManagerRow,
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
   playoffState, setPlayoffRules, generatePlayoffs, advancePlayoffs,
+  leagueGameMode, setLeagueClassicAccess,
   type WaiverMode, type TradeReview, type TradeRow, type LeaguePoolPlayer, type NativeRosterRow,
   type PlayoffState, type PlayoffMatchup,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
@@ -218,7 +219,12 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
           <ImportLeague reload={load} />
           {leagues === null ? <div style={card}><Muted text="Loading…" /></div>
             : leagues.length === 0 ? <div style={card}><Muted text="No leagues imported yet — import one above." /></div>
-            : leagues.map((l) => <LeagueRow key={l.league_id} l={l} reload={load} mine={mine.has(l.league_id)} />)}
+            : leagues.map((l) => (
+              <div key={l.league_id}>
+                <LeagueRow l={l} reload={load} mine={mine.has(l.league_id)} />
+                <ClassicAccessRow leagueId={l.league_id} />
+              </div>
+            ))}
         </>
       )}
 
@@ -600,6 +606,37 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
           Moves clear waiver holds and bypass position limits (roster size still applies). WAIVE starts a 24h claim window; CUT frees the player immediately.
         </div>
       </div>
+    </div>
+  );
+}
+
+// The founder's per-league feature flag on normie mode (0158): commissioners
+// only see the CLASSIC choice where this is on. Rendered under each league in
+// the admin list; current mode shown so a flip's effect is legible in place.
+function ClassicAccessRow({ leagueId }: { leagueId: string }) {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [mode, setMode] = useState<string>('drip');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    leagueGameMode(leagueId).then((r) => { if (r.ok) { setOn(r.classic_ok === true); setMode(r.mode ?? 'drip'); } }).catch(() => {});
+  }, [leagueId]);
+  const flip = async () => {
+    if (on === null || busy) return;
+    setBusy(true);
+    try { const r = await setLeagueClassicAccess(leagueId, !on); if (r.ok) setOn(!on); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 14px 14px' }}>
+      <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)' }}>
+        🎮 CLASSIC (NORMIE) AVAILABILITY {mode === 'classic' ? '· league is CLASSIC now' : ''}
+      </span>
+      <button onClick={() => void flip()} disabled={on === null || busy} className="mono"
+        style={{ fontSize: 9.5, fontWeight: 700, borderRadius: 999, padding: '4px 12px', cursor: 'pointer',
+          color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)',
+          border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, opacity: on === null || busy ? 0.5 : 1 }}>
+        {on === null ? '…' : on ? 'UNLOCKED' : 'LOCKED'}
+      </button>
     </div>
   );
 }
