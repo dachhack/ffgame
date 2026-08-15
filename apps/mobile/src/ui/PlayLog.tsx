@@ -89,6 +89,24 @@ export function PlayLog({ events, gameLabel, realOf, youName, theirName }: {
         ))}
       </View>
 
+      {/* Reconciliation line (0192.1): drip earns between plays (buffs ride
+          the ticks), so PLAYS mode's edges end short of the card. This is the
+          bank NOW, from the unfiltered tail — it always matches the card. */}
+      {events.length > 0 && (() => {
+        const last = events[events.length - 1];
+        const lastShown = rows.length ? (newestTop ? rows[0] : rows[rows.length - 1]) : null;
+        const gap = !minutes && lastShown != null
+          && (last.youBank - lastShown.youBank > 0.05 || last.theirBank - lastShown.theirBank > 0.05);
+        return (
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 5, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>{last.youBank.toFixed(1)}</Text>
+            <Text style={{ flex: 1, fontFamily: MONO, fontSize: 8, letterSpacing: 0.8, color: t.faint, textAlign: 'center' }}>
+              ◈ BANK NOW{gap ? ' · DRIP EARNS BETWEEN PLAYS — SEE MINUTES' : ''}
+            </Text>
+            <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.opp }}>{last.theirBank.toFixed(1)}</Text>
+          </View>
+        );
+      })()}
       <Mono size={7.5} tone="faint" track={0.12} style={{ textAlign: 'center', marginTop: 6 }}>
         CUMULATIVE TOTALS ON THE EDGES · {minutes ? 'MINUTE-BY-MINUTE DRIP' : 'PLAYS'} · GAME CLOCK ORDER
         {gameLabel ? ` · ${gameLabel.toUpperCase()}` : ''} · TAP A PLAY FOR DETAILS
