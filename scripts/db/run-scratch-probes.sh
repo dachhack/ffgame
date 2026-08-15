@@ -99,3 +99,4 @@ $RUN -f scripts/db/push-probes.sql | grep -E "PROBE FAIL|ALL PUSH PROBES" || { e
 $RUN -f scripts/db/league-seen-probes.sql | grep -E "PROBE FAIL|ALL LEAGUE-SEEN PROBES" || { echo "LEAGUE-SEEN PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/draft-night-probes.sql | grep -E "PROBE FAIL|ALL DRAFT-NIGHT PROBES" || { echo "DRAFT-NIGHT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/league-signals-probes.sql | grep -E "PROBE FAIL|ALL LEAGUE-SIGNALS PROBES" || { echo "LEAGUE-SIGNALS PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/live-buffs-probes.sql | grep -E "PROBE FAIL|ALL LIVE-BUFFS PROBES" || { echo "LIVE-BUFFS PROBES FAILED"; exit 1; }

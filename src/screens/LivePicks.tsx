@@ -5,7 +5,7 @@ import { slugMeta } from '@drip/core/data/slugMeta';
 import type { Pos, WindowId } from '@drip/core/types';
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
-  myBuffs, armBuff, disarmBuff, LIVE_BUFFS,
+  myBuffs, armBuff, disarmBuff, LIVE_BUFFS, leagueLiveBuffs,
   myUnlocks, armUnlock, disarmUnlock, myComboQty,
   myWallet, ensureWallet,
   myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium, startCheckout,
@@ -48,6 +48,8 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
   const [myTeam, setMyTeam] = useState<TeamInfo | null>(null);
   const [roster, setRoster] = useState<{ leagueId: string; rosterId: number } | null>(null);
+  // Real-time power-ups league switch (0155) — off hides the rail entirely.
+  const [buffsOn, setBuffsOn] = useState(true);
   const [controller, setController] = useState<Controller>('human');
   const [aiBusy, setAiBusy] = useState(false);
   const [pool, setPool] = useState<PoolPlayer[]>([]);
@@ -86,6 +88,7 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
         if (!r) { setState('none'); return; }
         setRoster(r);
         myMembership(r.leagueId, r.rosterId).then((mm) => { if (mm?.controller) setController(mm.controller); }).catch(() => {});
+        leagueLiveBuffs(r.leagueId).then((lb) => { if (lb.ok) setBuffsOn(lb.on !== false); }).catch(() => {});
         const m = await myMatchup(r.leagueId, r.rosterId, weekSel ?? undefined);
         if (!m) { setMatchup(null); setState('none'); return; }
         setMatchup(m);
@@ -431,7 +434,12 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
               </div>
             </div>
           )}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+          {!buffsOn && (
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 10 }}>
+              ◈ Real-time power-ups are turned off in this league (commissioner's setting).
+            </div>
+          )}
+          <div style={{ display: buffsOn ? 'flex' : 'none', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
             {LIVE_BUFFS.map((id) => {
               const pu = powerupById(id);
               const on = buffs.has(id);
