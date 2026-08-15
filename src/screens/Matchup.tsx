@@ -3315,6 +3315,26 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
           </div>
         ))}
       </div>
+      {/* The founder's Achane question, answered in place (0192.1): a drip
+          metric keeps earning BETWEEN plays — momentum/garbage/overtime ride
+          those ticks — so in PLAYS mode the edges end at the last play while
+          the card keeps climbing. This line is the reconciliation: the bank
+          NOW, from the unfiltered tail, always matching the card. */}
+      {events.length > 0 && (() => {
+        const last = events[events.length - 1];
+        const lastShown = slice.length ? slice[slice.length - 1] : null;
+        const gap = !minutes && lastShown != null
+          && (last.youBank - lastShown.youBank > 0.05 || last.theirBank - lastShown.theirBank > 0.05);
+        return (
+          <div className="mono" style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 5, padding: '4px 8px', background: 'color-mix(in srgb, var(--you) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--bd) 70%, transparent)', borderRadius: 5 }}>
+            <span style={{ fontSize: fs(9.5), fontWeight: 700, color: 'var(--you)' }}>{last.youBank.toFixed(1)}</span>
+            <span style={{ flex: 1, fontSize: fs(8), letterSpacing: '0.1em', color: 'var(--faint)', textAlign: 'center' }}>
+              ◈ BANK NOW{gap ? ' · drip keeps earning between plays — MINUTES shows it' : ''}
+            </span>
+            <span style={{ fontSize: fs(9.5), fontWeight: 700, color: 'var(--opp)' }}>{last.theirBank.toFixed(1)}</span>
+          </div>
+        );
+      })()}
       <div className="mono" style={{ fontSize: fs(7.5), color: 'var(--faint)', letterSpacing: '0.12em', marginTop: 6, textAlign: 'center' }}>cumulative totals on the edges · {minutes ? 'minute-by-minute drip' : 'plays'} · game + real clock · {realOrder ? 'real-time order' : 'game-clock order'} · {gameLabel} · tap a play for details</div>
       {detail && <PlayDetailModal ev={detail} player={detail.side === 'you' ? youPlayer : theirPlayer} week={week} realStamp={realOf?.(detail)} onClose={() => setDetail(null)} />}
     </div>
