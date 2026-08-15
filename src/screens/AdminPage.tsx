@@ -12,7 +12,7 @@ import {
   adminUserState, type ViewAsState,
   commishSetManager, teamManagers, type TeamManagerRow,
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
-  playoffState, setPlayoffRules, generatePlayoffs, advancePlayoffs,
+  playoffState, setPlayoffRules, generatePlayoffs, advancePlayoffs, autoGeneratePlayoffs,
   leagueGameMode, setLeagueClassicAccess,
   type WaiverMode, type TradeReview, type TradeRow, type LeaguePoolPlayer, type NativeRosterRow,
   type PlayoffState, type PlayoffMatchup,
@@ -2617,6 +2617,9 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
   // The commish can reorder seeding before generating; defaults to standings.
   const [seedOrder, setSeedOrder] = useState<number[] | null>(null);
   const load = async () => {
+    // The season closes itself (0162): the auto-generate poke rides next to
+    // the advance poke — builds round 1 when the last reg-season game is final.
+    await autoGeneratePlayoffs(leagueId).catch(() => {});
     await advancePlayoffs(leagueId).catch(() => {});
     const s = await playoffState(leagueId);
     if (s.error || !s.ok) { setMsg(s.error ?? 'could not load playoffs'); return; }

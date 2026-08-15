@@ -15,7 +15,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
 import { Img } from '../app/ui';
 import {
-  myMatchup, defaultOpenWeek, matchupTeams, leagueNote, chatUnread, leagueSignals, nativeRosters, leaguePool,
+  myMatchup, defaultOpenWeek, matchupTeams, leagueNote, chatUnread, leagueSignals, nativeRosters, leaguePool, playoffState,
   type Enrollment, type LiveMatchup, type TeamInfo,
 } from '@drip/core/data/liveApi';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
@@ -106,6 +106,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   const [sig, setSig] = useState<{ polls: number; waivers: number; commish: { waiting: number; review: number } | null }>({ polls: 0, waivers: 0, commish: null });
   const [chatOpen, setChatOpen] = useState(false);
   const [rostersOpen, setRostersOpen] = useState(false);
+  const [champion, setChampion] = useState<string | null>(null);
 
   useEffect(() => {
     // The note lives HERE now (0182.1 — off the board, founder's call), so the
@@ -118,6 +119,10 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
       .catch(() => {});
     leagueSignals(e.league_id)
       .then((r) => { if (r.ok) setSig({ polls: r.polls_unvoted ?? 0, waivers: r.waiver_results ?? 0, commish: r.commish ?? null }); })
+      .catch(() => {});
+    // Season's over and someone won it? The hub wears the banner (0199).
+    playoffState(e.league_id)
+      .then((st) => { if (st.champion_team) setChampion(st.champion_team); })
       .catch(() => {});
   }, [e.league_id]);
 
@@ -138,6 +143,16 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto' }}>
+      {/* champion banner — the season is decided; the hub says so first */}
+      {champion && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'color-mix(in srgb, #D8B24A 14%, var(--surface))', border: '1px solid #D8B24A', borderRadius: 8, padding: '12px 16px', marginBottom: 12 }}>
+          <span style={{ fontSize: 24, flexShrink: 0 }}>🏆</span>
+          <div style={{ minWidth: 0 }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em' }}>{champion}</div>
+            <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: '#D8B24A', marginTop: 2 }}>LEAGUE CHAMPIONS — THE SEASON IS IN THE BOOKS</div>
+          </div>
+        </div>
+      )}
       {/* identity header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
         <Img src={e.league?.avatar_url} size={44} radius={9} alt={e.league?.name ?? ''}

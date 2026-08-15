@@ -47,6 +47,10 @@ function pwaServiceWorker(): Plugin {
       writeFileSync(sw, readFileSync(sw, 'utf8')
         .replace('"__PRECACHE__"', assets.map((a) => JSON.stringify(a)).join(', '))
         .replace('__VERSION__', `${version}-${digest}`));
+      // The deployed version, as a tiny fetchable fact (0199): UpdateBanner
+      // polls it so a long-lived tab learns a new build shipped — the 8/15
+      // playtest ran a tab seven versions stale with no way to know.
+      writeFileSync(resolve(__dirname, 'dist/version.json'), JSON.stringify({ version }));
     },
   };
 }

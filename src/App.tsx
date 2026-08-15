@@ -7,6 +7,7 @@ import { getSession, hasAuthTokensInUrl, captureAuthUrlError } from '@drip/core/
 import { RequestCodeFab } from './screens/RequestCode';
 import { InstallPrompt } from './app/InstallPrompt';
 import { PlayerCardHost } from './app/playerCard';
+import { UpdateBanner } from './app/UpdateBanner';
 import { DEMO_WEEK } from '@drip/core/config';
 
 // Route screens are code-split: only the active screen's chunk loads, keeping the
@@ -125,6 +126,7 @@ export function App() {
         flexDirection: 'column',
       }}
     >
+      <UpdateBanner />
       <Suspense fallback={null}>
         {/* 'splash' is retired — legacy navigations land on the demo landing. */}
         {route.name === 'splash' && <DemoBoard />}

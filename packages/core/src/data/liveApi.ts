@@ -1574,7 +1574,12 @@ export const setPlayoffRules = (leagueId: string, teams: number | null, startWee
 /** Commissioner: (re)build round 1 — standings seeding, or an explicit seed
  *  order (override). Locked once underway. */
 export const generatePlayoffs = (leagueId: string, seeds: number[] | null = null) =>
-  rpc<{ ok: boolean; error?: string }>('generate_playoffs', { p_league_id: leagueId, p_seeds: seeds });
+  rpc<{ ok: boolean; error?: string }>('generate_playoffs', { p_league_id: leagueId, p_seeds: seeds, p_auto: false });
+/** The season closes itself (0162): any member's league-load poke — builds
+ *  round 1 once the LAST regular-season game is final. Seedless only, never
+ *  regenerates an existing bracket; safe to call blindly like advancePlayoffs. */
+export const autoGeneratePlayoffs = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; generated?: boolean }>('generate_playoffs', { p_league_id: leagueId, p_seeds: null, p_auto: true });
 /** Idempotent: creates the next round when the current one is final; crowns the champ. */
 export const advancePlayoffs = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; advanced?: boolean; champion?: number }>('advance_playoffs', { p_league_id: leagueId });
