@@ -121,9 +121,15 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
                   : <Text style={{ fontFamily: MONO, fontSize: 13, color: suit.fg }}>{initials(name)}</Text>}
             </View>
 
-            <Text numberOfLines={2} style={{ fontSize: 8.2, fontWeight: '800', letterSpacing: 0.2, lineHeight: 9.5, textAlign: 'center', color: INK, textTransform: 'uppercase' }}>
-              {name}
-            </Text>
+            {/* Fixed two-line box, name centred in it: a one-line TYLER
+                BADIE and a wrapping BIJAN ROBINSON must produce the SAME
+                card height or the pair's bottoms drift apart (founder's
+                Fri-slate note: cards aligned, chips one height). */}
+            <View style={{ height: 19, justifyContent: 'center' }}>
+              <Text numberOfLines={2} style={{ fontSize: 8.2, fontWeight: '800', letterSpacing: 0.2, lineHeight: 9.5, textAlign: 'center', color: INK, textTransform: 'uppercase' }}>
+                {name}
+              </Text>
+            </View>
           </View>
 
           {nuked && (
@@ -220,7 +226,7 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
             "Receiving …" loses the only word that distinguishes it from
             "Receiving TDs". */}
         {!!metricName && (
-          <View style={{ backgroundColor: alpha(accent, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(accent, 55), borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3, maxWidth: '100%' }}>
+          <View style={{ backgroundColor: alpha(accent, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(accent, 55), borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3, maxWidth: '100%', minHeight: 36, justifyContent: 'center' }}>
             <Text numberOfLines={2} style={{ fontSize: 11, fontWeight: '800', color: accent, textAlign: mirror ? 'right' : 'left' }}>{metricName}</Text>
           </View>
         )}

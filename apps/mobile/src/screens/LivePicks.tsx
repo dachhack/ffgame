@@ -338,7 +338,17 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     const teams = [...new Set([mySlug, theirSlug]
       .map((sl) => (sl ? duelPool[sl]?.team || slugMeta(sl).team : ''))
       .filter(Boolean))];
-    const withFeed = teams.filter((tm) => !!gameFeedFor(week, tm));
+    // Dedupe by the GAME the team maps to, not the team: a duel whose two
+    // players share a game (DEN RB vs ATL RB in DEN@ATL) is ONE field, and
+    // rendering it once per team stacked two identical fields (founder's
+    // Fri-slate screenshot).
+    const seenGames = new Set<string>();
+    const withFeed = teams.filter((tm) => {
+      const f = gameFeedFor(week, tm);
+      if (!f || seenGames.has(f.key)) return false;
+      seenGames.add(f.key);
+      return true;
+    });
     if (!withFeed.length) return null;
     return (
       <View style={{ gap: 6 }}>

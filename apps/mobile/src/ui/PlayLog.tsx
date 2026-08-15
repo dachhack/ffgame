@@ -21,6 +21,8 @@
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { PbpEvent, EffectType } from '@drip/core/types';
+import { gamesInWindow } from '@drip/core/data/nflSlate';
+import { gameFeedFor, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { useTheme, MONO, type Theme, type FxKey } from '../theme.native';
 import { Mono } from './prims';
 import { Overlay } from './Overlay';
@@ -179,5 +181,70 @@ function Row({ ev, realOf, onPress, last }: {
         {ev.theirBank.toFixed(1)}
       </Text>
     </Pressable>
+  );
+}
+
+
+// ── Window game log (live board) ─────────────────────────────────────────────
+// The web's WindowGameLog, ported: every ingested play across the window's
+// games — the whole game's story, not just the slotted players'. Sourced from
+// the worker's game_feed rows (the board already polls them for the fields),
+// newest first, scoring plays flagged with the running score. Collapsed by
+// default — the founder's first multi-window live night on the web showed the
+// expanded log pushing the cards below the fold; the play count ticks on the
+// closed header so live is still legible.
+export function WindowGameLog({ week, win }: { week: number; win: string }) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const feeds = gamesInWindow(week, win as never)
+    .map((g) => gameFeedFor(week, g.home))
+    .filter((f): f is TeamGameFeed => !!f && f.plays.length > 0);
+  // Dedupe by (game, clock, text): ESPN re-emits a play under a fresh id when
+  // it restructures a drive; a reader's log must not repeat the line.
+  const seenPlay = new Set<string>();
+  const rows = feeds
+    .flatMap((f) => f.plays.map((p) => ({ f, p })))
+    .sort((a, b) => b.p.c - a.p.c)
+    .filter(({ f, p }) => {
+      const k = `${f.key}|${p.c}|${p.txt}`;
+      if (seenPlay.has(k)) return false;
+      seenPlay.add(k); return true;
+    })
+    .slice(0, 250);
+  if (!feeds.length) return null;
+  const qc = (c: number) => {
+    const q = Math.min(5, Math.floor(c / 900) + 1);
+    const r = Math.max(0, 900 - (c % 900));
+    return `${q > 4 ? 'OT' : `Q${q}`} ${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')}`;
+  };
+  return (
+    <View style={{ backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 10, paddingVertical: 7, marginBottom: 9 }}>
+      <Pressable onPress={() => setOpen((o) => !o)}
+        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.85, color: t.faint }}>📺 GAME LOG · every play, all games</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.7, color: t.dim }}>
+          {rows.length ? `${rows.length} PLAYS ${open ? '▾' : '▸'}` : ''}
+        </Text>
+      </Pressable>
+      {open && (
+        <ScrollView style={{ maxHeight: 220, marginTop: 6 }} nestedScrollEnabled>
+          <View style={{ gap: 5, paddingRight: 4 }}>
+            {rows.length === 0 && (
+              <Mono size={9} tone="faint" track={0.08} style={{ textAlign: 'center', paddingVertical: 8 }}>— waiting on the first snap —</Mono>
+            )}
+            {rows.map(({ f, p }, i) => (
+              <View key={`${f.key}:${p.pid ?? p.c}:${i}`} style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
+                <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: p.sc ? t.warn : t.faint, minWidth: 88 }}>
+                  {feeds.length > 1 ? `${f.key} · ` : ''}{qc(p.c)}
+                </Text>
+                <Text style={{ flex: 1, minWidth: 0, fontSize: 11, lineHeight: 15, color: p.sc ? t.text : t.dim }}>
+                  {p.txt}{p.sc ? <Text style={{ fontWeight: '700', color: t.warn }}> — {f.away} {p.as}–{p.hs} {f.home}</Text> : null}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      )}
+    </View>
   );
 }
