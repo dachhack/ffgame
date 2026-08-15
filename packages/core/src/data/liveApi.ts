@@ -768,11 +768,34 @@ export async function matchupTeams(leagueId: string, rosterIds: number[]): Promi
   return out;
 }
 
-/** Sealed picks visible under RLS: always yours; the opponent's only once locked. */
+/** Sealed picks visible under RLS: always yours; the opponent's only once locked.
+ *
+ *  Filtered to the seats' CURRENT occupants. sealed_pick rows outlive a seat
+ *  reassignment — a previous manager's saved lineup stays in the table under
+ *  their app_user_id — and the resolver only fields rows matching the
+ *  membership's app_user_id today (enrolledPicks). Without this filter the
+ *  board renders those ghost picks with live yardage while the worker scores
+ *  the seat as empty: a player "with passing yards but no points". If the
+ *  membership read fails (offline blip), return unfiltered rather than blank
+ *  the whole board. */
 export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[]> {
-  const { data } = await (await client()).from('sealed_pick')
+  const c = await client();
+  const { data } = await c.from('sealed_pick')
     .select('app_user_id, game_window, roster_slot, player_slug, metric_id, locked').eq('matchup_id', matchupId);
-  return (data ?? []) as RevealedPick[];
+  const rows = (data ?? []) as RevealedPick[];
+  if (!rows.length) return rows;
+  try {
+    const { data: m } = await c.from('matchup')
+      .select('league_id, home_roster_id, away_roster_id').eq('id', matchupId).maybeSingle();
+    if (!m) return rows;
+    const { data: mems } = await c.from('league_membership').select('app_user_id')
+      .eq('league_id', m.league_id).in('sleeper_roster_id', [m.home_roster_id, m.away_roster_id]);
+    const current = new Set((mems ?? []).map((r: { app_user_id: string | null }) => r.app_user_id).filter(Boolean));
+    if (!current.size) return rows;
+    return rows.filter((p) => current.has(p.app_user_id));
+  } catch {
+    return rows;
+  }
 }
 
 /** All worker-ingested plays for a week (live_play is readable by any authed user).
