@@ -19,7 +19,7 @@
 // cross-window TE-TD nukes, and the K banker bonus remain simplified there.
 import { db } from './supabase.js';
 import { config } from './config.js';
-import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY, resolveClassicMatchup, CLASSIC_WIN, classicSlots, assignSealedRows } from './engine.js';
+import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY, resolveClassicMatchup, CLASSIC_WIN, classicSlots, assignSealedRows, playsFor } from './engine.js';
 import { matchupPremium, premiumTier, hasPremiumContent, gateSide, hasPremiumTargeted, gateTargeted } from './premium.js';
 import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
 import { starterSlugs } from '../../packages/core/src/data/poolEntry.ts';
@@ -69,7 +69,10 @@ async function weekPlayRows(week) {
  *  this once per tick before resolving many matchups — they all read the same
  *  global week feed, so per-matchup re-fetching is pure waste at scale. */
 export async function injectWeekPlays(week) {
-  injectWeek(week, rowsToPbp(await weekPlayRows(week)));
+  const rows = await weekPlayRows(week);
+  const by = rowsToPbp(rows);
+  injectWeek(week, by);
+  console.log(new Date().toISOString(), 'inject wk', week, rows.length, 'plays,', Object.keys(by).length, 'players');
 }
 
 // The per-matchup gatherers below take an optional `ctx` (from prefetchTick). When
@@ -462,6 +465,19 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     for (const w of wins) states.push({ game_window: w, home_score: h.byWin[w] ?? 0, away_score: a.byWin[w] ?? 0 });
     if (!states.length) states.push({ game_window: 'ALL', home_score: 0, away_score: 0 });
     homeTotal = h.total; awayTotal = a.total;
+  }
+
+  // Zero-resolve probe (0199.3): a started matchup with fielded picks scoring
+  // 0–0 is the play-store failure signature (the 8/15 clobber). Log what the
+  // engine's store held for one pick at compute time — visible in the deploy
+  // tail — so a recurrence is diagnosable without a database archaeology chain.
+  if (!homeTotal && !awayTotal && opts.startedWins?.size
+      && ((homePicks?.length ?? 0) + (awayPicks?.length ?? 0)) > 0) {
+    const probe = (homePicks ?? awayPicks ?? [])[0];
+    if (probe) {
+      console.log(new Date().toISOString(), 'zero-resolve', matchup.id.slice(0, 8),
+        'wk', matchup.week, 'probe', probe.slug, 'store-plays', playsFor(matchup.week, probe.slug));
+    }
   }
 
   // Per-slot detail → matchup_state.slot_scores (the card-table board's banks).
