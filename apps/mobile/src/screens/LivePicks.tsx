@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
-import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, nflGameForTeam, kickoffLabel, isPreseasonWeek, LOCK_LEAD_MS } from '@drip/core/data/nflSlate';
+import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, nflGameForTeam, kickoffLabel, isPreseasonWeek, LOCK_LEAD_MS, windowKickoffMs } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
@@ -909,6 +909,15 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
               mine={myLive} theirs={theirLive} pool={duelPool} scores={winScores}
               youAreHome={youAreHome} status={matchup!.status} week={week} winLabel={winLabelFor}
               userId={userId}
+              // Per-window FINAL (the web's wall-clock rule): a window whose
+              // games kicked ~4h ago is done, even though the WEEK's matchup
+              // row stays 'live' until its last game — without this every past
+              // window of a Thu–Sun preseason week wears ● LIVE for days.
+              winStatus={(id) => {
+                if (matchup!.status === 'final') return 'FINAL';
+                const k = windowKickoffMs(week, id as never);
+                return k != null && nowTs - k > 4 * 3_600_000 ? 'FINAL' : null;
+              }}
               slotDetail={slotDetail}
               // The stat DRIVING the metric ("127 pass yd"), in the card's stat
               // slot. No full statline on the app (founder's call) — just the
