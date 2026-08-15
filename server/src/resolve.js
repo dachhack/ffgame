@@ -19,7 +19,7 @@
 // cross-window TE-TD nukes, and the K banker bonus remain simplified there.
 import { db } from './supabase.js';
 import { config } from './config.js';
-import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY, resolveClassicMatchup, CLASSIC_WIN } from './engine.js';
+import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY, resolveClassicMatchup, CLASSIC_WIN, classicSlots } from './engine.js';
 import { matchupPremium, premiumTier, hasPremiumContent, gateSide, hasPremiumTargeted, gateTargeted } from './premium.js';
 import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
 import { starterSlugs } from '../../packages/core/src/data/poolEntry.ts';
@@ -146,9 +146,11 @@ const modeOfSettings = (s) => ({
   // The commissioner's classic scoring overrides (0160) — raw; the engine's
   // normalizeClassicScoring supplies every default.
   scoring: (s?.scoring_classic && typeof s.scoring_classic === 'object') ? s.scoring_classic : null,
+  // The configured starting lineup (0161) — raw counts; classicSlots defaults.
+  roster: (s?.roster_classic && typeof s.roster_classic === 'object') ? s.roster_classic : null,
 });
 async function leagueModeOf(leagueId, ctx) {
-  if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1, bestball: [] };
+  if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1, bestball: [], scoring: null, roster: null };
   const { data } = await db().from('league').select('settings_json').eq('id', leagueId).maybeSingle();
   return modeOfSettings(data?.settings_json);
 }
@@ -402,7 +404,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     setLeagueFlags(matchup.league_id, flagRows);
     const r = resolveClassicMatchup(
       sideOf(homePicks, matchup.home_roster_id), sideOf(awayPicks, matchup.away_roster_id),
-      matchup.week, { ...(gameMode.scoring ?? {}), ppr: gameMode.ppr });
+      matchup.week, { ...(gameMode.scoring ?? {}), ppr: gameMode.ppr }, classicSlots(gameMode.roster));
     for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
     slotRows = r.slots;
     homeTotal = r.home; awayTotal = r.away;

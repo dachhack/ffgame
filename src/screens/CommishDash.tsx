@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueBestball, setLeagueClassicScoring, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
-import { CLASSIC_SLOTS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING } from '@drip/core/engine/classic';
+import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueBestball, setLeagueClassicScoring, setLeagueClassicRoster, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
+import { classicSlots, CLASSIC_SLOT_TYPES, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, DEFAULT_CLASSIC_ROSTER } from '@drip/core/engine/classic';
 import { LeagueRow, type LeagueTab } from './AdminPage';
 import { card, linkBtn, mono, Muted, errMsg } from './adminUi';
 
@@ -121,8 +121,10 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
   const [ppr, setPpr] = useState(1);
   const [classicOk, setClassicOk] = useState(false);
   const [bestball, setBestball] = useState<string[]>([]);
+  const [rosterCfg, setRosterCfg] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const slotDefs = classicSlots(rosterCfg);
   // Full classic scoring (0160): drafts are strings so partial typing never
   // fights the keyboard; parse + diff against the engine defaults on save.
   const [scOpen, setScOpen] = useState(false);
@@ -133,7 +135,7 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
     setScDraft(d);
   };
   useEffect(() => {
-    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setBestball(r.bestball ?? []); scInit(r.scoring ?? {}); } }).catch(() => {});
+    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setBestball(r.bestball ?? []); scInit(r.scoring ?? {}); setRosterCfg(r.roster && Object.keys(r.roster).length ? r.roster : { ...DEFAULT_CLASSIC_ROSTER }); } }).catch(() => {});
   }, [leagueId]);
   const saveScoring = async (reset = false) => {
     if (busy) return;
@@ -203,12 +205,42 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
       {mode === 'classic' && (
         <div style={{ marginTop: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', fontWeight: 700 }}>🧩 STARTING LINEUP · {slotDefs.length} STARTERS</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+            {CLASSIC_SLOT_TYPES.map((t) => {
+              const n = Math.max(0, Math.floor(Number(rosterCfg[t.type]) || 0));
+              const step = async (d: number) => {
+                if (busy) return;
+                const next = { ...rosterCfg, [t.type]: Math.max(0, Math.min(6, n + d)) };
+                if (!Object.values(next).some((v) => Number(v) > 0)) return;
+                setBusy(true); setNote(null);
+                try {
+                  const r = await setLeagueClassicRoster(leagueId, next);
+                  if (r.ok) setRosterCfg(r.roster ?? next);
+                  else setNote(r.error ?? 'failed');
+                } finally { setBusy(false); }
+              };
+              return (
+                <span key={t.type} title={t.label} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 8.5, fontWeight: 700, color: n ? 'var(--you)' : 'var(--faint)', border: `1px solid ${n ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 6, padding: '3px 6px' }}>
+                  {t.type}
+                  <button onClick={() => void step(-1)} disabled={busy || n === 0} className="mono" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 10, padding: '0 2px' }}>−</button>
+                  <span style={{ minWidth: 10, textAlign: 'center' }}>{n}</span>
+                  <button onClick={() => void step(1)} disabled={busy || n >= 6} className="mono" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 10, padding: '0 2px' }}>＋</button>
+                </span>
+              );
+            })}
+          </div>
+          <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
+            Any combination — flex spots take multiple positions (FLEX = RB/WR/TE, SFLX adds QB, WRT = WR/TE, IDP = DL/LB/DB). Locks once the draft starts.
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
             <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', fontWeight: 700 }}>🎯 BEST BALL</span>
-            <button onClick={() => void saveBestball(CLASSIC_SLOTS.map((d) => d.slot))} disabled={busy} className="mono" style={pill(bestball.length === CLASSIC_SLOTS.length)}>ENTIRE ROSTER</button>
+            <button onClick={() => void saveBestball(slotDefs.map((d) => d.slot))} disabled={busy} className="mono" style={pill(bestball.length >= slotDefs.length && slotDefs.length > 0)}>ENTIRE ROSTER</button>
             <button onClick={() => void saveBestball([])} disabled={busy} className="mono" style={pill(bestball.length === 0)}>OFF</button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
-            {CLASSIC_SLOTS.map((d) => {
+            {slotDefs.map((d) => {
               const on = bestball.includes(d.slot);
               return (
                 <button key={d.slot} onClick={() => void saveBestball(on ? bestball.filter((s) => s !== d.slot) : [...bestball, d.slot])}
@@ -231,19 +263,24 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
           </button>
           {scOpen && (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 6, marginTop: 8 }}>
-                {CLASSIC_SCORING_FIELDS.map((f) => {
-                  const changed = Number(scDraft[f.key]) !== DEFAULT_CLASSIC_SCORING[f.key];
-                  return (
-                    <label key={f.key} className="mono" style={{ fontSize: 7.5, fontWeight: 700, color: changed ? 'var(--you)' : 'var(--faint)', display: 'grid', gap: 3 }}>
-                      {f.label}{f.perYard ? ' /YD' : ''}
-                      <input value={scDraft[f.key] ?? ''} inputMode="decimal"
-                        onChange={(e) => setScDraft((d) => ({ ...d, [f.key]: e.target.value }))}
-                        style={{ fontFamily: 'inherit', fontSize: 11, padding: '5px 6px', background: 'var(--bg)', color: 'var(--text)', border: `1px solid ${changed ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, width: '100%', boxSizing: 'border-box' }} />
-                    </label>
-                  );
-                })}
-              </div>
+              {CLASSIC_SCORING_SECTIONS.map((sec) => (
+                <div key={sec.section} style={{ marginTop: 8 }}>
+                  <div className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: 4 }}>{sec.section}</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 6 }}>
+                    {sec.fields.map((f) => {
+                      const changed = Number(scDraft[f.key]) !== DEFAULT_CLASSIC_SCORING[f.key];
+                      return (
+                        <label key={f.key} className="mono" style={{ fontSize: 7.5, fontWeight: 700, color: changed ? 'var(--you)' : 'var(--faint)', display: 'grid', gap: 3 }}>
+                          {f.label}{f.perYard ? ' /YD' : ''}
+                          <input value={scDraft[f.key] ?? ''} inputMode="decimal"
+                            onChange={(e) => setScDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+                            style={{ fontFamily: 'inherit', fontSize: 11, padding: '5px 6px', background: 'var(--bg)', color: 'var(--text)', border: `1px solid ${changed ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, width: '100%', boxSizing: 'border-box' }} />
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
               <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                 <button onClick={() => void saveScoring()} disabled={busy} className="mono" style={pill(true)}>SAVE SCORING</button>
                 <button onClick={() => void saveScoring(true)} disabled={busy} className="mono" style={pill(false)}>RESET TO STANDARD</button>

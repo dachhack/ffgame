@@ -160,6 +160,47 @@ begin
   perform assert_ok(set_league_classic_scoring(lid, '{}'::jsonb), 'cs8 clear to defaults');
   perform assert_true((league_game_mode(lid) -> 'scoring') = '{}'::jsonb, 'cs9 reads empty after clear');
 
+  -- custom lineup (0161): commish-only, sanitized, capped, member-readable
+  perform probe_as('c');
+  perform assert_err(set_league_classic_roster(lid, '{"QB": 2}'::jsonb), 'commissioner', 'rc0 member cannot set lineup');
+  perform probe_as('b');
+  r := set_league_classic_roster(lid, '{"QB": 2, "RB": 1, "BOGUS": 3, "DL": 9, "WR": "junk"}'::jsonb);
+  perform assert_ok(r, 'rc1 commish sets lineup');
+  perform assert_true(r -> 'roster' = '{"QB": 2, "RB": 1, "DL": 6}'::jsonb, 'rc2 sanitized: bogus dropped, DL clamped to 6, junk dropped (got ' || (r -> 'roster')::text || ')');
+  perform assert_true((r ->> 'starters')::int = 9, 'rc2a starter count reported');
+  perform assert_err(set_league_classic_roster(lid, '{"QB": 6, "RB": 6, "WR": 6, "TE": 6}'::jsonb), 'cap at 20', 'rc3 over-20 refused');
+  perform assert_err(set_league_classic_roster(lid, '{}'::jsonb), 'at least one', 'rc4 empty lineup refused');
+  perform probe_as('c');
+  perform assert_true((league_game_mode(lid) -> 'roster') = '{"QB": 2, "RB": 1, "DL": 6}'::jsonb, 'rc5 member reads lineup');
+
+  -- the slot cap admits exactly the configured starter count
+  perform probe_as('b');
+  perform assert_ok(set_league_classic_roster(lid, '{"QB": 1, "RB": 1}'::jsonb), 'rc6 two-starter lineup');
+  reset role;
+  insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
+  values (lid, 2, 2, 1, 'scheduled') returning id into mid;
+  set local role authenticated;
+  perform probe_as('c');
+  insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
+  values (mid, '00000000-0000-0000-0000-00000000000c', 'wk', 'QB', 'probe-qb'),
+         (mid, '00000000-0000-0000-0000-00000000000c', 'wk', 'RB', 'probe-rb');
+  begin
+    insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
+    values (mid, '00000000-0000-0000-0000-00000000000c', 'wk', 'FLEX', 'probe-x');
+    raise exception 'PROBE FAIL rc7 — a third pick beat a two-starter lineup';
+  exception when check_violation then null;
+  end;
+
+  -- best ball accepts generated names, rejects junk
+  perform probe_as('b');
+  r := set_league_bestball(lid, '["SFLX", "WR3", "JUNK$", "SFLX"]'::jsonb);
+  perform assert_true(r -> 'bestball' = '["SFLX","WR3"]'::jsonb, 'bb12 generated names pass, junk + dupes drop (got ' || (r -> 'bestball')::text || ')');
+
+  -- the widened scoring catalog accepts the new keys
+  r := set_league_classic_scoring(lid, '{"teRec": 0.5, "fg20": 3.5, "idpTackle": 1.5, "pass300": 3}'::jsonb);
+  perform assert_ok(r, 'cs11 catalog keys accepted');
+  perform assert_true((r -> 'scoring' ->> 'teRec')::numeric = 0.5 and (r -> 'scoring' ->> 'pass300')::numeric = 3, 'cs12 values stored');
+
   -- best ball + classic scoring have no meaning in a drip league
   perform assert_ok(set_league_game_mode(lid, 'drip'), 'bb8 back to drip');
   perform assert_err(set_league_bestball(lid, '["FLEX"]'::jsonb), 'classic-league setting', 'bb9 refused in drip');
@@ -173,6 +214,7 @@ begin
   perform probe_as('b');
   perform assert_err(set_league_game_mode(lid, 'drip'), 'locks once the draft starts', 'gm13 frozen after draft start');
   perform assert_err(set_league_bestball(lid, '[]'::jsonb), 'locks once the draft starts', 'bb11 best ball frozen after draft start');
+  perform assert_err(set_league_classic_roster(lid, '{"QB": 1}'::jsonb), 'locks once the draft starts', 'rc8 lineup frozen after draft start');
   reset role;
 end $$;
 

@@ -1203,7 +1203,7 @@ export const leagueLiveBuffs = (leagueId: string) =>
 /** 'drip' (default) or 'classic' — classic = standard scoring, one weekly
  *  QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses, no power-ups. Frozen once
  *  the draft starts. `ppr` (0 | 0.5 | 1, default 1) applies in classic only. */
-export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; can_edit?: boolean }
+export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; can_edit?: boolean }
 export const setLeagueGameMode = (leagueId: string, mode: 'drip' | 'classic', ppr?: number) =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_game_mode',
     { p_league_id: leagueId, p_mode: mode, p_ppr: ppr ?? null }),
@@ -1222,6 +1222,12 @@ export const setLeagueBestball = (leagueId: string, slots: string[]) =>
   tracked(rpc<{ ok: boolean; error?: string; bestball?: string[] }>('set_league_bestball',
     { p_league_id: leagueId, p_slots: slots }),
     Ev.commishAction, { tool: 'bestball', count: slots.length });
+/** The classic starting lineup (0161): counts per slot type (QB/RB/WR/TE/
+ *  FLEX/SFLX/WRT/K/DEF/DL/LB/DB/IDP). Frozen once the draft starts. */
+export const setLeagueClassicRoster = (leagueId: string, roster: Record<string, number>) =>
+  tracked(rpc<{ ok: boolean; error?: string; roster?: Record<string, number>; starters?: number }>('set_league_classic_roster',
+    { p_league_id: leagueId, p_roster: roster }),
+    Ev.commishAction, { tool: 'classic_roster' });
 /** Full classic scoring overrides (0160) — camelCase ClassicScoring keys,
  *  sanitized + clamped server-side; {} resets to the engine defaults. */
 export const setLeagueClassicScoring = (leagueId: string, scoring: Record<string, number>) =>
@@ -1764,7 +1770,7 @@ export const closeLeagueListing = (leagueId: string) =>
 export interface BoardPreview {
   ok: boolean; error?: string;
   name?: string; season?: string; avatar_url?: string | null; blurb?: string | null;
-  game_mode?: 'drip' | 'classic'; ppr?: number; bestball?: string[];
+  game_mode?: 'drip' | 'classic'; ppr?: number; bestball?: string[]; roster?: Record<string, number>;
   seats_total?: number; seats_open?: number;
   draft?: { status: string; mode: string; rounds: number; pick_seconds: number;
             budget?: number | null; night?: { start_min: number; end_min: number } | null } | null;
