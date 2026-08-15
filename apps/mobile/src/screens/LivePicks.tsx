@@ -26,7 +26,7 @@ import {
   myUnlocks, armUnlock, disarmUnlock, myComboQty,
   myWallet, ensureWallet,
   liveSlate, matchupTeams, matchupPremium, startCheckout, friendlyError,
-  getMatchup, getMatchupState, getRevealedPicks, subscribeMatchup, weekGameFeeds, weekLivePlays,
+  getMatchup, getMatchupState, getRevealedPicks, revealedOppBuffs, subscribeMatchup, weekGameFeeds, weekLivePlays,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
   type WindowScore, type RevealedPick, type GameFeedRow,
   nativeTeamState, loadLiveInjuries, loadTeamOverrides,
@@ -48,6 +48,8 @@ import { ShopModal } from '../ui/ShopModal';
 import { PowerupHand, HAND_TAB_H, type HandCard } from '../ui/PowerupHand';
 import { Duel, round1 } from '../ui/Duel';
 import { FieldView } from '../ui/FieldView';
+import { PlayLog } from '../ui/PlayLog';
+import { liveDuelEvents } from '@drip/core/data/duelLog';
 import { Overlay } from '../ui/Overlay';
 import { CommishKit } from '../ui/CommishKit';
 import { clearLeagueFlags } from '@drip/core/data/commish';
@@ -112,6 +114,10 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   const [roster, setRoster] = useState<{ leagueId: string; rosterId: number } | null>(null);
   // Real-time power-ups league switch (0155) — off refuses arms with a clear line.
   const [liveBuffsOn, setLiveBuffsOn] = useState(true);
+  // The live duel log (0193): which pair's log is open, + the opponent's
+  // revealed buff set the resolution needs.
+  const [logFor, setLogFor] = useState<{ win: string; slot: string } | null>(null);
+  const [oppBuffs, setOppBuffs] = useState<string[]>([]);
   const [controller, setController] = useState<Controller>('human');
   // Why this roster is locked out of picks/power-ups (native leagues; null = legal).
   const [rosterIssue, setRosterIssue] = useState<string | null>(null);
@@ -284,6 +290,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           if (mm) setMatchup(mm);
           setScores(ss); setRevealed(pk2);
           if (lp.length) setLivePlays(m.week, liveRowsToPbp(lp));
+          revealedOppBuffs(m.id, userId).then((b) => { if (alive && b) setOppBuffs(b); }).catch(() => {});
           // Install the week's feeds so gameFeedFor() resolves them. The live
           // overlay is exclusive per week — a live board must never fall through
           // to baked 2025 drives, which would draw a plausible, wrong field.
@@ -317,6 +324,22 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   /** Window labels from the week's OWN windows — a preseason cluster has no
    *  entry in the regular-season list and would render as its raw id. */
   const winLabelFor = (id: string) => wins.find((w) => String(w.id) === id)?.label ?? id.toUpperCase();
+
+  // The live duel log (0193): one engine run per open — resolveLiveMatchup
+  // over the revealed picks with events captured. The plays are already in
+  // the engine (refreshLive's setLivePlays); computing lazily on logFor means
+  // a board that never opens a log never pays for the resolution.
+  const duelEvents = useMemo(() => {
+    if (!logFor || !matchup) return null;
+    try {
+      return liveDuelEvents(
+        revealed.filter((p) => p.app_user_id === userId),
+        revealed.filter((p) => p.app_user_id !== userId),
+        matchup.week, youAreHome, [...buffs], oppBuffs,
+      );
+    } catch { return null; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logFor, revealed, matchup?.week, youAreHome, buffs, oppBuffs]);
 
   /** The field(s) under one duel: the real NFL games the two players are in.
    *
@@ -356,6 +379,11 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     return (
       <View style={{ gap: 6 }}>
         {withFeed.map((tm) => <FieldView key={tm} week={week} team={tm} clock={Number.MAX_SAFE_INTEGER} />)}
+        {/* the live duel log (0193): the founder's minutes view, on demand */}
+        <Pressable hitSlop={6} onPress={() => { tap(); setLogFor({ win, slot }); }}
+          style={{ alignSelf: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 11, paddingVertical: 5 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.dim }}>▸ DUEL LOG · plays & minutes</Text>
+        </Pressable>
       </View>
     );
   };
@@ -1148,6 +1176,22 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
                 <Mono size={9} tone="faint">{slugMeta(op.slug).team}</Mono>
               </View>
             ));
+          })()}
+        </ScrollView>
+      </Overlay>
+
+      {/* the live duel log (0193) — the founder's minutes view, on the phone */}
+      <Overlay visible={!!logFor}
+        title={logFor ? `⚔ ${winLabelFor(logFor.win)} duel log` : ''}
+        subtitle="PLAYS jump · MINUTES shows drip accrue between them · BANK NOW matches the card"
+        onClose={() => setLogFor(null)}>
+        <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 30 }}>
+          {(() => {
+            const evs = logFor ? duelEvents?.get(`${logFor.win}|${logFor.slot}`) : undefined;
+            if (!evs?.length) {
+              return <Mono size={10} tone="faint">No events yet — the log fills once this window's games kick.</Mono>;
+            }
+            return <PlayLog events={evs} youName="YOU" theirName="THEM" />;
           })()}
         </ScrollView>
       </Overlay>
