@@ -1600,6 +1600,14 @@ export async function myDraftQueue(leagueId: string, rosterId: number): Promise<
 }
 export const setAutodraft = (leagueId: string, rosterId: number, on: boolean) =>
   rpc<{ ok: boolean; error?: string; autodraft?: boolean }>('set_autodraft', { p_league_id: leagueId, p_roster_id: rosterId, p_on: on });
+/** Commissioner sets/clears the draft's overnight quiet hours (0153). Both
+ *  null clears; minutes since midnight ET. A live draft's running clocks are
+ *  re-based server-side so a fresh pause can't be beaten by an old deadline. */
+export const setDraftNight = (leagueId: string, startMin: number | null = null, endMin: number | null = null) =>
+  tracked(rpc<{ ok: boolean; error?: string; start_min?: number | null; end_min?: number | null }>('set_draft_night', {
+    p_league_id: leagueId, p_start_min: startMin, p_end_min: endMin,
+  }), Ev.commishAction, { tool: 'draft_night', on: startMin != null });
+
 export const commishPauseDraft = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string }>('commish_pause_draft', { p_league_id: leagueId });
 export const commishResumeDraft = (leagueId: string) =>

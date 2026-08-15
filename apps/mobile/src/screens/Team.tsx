@@ -24,6 +24,7 @@ import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { AvatarGrid } from '../ui/AvatarGrid';
+import { PushPrefs } from '../ui/SettingsModal';
 import { Playoffs, Standings } from '../ui/LeagueExtras';
 import { TradeCenter } from '../ui/TradeCenter';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
@@ -218,6 +219,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
         </View>
         {!!err && <Notice tone="opp"><Mono size={10} tone="opp">{err}</Mono></Notice>}
         {identityCard}
+        <Card><PushPrefs /></Card>
         <Card>
           <Display size={15}>Rosters arrive at the draft</Display>
           <Mono size={10} style={{ marginTop: 8, lineHeight: 16 }}>
@@ -244,6 +246,8 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
       </View>
       {!!err && <Notice tone="opp"><Mono size={10} tone="opp">{err}</Mono></Notice>}
       {identityCard}
+      {/* notification mutes live with the rest of your options (founder's call) */}
+      <Card><PushPrefs /></Card>
 
       {/* over-limit lockout: no adds/claims/weekly lineups until legal */}
       {team.roster_issue && (
