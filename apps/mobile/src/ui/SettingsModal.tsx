@@ -212,6 +212,7 @@ const PUSH_KINDS: { key: string; label: string }[] = [
   { key: 'chat', label: '💬 mentions & DMs' },
   { key: 'trades', label: '⇄ trade offers' },
   { key: 'waivers', label: '✚ waiver results' },
+  { key: 'draft', label: '⛏ draft alerts' },
 ];
 
 function PushPrefs() {
