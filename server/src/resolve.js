@@ -85,8 +85,14 @@ export async function injectWeekPlays(week) {
  *  when they have no picks at all (caller then uses the auto-lineup fallback).
  *  Without the distinction, a manager's real-but-unsealed week would resolve as
  *  a phantom AI lineup until their first window locked. */
+// Saved picks score for ANY claimed seat (founder's ruling, live playtest
+// 8/15): a manager who set a lineup gets scored on it whether or not the seat
+// is "enrolled" — what the board reveals is what the resolver fields.
+// Enrollment still gates everything else it gated; it just no longer zeroes a
+// lineup somebody actually set. Truly empty/absent seats keep the aiSide /
+// policy fallbacks below.
 async function enrolledPicks(matchup, membership, ctx) {
-  if (!(membership?.enrolled && membership.app_user_id && matchup.status !== 'scheduled')) return null;
+  if (!(membership?.app_user_id && matchup.status !== 'scheduled')) return null;
   const key = `${matchup.id}:${membership.app_user_id}`;
   if (ctx) {
     const ps = ctx.picks.get(key);
