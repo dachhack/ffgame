@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueBestball, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
-import { CLASSIC_SLOTS } from '@drip/core/engine/classic';
+import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueBestball, setLeagueClassicScoring, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
+import { CLASSIC_SLOTS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING } from '@drip/core/engine/classic';
 import { LeagueRow, type LeagueTab } from './AdminPage';
 import { card, linkBtn, mono, Muted, errMsg } from './adminUi';
 
@@ -123,9 +123,34 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
   const [bestball, setBestball] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Full classic scoring (0160): drafts are strings so partial typing never
+  // fights the keyboard; parse + diff against the engine defaults on save.
+  const [scOpen, setScOpen] = useState(false);
+  const [scDraft, setScDraft] = useState<Record<string, string>>({});
+  const scInit = (over: Record<string, number>) => {
+    const d: Record<string, string> = {};
+    for (const f of CLASSIC_SCORING_FIELDS) d[f.key] = String(over[f.key] ?? DEFAULT_CLASSIC_SCORING[f.key]);
+    setScDraft(d);
+  };
   useEffect(() => {
-    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setBestball(r.bestball ?? []); } }).catch(() => {});
+    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setBestball(r.bestball ?? []); scInit(r.scoring ?? {}); } }).catch(() => {});
   }, [leagueId]);
+  const saveScoring = async (reset = false) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    const over: Record<string, number> = {};
+    if (!reset) {
+      for (const f of CLASSIC_SCORING_FIELDS) {
+        const v = Number(scDraft[f.key]);
+        if (Number.isFinite(v) && v !== DEFAULT_CLASSIC_SCORING[f.key]) over[f.key] = v;
+      }
+    }
+    try {
+      const r = await setLeagueClassicScoring(leagueId, over);
+      if (r.ok) { scInit(r.scoring ?? {}); setNote('✓ scoring saved'); }
+      else setNote(r.error ?? 'failed');
+    } finally { setBusy(false); }
+  };
   const saveBestball = async (slots: string[]) => {
     if (busy) return;
     setBusy(true); setNote(null);
@@ -198,7 +223,36 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
           </div>
         </div>
       )}
-      {note && <div className="mono" style={{ fontSize: 9, color: 'var(--warn, #c66)', marginTop: 8 }}>{note}</div>}
+      {mode === 'classic' && (
+        <div style={{ marginTop: 10 }}>
+          <button onClick={() => setScOpen((o) => !o)} className="mono"
+            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 8.5, fontWeight: 700, color: 'var(--faint)' }}>
+            ⚖ SCORING {scOpen ? '▾' : '▸'} <span style={{ fontWeight: 400 }}>every value is yours to set</span>
+          </button>
+          {scOpen && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 6, marginTop: 8 }}>
+                {CLASSIC_SCORING_FIELDS.map((f) => {
+                  const changed = Number(scDraft[f.key]) !== DEFAULT_CLASSIC_SCORING[f.key];
+                  return (
+                    <label key={f.key} className="mono" style={{ fontSize: 7.5, fontWeight: 700, color: changed ? 'var(--you)' : 'var(--faint)', display: 'grid', gap: 3 }}>
+                      {f.label}{f.perYard ? ' /YD' : ''}
+                      <input value={scDraft[f.key] ?? ''} inputMode="decimal"
+                        onChange={(e) => setScDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+                        style={{ fontFamily: 'inherit', fontSize: 11, padding: '5px 6px', background: 'var(--bg)', color: 'var(--text)', border: `1px solid ${changed ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, width: '100%', boxSizing: 'border-box' }} />
+                    </label>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <button onClick={() => void saveScoring()} disabled={busy} className="mono" style={pill(true)}>SAVE SCORING</button>
+                <button onClick={() => void saveScoring(true)} disabled={busy} className="mono" style={pill(false)}>RESET TO STANDARD</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      {note && <div className="mono" style={{ fontSize: 9, color: note.startsWith('✓') ? 'var(--faint)' : 'var(--warn, #c66)', marginTop: 8 }}>{note}</div>}
     </div>
   );
 }

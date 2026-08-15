@@ -10,13 +10,14 @@
 // stream the drip boards run on, refreshed every 60s.
 import { useEffect, useMemo, useState } from 'react';
 import type { Pos } from '@drip/core/types';
-import { CLASSIC_SLOTS, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick } from '@drip/core/engine/classic';
+import { CLASSIC_SLOTS, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring } from '@drip/core/engine/classic';
+import { setLeagueFlags } from '@drip/core/data/commish';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
-  leagueGameMode, weekLivePlays, friendlyError,
+  leagueGameMode, weekLivePlays, friendlyError, playerFlags,
   type LiveMatchup, type PoolPlayer, type TeamInfo,
 } from '@drip/core/data/liveApi';
 import { PlayerImg, PosPill } from '../app/ui';
@@ -50,6 +51,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
   const [ros, setRos] = useState<{ leagueId: string; rosterId: number } | null>(null);
   const [ppr, setPpr] = useState(1);
+  const [scoring, setScoring] = useState<Record<string, number>>({});
+  const [flagsVer, setFlagsVer] = useState(0);
   const [bestball, setBestball] = useState<string[]>([]);
   const [pool, setPool] = useState<PoolPlayer[]>([]);
   const [oppPool, setOppPool] = useState<PoolPlayer[]>([]);
@@ -75,7 +78,12 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         setMatchup(m);
         leagueGameMode(r.leagueId).then((gm) => {
           if (gm.ok && gm.ppr != null) setPpr(Number(gm.ppr));
-          if (gm.ok) setBestball(gm.bestball ?? []);
+          if (gm.ok) { setBestball(gm.bestball ?? []); setScoring(gm.scoring ?? {}); }
+        }).catch(() => {});
+        // Flag rules (0144) bite classic scoring (bonus_mult / bonus_pts) and
+        // the best-ball fill (no_start) — same cache the drip screens keep.
+        playerFlags(r.leagueId).then((f) => {
+          if (Array.isArray(f)) { setLeagueFlags(r.leagueId, f); setFlagsVer((v) => v + 1); }
         }).catch(() => {});
         const oppRoster = m.home_roster_id === r.rosterId ? m.away_roster_id : m.home_roster_id;
         matchupTeams(r.leagueId, [r.rosterId, oppRoster]).then((t: Record<number, TeamInfo>) => setNames({
@@ -131,11 +139,12 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     return () => { stop = true; window.clearInterval(t); };
   }, [locked, matchup, userId, ros, bestball.length]);
 
+  const sc = useMemo<Partial<ClassicScoring>>(() => ({ ...scoring, ppr }), [scoring, ppr]);
   const pts = useMemo(() => {
-    void playsAt;
+    void playsAt; void flagsVer;
     if (!matchup) return () => 0;
-    return (slug: string | null | undefined) => (slug ? classicPoints(mkPlayer(slug), matchup.week, ppr) : 0);
-  }, [matchup, ppr, playsAt]);
+    return (slug: string | null | undefined) => (slug ? classicPoints(mkPlayer(slug), matchup.week, sc) : 0);
+  }, [matchup, sc, playsAt, flagsVer]);
 
   const bb = useMemo(() => new Set(bestball), [bestball]);
   // The EFFECTIVE lineup per side: manual picks in non-best-ball slots, plus
@@ -152,7 +161,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         if (manual[d.slot]) manualPicks.push({ slot: d.slot, player: mkPlayer(manual[d.slot]!) });
       }
       if (locked && matchup && bb.size) {
-        for (const f of bestballFill(manualPicks, bestball, rosterSlugs.map(mkPlayer), matchup.week, ppr)) out[f.slot] = f.player.id;
+        for (const f of bestballFill(manualPicks, bestball, rosterSlugs.map(mkPlayer), matchup.week, sc)) out[f.slot] = f.player.id;
       }
       return out;
     };
@@ -160,7 +169,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
       mine: build(mine, pool.map((p) => p.slug)),
       theirs: build(theirs, oppPool.map((p) => p.slug)),
     };
-  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, ppr, playsAt]);
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, playsAt, flagsVer]);
 
   // Only MANUAL starters reserve players; best-ball slots never block the picker.
   const used = useMemo(() => new Set(

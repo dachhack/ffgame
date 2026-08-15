@@ -137,6 +137,9 @@ const modeOfSettings = (s) => ({
   mode: s?.game_mode === 'classic' ? 'classic' : 'drip',
   ppr: Number.isFinite(Number(s?.ppr)) ? Number(s.ppr) : 1,
   bestball: Array.isArray(s?.bestball) ? s.bestball.map(String) : [],
+  // The commissioner's classic scoring overrides (0160) — raw; the engine's
+  // normalizeClassicScoring supplies every default.
+  scoring: (s?.scoring_classic && typeof s.scoring_classic === 'object') ? s.scoring_classic : null,
 });
 async function leagueModeOf(leagueId, ctx) {
   if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1, bestball: [] };
@@ -387,9 +390,13 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       roster: rosters.get(rosterId) ?? [],
       bestball: gameMode.bestball,
     });
+    // Flags (0144) bite classic scoring too (bonus_mult / bonus_pts /
+    // no_start-in-best-ball) — install synchronously right before the resolve,
+    // the same isolation rule the drip branches follow.
+    setLeagueFlags(matchup.league_id, flagRows);
     const r = resolveClassicMatchup(
       sideOf(homePicks, matchup.home_roster_id), sideOf(awayPicks, matchup.away_roster_id),
-      matchup.week, gameMode.ppr);
+      matchup.week, { ...(gameMode.scoring ?? {}), ppr: gameMode.ppr });
     for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
     slotRows = r.slots;
     homeTotal = r.home; awayTotal = r.away;
