@@ -601,15 +601,17 @@ function CommishSeen({ leagueId }: { leagueId: string }) {
 // armed before the flip stay reclaimable. The shop's pre-game power-ups are a
 // different lever and are untouched.
 // Normie mode (0157): DRIP ⇄ CLASSIC + the PPR knob while classic. The server
-// freezes the mode once the draft starts; its refusal shows inline.
+// freezes the mode once the draft starts; its refusal shows inline. CLASSIC
+// only offers itself where the founder's per-league flag (0158) is on.
 function GameModeCard({ leagueId }: { leagueId: string }) {
   const t = useTheme();
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
   const [ppr, setPpr] = useState(1);
+  const [classicOk, setClassicOk] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   useEffect(() => {
-    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); } }).catch(() => {});
+    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); } }).catch(() => {});
   }, [leagueId]);
   const set = async (m: 'drip' | 'classic', p?: number) => {
     if (busy || mode === null) return;
@@ -638,7 +640,9 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
         </View>
         <View style={{ flexDirection: 'row', gap: 6 }}>
           <Pill on={mode === 'drip'} label="DRIP" onPress={() => void set('drip')} />
-          <Pill on={mode === 'classic'} label="CLASSIC" onPress={() => void set('classic')} />
+          {(classicOk || mode === 'classic')
+            ? <Pill on={mode === 'classic'} label="CLASSIC" onPress={() => void set('classic')} />
+            : <Mono size={8} tone="faint" style={{ alignSelf: 'center' }}>CLASSIC{'\n'}not unlocked</Mono>}
         </View>
       </View>
       {mode === 'classic' && (
