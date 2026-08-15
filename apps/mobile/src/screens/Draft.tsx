@@ -16,7 +16,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, Text
 import {
   draftState, draftTick, leaguePool, makeDraftPick, myDraftQueue, nativeTeamState, nominate, placeBid,
   setAutodraft, setDraftQueue, setLotProxy, startDraft, seedLeaguePool,
-  commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick,
+  commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   friendlyError, type DraftState, type LeaguePoolPlayer, type NativeTeamState, type PosCaps,
 } from '@drip/core/data/liveApi';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
@@ -69,6 +69,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   const [proxyDraft, setProxyDraft] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [nightOpen, setNightOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
   const skew = useRef(0);
   const ticking = useRef(false);
@@ -354,7 +355,13 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                 : ghost('⏸ PAUSE', () => void run(() => commishPauseDraft(leagueId)))}
               {!auction && ghost('⏭ FORCE PICK', () => void run(() => commishForcePick(leagueId)))}
               {!auction && ghost('↩ UNDO', () => void run(() => commishUndoPick(leagueId)), t.opp)}
+              {ghost(st.night ? `🌙 ${fmtNight(st.night)}` : '🌙 QUIET HRS', () => { setNightOpen((v) => !v); })}
             </View>
+          )}
+          {isCommish && nightOpen && (
+            <NightEditor current={st.night ?? null} busy={busy}
+              onSet={(s, e) => { setNightOpen(false); void run(() => setDraftNight(leagueId, s, e)); }}
+              onClear={() => { setNightOpen(false); void run(() => setDraftNight(leagueId)); }} />
           )}
         </Card>
       )}
@@ -557,5 +564,55 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
         </Card>
       )}
     </ScrollView>
+  );
+}
+
+
+// ── overnight pause (0153) ───────────────────────────────────────────────────
+// Hour-granular quiet window, ET — the engine (awake_deadline, 0069) has
+// understood these minutes since before they were settable; this is just the
+// commissioner's dial. Clocks re-base server-side on save.
+const fmtHour = (m: number) => {
+  const h = Math.floor(m / 60) % 24;
+  return `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? 'a' : 'p'}`;
+};
+const fmtNight = (n: { start_min: number; end_min: number }) => `${fmtHour(n.start_min)}–${fmtHour(n.end_min)} ET`;
+
+function NightEditor({ current, busy, onSet, onClear }: {
+  current: { start_min: number; end_min: number } | null;
+  busy: boolean;
+  onSet: (startMin: number, endMin: number) => void;
+  onClear: () => void;
+}) {
+  const t = useTheme();
+  const [start, setStart] = useState(current ? Math.floor(current.start_min / 60) : 22);
+  const [end, setEnd] = useState(current ? Math.floor(current.end_min / 60) : 9);
+  const step = (v: number, d: number) => (v + d + 24) % 24;
+  const dial = (label: string, v: number, set: (n: number) => void) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Mono size={8.5} tone="faint" track={0.1}>{label}</Mono>
+      <Pressable hitSlop={6} onPress={() => { tap(); set(step(v, -1)); }}><Text style={{ fontFamily: MONO, fontSize: 13, color: t.dim }}>−</Text></Pressable>
+      <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '700', color: t.text, minWidth: 34, textAlign: 'center' }}>{fmtHour(v * 60)}</Text>
+      <Pressable hitSlop={6} onPress={() => { tap(); set(step(v, 1)); }}><Text style={{ fontFamily: MONO, fontSize: 13, color: t.dim }}>＋</Text></Pressable>
+    </View>
+  );
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 8, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
+      <Mono size={8.5} tone="faint" track={0.1}>🌙 PAUSE (ET)</Mono>
+      {dial('FROM', start, setStart)}
+      {dial('TO', end, setEnd)}
+      <Pressable disabled={busy || start === end} onPress={() => { tap(); onSet(start * 60, end * 60); }}
+        style={{ backgroundColor: t.you, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6, opacity: busy || start === end ? 0.5 : 1 }}>
+        <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.onAccent }}>SET</Text>
+      </Pressable>
+      {current && (
+        <Pressable disabled={busy} onPress={() => { tap(); onClear(); }}>
+          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.opp }}>✕ OFF</Text>
+        </Pressable>
+      )}
+      <Mono size={8} tone="faint" style={{ width: '100%', lineHeight: 12 }}>
+        Clocks only burn awake time — no deadline can expire inside the pause. Acting early is always allowed.
+      </Mono>
+    </View>
   );
 }

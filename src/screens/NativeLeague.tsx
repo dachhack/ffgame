@@ -22,7 +22,8 @@ import {
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
   setTeamName, setTeamAvatar, setLeagueAvatar,
   setDraftQueue, myDraftQueue, setAutodraft,
-  commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick,
+  commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
+  myPushTokens, setPushPrefs, type PushTokenRow,
   nominate, placeBid, setLotProxy,
   leagueTrades, proposeTrade, respondTrade, cancelTrade,
   myFavorites, tradeSignals, setTradeSignal, playerFlags,
@@ -384,6 +385,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   // re-renders the FlagChips (same contract as the live board).
   const [, setFlagVer] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [nightOpen, setNightOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const skew = useRef(0); // serverNow − clientNow, for an honest countdown
@@ -675,7 +677,15 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
               {!auction && <button onClick={() => run(() => commishForcePick(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5 }}>⏭ FORCE PICK</button>}
               {!auction && <button onClick={() => run(() => commishUndoPick(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5, color: 'var(--opp)' }}>↩ UNDO PICK</button>}
               {st.is_mock && <button onClick={deleteMock} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5, color: 'var(--opp)' }}>🗑 DELETE MOCK</button>}
+              <button onClick={() => setNightOpen((v) => !v)} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5 }}>
+                {st.night ? `🌙 ${fmtNightWin(st.night)}` : '🌙 QUIET HRS'}
+              </button>
             </div>
+          )}
+          {isCommish && nightOpen && (
+            <NightEditorWeb current={st.night ?? null} busy={busy}
+              onSet={(s, e) => { setNightOpen(false); run(() => setDraftNight(leagueId, s, e)); }}
+              onClear={() => { setNightOpen(false); run(() => setDraftNight(leagueId)); }} />
           )}
           {err && <div className="mono" style={errStyle}>{err}</div>}
         </div>
@@ -1074,6 +1084,9 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
       <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>⇄ Team management</div>
       {err && <div className="mono" style={{ ...errStyle, marginBottom: 10 }}>{err}</div>}
       <div ref={optionsRef}>{identityCard}</div>
+      {/* notification mutes live with the rest of your options (founder's call) —
+          prefs are server-side per device, so the web can flip the phone's. */}
+      <NotifPrefsCard />
       <div style={card}>
         <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>Rosters arrive at the draft</div>
         <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Waivers and free agency open once the draft is complete. Set your team name and avatar now — they show on the draft board.</div>
@@ -1093,6 +1106,9 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
       {err && <div className="mono" style={{ ...errStyle, marginBottom: 10 }}>{err}</div>}
 
       <div ref={optionsRef}>{identityCard}</div>
+      {/* notification mutes live with the rest of your options (founder's call) —
+          prefs are server-side per device, so the web can flip the phone's. */}
+      <NotifPrefsCard />
 
       {/* over-limit lockout: no adds/claims/weekly lineups until legal */}
       {team.roster_issue && (
@@ -1541,6 +1557,101 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+
+// ── overnight pause (0153), web ─────────────────────────────────────────────
+const fmtHourET = (m: number) => {
+  const h = Math.floor(m / 60) % 24;
+  return `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? 'a' : 'p'}`;
+};
+const fmtNightWin = (n: { start_min: number; end_min: number }) => `${fmtHourET(n.start_min)}–${fmtHourET(n.end_min)} ET`;
+const HOURS = Array.from({ length: 24 }, (_, h) => h);
+
+function NightEditorWeb({ current, busy, onSet, onClear }: {
+  current: { start_min: number; end_min: number } | null;
+  busy: boolean;
+  onSet: (startMin: number, endMin: number) => void;
+  onClear: () => void;
+}) {
+  const [start, setStart] = useState(current ? Math.floor(current.start_min / 60) : 22);
+  const [end, setEnd] = useState(current ? Math.floor(current.end_min / 60) : 9);
+  const sel = (v: number, set: (n: number) => void) => (
+    <select value={v} onChange={(e) => set(Number(e.target.value))} className="mono"
+      style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, fontSize: 10.5, padding: '4px 6px' }}>
+      {HOURS.map((h) => <option key={h} value={h}>{fmtHourET(h * 60)}</option>)}
+    </select>
+  );
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 8, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 7, padding: '8px 10px' }}>
+      <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>🌙 OVERNIGHT PAUSE (ET)</span>
+      <span className="mono" style={{ fontSize: 9, color: 'var(--dim)' }}>from</span>{sel(start, setStart)}
+      <span className="mono" style={{ fontSize: 9, color: 'var(--dim)' }}>to</span>{sel(end, setEnd)}
+      <button onClick={() => onSet(start * 60, end * 60)} disabled={busy || start === end} className="mono"
+        style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 5, padding: '5px 12px', cursor: 'pointer', opacity: busy || start === end ? 0.5 : 1 }}>SET</button>
+      {current && (
+        <button onClick={onClear} disabled={busy} className="mono"
+          style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--opp)', background: 'none', border: 'none', cursor: 'pointer' }}>✕ OFF</button>
+      )}
+      <span className="mono" style={{ width: '100%', fontSize: 8.5, color: 'var(--faint)', lineHeight: 1.5 }}>
+        Clocks only burn awake time — no pick or bid deadline can expire inside the pause. Acting early stays allowed.
+      </span>
+    </div>
+  );
+}
+
+// ── notification mutes in the options (0153), web ───────────────────────────
+// The phone's push prefs, editable from the browser: prefs live server-side
+// per registered device, so this lists your devices and flips their mutes.
+// No device yet → a pointer at the app, where registration happens.
+const NOTIF_KINDS: { key: string; label: string }[] = [
+  { key: 'lineup', label: '⚠ lineup locks soon' },
+  { key: 'chat', label: '💬 mentions & DMs' },
+  { key: 'trades', label: '⇄ trade offers' },
+  { key: 'waivers', label: '✚ waiver results' },
+  { key: 'draft', label: '⛏ draft alerts' },
+];
+
+function NotifPrefsCard() {
+  const [tokens, setTokens] = useState<PushTokenRow[] | null>(null);
+  useEffect(() => { myPushTokens().then(setTokens).catch(() => setTokens([])); }, []);
+  const toggle = (tok: PushTokenRow, key: string) => {
+    const next = { ...(tok.prefs ?? {}), [key]: tok.prefs?.[key] === false };
+    setTokens((cur) => (cur ?? []).map((x) => (x.token === tok.token ? { ...x, prefs: next } : x)));
+    void setPushPrefs(tok.token, next).catch(() => {});
+  };
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: '12px 14px' }}>
+      <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 8 }}>🔔 NOTIFICATIONS</div>
+      {tokens === null && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading…</div>}
+      {tokens?.length === 0 && (
+        <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', lineHeight: 1.5 }}>
+          No phone registered — push notifications come from the Drip Fantasy app. Sign in there once and your device shows up here.
+        </div>
+      )}
+      {tokens?.map((tok) => (
+        <div key={tok.token} style={{ marginBottom: 6 }}>
+          {(tokens.length > 1) && (
+            <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginBottom: 4 }}>{tok.platform} · seen {new Date(tok.last_seen_at).toLocaleDateString()}</div>
+          )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {NOTIF_KINDS.map((k) => {
+              const on = tok.prefs?.[k.key] !== false;
+              return (
+                <button key={k.key} onClick={() => toggle(tok, k.key)} className="mono"
+                  style={{ fontSize: 9, fontWeight: 700, borderRadius: 999, padding: '4px 10px', cursor: 'pointer', color: on ? 'var(--you)' : 'var(--dim)', background: on ? 'color-mix(in srgb, var(--you) 12%, transparent)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}` }}>
+                  {k.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+        Lit = on. Mutes apply per kind, per device — they follow your account, so flipping them here reaches your phone.
+      </div>
     </div>
   );
 }

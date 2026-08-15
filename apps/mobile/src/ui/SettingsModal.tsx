@@ -215,7 +215,7 @@ const PUSH_KINDS: { key: string; label: string }[] = [
   { key: 'draft', label: '⛏ draft alerts' },
 ];
 
-function PushPrefs() {
+export function PushPrefs() {
   const t = useTheme();
   const [token, setToken] = useState<string | null>(registeredPushToken());
   const [prefs, setPrefs] = useState<Record<string, boolean>>({});
