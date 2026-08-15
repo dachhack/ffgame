@@ -101,3 +101,4 @@ $RUN -f scripts/db/draft-night-probes.sql | grep -E "PROBE FAIL|ALL DRAFT-NIGHT 
 $RUN -f scripts/db/league-signals-probes.sql | grep -E "PROBE FAIL|ALL LEAGUE-SIGNALS PROBES" || { echo "LEAGUE-SIGNALS PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/live-buffs-probes.sql | grep -E "PROBE FAIL|ALL LIVE-BUFFS PROBES" || { echo "LIVE-BUFFS PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/league-preview-probes.sql | grep -E "PROBE FAIL|ALL LEAGUE-PREVIEW PROBES" || { echo "LEAGUE-PREVIEW PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/game-mode-probes.sql | grep -E "PROBE FAIL|ALL GAME-MODE PROBES" || { echo "GAME-MODE PROBES FAILED"; exit 1; }

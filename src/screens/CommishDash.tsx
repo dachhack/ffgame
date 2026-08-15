@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
+import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { LeagueRow, type LeagueTab } from './AdminPage';
 import { card, linkBtn, mono, Muted, errMsg } from './adminUi';
 
@@ -50,6 +50,7 @@ export function CommishDash({ onBack, focusId, defaultTab }: {
             <LeagueRow l={l} reload={load} admin={false} mine defaultTab={defaultTab ?? 'members'}
               collapsible={shown.length > 1} defaultOpen={i === 0} />
             <LastSeenCard leagueId={l.league_id} />
+            <GameModeCard leagueId={l.league_id} />
             <LiveBuffsCard leagueId={l.league_id} />
           </div>
         ))}
@@ -111,6 +112,59 @@ function LastSeenCard({ leagueId }: { leagueId: string }) {
 
 
 // ── real-time power-ups switch (0155) ────────────────────────────────────────
+// Normie mode (0157): DRIP ⇄ CLASSIC, plus the PPR knob while classic. Frozen
+// once the draft starts — the server refuses and the card says why.
+function GameModeCard({ leagueId }: { leagueId: string }) {
+  const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
+  const [ppr, setPpr] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); } }).catch(() => {});
+  }, [leagueId]);
+  const set = async (m: 'drip' | 'classic', p?: number) => {
+    if (busy || mode === null) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueGameMode(leagueId, m, p);
+      if (r.ok) { setMode(m); if (p != null) setPpr(p); }
+      else setNote(r.error ?? 'failed');
+    } finally { setBusy(false); }
+  };
+  const pill = (on: boolean): React.CSSProperties => ({
+    fontSize: 10, fontWeight: 700, borderRadius: 999, padding: '6px 13px', cursor: 'pointer',
+    color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)',
+    border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, opacity: busy || mode === null ? 0.5 : 1,
+  });
+  return (
+    <div style={{ ...card, marginTop: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>🎮 GAME MODE</div>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
+            DRIP is the full game — metrics, windows, power-ups. CLASSIC is traditional fantasy: standard scoring, one weekly QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses or power-ups. Locks once the draft starts.
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <button onClick={() => void set('drip')} disabled={busy || mode === null} className="mono" style={pill(mode === 'drip')}>DRIP</button>
+          <button onClick={() => void set('classic')} disabled={busy || mode === null} className="mono" style={pill(mode === 'classic')}>CLASSIC</button>
+        </div>
+      </div>
+      {mode === 'classic' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10 }}>
+          <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', fontWeight: 700 }}>RECEPTIONS</span>
+          {([0, 0.5, 1] as const).map((p) => (
+            <button key={p} onClick={() => void set('classic', p)} disabled={busy} className="mono" style={pill(ppr === p)}>
+              {p === 0 ? 'NON-PPR' : p === 0.5 ? '½ PPR' : 'FULL PPR'}
+            </button>
+          ))}
+        </div>
+      )}
+      {note && <div className="mono" style={{ fontSize: 9, color: 'var(--warn, #c66)', marginTop: 8 }}>{note}</div>}
+    </div>
+  );
+}
+
 function LiveBuffsCard({ leagueId }: { leagueId: string }) {
   const [on, setOn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);

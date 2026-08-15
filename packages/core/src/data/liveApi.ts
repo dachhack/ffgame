@@ -1199,6 +1199,18 @@ export const setLeagueLiveBuffs = (leagueId: string, on: boolean) =>
 export const leagueLiveBuffs = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; on?: boolean }>('league_live_buffs', { p_league_id: leagueId });
 
+// ── Game mode (0157): NORMIE MODE — classic fantasy as a league setting ──────
+/** 'drip' (default) or 'classic' — classic = standard scoring, one weekly
+ *  QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses, no power-ups. Frozen once
+ *  the draft starts. `ppr` (0 | 0.5 | 1, default 1) applies in classic only. */
+export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; can_edit?: boolean }
+export const setLeagueGameMode = (leagueId: string, mode: 'drip' | 'classic', ppr?: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_game_mode',
+    { p_league_id: leagueId, p_mode: mode, p_ppr: ppr ?? null }),
+    Ev.commishAction, { tool: 'game_mode', mode });
+export const leagueGameMode = (leagueId: string) =>
+  rpc<GameModeInfo>('league_game_mode', { p_league_id: leagueId });
+
 export const LIVE_BUFFS = ['overtime', 'ot-shield', 'momentum', 'garbage-time', 'amp-2', 'amp-3', 'floodgates', 'counter-nuke', 'insurance', 'fg-stack'] as const;
 export const armBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; detail?: string; buffs?: string[] }>('arm_buff', { p_matchup_id: matchupId, p_buff: buff });
 export const disarmBuff = (matchupId: string, buff: string) => rpc<{ ok: boolean; error?: string; detail?: string; buffs?: string[] }>('disarm_buff', { p_matchup_id: matchupId, p_buff: buff });
@@ -1734,6 +1746,7 @@ export const closeLeagueListing = (leagueId: string) =>
 export interface BoardPreview {
   ok: boolean; error?: string;
   name?: string; season?: string; avatar_url?: string | null; blurb?: string | null;
+  game_mode?: 'drip' | 'classic'; ppr?: number;
   seats_total?: number; seats_open?: number;
   draft?: { status: string; mode: string; rounds: number; pick_seconds: number;
             budget?: number | null; night?: { start_min: number; end_min: number } | null } | null;
