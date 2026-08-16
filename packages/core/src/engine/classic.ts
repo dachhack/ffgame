@@ -637,6 +637,67 @@ export function bestballFill(manual: ClassicPick[], bestball: string[], roster: 
   return fills;
 }
 
+// ── Which SPOT will a drafted player fill? (draft room's TEAMS panel) ────────
+// The draft room used to list a team's picks as R1..R12. What a manager
+// actually wants to know mid-draft is "what does my LINEUP look like" — the
+// picks against the starting spots they will occupy, under the commissioner's
+// own labels.
+//
+// This is an ASSIGNMENT problem, not a relabel. Since 0172 a spot carries its
+// own player filter and since 0174 its own name, so eligibility sets OVERLAP
+// without nesting: a player can be legal for several spots, and two spots can
+// each be legal for a player the other needs. A first-fit walk therefore
+// strands starters on the bench beside an empty spot they were eligible for —
+// e.g. spots [FLEX, RB] and picks [RB1, WR1]: first-fit hands FLEX to RB1, and
+// WR1 (FLEX-only) benches while RB sits empty. The panel would be showing a
+// lineup that the league will not field, which is worse than R1..R12.
+//
+// So: MAXIMUM BIPARTITE MATCHING (Kuhn's augmenting paths). Never leaves a
+// spot empty that some legal arrangement could fill, and never benches a
+// player some legal arrangement could start. Two deliberate tie-breaks make it
+// deterministic and honest about draft priority:
+//   • players are processed in DRAFT ORDER, and Kuhn's never un-matches a
+//     matched player — only moves them — so an earlier pick can never be
+//     benched to seat a later one;
+//   • a player takes a FREE eligible spot (in the league's own spot order)
+//     before disturbing anyone, so RB1/RB2 land in RB/FLEX rather than being
+//     shuffled through an augmenting path into FLEX/RB.
+// Pure and score-free: at draft time nobody's points exist yet, so this answers
+// only "who is legal where", the half of the question that is knowable. Once
+// the season starts `bestballFill` does the score-driven half on top of the
+// same `slotAllows` eligibility.
+export interface SpotPlayer { id: string; pos: string; team?: string | null; exp?: number | null }
+/** One starting spot and its occupant — `null` when nothing on the roster is
+ *  legal for it yet (an unfilled spot is information, not an error). */
+export interface SpotRow { def: ClassicSlotDef; player: SpotPlayer | null }
+export interface SpotAssignment { spots: SpotRow[]; bench: SpotPlayer[] }
+
+export function assignSpots(slots: ClassicSlotDef[], players: SpotPlayer[]): SpotAssignment {
+  // Eligible spot indices per player, in the league's spot order.
+  const legal = players.map((p) => slots.flatMap((d, i) => (slotAllows(d, p) ? [i] : [])));
+  const heldBy: number[] = new Array(slots.length).fill(-1);   // spot index → player index
+  const seen: boolean[] = new Array(slots.length).fill(false);
+  const seat = (pi: number): boolean => {
+    // Free spots first: a player only displaces someone when they must.
+    for (const si of legal[pi]) {
+      if (!seen[si] && heldBy[si] === -1) { seen[si] = true; heldBy[si] = pi; return true; }
+    }
+    for (const si of legal[pi]) {
+      if (seen[si]) continue;
+      seen[si] = true;
+      const held = heldBy[si];   // loop 1 already took any free spot; -1 can't happen, but never recurse on it
+      if (held === -1 || seat(held)) { heldBy[si] = pi; return true; }
+    }
+    return false;
+  };
+  for (let pi = 0; pi < players.length; pi++) { seen.fill(false); seat(pi); }
+  const started = new Set(heldBy.filter((pi) => pi >= 0));
+  return {
+    spots: slots.map((d, si) => ({ def: d, player: heldBy[si] >= 0 ? players[heldBy[si]] : null })),
+    bench: players.filter((_, pi) => !started.has(pi)),   // draft order, unchanged
+  };
+}
+
 /** One side of a classic matchup. `bestball` + `roster` drive the auto-fill;
  *  without them the side is fully manual (the 0157 behavior, unchanged). */
 export interface ClassicSide { picks: ClassicPick[]; roster?: Player[]; bestball?: string[] }

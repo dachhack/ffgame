@@ -1,0 +1,177 @@
+// The draft room's SPOT ASSIGNMENT, checked in Node.
+//
+// `assignSpots` decides what the draft room's TEAMS panel shows: each pick
+// against the starting spot it will fill. It lives in check:parity rather
+// than beside the screens because two hosts render it and a panel that
+// disagrees with the lineup the league can actually field is worse than the
+// R1..R12 list it replaced.
+//
+// The cases that earn their keep are the ones a first-fit gets WRONG: a flex
+// grabbed early that strands a flex-only player, a filtered spot (0172) that
+// must claim its player before a plain spot takes them, and the general
+// property — no arrangement of these players fills more spots than the one
+// shown. That last one is checked by brute force, not by argument.
+import { assignSpots, slotAllows, slotDisplayName, classicSlotsFromSpec } from '../packages/core/src/engine/classic';
+
+let fails = 0;
+const ok = (name, cond, got) => {
+  if (!cond) { fails++; console.log(`FAIL ${name}${got !== undefined ? ` — got ${JSON.stringify(got)}` : ''}`); }
+  else console.log(`ok   ${name}`);
+};
+
+/** Spots from a builder spec, exactly as a league stores them (S1..Sn). */
+const spots = (...spec) => classicSlotsFromSpec(spec);
+/** A drafted player. Draft order is array order. */
+const P = (id, pos, extra = {}) => ({ id, pos, team: 'KC', exp: 3, ...extra });
+/** slot → player id, the shape the panel renders. */
+const seated = (a) => Object.fromEntries(a.spots.map((s) => [s.def.slot, s.player?.id ?? null]));
+const benched = (a) => a.bench.map((p) => p.id);
+const filled = (a) => a.spots.filter((s) => s.player).length;
+
+// ── The plain case: nothing exotic, everyone lands where you'd expect ────────
+{
+  const s = spots({ pos: ['QB'] }, { pos: ['RB'] }, { pos: ['RB'] }, { pos: ['WR'] }, { pos: ['RB', 'WR', 'TE'] });
+  const a = assignSpots(s, [P('rb1', 'RB'), P('wr1', 'WR'), P('qb1', 'QB'), P('rb2', 'RB'), P('te1', 'TE'), P('rb3', 'RB')]);
+  ok('dedicated spots take their own position', seated(a).S1 === 'qb1' && seated(a).S2 === 'rb1' && seated(a).S3 === 'rb2' && seated(a).S4 === 'wr1', seated(a));
+  ok('the flex takes the earliest pick left over', seated(a).S5 === 'te1', seated(a));
+  ok('leftovers bench in draft order', JSON.stringify(benched(a)) === JSON.stringify(['rb3']), benched(a));
+}
+
+// ── The first-fit trap: a flex claimed early ────────────────────────────────
+// Spot order puts FLEX first. First-fit seats RB1 there, and WR1 — who is
+// legal for NOTHING else — benches beside an empty RB spot.
+{
+  const s = spots({ pos: ['RB', 'WR', 'TE'] }, { pos: ['RB'] });
+  const a = assignSpots(s, [P('rb1', 'RB'), P('wr1', 'WR')]);
+  ok('a flex taken early does not bench a flex-only player', filled(a) === 2, seated(a));
+  ok('the displaced pick moves to the spot only it can fill', seated(a).S2 === 'rb1' && seated(a).S1 === 'wr1', seated(a));
+  ok('nothing benches while a spot it fits is empty', benched(a).length === 0, benched(a));
+}
+
+// ── The 0172 filter trap: overlapping, non-nested eligibility ───────────────
+// A rookies-only RB spot and a plain RB spot. The rookie is legal for both;
+// the veteran only for the plain one. Whoever the rookie is offered first,
+// both must start.
+{
+  const s = spots({ pos: ['RB'] }, { pos: ['RB'], max_exp: 0, label: 'ROOKIE RB' });
+  const a = assignSpots(s, [P('rook', 'RB', { exp: 0 }), P('vet', 'RB', { exp: 6 })]);
+  ok('a filtered spot does not lose its only candidate', filled(a) === 2, seated(a));
+  ok('the rookie takes the rookies-only spot', seated(a).S2 === 'rook' && seated(a).S1 === 'vet', seated(a));
+
+  // Reversed draft order — the same two must start, whichever came first.
+  const b = assignSpots(s, [P('vet', 'RB', { exp: 6 }), P('rook', 'RB', { exp: 0 })]);
+  ok('draft order cannot cost a spot', filled(b) === 2 && seated(b).S2 === 'rook', seated(b));
+}
+
+// Two filtered spots whose candidate sets overlap but nest neither way:
+// KC-only and KC/BUF. The KC/BUF spot must not eat the only KC back.
+{
+  const s = spots({ pos: ['RB'], teams: ['KC', 'BUF'] }, { pos: ['RB'], teams: ['KC'] });
+  const a = assignSpots(s, [P('kcRb', 'RB', { team: 'KC' }), P('bufRb', 'RB', { team: 'BUF' })]);
+  ok('crossing team whitelists still seat both', filled(a) === 2, seated(a));
+  ok('the KC-only spot gets the KC back', seated(a).S2 === 'kcRb' && seated(a).S1 === 'bufRb', seated(a));
+}
+
+// ── Eligibility is exactly slotAllows — labels never change it (0174) ───────
+{
+  const s = spots({ pos: ['RB'], label: 'QB' });
+  const a = assignSpots(s, [P('qb1', 'QB'), P('rb1', 'RB')]);
+  ok('a label cannot make a spot take a position it does not accept', seated(a).S1 === 'rb1', seated(a));
+  ok('the label is what the panel calls the spot', slotDisplayName(a.spots[0].def) === 'QB');
+  ok('an unlabelled spot reads its eligibility', slotDisplayName(spots({ pos: ['RB', 'WR', 'TE'] })[0]) === 'FLEX (RB/WR/TE)');
+}
+{
+  // Unknown tenure can't prove eligibility — the engine's no-guess rule.
+  const s = spots({ pos: ['RB'], max_exp: 0 });
+  const a = assignSpots(s, [P('unknown', 'RB', { exp: null })]);
+  ok('unknown tenure cannot fill a tenure-windowed spot', seated(a).S1 === null && benched(a).length === 1, seated(a));
+}
+
+// ── Degenerate shapes hold their shape ──────────────────────────────────────
+{
+  const s = spots({ pos: ['QB'] }, { pos: ['K'] });
+  const empty = assignSpots(s, []);
+  ok('no picks yet: every spot renders empty', filled(empty) === 0 && empty.spots.length === 2, seated(empty));
+  const only = assignSpots(s, [P('te1', 'TE')]);
+  ok('a pick that fits nothing benches, spots stay empty', filled(only) === 0 && benched(only)[0] === 'te1');
+  ok('no spots at all: everyone benches', assignSpots([], [P('rb1', 'RB')]).bench.length === 1);
+}
+{
+  // Nobody is seated twice, and everybody is accounted for exactly once.
+  const s = spots({ pos: ['RB'] }, { pos: ['RB', 'WR', 'TE'] }, { pos: ['WR'] });
+  const picks = [P('a', 'RB'), P('b', 'WR'), P('c', 'RB'), P('d', 'WR'), P('e', 'TE')];
+  const a = assignSpots(s, picks);
+  const ids = [...a.spots.flatMap((x) => (x.player ? [x.player.id] : [])), ...benched(a)];
+  ok('every pick appears exactly once', ids.length === picks.length && new Set(ids).size === picks.length, ids);
+  ok('a seated player is legal for their spot', a.spots.every((x) => !x.player || slotAllows(x.def, x.player)));
+}
+{
+  // Determinism: same input, same answer. The panel repolls every 3 seconds.
+  const s = spots({ pos: ['RB', 'WR', 'TE'] }, { pos: ['RB'] }, { pos: ['WR'] });
+  const picks = [P('a', 'RB'), P('b', 'WR'), P('c', 'TE')];
+  ok('the same draft answers the same way twice',
+    JSON.stringify(seated(assignSpots(s, picks))) === JSON.stringify(seated(assignSpots(s, picks))));
+}
+
+// ── An earlier pick is never benched to seat a later one ────────────────────
+{
+  // One spot, two legal players: the first one drafted holds it.
+  const s = spots({ pos: ['RB'] });
+  const a = assignSpots(s, [P('first', 'RB'), P('second', 'RB')]);
+  ok('draft priority: the earlier pick keeps the contested spot', seated(a).S1 === 'first' && benched(a)[0] === 'second', seated(a));
+}
+
+// ── The property, brute-forced: nothing fills more spots ────────────────────
+// Every case above is an argument; this is a proof over a few hundred shapes.
+// A tiny LCG keeps it reproducible — a probe that fails only sometimes is
+// worse than no probe.
+{
+  let seed = 20260816;
+  const rnd = (n) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+  const POS = ['QB', 'RB', 'WR', 'TE', 'K'];
+  const SETS = [['QB'], ['RB'], ['WR'], ['TE'], ['K'], ['RB', 'WR', 'TE'], ['QB', 'RB', 'WR', 'TE'], ['WR', 'TE']];
+  /** Maximum spots fillable, by exhaustive search over spot→player choices. */
+  const brute = (slots, players) => {
+    let best = 0;
+    const walk = (si, used, got) => {
+      if (got + (slots.length - si) <= best) return;    // can't beat it from here
+      if (si === slots.length) { best = Math.max(best, got); return; }
+      walk(si + 1, used, got);                          // leave this spot empty
+      for (let pi = 0; pi < players.length; pi++) {
+        if (used.has(pi) || !slotAllows(slots[si], players[pi])) continue;
+        used.add(pi); walk(si + 1, used, got + 1); used.delete(pi);
+      }
+    };
+    walk(0, new Set(), 0);
+    return best;
+  };
+  let worst = null, cases = 0;
+  for (let c = 0; c < 400; c++) {
+    const spec = Array.from({ length: 1 + rnd(6) }, () => {
+      const s = { pos: SETS[rnd(SETS.length)] };
+      const f = rnd(4);
+      if (f === 1) s.teams = ['KC'];
+      else if (f === 2) s.max_exp = 0;
+      else if (f === 3) s.min_exp = 4;
+      return s;
+    });
+    const slots = classicSlotsFromSpec(spec);
+    const players = Array.from({ length: rnd(8) }, (_, i) =>
+      ({ id: `p${i}`, pos: POS[rnd(POS.length)], team: rnd(2) ? 'KC' : 'BUF', exp: rnd(3) === 0 ? 0 : 1 + rnd(8) }));
+    const a = assignSpots(slots, players);
+    cases++;
+    // Legality + accounting hold on every shape, not just the handwritten ones.
+    const idsSeen = [...a.spots.flatMap((x) => (x.player ? [x.player.id] : [])), ...benched(a)];
+    if (!a.spots.every((x) => !x.player || slotAllows(x.def, x.player))
+        || new Set(idsSeen).size !== players.length || idsSeen.length !== players.length) {
+      worst = { why: 'illegal or lost a player', spec, players };
+      break;
+    }
+    const max = brute(slots, players);
+    if (filled(a) !== max) { worst = { why: `filled ${filled(a)}, best possible ${max}`, spec, players }; break; }
+  }
+  ok(`no arrangement fills more spots (${cases} random shapes, brute-forced)`, worst === null, worst);
+}
+
+console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');
+process.exit(fails ? 1 : 0);
