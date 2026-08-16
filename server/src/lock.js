@@ -257,14 +257,19 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       const fieldedSlugs = new Set((existing ?? []).map((r) => r.player_slug));
       const hasPicks = setSlots.size > 0;
       const isAi = mem.controller === 'ai';
-      const missed = mem.enrolled && !hasPicks;
-      const partial = mem.enrolled && hasPicks && !isAi; // some slots set, fill the rest
+      // The 8/16 ruling: every claimed seat gets its empty slots filled if
+      // possible — enrolled or not, actively managed or not. (Unclaimed seats
+      // have no app_user to key sealed rows under; the resolve-time fallback
+      // still covers them.) The 'empty' lineup policy remains the commissioner's
+      // explicit opt-out: a missed side scores its honest zero there.
+      const missed = !!mem.app_user_id && !hasPicks;
+      const partial = !!mem.app_user_id && hasPicks && !isAi; // some slots set, fill the rest
       if (!(isAi || ((missed || partial) && policy !== 'empty'))) continue;
-      // An AI-controlled seat (always, or a missed manager flipped to AI for the
-      // week) plays the economy: it earns + spends coin. A missed 'best_lineup'
-      // manager just gets auto-filled with whatever they already own — we never
-      // spend their coin for them.
-      const aiDriven = !fillOnly && (isAi || (missed && policy === 'ai'));
+      // The other half of the ruling: the AI SPENDS only when AI control is on
+      // (controller === 'ai'). A missed manager — under ANY policy, 'ai'
+      // included — gets auto-filled with whatever they already own; their coin
+      // is never spent for them and no power-ups appear they didn't buy.
+      const aiDriven = !fillOnly && isAi;
       const fullRewrite = !fillOnly && isAi;
       const starters = (startersByRoster.get(rosterId)) ?? [];
       // The fill must never duplicate a player the manager already fielded:
