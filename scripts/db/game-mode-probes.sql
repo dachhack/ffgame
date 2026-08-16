@@ -237,6 +237,11 @@ begin
     and (r -> 'scoring' ->> 'idpTfl')::numeric = 1 and (r -> 'scoring' ->> 'dstFf')::numeric = 1,
     'cs22 idp values stored (event knobs land on the 0.1 grid: 0.25 → 0.3)');
 
+  -- 0169 true-up keys: QB hits + passes defended, IDP and team
+  r := set_league_classic_scoring(lid, '{"idpQbHit": 1, "idpPd": 1.5, "dstQbHit": 0.5, "dstPd": 0.5}'::jsonb);
+  perform assert_ok(r, 'cs23 true-up keys accepted');
+  perform assert_true((r -> 'scoring' ->> 'idpQbHit')::numeric = 1 and (r -> 'scoring' ->> 'dstPd')::numeric = 0.5, 'cs24 true-up values stored');
+
   -- best ball + classic scoring have no meaning in a drip league
   perform assert_ok(set_league_game_mode(lid, 'drip'), 'bb8 back to drip');
   perform assert_err(set_league_bestball(lid, '["FLEX"]'::jsonb), 'classic-league setting', 'bb9 refused in drip');

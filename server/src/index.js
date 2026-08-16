@@ -21,6 +21,7 @@ import { syncAllLeagues } from './sync.js';
 import { sweepNative } from './native.js';
 import { sweepPots } from './pot.js';
 import { sweepPush } from './push.js';
+import { trueupTick } from './poll/trueup.js';
 import { db } from './supabase.js';
 import { ensurePods } from './pods.js';
 import { PRESEASON, REGULAR_SEASON } from './seasonType.js';
@@ -314,6 +315,21 @@ async function main() {
   // loop — a slow FCM round must never stretch a play tick.
   await sweepPush().catch((e) => log('push sweep error', e.message));
   setInterval(() => sweepPush().catch((e) => log('push sweep error', e.message)), 60_000);
+
+  // nflverse true-up (0169): QB hits + passes defended, ~a day behind the
+  // games — ESPN's live text can't carry them; nflverse's nightly pbp can.
+  // Sweeps the current regular-season week and the three before it (late
+  // stat corrections), every 6h. A 404 before the season's first data drop
+  // just logs — the regular season is the product this loop serves, and
+  // nflverse doesn't publish preseason pbp at all.
+  const trueup = async () => {
+    const wk = await regularWeek(config.season);
+    const weeks = []; for (let w = Math.max(1, wk - 3); w <= wk; w++) weeks.push(w);
+    const r = await trueupTick(Number(config.season), weeks, playerIndex);
+    if (r.rows) log(`true-up: ${r.rows} qbhit/pd rows current`);
+  };
+  await trueup().catch((e) => log('true-up error', e.message));
+  setInterval(() => trueup().catch((e) => log('true-up error', e.message)), 6 * 3600e3);
 
   // Weekly schedule + lineup auto-sync for all configured leagues (separate, slower
   // loop — a 100-league sync can outlast one play tick).

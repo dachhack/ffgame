@@ -223,6 +223,8 @@ function playText(p: Player, play: RawPlay): string {
   if (play.kind === 'tackle') return `${t} D: ${play.tt === 's' ? 'solo tackle' : play.tt === 'a' ? 'assisted tackle' : 'tackle'}`;
   if (play.kind === 'tfl') return `${t} D: tackle for loss`;
   if (play.kind === 'ff') return `${t} D: forced fumble`;
+  if (play.kind === 'qbhit') return `${t} D: QB hit`;
+  if (play.kind === 'pd') return `${t} D: pass defended`;
   return `${t}: incomplete`;
 }
 
