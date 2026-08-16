@@ -30,7 +30,7 @@ export const CLASSIC_WIN = 'wk';
 // A lineup is COUNTS per slot type. Names generate as TYPE or TYPE+index
 // (RB1, RB2 …) — with the default config this reproduces the original nine
 // names exactly, so pre-0161 leagues' saved rows keep meaning what they meant.
-export interface ClassicSlotDef { slot: string; type: string; pos: Pos[]; flt?: SlotFilter }
+export interface ClassicSlotDef { slot: string; type: string; pos: Pos[]; flt?: SlotFilter; label?: string }
 export type ClassicRoster = Record<string, number>;
 
 export const CLASSIC_SLOT_TYPES: { type: string; label: string; pos: Pos[] }[] = [
@@ -64,7 +64,10 @@ export const CLASSIC_ROSTER_MAX = 20; // starters cap, mirrored by SQL's sanitiz
 // run "an RB slot only for rookies". Filters gate who may FILL the spot
 // (picker + best-ball fill); they never shrink the draft pool.
 export interface SlotFilter { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null }
-export interface SlotSpec extends SlotFilter { pos: string[]; bb?: boolean }
+/** `label` (0174) is the commissioner's own name for the spot ("Only NFC
+ *  Players") — PRESENTATION ONLY. Eligibility is still pos + the filter, so a
+ *  label can never make a spot behave differently than it reads. */
+export interface SlotSpec extends SlotFilter { pos: string[]; bb?: boolean; label?: string }
 
 export function classicSlotsFromSpec(spec?: SlotSpec[] | null): ClassicSlotDef[] | null {
   if (!Array.isArray(spec) || !spec.length) return null;
@@ -73,6 +76,10 @@ export function classicSlotsFromSpec(spec?: SlotSpec[] | null): ClassicSlotDef[]
     // A spot whose eligibility matches a catalog type keeps that type's label.
     const known = CLASSIC_SLOT_TYPES.find((t) => t.pos.length === pos.length && t.pos.every((p) => pos.includes(p)));
     const d: ClassicSlotDef = { slot: `S${i + 1}`, type: known?.type ?? pos.join('/'), pos };
+    // The commissioner's own name for the spot wins over the derived type
+    // wherever a slot is DISPLAYED — `type` stays derived so nothing that
+    // keys off it changes meaning.
+    if (s.label?.trim()) d.label = s.label.trim();
     // Per-spot allowable-player filter (0172) rides along to the pickers + fill.
     if (s.teams?.length || s.min_exp != null || s.max_exp != null) {
       d.flt = { teams: s.teams ?? null, min_exp: s.min_exp ?? null, max_exp: s.max_exp ?? null };
@@ -131,6 +138,11 @@ export function slotAllows(d: { pos: string[]; flt?: SlotFilter | null }, p: { p
   }
   return true;
 }
+
+/** What to CALL a spot on screen: the commissioner's label when they wrote
+ *  one (0174), else the derived eligibility label. */
+export const slotDisplayName = (d: { label?: string; pos: string[] }): string =>
+  d.label?.trim() || slotSpecLabel(d.pos);
 
 /** Display label for a spot's eligibility ("FLEX (RB/WR/TE)" or "QB/RB/K"). */
 export function slotSpecLabel(pos: string[]): string {

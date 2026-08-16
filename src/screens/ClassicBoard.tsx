@@ -10,7 +10,7 @@
 // stream the drip boards run on, refreshed every 60s.
 import { useEffect, useMemo, useState } from 'react';
 import type { Pos } from '@drip/core/types';
-import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec, type SlotFilter } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayName, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec, type SlotFilter } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
@@ -299,7 +299,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
       {!locked && pickerSlot && (
         <div style={card}>
           <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--faint)', marginBottom: 8 }}>
-            SET {pickerSlot} — {slotDefs.find((d) => d.slot === pickerSlot)?.pos.join(' / ')}
+            SET {(() => { const d = slotDefs.find((x) => x.slot === pickerSlot); return d ? slotDisplayName(d) : pickerSlot; })()} — {slotDefs.find((d) => d.slot === pickerSlot)?.pos.join(' / ')}
             {(() => { const l = fltLabel(slotDefs.find((d) => d.slot === pickerSlot)?.flt); return l ? <span style={{ color: 'var(--you)' }}> · {l}</span> : null; })()}
           </div>
           {mine[pickerSlot] && (

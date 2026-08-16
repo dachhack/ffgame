@@ -6,7 +6,7 @@
 // the same live play stream, refreshed every 60s.
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
-import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec, type SlotFilter } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayName, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec, type SlotFilter } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
@@ -291,7 +291,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       {/* Picker */}
       {!locked && pickerSlot && slotDef && (
         <Card>
-          <Mono size={9} tone="faint" weight="700" style={{ marginBottom: 8 }}>SET {pickerSlot} — {slotDef.pos.join(' / ')}{fltLabel(slotDef.flt) ? ` · ${fltLabel(slotDef.flt)}` : ''}</Mono>
+          <Mono size={9} tone="faint" weight="700" style={{ marginBottom: 8 }}>SET {slotDisplayName(slotDef)} — {slotDef.pos.join(' / ')}{fltLabel(slotDef.flt) ? ` · ${fltLabel(slotDef.flt)}` : ''}</Mono>
           {mine[pickerSlot] && (
             <Pressable onPress={() => { void assign(pickerSlot, null); }} style={{ paddingVertical: 7 }}>
               <Mono size={10} tone="dim">✕ CLEAR SLOT</Mono>

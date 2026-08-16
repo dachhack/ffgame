@@ -130,9 +130,9 @@ export function LastSeenPanel({ leagueId }: { leagueId: string }) {
 // only appears where the founder has flagged it available (0158).
 // A builder spot's local draft row: pos/bb plus the PER-SLOT player filter
 // (0172) as raw input strings, so partial typing never fights the keyboard.
-type SpotDraft = { pos: string[]; bb?: boolean; fTeams: string; fMin: string; fMax: string };
+type SpotDraft = { pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string };
 const toSpotDraft = (x: SlotSpec): SpotDraft => ({
-  pos: [...x.pos], bb: !!x.bb,
+  pos: [...x.pos], bb: !!x.bb, label: x.label ?? '',
   fTeams: (x.teams ?? []).join(', '),
   fMin: x.min_exp != null ? String(x.min_exp) : '',
   fMax: x.max_exp != null ? String(x.max_exp) : '',
@@ -143,6 +143,7 @@ const fromSpotDraft = (s: SpotDraft): SlotSpec => {
   const mx = s.fMax.trim() === '' ? null : Number(s.fMax);
   return {
     pos: s.pos, bb: s.bb,
+    ...(s.label.trim() ? { label: s.label.trim() } : {}),
     ...(teams.length ? { teams } : {}),
     ...(mn != null && Number.isFinite(mn) ? { min_exp: mn } : {}),
     ...(mx != null && Number.isFinite(mx) ? { max_exp: mx } : {}),
@@ -274,6 +275,21 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   const [scTab, setScTab] = useState('passing');
   // Which preset is armed for its confirming second click (v0.213.1).
   const [armed, setArmed] = useState<string | null>(null);
+  // Drag-to-reorder (0174): the index being dragged. Safe because the spec is
+  // an ordered array whose slot names generate positionally AND freezes at the
+  // draft — so a reorder can never reshuffle rows that already exist.
+  const [drag, setDrag] = useState<number | null>(null);
+  const moveSpot = (from: number, to: number) => {
+    if (from === to || to < 0) return;
+    setSpots((cur) => {
+      if (!cur || to >= cur.length) return cur;
+      const next = cur.slice();
+      const [row] = next.splice(from, 1);
+      next.splice(to, 0, row);
+      return next;
+    });
+    setSpotsDirty(true);
+  };
   const [adjust, setAdjust] = useState<LeagueScoring | null>(null);
   useEffect(() => {
     if (view !== 'scoring' || adjust) return;
@@ -452,7 +468,22 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 6 }}>
             {spots.map((sp, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '5px 8px' }}>
+              <div key={i}
+                onDragOver={(e) => { if (drag != null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } }}
+                onDrop={(e) => { e.preventDefault(); if (drag != null) moveSpot(drag, i); setDrag(null); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', border: `1px solid ${drag === i ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, padding: '5px 8px', opacity: drag === i ? 0.55 : 1, background: drag === i ? 'var(--bg)' : undefined }}>
+                {/* Drag handle (0174). Keyboard works too — focus it and press
+                    ↑/↓ — because HTML5 drag is mouse-only and a commissioner
+                    on a keyboard (or a touch screen) still has to reorder. */}
+                <button draggable={!busy} title="drag to reorder · or focus and press ↑ / ↓"
+                  onDragStart={(e) => { setDrag(i); e.dataTransfer.effectAllowed = 'move'; }}
+                  onDragEnd={() => setDrag(null)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowUp') { e.preventDefault(); moveSpot(i, i - 1); }
+                    if (e.key === 'ArrowDown') { e.preventDefault(); moveSpot(i, i + 1); }
+                  }}
+                  className="mono" aria-label={`reorder spot ${i + 1}`}
+                  style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: busy ? 'default' : 'grab', fontSize: 13, padding: '0 2px', lineHeight: 1 }}>⠿</button>
                 <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)', width: 22 }}>{i + 1}</span>
                 {builderPos.map((p) => {
                   const on = sp.pos.includes(p);
@@ -462,7 +493,11 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                       className="mono" style={posChip(p, on)}>{p}</button>
                   );
                 })}
-                <span className="mono" style={{ flex: 1, minWidth: 60, fontSize: 10.5, color: 'var(--faint)', textAlign: 'right' }}>{slotSpecLabel(sp.pos)}</span>
+                <input value={sp.label}
+                  onChange={(e) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, label: e.target.value.slice(0, 24) })); setSpotsDirty(true); }}
+                  placeholder={slotSpecLabel(sp.pos)} maxLength={24}
+                  title="name this spot — e.g. Only NFC Players. Naming it doesn't change who may fill it; the chips and 🔎 filter do that."
+                  className="mono" style={{ fontFamily: 'inherit', fontSize: 11, padding: '3px 6px', background: 'var(--bg)', color: sp.label ? 'var(--text)' : 'var(--faint)', border: `1px solid ${sp.label ? 'var(--bd)' : 'transparent'}`, borderRadius: RADIUS, flex: 1, minWidth: 90, textAlign: 'right' }} />
                 <button disabled={busy} title="Best ball: this spot fills itself with the top scorer"
                   onClick={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, bb: !x.bb })); setSpotsDirty(true); }}
                   className="mono" style={{ ...pill(!!sp.bb), padding: '3px 8px', fontSize: 11 }}>🎯 BB</button>
@@ -495,10 +530,10 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
             <button disabled={busy || spots.length >= 20}
-              onClick={() => { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'], fTeams: '', fMin: '', fMax: '' }]); setSpotsDirty(true); }}
+              onClick={() => { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'], label: '', fTeams: '', fMin: '', fMax: '' }]); setSpotsDirty(true); }}
               className="mono" style={{ ...pill(false), padding: '4px 14px' }}>＋ ADD SPOT</button>
             <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>
-              Any position combination per spot · 🎯 BB spots fill themselves with the top scorer · 🔎 limits who may fill the spot (teams / tenure — an RB spot for rookies only) · tenure filters need a pool re-seed so player experience is loaded · locks once the draft starts.
+              ⠿ drag (or focus + ↑/↓) to reorder · name a spot anything you like — the name is a label, the chips and 🔎 decide who may fill it · 🎯 BB spots fill themselves with the top scorer · 🔎 limits who may fill the spot (teams / tenure — an RB spot for rookies only) · tenure filters need a pool re-seed so player experience is loaded · locks once the draft starts.
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>

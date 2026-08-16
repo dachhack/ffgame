@@ -137,6 +137,24 @@ begin
   perform assert_true((select exp from league_pool where league_id = lid and slug = 'sf-vet') = 9, 'sf5b exp stored');
   perform assert_true((select exp from league_pool where league_id = lid and slug = 'kc-hc') is null, 'sf5c missing exp stays null');
 
+  -- SPOT LABELS (0174): presentation only, sanitised, capped at 24.
+  r := set_league_classic_slots(lid, ('[{"pos":["RB"],"label":"  Only NFC Players  "},'
+    || '{"pos":["WR"],"label":"' || repeat('x', 40) || '"},'
+    || '{"pos":["TE"],"label":"line\nbreak"},'
+    || '{"pos":["QB"],"label":"   "}]')::jsonb);
+  perform assert_ok(r, 'sl1 labels save');
+  perform assert_true(r -> 'slots' -> 0 ->> 'label' = 'Only NFC Players', 'sl1a trimmed');
+  perform assert_true(length(r -> 'slots' -> 1 ->> 'label') = 24, 'sl1b capped at 24');
+  perform assert_true(r -> 'slots' -> 2 ->> 'label' = 'linebreak', 'sl1c control chars stripped');
+  perform assert_true(not ((r -> 'slots' -> 3) ? 'label'), 'sl1d blank label stores nothing');
+  -- a label never changes what the spot ACCEPTS
+  perform assert_true(r -> 'slots' -> 0 -> 'pos' = '["RB"]'::jsonb, 'sl1e eligibility untouched by the label');
+  -- order is the caller's: the array is stored as sent (drag-to-reorder)
+  r := set_league_classic_slots(lid, '[{"pos":["DEF"]},{"pos":["K"]},{"pos":["QB"]}]'::jsonb);
+  perform assert_ok(r, 'sl2 reorder saves');
+  perform assert_true(r -> 'slots' -> 0 -> 'pos' = '["DEF"]'::jsonb
+    and r -> 'slots' -> 2 -> 'pos' = '["QB"]'::jsonb, 'sl2a stored in the order sent');
+
   -- restore the sb10b spec so the freeze test below means what it says
   perform assert_ok(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"bb":true}]'::jsonb), 'sf6 re-set for freeze');
 
