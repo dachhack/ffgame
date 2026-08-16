@@ -417,13 +417,22 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     // so those sides carry it. One 2-row query, only for best-ball leagues.
     const rosters = new Map();
     const bestball = leagueBestball(gameMode);
+    const slotDefs = leagueSlotDefs(gameMode);
     if (bestball.length) {
       const { data: ros } = await db().from('native_roster').select('roster_id,slug')
         .eq('league_id', matchup.league_id).eq('spot', 'active') // taxi/IR stashes never fill (0164)
         .in('roster_id', [matchup.home_roster_id, matchup.away_roster_id]);
+      // Per-slot tenure filters (0172) check years_exp — visible only via
+      // league_pool, so fetch it when a best-ball spot actually has a window.
+      const expBySlug = new Map();
+      if (slotDefs.some((d) => d.flt && (d.flt.min_exp != null || d.flt.max_exp != null))) {
+        const { data: lp } = await db().from('league_pool').select('slug,exp')
+          .eq('league_id', matchup.league_id).not('exp', 'is', null).range(0, 1999);
+        for (const r of lp ?? []) expBySlug.set(r.slug, r.exp);
+      }
       for (const row of ros ?? []) {
         if (!rosters.has(row.roster_id)) rosters.set(row.roster_id, []);
-        rosters.get(row.roster_id).push(player(row.slug));
+        rosters.get(row.roster_id).push({ ...player(row.slug), exp: expBySlug.get(row.slug) ?? null });
       }
     }
     const sideOf = (picks, rosterId) => ({
@@ -437,7 +446,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     setLeagueFlags(matchup.league_id, flagRows);
     const r = resolveClassicMatchup(
       sideOf(homePicks, matchup.home_roster_id), sideOf(awayPicks, matchup.away_roster_id),
-      matchup.week, { ...(gameMode.scoring ?? {}), ppr: gameMode.ppr }, leagueSlotDefs(gameMode));
+      matchup.week, { ...(gameMode.scoring ?? {}), ppr: gameMode.ppr }, slotDefs);
     for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
     slotRows = r.slots;
     homeTotal = r.home; awayTotal = r.away;

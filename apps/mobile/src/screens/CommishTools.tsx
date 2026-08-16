@@ -607,14 +607,38 @@ function CommishSeen({ leagueId }: { leagueId: string }) {
 // Normie mode (0157): DRIP ⇄ CLASSIC + the PPR knob while classic. The server
 // freezes the mode once the draft starts; its refusal shows inline. CLASSIC
 // only offers itself where the founder's per-league flag (0158) is on.
+// A builder spot's local draft row: pos/bb plus the PER-SLOT player filter
+// (0172) as raw input strings, so partial typing never fights the keyboard.
+type SpotDraft = { pos: string[]; bb?: boolean; fTeams: string; fMin: string; fMax: string };
+const toSpotDraft = (x: SlotSpec): SpotDraft => ({
+  pos: [...x.pos], bb: !!x.bb,
+  fTeams: (x.teams ?? []).join(', '),
+  fMin: x.min_exp != null ? String(x.min_exp) : '',
+  fMax: x.max_exp != null ? String(x.max_exp) : '',
+});
+const fromSpotDraft = (s: SpotDraft): SlotSpec => {
+  const teams = s.fTeams.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
+  const mn = s.fMin.trim() === '' ? null : Number(s.fMin);
+  const mx = s.fMax.trim() === '' ? null : Number(s.fMax);
+  return {
+    pos: s.pos, bb: s.bb,
+    ...(teams.length ? { teams } : {}),
+    ...(mn != null && Number.isFinite(mn) ? { min_exp: mn } : {}),
+    ...(mx != null && Number.isFinite(mx) ? { max_exp: mx } : {}),
+  };
+};
+const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim());
+
 function GameModeCard({ leagueId }: { leagueId: string }) {
   const t = useTheme();
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
   const [ppr, setPpr] = useState(1);
   const [classicOk, setClassicOk] = useState(false);
   // The roster POSITION BUILDER (0163): draft rows, one SAVE writes the spec.
-  const [spots, setSpots] = useState<SlotSpec[] | null>(null);
+  const [spots, setSpots] = useState<SpotDraft[] | null>(null);
   const [spotsDirty, setSpotsDirty] = useState(false);
+  // Which spot's PER-SLOT filter editor (0172) is open.
+  const [fltOpen, setFltOpen] = useState<number | null>(null);
   const [shape, setShape] = useState<{ bench: number; taxi: number; ir: number }>({ bench: 6, taxi: 0, ir: 0 });
   const [rounds, setRounds] = useState<number | null>(null);
   // 0171: admin-enabled extra positions + the commissioner's pool filter.
@@ -637,8 +661,8 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
       setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); scInit(r.scoring ?? {});
       const legacy = classicSlots(r.roster && Object.keys(r.roster).length ? r.roster : null);
       setSpots(r.slots?.length
-        ? r.slots.map((x) => ({ pos: [...x.pos], bb: !!x.bb }))
-        : legacy.map((d) => ({ pos: [...d.pos], bb: (r.bestball ?? []).includes(d.slot) })));
+        ? r.slots.map(toSpotDraft)
+        : legacy.map((d) => toSpotDraft({ pos: [...d.pos], bb: (r.bestball ?? []).includes(d.slot) })));
       setSpotsDirty(false);
       if (r.shape) setShape({ bench: r.shape.bench ?? 6, taxi: r.shape.taxi ?? 0, ir: r.shape.ir ?? 0 });
       setRounds(r.rounds ?? null);
@@ -669,8 +693,8 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
     if (busy || !spots || !spots.length) return;
     setBusy(true); setNote(null);
     try {
-      const r = await setLeagueClassicSlots(leagueId, spots);
-      if (r.ok) { commit(); setSpots((r.slots ?? spots).map((x) => ({ pos: [...x.pos], bb: !!x.bb }))); setSpotsDirty(false); setNote('✓ lineup saved'); }
+      const r = await setLeagueClassicSlots(leagueId, spots.map(fromSpotDraft));
+      if (r.ok) { commit(); setSpots(r.slots ? r.slots.map(toSpotDraft) : spots); setSpotsDirty(false); setNote('✓ lineup saved'); }
       else { warn(); setNote(r.error ?? 'failed'); }
     } catch { warn(); }
     finally { setBusy(false); }
@@ -752,14 +776,34 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
                   style={{ borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: sp.bb ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: sp.bb ? t.you : t.bd }}>
                   <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: sp.bb ? t.onAccent : t.dim }}>🎯 BB</Text>
                 </Pressable>
+                <Pressable disabled={busy} onPress={() => { tap(); setFltOpen((cur) => cur === i ? null : i); }}
+                  style={{ borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: spotHasFlt(sp) ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: spotHasFlt(sp) ? t.you : t.bd }}>
+                  <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: spotHasFlt(sp) ? t.onAccent : t.dim }}>🔎</Text>
+                </Pressable>
                 <Pressable disabled={busy || spots.length <= 1} onPress={() => { tap(); setSpots((cur) => cur!.filter((_, j) => j !== i)); setSpotsDirty(true); }} hitSlop={6}>
                   <Text style={{ fontFamily: MONO, fontSize: 10, color: t.opp }}> ✕ </Text>
                 </Pressable>
+                {/* PER-SLOT FILTER (0172): who may FILL this spot — teams and/or
+                    a tenure window (0 = rookie). Never shrinks the draft pool. */}
+                {fltOpen === i && (
+                  <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 4 }}>
+                    <TextInput value={sp.fTeams} onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fTeams: v })); setSpotsDirty(true); }}
+                      placeholder="teams (KC, SF…) — empty = all" placeholderTextColor={t.faint}
+                      style={{ fontFamily: MONO, fontSize: 9.5, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4, flexGrow: 1, minWidth: 130 }} />
+                    <TextInput value={sp.fMin} onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fMin: v })); setSpotsDirty(true); }}
+                      placeholder="min" keyboardType="number-pad" placeholderTextColor={t.faint}
+                      style={{ fontFamily: MONO, fontSize: 9.5, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4, width: 48 }} />
+                    <TextInput value={sp.fMax} onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fMax: v })); setSpotsDirty(true); }}
+                      placeholder="max" keyboardType="number-pad" placeholderTextColor={t.faint}
+                      style={{ fontFamily: MONO, fontSize: 9.5, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4, width: 48 }} />
+                    <Mono size={7.5} tone="faint">rookies → max 0 · SAVE LINEUP applies</Mono>
+                  </View>
+                )}
               </View>
             ))}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-            <Pill on={false} label="＋ ADD SPOT" onPress={() => { if (spots.length < 20) { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'] }]); setSpotsDirty(true); } }} />
+            <Pill on={false} label="＋ ADD SPOT" onPress={() => { if (spots.length < 20) { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'], fTeams: '', fMin: '', fMax: '' }]); setSpotsDirty(true); } }} />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
             {([['BENCH', 'bench', 20], ['TAXI', 'taxi', 8], ['IR', 'ir', 8]] as const).map(([label, key, max]) => (
@@ -777,7 +821,7 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
             <Mono size={8.5} weight="700" tone="you">DRAFT = {rounds ?? spots.length + shape.bench + shape.taxi + shape.ir} ROUNDS</Mono>
           </View>
           <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
-            Any position combination per spot · 🎯 BB fills itself · you draft the whole roster (starters + bench + taxi + IR), then stash · IR needs a real IR/Out designation · stashed players can't start · locks at draft.
+            Any position combination per spot · 🎯 BB fills itself · 🔎 limits who may fill the spot (teams / tenure — tenure filters need a pool re-seed) · you draft the whole roster (starters + bench + taxi + IR), then stash · IR needs a real IR/Out designation · stashed players can't start · locks at draft.
           </Mono>
           {extraPos.length > 0 && (
             <Mono size={8} tone="you" style={{ marginTop: 4 }}>UNLOCKED: {extraPos.join(' · ')} — refresh the player pool (draft room) after changes.</Mono>

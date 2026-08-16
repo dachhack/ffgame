@@ -23,7 +23,7 @@ import { ADP_2026 } from './adp2026';
 import { loadPlayerDirectory } from './sleeperPlayers';
 import { teamFor } from './playerTeam';
 
-export interface DraftPoolEntry { slug: string; full: string; pos: string; team: string; espnId?: string; }
+export interface DraftPoolEntry { slug: string; full: string; pos: string; team: string; espnId?: string; exp?: number; }
 
 const POOL_POS = new Set(['QB', 'RB', 'WR', 'TE']);
 const POOL_CAP = 1200;      // server accepts 2000; keep the board browsable
@@ -150,7 +150,9 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
     if (!prev || score < prev.score) {
       // espnId rides along so the draft board / team screens can render
       // headshots for players outside the baked 2025 map (i.e. rookies).
-      best.set(slug, { slug, full: p.full, pos: p.pos, team: p.team ?? 'FA', espnId: p.espnId, score });
+      // exp (0172) rides along too — league_pool stores it so per-slot tenure
+      // filters can check eligibility at lineup time.
+      best.set(slug, { slug, full: p.full, pos: p.pos, team: p.team ?? 'FA', espnId: p.espnId, exp: p.exp, score });
     }
   }
   const pseudo = [...kdstEntries(), ...hcPuntEntries(extras)]

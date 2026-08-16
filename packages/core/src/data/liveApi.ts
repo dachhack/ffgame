@@ -1233,7 +1233,7 @@ export const leagueLiveBuffs = (leagueId: string) =>
 /** 'drip' (default) or 'classic' — classic = standard scoring, one weekly
  *  QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses, no power-ups. Frozen once
  *  the draft starts. `ppr` (0 | 0.5 | 1, default 1) applies in classic only. */
-export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean }[] | null; shape?: { bench?: number; taxi?: number; ir?: number } | null; rounds?: number | null; positions?: string[] | null; pool_filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null } | null; can_edit?: boolean }
+export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null }[] | null; shape?: { bench?: number; taxi?: number; ir?: number } | null; rounds?: number | null; positions?: string[] | null; pool_filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null } | null; can_edit?: boolean }
 export const setLeagueGameMode = (leagueId: string, mode: 'drip' | 'classic', ppr?: number) =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_game_mode',
     { p_league_id: leagueId, p_mode: mode, p_ppr: ppr ?? null }),
@@ -1261,8 +1261,8 @@ export const setLeagueClassicRoster = (leagueId: string, roster: Record<string, 
 /** The roster POSITION BUILDER (0163): an ordered list of starting spots,
  *  each with its own eligible-position set + best-ball flag. Wins over the
  *  0161 counts when present; null/[] clears back to them. Draft-frozen. */
-export const setLeagueClassicSlots = (leagueId: string, slots: { pos: string[]; bb?: boolean }[] | null) =>
-  tracked(rpc<{ ok: boolean; error?: string; slots?: { pos: string[]; bb?: boolean }[] | null; starters?: number }>('set_league_classic_slots',
+export const setLeagueClassicSlots = (leagueId: string, slots: { pos: string[]; bb?: boolean; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null }[] | null) =>
+  tracked(rpc<{ ok: boolean; error?: string; slots?: { pos: string[]; bb?: boolean; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null }[] | null; starters?: number }>('set_league_classic_slots',
     { p_league_id: leagueId, p_slots: slots }),
     Ev.commishAction, { tool: 'roster_builder', count: slots?.length ?? 0 });
 /** BENCH/TAXI/IR counts (0164) — classic, pre-draft; draft rounds re-derive as
@@ -1668,10 +1668,10 @@ export const setLeaguePoolFilter = (leagueId: string, filter: { teams?: string[]
     p_league_id: leagueId, p_filter: filter,
   });
 
-export const seedLeaguePool = (leagueId: string, players: { slug: string; full: string; pos: string; team: string; espnId?: string }[]) =>
+export const seedLeaguePool = (leagueId: string, players: { slug: string; full: string; pos: string; team: string; espnId?: string; exp?: number }[]) =>
   rpc<{ ok: boolean; error?: string; players?: number }>('seed_league_pool', {
     p_league_id: leagueId,
-    p_players: players.map(({ espnId, ...p }) => ({ ...p, espn_id: espnId ?? null })),
+    p_players: players.map(({ espnId, exp, ...p }) => ({ ...p, espn_id: espnId ?? null, exp: exp ?? null })),
   });
 export const nativeGenerateSchedule = (leagueId: string, weeks = 14) =>
   rpc<{ ok: boolean; error?: string; weeks?: number; matchups?: number }>('native_generate_schedule', { p_league_id: leagueId, p_weeks: weeks });
@@ -1757,6 +1757,18 @@ export async function leaguePool(leagueId: string): Promise<LeaguePoolPlayer[]> 
   if (error) throw error;
   return (data ?? []) as LeaguePoolPlayer[];
 }
+/** Tenure by slug from the league's pool (0172) — per-slot filter checks at
+ *  lineup time read this. Null exp = unknown (pre-0172 seed, or Sleeper doesn't
+ *  know); tenure-filtered spots refuse unknowns, so a re-seed fills them in. */
+export async function leaguePoolExp(leagueId: string): Promise<Record<string, number>> {
+  const { data, error } = await (await client()).from('league_pool')
+    .select('slug, exp').eq('league_id', leagueId).not('exp', 'is', null).range(0, 1999);
+  if (error) throw error;
+  const out: Record<string, number> = {};
+  for (const r of (data ?? []) as { slug: string; exp: number }[]) out[r.slug] = r.exp;
+  return out;
+}
+
 export interface NativeRosterRow { roster_id: number; slug: string; acquired: string; spot?: 'active' | 'taxi' | 'ir'; }
 export async function nativeRosters(leagueId: string): Promise<NativeRosterRow[]> {
   const { data, error } = await (await client()).from('native_roster')

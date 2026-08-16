@@ -30,7 +30,7 @@ export const CLASSIC_WIN = 'wk';
 // A lineup is COUNTS per slot type. Names generate as TYPE or TYPE+index
 // (RB1, RB2 …) — with the default config this reproduces the original nine
 // names exactly, so pre-0161 leagues' saved rows keep meaning what they meant.
-export interface ClassicSlotDef { slot: string; type: string; pos: Pos[] }
+export interface ClassicSlotDef { slot: string; type: string; pos: Pos[]; flt?: SlotFilter }
 export type ClassicRoster = Record<string, number>;
 
 export const CLASSIC_SLOT_TYPES: { type: string; label: string; pos: Pos[] }[] = [
@@ -59,7 +59,12 @@ export const CLASSIC_ROSTER_MAX = 20; // starters cap, mirrored by SQL's sanitiz
 // counts-per-type model and the separate best-ball name array. Slot names are
 // positional (S1..Sn): the list is draft-frozen, so names never shift under
 // stored rows.
-export interface SlotSpec { pos: string[]; bb?: boolean }
+// 0172: a spot may also carry its OWN allowable-player filter — a team
+// whitelist and/or a tenure window (years_exp; 0 = rookie) — so a league can
+// run "an RB slot only for rookies". Filters gate who may FILL the spot
+// (picker + best-ball fill); they never shrink the draft pool.
+export interface SlotFilter { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null }
+export interface SlotSpec extends SlotFilter { pos: string[]; bb?: boolean }
 
 export function classicSlotsFromSpec(spec?: SlotSpec[] | null): ClassicSlotDef[] | null {
   if (!Array.isArray(spec) || !spec.length) return null;
@@ -67,7 +72,12 @@ export function classicSlotsFromSpec(spec?: SlotSpec[] | null): ClassicSlotDef[]
     const pos = [...new Set((s.pos ?? []).map((p) => String(p).toUpperCase()))] as Pos[];
     // A spot whose eligibility matches a catalog type keeps that type's label.
     const known = CLASSIC_SLOT_TYPES.find((t) => t.pos.length === pos.length && t.pos.every((p) => pos.includes(p)));
-    return { slot: `S${i + 1}`, type: known?.type ?? pos.join('/'), pos };
+    const d: ClassicSlotDef = { slot: `S${i + 1}`, type: known?.type ?? pos.join('/'), pos };
+    // Per-spot allowable-player filter (0172) rides along to the pickers + fill.
+    if (s.teams?.length || s.min_exp != null || s.max_exp != null) {
+      d.flt = { teams: s.teams ?? null, min_exp: s.min_exp ?? null, max_exp: s.max_exp ?? null };
+    }
+    return d;
   });
 }
 
@@ -99,6 +109,28 @@ export function slotEligiblePos(specPos: string[]): string[] {
 
 /** True when a spot scores return-only (its spec is exactly [RET]). */
 export const isRetSlot = (specPos: string[]): boolean => specPos.length === 1 && specPos[0] === 'RET';
+
+// Positions whose "players" are team units — a tenure window is meaningless
+// for them, so they pass it (the 0171 pool-filter rule, kept per-slot).
+const TEAM_UNIT_POS = new Set(['K', 'DEF', 'HC', 'P']);
+
+/** May this player FILL this spot? Position eligibility plus the spot's own
+ *  filter (0172): team whitelist applies to everyone (team units included);
+ *  the tenure window skips team units, and a player whose tenure is unknown
+ *  can't prove eligibility while a bound is set — same no-guess rule the
+ *  pool-level filter follows. */
+export function slotAllows(d: { pos: string[]; flt?: SlotFilter | null }, p: { pos: string; team?: string | null; exp?: number | null }): boolean {
+  if (!slotEligiblePos(d.pos).includes(p.pos)) return false;
+  const f = d.flt;
+  if (!f) return true;
+  if (f.teams?.length && !f.teams.some((t) => t.toUpperCase() === (p.team ?? '').toUpperCase())) return false;
+  if ((f.min_exp != null || f.max_exp != null) && !TEAM_UNIT_POS.has(p.pos)) {
+    if (p.exp == null) return false;
+    if (f.min_exp != null && p.exp < f.min_exp) return false;
+    if (f.max_exp != null && p.exp > f.max_exp) return false;
+  }
+  return true;
+}
 
 /** Display label for a spot's eligibility ("FLEX (RB/WR/TE)" or "QB/RB/K"). */
 export function slotSpecLabel(pos: string[]): string {
@@ -568,13 +600,15 @@ export function bestballFill(manual: ClassicPick[], bestball: string[], roster: 
   // RET spots (0171) rank candidates by their RETURN production, since that's
   // all the spot will bank.
   const retScore = new Map<string, number>();
-  const order = [...slots].sort((a, b) => a.pos.length - b.pos.length);
+  // Filtered spots (0172) go before unfiltered spots of the same width: their
+  // candidate set is a subset, so they must claim their player first (else a
+  // plain RB slot could take the only rookie from a rookies-only RB slot).
+  const order = [...slots].sort((a, b) => a.pos.length - b.pos.length || (a.flt ? 0 : 1) - (b.flt ? 0 : 1));
   const used = new Set<string>();
   const fills: ClassicPick[] = [];
   for (const d of order) {
     if (!bb.has(d.slot)) continue;
     const ret = isRetSlot(d.pos);
-    const elig = slotEligiblePos(d.pos);
     const scoreOf = (id: string, pl: Player): number => {
       if (!ret) return score.get(id) ?? 0;
       if (!retScore.has(id)) retScore.set(id, classicPoints(pl, week, sc, 'RET'));
@@ -582,7 +616,8 @@ export function bestballFill(manual: ClassicPick[], bestball: string[], roster: 
     };
     let best: Player | null = null;
     for (const c of cands) {
-      if (used.has(c.id) || !elig.includes(c.pos)) continue;
+      // slotAllows (0172): position eligibility + the spot's own player filter.
+      if (used.has(c.id) || !slotAllows(d, c)) continue;
       if (!best || scoreOf(c.id, c) > scoreOf(best.id, best)) best = c;
     }
     if (best) { used.add(best.id); fills.push({ slot: d.slot, player: best }); }

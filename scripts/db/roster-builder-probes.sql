@@ -107,6 +107,39 @@ begin
     or jsonb_typeof(league_game_mode(lid) -> 'slots') = 'null', 'sb10a spec gone after clear');
   perform assert_ok(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"bb":true}]'::jsonb), 'sb10b re-set for freeze test');
 
+  -- PER-SLOT FILTERS (0172): a spot may carry a team whitelist and/or a
+  -- tenure window; validation mirrors the 0171 pool filter (codes 2–4
+  -- uppercase letters, tenure clamped 0..30, min<=max).
+  perform probe_as('b');
+  r := set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"max_exp":0,"bb":true},{"pos":["WR"],"teams":["kc","SF"],"min_exp":2,"max_exp":10}]'::jsonb);
+  perform assert_ok(r, 'sf1 filtered spec saves');
+  perform assert_true((r -> 'slots' -> 1 ->> 'max_exp')::int = 0, 'sf1a rookies-only stored');
+  perform assert_true(jsonb_array_length(r -> 'slots' -> 2 -> 'teams') = 2, 'sf1b team list stored');
+  perform assert_true(r -> 'slots' -> 2 -> 'teams' @> '["KC"]'::jsonb, 'sf1c team code uppercased');
+  perform assert_true(not ((r -> 'slots' -> 0) ? 'max_exp'), 'sf1d unfiltered spot stays clean');
+  perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"],"teams":["K9"]}]'::jsonb), 'bad team code', 'sf2 bad team refused');
+  perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"],"min_exp":9,"max_exp":2}]'::jsonb), 'min tenure exceeds max', 'sf3 min>max refused');
+  r := set_league_classic_slots(lid, '[{"pos":["QB"],"min_exp":-5,"max_exp":99}]'::jsonb);
+  perform assert_ok(r, 'sf4 clamp saves');
+  perform assert_true((r -> 'slots' -> 0 ->> 'min_exp')::int = 0
+    and (r -> 'slots' -> 0 ->> 'max_exp')::int = 30, 'sf4a tenure clamped 0..30');
+
+  -- seed_league_pool v3 (0172): the 0171 extra positions finally pass the
+  -- whitelist (v2 silently dropped them) and exp round-trips into league_pool.
+  r := seed_league_pool(lid, '[
+    {"slug":"sf-rook","full":"Sf Rook","pos":"RB","team":"KC","exp":0},
+    {"slug":"sf-vet","full":"Sf Vet","pos":"RB","team":"SF","exp":9},
+    {"slug":"sf-dl","full":"Sf Dl","pos":"DL","team":"KC","exp":3},
+    {"slug":"kc-hc","full":"KC Head Coach","pos":"HC","team":"KC"},
+    {"slug":"sf-bad","full":"Sf Bad","pos":"ZZ","team":"KC"}]'::jsonb);
+  perform assert_ok(r, 'sf5 seed with extras');
+  perform assert_true((r ->> 'players')::int = 4, 'sf5a DL + HC in, unknown pos dropped');
+  perform assert_true((select exp from league_pool where league_id = lid and slug = 'sf-vet') = 9, 'sf5b exp stored');
+  perform assert_true((select exp from league_pool where league_id = lid and slug = 'kc-hc') is null, 'sf5c missing exp stays null');
+
+  -- restore the sb10b spec so the freeze test below means what it says
+  perform assert_ok(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"bb":true}]'::jsonb), 'sf6 re-set for freeze');
+
   -- freeze once the draft leaves pending
   reset role;
   update draft set status = 'live' where league_id = lid;
