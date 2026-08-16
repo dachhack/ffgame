@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { WINDOWS, METRICS, LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
 import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel } from '@drip/core/data/nflSlate';
 import { slugMeta } from '@drip/core/data/slugMeta';
@@ -49,6 +49,10 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
   // Classic leagues (0157) get the traditional board — no windows, no metrics.
   const [gameMode, setGameMode] = useState<'drip' | 'classic' | null>(null);
   const [leagueName, setLeagueName] = useState<string | null>(null);
+  // Read inside the loader without making it a dependency — the loader must
+  // be able to ask "do we already know this league is classic?" without
+  // re-running every time the answer changes.
+  const gameModeRef = useRef<'drip' | 'classic' | null>(null);
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
   const [myTeam, setMyTeam] = useState<TeamInfo | null>(null);
   const [roster, setRoster] = useState<{ leagueId: string; rosterId: number } | null>(null);
@@ -83,20 +87,37 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
 
   useEffect(() => { ensurePremiumTier(); }, []); // load the free/premium split for intent gating
   useEffect(() => {
+    // STALE-RUN GUARD (v0.232.0). This effect re-runs on the week stepper and
+    // on retry, and it had nothing stopping two runs overlapping. The classic
+    // path returns EARLY after a single RPC; the drip path awaits several
+    // more. So an older drip run could finish AFTER a newer classic run and
+    // overwrite gameMode — the board rendering correctly and then flipping to
+    // the cards a moment later, which is exactly what was reported. The app's
+    // copy of this loader has always had this guard; the web's never did.
+    let alive = true;
     (async () => {
       try {
         // Open the specific league/roster the card asked for; fall back to the
         // user's default roster when none is given.
         setState('loading'); setErr(null);
         const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
+        if (!alive) return;
         if (!r) { setState('none'); return; }
         setRoster(r);
         commishOverview().then((ls) => {
-          setLeagueName(ls.find((l) => l.league_id === r.leagueId)?.name ?? null);
+          if (alive) setLeagueName(ls.find((l) => l.league_id === r.leagueId)?.name ?? null);
         }).catch(() => {});
         const gm = await leagueGameMode(r.leagueId).catch(() => null);
+        if (!alive) return;
         if (gm?.ok && gm.mode === 'classic') { setGameMode('classic'); setState('ready'); return; }
-        setGameMode('drip');
+        // A FAILED READ IS NOT A DRIP LEAGUE. `gm` is null when the RPC threw
+        // — a network blip, an auth refresh mid-flight — and treating that as
+        // "not classic" silently drops a normie league onto the card board.
+        // Only a definitive answer moves the mode; otherwise keep what we
+        // already know and let the next run settle it.
+        if (gm?.ok) setGameMode(gm.mode === 'classic' ? 'classic' : 'drip');
+        else if (gameModeRef.current == null) setGameMode('drip');
+        if (gameModeRef.current === 'classic') { setState('ready'); return; }
         myMembership(r.leagueId, r.rosterId).then((mm) => { if (mm?.controller) setController(mm.controller); }).catch(() => {});
         leagueLiveBuffs(r.leagueId).then((lb) => { if (lb.ok) setBuffsOn(lb.on !== false); }).catch(() => {});
         const m = await myMatchup(r.leagueId, r.rosterId, weekSel ?? undefined);
@@ -140,7 +161,9 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
         setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('error');
       }
     })();
+    return () => { alive = false; };
   }, [userId, leagueId, rosterId, weekSel, attempt]);
+  useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
 
   const posBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, p.pos])), [pool]);
   // The week has started (first kickoff passed) — gates power-ups/extra slots,
