@@ -710,24 +710,50 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   }, [phase, winClocks, winMax, resolved, liveCtx, liveWinState]);
 
   // ── totals at each window's own clock ──
+  // ALIGNED with the worker's accounting (0200.3, task #57 — the 89.2-vs-62.3
+  // split). Three rules this total was missing vs the official matchup_state:
+  //   1. UNOPPOSED slots count — the engine scores a solo slot vs EMPTY and
+  //      the server banks it; skipping `!s.you || !s.their` dropped every pick
+  //      the opponent didn't field a counterpart for. (Backup rows still don't
+  //      count — a backup only scores by subbing in at final.)
+  //   2. FINAL windows settle — a done window banks its drip TAIL (accrual
+  //      between the last play and the end of the game), which the last-play
+  //      playback ceiling silently cut (~rate × tail-minutes per slot: the
+  //      Wheeler 9.3-vs-8.5 class of drift).
+  //   3. WINDOW WIN BONUS — the server bakes +5 into every contested window's
+  //      leader continuously; mirror it so live totals track the official.
   const { youTotal, themTotal } = useMemo(() => {
     if (phase === 'final') return { youTotal: resolved.youFinal, themTotal: resolved.theirFinal };
     if (phase === 'setup') return { youTotal: 0, themTotal: 0 };
+    const SETTLE = 100_000; // clock far past any event → the slot's settled bank
     let y = 0; let t = 0;
     for (const rw of resolved.windows) {
       // Live board: each window is sampled at its real-time position (all plays
-      // ingested so far for a live/final window, none for locked/setup).
+      // ingested so far for a live/final window, none for locked/setup) — and a
+      // FINAL window settles fully (rule 2).
+      const winFinal = !!liveCtx && liveWinState[rw.window.id] === 'final';
       const c = effWinClock(rw.window.id);
+      let wy = 0, wt = 0, anyY = false, anyT = false;
       for (const s of rw.slots) {
-        if (!s.you || !s.their) continue;
+        if (s.backup) continue; // backups score via the sub decision at final, never the running total
         // In wall-clock mode each side is sampled at ITS game's clock for the
         // window's real-time position; in game mode both share the one clock.
-        const yc = wallClock ? clockAtRealTime(s.you.player, week, c, s.you.metricId ?? undefined) : c;
-        const tc = wallClock ? clockAtRealTime(s.their.player, week, c, s.their.metricId ?? undefined) : c;
-        // A suppress DST's earn shows in its log but banks 0 (spent on halving).
-        y += s.suppressSpentYou != null ? 0 : banksAtClock(s.events, yc).you;
-        t += s.suppressSpentTheir != null ? 0 : banksAtClock(s.events, tc).their;
+        if (s.you) {
+          anyY = true;
+          const yc = winFinal ? SETTLE : wallClock ? clockAtRealTime(s.you.player, week, c, s.you.metricId ?? undefined) : c;
+          // A suppress DST's earn shows in its log but banks 0 (spent on halving).
+          wy += s.suppressSpentYou != null ? 0 : banksAtClock(s.events, yc).you;
+        }
+        if (s.their) {
+          anyT = true;
+          const tc = winFinal ? SETTLE : wallClock ? clockAtRealTime(s.their.player, week, c, s.their.metricId ?? undefined) : c;
+          wt += s.suppressSpentTheir != null ? 0 : banksAtClock(s.events, tc).their;
+        }
       }
+      // Rule 3 — the contested window's current leader carries the +5, exactly
+      // as the server bakes it into matchup_state on every resolve.
+      if (anyY && anyT && Math.abs(wy - wt) >= 0.1) { if (wy > wt) wy += WINDOW_WIN_BONUS; else wt += WINDOW_WIN_BONUS; }
+      y += wy; t += wt;
     }
     for (const b of resolved.bonuses ?? []) y += b.points; // armed-buff payouts
     return { youTotal: Math.round(y * 10) / 10, themTotal: Math.round(t * 10) / 10 };
@@ -2891,6 +2917,12 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
     if (final && side === 'their' && slot.theirNegated) return 0;
     if (final && side === 'you' && slot.youHalvedFrom != null) return slot.youFinal;
     if (final && side === 'their' && slot.theirHalvedFrom != null) return slot.theirFinal;
+    // At FINAL, the engine's settled slot value — which banks the drip TAIL
+    // (accrual between the last play and the end of the game) that the
+    // last-play playback ceiling cut. This is the number the worker publishes
+    // (0200.3): Wheeler read 8.5 here vs the official 9.3 for exactly that
+    // tail. Live windows keep the running bank.
+    if (final) return side === 'you' ? (slot.youFinal ?? banks.you) : (slot.theirFinal ?? banks.their);
     return side === 'you' ? banks.you : banks.their;
   };
   const youShown = shownFor('you');
