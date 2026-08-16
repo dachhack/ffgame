@@ -5,7 +5,7 @@ import { slugMeta } from '@drip/core/data/slugMeta';
 import type { Pos, WindowId } from '@drip/core/types';
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
-  myBuffs, armBuff, disarmBuff, LIVE_BUFFS, leagueLiveBuffs, leagueGameMode,
+  myBuffs, armBuff, disarmBuff, LIVE_BUFFS, leagueLiveBuffs, leagueGameMode, commishOverview,
   myUnlocks, armUnlock, disarmUnlock, myComboQty,
   myWallet, ensureWallet,
   myExtra, buyExtraSlot, sellExtraSlot, liveSlate, matchupTeams, matchupPremium, startCheckout,
@@ -48,6 +48,7 @@ const fmtLock = (iso: string | null) => {
 export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: string; leagueId?: string; rosterId?: number; onBack: () => void }) {
   // Classic leagues (0157) get the traditional board — no windows, no metrics.
   const [gameMode, setGameMode] = useState<'drip' | 'classic' | null>(null);
+  const [leagueName, setLeagueName] = useState<string | null>(null);
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
   const [myTeam, setMyTeam] = useState<TeamInfo | null>(null);
   const [roster, setRoster] = useState<{ leagueId: string; rosterId: number } | null>(null);
@@ -90,6 +91,9 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
         const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
         if (!r) { setState('none'); return; }
         setRoster(r);
+        commishOverview().then((ls) => {
+          setLeagueName(ls.find((l) => l.league_id === r.leagueId)?.name ?? null);
+        }).catch(() => {});
         const gm = await leagueGameMode(r.leagueId).catch(() => null);
         if (gm?.ok && gm.mode === 'classic') { setGameMode('classic'); setState('ready'); return; }
         setGameMode('drip');
@@ -360,6 +364,19 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
           from here, which made a settings problem look like a broken screen.
           Now the mode is stated where the game is played, not only in the
           commissioner's settings. */}
+      {/* WHICH LEAGUE (v0.231.0). The chip below said what GAME was being
+          played but never which LEAGUE — and when no leagueId reaches this
+          screen it falls back to myRoster(), which is `limit(1)` with no
+          ORDER BY: an arbitrary enrolled membership. So "my week 1 matchup"
+          could quietly open a different league than the one you were just
+          looking at, and the board would be correct about a league you did not
+          mean. Naming it here makes that visible where it matters. */}
+      {leagueName && (
+        <span className="mono" title="the league this board is showing"
+          style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {leagueName}
+        </span>
+      )}
       {gameMode && (
         <span className="mono" title={gameMode === 'classic'
           ? 'This league plays NORMAL fantasy — positional lineup, weekly totals.'
