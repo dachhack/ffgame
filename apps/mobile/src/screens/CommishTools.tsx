@@ -22,6 +22,7 @@ import {
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
   leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter,
+  leagueFaabWallets, commishGrantFaab, rosterRules, type FaabWallets, type WaiverMode,
 } from '@drip/core/data/liveApi';
 import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_CODES } from '@drip/core/data/kdst';
@@ -51,7 +52,13 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
     { id: 'activity', label: '👁 ACTIVITY' },
     { id: 'buffs', label: '◈ POWER-UPS' },
   ] },
-  { title: 'MONEY', items: [{ id: 'coin', label: '◈ DRIP COIN' }] },
+  // Two wallets, two destinations — deliberately NOT one "money" screen. Drip
+  // coin buys power-ups; FAAB buys players. They never trade against each
+  // other, and a commissioner topping one up must not wonder which they moved.
+  { title: 'MONEY', items: [
+    { id: 'coin', label: '◈ DRIP COIN' },
+    { id: 'faab', label: '💰 FAAB', nativeOnly: true },
+  ] },
 ];
 
 export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassigned }: {
@@ -120,7 +127,11 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
   if (native && team && !team.is_commish) {
     return (
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12 }}>
-        <Notice>These tools are the commissioner's. You're not this league's commissioner (anymore?) — head back to your leagues.</Notice>
+        {/* Wrapped in <Mono>: Notice renders its children into a View, and a
+            bare string in a View is a hard RN crash — on the one path (a
+            commissioner demoted while this screen is open) where this branch
+            actually renders. */}
+        <Notice><Mono size={10}>These tools are the commissioner's. You're not this league's commissioner (anymore?) — head back to your leagues.</Mono></Notice>
         <View style={{ marginTop: 10, alignItems: 'center' }}><LinkButton label="← back" onPress={onBack} /></View>
       </ScrollView>
     );
@@ -185,8 +196,15 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
       {section === 'mode' && <GameModeCard leagueId={leagueId} />}
       {section === 'buffs' && <LiveBuffsCard leagueId={leagueId} />}
       {section === 'coin' && (
-        <CommishCoin leagueId={leagueId} onChanged={() => { setEpoch((n) => n + 1); void refresh(); }} />
+        <>
+          <CommishCoin leagueId={leagueId} onChanged={() => { setEpoch((n) => n + 1); void refresh(); }} />
+          {/* Per-team balances (v0.220.0). The league-wide levers above move
+              everyone; this answers "who has what" and "give THIS team some"
+              side by side — the same table the web grew in v0.213.2. */}
+          <CoinByTeam key={`coin-${epoch}`} leagueId={leagueId} />
+        </>
       )}
+      {section === 'faab' && native && <FaabWalletsCard leagueId={leagueId} />}
       {section === 'players' && native && <CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} />}
 
       {native && (
@@ -317,6 +335,236 @@ function CommishCoin({ leagueId, onChanged }: { leagueId: string; onChanged: () 
         </View>
         <LinkButton label="⌀ zero all wallets" tone="opp" onPress={() => { tap(); doClear(); }} />
       </View>
+    </Card>
+  );
+}
+
+/** One signed grant, as a sheet — the app's idiom for a per-row money move.
+ *
+ *  The web puts an amount box and a button INSIDE each table row, which works
+ *  when a row has 700px to spend. A phone row has ~340px and has to hold a team
+ *  name and a balance, so here the row stays a readout and the typing happens
+ *  in a sheet. GRANT / DOCK is a sign TOGGLE rather than a typed minus: the
+ *  number pad on iOS has no "−" key, so a signed text field would be
+ *  unenterable on the platform this screen mostly runs on. */
+function GrantSheet({ visible, title, subtitle, unit, busy, grantLabel, dockLabel, onClose, onSubmit }: {
+  visible: boolean; title: string; subtitle: string; unit: string; busy: boolean;
+  grantLabel: string; dockLabel: string;
+  onClose: () => void; onSubmit: (amount: number) => void;
+}) {
+  const t = useTheme();
+  const [draft, setDraft] = useState('');
+  const [sign, setSign] = useState<1 | -1>(1);
+  // Fresh sheet, fresh amount — a leftover number from the last team is the
+  // one mistake this control must never make.
+  useEffect(() => { if (visible) { setDraft(''); setSign(1); } }, [visible]);
+  const amt = (parseInt(draft || '0', 10) || 0) * sign;
+  return (
+    <Overlay visible={visible} title={title} subtitle={subtitle} onClose={onClose}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Chip label={`＋ ${grantLabel}`} on={sign === 1} onPress={() => { tap(); setSign(1); }} />
+        <Chip label={`− ${dockLabel}`} on={sign === -1} onPress={() => { tap(); setSign(-1); }} />
+        <TextInput value={draft} autoFocus keyboardType="number-pad" placeholder="amount" placeholderTextColor={t.faint}
+          onChangeText={(v) => setDraft(v.replace(/\D/g, ''))}
+          style={{
+            flex: 1, minWidth: 90, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6,
+            paddingHorizontal: 9, paddingVertical: 7, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg,
+          }} />
+      </View>
+      <View style={{ marginTop: 10 }}>
+        <PrimaryButton label={busy ? '…' : `${amt >= 0 ? '+' : ''}${amt} ${unit}`} disabled={busy || !draft}
+          onPress={() => { if (amt) onSubmit(amt); }} />
+      </View>
+    </Overlay>
+  );
+}
+
+/** DRIP COIN BY TEAM (v0.220.0) — the web's v0.213.2 table, ported.
+ *
+ *  Per-seat balances already existed in the app, but only as a 💰 chip on each
+ *  SEATS row: to compare two teams you scrolled a seat list reading one number
+ *  at a time, and the two coin questions a commissioner actually has ("who has
+ *  what", "give that team some") lived on a screen about who has JOINED. One
+ *  sorted table answers both. The chip on SEATS stays — it's the right lever
+ *  when you're already looking at that seat. */
+function CoinByTeam({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [seats, setSeats] = useState<AdminMember[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [target, setTarget] = useState<AdminMember | null>(null);
+
+  const load = () => adminLeagueMembers(leagueId).then(setSeats).catch((e) => setNote(friendlyError(e)));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+
+  const grant = async (m: AdminMember, amount: number) => {
+    if (busy) return;
+    setBusy(true); setNote(null); setTarget(null);
+    try {
+      const r = await commishSeedCoin(leagueId, m.roster_id, amount);
+      if (r.ok) {
+        commit();
+        setNote(`✓ ${amount > 0 ? '+' : ''}${amount} coin — ${m.team ?? `roster ${m.roster_id}`}`);
+        // Reloads ITSELF rather than poking the parent's epoch: that key
+        // remounts this card, which would wipe the ✓ the commissioner needs
+        // to read. SEATS refetches on its own when you next open it.
+        await load();
+      } else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
+  // Richest first — comparison is the whole point of a table.
+  const rows = [...(seats ?? [])].sort((a, b) => Number(b.coin ?? 0) - Number(a.coin ?? 0));
+  const total = rows.reduce((s, m) => s + Number(m.coin ?? 0), 0);
+
+  return (
+    <Card>
+      <Mono size={9} tone="faint" track={0.12}>◈ DRIP COIN BY TEAM</Mono>
+      {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
+      {!seats ? <Mono size={10} tone="faint" style={{ marginTop: 8 }}>Loading…</Mono>
+        : rows.length === 0 ? <Mono size={10} tone="faint" style={{ marginTop: 8 }}>No teams yet.</Mono> : (
+          <>
+            <Mono size={9} tone="dim" style={{ marginTop: 6 }}>
+              {rows.length} teams · ◇ {coinFmt(total)} in circulation
+            </Mono>
+            <View style={{ marginTop: 8, gap: 1 }}>
+              {rows.map((m) => (
+                <Pressable key={m.roster_id} onPress={() => { tap(); setTarget(m); }}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 8, backgroundColor: t.bg, borderRadius: 3 }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '600', color: t.text }}>
+                      {m.team || `Roster ${m.roster_id}`}
+                    </Text>
+                    {!m.enrolled && <Mono size={8.5} tone="faint" style={{ marginTop: 2 }}>not joined</Mono>}
+                  </View>
+                  <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: Number(m.coin ?? 0) > 0 ? t.you : t.faint }}>
+                    ◇ {coinFmt(m.coin)}
+                  </Text>
+                  <Text style={{ fontFamily: MONO, fontSize: 11, color: t.dim }}>›</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 13 }}>
+              Tap a team to grant or dock. Adjustments are additive and immediate, and land on the coin ledger like any other move. DRIP COIN buys power-ups and live buffs — it is NOT the FAAB waiver budget, which has its own wallet under 💰 FAAB.
+            </Mono>
+          </>
+        )}
+      <GrantSheet visible={!!target} busy={busy} unit="coin" grantLabel="GRANT" dockLabel="DOCK"
+        title={target ? `Adjust coin — ${target.team ?? `roster ${target.roster_id}`}` : ''}
+        subtitle={target ? `Current balance: ${coinFmt(target.coin)} coin.` : ''}
+        onClose={() => setTarget(null)}
+        onSubmit={(amt) => { if (target) void grant(target, amt); }} />
+    </Card>
+  );
+}
+
+/** FAAB WALLETS + GRANTS (0173, ported to the app in v0.220.0).
+ *
+ *  Every seat's remaining waiver budget, with a grant per team and one to the
+ *  whole league. Balances are EFFECTIVE — a seat that has never bid reads the
+ *  league default rather than 0 — so "$100" means the same on every row.
+ *
+ *  Rows keep the RPC's roster_id order rather than sorting by balance: most
+ *  seats sit on the same default, so a balance sort would reshuffle ties on
+ *  every grant and move the row out from under your thumb. */
+function FaabWalletsCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [w, setW] = useState<FaabWallets | null>(null);
+  const [mode, setMode] = useState<WaiverMode | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [target, setTarget] = useState<{ roster_id: number | null; team: string | null; faab: number } | null>(null);
+
+  const load = () => leagueFaabWallets(leagueId).then(setW).catch((e) => setNote(friendlyError(e)));
+  useEffect(() => {
+    void load();
+    // The read is mode-independent, but the GRANT is refused outside FAAB —
+    // so the mode decides whether the levers are live, not whether the
+    // balances show. Hiding the numbers would just make the refusal a mystery.
+    rosterRules(leagueId).then((r) => setMode(r.waiver_mode ?? 'rolling')).catch(() => {});
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [leagueId]);
+
+  const grant = async (rosterId: number | null, amount: number) => {
+    if (busy) return;
+    setBusy(true); setNote(null); setTarget(null);
+    try {
+      const r = await commishGrantFaab(leagueId, rosterId, amount);
+      if (r.ok) {
+        commit();
+        setNote(rosterId == null ? `✓ ${amount > 0 ? '+' : ''}$${Math.abs(amount)} to every team` : `✓ ${amount > 0 ? '+' : ''}$${Math.abs(amount)} granted`);
+        await load();
+      } else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
+  const teams = w?.teams ?? [];
+  const live = mode === 'faab';
+
+  return (
+    <Card>
+      <Mono size={9} tone="faint" track={0.12}>💰 FAAB WALLETS</Mono>
+      {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
+      {!w ? <Mono size={10} tone="faint" style={{ marginTop: 8 }}>Loading…</Mono>
+        : !w.ok ? <Mono size={10} tone="opp" style={{ marginTop: 8 }}>{friendlyError(w.error ?? 'could not load wallets')}</Mono> : (
+          <>
+            <Mono size={9} tone="dim" style={{ marginTop: 6 }}>
+              season budget ${w.budget} · {teams.length} teams · ${teams.reduce((s, x) => s + x.faab, 0).toLocaleString()} unspent
+            </Mono>
+            {/* Three states, not two: FAAB (levers live), a known non-FAAB
+                mode (say WHICH one and why the grant would be refused), and
+                mode-unknown — where naming a mode we failed to read would be
+                a guess printed as fact. */}
+            {mode == null && (
+              <Mono size={9} tone="faint" style={{ marginTop: 8 }}>Checking the waiver mode — grants stay locked until it reads back.</Mono>
+            )}
+            {mode != null && !live && (
+              <View style={{ marginTop: 8 }}>
+                <Notice tone="warn">
+                  <Mono size={9} tone="warn" style={{ lineHeight: 13 }}>
+                    This league runs {mode === 'standings' ? 'standings-order' : 'rolling-priority'} waivers, so grants are refused. Switch waivers to FAAB in ⚑ SETTINGS first — and note that the switch itself resets every balance to the season budget, which is exactly why a grant made now would evaporate.
+                  </Mono>
+                </Notice>
+              </View>
+            )}
+            {live && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                <Mono size={9} tone="faint">EVERY TEAM</Mono>
+                <Chip label="💰 GRANT ALL" disabled={busy || teams.length === 0}
+                  onPress={() => { tap(); setTarget({ roster_id: null, team: null, faab: 0 }); }} />
+              </View>
+            )}
+            <View style={{ marginTop: 8, gap: 1 }}>
+              {teams.map((x) => (
+                <Pressable key={x.roster_id} disabled={!live} onPress={() => { tap(); setTarget(x); }}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 8, backgroundColor: t.bg, borderRadius: 3, opacity: live ? 1 : 0.75 }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '600', color: t.text }}>
+                      {x.team || `Roster ${x.roster_id}`}
+                    </Text>
+                    {!x.touched && <Mono size={8.5} tone="faint" style={{ marginTop: 2 }}>untouched — still on the league default</Mono>}
+                  </View>
+                  <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: x.faab > 0 ? t.you : t.faint }}>
+                    ${x.faab.toLocaleString()}
+                  </Text>
+                  {live && <Text style={{ fontFamily: MONO, fontSize: 11, color: t.dim }}>›</Text>}
+                </Pressable>
+              ))}
+            </View>
+            <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 13 }}>
+              Grants are additive — a claw-back is a negative, and a balance never drops below $0 (the claim resolver assumes a bid can always be paid). Changing the waiver mode or the season budget resets every balance to the default. FAAB buys players; it is NOT drip coin, which buys power-ups.
+            </Mono>
+          </>
+        )}
+      <GrantSheet visible={!!target} busy={busy} unit="FAAB" grantLabel="GRANT" dockLabel="CLAW BACK"
+        title={target ? (target.roster_id == null ? 'Grant every team' : `Adjust FAAB — ${target.team ?? `roster ${target.roster_id}`}`) : ''}
+        subtitle={target ? (target.roster_id == null
+          ? `Applies to all ${teams.length} teams, additively — each keeps whatever it had.`
+          : `Current balance: $${target.faab.toLocaleString()}.`) : ''}
+        onClose={() => setTarget(null)}
+        onSubmit={(amt) => { if (target) void grant(target.roster_id, amt); }} />
     </Card>
   );
 }
