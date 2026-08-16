@@ -547,7 +547,19 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
             ))}
             <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--you)' }}>
               DRAFT = {rounds ?? spots.length + shape.bench + shape.taxi + shape.ir} ROUNDS
-            </span>
+
+            {/* SPOTS CANNOT OUTRUN THE DRAFT (v0.233.0). Adding starting spots
+                does not lengthen a draft that already has its rounds, so a
+                league can end up with more spots than players — 13 spots and a
+                12-round draft means nobody can field a legal lineup, and
+                nothing said so until someone opened their empty last slot on
+                game day. The number was already on screen; what was missing
+                was the comparison. */}
+            {rounds != null && spots.length > rounds && (
+              <div className="mono" style={{ fontSize: 11.5, color: 'var(--warn, #c66)', marginTop: 6, lineHeight: 1.5 }}>
+                ⚠ {spots.length} starting spots but only {rounds} draft rounds — every team finishes {spots.length - rounds} player{spots.length - rounds === 1 ? '' : 's'} short of a legal lineup. Remove {spots.length - rounds} spot{spots.length - rounds === 1 ? '' : 's'}, or raise the roster size before the draft.
+              </div>
+            )}            </span>
           </div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
             You draft the whole roster (starters + bench + taxi + IR), then stash. IR takes a real IR/Out designation only; taxi and IR players can't be started.
