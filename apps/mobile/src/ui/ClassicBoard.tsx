@@ -5,15 +5,19 @@
 // week's first kickoff (matchup.lock_at), scored by core's classicPoints off
 // the same live play stream, refreshed every 60s.
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayName, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec, type SlotFilter } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
+import { buildMatchupBoard, gameFor, entryState, type BoardEntry, type BoardSide } from '@drip/core/engine/matchupBoard';
+import { PROJ_2026 } from '@drip/core/data/proj2026';
+import { injuryFor } from '@drip/core/data/injuries';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import {
   myMatchup, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
+  liveSlate, leagueStandings,
   leagueGameMode, weekLivePlays, friendlyError, playerFlags, leaguePoolExp,
   type LiveMatchup, type PoolPlayer, type TeamInfo,
   nativeRosters,
@@ -21,6 +25,73 @@ import {
 import { useTheme } from '../theme.native';
 import { tap, commit } from './feedback';
 import { Card, Chip, Display, Mono, PosPill } from './prims';
+
+/** One team in the scoreboard: crest, name, record + seed, live score, and
+ *  the projected final beneath it. */
+function TeamHead({ side, align, scoreless = false }: { side: BoardSide; align: 'left' | 'right'; scoreless?: boolean }) {
+  const t = useTheme();
+  const rec = side.record;
+  const right = align === 'right';
+  return (
+    <View style={{ flex: 1, alignItems: right ? 'flex-end' : 'flex-start', minWidth: 0 }}>
+      <View style={{ flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 6 }}>
+        {side.avatar
+          ? <Image source={{ uri: side.avatar }} style={{ width: 22, height: 22, borderRadius: 4 }} />
+          : <View style={{ width: 22, height: 22, borderRadius: 4, backgroundColor: t.bg, borderWidth: 1, borderColor: t.bd, alignItems: 'center', justifyContent: 'center' }}>
+              <Mono size={9} tone="faint" weight="700">{(side.team || '?').charAt(0).toUpperCase()}</Mono>
+            </View>}
+        <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text, flexShrink: 1 }}>{side.team}</Text>
+      </View>
+      {!!rec && (
+        <Mono size={8} tone="faint" style={{ marginTop: 2 }}>
+          {rec.wins}-{rec.losses}{rec.ties ? `-${rec.ties}` : ''}{rec.rank ? ` (#${rec.rank})` : ''}
+        </Mono>
+      )}
+      <Display size={24} style={{ marginTop: 3 }}>{scoreless ? '—' : side.live.toFixed(2)}</Display>
+      {!scoreless && <Mono size={8.5} tone="dim">proj {side.projected.toFixed(1)}</Mono>}
+    </View>
+  );
+}
+
+/** The centre slot pill. RN has no gradients without a dependency, so the
+ *  eligible positions are STACKED BANDS behind the label — same information as
+ *  the web's gradient (a FLEX reads as the set it accepts) with nothing new
+ *  to install. */
+function SlotPill({ pos, label }: { pos: string[]; label: string }) {
+  const t = useTheme();
+  const use = pos.slice(0, 3);
+  const first = t.pos[use[0] as keyof typeof t.pos];
+  return (
+    <View style={{ width: 40, height: 28, borderRadius: 4, overflow: 'hidden', borderWidth: 1, borderColor: t.bd, flexDirection: 'row' }}>
+      {use.map((p) => (
+        <View key={p} style={{ flex: 1, backgroundColor: t.pos[p as keyof typeof t.pos]?.bg ?? t.bg }} />
+      ))}
+      <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+        <Mono size={8.5} weight="700" style={{ color: first?.fg ?? t.text }}>{label.length > 4 ? label.slice(0, 4) : label}</Mono>
+      </View>
+    </View>
+  );
+}
+
+/** A player on one side of a row, mirrored so both read outward from the pill. */
+function BoardCell({ e, align }: { e: BoardEntry | null; align: 'left' | 'right' }) {
+  const t = useTheme();
+  const right = align === 'right';
+  if (!e) return <View style={{ flex: 1 }}><Mono size={10} tone="faint" style={{ textAlign: right ? 'right' : 'left' }}>Empty</Mono></View>;
+  return (
+    <View style={{ flex: 1, minWidth: 0 }}>
+      <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: e.state === 'done' ? t.dim : t.text, textAlign: right ? 'right' : 'left' }}>{e.name}</Text>
+      <Text numberOfLines={1} style={{ fontSize: 9, marginTop: 1, color: t.faint, textAlign: right ? 'right' : 'left' }}>
+        <Text style={{ color: t.pos[e.pos as keyof typeof t.pos]?.fg ?? t.dim, fontWeight: '700' }}>{e.pos}</Text>
+        {e.team ? ` · ${e.team}` : ''}
+        {e.injury ? <Text style={{ color: t.warn, fontWeight: '700' }}>{` ${e.injury}`}</Text> : null}
+      </Text>
+      <Text numberOfLines={1} style={{ fontSize: 9, marginTop: 1, color: e.opponent === 'BYE' ? t.warn : t.faint, textAlign: right ? 'right' : 'left' }}>
+        {e.opponent === 'BYE' ? 'BYE' : `${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim()}
+      </Text>
+    </View>
+  );
+}
 
 const ZERO = { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 };
 const mkPlayer = (slug: string) => {
@@ -38,6 +109,11 @@ const fmtLock = (iso: string | null) => {
   catch { return iso; }
 };
 const r1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
+/** "Sun 1:00 PM" — the row's game line, in the reader's own timezone. */
+const fmtKick = (iso: string): string => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+};
 // Short human label for a spot's player filter (0172): "KC/SF · ROOKIES".
 const fltLabel = (f?: SlotFilter | null): string => {
   if (!f) return '';
@@ -75,6 +151,11 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const [pickerSlot, setPickerSlot] = useState<string | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
   const [nowTs, setNowTs] = useState(() => Date.now());
+  // MATCHUP BOARD inputs (v0.229.0) — same three optional reads the web board
+  // takes. Each degrades to a quieter row, never to a blank board.
+  const [slate, setSlate] = useState<{ home: string; away: string; kickoff?: string | null }[]>([]);
+  const [records, setRecords] = useState<Record<number, { wins: number; losses: number; ties: number; rank: number }>>({});
+  const [avatars, setAvatars] = useState<{ me: string | null; opp: string | null }>({ me: null, opp: null });
 
   useEffect(() => {
     (async () => {
@@ -99,9 +180,18 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           if (Array.isArray(f)) { setLeagueFlags(leagueId, f); setFlagsVer((v) => v + 1); }
         }).catch(() => {});
         const oppRoster = m.home_roster_id === rosterId ? m.away_roster_id : m.home_roster_id;
-        matchupTeams(leagueId, [rosterId, oppRoster]).then((tm: Record<number, TeamInfo>) => setNames({
-          me: tm[rosterId]?.team_name || 'YOU', opp: tm[oppRoster]?.team_name || 'OPPONENT',
-        })).catch(() => {});
+        liveSlate(m.week, '2026').then(setSlate).catch(() => {});
+        leagueStandings(leagueId).then((rows) => {
+          const map: Record<number, { wins: number; losses: number; ties: number; rank: number }> = {};
+          (Array.isArray(rows) ? rows : []).forEach((row, i) => {
+            map[row.roster_id] = { wins: row.wins, losses: row.losses, ties: row.ties, rank: i + 1 };
+          });
+          setRecords(map);
+        }).catch(() => {});
+        matchupTeams(leagueId, [rosterId, oppRoster]).then((tm: Record<number, TeamInfo>) => {
+          setAvatars({ me: tm[rosterId]?.avatar ?? null, opp: tm[oppRoster]?.avatar ?? null });
+          setNames({ me: tm[rosterId]?.team_name || 'YOU', opp: tm[oppRoster]?.team_name || 'OPPONENT' });
+        }).catch(() => {});
         const [pl, pk] = await Promise.all([myPool(leagueId, m.week, rosterId), myPicks(m.id, userId)]);
         setPool(pl);
         const map: Record<string, string | null> = {};
@@ -194,6 +284,63 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   ), [mine, bb, slotDefs]);
   const bench = useMemo(() => pool.filter((p) => !used.has(p.slug)), [pool, used]);
 
+  // ── The head-to-head board (v0.229.0) ───────────────────────────────────
+  // Same three steps as the web board, and deliberately the same numbers:
+  // every figure comes out of buildMatchupBoard, so a manager comparing the
+  // phone against the site can never find a discrepancy to argue about.
+  //
+  // FINAL is inferred at 3h20m past kickoff — the slate carries no status
+  // column, and without an end signal every started game reads 'live' forever
+  // and the projection never settles on the real score.
+  const finalTeams = useMemo(() => {
+    const out = new Set<string>();
+    for (const g of slate) {
+      const t = g.kickoff ? Date.parse(g.kickoff) : NaN;
+      if (Number.isFinite(t) && nowTs - t > 3.34 * 3600_000) { out.add((g.home ?? '').toUpperCase()); out.add((g.away ?? '').toUpperCase()); }
+    }
+    return out;
+  }, [slate, nowTs]);
+
+  const entryFor = useMemo(() => {
+    void playsAt; void flagsVer;
+    return (slug: string | null | undefined, slotPos?: string[]): BoardEntry | null => {
+      if (!slug) return null;
+      const meta = slugMeta(slug);
+      const g = gameFor(meta.team, slate);
+      return {
+        slug,
+        name: prettySlug(slug),
+        pos: meta.pos ?? '',
+        team: meta.team ?? null,
+        live: pts(slug, slotPos),
+        proj: PROJ_2026.get(slug) ?? 0,
+        state: g ? entryState(g.kickoff, meta.team, nowTs, finalTeams) : 'pre',
+        kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,
+        opponent: g ? `${g.home ? 'vs' : '@'} ${g.opponent}` : 'BYE',
+        injury: injuryFor(matchup?.week ?? 1, slug),
+      };
+    };
+  }, [slate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer]);
+
+  const board = useMemo(() => {
+    if (!matchup) return null;
+    const oppRoster = matchup.home_roster_id === rosterId ? matchup.away_roster_id : matchup.home_roster_id;
+    const mkSide = (rid: number, team: string, avatar: string | null, lineup: Record<string, string | null>, benchList: PoolPlayer[]) => ({
+      rosterId: rid, team, avatar,
+      record: records[rid] ?? null,
+      starters: Object.fromEntries(slotDefs.map((d) => [d.slot, entryFor(lineup[d.slot], d.pos)])),
+      bench: benchList.filter((p) => !stashed.has(p.slug)).map((p) => entryFor(p.slug)).filter((e): e is BoardEntry => !!e),
+      ir: benchList.filter((p) => stashed.has(p.slug)).map((p) => entryFor(p.slug)).filter((e): e is BoardEntry => !!e),
+    });
+    return buildMatchupBoard({
+      week: matchup.week, locked, slots: slotDefs, labelFor: slotDisplayName,
+      home: mkSide(rosterId, names.me, avatars.me, effective.mine, bench),
+      // The opponent's bench isn't readable, and shouldn't be — an empty
+      // column beside mine would imply they had nobody, not that I can't see.
+      away: mkSide(oppRoster, names.opp, avatars.opp, effective.theirs, []),
+    });
+  }, [matchup, rosterId, slotDefs, effective, names, avatars, records, bench, stashed, entryFor, locked]);
+
   const assign = async (slot: string, slug: string | null) => {
     if (!matchup) return;
     const prev = mine;
@@ -212,8 +359,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   if (state === 'none') return <View style={{ padding: 24 }}><Mono size={10} tone="faint">No matchup this week.</Mono></View>;
   if (state === 'error') return <View style={{ padding: 24 }}><Mono size={10} tone="warn">{err}</Mono></View>;
 
-  const myTotal = slotDefs.reduce((s, d) => s + pts(effective.mine[d.slot], d.pos), 0);
-  const oppTotal = slotDefs.reduce((s, d) => s + pts(effective.theirs[d.slot], d.pos), 0);
+  // Totals now come from the board (same arithmetic, plus projections and
+  // empty-spot handling); the fallback grid below computes its own inline.
 
   const Face = ({ slug, size = 26 }: { slug: string; size?: number }) => {
     const uri = headshot(slug);
@@ -230,22 +377,80 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         CLASSIC · WEEK {matchup?.week} · {ppr === 1 ? 'FULL PPR' : ppr === 0.5 ? 'HALF PPR' : 'NON-PPR'}
       </Mono>
 
-      {/* Scoreboard */}
-      <Card>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={{ flex: 1 }}>
-            <Mono size={8.5} tone="you" weight="700">{names.me}</Mono>
-            <Display size={26}>{r1(myTotal)}</Display>
+      {/* ── SCOREBOARD (v0.229.0) ─────────────────────────────────────────
+          The web board's header, in RN. Pre-lock the projection half stays
+          hidden: nothing has happened, so a win % would be asserting
+          something about a lineup that can still change. */}
+      {board && (
+        <Card>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TeamHead side={board.home} align="left" />
+            <View style={{ alignItems: 'center' }}>
+              <Mono size={8.5} tone="faint">{locked ? 'LIVE' : 'LOCKS'}</Mono>
+              {!locked && <Mono size={8} tone="faint" style={{ marginTop: 2 }}>{fmtLock(matchup?.lock_at ?? null)}</Mono>}
+            </View>
+            <TeamHead side={board.away} align="right" scoreless={!locked} />
           </View>
-          <Mono size={8.5} tone="faint">{locked ? 'LIVE' : `LOCKS ${fmtLock(matchup?.lock_at ?? null)}`}</Mono>
-          <View style={{ flex: 1, alignItems: 'flex-end' }}>
-            <Mono size={8.5} tone="dim" weight="700">{names.opp}</Mono>
-            <Display size={26}>{locked ? r1(oppTotal) : '—'}</Display>
-          </View>
-        </View>
-      </Card>
+          {locked && (
+            <>
+              <View style={{ flexDirection: 'row', gap: 4, marginTop: 9, height: 5 }}>
+                <View style={{ flex: Math.max(0.02, board.home.winPct), backgroundColor: t.you, borderRadius: 3 }} />
+                <View style={{ flex: Math.max(0.02, board.away.winPct), backgroundColor: t.opp, borderRadius: 3 }} />
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                <Mono size={9} tone="you" weight="700">{Math.round(board.home.winPct * 100)}% WIN</Mono>
+                <Mono size={9} tone="opp" weight="700">{Math.round(board.away.winPct * 100)}% WIN</Mono>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 7, gap: 10 }}>
+                <Mono size={8.5} tone="faint" style={{ flex: 1, lineHeight: 12 }}>
+                  {`yet to play (${board.home.yetToPlay})${board.home.yetToPlayBreakdown ? `\n${board.home.yetToPlayBreakdown}` : ''}`}
+                </Mono>
+                <Mono size={8.5} tone="faint" style={{ flex: 1, textAlign: 'right', lineHeight: 12 }}>
+                  {`yet to play (${board.away.yetToPlay})${board.away.yetToPlayBreakdown ? `\n${board.away.yetToPlayBreakdown}` : ''}`}
+                </Mono>
+              </View>
+            </>
+          )}
+        </Card>
+      )}
 
-      {/* Lineup */}
+      {/* ── STARTERS, head to head. Locked only: pre-lock this screen is a
+          LINEUP SETTER and the editable grid below is the right tool. ── */}
+      {locked && board && (
+        <>
+          <Card style={{ paddingVertical: 2 }}>
+            <Mono size={8.5} tone="faint" weight="700" track={0.1} style={{ paddingVertical: 6 }}>STARTERS</Mono>
+            {board.starters.map((row) => (
+              <View key={row.slot} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, borderTopWidth: 1, borderTopColor: t.bd }}>
+                <BoardCell e={row.home} align="left" />
+                <Mono size={11} weight="700" style={{ width: 42, textAlign: 'right' }}>{row.home ? row.home.live.toFixed(2) : '—'}</Mono>
+                <SlotPill pos={row.pos} label={row.label} />
+                <Mono size={11} weight="700" style={{ width: 42 }}>{row.away ? row.away.live.toFixed(2) : '—'}</Mono>
+                <BoardCell e={row.away} align="right" />
+              </View>
+            ))}
+          </Card>
+          {(['bench', 'ir'] as const).map((k) => (
+            board[k].home.length > 0 ? (
+              <Card key={k} style={{ paddingVertical: 2 }}>
+                <Mono size={8.5} tone="faint" weight="700" track={0.1} style={{ paddingVertical: 6 }}>
+                  {k === 'bench' ? 'BENCH' : 'TAXI / IR'}
+                </Mono>
+                {board[k].home.map((e) => (
+                  <View key={e.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
+                    <BoardCell e={e} align="left" />
+                    <Mono size={10.5} tone="dim" weight="700" style={{ width: 52, textAlign: 'right' }}>{e.live.toFixed(2)}</Mono>
+                  </View>
+                ))}
+              </Card>
+            ) : null
+          ))}
+        </>
+      )}
+
+      {/* Lineup — the SETTER (pre-lock), and the fallback whenever the board
+          can't assemble. */}
+      {!(locked && board) && (
       <Card style={{ paddingVertical: 2 }}>
         {slotDefs.map((d, i) => {
           const auto = bb.has(d.slot);
@@ -286,6 +491,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           );
         })}
       </Card>
+      )}
       {saveNote && <Mono size={9} tone={saveNote.startsWith('✓') ? 'faint' : 'warn'}>{saveNote}</Mono>}
 
       {/* Picker */}
