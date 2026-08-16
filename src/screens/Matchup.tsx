@@ -1,5 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../app/store';
+import { leagueGameMode } from '@drip/core/data/liveApi';
+import { ClassicBoard } from './ClassicBoard';
 import type { Phase } from '../app/store';
 import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile, ModalBackdrop } from '../app/ui';
 import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
@@ -104,6 +106,17 @@ const EMPTY_REC: Record<string, never> = {};
 
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
   const { youTeamId: YOU, navigate, liveCtx, activeLeague, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
+  // CLASSIC LEAGUES DO NOT PLAY THIS SCREEN (v0.234.0). LivePicks has branched
+  // on league_game_mode since 0157 — but THIS screen, which serves the
+  // `matchup` route (the one "my leagues → a league → the matchup" actually
+  // lands on), never did. So a normie league opened here got the full drip
+  // board — windows, cards, power-ups — no matter what mode it was in, and no
+  // amount of fixing LivePicks could change that. It is the same one-line
+  // branch, in the file that was missing it.
+  //
+  // `demo` skips the check on purpose: the demo board is a marketing surface
+  // with no real league behind it, so there is no mode to read.
+  const [classicMode, setClassicMode] = useState<boolean | null>(demo ? false : null);
   const [demoBuff, setDemoBuff] = useState('garbage-time'); // the power-up the demo viewer armed
   const buffs = useMemo(() => (demo ? { [demoBuff]: true } : (applied[week]?.buffs ?? EMPTY_REC)), [demo, demoBuff, applied, week]);
   const buffsKey = JSON.stringify(buffs);
@@ -114,6 +127,24 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const rivalryWins = aw?.rivalry ? (Object.keys(aw.rivalry).filter((w) => aw.rivalry![w as WindowId]) as WindowId[]) : undefined;
   const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, ghost: aw?.ghost, emp: aw?.emp, rivalry: rivalryWins, leadChange: aw?.leadChange, grudge: aw?.grudge, jinx: aw?.jinx, redHerring: aw?.redHerring, surge: aw?.surge, coldSnap: aw?.coldSnap, napalm: aw?.napalm, bunker: aw?.bunker, clutchDon: aw?.clutchDon, clutchEncore: aw?.clutchEncore, clutchCounter: aw?.clutchCounter };
   const extrasKey = JSON.stringify(extras);
+  useEffect(() => {
+    if (demo) { setClassicMode(false); return; }
+    if (!liveCtx?.leagueId) { setClassicMode(false); return; }
+    let alive = true;
+    leagueGameMode(liveCtx.leagueId)
+      .then((gm) => {
+        if (!alive) return;
+        // Only a definitive answer decides. A failed read must not drop a
+        // classic league onto the card board — the same trap v0.232.0 fixed
+        // in LivePicks.
+        if (gm?.ok) setClassicMode(gm.mode === 'classic');
+        else setClassicMode((cur) => cur ?? false);
+      })
+      .catch(() => { if (alive) setClassicMode((cur) => cur ?? false); });
+    return () => { alive = false; };
+  }, [demo, liveCtx?.leagueId]);
+
+
   const oppId = gameForTeam(YOU, week)?.oppId ?? 'rock-tunnel';
   const you = getTeam(YOU)!;
   const opp = getTeam(oppId)!;
@@ -1065,6 +1096,16 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   }
   function setWinPlay(wid: string, v: boolean) { setWinPlaying((p) => ({ ...p, [wid]: v })); }
   function replayWin(wid: string) { setWinClocks((c) => ({ ...c, [wid]: 0 })); setWinPlaying((p) => ({ ...p, [wid]: true })); }
+
+  // Hand a classic league to its own board. Held until the mode is KNOWN
+  // (null) rather than defaulting to drip for a frame — flashing the card
+  // board and then replacing it is exactly the symptom this is fixing.
+  if (!demo && liveCtx && classicMode === null) {
+    return <div className="mono" style={{ padding: 24, fontSize: 11, color: 'var(--faint)' }}>Loading your matchup…</div>;
+  }
+  if (!demo && liveCtx && classicMode) {
+    return <ClassicBoard userId={liveCtx.userId} leagueId={liveCtx.leagueId} rosterId={liveCtx.rosterId} onBack={() => navigate({ name: 'leagues' })} />;
+  }
 
   const headline = phase === 'setup' ? 'Set Your Windows' : phase === 'live' ? 'Live Resolution' : `Week ${week} — Final`;
   // The real live board advances on real time (no manual per-window playback), so
