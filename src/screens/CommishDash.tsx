@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_CODES } from '@drip/core/data/kdst';
+import { leagueScoringGet } from '@drip/core/data/liveApi';
+import { parseScoring, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 
 // The builder's position chips (0163) — base positions only; combos are made by
 // lighting several chips on one spot.
 const BUILDER_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'] as const;
 import { LeagueRow, type LeagueTab } from './AdminPage';
-import { card, linkBtn, mono, Muted, errMsg } from './adminUi';
+import { card, linkBtn, mono, Muted, errMsg, RADIUS, TabBar } from './adminUi';
+import { ScoringEditor } from '../app/commishKit';
 
 // Commissioner dashboard — one tabbed management card (LeagueRow) per league you
 // run. Opened from a league card's "manage" (focusId → just that league), as
@@ -146,6 +149,23 @@ const fromSpotDraft = (s: SpotDraft): SlotSpec => {
 };
 const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim());
 
+// ── The scoring page's tabs (v0.213.0) ──────────────────────────────────────
+// 14 catalog sections in one endless column made "find the IDP knobs" a scroll
+// hunt, so they're bucketed into six tabs by what part of the game they score,
+// plus ADJUSTMENTS — the drip-side league scoring that used to live in the
+// commish kit. Sections are matched BY NAME with a fallback bucket, so a
+// section added to the core catalog still shows up (under MORE) instead of
+// silently vanishing from the editor.
+const SCORING_TABS: { id: string; label: string; sections: string[] }[] = [
+  { id: 'offense', label: 'OFFENSE', sections: ['PASSING', 'RUSHING', 'RECEIVING', 'COMBINED RUSH + REC', 'FIRST DOWNS BY POSITION'] },
+  { id: 'turnovers', label: 'TURNOVERS & ST', sections: ['TURNOVERS & RETURNS', 'SPECIAL TEAMS PLAYER'] },
+  { id: 'kicking', label: 'KICKING', sections: ['KICKING', 'PUNTING'] },
+  { id: 'defense', label: 'TEAM DEFENSE', sections: ['TEAM DEFENSE', 'POINTS ALLOWED', 'YARDAGE ALLOWED'] },
+  { id: 'idp', label: 'IDP', sections: ['IDP'] },
+  { id: 'coach', label: 'HEAD COACH', sections: ['HEAD COACH'] },
+];
+const KNOWN_SECTIONS = new Set(SCORING_TABS.flatMap((t) => t.sections));
+
 // Team-acronym helper (founder ask): a tappable 32-team grid under every teams
 // input, kept in SYNC with the free-text field — a chip toggles its code in or
 // out of the comma list, and hand-typed codes light their chips.
@@ -161,7 +181,7 @@ function TeamChips({ value, onChange, disabled }: { value: string; onChange: (ne
     <div style={{ flexBasis: '100%', display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 4 }}>
       {ALL_TEAMS.map((tm) => (
         <button key={tm} disabled={disabled} onClick={() => onChange(toggleTeam(value, tm))} className="mono"
-          style={{ fontSize: 8, fontWeight: 700, padding: '2px 5px', borderRadius: 4, cursor: 'pointer',
+          style={{ fontSize: 8, fontWeight: 700, padding: '2px 5px', borderRadius: RADIUS, cursor: 'pointer',
             color: on.has(tm) ? 'var(--on-accent)' : 'var(--dim)', background: on.has(tm) ? 'var(--you)' : 'var(--bg)',
             border: `1px solid ${on.has(tm) ? 'var(--you)' : 'var(--bd)'}`, opacity: disabled ? 0.5 : 1 }}>{tm}</button>
       ))}
@@ -189,6 +209,14 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   const [spotsDirty, setSpotsDirty] = useState(false);
   // Which spot's PER-SLOT filter editor (0172) is open.
   const [fltOpen, setFltOpen] = useState<number | null>(null);
+  // Which SCORING tab is showing (v0.213.0), and the drip-side adjustments
+  // that the ADJUSTMENTS tab edits (loaded lazily — only that tab needs them).
+  const [scTab, setScTab] = useState('offense');
+  const [adjust, setAdjust] = useState<LeagueScoring | null>(null);
+  useEffect(() => {
+    if (view !== 'scoring' || adjust) return;
+    leagueScoringGet(leagueId).then((r) => { if (r && r.ok) setAdjust(parseScoring(r)); }).catch(() => {});
+  }, [view, leagueId, adjust]);
   // BENCH/TAXI/IR (0164) — with the derived draft-rounds readout.
   const [shape, setShape] = useState<{ bench: number; taxi: number; ir: number }>({ bench: 6, taxi: 0, ir: 0 });
   const [rounds, setRounds] = useState<number | null>(null);
@@ -283,8 +311,9 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
+  // Square controls (v0.213.0) — see adminUi's RADIUS note.
   const pill = (on: boolean): React.CSSProperties => ({
-    fontSize: 10, fontWeight: 700, borderRadius: 999, padding: '6px 13px', cursor: 'pointer',
+    fontSize: 10, fontWeight: 700, borderRadius: RADIUS, padding: '6px 13px', cursor: 'pointer',
     color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)',
     border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, opacity: busy || mode === null ? 0.5 : 1,
   });
@@ -335,7 +364,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 6 }}>
             {spots.map((sp, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', border: '1px solid var(--bd)', borderRadius: 6, padding: '5px 8px' }}>
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '5px 8px' }}>
                 <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--dim)', width: 22 }}>{i + 1}</span>
                 {builderPos.map((p) => {
                   const on = sp.pos.includes(p);
@@ -361,13 +390,13 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                   <div style={{ flexBasis: '100%', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
                     <input value={sp.fTeams} onChange={(e) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fTeams: e.target.value })); setSpotsDirty(true); }}
                       placeholder="teams (e.g. KC, SF) — empty = all"
-                      className="mono" style={{ fontFamily: 'inherit', fontSize: 9.5, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, flex: '1 1 160px' }} />
+                      className="mono" style={{ fontFamily: 'inherit', fontSize: 9.5, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: RADIUS, flex: '1 1 160px' }} />
                     <input value={sp.fMin} onChange={(e) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fMin: e.target.value })); setSpotsDirty(true); }}
                       placeholder="min yrs" inputMode="numeric"
-                      className="mono" style={{ fontFamily: 'inherit', fontSize: 9.5, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, width: 58 }} />
+                      className="mono" style={{ fontFamily: 'inherit', fontSize: 9.5, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: RADIUS, width: 58 }} />
                     <input value={sp.fMax} onChange={(e) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fMax: e.target.value })); setSpotsDirty(true); }}
                       placeholder="max yrs" inputMode="numeric"
-                      className="mono" style={{ fontFamily: 'inherit', fontSize: 9.5, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, width: 58 }} />
+                      className="mono" style={{ fontFamily: 'inherit', fontSize: 9.5, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: RADIUS, width: 58 }} />
                     <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>rookies only → max 0 · SAVE LINEUP applies</span>
                     <TeamChips value={sp.fTeams} disabled={busy}
                       onChange={(next) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fTeams: next })); setSpotsDirty(true); }} />
@@ -386,7 +415,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
             {([['BENCH', 'bench', 20], ['TAXI', 'taxi', 8], ['IR', 'ir', 8]] as const).map(([label, key, max]) => (
-              <span key={key} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 8.5, fontWeight: 700, color: 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 6, padding: '4px 8px' }}>
+              <span key={key} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 8.5, fontWeight: 700, color: 'var(--dim)', border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '4px 8px' }}>
                 {label}
                 <button onClick={() => void saveShape({ ...shape, [key]: Math.max(0, shape[key] - 1) })} disabled={busy || shape[key] === 0} className="mono" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 10 }}>−</button>
                 <span style={{ minWidth: 12, textAlign: 'center', color: 'var(--you)' }}>{shape[key]}</span>
@@ -408,15 +437,15 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           {/* PLAYER FILTERS (0171): who is ALLOWED in this league's pool — a team
               whitelist and/or a tenure window (0 = rookie). Applies when the pool
               is (re)seeded; locks at the draft like everything else. */}
-          <div style={{ marginTop: 10, border: '1px solid var(--bd)', borderRadius: 6, padding: '8px 10px' }}>
+          <div style={{ marginTop: 10, border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '8px 10px' }}>
             <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', fontWeight: 700 }}>🔎 PLAYER FILTERS · who's allowed in the pool</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
               <input value={fltTeams} onChange={(e) => setFltTeams(e.target.value)} placeholder="teams (e.g. KC, SF, BUF) — empty = all"
-                className="mono" style={{ fontFamily: 'inherit', fontSize: 10, padding: '5px 7px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, flex: '1 1 220px' }} />
+                className="mono" style={{ fontFamily: 'inherit', fontSize: 10, padding: '5px 7px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: RADIUS, flex: '1 1 220px' }} />
               <input value={fltMin} onChange={(e) => setFltMin(e.target.value)} placeholder="min yrs" inputMode="numeric"
-                className="mono" style={{ fontFamily: 'inherit', fontSize: 10, padding: '5px 7px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, width: 64 }} />
+                className="mono" style={{ fontFamily: 'inherit', fontSize: 10, padding: '5px 7px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: RADIUS, width: 64 }} />
               <input value={fltMax} onChange={(e) => setFltMax(e.target.value)} placeholder="max yrs" inputMode="numeric"
-                className="mono" style={{ fontFamily: 'inherit', fontSize: 10, padding: '5px 7px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, width: 64 }} />
+                className="mono" style={{ fontFamily: 'inherit', fontSize: 10, padding: '5px 7px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: RADIUS, width: 64 }} />
               <button onClick={() => void saveFilter()} disabled={busy} className="mono" style={pill(true)}>SAVE FILTER</button>
               <button onClick={() => void saveFilter(true)} disabled={busy} className="mono" style={pill(false)}>CLEAR</button>
               <TeamChips value={fltTeams} disabled={busy} onChange={setFltTeams} />
@@ -427,15 +456,33 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           </div>
         </div>
       )}
-      {view === 'scoring' && mode === 'classic' && (
+      {view === 'scoring' && (
         <div>
-          {/* Its own destination now, so the catalog opens EXPANDED — the
-              collapse existed only to keep this off the mode card. */}
           <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--faint)' }}>
             ⚖ SCORING <span style={{ fontWeight: 400 }}>every value is yours to set · changed values light up</span>
           </div>
+          {/* Tabs across the top (v0.213.0): six catalog groups + the drip
+              ADJUSTMENTS that used to live in the commish kit. A drip league
+              only has ADJUSTMENTS to show, so it opens straight on it. */}
+          <TabBar
+            tabs={[...(mode === 'classic' ? SCORING_TABS.map((t) => ({ id: t.id, label: t.label })) : []),
+              // A section the core catalog grows that no bucket claims still
+              // gets an editor rather than disappearing.
+              ...(mode === 'classic' && CLASSIC_SCORING_SECTIONS.some((s) => !KNOWN_SECTIONS.has(s.section))
+                ? [{ id: 'more', label: 'MORE' }] : []),
+              { id: 'adjust', label: '⚖ ADJUSTMENTS' }]}
+            active={mode === 'classic' ? scTab : 'adjust'}
+            onSelect={setScTab}
+            style={{ margin: '8px 0 0' }} />
+        </div>
+      )}
+      {view === 'scoring' && mode === 'classic' && scTab !== 'adjust' && (
+        <div>
           <>
-              {CLASSIC_SCORING_SECTIONS.map((sec) => (
+              {CLASSIC_SCORING_SECTIONS.filter((sec) =>
+                (SCORING_TABS.find((t) => t.id === scTab)?.sections ?? []).includes(sec.section)
+                || (scTab === 'more' && !KNOWN_SECTIONS.has(sec.section)),
+              ).map((sec) => (
                 <div key={sec.section} style={{ marginTop: 8 }}>
                   <div className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: 4 }}>{sec.section}</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 6 }}>
@@ -446,7 +493,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                           {f.label}{f.perYard ? ' /YD' : ''}
                           <input value={scDraft[f.key] ?? ''} inputMode="decimal"
                             onChange={(e) => setScDraft((d) => ({ ...d, [f.key]: e.target.value }))}
-                            style={{ fontFamily: 'inherit', fontSize: 11, padding: '5px 6px', background: 'var(--bg)', color: 'var(--text)', border: `1px solid ${changed ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, width: '100%', boxSizing: 'border-box' }} />
+                            style={{ fontFamily: 'inherit', fontSize: 11, padding: '5px 6px', background: 'var(--bg)', color: 'var(--text)', border: `1px solid ${changed ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, width: '100%', boxSizing: 'border-box' }} />
                         </label>
                       );
                     })}
@@ -458,6 +505,18 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                 <button onClick={() => void saveScoring(true)} disabled={busy} className="mono" style={pill(false)}>RESET TO STANDARD</button>
               </div>
             </>
+        </div>
+      )}
+      {/* ADJUSTMENTS (v0.213.0): the drip-side league scoring — TD bonus,
+          yardage multiplier, turnover penalty, scoped bonuses — folded in from
+          the commish kit. Applies to BOTH modes, which is why it isn't gated
+          on classic: a drip league's only scoring controls are these. */}
+      {view === 'scoring' && (mode !== 'classic' || scTab === 'adjust') && (
+        <div style={{ marginTop: 12 }}>
+          {adjust
+            ? <ScoringEditor leagueId={leagueId} initial={adjust} inline
+                onDone={() => setAdjust(null)} onClose={() => {}} />
+            : <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>Loading…</div>}
         </div>
       )}
       {note && <div className="mono" style={{ fontSize: 9, color: note.startsWith('✓') ? 'var(--faint)' : 'var(--warn, #c66)', marginTop: 8 }}>{note}</div>}
@@ -486,7 +545,7 @@ export function LiveBuffsPanel({ leagueId }: { leagueId: string }) {
         </div>
       </div>
       <button onClick={() => void flip()} disabled={on === null || busy} className="mono"
-        style={{ fontSize: 10, fontWeight: 700, borderRadius: 999, padding: '7px 16px', cursor: 'pointer', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, opacity: on === null || busy ? 0.5 : 1, flexShrink: 0 }}>
+        style={{ fontSize: 10, fontWeight: 700, borderRadius: RADIUS, padding: '7px 16px', cursor: 'pointer', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, opacity: on === null || busy ? 0.5 : 1, flexShrink: 0 }}>
         {on === null ? '…' : on ? 'ON' : 'OFF'}
       </button>
     </div>
