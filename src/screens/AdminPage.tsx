@@ -35,7 +35,7 @@ import { slugMeta } from '@drip/core/data/slugMeta';
 import { isMarkFree, setMarkFree } from '@drip/core/data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '@drip/core/data/liveApi';
 import { POWERUPS } from '@drip/core/data/powerups';
-import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, useWide, errMsg, type TabDef, type NavGroup } from './adminUi';
+import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, useWide, errMsg, RADIUS, type TabDef, type NavGroup } from './adminUi';
 import { DraftRoom } from './NativeLeague';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
@@ -810,7 +810,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
   const showTab = (t: LeagueTab) => {
     setTab(t);
     if (t === 'matchups') { if (!matchups) loadM().catch(() => {}); if (!members) loadMembers().catch(() => {}); }
-    if (t === 'members' && !members) loadMembers().catch(() => {});
+    if ((t === 'members' || t === 'coin') && !members) loadMembers().catch(() => {});
     if (t === 'audit') loadAudit().catch(() => {});
     if (t === 'kdst' && !kdst) loadKdst();
   };
@@ -818,7 +818,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
   // cards don't fetch anything until expanded. Guards prevent refetching.
   useEffect(() => {
     if (!open) return;
-    if (tab === 'members' && !members) loadMembers().catch(() => {});
+    if ((tab === 'members' || tab === 'coin') && !members) loadMembers().catch(() => {});
     else if (tab === 'matchups') { if (!matchups) loadM().catch(() => {}); if (!members) loadMembers().catch(() => {}); }
     else if (tab === 'kdst' && !kdst) loadKdst();
     else if (tab === 'audit' && !audit) loadAudit().catch(() => {});
@@ -1159,7 +1159,41 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           an economy control every time you wanted to check who had joined. */}
       {tab === 'coin' && (
         <div style={{ marginTop: 12 }}>
-          <WeeklyBudget l={l} onGranted={() => { if (members) loadMembers().catch(() => {}); }} />
+          <WeeklyBudget l={l} onGranted={() => { loadMembers().catch(() => {}); }} />
+          {/* Per-team balances + grants (v0.213.2). The commissioner's two coin
+              questions are "who has what" and "give this team some" — both were
+              only answerable by scrolling the MEMBERS list, one team at a time,
+              with no way to compare. One table answers both. */}
+          <div style={{ ...subhead, marginTop: 16 }}>COIN BY TEAM</div>
+          {!members ? <Muted text="Loading…" /> : members.length === 0 ? <Muted text="No teams yet." /> : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+                <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)' }}>
+                  {members.length} teams · ◇ {Math.round(members.reduce((s, m) => s + (wallets[m.roster_id] ?? 0), 0)).toLocaleString()} in circulation
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {[...members]
+                  // Richest first — the point of a table is comparison.
+                  .sort((a, b) => (wallets[b.roster_id] ?? 0) - (wallets[a.roster_id] ?? 0))
+                  .map((m) => (
+                    <div key={m.roster_id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '7px 8px', background: 'var(--bg)', borderRadius: RADIUS }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', flex: '1 1 150px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {m.team || `Roster ${m.roster_id}`}
+                        {!m.enrolled && <span className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)', marginLeft: 6 }}>not joined</span>}
+                      </span>
+                      <span className="mono" style={{ ...mono, fontSize: 12, fontWeight: 700, color: (wallets[m.roster_id] ?? 0) > 0 ? 'var(--you)' : 'var(--faint)', minWidth: 64, textAlign: 'right' }}>
+                        ◇ {Math.round(wallets[m.roster_id] ?? 0).toLocaleString()}
+                      </span>
+                      <SeedCoin balance={wallets[m.roster_id] ?? 0} onSeed={(amt) => seedCoin(m.roster_id, amt)} hideBalance />
+                    </div>
+                  ))}
+              </div>
+              <div className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
+                Grants are additive and immediate — a negative number claws coin back. The weekly allowance above pays every team automatically as each week's games arrive.
+              </div>
+            </>
+          )}
         </div>
       )}
       {tab === 'members' && members && (
@@ -1672,7 +1706,12 @@ function AssignRoster({ initial, seated, stillOnPlatform, joiners = [], onAssign
 
 // Commissioner grants drip coin to a team. Real leagues start at 0; this is how a
 // commish stakes players (or claws back). Additive; the balance shows live.
-function SeedCoin({ balance, onSeed }: { balance: number; onSeed: (amt: number) => Promise<{ ok: boolean; error?: string; balance?: number }> }) {
+function SeedCoin({ balance, onSeed, hideBalance = false }: {
+  balance: number; onSeed: (amt: number) => Promise<{ ok: boolean; error?: string; balance?: number }>;
+  /** The COIN table (v0.213.2) prints the balance in its own column, so the
+   *  inline ◇ chip would say it twice. */
+  hideBalance?: boolean;
+}) {
   const [amt, setAmt] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -1685,8 +1724,8 @@ function SeedCoin({ balance, onSeed }: { balance: number; onSeed: (amt: number) 
     if (r.ok) { setAmt(''); setMsg(`✓ balance ${Math.round(r.balance ?? balance)}`); } else setMsg(r.error ?? 'failed');
   };
   return (
-    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
-      <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>◇ {Math.round(balance)}</span>
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: hideBalance ? 0 : 6 }}>
+      {!hideBalance && <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>◇ {Math.round(balance)}</span>}
       <input value={amt} onChange={(e) => { setAmt(e.target.value.replace(/[^\d-]/g, '')); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
         placeholder="grant coin…" inputMode="numeric" style={{ ...inp, fontSize: 10, padding: '5px 7px', width: 90 }} />
       <button onClick={go} disabled={busy || !amt} className="mono" style={{ ...btn(false), opacity: busy || !amt ? 0.6 : 1 }}>{busy ? '…' : 'grant'}</button>
