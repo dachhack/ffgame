@@ -35,7 +35,7 @@ import { slugMeta } from '@drip/core/data/slugMeta';
 import { isMarkFree, setMarkFree } from '@drip/core/data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '@drip/core/data/liveApi';
 import { POWERUPS } from '@drip/core/data/powerups';
-import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, errMsg, type TabDef } from './adminUi';
+import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, useWide, errMsg, type TabDef, type NavGroup } from './adminUi';
 import { DraftRoom } from './NativeLeague';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
@@ -270,7 +270,15 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 // One league's management card — the whole commissioner/admin toolset for a
 // league, organized under a tab strip (Setup / Members / Picks / Matchups /
 // K-DST / Audit). Used by both the super-admin Leagues tab and CommishDash.
-export type LeagueTab = 'overview' | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst';
+// The league management destinations (v0.212.0). Each id is ONE job — the old
+// catch-all 'overview' has been split into invite / rules / season / admin, and
+// the commissioner's settings panels (injected by CommishDash) are first-class
+// destinations rather than cards stacked below the card.
+export type LeagueTab =
+  | 'overview' | 'rules' | 'season' | 'admin'
+  | 'mode' | 'lineup' | 'scoring'
+  | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst'
+  | 'activity' | 'buffs';
 
 // ── Roster rules editor (native leagues, 0071): per-position limits any time,
 // roster size while the draft is still pending. ∞ = uncapped (stored null).
@@ -680,8 +688,14 @@ function ClassicAccessRow({ leagueId }: { leagueId: string }) {
   );
 }
 
-export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = '', collapsible = false, defaultOpen = true }: {
+export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = '', collapsible = false, defaultOpen = true, panels }: {
   l: AdminLeague; reload: () => void; admin?: boolean; defaultTab?: '' | LeagueTab;
+  /** Extra destinations rendered by the CALLER (v0.212.0). CommishDash injects
+   *  its settings/activity/power-up panels here; the admin console passes
+   *  nothing and simply doesn't show those entries. Injection keeps the
+   *  dependency pointing one way — CommishDash imports LeagueRow, never the
+   *  reverse — so the nav can host panels this file knows nothing about. */
+  panels?: Partial<Record<LeagueTab, React.ReactNode>>;
   /** Whether the signed-in user personally holds this league's commissioner
    *  seat. Deliberately NOT `l.commissioner`, which is
    *  `commissioner_id is not null` — "somebody runs this league", not "you do".
@@ -699,6 +713,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
   const [audit, setAudit] = useState<AdminAudit[] | null>(null);
   const [tab, setTab] = useState<LeagueTab>(defaultTab || 'overview');
   const [open, setOpen] = useState(collapsible ? defaultOpen : true);
+  const wide = useWide();
   // roster_id → team name, from members (drives readable matchup labels).
   const teamName = (rid: number) => members?.find((m) => m.roster_id === rid)?.team ?? `Roster ${rid}`;
   const [kdst, setKdst] = useState<LeagueKdst | null>(null);
@@ -893,23 +908,60 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
   };
 
   const statusChip = (color: string): React.CSSProperties => ({ ...mono, fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color, border: `1px solid ${color}`, borderRadius: 4, padding: '2px 5px', whiteSpace: 'nowrap' });
-  const leagueTabs: TabDef<LeagueTab>[] = [
-    { id: 'overview', label: 'SETUP' },
-    // The commissioner's kit (0141/0143/0144) — note, flags, scoring. Any
-    // league kind; the same editors the live board's ⚑ banner opens.
-    { id: 'kit', label: '⚑ KIT' },
-    // Native leagues draft, manage rosters, and run playoffs in-app.
-    ...(l.provider === 'native' ? [
-      { id: 'draft', label: '⛏ DRAFT' } as TabDef<LeagueTab>,
-      { id: 'rosters', label: 'ROSTERS' } as TabDef<LeagueTab>,
-      { id: 'playoffs', label: '🏆 PLAYOFFS' } as TabDef<LeagueTab>,
-    ] : []),
-    { id: 'members', label: 'MEMBERS' },
-    { id: 'ready', label: 'PICKS' },
-    { id: 'matchups', label: 'MATCHUPS' },
-    { id: 'kdst', label: 'K/DST' },
-    { id: 'audit', label: 'AUDIT' },
+  // ── The management map (v0.212.0) ────────────────────────────────────────
+  // Grouped by WHEN a commissioner needs it, not by which subsystem owns it.
+  // A flat strip of ~15 destinations told you nothing about sequence and
+  // scrolled its tail out of view; these four groups answer "am I setting this
+  // league up, running a week, keeping people engaged, or debugging?" —
+  // rendered as a left rail on desktop and the same scrolling strip on mobile.
+  const native = l.provider === 'native';
+  const has = (id: LeagueTab) => panels?.[id] !== undefined;
+  const navGroups: NavGroup<LeagueTab>[] = [
+    {
+      title: 'SET UP',
+      items: [
+        { id: 'overview', label: 'INVITE & ACCESS' },
+        ...(has('mode') ? [{ id: 'mode', label: '🎮 GAME MODE' } as TabDef<LeagueTab>] : []),
+        ...(has('lineup') ? [{ id: 'lineup', label: '🧩 LINEUP' } as TabDef<LeagueTab>] : []),
+        ...(has('scoring') ? [{ id: 'scoring', label: '⚖ SCORING' } as TabDef<LeagueTab>] : []),
+        ...(native ? [{ id: 'rules', label: 'ROSTER RULES' } as TabDef<LeagueTab>] : []),
+        { id: 'season', label: 'SEASON' },
+      ],
+    },
+    {
+      title: 'RUN THE SEASON',
+      items: [
+        ...(native ? [{ id: 'draft', label: '⛏ DRAFT' } as TabDef<LeagueTab>] : []),
+        { id: 'members', label: 'MEMBERS' },
+        { id: 'ready', label: 'PICKS' },
+        { id: 'matchups', label: 'MATCHUPS' },
+        ...(native ? [
+          { id: 'rosters', label: 'ROSTERS' } as TabDef<LeagueTab>,
+          { id: 'playoffs', label: '🏆 PLAYOFFS' } as TabDef<LeagueTab>,
+        ] : []),
+      ],
+    },
+    {
+      title: 'ENGAGE',
+      items: [
+        // The commissioner's kit (0141/0143/0144) — note, flags, scoring
+        // adjustments. Any league kind; the same editors the ⚑ banner opens.
+        { id: 'kit', label: '⚑ COMMISH KIT' },
+        ...(has('activity') ? [{ id: 'activity', label: '👁 ACTIVITY' } as TabDef<LeagueTab>] : []),
+        ...(has('buffs') ? [{ id: 'buffs', label: '◈ POWER-UPS' } as TabDef<LeagueTab>] : []),
+      ],
+    },
+    {
+      title: 'DIAGNOSE',
+      items: [
+        { id: 'kdst', label: 'K/DST' },
+        { id: 'audit', label: 'AUDIT' },
+        ...(admin ? [{ id: 'admin', label: '⚙ ADMIN MODES' } as TabDef<LeagueTab>] : []),
+      ],
+    },
   ];
+  // Mobile keeps the single scrolling strip — same destinations, flattened.
+  const leagueTabs: TabDef<LeagueTab>[] = navGroups.flatMap((g) => g.items);
 
   return (
     <div style={card}>
@@ -956,7 +1008,16 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       {/* 'sync' / 'members' are in-progress sentinels shown on their own buttons. */}
       {busy && busy !== 'sync' && busy !== 'members' && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{busy}</div>}
 
-      <TabBar tabs={leagueTabs} active={tab} onSelect={showTab} style={{ margin: '10px -14px 0', padding: '0 8px' }} />
+      {/* Desktop gets the grouped rail; narrow screens keep the scrolling strip.
+          Both drive the same `tab` state, so a destination behaves identically
+          either way. */}
+      {!wide && <TabBar tabs={leagueTabs} active={tab} onSelect={showTab} style={{ margin: '10px -14px 0', padding: '0 8px' }} />}
+      <div style={wide ? { display: 'flex', gap: 18, marginTop: 12, alignItems: 'flex-start' } : undefined}>
+        {wide && <SideNav groups={navGroups} active={tab} onSelect={showTab} />}
+        <div style={wide ? { flex: 1, minWidth: 0, borderLeft: '1px solid var(--bd)', paddingLeft: 18 } : undefined}>
+
+      {/* Caller-injected panels (CommishDash's settings / activity / power-ups). */}
+      {panels?.[tab] !== undefined && panels[tab]}
 
       {/* the commissioner's kit — note / player flags / scoring adjustments */}
       {tab === 'kit' && <CommishToolsPanel leagueId={l.league_id} />}
@@ -1005,19 +1066,29 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
             </div>
             <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>Players join with the invite link (button above) or by typing the invite code. The commish code claims league management.</div>
           </div>
-          {/* roster + transaction rules — native leagues only (imported rosters live on their platform) */}
-          {l.provider === 'native' && (
-            <div>
-              <div style={subhead}>ROSTER RULES</div>
-              <RosterRulesEditor leagueId={l.league_id} />
-            </div>
-          )}
-          {l.provider === 'native' && (
-            <div>
-              <div style={subhead}>WAIVERS &amp; TRADES</div>
-              <TransactionRulesEditor leagueId={l.league_id} />
-            </div>
-          )}
+        </div>
+      )}
+
+      {/* ROSTER RULES — native leagues only (imported rosters live on their
+          own platform). Its own destination since v0.212.0: these are two full
+          editors that used to sit below the invite codes. */}
+      {tab === 'rules' && l.provider === 'native' && (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <div style={subhead}>ROSTER RULES</div>
+            <RosterRulesEditor leagueId={l.league_id} />
+          </div>
+          <div>
+            <div style={subhead}>WAIVERS &amp; TRADES</div>
+            <TransactionRulesEditor leagueId={l.league_id} />
+          </div>
+        </div>
+      )}
+
+      {/* SEASON — the once-per-season plumbing: schedule sync, member re-pull,
+          preseason practice. */}
+      {tab === 'season' && (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
           {l.provider !== 'native' && (
           <div>
             <div style={subhead}>SCHEDULE</div>
@@ -1041,19 +1112,22 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           {/* Practice is a commissioner tool, not an admin errand — it's how a
               league's players get to rehearse the live loop before Week 1. */}
           <PreseasonPractice on={!!l.preseason_at} leagueId={l.league_id} season={l.season} admin={admin} reload={reload} />
-          {admin && (
-            <div>
-              <div style={subhead}>ADMIN MODES</div>
-              <WeekLockControl leagueId={l.league_id} />
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
-                <TestLiveToggle on={!!l.test_live_at} leagueId={l.league_id} reload={reload} />
-                <CardThemeToggle leagueId={l.league_id} />
-                <WindowPotToggle l={l} reload={reload} />
-                <span style={{ flex: 1 }} />
-                <DeleteLeague name={l.name} onDelete={async () => { const r = await adminDeleteLeague(l.league_id); if (r.ok) reload(); return r; }} />
-              </div>
-            </div>
-          )}
+        </div>
+      )}
+
+      {/* ADMIN MODES — super-admin only, and now behind its own destination so
+          the destructive controls aren't one scroll below the invite codes. */}
+      {tab === 'admin' && admin && (
+        <div style={{ marginTop: 12 }}>
+          <div style={subhead}>ADMIN MODES</div>
+          <WeekLockControl leagueId={l.league_id} />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
+            <TestLiveToggle on={!!l.test_live_at} leagueId={l.league_id} reload={reload} />
+            <CardThemeToggle leagueId={l.league_id} />
+            <WindowPotToggle l={l} reload={reload} />
+            <span style={{ flex: 1 }} />
+            <DeleteLeague name={l.name} onDelete={async () => { const r = await adminDeleteLeague(l.league_id); if (r.ok) reload(); return r; }} />
+          </div>
         </div>
       )}
 
@@ -1240,6 +1314,8 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         </div>
       )}
 
+        </div>
+      </div>
       </>}
     </div>
   );
