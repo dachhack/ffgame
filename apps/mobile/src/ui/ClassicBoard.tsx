@@ -22,7 +22,7 @@ import {
   type LiveMatchup, type PoolPlayer, type TeamInfo,
   nativeRosters,
 } from '@drip/core/data/liveApi';
-import { useTheme } from '../theme.native';
+import { useTheme, MONO } from '../theme.native';
 import { tap, commit } from './feedback';
 import { Card, Chip, Display, Mono, PosPill } from './prims';
 
@@ -53,22 +53,28 @@ function TeamHead({ side, align, scoreless = false }: { side: BoardSide; align: 
   );
 }
 
-/** The centre slot pill. RN has no gradients without a dependency, so the
- *  eligible positions are STACKED BANDS behind the label — same information as
- *  the web's gradient (a FLEX reads as the set it accepts) with nothing new
- *  to install. */
+/** The centre slot marker: eligible positions as colour bands, plus the
+ *  spot's REAL NAME under them.
+ *
+ *  The first cut truncated the name to four characters, which quietly
+ *  destroyed the thing the commissioner had just built — "NFC Flex" became
+ *  "NFC ", "Rookie Only" became "Rook". A custom label is a rule the league
+ *  agreed on; it has to reach the board intact or the builder's label feature
+ *  stops meaning anything once the games start. Positions are NAMED as well as
+ *  coloured, since colour alone asks the reader to have memorised the palette. */
 function SlotPill({ pos, label }: { pos: string[]; label: string }) {
   const t = useTheme();
-  const use = pos.slice(0, 3);
-  const first = t.pos[use[0] as keyof typeof t.pos];
+  const posLine = pos.length > 1 ? pos.map((p) => (p === 'DEF' ? 'D/ST' : p)).join('/') : null;
+  const first = t.pos[pos[0] as keyof typeof t.pos];
   return (
-    <View style={{ width: 40, height: 28, borderRadius: 4, overflow: 'hidden', borderWidth: 1, borderColor: t.bd, flexDirection: 'row' }}>
-      {use.map((p) => (
-        <View key={p} style={{ flex: 1, backgroundColor: t.pos[p as keyof typeof t.pos]?.bg ?? t.bg }} />
-      ))}
-      <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
-        <Mono size={8.5} weight="700" style={{ color: first?.fg ?? t.text }}>{label.length > 4 ? label.slice(0, 4) : label}</Mono>
+    <View style={{ width: 84, alignItems: 'center', gap: 2 }}>
+      <View style={{ flexDirection: 'row', width: 48, height: 5, borderRadius: 3, overflow: 'hidden', borderWidth: 1, borderColor: t.bd }}>
+        {pos.slice(0, 6).map((p) => (
+          <View key={p} style={{ flex: 1, backgroundColor: t.pos[p as keyof typeof t.pos]?.bg ?? t.bg }} />
+        ))}
       </View>
+      <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: first?.fg ?? t.text, textAlign: 'center' }}>{label}</Text>
+      {!!posLine && <Text style={{ fontFamily: MONO, fontSize: 7.5, color: t.faint, textAlign: 'center' }}>{posLine}</Text>}
     </View>
   );
 }

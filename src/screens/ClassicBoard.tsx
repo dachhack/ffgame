@@ -96,19 +96,35 @@ function TeamHead({ side, align, accent, scoreless = false }: {
   );
 }
 
-/** The slot pill down the middle — one colour per eligible position, so a
- *  FLEX reads as the set of things it accepts rather than as a word. */
+/** The slot marker down the middle: the ELIGIBLE POSITIONS as colour bands
+ *  plus the spot's real name underneath.
+ *
+ *  The first cut truncated the name to four characters to fit a fixed pill,
+ *  which quietly destroyed exactly the thing the commissioner had just built:
+ *  "NFC Flex" became "NFC ", "Rookie Only" became "Rook". A custom spot label
+ *  is a rule the league agreed on — it has to survive to the board, at full
+ *  length, or the builder's label feature stops meaning anything once the
+ *  games start. The positions are named as well as coloured, because colour
+ *  alone asks the reader to have memorised the palette. */
 function SlotPill({ pos, label }: { pos: string[]; label: string }) {
-  const use = pos.slice(0, 3);
+  // FLEX-style spots list what they accept; a single-position spot would just
+  // repeat itself, so it shows the name alone.
+  const posLine = pos.length > 1 ? pos.map((p) => (p === 'DEF' ? 'D/ST' : p)).join('/') : null;
   return (
-    <span title={label} style={{ display: 'inline-flex', width: 46, height: 30, borderRadius: 5, overflow: 'hidden', border: '1px solid var(--bd)', flexShrink: 0 }}>
-      {use.map((p) => (
-        <span key={p} style={{ flex: 1, background: `var(--pos-${p}-bg, var(--bg))`, display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
-      ))}
-      <span className="mono" style={{ position: 'absolute', width: 46, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, fontWeight: 700, color: `var(--pos-${use[0]}-fg, var(--text))` }}>
-        {label.length > 4 ? label.slice(0, 4) : label}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, minWidth: 0 }}>
+      <div style={{ display: 'flex', width: 54, height: 6, borderRadius: 3, overflow: 'hidden', border: '1px solid var(--bd)' }}>
+        {pos.slice(0, 6).map((p) => (
+          <span key={p} style={{ flex: 1, background: `var(--pos-${p}-bg, var(--bg))` }} />
+        ))}
+      </div>
+      <span className="mono" title={posLine ? `${label} — ${posLine}` : label}
+        style={{ fontSize: 9.5, fontWeight: 700, color: `var(--pos-${pos[0]}-fg, var(--text))`, textAlign: 'center', lineHeight: 1.25, maxWidth: 86 }}>
+        {label}
       </span>
-    </span>
+      {posLine && (
+        <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', textAlign: 'center', lineHeight: 1.2, maxWidth: 86 }}>{posLine}</span>
+      )}
+    </div>
   );
 }
 
@@ -462,7 +478,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
           <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
             <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', padding: '10px 14px 6px' }}>STARTERS</div>
             {board.starters.map((row) => (
-              <div key={row.slot} style={{ display: 'grid', gridTemplateColumns: '1fr 44px 46px 44px 1fr', alignItems: 'center', gap: 8, padding: '10px 14px', borderTop: '1px solid var(--bd)' }}>
+              <div key={row.slot} style={{ display: 'grid', gridTemplateColumns: '1fr 44px 92px 44px 1fr', alignItems: 'center', gap: 8, padding: '10px 14px', borderTop: '1px solid var(--bd)' }}>
                 <BoardCell e={row.home} align="left" />
                 <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, textAlign: 'right', color: 'var(--text)' }}>{row.home ? row.home.live.toFixed(2) : '—'}</span>
                 <span style={{ position: 'relative', display: 'inline-flex', justifyContent: 'center' }}><SlotPill pos={row.pos} label={row.label} /></span>
