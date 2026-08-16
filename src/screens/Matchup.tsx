@@ -16,6 +16,7 @@ import {
 } from '@drip/core/engine/matchup';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, fmtStat, metricDriver, GAME_SECONDS } from '@drip/core/engine/sim';
 import { openPlayerCard } from '../app/playerCard';
+import { ScoreDiffPanel } from '../app/scoreDiff';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '@drip/core/data/demoNarration';
@@ -1561,6 +1562,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               />
             ))}
           </div>
+          {/* ⚖ SCORE DIFF (0200.2, task #57) — the live board's client-vs-server
+              accounting instrument; collapsed dashed strip, live boards only. */}
+          {liveCtx && liveCtx.rosterId != null && (
+            <ScoreDiffPanel matchupId={liveCtx.matchupId} rosterId={liveCtx.rosterId} windows={resolved.windows} />
+          )}
           <div style={{ height: 40 }} />
         </main>
 
