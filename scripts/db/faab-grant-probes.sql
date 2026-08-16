@@ -106,6 +106,17 @@ begin
   perform assert_ok(set_transaction_rules(lid, 'rolling', null, null), 'fb11 back to rolling');
   perform assert_ok(set_transaction_rules(lid, 'faab', null, null), 'fb11a faab again');
   perform assert_true(member_faab(lid, rid_c) = 100, 'fb11b balances reset to the default');
+
+  -- THE READ IS MODE-INDEPENDENT (v0.220.0 depends on this): the app's FAAB
+  -- card shows balances even on a non-FAAB league and disables the grant
+  -- levers, because hiding the numbers would make the refusal a mystery. If
+  -- league_faab_wallets ever started refusing outside FAAB, that card would
+  -- go blank with no explanation — so pin the contract here.
+  perform assert_ok(set_transaction_rules(lid, 'rolling', null, null), 'fb12 rolling for the read test');
+  r := league_faab_wallets(lid);
+  perform assert_ok(r, 'fb12a wallets still readable off FAAB');
+  perform assert_true(jsonb_array_length(r -> 'teams') >= 2, 'fb12b every seat still listed');
+  perform assert_err(commish_grant_faab(lid, rid_b, 5), 'set waivers to FAAB', 'fb12c but the grant is still refused');
 end $$;
 
 select 'ALL FAAB-GRANT PROBES PASSED' as status;
