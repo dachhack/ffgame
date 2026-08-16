@@ -17,6 +17,7 @@ import {
   myMatchup, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   leagueGameMode, weekLivePlays, friendlyError, playerFlags,
   type LiveMatchup, type PoolPlayer, type TeamInfo,
+  nativeRosters,
 } from '@drip/core/data/liveApi';
 import { useTheme } from '../theme.native';
 import { tap, commit } from './feedback';
@@ -50,6 +51,9 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const [flagsVer, setFlagsVer] = useState(0);
   const [bestball, setBestball] = useState<string[]>([]);
   const [slotsSpec, setSlotsSpec] = useState<SlotSpec[] | null>(null);
+  // TAXI/IR stashes (0164): stashed players can't start or best-ball fill —
+  // the DB refuses them; filtering here keeps the picker and fills honest.
+  const [stashed, setStashed] = useState<Set<string>>(new Set());
   const [pool, setPool] = useState<PoolPlayer[]>([]);
   const [oppPool, setOppPool] = useState<PoolPlayer[]>([]);
   const [mine, setMine] = useState<Record<string, string | null>>({});
@@ -68,6 +72,9 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         const m = await myMatchup(leagueId, rosterId);
         if (!m) { setState('none'); return; }
         setMatchup(m);
+        nativeRosters(leagueId).then((rows) => {
+          setStashed(new Set(rows.filter((x) => x.spot && x.spot !== 'active').map((x) => x.slug)));
+        }).catch(() => {});
         leagueGameMode(leagueId).then((gm) => { if (gm.ok) { if (gm.ppr != null) setPpr(Number(gm.ppr)); setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRosterCfg(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); } }).catch(() => {});
         // Flag rules (0144) bite classic scoring (bonus_mult / bonus_pts) and
         // the best-ball fill (no_start) — same cache the drip screens keep.
@@ -150,7 +157,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         if (manual[d.slot]) manualPicks.push({ slot: d.slot, player: mkPlayer(manual[d.slot]!) });
       }
       if (locked && matchup && bb.size) {
-        for (const f of bestballFill(manualPicks, bestball, rosterSlugs.map(mkPlayer), matchup.week, sc, slotDefs)) out[f.slot] = f.player.id;
+        for (const f of bestballFill(manualPicks, bestball, rosterSlugs.filter((x) => !stashed.has(x)).map(mkPlayer), matchup.week, sc, slotDefs)) out[f.slot] = f.player.id;
       }
       return out;
     };
@@ -158,7 +165,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       mine: build(mine, pool.map((p) => p.slug)),
       theirs: build(theirs, oppPool.map((p) => p.slug)),
     };
-  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer]);
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed]);
 
   // Only MANUAL starters reserve players; best-ball slots never block the picker.
   const used = useMemo(() => new Set(

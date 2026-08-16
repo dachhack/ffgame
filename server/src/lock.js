@@ -235,6 +235,11 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
     // (game ops must not jam), so the exclusion has to happen HERE.
     const { data: flagRows } = await db().from('player_flag').select('slug,rules').eq('league_id', m.league_id);
     const noStart = new Set((flagRows ?? []).filter((f) => f.rules?.no_start === true).map((f) => f.slug));
+    // TAXI/IR (0164): a stashed player can't start — the DB trigger would
+    // refuse the row and take the whole autofill batch down with it.
+    const { data: stashedRows } = await db().from('native_roster')
+      .select('slug').eq('league_id', m.league_id).neq('spot', 'active');
+    for (const r of stashedRows ?? []) noStart.add(r.slug);
     const { data: mems } = await db().from('league_membership')
       .select('sleeper_roster_id,app_user_id,enrolled,controller').eq('league_id', m.league_id)
       .in('sleeper_roster_id', [m.home_roster_id, m.away_roster_id]);
