@@ -298,4 +298,51 @@ begin
   reset role;
 end $$;
 
+-- ── PICK THE GAME AT CREATION (0175) ────────────────────────────────────────
+-- create_native_league takes p_game_mode. The interesting property is not that
+-- the key gets written — it's that a league created as 'classic' is USABLE as
+-- one by its own commissioner, with no admin step, which means classic_ok has
+-- to be set alongside game_mode. And the drip default must still produce a
+-- league byte-identical in behaviour to every league created before 0175.
+do $$
+declare r jsonb; lid uuid; gm jsonb;
+begin
+  perform probe_as('b');
+
+  -- default: still drip, and the classic gate is still SHUT (the 0158
+  -- behaviour, unchanged — this is the regression that would matter most)
+  r := create_native_league('Default Game League', '2026', 4, 7, 60);
+  perform assert_ok(r, 'cg0 12-arg call still works after the signature change');
+  lid := (r ->> 'league_id')::uuid;
+  perform assert_true(r ->> 'game_mode' = 'drip', 'cg0a defaults to drip');
+  gm := league_game_mode(lid);
+  perform assert_true(gm ->> 'mode' = 'drip', 'cg0b reads back drip');
+  perform assert_true((gm ->> 'classic_ok')::boolean is not true, 'cg0c drip league is NOT self-flagged');
+  perform assert_err(set_league_game_mode(lid, 'classic'), 'not enabled', 'cg0d and still needs the admin flag to become classic');
+
+  -- classic at creation: mode set AND the league flagged, so the
+  -- commissioner owns the switch from here on
+  r := create_native_league('Normal Game League', '2026', 4, 7, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  perform assert_ok(r, 'cg1 classic league creates');
+  lid := (r ->> 'league_id')::uuid;
+  perform assert_true(r ->> 'game_mode' = 'classic', 'cg1a result names the game');
+  gm := league_game_mode(lid);
+  perform assert_true(gm ->> 'mode' = 'classic', 'cg1b reads back classic');
+  perform assert_true((gm ->> 'classic_ok')::boolean, 'cg1c self-flagged at creation');
+  -- the point of the flag: switch away and back with no admin involved
+  perform assert_ok(set_league_game_mode(lid, 'drip'), 'cg1d commish can switch to drip');
+  perform assert_ok(set_league_game_mode(lid, 'classic'), 'cg1e …and back, without an admin');
+  -- a classic league is immediately usable AS one (0157/0163 writes accepted)
+  perform assert_ok(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB","WR","TE"]}]'::jsonb), 'cg1f lineup spec accepted straight away');
+
+  -- validation
+  perform assert_err(create_native_league('Bad Game', '2026', 4, 7, 60, 'snake', 200, 15, 1, null, null, null, 'sleeper'),
+    'game must be drip or classic', 'cg2 unknown game refused');
+  -- case/whitespace tolerated rather than refused — the value comes from a UI
+  -- toggle, and a stray space must not cost someone their league
+  r := create_native_league('Loud Game', '2026', 4, 7, 60, 'snake', 200, 15, 1, null, null, null, '  CLASSIC ');
+  perform assert_ok(r, 'cg3 case/space tolerated');
+  perform assert_true(r ->> 'game_mode' = 'classic', 'cg3a normalised to classic');
+end $$;
+
 select 'ALL GAME-MODE PROBES PASSED' as result;
