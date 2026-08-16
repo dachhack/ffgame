@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, redeemCommish, commishOverview, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminSetCodeRequestEmail, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, leagueFaabWallets, commishGrantFaab, type FaabWallets, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   adminSetPot, adminClosePots,
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
@@ -361,6 +361,76 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
   );
 }
 
+// ── FAAB wallets + grants (0173) ─────────────────────────────────────────────
+// Every seat's remaining budget with a grant box each, plus one grant to the
+// whole league. Balances are EFFECTIVE — a seat that has never bid reads the
+// league default, not 0 — so "100" means the same thing on every row whether
+// or not that team has spent yet.
+function FaabWallets({ leagueId }: { leagueId: string }) {
+  const [w, setW] = useState<FaabWallets | null>(null);
+  const [amt, setAmt] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => leagueFaabWallets(leagueId).then(setW).catch((e) => setMsg(errMsg(e, 'load failed')));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  const grant = async (rosterId: number | null, key: string) => {
+    const n = Number(amt[key]);
+    if (busy || !Number.isFinite(n) || n === 0) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishGrantFaab(leagueId, rosterId, Math.round(n));
+      if (r.ok) { setAmt((a) => ({ ...a, [key]: '' })); setMsg(rosterId == null ? `✓ granted to all teams` : '✓ granted'); await load(); }
+      else setMsg(r.error ?? 'failed');
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); }
+  };
+  const box: React.CSSProperties = { ...inp, fontSize: 12.5, padding: '4px 6px', width: 86 };
+  const teams = w?.teams ?? [];
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
+      <div style={subhead}>💰 FAAB WALLETS</div>
+      {!w ? <Muted text="Loading…" /> : !w.ok ? <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--opp)' }}>{w.error}</div> : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--dim)' }}>
+              season budget ${w.budget} · {teams.length} teams · ${teams.reduce((s, t) => s + t.faab, 0).toLocaleString()} unspent
+            </span>
+            <span style={{ flex: 1 }} />
+            <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>grant every team</span>
+            <input value={amt.all ?? ''} onChange={(e) => setAmt((a) => ({ ...a, all: e.target.value.replace(/[^\d-]/g, '') }))}
+              onKeyDown={(e) => { if (e.key === 'Enter') void grant(null, 'all'); }}
+              placeholder="+/− $" inputMode="numeric" style={box} />
+            <button onClick={() => void grant(null, 'all')} disabled={busy || !amt.all} className="mono"
+              style={{ ...btn(true), opacity: busy || !amt.all ? 0.5 : 1 }}>grant all</button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {teams.map((t) => (
+              <div key={t.roster_id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '6px 8px', background: 'var(--bg)', borderRadius: RADIUS }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', flex: '1 1 150px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {t.team || `Roster ${t.roster_id}`}
+                  {!t.touched && <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)', marginLeft: 6 }}>untouched</span>}
+                </span>
+                <span className="mono" style={{ ...mono, fontSize: 14, fontWeight: 700, color: t.faab > 0 ? 'var(--you)' : 'var(--faint)', minWidth: 64, textAlign: 'right' }}>
+                  ${t.faab.toLocaleString()}
+                </span>
+                <input value={amt[t.roster_id] ?? ''} onChange={(e) => setAmt((a) => ({ ...a, [t.roster_id]: e.target.value.replace(/[^\d-]/g, '') }))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void grant(t.roster_id, String(t.roster_id)); }}
+                  placeholder="+/− $" inputMode="numeric" style={box} />
+                <button onClick={() => void grant(t.roster_id, String(t.roster_id))} disabled={busy || !amt[t.roster_id]} className="mono"
+                  style={{ ...btn(false), opacity: busy || !amt[t.roster_id] ? 0.5 : 1 }}>grant</button>
+              </div>
+            ))}
+          </div>
+          <div className="mono" style={{ ...mono, fontSize: 11, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+            Grants are additive — a negative number claws back, and a balance never goes below $0. "Untouched" seats have never bid, so they still read the league default. Changing the waiver mode or season budget resets every balance to the default.
+          </div>
+        </>
+      )}
+      {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{msg}</div>}
+    </div>
+  );
+}
+
 // ── Waivers & trades rules (0072). Mode/budget saves only send CHANGED fields
 // — the server resets every seat's FAAB balance when either changes. The
 // schedule knobs send -1 to CLEAR (daily clear → rolling; window → always).
@@ -532,6 +602,10 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         {faStart != null && hourStep(faEnd ?? 1320, (m) => setFaEnd(m), 'CLOSES')}
         <button onClick={save} disabled={saving} className="mono" style={btn(true)}>{saving ? 'saving…' : '✓ save'}</button>
       </div>
+      {/* FAAB wallets (0173) — only meaningful in FAAB mode, and the grant RPC
+          refuses outside it, so the whole block is gated on the SAVED mode
+          rather than the unsaved toggle. */}
+      {init?.mode === 'faab' && <FaabWallets leagueId={leagueId} />}
       <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
         FAAB: claims carry blind bids against a season budget — highest bid wins, winner pays, losers keep their money. Changing the mode or budget resets every team's balance. Trade review parks accepted trades until you approve or veto them. A daily clear time holds dropped players until that ET time (× hold days); the free-agency window gates instant pickups only — claims can be submitted around the clock.
       </div>
@@ -901,7 +975,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
     if (t === 'matchups') { if (!matchups) loadM().catch(() => {}); if (!members) loadMembers().catch(() => {}); }
     if ((t === 'members' || t === 'coin') && !members) loadMembers().catch(() => {});
     if (t === 'audit') loadAudit().catch(() => {});
-    if (t === 'kdst' && !kdst) loadKdst();
+    if ((t === 'kdst' || t === 'mode') && !kdst) loadKdst();
   };
   // Load the active tab's data once the card is (or becomes) open — collapsed
   // cards don't fetch anything until expanded. Guards prevent refetching.
@@ -909,7 +983,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
     if (!open) return;
     if ((tab === 'members' || tab === 'coin') && !members) loadMembers().catch(() => {});
     else if (tab === 'matchups') { if (!matchups) loadM().catch(() => {}); if (!members) loadMembers().catch(() => {}); }
-    else if (tab === 'kdst' && !kdst) loadKdst();
+    else if ((tab === 'kdst' || tab === 'mode') && !kdst) loadKdst();
     else if (tab === 'audit' && !audit) loadAudit().catch(() => {});
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [open]);
@@ -1046,7 +1120,6 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
     {
       title: 'DIAGNOSE',
       items: [
-        { id: 'kdst', label: 'K/DST' },
         { id: 'audit', label: 'AUDIT' },
         ...(admin ? [{ id: 'admin', label: '⚙ ADMIN MODES' } as TabDef<LeagueTab>] : []),
       ],
@@ -1337,8 +1410,11 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           <CoManagerPanel leagueId={l.league_id} members={members} />
         </div>
       )}
-      {tab === 'kdst' && (
-        <div style={{ marginTop: 12 }}>
+      {/* K/DST fill (v0.216.2) — a setup decision about what the league
+          rosters, so it lives with MODE & SEASON rather than under DIAGNOSE. */}
+      {tab === 'mode' && (
+        <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
+          <div style={subhead}>K / D-ST FILL</div>
           {!kdst ? <Muted text="Loading…" /> : (
             <>
               <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>

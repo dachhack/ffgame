@@ -105,3 +105,4 @@ $RUN -f scripts/db/game-mode-probes.sql | grep -E "PROBE FAIL|ALL GAME-MODE PROB
 $RUN -f scripts/db/auto-playoffs-probes.sql | grep -E "PROBE FAIL|ALL AUTO-PLAYOFFS PROBES" || { echo "AUTO-PLAYOFFS PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/roster-builder-probes.sql | grep -E "PROBE FAIL|ALL ROSTER-BUILDER PROBES" || { echo "ROSTER-BUILDER PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/taxi-ir-probes.sql | grep -E "PROBE FAIL|ALL TAXI-IR PROBES" || { echo "TAXI-IR PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/faab-grant-probes.sql | grep -E "PROBE FAIL|ALL FAAB-GRANT PROBES" || { echo "FAAB-GRANT PROBES FAILED"; exit 1; }
