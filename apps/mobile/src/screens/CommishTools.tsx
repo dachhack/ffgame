@@ -610,9 +610,9 @@ function CommishSeen({ leagueId }: { leagueId: string }) {
 // only offers itself where the founder's per-league flag (0158) is on.
 // A builder spot's local draft row: pos/bb plus the PER-SLOT player filter
 // (0172) as raw input strings, so partial typing never fights the keyboard.
-type SpotDraft = { pos: string[]; bb?: boolean; fTeams: string; fMin: string; fMax: string };
+type SpotDraft = { pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string };
 const toSpotDraft = (x: SlotSpec): SpotDraft => ({
-  pos: [...x.pos], bb: !!x.bb,
+  pos: [...x.pos], bb: !!x.bb, label: x.label ?? '',
   fTeams: (x.teams ?? []).join(', '),
   fMin: x.min_exp != null ? String(x.min_exp) : '',
   fMax: x.max_exp != null ? String(x.max_exp) : '',
@@ -623,6 +623,7 @@ const fromSpotDraft = (s: SpotDraft): SlotSpec => {
   const mx = s.fMax.trim() === '' ? null : Number(s.fMax);
   return {
     pos: s.pos, bb: s.bb,
+    ...(s.label.trim() ? { label: s.label.trim() } : {}),
     ...(teams.length ? { teams } : {}),
     ...(mn != null && Number.isFinite(mn) ? { min_exp: mn } : {}),
     ...(mx != null && Number.isFinite(mx) ? { max_exp: mx } : {}),
@@ -809,6 +810,14 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
                   style={{ borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: spotHasFlt(sp) ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: spotHasFlt(sp) ? t.you : t.bd }}>
                   <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: spotHasFlt(sp) ? t.onAccent : t.dim }}>🔎</Text>
                 </Pressable>
+                {/* Touch has no drag-and-drop, so reordering is ▲▼ here — same
+                    result as the web builder's handle. */}
+                <Pressable disabled={busy || i === 0} onPress={() => { tap(); setSpots((cur) => { const n = cur!.slice(); const [r] = n.splice(i, 1); n.splice(i - 1, 0, r); return n; }); setSpotsDirty(true); }} hitSlop={6}>
+                  <Text style={{ fontFamily: MONO, fontSize: 10, color: i === 0 ? t.faint : t.dim }}> ▲ </Text>
+                </Pressable>
+                <Pressable disabled={busy || i === spots.length - 1} onPress={() => { tap(); setSpots((cur) => { const n = cur!.slice(); const [r] = n.splice(i, 1); n.splice(i + 1, 0, r); return n; }); setSpotsDirty(true); }} hitSlop={6}>
+                  <Text style={{ fontFamily: MONO, fontSize: 10, color: i === spots.length - 1 ? t.faint : t.dim }}> ▼ </Text>
+                </Pressable>
                 <Pressable disabled={busy || spots.length <= 1} onPress={() => { tap(); setSpots((cur) => cur!.filter((_, j) => j !== i)); setSpotsDirty(true); }} hitSlop={6}>
                   <Text style={{ fontFamily: MONO, fontSize: 10, color: t.opp }}> ✕ </Text>
                 </Pressable>
@@ -825,7 +834,10 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
                     <TextInput value={sp.fMax} onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fMax: v })); setSpotsDirty(true); }}
                       placeholder="max" keyboardType="number-pad" placeholderTextColor={t.faint}
                       style={{ fontFamily: MONO, fontSize: 9.5, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4, width: 48 }} />
-                    <Mono size={7.5} tone="faint">rookies → max 0 · SAVE LINEUP applies</Mono>
+                    <TextInput value={sp.label} onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, label: v.slice(0, 24) })); setSpotsDirty(true); }}
+                      placeholder="name this spot (e.g. Only NFC Players)" placeholderTextColor={t.faint} maxLength={24}
+                      style={{ fontFamily: MONO, fontSize: 9.5, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 3, paddingHorizontal: 6, paddingVertical: 4, width: '100%' }} />
+                    <Mono size={7.5} tone="faint">rookies → max 0 · the name is a label; chips + filters decide who may fill it · SAVE LINEUP applies</Mono>
                     <TeamChips value={sp.fTeams} disabled={busy}
                       onChange={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fTeams: v })); setSpotsDirty(true); }} />
                   </View>
@@ -834,7 +846,7 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
             ))}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-            <Pill on={false} label="＋ ADD SPOT" onPress={() => { if (spots.length < 20) { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'], fTeams: '', fMin: '', fMax: '' }]); setSpotsDirty(true); } }} />
+            <Pill on={false} label="＋ ADD SPOT" onPress={() => { if (spots.length < 20) { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'], label: '', fTeams: '', fMin: '', fMax: '' }]); setSpotsDirty(true); } }} />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
             {([['BENCH', 'bench', 20], ['TAXI', 'taxi', 8], ['IR', 'ir', 8]] as const).map(([label, key, max]) => (
