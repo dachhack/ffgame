@@ -22,6 +22,7 @@ import {
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
   leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter,
+  leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
   leagueFaabWallets, commishGrantFaab, rosterRules, type FaabWallets, type WaiverMode,
 } from '@drip/core/data/liveApi';
 import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
@@ -983,6 +984,14 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
   const [note, setNote] = useState<string | null>(null);
   // Full classic scoring (0160): string drafts; parse + diff on save.
   const [scTab, setScTab] = useState('passing');
+  // K/DST fill (v0.225.0) — optimistic like the web's, since the RPC's only
+  // failure mode here is "not the commissioner", which this screen already is.
+  const [kdst, setKdstState] = useState<LeagueKdst | null>(null);
+  const setKdst2 = async (m: KdstMode) => {
+    tap();
+    setKdstState((k) => (k ? { ...k, mode: m } : k));
+    try { await setKdstMode(leagueId, m); } catch { /* keep the optimistic value */ }
+  };
   const [armed, setArmed] = useState<string | null>(null);
   const [scDraft, setScDraft] = useState<Record<string, string>>({});
   const scInit = (over: Record<string, number>) => {
@@ -1005,6 +1014,7 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
       setFltMin(r.pool_filter?.min_exp != null ? String(r.pool_filter.min_exp) : '');
       setFltMax(r.pool_filter?.max_exp != null ? String(r.pool_filter.max_exp) : '');
     } }).catch(() => {});
+    leagueKdst(leagueId).then(setKdstState).catch(() => {});
   }, [leagueId]);
   const saveScoring = async (reset = false) => {
     if (busy) return;
@@ -1090,6 +1100,33 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
             : <Mono size={8} tone="faint" style={{ alignSelf: 'center' }}>CLASSIC{'\n'}not unlocked</Mono>}
         </View>
       </View>
+      {/* K/DST FILL (v0.225.0) — a setup decision about what the league
+          rosters, so it sits with the game mode exactly as it does on web.
+          PORTED DELIBERATELY PARTIALLY: the mode selector is the part that
+          decides league behaviour and belongs on a phone; MANUAL's per-team
+          assignment is a 32-option dropdown per seat, which is a desk job, so
+          it points at the web console rather than pretending to fit. */}
+      {kdst && (
+        <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
+          <Mono size={8.5} tone="faint" weight="700" track={0.12}>K / D-ST FILL</Mono>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 4, lineHeight: 12 }}>
+            {kdst.needs_k || kdst.needs_def
+              ? `This league doesn't roster ${[kdst.needs_k && 'kickers', kdst.needs_def && 'defenses'].filter(Boolean).join(' or ')} — fill them so the Banker / Suppress metrics are playable. Takes effect on the next sync.`
+              : 'This league rosters both K and DEF — no fill needed.'}
+          </Mono>
+          <View style={{ flexDirection: 'row', gap: 5, marginTop: 7, flexWrap: 'wrap' }}>
+            {(['off', 'random', 'manual'] as KdstMode[]).map((m) => (
+              <Pill key={m} on={kdst.mode === m} label={m === 'off' ? 'OFF' : m === 'random' ? 'RANDOM WEEKLY' : 'MANUAL'}
+                onPress={() => void setKdst2(m)} />
+            ))}
+          </View>
+          {kdst.mode === 'manual' && (
+            <Mono size={8} tone="warn" style={{ marginTop: 6, lineHeight: 12 }}>
+              Manual is on, but the per-team K/DEF picker is web-only — assign them from the league console. Any team left blank falls back to a random not-on-bye pick.
+            </Mono>
+          )}
+        </View>
+      )}
       {/* The RECEPTIONS pills moved into the scoring presets below (web
           parity) — receptions are a scoring decision. */}
       {mode === 'classic' && (

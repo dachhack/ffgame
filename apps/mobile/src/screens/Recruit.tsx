@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   closeLeagueListing, commishOverview, friendlyError, joinFromBoard, leagueBoard, leagueInvite, leaguePreview, type BoardPreview,
-  postLeagueListing, redeemCommish, type AdminLeague, type BoardListing,
+  postLeagueListing, redeemCommish, nativeJoin, type AdminLeague, type BoardListing,
 } from '@drip/core/data/liveApi';
 import { rosterLabel } from '@drip/core/engine/classic';
 import { useTheme, MONO } from '../theme.native';
@@ -53,6 +53,8 @@ export function Recruit({ onBack, onJoined }: {
   const [blurbDraft, setBlurbDraft] = useState('');
   const [joined, setJoined] = useState<string | null>(null); // league name, for the success note
   const [commishDraft, setCommishDraft] = useState('');      // commish-code redemption
+  const [inviteDraft, setInviteDraft] = useState('');        // invite-code join (native_join)
+  const [inviteTeam, setInviteTeam] = useState('');
 
   const load = useCallback(async () => {
     setErr(null);
@@ -115,6 +117,33 @@ export function Recruit({ onBack, onJoined }: {
       const r = await redeemCommish(code);
       if (r.ok) { commit(); setCommishDraft(''); setJoined(`${r.league ?? 'the league'} — as its commissioner`); onJoined(); }
       else { warn(); setErr(friendlyError(r.error ?? 'invalid commissioner code')); }
+    } catch (e) { warn(); setErr(friendlyError(e)); }
+    finally { setBusy(false); await load(); }
+  };
+
+  // Redeem an INVITE code — a friend's league, not the public board.
+  //
+  // This was the app's onboarding dead end: both this screen and the
+  // commissioner's ⚑ RECRUIT button share an invite code ("Invite code: XXXX"),
+  // and nothing in the app could accept one. Someone who installed the app
+  // holding a code from a friend had to go find the website. Meanwhile the
+  // COMMISSIONER code — the rarer, more advanced path — has had a box here all
+  // along, which made the omission read as deliberate rather than missing.
+  //
+  // native_join is the whole flow: the code IS the seat, so it claims the
+  // lowest open roster with no identity-matching step and no commissioner
+  // approval. The team name is optional and renameable later.
+  const doJoinByCode = async () => {
+    const code = inviteDraft.trim();
+    if (!code || busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await nativeJoin(code, inviteTeam.trim() || undefined);
+      if (r.ok) {
+        commit(); setInviteDraft(''); setInviteTeam('');
+        setJoined(r.league ?? 'your league');
+        onJoined();
+      } else { warn(); setErr(friendlyError(r.error ?? 'that code did not work')); }
     } catch (e) { warn(); setErr(friendlyError(e)); }
     finally { setBusy(false); await load(); }
   };
@@ -226,6 +255,29 @@ export function Recruit({ onBack, onJoined }: {
           </View>
         </Card>
       ))}
+
+      {/* HAVE A CODE? — the invite path, above the commissioner one because
+          it's the common case by a wide margin: most people arriving here were
+          handed a code by a friend, not asked to run the league. */}
+      <Card>
+        <Mono size={9} tone="faint" track={0.12}>GOT AN INVITE CODE?</Mono>
+        <Mono size={9.5} style={{ marginTop: 5, lineHeight: 14 }}>
+          A friend's league isn't on the board unless they listed it. Paste the code they sent and you're seated.
+        </Mono>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          <TextInput value={inviteDraft} autoCapitalize="characters" autoCorrect={false} maxLength={12}
+            placeholder="INVITE CODE" placeholderTextColor={t.faint}
+            onChangeText={(v) => { setInviteDraft(v); setErr(null); }}
+            style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontFamily: MONO, fontSize: 13, letterSpacing: 1.5, color: t.text, backgroundColor: t.bg }} />
+          <Chip label={busy ? '…' : '→ JOIN'} on disabled={busy || !inviteDraft.trim()} onPress={() => void doJoinByCode()} />
+        </View>
+        <TextInput value={inviteTeam} maxLength={24} placeholder="team name (optional)" placeholderTextColor={t.faint}
+          onChangeText={setInviteTeam}
+          style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+        <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
+          You take the lowest open seat. Leave the name blank and you can set it later from MY TEAM.
+        </Mono>
+      </Card>
 
       {/* redeem a commish code — the seatless way to run a league */}
       <Card>
