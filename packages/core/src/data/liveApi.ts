@@ -1389,11 +1389,15 @@ export const createNativeLeague = (
   mode: 'snake' | 'auction' = 'snake', budget = 200, lotSeconds = 15, maxLots = 1,
   nightStartMin: number | null = null, nightEndMin: number | null = null,
   posCaps: PosCaps | null = null,
+  /** Which game the league plays (0175). 'classic' also self-flags the league
+   *  as classic-capable, so its commissioner can switch modes pre-draft. */
+  gameMode: 'drip' | 'classic' = 'drip',
 ) =>
   rpc<NativeCreateResult>('create_native_league', {
     p_name: name, p_season: season, p_teams: teams, p_rounds: rounds, p_pick_seconds: pickSeconds,
     p_mode: mode, p_budget: budget, p_lot_seconds: lotSeconds, p_max_lots: maxLots,
     p_night_start_min: nightStartMin, p_night_end_min: nightEndMin, p_pos_caps: posCaps,
+    p_game_mode: gameMode,
   });
 /** Read the league's roster + transaction rules (any member; the commish editors' loader). */
 export const rosterRules = (leagueId: string) =>

@@ -109,9 +109,13 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   // draft against named AI teams: same settings surface, no season behind it,
   // starts immediately and lands straight in the draft room.
   const [kind, setKind] = useState<'league' | 'mock'>('league');
+  // DRIP vs NORMAL (0175). The one choice on this screen that changes what the
+  // game IS — scoring, the lineup, the whole weekly loop — so it comes first,
+  // and it's the only new control: everything it needs beyond a flag (roster
+  // size, position caps) it sets as a DEFAULT rather than as another question.
+  const [game, setGame] = useState<'drip' | 'classic'>('drip');
   const [name, setName] = useState('');
   const [teams, setTeams] = useState(8);
-  const [rounds, setRounds] = useState(12);
   const [clock, setClock] = useState(90);
   const [mode, setMode] = useState<'snake' | 'auction'>('snake');
   const [budget, setBudget] = useState(200);
@@ -122,16 +126,29 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   const [bellSecs, setBellSecs] = useState(15);   // live auction bell
   const [bellHrs, setBellHrs] = useState(8);      // slow auction bell
   const [maxLots, setMaxLots] = useState(1);      // auction: parallel lots
-  const [nightOn, setNightOn] = useState(false);  // overnight quiet hours (ET)
-  const [nightStart, setNightStart] = useState(22);
-  const [nightEnd, setNightEnd] = useState(10);
-  // Per-position roster limits. Stepping past CAP_MAX = no limit (∞, stored
-  // null). Defaults mirror the pre-0071 hard-coded rules.
-  const [caps, setCaps] = useState<Record<(typeof POS_CAP_KEYS)[number], number>>(
-    { QB: 3, RB: CAP_UNLIMITED, WR: CAP_UNLIMITED, TE: 3, K: 1, DEF: 1 });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [err, setErr] = useState<string | null>(null);
+
+  // ── What the create screen no longer asks (v0.221.0) ──────────────────────
+  // The founder's note was "we don't need so many options in this", and the
+  // dividing line that fell out of checking the RPCs is EDITABILITY, not
+  // importance. Draft type, pace, clock and the auction knobs have NO setter
+  // after creation — get them wrong and the league is stuck with them — so
+  // they stay. Roster size and per-position limits have one (set_roster_rules,
+  // live until the draft starts, right there on the commissioner's ROSTER
+  // tab), and overnight pause has one (set_draft_night, in the draft room), so
+  // they leave. They become DEFAULTS chosen by the game type instead of six
+  // steppers asked before the league even has a name.
+  //
+  // Drip: 12 spots, 8 of them weekly starters, with the pre-0071 position
+  // limits. Classic: 15 (a starting lineup plus a real bench) and NO position
+  // limits, because a classic league's shape is its starting-lineup spec —
+  // capping the roster too would be two answers to one question.
+  const rounds = game === 'classic' ? 15 : 12;
+  const caps: PosCaps | null = game === 'classic'
+    ? null
+    : capsToPosCaps({ QB: 3, RB: CAP_UNLIMITED, WR: CAP_UNLIMITED, TE: 3, K: 1, DEF: 1 });
 
   const create = async () => {
     if (busy || (kind === 'league' && !name.trim())) return;
@@ -143,7 +160,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
         // Mock: create vs the AI, seed the pool, start, straight into the room.
         setNote('Spinning up your AI opponents…');
         const r = await createMockDraft(teams, rounds, pickSecs, mode, budget, lotSecs,
-          mode === 'auction' ? maxLots : 1, capsToPosCaps(caps));
+          mode === 'auction' ? maxLots : 1, caps);
         if (!r.ok || !r.league_id) { setErr(friendlyError(r.error ?? 'Could not create the mock draft.')); setBusy(false); return; }
         setNote('Building the 2026 player pool…');
         const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
@@ -156,8 +173,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
       }
       setNote('Creating your league…');
       const r = await createNativeLeague(name, '2026', teams, rounds, pickSecs, mode, budget, lotSecs,
-        mode === 'auction' ? maxLots : 1,
-        nightOn ? nightStart * 60 : null, nightOn ? nightEnd * 60 : null, capsToPosCaps(caps));
+        mode === 'auction' ? maxLots : 1, null, null, caps, game);
       if (!r.ok || !r.league_id) { setErr(friendlyError(r.error ?? 'Could not create the league.')); setBusy(false); return; }
       setNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
@@ -200,8 +216,24 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
           <Chip on={kind === 'league'} onClick={() => setKind('league')}>REAL LEAGUE</Chip>
           <Chip on={kind === 'mock'} onClick={() => setKind('mock')}>🤖 MOCK DRAFT</Chip>
         </div>
+        {/* THE GAME (0175). First question on the screen because it's the only
+            one that changes what you're playing rather than how it's set up —
+            and it FREEZES at the draft, so it can't be a "decide later". A
+            mock is a draft with no season behind it, so the choice doesn't
+            apply there. */}
         {kind === 'league' && (
           <>
+            <div className="mono" style={label}>WHICH GAME?</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+              <Chip on={game === 'drip'} onClick={() => setGame('drip')}>◈ DRIP</Chip>
+              <Chip on={game === 'classic'} onClick={() => setGame('classic')}>🏈 NORMAL</Chip>
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
+              {game === 'drip'
+                ? 'Drip: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.'
+                : 'Normal: fantasy the way you already know it. A positional starting lineup, weekly point totals, standard scoring you can tune.'}
+            </div>
+            <div style={{ height: 16 }} />
             <label className="mono" style={label}>LEAGUE NAME</label>
             <input value={name} autoFocus maxLength={40} onChange={(e) => { setName(e.target.value); setErr(null); }}
               onKeyDown={(e) => { if (e.key === 'Enter') create(); }} placeholder="e.g. Sunday Drip Society" style={{ ...input, marginTop: 7 }} />
@@ -209,7 +241,6 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
         )}
         <div style={{ display: 'flex', gap: 18, marginTop: 16, flexWrap: 'wrap' }}>
           <div><div className="mono" style={label}>TEAMS</div><div style={{ marginTop: 7 }}>{num(teams, setTeams, 2, 14, 1)}</div></div>
-          <div><div className="mono" style={label}>ROSTER SIZE</div><div style={{ marginTop: 7 }}>{num(rounds, setRounds, 5, 25, 1)}</div></div>
         </div>
         <div style={{ display: 'flex', gap: 18, marginTop: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div>
@@ -237,50 +268,17 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             : <div><div className="mono" style={label}>BID WINDOW (HRS)</div><div style={{ marginTop: 7 }}>{num(bellHrs, setBellHrs, 1, 48, 1)}</div></div>)}
           {mode === 'auction' && <div><div className="mono" style={label}>LOTS AT ONCE</div><div style={{ marginTop: 7 }}>{num(maxLots, setMaxLots, 1, 4, 1)}</div></div>}
         </div>
-        {/* roster limits — the max a roster may hold at each position. There is
-            no positional starting lineup in Drip (the weekly board fields 8
-            time-window slots, any position), so limits + roster size ARE the
-            roster rules. ∞ = no limit; 0 bans the position. */}
-        <div style={{ marginTop: 14 }}>
-          <div className="mono" style={label}>ROSTER LIMITS — MAX PER POSITION (∞ = NO LIMIT)</div>
-          <div style={{ display: 'flex', gap: 14, marginTop: 7, flexWrap: 'wrap' }}>
-            {POS_CAP_KEYS.map((k) => (
-              <div key={k} style={{ textAlign: 'center' }}>
-                <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{posLabel(k)}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
-                  <button onClick={() => setCaps({ ...caps, [k]: Math.max(0, caps[k] - 1) })} className="mono" style={{ ...ghostBtn, padding: '5px 9px' }}>−</button>
-                  <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', minWidth: 24, textAlign: 'center' }}>{caps[k] >= CAP_UNLIMITED ? '∞' : caps[k]}</span>
-                  <button onClick={() => setCaps({ ...caps, [k]: Math.min(CAP_UNLIMITED, caps[k] + 1) })} className="mono" style={{ ...ghostBtn, padding: '5px 9px' }}>＋</button>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
-            Everyone fields 8 weekly starters (the game's kickoff windows — any position); the other {Math.max(0, rounds - 8)} roster spots are bench. K and D/ST are auto-filled late in every draft unless you set them to 0.
-          </div>
+        {/* What the roster looks like is now a CONSEQUENCE of the game type,
+            not a question — and every part of it is editable on the
+            commissioner's ROSTER tab until the draft starts. Say what you're
+            getting; don't make them configure it before the league exists. */}
+        <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 14, lineHeight: 1.5 }}>
+          {game === 'classic' && kind === 'league'
+            ? `${rounds} roster spots per team. You'll set the starting lineup — QB / RB / WR / TE / FLEX / K / D/ST, and any bench, taxi or IR spots — plus scoring on the league's ROSTER and SCORING tabs before the draft.`
+            : `${rounds} roster spots per team: everyone fields 8 weekly starters (the game's kickoff windows — any position), the other ${Math.max(0, rounds - 8)} are bench. Roster size, position limits and the overnight draft pause are all adjustable in league settings until the draft starts.`}
         </div>
-        {/* overnight quiet hours: clocks skip these ET hours entirely — no
-            deadline can land (or expire) while the league sleeps. Mocks skip
-            this — a practice room shouldn't sleep on you. */}
-        {kind === 'league' && (
-        <div style={{ display: 'flex', gap: 18, marginTop: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div>
-            <div className="mono" style={label}>OVERNIGHT PAUSE (ET)</div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
-              <Chip on={!nightOn} onClick={() => setNightOn(false)}>OFF</Chip>
-              <Chip on={nightOn} onClick={() => setNightOn(true)}>🌙 ON</Chip>
-            </div>
-          </div>
-          {nightOn && (
-            <>
-              <div><div className="mono" style={label}>FROM ({nightStart % 12 === 0 ? 12 : nightStart % 12} {nightStart < 12 ? 'AM' : 'PM'})</div><div style={{ marginTop: 7 }}>{num(nightStart, setNightStart, 0, 23, 1)}</div></div>
-              <div><div className="mono" style={label}>UNTIL ({nightEnd % 12 === 0 ? 12 : nightEnd % 12} {nightEnd < 12 ? 'AM' : 'PM'})</div><div style={{ marginTop: 7 }}>{num(nightEnd, setNightEnd, 0, 23, 1)}</div></div>
-            </>
-          )}
-        </div>
-        )}
         {pace === 'slow' && (
-          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>
+          <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>
             Slow drafts run for days. Fairness is built in: any bid restarts the full bid window (no sniping), hidden max bids answer for you while you're away, and a missed turn nominates from your own queue.
           </div>
         )}
@@ -289,7 +287,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
           {busy ? (note || 'CREATING…') : kind === 'mock' ? '🤖 START THE MOCK →' : 'CREATE LEAGUE →'}
         </button>
         {err && <div className="mono" style={errStyle}>{err}</div>}
-        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+        <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
           {kind === 'mock'
             ? 'You take seat 1; every other seat is an AI team that picks, nominates, and bids on its own. The draft starts the moment the room opens.'
             : 'You take seat 1 as commissioner. A 14-week head-to-head schedule is generated automatically; seats that stay empty are drafted and managed by the AI.'}
