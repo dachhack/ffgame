@@ -211,7 +211,42 @@ async function detectChat() {
 // makes them once-ever), and "you're ON THE CLOCK" to the snake picker
 // (dedupe per overall). Auction lots have no single on-clock target, so
 // auction leagues get the live/complete brackets only.
+// "your draft is at 8pm" — the reminder a SCHEDULED start (0177) earns. The
+// draft-is-LIVE push below already fires the moment status flips, but that
+// arrives as the room opens, which is no use to someone who needed an hour's
+// warning to be at a laptop. Fires once per armed time (the dedupe key carries
+// start_at, so moving the draft re-arms the reminder rather than suppressing
+// it), and only inside a T-90m..T-0 window so a schedule set weeks out doesn't
+// nag from the day it's made.
+async function detectDraftSoon() {
+  const { data: armed } = await db().from('draft')
+    .select('league_id, start_at').eq('status', 'pending').not('start_at', 'is', null);
+  const now = Date.now();
+  const due = (armed ?? []).filter((d) => {
+    const t = Date.parse(d.start_at);
+    return Number.isFinite(t) && t > now && t - now <= 90 * 60_000;
+  });
+  if (!due.length) return;
+  const names = await leagueNames(due.map((d) => d.league_id));
+  const rows = [];
+  for (const d of due) {
+    const name = names.get(d.league_id) ?? 'your league';
+    const mins = Math.max(1, Math.round((Date.parse(d.start_at) - now) / 60_000));
+    const when = mins >= 60 ? `${Math.round(mins / 60)}h` : `${mins}m`;
+    for (const uid of await leagueMembers(d.league_id)) {
+      rows.push({
+        app_user_id: uid, kind: 'draft', title: `⛏ ${name}`,
+        body: `Draft starts in ${when} — it opens on its own, be in the room.`,
+        data: { league_id: d.league_id, open: 'draft' },
+        dedupe_key: `draft:${d.league_id}:soon:${d.start_at}`,
+      });
+    }
+  }
+  await enqueue(rows);
+}
+
 async function detectDraft() {
+  await detectDraftSoon();
   const { data: drafts } = await db().from('draft')
     .select('league_id, status, mode, draft_order, current_overall, paused, completed_at')
     .in('status', ['live', 'complete']);

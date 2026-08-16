@@ -19,7 +19,7 @@ import {
   startDraft, draftState, makeDraftPick, draftTick,
   POS_CAP_KEYS, type PosCaps,
   leaguePool, nativeRosters, nativeTeamState, dropPlayer, addFreeAgent, setRosterSpot,
-  setDraftSetup, setDraftOrder,
+  setDraftSetup, setDraftOrder, setDraftStart,
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
   setTeamName, setTeamAvatar, setLeagueAvatar,
   setDraftQueue, myDraftQueue, setAutodraft,
@@ -396,6 +396,14 @@ function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
   // The order is DRAFTED here and only committed on save, so a mis-tap while
   // reordering isn't immediately visible to the whole league.
   const [ord, setOrd] = useState<number[] | null>(st.order);
+  // datetime-local wants "YYYY-MM-DDTHH:mm" in LOCAL time — the ISO the server
+  // stores is UTC, so it has to be shifted back through the local offset or
+  // the field would show the commissioner someone else's clock.
+  const [when, setWhen] = useState(() => {
+    if (!st.start_at) return '';
+    const d = new Date(st.start_at);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+  });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -483,6 +491,31 @@ function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
           </div>
           <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
             Roster size and position limits live on the league's ROSTER settings; the overnight pause is the 🌙 control above. All of it, this included, locks when the draft starts.
+          </div>
+
+          {/* ── when (0177) ── */}
+          <div className="mono" style={{ ...label, marginTop: 16 }}>SCHEDULED START</div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 7, flexWrap: 'wrap', alignItems: 'center' }}>
+            {/* datetime-local reads and writes the BROWSER's local time, which
+                is what a commissioner means by "8pm"; it's converted to a real
+                instant on the way out so every member's countdown agrees. */}
+            <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)}
+              style={{ ...input, width: 'auto', padding: '7px 9px', fontSize: 13 }} />
+            <button onClick={() => {
+              const ms = Date.parse(when);
+              if (!when || !Number.isFinite(ms)) { setMsg('pick a date and time'); return; }
+              void run(() => setDraftStart(leagueId, new Date(ms).toISOString()), '✓ draft scheduled');
+            }} disabled={busy} className="mono" style={{ ...btn, opacity: busy ? 0.6 : 1 }}>SCHEDULE IT</button>
+            {st.start_at && (
+              <button onClick={() => { setWhen(''); void run(() => setDraftStart(leagueId, null), '✓ back to a manual start'); }}
+                disabled={busy} className="mono" style={{ ...ghostBtn, opacity: busy ? 0.6 : 1 }}>CLEAR</button>
+            )}
+          </div>
+          <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
+            {st.start_at
+              ? 'Armed. The draft opens itself at that time whether or not anyone has the app open, and everyone gets a reminder about an hour out.'
+              : 'Optional. Leave it empty and the draft starts when you press the button. Set it and the draft opens itself — the league gets a reminder about an hour before.'}
+            {' '}The player pool must be seeded by then (it is, unless you cleared it) and at least two seats must exist, or the start retries until they are.
           </div>
 
           {/* ── the order, drawn early and on purpose ── */}
@@ -739,7 +772,28 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
               ? <>{st.rounds} roster spots · ${st.budget} budget per team · nomination rotates the draft order. Queue players now — empty seats auto-nominate.</>
               : <>{st.rounds} rounds · {st.pick_seconds}s per pick · snake order (randomized at start). Queue players now — your queue drafts for you if the clock runs out.</>}
           </div>
-          {isCommish && <button onClick={() => run(() => startDraft(leagueId))} disabled={busy} className="mono" style={{ ...btn, width: '100%', marginTop: 12, opacity: busy ? 0.6 : 1 }}>▶ START THE DRAFT</button>}
+          {/* 0177: the countdown belongs to EVERY member, not the commissioner
+              — the whole point of a schedule is that the league knows when to
+              show up without asking. Counts down off the server's own clock
+              (`server_now`), so a member with a skewed device sees the same
+              number as everyone else. */}
+          {st.start_at && (() => {
+            const left = Math.round((Date.parse(st.start_at) - Date.parse(st.server_now)) / 1000);
+            const when = new Date(st.start_at).toLocaleString(undefined,
+              { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+            return (
+              <div className="mono" style={{
+                fontSize: 12, marginTop: 10, padding: '9px 11px', borderRadius: 6, lineHeight: 1.5,
+                color: left > 0 ? 'var(--you)' : 'var(--warn)',
+                border: `1px solid ${left > 0 ? 'var(--you)' : 'var(--warn)'}`,
+              }}>
+                {left > 0
+                  ? <>⏱ Drafting in <b>{fmtCountdown(left)}</b> — {when}. It opens on its own; nobody has to press anything.</>
+                  : <>⏱ Scheduled for {when} — starting now. If it doesn't open in a minute, the pool or a seat is missing and the commissioner can start it by hand.</>}
+              </div>
+            );
+          })()}
+          {isCommish && <button onClick={() => run(() => startDraft(leagueId))} disabled={busy} className="mono" style={{ ...btn, width: '100%', marginTop: 12, opacity: busy ? 0.6 : 1 }}>▶ START THE DRAFT{st.start_at ? ' NOW' : ''}</button>}
           {isCommish && <button onClick={() => run(async () => {
             // 0171: reseed under the league's enabled positions + player filter.
             const gm = await leagueGameMode(leagueId).catch(() => null);
