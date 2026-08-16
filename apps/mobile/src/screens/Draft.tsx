@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   draftState, draftTick, leaguePool, makeDraftPick, myDraftQueue, nativeTeamState, nominate, placeBid,
-  setAutodraft, setDraftQueue, setLotProxy, startDraft, seedLeaguePool,
+  setAutodraft, setDraftQueue, setLotProxy, startDraft, seedLeaguePool, leagueGameMode,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   friendlyError, type DraftState, type LeaguePoolPlayer, type NativeTeamState, type PosCaps,
 } from '@drip/core/data/liveApi';
@@ -247,7 +247,9 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
               {pool.length === 0 && (
                 <PrimaryButton label="↻ SEED PLAYER POOL (2026 ADP)" disabled={busy}
                   onPress={() => run(async () => {
-                    const r = await seedLeaguePool(leagueId, await buildDraftPool());
+                    // 0171: seed under the league's enabled positions + filter.
+                    const gm = await leagueGameMode(leagueId).catch(() => null);
+                    const r = await seedLeaguePool(leagueId, await buildDraftPool(undefined, { positions: gm?.positions ?? null, filter: gm?.pool_filter ?? null }));
                     setPool(await leaguePool(leagueId));
                     return r;
                   })} />

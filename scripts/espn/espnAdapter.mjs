@@ -172,6 +172,12 @@ export function playToRows(p, roster, eventId, gameStartMs) {
     if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', 0, 0, 0, 0, fumbler === passer.slug ? 1 : 0, { sk: 1 }) });
   }
 
+  // Head coach conversions (0171): a converted 3rd/4th down is the offense
+  // coach's play — rows on the "xxx-hc" pseudo-player.
+  if (fd && (dn === 3 || dn === 4) && offTeam) {
+    out.push({ slug: `${offTeam.toLowerCase()}-hc`, play: row(c, ride, dn === 3 ? 'hc_3dc' : 'hc_4dc', 0, 0, 0, 0, 0) });
+  }
+
   // 2-pt conversions (0166) ride inside the scoring play's text ("TWO-POINT
   // CONVERSION ATTEMPT. X pass to Y is complete. ATTEMPT SUCCEEDS."). Only
   // successes emit rows, as their OWN kinds (tp_*) with zero yards and ca:0 —
@@ -191,6 +197,8 @@ export function playToRows(p, roster, eventId, gameStartMs) {
       const runner = resolve(seg[0].abbr);
       if (runner) out.push({ slug: runner.slug, play: row(c, ride, 'tp_rush', 0, 0, 0, 0, 0) });
     }
+    // The coach's team 2-pt conversion (0171).
+    if (offTeam) out.push({ slug: `${offTeam.toLowerCase()}-hc`, play: row(c, ride, 'hc_2pt', 0, 0, 0, 0, 0) });
   }
 
   // Kicker — FG (own play, incl. missed/blocked) + XP (rides inside a TD play).
@@ -502,6 +510,10 @@ export function gameToRealPlays(summary, resolveSlug = slugOf) {
       const d = `${me.toLowerCase()}-dst`;
       (pbp[d] ||= []).push({ c: maxC, pid: 900000001, k: 'pa', y: score.get(opp) ?? 0, td: 0, ca: 0, tg: 0 });
       if (yardsOf.has(opp)) (pbp[d] ||= []).push({ c: maxC, pid: 900000002, k: 'ya', y: yardsOf.get(opp), td: 0, ca: 0, tg: 0 });
+      // Head coach result rows (0171): signed margin + points scored.
+      const hc = `${me.toLowerCase()}-hc`;
+      (pbp[hc] ||= []).push({ c: maxC, pid: 900000003, k: 'hc_res', y: (score.get(me) ?? 0) - (score.get(opp) ?? 0), td: 0, ca: 0, tg: 0 });
+      (pbp[hc] ||= []).push({ c: maxC, pid: 900000004, k: 'hc_pts', y: score.get(me) ?? 0, td: 0, ca: 0, tg: 0 });
     }
   }
 

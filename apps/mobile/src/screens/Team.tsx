@@ -31,7 +31,7 @@ import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
 import { FlagChip } from '../ui/rosterGroup';
 import { setLeagueFlags } from '@drip/core/data/commish';
 
-const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
+const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB', 'FB', 'HC', 'P'] as const;
 
 function fmtEtMin(m: number): string {
   const h24 = Math.floor(m / 60), mm = m % 60;

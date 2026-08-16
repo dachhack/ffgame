@@ -70,6 +70,8 @@ export const METRICS: Record<Pos, Metric[]> = {
   DL: IDP_METRICS,
   LB: IDP_METRICS,
   DB: IDP_METRICS,
+  // 0171 positions are classic-only — no drip metrics yet (feature-flagged later).
+  FB: [], HC: [], P: [], RET: [],
 };
 
 export function metricById(pos: Pos, id: string | null | undefined): Metric | undefined {

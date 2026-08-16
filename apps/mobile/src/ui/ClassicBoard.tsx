@@ -6,8 +6,7 @@
 // the same live play stream, refreshed every 60s.
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
-import type { Pos } from '@drip/core/types';
-import { leagueSlotDefs, leagueBestball, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, slotEligiblePos, isRetSlot, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
@@ -140,7 +139,9 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const pts = useMemo(() => {
     void playsAt; void flagsVer;
     if (!matchup) return () => 0;
-    return (slug: string | null | undefined) => (slug ? classicPoints(mkPlayer(slug), matchup.week, sc) : 0);
+    // RET spots (0171) score their occupant return-only — mirror the resolver.
+    return (slug: string | null | undefined, slotPos?: string[]) =>
+      (slug ? classicPoints(mkPlayer(slug), matchup.week, sc, slotPos && isRetSlot(slotPos) ? 'RET' : undefined) : 0);
   }, [matchup, sc, playsAt, flagsVer]);
 
   const bb = useMemo(() => new Set(bestball), [bestball]);
@@ -191,8 +192,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   if (state === 'none') return <View style={{ padding: 24 }}><Mono size={10} tone="faint">No matchup this week.</Mono></View>;
   if (state === 'error') return <View style={{ padding: 24 }}><Mono size={10} tone="warn">{err}</Mono></View>;
 
-  const myTotal = slotDefs.reduce((s, d) => s + pts(effective.mine[d.slot]), 0);
-  const oppTotal = slotDefs.reduce((s, d) => s + pts(effective.theirs[d.slot]), 0);
+  const myTotal = slotDefs.reduce((s, d) => s + pts(effective.mine[d.slot], d.pos), 0);
+  const oppTotal = slotDefs.reduce((s, d) => s + pts(effective.theirs[d.slot], d.pos), 0);
 
   const Face = ({ slug, size = 26 }: { slug: string; size?: number }) => {
     const uri = headshot(slug);
@@ -250,10 +251,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                 <Mono size={10} tone={locked || auto ? 'faint' : 'you'}>{locked || auto ? '—' : `+ SET ${d.slot}`}</Mono>
               )}
             </Pressable>
-            <Mono size={12} tone="you" weight="700">{locked || my ? r1(pts(my)) : ''}</Mono>
+            <Mono size={12} tone="you" weight="700">{locked || my ? r1(pts(my, d.pos)) : ''}</Mono>
             {locked && (
               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 7 }}>
-                <Mono size={12} tone="dim" weight="700">{r1(pts(their))}</Mono>
+                <Mono size={12} tone="dim" weight="700">{r1(pts(their, d.pos))}</Mono>
                 {their
                   ? <View style={{ flexShrink: 1, alignItems: 'flex-end' }}>
                       <Display size={12.5}>{prettySlug(their)}</Display>
@@ -276,7 +277,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
               <Mono size={10} tone="dim">✕ CLEAR SLOT</Mono>
             </Pressable>
           )}
-          {bench.filter((p) => slotDef.pos.includes(p.pos as Pos)).map((p) => (
+          {bench.filter((p) => slotEligiblePos(slotDef.pos).includes(p.pos)).map((p) => (
             <Pressable key={p.slug} onPress={() => { void assign(pickerSlot, p.slug); }}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7 }}>
               <Face slug={p.slug} />

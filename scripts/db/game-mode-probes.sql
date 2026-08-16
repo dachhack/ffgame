@@ -252,6 +252,35 @@ begin
     and (r -> 'scoring' ->> 'dstFumRetYd')::numeric = 0.02 and (r -> 'scoring' ->> 'idpSack2')::numeric = 3,
     'cs26 gap-close values stored (yard rates keep 3dp)');
 
+  -- 0171 flagged positions + pool filters
+  perform probe_as('b');
+  perform assert_err(set_league_position_access(lid, '["HC"]'::jsonb), 'admin only', 'px0 commish cannot flip positions');
+  perform assert_err(set_league_classic_slots(lid, '[{"pos":["HC"]}]'::jsonb), 'unknown position', 'px1 HC refused unflagged');
+  perform probe_as('a');
+  perform assert_err(set_league_position_access(lid, '["ZZ"]'::jsonb), 'unknown position group', 'px2 junk group refused');
+  r := set_league_position_access(lid, '["HC","RET","IDP","FB"]'::jsonb);
+  perform assert_ok(r, 'px3 admin flips flags');
+  perform probe_as('c');
+  perform assert_true((league_game_mode(lid) -> 'positions') @> '["HC"]'::jsonb, 'px4 member reads flags');
+  perform probe_as('b');
+  perform assert_ok(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["HC"]},{"pos":["RET"]},{"pos":["DL","LB"]},{"pos":["FB","RB"]}]'::jsonb), 'px5 flagged tokens accepted');
+  perform assert_err(set_league_classic_slots(lid, '[{"pos":["RET","RB"]}]'::jsonb), 'stands alone', 'px6 RET must stand alone');
+  perform assert_err(set_league_classic_slots(lid, '[{"pos":["P"]}]'::jsonb), 'unknown position', 'px7 P still gated off');
+  -- pool filter: commish-only validation + round trip + clear
+  perform probe_as('c');
+  perform assert_err(set_league_pool_filter(lid, '{"min_exp": 0}'::jsonb), 'commissioner', 'pf0 member refused');
+  perform probe_as('b');
+  perform assert_err(set_league_pool_filter(lid, '{"teams": ["K9!"]}'::jsonb), 'bad team code', 'pf1 junk team refused');
+  perform assert_err(set_league_pool_filter(lid, '{"min_exp": 9, "max_exp": 2}'::jsonb), 'min tenure exceeds max', 'pf2 inverted window refused');
+  r := set_league_pool_filter(lid, '{"teams": ["kc", "SF"], "max_exp": 0}'::jsonb);
+  perform assert_ok(r, 'pf3 rookie two-team filter saves');
+  perform assert_true((league_game_mode(lid) -> 'pool_filter' -> 'teams') @> '["KC"]'::jsonb
+    and (league_game_mode(lid) -> 'pool_filter' ->> 'max_exp')::int = 0, 'pf4 filter round-trips uppercased');
+  perform assert_ok(set_league_pool_filter(lid, null), 'pf5 clear');
+  perform assert_true((league_game_mode(lid) -> 'pool_filter') is null
+    or jsonb_typeof(league_game_mode(lid) -> 'pool_filter') = 'null', 'pf6 cleared');
+  perform assert_ok(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"bb":true}]'::jsonb), 'px8 back to a plain spec');
+
   -- best ball + classic scoring have no meaning in a drip league
   perform assert_ok(set_league_game_mode(lid, 'drip'), 'bb8 back to drip');
   perform assert_err(set_league_bestball(lid, '["FLEX"]'::jsonb), 'classic-league setting', 'bb9 refused in drip');

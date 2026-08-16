@@ -10,7 +10,7 @@
 // stream the drip boards run on, refreshed every 60s.
 import { useEffect, useMemo, useState } from 'react';
 import type { Pos } from '@drip/core/types';
-import { leagueSlotDefs, leagueBestball, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, slotEligiblePos, isRetSlot, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
@@ -154,7 +154,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   const pts = useMemo(() => {
     void playsAt; void flagsVer;
     if (!matchup) return () => 0;
-    return (slug: string | null | undefined) => (slug ? classicPoints(mkPlayer(slug), matchup.week, sc) : 0);
+    // RET spots (0171) score their occupant return-only — mirror the resolver.
+    return (slug: string | null | undefined, slotPos?: string[]) =>
+      (slug ? classicPoints(mkPlayer(slug), matchup.week, sc, slotPos && isRetSlot(slotPos) ? 'RET' : undefined) : 0);
   }, [matchup, sc, playsAt, flagsVer]);
 
   const bb = useMemo(() => new Set(bestball), [bestball]);
@@ -210,8 +212,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     </div>
   );
 
-  const myTotal = slotDefs.reduce((s, d) => s + pts(effective.mine[d.slot]), 0);
-  const oppTotal = slotDefs.reduce((s, d) => s + pts(effective.theirs[d.slot]), 0);
+  const myTotal = slotDefs.reduce((s, d) => s + pts(effective.mine[d.slot], d.pos), 0);
+  const oppTotal = slotDefs.reduce((s, d) => s + pts(effective.theirs[d.slot], d.pos), 0);
   const r1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
 
   const PlayerCell = ({ slug, right }: { slug: string | null | undefined; right?: boolean }) => {
@@ -265,8 +267,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                   {my ? <PlayerCell slug={my} /> : <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>+ SET {d.slot}</span>}
                 </button>
               )}
-              <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, textAlign: 'right', color: 'var(--you)' }}>{locked || my ? r1(pts(my)) : ''}</span>
-              <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, textAlign: 'right', color: 'var(--dim)' }}>{locked ? r1(pts(their)) : ''}</span>
+              <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, textAlign: 'right', color: 'var(--you)' }}>{locked || my ? r1(pts(my, d.pos)) : ''}</span>
+              <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, textAlign: 'right', color: 'var(--dim)' }}>{locked ? r1(pts(their, d.pos)) : ''}</span>
               <div style={{ textAlign: 'right' }}>{locked && <PlayerCell slug={their} right />}</div>
             </div>
           );
@@ -286,7 +288,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
               ✕ CLEAR SLOT
             </button>
           )}
-          {bench.filter((p) => slotDefs.find((d) => d.slot === pickerSlot)!.pos.includes(p.pos as Pos)).map((p) => (
+          {bench.filter((p) => slotEligiblePos(slotDefs.find((d) => d.slot === pickerSlot)!.pos).includes(p.pos)).map((p) => (
             <button key={p.slug} onClick={() => { void assign(pickerSlot, p.slug); }}
               style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '7px 8px', marginBottom: 2, background: 'none', border: 'none', borderRadius: 6, cursor: 'pointer', color: 'inherit' }}>
               <PlayerImg playerId={p.slug} team={p.team} pos={p.pos as Pos} size={26} />

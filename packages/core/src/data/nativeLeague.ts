@@ -79,7 +79,30 @@ function bakedPool2025(): DraftPoolEntry[] {
   return rows.map(({ score: _score, ...r }) => r);
 }
 
-export async function buildDraftPool(onProgress?: (note: string) => void): Promise<DraftPoolEntry[]> {
+/** 0171: extra position groups + allowable-player filters, both decided at
+ *  SEED time — league_pool is the gate every downstream surface (draft,
+ *  waivers, lineups) already honors, so nothing else needs to know. */
+export interface PoolOpts {
+  /** Admin-enabled extras for this league: subset of IDP / FB / HC / P.
+   *  (RET is a lineup-slot identity — it needs no pool entries.) */
+  positions?: string[] | null;
+  /** Commissioner's allowable-player filter: team whitelist and/or a tenure
+   *  window (years_exp — 0 = rookie). Pseudo-players (K/DST/HC/P) pass the
+   *  tenure filter always; the team filter applies to them too. */
+  filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null } | null;
+}
+
+function hcPuntEntries(positions: string[]): (DraftPoolEntry & { score: number })[] {
+  const out: (DraftPoolEntry & { score: number })[] = [];
+  NFL_CODES.forEach((code, i) => {
+    const t = code.toUpperCase();
+    if (positions.includes('HC')) out.push({ slug: `${code}-hc`, full: `${t} Head Coach`, pos: 'HC', team: t, score: BENCH_BASE + 400 + i * 0.01 });
+    if (positions.includes('P')) out.push({ slug: `${code}-p`, full: `${t} Punter`, pos: 'P', team: t, score: BENCH_BASE + 500 + i * 0.01 });
+  });
+  return out;
+}
+
+export async function buildDraftPool(onProgress?: (note: string) => void, opts?: PoolOpts): Promise<DraftPoolEntry[]> {
   let dir: Awaited<ReturnType<typeof loadPlayerDirectory>>;
   try {
     dir = await loadPlayerDirectory(onProgress);
@@ -88,21 +111,41 @@ export async function buildDraftPool(onProgress?: (note: string) => void): Promi
     return bakedPool2025();
   }
 
+  const extras = opts?.positions ?? [];
+  const wantIdp = extras.includes('IDP');
+  const wantFb = extras.includes('FB');
+  const teams = opts?.filter?.teams?.length ? new Set(opts.filter.teams.map((t) => t.toUpperCase())) : null;
+  const minExp = opts?.filter?.min_exp ?? null;
+  const maxExp = opts?.filter?.max_exp ?? null;
+  const tenureOk = (exp?: number) => {
+    if (minExp == null && maxExp == null) return true;
+    if (exp == null) return false; // unknown tenure can't prove eligibility
+    return (minExp == null || exp >= minExp) && (maxExp == null || exp <= maxExp);
+  };
+
   const ppr = pprBySlug();
   const best = new Map<string, DraftPoolEntry & { score: number }>();
   for (const p of dir.values()) {
-    if (!POOL_POS.has(p.pos)) continue;                    // K/DST are team-keyed, added below
+    const isIdp = p.pos === 'DL' || p.pos === 'LB' || p.pos === 'DB';
+    if (isIdp && !wantIdp) continue;
+    if (p.pos === 'FB' && !wantFb) continue;
+    if (!isIdp && p.pos !== 'FB' && !POOL_POS.has(p.pos)) continue; // K/DST are team-keyed, added below
     const slug = slugFor(p.full);
     if (!slug) continue;
+    if (teams && (!p.team || !teams.has(p.team.toUpperCase()))) continue;
+    if (!tenureOk(p.exp)) continue;
     const adp = ADP_2026.get(slug);
     // No NFL team (unsigned FA / retired) → only keep if the draft market
     // prices them anyway (a July FA like an unsigned star will sign; a re-seed
     // before the draft picks up the team).
     if (!p.team && adp == null) continue;
+    // Defenders/FBs have no ADP — rank by Sleeper search_rank in their own tier.
     const st = ppr.get(slug);
-    const score = adp
-      ?? (st != null ? VET_BASE + Math.max(0, 350 - st) : undefined)
-      ?? (p.rank != null ? BENCH_BASE + p.rank : FLOOR);
+    const score = (isIdp || p.pos === 'FB')
+      ? (p.rank != null ? BENCH_BASE + 100 + p.rank * 0.1 : FLOOR)
+      : adp
+        ?? (st != null ? VET_BASE + Math.max(0, 350 - st) : undefined)
+        ?? (p.rank != null ? BENCH_BASE + p.rank : FLOOR);
     const prev = best.get(slug);
     if (!prev || score < prev.score) {
       // espnId rides along so the draft board / team screens can render
@@ -110,7 +153,11 @@ export async function buildDraftPool(onProgress?: (note: string) => void): Promi
       best.set(slug, { slug, full: p.full, pos: p.pos, team: p.team ?? 'FA', espnId: p.espnId, score });
     }
   }
-  const rows = [...best.values(), ...kdstEntries()];
+  const pseudo = [...kdstEntries(), ...hcPuntEntries(extras)]
+    .filter((e) => !teams || teams.has(e.team.toUpperCase()));
+  const rows = [...best.values(), ...pseudo];
   rows.sort((a, b) => a.score - b.score || a.slug.localeCompare(b.slug));
-  return rows.slice(0, POOL_CAP).map(({ score: _score, ...r }) => r);
+  // Extras widen the universe — let the pool grow to the server's ceiling.
+  const cap = extras.length ? 2000 : POOL_CAP;
+  return rows.slice(0, cap).map(({ score: _score, ...r }) => r);
 }

@@ -227,6 +227,11 @@ function playText(p: Player, play: RawPlay): string {
   if (play.kind === 'ff') return `${t} D: forced fumble`;
   if (play.kind === 'qbhit') return `${t} D: QB hit`;
   if (play.kind === 'pd') return `${t} D: pass defended`;
+  if (play.kind === 'hc_3dc') return `${t} HC: 3rd down converted`;
+  if (play.kind === 'hc_4dc') return `${t} HC: 4th down converted`;
+  if (play.kind === 'hc_2pt') return `${t} HC: 2-pt conversion`;
+  if (play.kind === 'hc_res') return `${t} HC: ${play.yards > 0 ? `won by ${play.yards}` : play.yards < 0 ? `lost by ${-play.yards}` : 'tie'}`;
+  if (play.kind === 'hc_pts') return `${t} HC: ${play.yards} points scored`;
   if (play.kind === 'fum') return `${t}: fumble`;
   if (play.kind === 'frtd') return `${t}: fumble recovery TD`;
   if (play.kind === 'st_tkl') return `${t} ST: ${play.tt === 's' ? 'solo tackle' : 'tackle'}`;
