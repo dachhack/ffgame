@@ -124,43 +124,72 @@ export function rosterLabel(roster?: ClassicRoster | null): string {
 // are computed on the player's week totals.
 export interface ClassicScoring {
   passYd: number; passTd: number; int: number; pass300: number; pass400: number;
+  pass40: number; passTd40: number; passTd50: number;
   rushYd: number; rushTd: number; rush100: number; rush200: number;
+  rush40: number; rushTd40: number; rushTd50: number; carries20: number;
   recYd: number; recTd: number; ppr: number; teRec: number; rec100: number; rec200: number;
+  rbRec: number; wrRec: number; targetPt: number;
+  recB0: number; recB5: number; recB10: number; recB20: number; recB30: number; recB40: number;
+  recTd40: number; recTd50: number;
+  rr100: number; rr200: number;
   fumble: number; retYd: number; retTd: number;
-  fg0: number; fg20: number; fg30: number; fg40: number; fg50: number; fgMiss: number; xp: number; xpMiss: number;
+  fg0: number; fg20: number; fg30: number; fg40: number; fg50: number; fg60: number;
+  fgYd: number; fgYd30: number; fgMiss: number; xp: number; xpMiss: number;
   sack: number; dstInt: number; fumRec: number; dstTd: number; safety: number;
   idpTackle: number; idpSack: number; idpInt: number; idpFr: number; idpTd: number; idpSafety: number;
+  idpTackle10: number;
 }
 export const DEFAULT_CLASSIC_SCORING: ClassicScoring = {
   passYd: 0.04, passTd: 4, int: -2, pass300: 0, pass400: 0,
+  pass40: 0, passTd40: 0, passTd50: 0,
   rushYd: 0.1, rushTd: 6, rush100: 0, rush200: 0,
+  rush40: 0, rushTd40: 0, rushTd50: 0, carries20: 0,
   recYd: 0.1, recTd: 6, ppr: 1, teRec: 0, rec100: 0, rec200: 0,
+  rbRec: 0, wrRec: 0, targetPt: 0,
+  recB0: 0, recB5: 0, recB10: 0, recB20: 0, recB30: 0, recB40: 0,
+  recTd40: 0, recTd50: 0,
+  rr100: 0, rr200: 0,
   fumble: -2, retYd: 0, retTd: 6,
-  fg0: 3, fg20: 3, fg30: 3, fg40: 4, fg50: 5, fgMiss: -1, xp: 1, xpMiss: -1,
+  // fg60 defaults to fg50's value so a 60-yarder scores exactly what it did
+  // before the band existed — the knob is there for Sleeper's 6, not forced.
+  fg0: 3, fg20: 3, fg30: 3, fg40: 4, fg50: 5, fg60: 5,
+  fgYd: 0, fgYd30: 0, fgMiss: -1, xp: 1, xpMiss: -1,
   sack: 1, dstInt: 2, fumRec: 2, dstTd: 6, safety: 2,
   idpTackle: 1, idpSack: 2, idpInt: 3, idpFr: 2, idpTd: 6, idpSafety: 2,
+  idpTackle10: 0,
 };
 /** Editor metadata, grouped the way Sleeper/ESPN group their settings pages. */
 export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof ClassicScoring; label: string; perYard?: boolean }[] }[] = [
   { section: 'PASSING', fields: [
     { key: 'passYd', label: 'PASS YD', perYard: true }, { key: 'passTd', label: 'PASS TD' }, { key: 'int', label: 'INT' },
     { key: 'pass300', label: '300+ YD GAME' }, { key: 'pass400', label: '400+ YD GAME' },
+    { key: 'pass40', label: '40+ YD COMP' }, { key: 'passTd40', label: '40+ YD TD' }, { key: 'passTd50', label: '50+ YD TD' },
   ] },
   { section: 'RUSHING', fields: [
     { key: 'rushYd', label: 'RUSH YD', perYard: true }, { key: 'rushTd', label: 'RUSH TD' },
     { key: 'rush100', label: '100+ YD GAME' }, { key: 'rush200', label: '200+ YD GAME' },
+    { key: 'rush40', label: '40+ YD RUSH' }, { key: 'rushTd40', label: '40+ YD TD' }, { key: 'rushTd50', label: '50+ YD TD' },
+    { key: 'carries20', label: '20+ CARRY GAME' },
   ] },
   { section: 'RECEIVING', fields: [
     { key: 'recYd', label: 'REC YD', perYard: true }, { key: 'recTd', label: 'REC TD' }, { key: 'teRec', label: 'TE CATCH BONUS' },
+    { key: 'rbRec', label: 'RB CATCH BONUS' }, { key: 'wrRec', label: 'WR CATCH BONUS' }, { key: 'targetPt', label: 'TARGET' },
     { key: 'rec100', label: '100+ YD GAME' }, { key: 'rec200', label: '200+ YD GAME' },
+    { key: 'recB0', label: 'REC 0-4 YD' }, { key: 'recB5', label: 'REC 5-9 YD' }, { key: 'recB10', label: 'REC 10-19 YD' },
+    { key: 'recB20', label: 'REC 20-29 YD' }, { key: 'recB30', label: 'REC 30-39 YD' }, { key: 'recB40', label: 'REC 40+ YD' },
+    { key: 'recTd40', label: '40+ YD TD' }, { key: 'recTd50', label: '50+ YD TD' },
+  ] },
+  { section: 'COMBINED RUSH + REC', fields: [
+    { key: 'rr100', label: '100+ YD GAME' }, { key: 'rr200', label: '200+ YD GAME' },
   ] },
   { section: 'TURNOVERS & RETURNS', fields: [
     { key: 'fumble', label: 'FUMBLE LOST' }, { key: 'retYd', label: 'RETURN YD', perYard: true }, { key: 'retTd', label: 'RETURN TD' },
   ] },
   { section: 'KICKING', fields: [
     { key: 'fg0', label: 'FG 0-19' }, { key: 'fg20', label: 'FG 20-29' }, { key: 'fg30', label: 'FG 30-39' },
-    { key: 'fg40', label: 'FG 40-49' }, { key: 'fg50', label: 'FG 50+' }, { key: 'fgMiss', label: 'FG MISS' },
-    { key: 'xp', label: 'XP' }, { key: 'xpMiss', label: 'XP MISS' },
+    { key: 'fg40', label: 'FG 40-49' }, { key: 'fg50', label: 'FG 50-59' }, { key: 'fg60', label: 'FG 60+' },
+    { key: 'fgYd', label: 'PER FG YD', perYard: true }, { key: 'fgYd30', label: 'PER FG YD >30', perYard: true },
+    { key: 'fgMiss', label: 'FG MISS' }, { key: 'xp', label: 'XP' }, { key: 'xpMiss', label: 'XP MISS' },
   ] },
   { section: 'TEAM DEFENSE', fields: [
     { key: 'sack', label: 'SACK' }, { key: 'dstInt', label: 'INT' }, { key: 'fumRec', label: 'FUM REC' },
@@ -169,6 +198,7 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
   { section: 'IDP', fields: [
     { key: 'idpTackle', label: 'TACKLE' }, { key: 'idpSack', label: 'SACK' }, { key: 'idpInt', label: 'INT' },
     { key: 'idpFr', label: 'FUM REC' }, { key: 'idpTd', label: 'TD' }, { key: 'idpSafety', label: 'SAFETY' },
+    { key: 'idpTackle10', label: '10+ TACKLE GAME' },
   ] },
 ];
 /** Flat field list — the 0160 editors and the SQL sanitizer key off it. */
@@ -193,7 +223,10 @@ export function normalizeClassicScoring(x?: number | Partial<ClassicScoring> | n
  *  they're week-total facts, not play facts). */
 export function classicScorePlay(play: RawPlay, pos: Pos, sc: ClassicScoring): number {
   if (pos === 'K') {
-    if (play.kind === 'fg') return play.yards < 20 ? sc.fg0 : play.yards < 30 ? sc.fg20 : play.yards < 40 ? sc.fg30 : play.yards < 50 ? sc.fg40 : sc.fg50;
+    if (play.kind === 'fg') {
+      const band = play.yards < 20 ? sc.fg0 : play.yards < 30 ? sc.fg20 : play.yards < 40 ? sc.fg30 : play.yards < 50 ? sc.fg40 : play.yards < 60 ? sc.fg50 : sc.fg60;
+      return band + play.yards * sc.fgYd + Math.max(0, play.yards - 30) * sc.fgYd30;
+    }
     if (play.kind === 'fgmiss') return sc.fgMiss;
     if (play.kind === 'xp') return sc.xp;
     if (play.kind === 'xpmiss') return sc.xpMiss;
@@ -217,10 +250,30 @@ export function classicScorePlay(play: RawPlay, pos: Pos, sc: ClassicScoring): n
     return 0;
   }
   // Skill positions: every stat counts, all at once — the whole point of classic.
+  // Distance bonuses key on YARDS, so incompletions/sacks (baked as 0-yd pass
+  // rows) can never trip them; the 40/50 TD bonuses STACK, house style.
   let pts = 0;
-  if (play.kind === 'pass') pts += play.yards * sc.passYd + (play.td ? sc.passTd : 0);
-  if (play.kind === 'rush') pts += play.yards * sc.rushYd + (play.td ? sc.rushTd : 0);
-  if (play.catch) pts += sc.ppr + (pos === 'TE' ? sc.teRec : 0) + play.yards * sc.recYd + (play.td ? sc.recTd : 0);
+  if (play.kind === 'pass') {
+    pts += play.yards * sc.passYd + (play.td ? sc.passTd : 0);
+    if (play.yards >= 40) pts += sc.pass40 + (play.td ? sc.passTd40 : 0);
+    if (play.yards >= 50 && play.td) pts += sc.passTd50;
+  }
+  if (play.kind === 'rush') {
+    pts += play.yards * sc.rushYd + (play.td ? sc.rushTd : 0);
+    if (play.yards >= 40) pts += sc.rush40 + (play.td ? sc.rushTd40 : 0);
+    if (play.yards >= 50 && play.td) pts += sc.rushTd50;
+  }
+  if (play.catch) {
+    pts += sc.ppr + (pos === 'TE' ? sc.teRec : pos === 'RB' ? sc.rbRec : pos === 'WR' ? sc.wrRec : 0)
+        + play.yards * sc.recYd + (play.td ? sc.recTd : 0);
+    pts += play.yards < 5 ? sc.recB0 : play.yards < 10 ? sc.recB5 : play.yards < 20 ? sc.recB10
+        : play.yards < 30 ? sc.recB20 : play.yards < 40 ? sc.recB30 : sc.recB40;
+    if (play.yards >= 40 && play.td) pts += sc.recTd40;
+    if (play.yards >= 50 && play.td) pts += sc.recTd50;
+  }
+  // ESPN-style per-target points (founder's ask) — pays on every target,
+  // caught or not: rec rows and incomplete-target rows both carry the flag.
+  if (play.target) pts += sc.targetPt;
   if (play.kind === 'return') pts += play.yards * sc.retYd + (play.td ? sc.retTd : 0);
   if (play.turnover) pts += play.kind === 'pass' ? sc.int : sc.fumble; // INT thrown vs fumble lost
   return pts;
@@ -237,12 +290,13 @@ const round1 = (n: number): number => Math.round(n * 10) / 10;
 export function classicPoints(player: Player, week: number, sc?: number | Partial<ClassicScoring>): number {
   const s = normalizeClassicScoring(sc);
   const { plays } = playsForPlayer(player, week);
-  let raw = 0, passYds = 0, rushYds = 0, recYds = 0;
+  let raw = 0, passYds = 0, rushYds = 0, recYds = 0, carries = 0, tackles = 0;
   for (const p of plays) {
     raw += classicScorePlay(p, player.pos, s);
     if (p.kind === 'pass') passYds += p.yards;
-    if (p.kind === 'rush') rushYds += p.yards;
+    if (p.kind === 'rush') { rushYds += p.yards; carries++; }
     if (p.catch) recYds += p.yards;
+    if (p.kind === 'tackle') tackles++;
   }
   if (passYds >= 300) raw += s.pass300;
   if (passYds >= 400) raw += s.pass400;
@@ -250,6 +304,10 @@ export function classicPoints(player: Player, week: number, sc?: number | Partia
   if (rushYds >= 200) raw += s.rush200;
   if (recYds >= 100) raw += s.rec100;
   if (recYds >= 200) raw += s.rec200;
+  if (rushYds + recYds >= 100) raw += s.rr100;
+  if (rushYds + recYds >= 200) raw += s.rr200;
+  if (carries >= 20) raw += s.carries20;
+  if (tackles >= 10) raw += s.idpTackle10;
   const fr = flagRulesFor(player.id);
   return round1(raw * (fr.bonusMult ?? 1) + (fr.bonusPts ?? 0));
 }

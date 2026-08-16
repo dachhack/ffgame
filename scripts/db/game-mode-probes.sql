@@ -201,6 +201,18 @@ begin
   perform assert_ok(r, 'cs11 catalog keys accepted');
   perform assert_true((r -> 'scoring' ->> 'teRec')::numeric = 0.5 and (r -> 'scoring' ->> 'pass300')::numeric = 3, 'cs12 values stored');
 
+  -- 0165 Sleeper-parity keys: distance/volume bonuses, position PPR, targets,
+  -- the FG 60+ band and the per-FG-yard rates (yard-clamped like the others)
+  r := set_league_classic_scoring(lid,
+    '{"targetPt": 0.5, "recB40": 1, "rushTd50": 2, "carries20": 1.5, "rr100": 1, "fg60": 6, "fgYd": 0.1, "fgYd30": 9, "idpTackle10": 2, "pass40": 1, "rbRec": 0.5}'::jsonb);
+  perform assert_ok(r, 'cs13 parity keys accepted');
+  perform assert_true((r -> 'scoring' ->> 'targetPt')::numeric = 0.5 and (r -> 'scoring' ->> 'fg60')::numeric = 6
+    and (r -> 'scoring' ->> 'rushTd50')::numeric = 2 and (r -> 'scoring' ->> 'rbRec')::numeric = 0.5, 'cs14 parity values stored');
+  perform assert_true((r -> 'scoring' ->> 'fgYd30')::numeric = 1, 'cs15 per-FG-yard rate clamped to 1');
+  perform probe_as('c');
+  perform assert_true((league_game_mode(lid) -> 'scoring' ->> 'carries20')::numeric = 1.5, 'cs16 member reads parity keys');
+  perform probe_as('b');
+
   -- best ball + classic scoring have no meaning in a drip league
   perform assert_ok(set_league_game_mode(lid, 'drip'), 'bb8 back to drip');
   perform assert_err(set_league_bestball(lid, '["FLEX"]'::jsonb), 'classic-league setting', 'bb9 refused in drip');
