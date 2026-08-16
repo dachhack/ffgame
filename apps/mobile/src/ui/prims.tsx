@@ -13,15 +13,18 @@ type Tone = 'text' | 'dim' | 'faint' | 'mid' | 'you' | 'opp' | 'warn';
 
 /** Monospace label — the web app's `className="mono"`, which is most of its
  *  small text. */
-export function Mono({ children, size = 10, tone = 'dim', weight, track, style }: {
+export function Mono({ children, size = 10, tone = 'dim', weight, track, style, numberOfLines }: {
   children: ReactNode; size?: number; tone?: Tone; weight?: '400' | '700';
   /** letterSpacing in em, matching the web values (0.06 → 0.06 * size). */
   track?: number;
+  /** Clip rather than wrap — a fixed-width label column (a commissioner's own
+   *  spot name can be any length) must not push the row it labels. */
+  numberOfLines?: number;
   style?: StyleProp<TextStyle>;
 }) {
   const t = useTheme();
   return (
-    <Text style={[
+    <Text numberOfLines={numberOfLines} style={[
       { fontFamily: MONO, fontSize: size, color: t[tone], lineHeight: size * 1.45 },
       weight ? { fontWeight: weight } : null,
       track ? { letterSpacing: track * size } : null,

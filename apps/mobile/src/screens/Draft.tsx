@@ -18,8 +18,10 @@ import {
   setAutodraft, setDraftQueue, setLotProxy, startDraft, seedLeaguePool, leagueGameMode,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   setDraftSetup, setDraftOrder, setDraftStart,
-  friendlyError, type DraftState, type LeaguePoolPlayer, type NativeTeamState, type PosCaps,
+  leaguePoolExp, friendlyError,
+  type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type PosCaps, type GameModeInfo,
 } from '@drip/core/data/liveApi';
+import { leagueSlotDefs, assignSpots, slotDisplayName, type SpotPlayer } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
 import { ADP_2026 } from '@drip/core/data/adp2026';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
@@ -70,6 +72,10 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   const [queue, setQueue] = useState<string[]>([]);
   const [tab, setTab] = useState<DraftTab>('players');
   const [teamView, setTeamView] = useState<number | null>(null);
+  // Classic leagues show picks against the ROSTER SPOTS they'll fill; a drip
+  // league has no starting spec to map onto, so it keeps the R1..Rn list.
+  const [gm, setGm] = useState<GameModeInfo | null>(null);
+  const [expMap, setExpMap] = useState<Record<string, number>>({});   // years_exp, only when a spot filters on tenure (0172)
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
   const [favs, setFavs] = useState<Set<string>>(new Set());
@@ -92,18 +98,32 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     } catch (x) { setErr(friendlyError(x)); }
   };
   useEffect(() => {
+    // `alive` guards the async reads that feed the SPOT panel: switching rooms
+    // must not let a slower league's lineup spec land on a newer one (the
+    // v0.232.0 lesson — an unguarded effect, not a rendering bug).
+    let alive = true;
     void refresh();
     leaguePool(leagueId).then(setPool).catch(() => {});
     myFavorites().then(setFavs).catch(() => {});
     void loadTeamOverrides();
     playerFlags(leagueId).then((f) => { if (Array.isArray(f)) { setLeagueFlags(leagueId, f); setFlagVer((v) => v + 1); } }).catch(() => {});
+    // The league's game mode + starting spec (0161/0163/0172/0174). A failed
+    // read leaves gm null, which shows the old R1..Rn list — never a guess at
+    // a lineup shape.
+    leagueGameMode(leagueId).then((g) => {
+      if (!alive || !g.ok) return;
+      setGm(g);
+      if ((g.slots ?? []).some((s) => s.min_exp != null || s.max_exp != null)) {
+        leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
+      }
+    }).catch(() => {});
     nativeTeamState(leagueId).then((tm) => {
       setTeam(tm);
       if (tm.my_roster_id != null) myDraftQueue(leagueId, tm.my_roster_id).then(setQueue).catch(() => {});
     }).catch(() => {});
     const poll = setInterval(refresh, 3000);
     const clock = setInterval(() => setNow(Date.now()), 500);
-    return () => { clearInterval(poll); clearInterval(clock); };
+    return () => { alive = false; clearInterval(poll); clearInterval(clock); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
 
@@ -219,6 +239,21 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   const lotSecsLeft = (l: { deadline_at: string }) =>
     st.paused ? null : Math.max(0, Math.ceil((Date.parse(l.deadline_at) - (now + skew.current)) / 1000));
   const pickRowsFor = (rid: number) => (st.picks ?? []).filter((p) => p.roster_id === rid);
+
+  // The league's starting spots, in the commissioner's own order. Null for a
+  // drip league (no starting spec) or while the mode read is outstanding.
+  const spotDefs = gm?.mode === 'classic' ? leagueSlotDefs({ roster: gm.roster ?? null, slots: gm.slots ?? null }) : null;
+  /** A seat's picks mapped onto the spots they'll fill — see assignSpots.
+   *  A pick the pool doesn't know (pos '?') matches nothing and benches, so a
+   *  missing pool row costs a spot, never a row. */
+  const spotsFor = (rid: number) => {
+    if (!spotDefs) return null;
+    const players: SpotPlayer[] = pickRowsFor(rid).map((pk) => {
+      const pl = poolBySlug.get(pk.slug);
+      return { id: pk.slug, pos: pl?.pos ?? '?', team: pl?.team ?? null, exp: expMap[pk.slug] ?? null };
+    });
+    return assignSpots(spotDefs, players);
+  };
 
   const ghost = (label: string, onPress: () => void, tone?: string) => (
     <Pressable key={label} onPress={() => { tap(); onPress(); }} disabled={busy}
@@ -547,20 +582,54 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
             const rid = teamView ?? myRoster ?? (st.order ?? [])[0];
             if (rid == null) return null;
             const rows = pickRowsFor(rid);
-            return rows.length === 0
-              ? <Mono size={10} tone="faint">No picks yet.</Mono>
-              : rows.map((pk) => {
-                const pl = poolBySlug.get(pk.slug);
-                return (
-                  <View key={pk.overall} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
-                    <Mono size={9} tone="faint" style={{ width: 30 }}>{auction ? `$${pk.price ?? 1}` : `R${pk.round}`}</Mono>
-                    <Face slug={pk.slug} pos={pl?.pos ?? '?'} size={22} />
-                    <PosPill pos={pl?.pos ?? '?'} size={8} />
-                    <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: t.text }}>{pl?.full_name ?? pk.slug}</Text>
-                    <Mono size={9} tone="faint">{pl?.team}{pk.auto ? ' 🤖' : ''}</Mono>
-                  </View>
-                );
-              });
+            const pickOf = new Map(rows.map((pk) => [pk.slug, pk]));
+            const cost = (pk: DraftPickRow) => (auction ? `$${pk.price ?? 1}` : `R${pk.round}`);
+            // One row: a tag on the left (the SPOT it fills, or the round/price
+            // when there are no spots to fill), the player, where he came from.
+            const row = (key: string | number, tag: string, slug: string, withCost = false) => {
+              const pl = poolBySlug.get(slug);
+              const pk = pickOf.get(slug);
+              return (
+                <View key={key} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+                  <Mono size={9} tone="faint" style={{ width: spotDefs ? 72 : 30 }} numberOfLines={1}>{tag}</Mono>
+                  <Face slug={slug} pos={pl?.pos ?? '?'} size={22} />
+                  <PosPill pos={pl?.pos ?? '?'} size={8} />
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: t.text }}>{pl?.full_name ?? slug}</Text>
+                  {/* Where he came from — kept on the spot rows, since the left
+                      column now says WHERE HE PLAYS rather than which round. */}
+                  <Mono size={9} tone="faint">{pl?.team}{withCost && pk ? ` · ${cost(pk)}` : ''}{pk?.auto ? ' 🤖' : ''}</Mono>
+                </View>
+              );
+            };
+            const fill = spotsFor(rid);
+            // Drip league (or the mode read hasn't landed): the picks, as they came.
+            if (!fill) {
+              return rows.length === 0
+                ? <Mono size={10} tone="faint">No picks yet.</Mono>
+                : rows.map((pk) => row(pk.overall, cost(pk), pk.slug));
+            }
+            const seated = fill.spots.filter((s) => s.player).length;
+            return (
+              <>
+                <Mono size={8.5} tone="faint" track={0.14} style={{ paddingBottom: 4 }}>
+                  {`STARTING LINEUP · ${seated}/${fill.spots.length} FILLED`}
+                </Mono>
+                {fill.spots.map((s) => (s.player
+                  ? row(s.def.slot, slotDisplayName(s.def), s.player.id, true)
+                  : (
+                    <View key={s.def.slot} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, opacity: 0.55 }}>
+                      <Mono size={9} tone="faint" style={{ width: 72 }} numberOfLines={1}>{slotDisplayName(s.def)}</Mono>
+                      <Mono size={10} tone="faint" style={{ flex: 1 }}>— empty</Mono>
+                    </View>
+                  )))}
+                <Mono size={8.5} tone="faint" track={0.14} style={{ paddingTop: 10, paddingBottom: 4 }}>
+                  {`BENCH${fill.bench.length ? ` · ${fill.bench.length}` : ''}`}
+                </Mono>
+                {fill.bench.length === 0
+                  ? <Mono size={10} tone="faint">{rows.length ? 'Every pick is starting.' : 'No picks yet.'}</Mono>
+                  : fill.bench.map((p) => row(`b-${p.id}`, pickOf.get(p.id) ? cost(pickOf.get(p.id)!) : 'BN', p.id))}
+              </>
+            );
           })()}
         </Card>
       )}
