@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Drip League FF — a real-time fantasy football game. Web demo seeded with the PeakedInDynasty 2025 season.",
+  "description": "Drip League FF \u2014 a real-time fantasy football game. Web demo seeded with the PeakedInDynasty 2025 season.",
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -18,7 +18,8 @@
     "check:prices": "tsx scripts/check-powerup-prices.mjs",
     "check:metrics": "tsx scripts/check-locked-metrics.mjs",
     "check:injuries": "tsx scripts/check-injuries.mjs",
-    "check:parity": "npm run check:prices && npm run check:metrics && npm run check:injuries"
+    "check:parity": "npm run check:prices && npm run check:metrics && npm run check:injuries && npm run check:board",
+    "check:board": "tsx scripts/check-matchup-board.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
