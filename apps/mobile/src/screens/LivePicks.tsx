@@ -10,7 +10,7 @@
 // gating, lock rules, pick shape and power-up prices all come from @drip/core,
 // exactly as they do on web. That is the whole point of the extraction — a rule
 // change lands in one file and both apps get it.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef} from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
 import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, nflGameForTeam, kickoffLabel, isPreseasonWeek, LOCK_LEAD_MS, windowKickoffMs } from '@drip/core/data/nflSlate';
@@ -112,6 +112,11 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
   // Classic leagues (0157) swap the whole drip board for the traditional one.
   const [gameMode, setGameMode] = useState<'drip' | 'classic' | null>(null);
+  // Readable inside the loader without making it a dependency.
+  const gameModeRef = useRef<'drip' | 'classic' | null>(null);
+  // Keep the ref in step with the state it mirrors — without this the guard
+  // above reads a permanent null and quietly reverts to the old behaviour.
+  useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
   const [myTeam, setMyTeam] = useState<TeamInfo | null>(null);
   const [oppTeam, setOppTeam] = useState<TeamInfo | null>(null);
   const [roster, setRoster] = useState<{ leagueId: string; rosterId: number } | null>(null);
@@ -206,8 +211,16 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         // Classic leagues (0157) branch to the traditional board — the drip
         // load below (windows, buffs, shop) never runs for them.
         const gm = await leagueGameMode(r.leagueId).catch(() => null);
-        if (gm?.ok && gm.mode === 'classic') { if (alive) { setGameMode('classic'); setState('ready'); } return; }
-        if (alive) setGameMode('drip');
+        if (!alive) return;
+        if (gm?.ok && gm.mode === 'classic') { setGameMode('classic'); setState('ready'); return; }
+        // A FAILED READ IS NOT A DRIP LEAGUE (v0.232.0). `gm` is null when the
+        // RPC threw — a blip, an auth refresh mid-flight — and treating that
+        // as "not classic" silently drops a normie league onto the card board.
+        // Only a definitive answer moves the mode; a failure keeps whatever we
+        // already knew and lets the next run settle it.
+        if (gm?.ok) setGameMode(gm.mode === 'classic' ? 'classic' : 'drip');
+        else if (gameModeRef.current == null) setGameMode('drip');
+        if (gameModeRef.current === 'classic') { setState('ready'); return; }
         // Live meta for the DUEL LOG's engine call (0200.1): the baked slug
         // table only knows the 2025 demo names, so a 2026 fringe player fell
         // to the WR/no-team fallback and his client-resolved duel banked 0.0
