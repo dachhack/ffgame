@@ -1,6 +1,119 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-08-13 · Build `v0.169.0`_
+_Last updated: 2026-08-16 · Build `v0.233.0`_
+
+## Where this session left off (v0.233.0, 2026-08-16)
+
+**Read this first if you are picking the matchup board back up.**
+
+### What shipped, v0.219.0 → v0.233.0
+
+App parity, then the normie matchup board, then a bug chase.
+
+- **v0.219.0–v0.226.0 — the app caught up with the site.** Grouped phone nav
+  (native `<select>` on web under 900px, wrapped chip row in the app because
+  ~7 destinations all fit and a picker would HIDE what a strip can show);
+  FAAB wallets + coin-by-team; draft-room commish controls; rosters/waiver
+  wire; K/DST fill; **join by invite code**; **league creation**.
+  The invite-code gap was the one worth finding: the app SHARED codes it
+  could not ACCEPT, so anyone installing with a friend's code had to go to
+  the website. It was found by measuring — diffing every exported `liveApi`
+  call the web uses against the app — not by working from a list.
+- **v0.227.0 — the matchup board ENGINE** (`packages/core/src/engine/matchupBoard.ts`).
+  Pure, no fetching. 26 assertions in `scripts/check-matchup-board.mjs`, wired
+  into `check:parity`. The four cases where the obvious implementation is
+  wrong are documented in the file and each has a test.
+- **v0.228.0 / v0.229.0 — the renderers**, site then app, both consuming the
+  same `buildMatchupBoard` output so the hosts cannot disagree about a figure.
+- **v0.230.0–v0.233.0 — the bug chase** (see below).
+
+### The bug chase, and what it actually was
+
+The founder reported "matchup screen in normie mode is still the card board".
+I got this wrong twice before getting it right; the wrong turns are recorded
+because each one is a trap the next person can fall into.
+
+1. First I said the league was set to drip and pointed at the 0158 admin gate.
+   **Wrong** — their commish UI showed CLASSIC, and that toggle only flips
+   local state on success (`if (r.ok) setMode(m)`), so it was persisted.
+2. Then I said `myRoster()` had opened a different league. **Plausible but
+   over-claimed** — `myRoster` really is `LIMIT 1` with no `ORDER BY` (still
+   unfixed, see below), but it was probably not the cause here.
+3. **The real cause**, from the founder's third report ("goes to the right
+   board, then immediately to the cards"): two defects in the web loader,
+   fixed in v0.232.0.
+   - No stale-run guard. The effect re-runs on the week stepper and on retry;
+     the classic path returns EARLY after one RPC while the drip path awaits
+     several more, so an older drip run finished AFTER a newer classic run and
+     overwrote the mode. The app's copy always had an `alive` flag; the web's
+     never did.
+   - `leagueGameMode(...).catch(() => null)` then fell through to
+     `setGameMode('drip')` — **a failed read was treated as "not classic"** on
+     BOTH hosts. A blip dropped a normie league onto the card board and left
+     it there.
+
+   Lesson worth keeping: "renders right, then flips" is almost always an
+   unguarded async effect, not a rendering bug. Look at the loader, not the JSX.
+
+4. Also fixed while chasing it: **`admin_set_week_lock(week, true)` does NOT
+   mean "lock now"** — it releases the unlock HOLD and clears the `2099-01-01`
+   sentinel back to null so the worker re-derives the real kickoff. A NULL
+   `lock_at` means "no lock time assigned yet"; `server/src/lock.js:173` seals
+   only `.not('lock_at','is',null)`. I nearly "fixed" the boards to treat null
+   as locked, which would have sealed lineups across every league with an
+   unbackfilled `lock_at`. **Do not make that change.**
+
+### NEXT, in priority order
+
+1. **Draft TEAMS panel by roster spot** — the founder's open ask, and the
+   largest piece. Today the draft room lists picks as R1..R12; it should show
+   them against the roster SPOTS they will fill, labels included. This is an
+   ASSIGNMENT problem, not a relabel: with per-spot filters (0172) and custom
+   labels (0174), a player can be legal for several spots, so the mapping
+   belongs in core beside `bestballFill` with its own probes — otherwise the
+   panel shows a lineup the engine then fills differently, which is worse than
+   R1..R12.
+2. **`myRoster()` picks arbitrarily** — `.eq(...).eq(...).limit(1)` with no
+   ORDER BY (`liveApi.ts` ~line 631). An ORDER BY makes it stable but still
+   guesses; the better answer is probably that a board with no league should
+   refuse to guess and say so. Behaviour change — make it on purpose.
+3. **`src/screens/Matchup.tsx` has NO game-mode branch at all.** It serves the
+   web's `matchup`/demo routes, so anything reaching a board through there
+   gets the drip card board regardless of league mode. Confirmed defect,
+   separate from the chase above.
+4. **Mode chip is web-only** (`◈ DRIP` / `🏈 NORMAL` on the week strip) — port
+   to the app.
+5. **The web has no public LEAGUE BOARD** — browse/post/join is app-only. The
+   reverse of the invite-code gap, and it is costing signups on the marketing
+   surface. Small next to solo/DFS.
+
+### Known-open, not blocking
+
+- Solo / pods / weekly / DFS: entirely absent from the app.
+- Sleeper/ESPN league import + platform-league join: app joins native only.
+- Targeted power-ups (spy, disarm, targeted applies): web-only. The app HAS
+  power-ups, buffs and hero sets — only the targeted subset is missing.
+- The window pot: web-only. Mock drafts: web-only.
+- Standings read two ways (`leagueStandings` in the app,
+  `playoffState.standings` on web). Not a gap; a drift risk.
+
+### Diagnostics you now have
+
+- `scripts/db/normie-league-diag.sql` — run through the **Run a database
+  query** workflow (read-only default). Answers: is the league really classic,
+  is the draft done, do week-1 matchups have a `lock_at` (with a plain-English
+  verdict per row), and which seats actually have lineups in. Written because
+  four wrong turns above would each have been settled by one query.
+- `scripts/check-matchup-board.mjs` — the board arithmetic, in `check:parity`.
+
+### The founder's league, as of this session
+
+`Normie Test`: classic ✓, drafted, 1/8 enrolled — but **13 starting spots
+against a 12-round draft**, so no team can field a legal lineup. v0.233.0 warns
+about this in the builder; the league itself still needs a spot removed or a
+longer draft. The seven unclaimed seats drafted rosters but nobody set their
+lineups, so the opponent column will read `Empty` — that is honest, and the
+engine deliberately excludes those spots from "yet to play".
 
 ## The week lock switch (v0.169.0, 0134→0136, 2026-08-13 evening)
 
