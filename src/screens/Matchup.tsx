@@ -376,7 +376,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const swapsKey = JSON.stringify(swaps);
   const backupsKey = JSON.stringify(backupAssign);
   const resolved = useMemo(
-    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps, backupAssign, buffs, extras, realResolve, liveOppBuffs ?? undefined),
+    // LIVE boards: the opponent's buffs are exactly what the reveal returned —
+    // and an opponent who armed NOTHING (no applied_state row) reveals null, so
+    // null must mean NONE here. Passing undefined invokes buildMatchup's demo
+    // default, the AI drama-buff draw (momentum/garbage-time/overtime), which
+    // put phantom +7.1 of buff lift on a real human opponent's Achane while the
+    // worker correctly scored him unbuffed (0200.5). Demo boards keep the draw.
+    () => buildMatchup(YOU, oppId, week, effYouPicks, oppPicks, extraSlots, swaps, backupAssign, buffs, extras, realResolve, liveCtx ? (liveOppBuffs ?? []) : undefined),
     [oppId, week, effYouPicks, oppPicks, ready, extraKey, swapsKey, backupsKey, buffsKey, extrasKey, realResolve, liveOppBuffs, livePbpVer],
   );
 
