@@ -54,6 +54,8 @@ export interface RawPlay {
   inc?: boolean;    // QB row: incomplete attempt (INTs included)
   skd?: boolean;    // QB row: sacked on this dropback (not a pass attempt)
   rk?: 'kr' | 'pr'; // return row: kickoff vs punt return (0167 split knobs)
+  tt?: 's' | 'a';   // tackle row: solo vs assist (0168 split knobs)
+  hf?: boolean;     // individual sack row: split credit — scores half (0168)
 }
 
 // Effect family of a metric → how it scores a single play and what it does.
@@ -218,7 +220,9 @@ function playText(p: Player, play: RawPlay): string {
   if (play.kind === 'blk') return `${t} D: blocked kick`;
   if (play.kind === 'pa') return `${t} D: ${play.yards} points allowed`;
   if (play.kind === 'ya') return `${t} D: ${play.yards} total yards allowed`;
-  if (play.kind === 'tackle') return `${t} D: tackle`;
+  if (play.kind === 'tackle') return `${t} D: ${play.tt === 's' ? 'solo tackle' : play.tt === 'a' ? 'assisted tackle' : 'tackle'}`;
+  if (play.kind === 'tfl') return `${t} D: tackle for loss`;
+  if (play.kind === 'ff') return `${t} D: forced fumble`;
   return `${t}: incomplete`;
 }
 
@@ -242,6 +246,7 @@ export function realRawPlays(playerId: string, week: number): RawPlay[] | null {
       clock: p.c, t: p.t, kind: p.k, yards: p.y, td: !!p.td, catch: !!p.ca, target: !!p.tg, turnover: !!p.to,
       ...(p.fd ? { fd: true } : {}), ...(p.cp ? { cmp: true } : {}), ...(p.ic ? { inc: true } : {}),
       ...(p.sk ? { skd: true } : {}), ...(p.rk === 'kr' || p.rk === 'pr' ? { rk: p.rk as 'kr' | 'pr' } : {}),
+      ...(p.tt === 's' || p.tt === 'a' ? { tt: p.tt as 's' | 'a' } : {}), ...(p.hf ? { hf: true } : {}),
     }))
     .sort((a, b) => a.clock - b.clock);
 }

@@ -244,6 +244,51 @@ export function playToRows(p, roster, eventId, gameStartMs) {
     if (/Return Touchdown$/.test(typeText)) out.push({ slug: d, play: row(c, ride, 'dst_td', 0, 0, 0, 0, 0) });
     // Blocked punt / PAT / FG (0167) — the blocking defense's play.
     if (typeText.startsWith('Blocked') || /is BLOCKED/i.test(text)) out.push({ slug: d, play: row(c, ride, 'blk', 0, 0, 0, 0, 0) });
+    // Team forced fumble (0168): "FUMBLES (M.Parsons)" names the forcer.
+    if (/FUMBLES\s*\(/.test(text)) out.push({ slug: d, play: row(c, ride, 'ff', 0, 0, 0, 0, 0) });
+  }
+
+  // ── Individual defender attribution (0168) ─────────────────────────────────
+  // ESPN's play text ends with the tacklers in parentheses — "(M.Parsons)" is a
+  // solo, "(K.Elam; T.Bernard)" a split. Solo/assist, TFL (negative-yard
+  // scrimmage plays), individual sack credit (halved when split), forced
+  // fumbles, INTs and fumble recoveries all resolve through the same boxscore
+  // roster as everything else. QB hits and passes defended are NOT parsed —
+  // live text doesn't carry them reliably; those knobs wait for the nflverse
+  // true-up loop (docs/play-feed-enrichment-scope.md, Phase 3 decision).
+  const isScrim = typeText === 'Rush' || typeText === 'Rushing Touchdown'
+    || typeText === 'Pass Reception' || typeText === 'Passing Touchdown' || typeText.startsWith('Sack');
+  if (isScrim && !isTD) {
+    const pm = /\(([^()]+)\)\s*\.?\s*$/.exec(text);
+    if (pm) {
+      const start = text.lastIndexOf(pm[1]);
+      const hits = names.filter((n) => n.idx >= start && n.idx < start + pm[1].length);
+      const solo = hits.length === 1;
+      for (const h of hits) {
+        const dd = resolve(h.abbr); if (!dd) continue;
+        out.push({ slug: dd.slug, play: row(c, ride, 'tackle', 0, 0, 0, 0, 0, { tt: solo ? 's' : 'a' }) });
+        if (yds < 0 && !typeText.startsWith('Sack')) out.push({ slug: dd.slug, play: row(c, ride, 'tfl', 0, 0, 0, 0, 0) });
+        if (typeText.startsWith('Sack')) out.push({ slug: dd.slug, play: row(c, ride, 'sack', 0, 0, 0, 0, 0, solo ? undefined : { hf: 1 }) });
+      }
+    }
+  }
+  // Forced fumble — the name inside "FUMBLES (…)".
+  const ffm = /FUMBLES\s*\(([^()]+)\)/.exec(text);
+  if (ffm) {
+    const start = text.indexOf(ffm[1], ffm.index);
+    for (const h of names.filter((n) => n.idx >= start && n.idx < start + ffm[1].length)) {
+      const dd = resolve(h.abbr);
+      if (dd) out.push({ slug: dd.slug, play: row(c, ride, 'ff', 0, 0, 0, 0, 0) });
+    }
+  }
+  // Individual INT + fumble recovery credit.
+  if (isInt) {
+    const dd = nameAfter('INTERCEPTED by');
+    if (dd) out.push({ slug: dd.slug, play: row(c, ride, 'int', 0, 0, 0, 0, 0) });
+  }
+  if (p?.isTurnover && /RECOVERED by/.test(text)) {
+    const dd = nameAfter('RECOVERED by');
+    if (dd) out.push({ slug: dd.slug, play: row(c, ride, 'fumrec', 0, 0, 0, 0, 0) });
   }
   return out;
 }

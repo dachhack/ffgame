@@ -139,12 +139,12 @@ export interface ClassicScoring {
   fumble: number; retYd: number; retTd: number; krYd: number; prYd: number;
   fg0: number; fg20: number; fg30: number; fg40: number; fg50: number; fg60: number;
   fgYd: number; fgYd30: number; fgMiss: number; xp: number; xpMiss: number;
-  sack: number; dstInt: number; fumRec: number; dstTd: number; safety: number; dstBlk: number;
+  sack: number; dstInt: number; fumRec: number; dstTd: number; safety: number; dstBlk: number; dstFf: number;
   paPt: number; pa0: number; pa1: number; pa7: number; pa14: number; pa21: number; pa28: number; pa35: number;
   yaPt: number; ya100: number; ya199: number; ya299: number; ya349: number; ya399: number;
   ya449: number; ya499: number; ya549: number; ya550: number;
   idpTackle: number; idpSack: number; idpInt: number; idpFr: number; idpTd: number; idpSafety: number;
-  idpTackle10: number;
+  idpTackle10: number; idpSolo: number; idpAst: number; idpTfl: number; idpFf: number;
 }
 export const DEFAULT_CLASSIC_SCORING: ClassicScoring = {
   passYd: 0.04, passTd: 4, int: -2, pass300: 0, pass400: 0,
@@ -167,7 +167,7 @@ export const DEFAULT_CLASSIC_SCORING: ClassicScoring = {
   // before the band existed — the knob is there for Sleeper's 6, not forced.
   fg0: 3, fg20: 3, fg30: 3, fg40: 4, fg50: 5, fg60: 5,
   fgYd: 0, fgYd30: 0, fgMiss: -1, xp: 1, xpMiss: -1,
-  sack: 1, dstInt: 2, fumRec: 2, dstTd: 6, safety: 2, dstBlk: 2,
+  sack: 1, dstInt: 2, fumRec: 2, dstTd: 6, safety: 2, dstBlk: 2, dstFf: 1,
   // Points-allowed brackets default to Sleeper's ladder — only 0167 pa rows
   // (emitted at game FINAL) can carry the kind, so no historical total moves;
   // going forward this is the standard DEF scoring every normie expects.
@@ -175,7 +175,7 @@ export const DEFAULT_CLASSIC_SCORING: ClassicScoring = {
   yaPt: 0, ya100: 0, ya199: 0, ya299: 0, ya349: 0, ya399: 0,
   ya449: 0, ya499: 0, ya549: 0, ya550: 0,
   idpTackle: 1, idpSack: 2, idpInt: 3, idpFr: 2, idpTd: 6, idpSafety: 2,
-  idpTackle10: 0,
+  idpTackle10: 0, idpSolo: 0, idpAst: 0, idpTfl: 0, idpFf: 0,
 };
 /** Editor metadata, grouped the way Sleeper/ESPN group their settings pages. */
 export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof ClassicScoring; label: string; perYard?: boolean }[] }[] = [
@@ -222,6 +222,7 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
   { section: 'TEAM DEFENSE', fields: [
     { key: 'sack', label: 'SACK' }, { key: 'dstInt', label: 'INT' }, { key: 'fumRec', label: 'FUM REC' },
     { key: 'dstTd', label: 'TD' }, { key: 'safety', label: 'SAFETY' }, { key: 'dstBlk', label: 'BLOCKED KICK' },
+    { key: 'dstFf', label: 'FORCED FUMBLE' },
   ] },
   { section: 'POINTS ALLOWED', fields: [
     { key: 'paPt', label: 'PER PT ALLOWED' },
@@ -236,9 +237,10 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
     { key: 'ya499', label: '450-499' }, { key: 'ya549', label: '500-549' }, { key: 'ya550', label: '550+' },
   ] },
   { section: 'IDP', fields: [
-    { key: 'idpTackle', label: 'TACKLE' }, { key: 'idpSack', label: 'SACK' }, { key: 'idpInt', label: 'INT' },
-    { key: 'idpFr', label: 'FUM REC' }, { key: 'idpTd', label: 'TD' }, { key: 'idpSafety', label: 'SAFETY' },
-    { key: 'idpTackle10', label: '10+ TACKLE GAME' },
+    { key: 'idpTackle', label: 'TACKLE' }, { key: 'idpSolo', label: 'SOLO BONUS' }, { key: 'idpAst', label: 'ASSIST BONUS' },
+    { key: 'idpTfl', label: 'TACKLE FOR LOSS' }, { key: 'idpSack', label: 'SACK' }, { key: 'idpFf', label: 'FORCED FUMBLE' },
+    { key: 'idpInt', label: 'INT' }, { key: 'idpFr', label: 'FUM REC' }, { key: 'idpTd', label: 'TD' },
+    { key: 'idpSafety', label: 'SAFETY' }, { key: 'idpTackle10', label: '10+ TACKLE GAME' },
   ] },
 ];
 /** Flat field list — the 0160 editors and the SQL sanitizer key off it. */
@@ -279,6 +281,7 @@ export function classicScorePlay(play: RawPlay, pos: Pos, sc: ClassicScoring): n
     if (play.kind === 'dst_td') return sc.dstTd;
     if (play.kind === 'safety') return sc.safety;
     if (play.kind === 'blk') return sc.dstBlk;
+    if (play.kind === 'ff') return sc.dstFf;
     // Team brackets (0167): one pa + one ya game-summary row per DEF at final,
     // y = points / total yards allowed. Bracket + per-unit rate, Sleeper-style.
     if (play.kind === 'pa') {
@@ -294,8 +297,12 @@ export function classicScorePlay(play: RawPlay, pos: Pos, sc: ClassicScoring): n
     return 0;
   }
   if (pos === 'DL' || pos === 'LB' || pos === 'DB') {
-    if (play.kind === 'tackle') return sc.idpTackle;
-    if (play.kind === 'sack') return sc.idpSack;
+    // 0168: the solo/assist premium layers on the base per-tackle point; a
+    // split sack credit (hf) scores half; TFL and FF are their own events.
+    if (play.kind === 'tackle') return sc.idpTackle + (play.tt === 's' ? sc.idpSolo : play.tt === 'a' ? sc.idpAst : 0);
+    if (play.kind === 'tfl') return sc.idpTfl;
+    if (play.kind === 'ff') return sc.idpFf;
+    if (play.kind === 'sack') return sc.idpSack * (play.hf ? 0.5 : 1);
     if (play.kind === 'int') return sc.idpInt;
     if (play.kind === 'fumrec') return sc.idpFr;
     if (play.kind === 'dst_td') return sc.idpTd;

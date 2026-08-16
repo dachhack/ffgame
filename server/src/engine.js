@@ -78,7 +78,7 @@ export function rowsToPbp(rows) {
       c: r.c, t: r.t ?? undefined, pid: r.pid ?? undefined, k: r.k, y: r.y, td: r.td, ca: r.ca, tg: r.tg,
       ...(r.to ? { to: r.to } : {}),
       ...(r.fd ? { fd: 1 } : {}), ...(r.cp ? { cp: 1 } : {}), ...(r.ic ? { ic: 1 } : {}), ...(r.sk ? { sk: 1 } : {}),
-      ...(r.rk ? { rk: r.rk } : {}),
+      ...(r.rk ? { rk: r.rk } : {}), ...(r.tt ? { tt: r.tt } : {}), ...(r.hf ? { hf: 1 } : {}),
     });
   }
   for (const s of Object.keys(by)) by[s].sort((a, b) => a.c - b.c);

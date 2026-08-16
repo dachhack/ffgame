@@ -229,6 +229,14 @@ begin
   perform assert_true((r -> 'scoring' ->> 'pa35')::numeric = -5 and (r -> 'scoring' ->> 'krYd')::numeric = 0.1
     and (r -> 'scoring' ->> 'dstBlk')::numeric = 2, 'cs20a bracket values stored');
 
+  -- 0168 IDP-fidelity keys: solo/assist premiums, TFL, forced fumbles
+  r := set_league_classic_scoring(lid,
+    '{"idpSolo": 0.5, "idpAst": 0.25, "idpTfl": 1, "idpFf": 2, "dstFf": 1}'::jsonb);
+  perform assert_ok(r, 'cs21 idp-fidelity keys accepted');
+  perform assert_true((r -> 'scoring' ->> 'idpSolo')::numeric = 0.5 and (r -> 'scoring' ->> 'idpAst')::numeric = 0.3
+    and (r -> 'scoring' ->> 'idpTfl')::numeric = 1 and (r -> 'scoring' ->> 'dstFf')::numeric = 1,
+    'cs22 idp values stored (event knobs land on the 0.1 grid: 0.25 → 0.3)');
+
   -- best ball + classic scoring have no meaning in a drip league
   perform assert_ok(set_league_game_mode(lid, 'drip'), 'bb8 back to drip');
   perform assert_err(set_league_bestball(lid, '["FLEX"]'::jsonb), 'classic-league setting', 'bb9 refused in drip');
