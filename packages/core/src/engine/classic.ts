@@ -136,10 +136,13 @@ export interface ClassicScoring {
   recB0: number; recB5: number; recB10: number; recB20: number; recB30: number; recB40: number;
   recTd40: number; recTd50: number;
   rr100: number; rr200: number;
-  fumble: number; retYd: number; retTd: number;
+  fumble: number; retYd: number; retTd: number; krYd: number; prYd: number;
   fg0: number; fg20: number; fg30: number; fg40: number; fg50: number; fg60: number;
   fgYd: number; fgYd30: number; fgMiss: number; xp: number; xpMiss: number;
-  sack: number; dstInt: number; fumRec: number; dstTd: number; safety: number;
+  sack: number; dstInt: number; fumRec: number; dstTd: number; safety: number; dstBlk: number;
+  paPt: number; pa0: number; pa1: number; pa7: number; pa14: number; pa21: number; pa28: number; pa35: number;
+  yaPt: number; ya100: number; ya199: number; ya299: number; ya349: number; ya399: number;
+  ya449: number; ya499: number; ya549: number; ya550: number;
   idpTackle: number; idpSack: number; idpInt: number; idpFr: number; idpTd: number; idpSafety: number;
   idpTackle10: number;
 }
@@ -159,12 +162,18 @@ export const DEFAULT_CLASSIC_SCORING: ClassicScoring = {
   recB0: 0, recB5: 0, recB10: 0, recB20: 0, recB30: 0, recB40: 0,
   recTd40: 0, recTd50: 0,
   rr100: 0, rr200: 0,
-  fumble: -2, retYd: 0, retTd: 6,
+  fumble: -2, retYd: 0, retTd: 6, krYd: 0, prYd: 0,
   // fg60 defaults to fg50's value so a 60-yarder scores exactly what it did
   // before the band existed — the knob is there for Sleeper's 6, not forced.
   fg0: 3, fg20: 3, fg30: 3, fg40: 4, fg50: 5, fg60: 5,
   fgYd: 0, fgYd30: 0, fgMiss: -1, xp: 1, xpMiss: -1,
-  sack: 1, dstInt: 2, fumRec: 2, dstTd: 6, safety: 2,
+  sack: 1, dstInt: 2, fumRec: 2, dstTd: 6, safety: 2, dstBlk: 2,
+  // Points-allowed brackets default to Sleeper's ladder — only 0167 pa rows
+  // (emitted at game FINAL) can carry the kind, so no historical total moves;
+  // going forward this is the standard DEF scoring every normie expects.
+  paPt: 0, pa0: 10, pa1: 7, pa7: 4, pa14: 1, pa21: 0, pa28: -1, pa35: -4,
+  yaPt: 0, ya100: 0, ya199: 0, ya299: 0, ya349: 0, ya399: 0,
+  ya449: 0, ya499: 0, ya549: 0, ya550: 0,
   idpTackle: 1, idpSack: 2, idpInt: 3, idpFr: 2, idpTd: 6, idpSafety: 2,
   idpTackle10: 0,
 };
@@ -202,6 +211,7 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
   ] },
   { section: 'TURNOVERS & RETURNS', fields: [
     { key: 'fumble', label: 'FUMBLE LOST' }, { key: 'retYd', label: 'RETURN YD', perYard: true }, { key: 'retTd', label: 'RETURN TD' },
+    { key: 'krYd', label: 'KICK RET YD', perYard: true }, { key: 'prYd', label: 'PUNT RET YD', perYard: true },
   ] },
   { section: 'KICKING', fields: [
     { key: 'fg0', label: 'FG 0-19' }, { key: 'fg20', label: 'FG 20-29' }, { key: 'fg30', label: 'FG 30-39' },
@@ -211,7 +221,19 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
   ] },
   { section: 'TEAM DEFENSE', fields: [
     { key: 'sack', label: 'SACK' }, { key: 'dstInt', label: 'INT' }, { key: 'fumRec', label: 'FUM REC' },
-    { key: 'dstTd', label: 'TD' }, { key: 'safety', label: 'SAFETY' },
+    { key: 'dstTd', label: 'TD' }, { key: 'safety', label: 'SAFETY' }, { key: 'dstBlk', label: 'BLOCKED KICK' },
+  ] },
+  { section: 'POINTS ALLOWED', fields: [
+    { key: 'paPt', label: 'PER PT ALLOWED' },
+    { key: 'pa0', label: 'PA 0' }, { key: 'pa1', label: 'PA 1-6' }, { key: 'pa7', label: 'PA 7-13' },
+    { key: 'pa14', label: 'PA 14-20' }, { key: 'pa21', label: 'PA 21-27' }, { key: 'pa28', label: 'PA 28-34' },
+    { key: 'pa35', label: 'PA 35+' },
+  ] },
+  { section: 'YARDAGE ALLOWED', fields: [
+    { key: 'yaPt', label: 'PER YD ALLOWED' },
+    { key: 'ya100', label: '< 100 YD' }, { key: 'ya199', label: '100-199' }, { key: 'ya299', label: '200-299' },
+    { key: 'ya349', label: '300-349' }, { key: 'ya399', label: '350-399' }, { key: 'ya449', label: '400-449' },
+    { key: 'ya499', label: '450-499' }, { key: 'ya549', label: '500-549' }, { key: 'ya550', label: '550+' },
   ] },
   { section: 'IDP', fields: [
     { key: 'idpTackle', label: 'TACKLE' }, { key: 'idpSack', label: 'SACK' }, { key: 'idpInt', label: 'INT' },
@@ -256,6 +278,19 @@ export function classicScorePlay(play: RawPlay, pos: Pos, sc: ClassicScoring): n
     if (play.kind === 'fumrec') return sc.fumRec;
     if (play.kind === 'dst_td') return sc.dstTd;
     if (play.kind === 'safety') return sc.safety;
+    if (play.kind === 'blk') return sc.dstBlk;
+    // Team brackets (0167): one pa + one ya game-summary row per DEF at final,
+    // y = points / total yards allowed. Bracket + per-unit rate, Sleeper-style.
+    if (play.kind === 'pa') {
+      const y = play.yards;
+      return (y <= 0 ? sc.pa0 : y <= 6 ? sc.pa1 : y <= 13 ? sc.pa7 : y <= 20 ? sc.pa14
+            : y <= 27 ? sc.pa21 : y <= 34 ? sc.pa28 : sc.pa35) + y * sc.paPt;
+    }
+    if (play.kind === 'ya') {
+      const y = play.yards;
+      return (y < 100 ? sc.ya100 : y < 200 ? sc.ya199 : y < 300 ? sc.ya299 : y < 350 ? sc.ya349
+            : y < 400 ? sc.ya399 : y < 450 ? sc.ya449 : y < 500 ? sc.ya499 : y < 550 ? sc.ya549 : sc.ya550) + y * sc.yaPt;
+    }
     return 0;
   }
   if (pos === 'DL' || pos === 'LB' || pos === 'DB') {
@@ -309,7 +344,12 @@ export function classicScorePlay(play: RawPlay, pos: Pos, sc: ClassicScoring): n
   // ESPN-style per-target points (founder's ask) — pays on every target,
   // caught or not: rec rows and incomplete-target rows both carry the flag.
   if (play.target) pts += sc.targetPt;
-  if (play.kind === 'return') pts += play.yards * sc.retYd + (play.td ? sc.retTd : 0);
+  // Returns: the combined retYd rate everywhere, plus the KR/PR split rates on
+  // flag-aware rows (0167) — legacy return rows score the combined knob only.
+  if (play.kind === 'return') {
+    pts += play.yards * (sc.retYd + (play.rk === 'kr' ? sc.krYd : play.rk === 'pr' ? sc.prYd : 0))
+         + (play.td ? sc.retTd : 0);
+  }
   if (play.turnover) pts += play.kind === 'pass' ? sc.int : sc.fumble; // INT thrown vs fumble lost
   return pts;
 }

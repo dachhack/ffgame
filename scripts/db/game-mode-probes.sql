@@ -220,6 +220,15 @@ begin
   perform assert_true((r -> 'scoring' ->> 'passFd')::numeric = 0.5 and (r -> 'scoring' ->> 'qbSacked')::numeric = -1
     and (r -> 'scoring' ->> 'rush2pt')::numeric = 2.5 and (r -> 'scoring' ->> 'fdRb')::numeric = 1, 'cs18 truth-flag values stored');
 
+  -- 0167 bracket keys: PA/YA ladders, the negative fine-grained rates, KR/PR split
+  r := set_league_classic_scoring(lid,
+    '{"pa0": 12, "pa35": -5, "paPt": -0.05, "yaPt": 0.02, "ya100": 5, "dstBlk": 2, "krYd": 0.1, "prYd": 0.25}'::jsonb);
+  perform assert_ok(r, 'cs19 bracket keys accepted');
+  perform assert_true((r -> 'scoring' ->> 'paPt')::numeric = -0.05 and (r -> 'scoring' ->> 'yaPt')::numeric = 0.02,
+    'cs20 rate keys keep sign + 2dp precision');
+  perform assert_true((r -> 'scoring' ->> 'pa35')::numeric = -5 and (r -> 'scoring' ->> 'krYd')::numeric = 0.1
+    and (r -> 'scoring' ->> 'dstBlk')::numeric = 2, 'cs20a bracket values stored');
+
   -- best ball + classic scoring have no meaning in a drip league
   perform assert_ok(set_league_game_mode(lid, 'drip'), 'bb8 back to drip');
   perform assert_err(set_league_bestball(lid, '["FLEX"]'::jsonb), 'classic-league setting', 'bb9 refused in drip');

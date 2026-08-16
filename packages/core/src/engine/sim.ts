@@ -53,6 +53,7 @@ export interface RawPlay {
   cmp?: boolean;    // QB row: completed pass
   inc?: boolean;    // QB row: incomplete attempt (INTs included)
   skd?: boolean;    // QB row: sacked on this dropback (not a pass attempt)
+  rk?: 'kr' | 'pr'; // return row: kickoff vs punt return (0167 split knobs)
 }
 
 // Effect family of a metric → how it scores a single play and what it does.
@@ -208,11 +209,15 @@ function playText(p: Player, play: RawPlay): string {
   if (play.kind === 'fgmiss') return `${t}: ${play.yards}yd FG miss`;
   if (play.kind === 'xp') return `${t}: XP good`;
   if (play.kind === 'xpmiss') return `${t}: XP miss`;
+  if (play.kind === 'punt') return `${t}: ${play.yards}yd punt`;
   if (play.kind === 'sack') return `${t} D: sack`;
   if (play.kind === 'int') return `${t} D: interception`;
   if (play.kind === 'fumrec') return `${t} D: fumble recovered`;
   if (play.kind === 'dst_td') return `${t} D: defensive TD`;
   if (play.kind === 'safety') return `${t} D: safety`;
+  if (play.kind === 'blk') return `${t} D: blocked kick`;
+  if (play.kind === 'pa') return `${t} D: ${play.yards} points allowed`;
+  if (play.kind === 'ya') return `${t} D: ${play.yards} total yards allowed`;
   if (play.kind === 'tackle') return `${t} D: tackle`;
   return `${t}: incomplete`;
 }
@@ -236,7 +241,7 @@ export function realRawPlays(playerId: string, week: number): RawPlay[] | null {
     .map((p) => ({
       clock: p.c, t: p.t, kind: p.k, yards: p.y, td: !!p.td, catch: !!p.ca, target: !!p.tg, turnover: !!p.to,
       ...(p.fd ? { fd: true } : {}), ...(p.cp ? { cmp: true } : {}), ...(p.ic ? { inc: true } : {}),
-      ...(p.sk ? { skd: true } : {}),
+      ...(p.sk ? { skd: true } : {}), ...(p.rk === 'kr' || p.rk === 'pr' ? { rk: p.rk as 'kr' | 'pr' } : {}),
     }))
     .sort((a, b) => a.clock - b.clock);
 }
