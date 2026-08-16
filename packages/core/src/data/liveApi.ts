@@ -1414,6 +1414,21 @@ export const setRosterRules = (leagueId: string, rounds: number | null, posCaps:
  *  nothing); faab = blind bids from a season budget. */
 export type WaiverMode = 'rolling' | 'standings' | 'faab';
 export type TradeReview = 'none' | 'commish';
+/** Per-seat FAAB (0173). `faab` is the EFFECTIVE balance — an untouched seat
+ *  reads the league default rather than 0 — and `touched` says whether the
+ *  seat has its own stored value yet. */
+export interface FaabWallets { ok: boolean; error?: string; budget?: number; teams?: { roster_id: number; team: string | null; faab: number; touched: boolean }[] }
+export const leagueFaabWallets = (leagueId: string) =>
+  rpc<FaabWallets>('league_faab_wallets', { p_league_id: leagueId });
+
+/** Commissioner grants FAAB (0173). ADDITIVE — negative claws back, the result
+ *  floors at 0. `rosterId` null grants EVERY team (the overall grant). Refused
+ *  unless the league is on FAAB, since a mode flip resets every balance. */
+export const commishGrantFaab = (leagueId: string, rosterId: number | null, amount: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; granted?: number; teams?: { roster_id: number; team: string | null; faab: number }[] }>(
+    'commish_grant_faab', { p_league_id: leagueId, p_roster_id: rosterId, p_amount: amount }),
+    Ev.commishAction, { tool: 'faab_grant', all: rosterId == null });
+
 /** Commissioner: waiver mode / FAAB budget / trade review / waiver clear
  *  schedule / FA window. Nulls = unchanged; the schedule knobs accept -1 to
  *  CLEAR (clear time → rolling 24h; FA window → always open).
