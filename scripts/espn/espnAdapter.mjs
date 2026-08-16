@@ -159,10 +159,13 @@ export function playToRows(p, roster, eventId, gameStartMs) {
   } else if (isInt) {
     // Interception (return / return-TD): passer threw it (pass y=0, turnover); the
     // intended receiver gets a target (incomplete); the TD, if any, is the defense's.
-    // An INT is a pass ATTEMPT and an incompletion in the books — ic rides along.
+    // An INT is a pass ATTEMPT and an incompletion in the books — ic rides along;
+    // a pick returned for a TD marks the passer's row p6 (0170) — never `td`, so
+    // no TD points can ever fire on a pick thrown.
     const passer = nameBefore(' pass');
     const recv = nameAfter('intended for');
-    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', 0, 0, 0, 0, 1, { ic: 1 }) });
+    const p6 = /Return Touchdown$/.test(typeText) ? { ic: 1, p6: 1 } : { ic: 1 };
+    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', 0, 0, 0, 0, 1, p6) });
     if (recv) out.push({ slug: recv.slug, play: row(c, ride, 'incomplete', 0, 0, 0, 1, 0) });
   } else if (typeText.startsWith('Sack')) {
     const passer = nameBefore(' sacked');
@@ -258,7 +261,9 @@ export function playToRows(p, roster, eventId, gameStartMs) {
   // true-up loop (docs/play-feed-enrichment-scope.md, Phase 3 decision).
   const isScrim = typeText === 'Rush' || typeText === 'Rushing Touchdown'
     || typeText === 'Pass Reception' || typeText === 'Passing Touchdown' || typeText.startsWith('Sack');
-  if (isScrim && !isTD) {
+  const isStPlay = typeText === 'Kickoff' || typeText === 'Punt'
+    || typeText === 'Punt Return Touchdown' || typeText === 'Kickoff Return Touchdown';
+  if ((isScrim || isStPlay) && !isTD) {
     const pm = /\(([^()]+)\)\s*\.?\s*$/.exec(text);
     if (pm) {
       const start = text.lastIndexOf(pm[1]);
@@ -266,9 +271,12 @@ export function playToRows(p, roster, eventId, gameStartMs) {
       const solo = hits.length === 1;
       for (const h of hits) {
         const dd = resolve(h.abbr); if (!dd) continue;
-        out.push({ slug: dd.slug, play: row(c, ride, 'tackle', 0, 0, 0, 0, 0, { tt: solo ? 's' : 'a' }) });
-        if (yds < 0 && !typeText.startsWith('Sack')) out.push({ slug: dd.slug, play: row(c, ride, 'tfl', 0, 0, 0, 0, 0) });
-        if (typeText.startsWith('Sack')) out.push({ slug: dd.slug, play: row(c, ride, 'sack', 0, 0, 0, 0, 0, solo ? undefined : { hf: 1 }) });
+        // Coverage tackles (0170) are their own kind — they must not inflate
+        // scrimmage tackle counts or the 10+ tackle game bonus.
+        out.push({ slug: dd.slug, play: row(c, ride, isStPlay ? 'st_tkl' : 'tackle', 0, 0, 0, 0, 0, { tt: solo ? 's' : 'a' }) });
+        if (isScrim && yds < 0 && !typeText.startsWith('Sack')) out.push({ slug: dd.slug, play: row(c, ride, 'tfl', 0, 0, 0, 0, 0) });
+        // Sack yards (0170) ride `y` — split credit halves the yardage too.
+        if (typeText.startsWith('Sack')) out.push({ slug: dd.slug, play: row(c, ride, 'sack', solo ? Math.abs(yds) : Math.round(Math.abs(yds) / 2), 0, 0, 0, 0, solo ? undefined : { hf: 1 }) });
       }
     }
   }
@@ -281,14 +289,37 @@ export function playToRows(p, roster, eventId, gameStartMs) {
       if (dd) out.push({ slug: dd.slug, play: row(c, ride, 'ff', 0, 0, 0, 0, 0) });
     }
   }
-  // Individual INT + fumble recovery credit.
+  // Return yards after a takeaway (0170): the "for N yards" clause AFTER the
+  // takeaway marker — never the scrimmage clause earlier in the text.
+  const retYdsAfter = (marker) => {
+    const i = text.indexOf(marker); if (i < 0) return 0;
+    const ms = [...text.matchAll(/\bfor (\d+) yards?/g)].filter((m) => m.index > i);
+    return ms.length ? Number(ms[ms.length - 1][1]) || 0 : 0;
+  };
+  const retTd = /Return Touchdown$/.test(typeText);
+  // Individual INT + fumble recovery credit — with return yards, the return-TD
+  // flag, and (0170) the individual defensive TD row for the scorer.
   if (isInt) {
     const dd = nameAfter('INTERCEPTED by');
-    if (dd) out.push({ slug: dd.slug, play: row(c, ride, 'int', 0, 0, 0, 0, 0) });
+    if (dd) {
+      out.push({ slug: dd.slug, play: row(c, ride, 'int', retYdsAfter('INTERCEPTED by'), retTd ? 1 : 0, 0, 0, 0) });
+      if (retTd) out.push({ slug: dd.slug, play: row(c, ride, 'dst_td', 0, 0, 0, 0, 0) });
+    }
   }
   if (p?.isTurnover && /RECOVERED by/.test(text)) {
     const dd = nameAfter('RECOVERED by');
-    if (dd) out.push({ slug: dd.slug, play: row(c, ride, 'fumrec', 0, 0, 0, 0, 0) });
+    if (dd) {
+      out.push({ slug: dd.slug, play: row(c, ride, 'fumrec', retYdsAfter('RECOVERED by'), retTd && !isInt ? 1 : 0, 0, 0, 0) });
+      if (retTd && !isInt) out.push({ slug: dd.slug, play: row(c, ride, 'dst_td', 0, 0, 0, 0, 0) });
+    }
+  }
+  // Any fumble by the fumbler (0170) — kept or lost; 'to' still marks lost.
+  if (fumblerR) out.push({ slug: fumblerR.slug, play: row(c, ride, 'fum', 0, 0, 0, 0, 0) });
+  // Own-team fumble-recovery TD (0170): a recovery on a NON-turnover play that
+  // scored — the recoverer takes the TD.
+  if (!p?.isTurnover && /RECOVERED by/.test(text) && isTD) {
+    const dd = nameAfter('RECOVERED by');
+    if (dd) out.push({ slug: dd.slug, play: row(c, ride, 'frtd', 0, 0, 0, 0, 0) });
   }
   return out;
 }
