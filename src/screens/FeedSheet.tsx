@@ -18,8 +18,8 @@ import { PlayerImg } from '../app/ui';
 import type { Pos } from '@drip/core/types';
 
 const mono: React.CSSProperties = { fontFamily: 'var(--mono, monospace)' };
-const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
-const ctlBtn = (active = false): React.CSSProperties => ({ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', color: active ? 'var(--on-accent, #06121a)' : 'var(--text)', background: active ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer' });
+const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
+const ctlBtn = (active = false): React.CSSProperties => ({ fontSize: 12.5, fontWeight: 700, letterSpacing: '0.04em', color: active ? 'var(--on-accent, #06121a)' : 'var(--text)', background: active ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer' });
 
 const round = (n: number) => Math.round(n * 10) / 10;
 const fmtClock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -80,21 +80,21 @@ function PlayerCard({ f, clock }: { f: PlayerFeed; clock: number }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <PlayerImg playerId={f.slug} team={f.team} pos={f.pos} size={34} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtSlug(f.slug)}</div>
-          <div style={{ ...mono, fontSize: 9, color: 'var(--dim)' }}>{f.pos} {f.team} · {shown.length}/{f.evs.length} plays</div>
+          <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtSlug(f.slug)}</div>
+          <div style={{ ...mono, fontSize: 11.5, color: 'var(--dim)' }}>{f.pos} {f.team} · {shown.length}/{f.evs.length} plays</div>
         </div>
-        <div className="grotesk" style={{ fontSize: 19, fontWeight: 800, color: 'var(--you)', lineHeight: 1, textAlign: 'right' }}>
+        <div className="grotesk" style={{ fontSize: 20.5, fontWeight: 800, color: 'var(--you)', lineHeight: 1, textAlign: 'right' }}>
           {round(cur)}
-          <span style={{ ...mono, display: 'block', fontSize: 7.5, color: 'var(--faint)', fontWeight: 700, letterSpacing: '0.08em' }}>{f.total != null ? `of ${round(f.total)}` : 'PTS'}</span>
+          <span style={{ ...mono, display: 'block', fontSize: 10, color: 'var(--faint)', fontWeight: 700, letterSpacing: '0.08em' }}>{f.total != null ? `of ${round(f.total)}` : 'PTS'}</span>
         </div>
       </div>
       {f.evs.length === 0
-        ? <div style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', marginTop: 6 }}>no plays this week</div>
+        ? <div style={{ ...mono, fontSize: 12, color: 'var(--faint)', marginTop: 6 }}>no plays this week</div>
         : rev.length === 0
-          ? <div style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', marginTop: 6 }}>waiting for kickoff…</div>
+          ? <div style={{ ...mono, fontSize: 12, color: 'var(--faint)', marginTop: 6 }}>waiting for kickoff…</div>
           : <div style={{ marginTop: 7, borderTop: '1px solid var(--bd)', paddingTop: 5, maxHeight: 150, overflow: 'auto' }}>
             {rev.map((e, i) => (
-              <div key={f.evs.length - 1 - i} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: 6, alignItems: 'baseline', padding: '1.5px 0', fontSize: 10, ...mono, background: i === 0 ? 'var(--you-soft, rgba(107,209,255,0.10))' : 'transparent', borderRadius: 3 }}>
+              <div key={f.evs.length - 1 - i} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: 6, alignItems: 'baseline', padding: '1.5px 0', fontSize: 12.5, ...mono, background: i === 0 ? 'var(--you-soft, rgba(107,209,255,0.10))' : 'transparent', borderRadius: 3 }}>
                 <span style={{ color: 'var(--faint)', minWidth: 38 }}>t+{fmtClock(e.at)}</span>
                 <span style={{ color: e.td ? 'var(--you)' : 'var(--dim)' }}>{KIND[e.kind] ?? e.kind}{e.td ? ' ●' : ''}</span>
                 <span style={{ color: 'var(--text)', textAlign: 'right' }}>{e.showYd ? `${e.y} yd` : ''}</span>
@@ -174,14 +174,14 @@ export function FeedSheet({ matchupId, week, onClose }: { matchupId: string; wee
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16, overflow: 'auto' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 760, background: 'var(--bg)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 10, padding: 16, margin: 'auto 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <span className="mono" style={{ ...mono, fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)', fontWeight: 700 }}>
+          <span className="mono" style={{ ...mono, fontSize: 11.5, letterSpacing: '0.12em', color: 'var(--faint)', fontWeight: 700 }}>
             REPLAY · WK {week}{src === 'baked' ? ' · baked 2025' : ''} · {done ? <span style={{ color: 'var(--faint)' }}>FINAL</span> : <span style={{ color: 'var(--you)' }}>● PLAYING</span>}
           </span>
           <button onClick={onClose} className="mono" style={linkBtn}>✕ close</button>
         </div>
-        {err && <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--opp)' }}>{err}</div>}
-        {!ready && !err && <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)' }}>Loading lineups + week {week} plays…</div>}
-        {ready && maxAt === 0 && <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)' }}>No plays recorded for week {week} — nothing to replay yet.</div>}
+        {err && <div className="mono" style={{ ...mono, fontSize: 13, color: 'var(--opp)' }}>{err}</div>}
+        {!ready && !err && <div className="mono" style={{ ...mono, fontSize: 13, color: 'var(--faint)' }}>Loading lineups + week {week} plays…</div>}
+        {ready && maxAt === 0 && <div className="mono" style={{ ...mono, fontSize: 13, color: 'var(--faint)' }}>No plays recorded for week {week} — nothing to replay yet.</div>}
         {ready && data && (
           <>
             {/* transport */}
@@ -191,15 +191,15 @@ export function FeedSheet({ matchupId, week, onClose }: { matchupId: string; wee
               <div style={{ display: 'flex', gap: 4 }}>
                 {SPEEDS.map((s) => <button key={s} style={ctlBtn(rate === s)} onClick={() => setRate(s)}>{s === 300 ? '1×' : s === 600 ? '2×' : '5×'}</button>)}
               </div>
-              <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--dim)', marginLeft: 'auto' }}>t+{fmtClock(clock)} / {fmtClock(maxAt)}</span>
+              <span className="mono" style={{ ...mono, fontSize: 12.5, color: 'var(--dim)', marginLeft: 'auto' }}>t+{fmtClock(clock)} / {fmtClock(maxAt)}</span>
             </div>
             <div style={{ height: 3, background: 'var(--bd)', borderRadius: 2, marginBottom: 10, overflow: 'hidden' }}>
               <div style={{ width: `${maxAt ? Math.min(100, (clock / maxAt) * 100) : 0}%`, height: '100%', background: 'var(--you)' }} />
             </div>
             {/* live ticker */}
             <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 7, padding: '6px 9px', marginBottom: 12, minHeight: 26 }}>
-              {ticker.length === 0 ? <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}>waiting for the first play…</span> : ticker.map((e, i) => (
-                <div key={i} className="mono" style={{ ...mono, fontSize: 10, color: i === 0 ? 'var(--text)' : 'var(--faint)', display: 'flex', gap: 6, padding: '1px 0', opacity: i === 0 ? 1 : 0.7 }}>
+              {ticker.length === 0 ? <span className="mono" style={{ ...mono, fontSize: 12.5, color: 'var(--faint)' }}>waiting for the first play…</span> : ticker.map((e, i) => (
+                <div key={i} className="mono" style={{ ...mono, fontSize: 12.5, color: i === 0 ? 'var(--text)' : 'var(--faint)', display: 'flex', gap: 6, padding: '1px 0', opacity: i === 0 ? 1 : 0.7 }}>
                   <span style={{ color: 'var(--faint)', minWidth: 40 }}>t+{fmtClock(e.at)}</span>
                   <span style={{ color: e.td ? 'var(--you)' : 'var(--text)', fontWeight: 700 }}>{e.name}</span>
                   <span style={{ color: 'var(--dim)' }}>{KIND[e.kind] ?? e.kind}{['pass', 'rush', 'rec', 'fg', 'return'].includes(e.kind) ? ` ${e.y}yd` : ''}{e.td ? ' TD' : ''}</span>
@@ -211,8 +211,8 @@ export function FeedSheet({ matchupId, week, onClose }: { matchupId: string; wee
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
               {([['HOME', `roster ${data.home_roster_id}`, home], ['AWAY', `roster ${data.away_roster_id}`, away]] as const).map(([label, sub, players]) => (
                 <div key={label}>
-                  <div className="mono" style={{ ...mono, fontSize: 9, letterSpacing: '0.1em', color: 'var(--you)', fontWeight: 700, marginBottom: 7 }}>{label} <span style={{ color: 'var(--faint)' }}>· {sub} · {players.length}</span></div>
-                  {players.length === 0 ? <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>no lineup (run sync week)</div> : players.map((f) => <PlayerCard key={f.slug} f={f} clock={clock} />)}
+                  <div className="mono" style={{ ...mono, fontSize: 11.5, letterSpacing: '0.1em', color: 'var(--you)', fontWeight: 700, marginBottom: 7 }}>{label} <span style={{ color: 'var(--faint)' }}>· {sub} · {players.length}</span></div>
+                  {players.length === 0 ? <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)' }}>no lineup (run sync week)</div> : players.map((f) => <PlayerCard key={f.slug} f={f} clock={clock} />)}
                 </div>
               ))}
             </div>

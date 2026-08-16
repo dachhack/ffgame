@@ -8,20 +8,20 @@ import { useEffect, useState, type CSSProperties } from 'react';
 
 export const mono: CSSProperties = { fontFamily: 'var(--mono, monospace)' };
 export const card: CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14, marginBottom: 12 };
-export const h: CSSProperties = { fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginBottom: 10 };
-export const subhead: CSSProperties = { ...mono, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginBottom: 7 };
+export const h: CSSProperties = { fontSize: 12.5, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginBottom: 10 };
+export const subhead: CSSProperties = { ...mono, fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginBottom: 7 };
 // SQUARE, not pill (v0.213.0, founder's call: "I don't like the pill look of
 // the buttons and field entrys"). One radius token for every control on the
 // management surfaces, so a button and the input beside it share an edge
 // treatment instead of one being a lozenge and the other a rounded rect.
 export const RADIUS = 3;
-export const chip: CSSProperties = { fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '4px 7px', color: 'var(--text)', background: 'var(--bg)' };
-export const linkBtn: CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
-export const btn = (active = false): CSSProperties => ({ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', color: active ? 'var(--on-accent)' : 'var(--text)', background: active ? 'var(--you)' : 'var(--bg)', border: `1px solid ${active ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, padding: '7px 10px', cursor: 'pointer' });
-export const inp: CSSProperties = { fontFamily: 'inherit', fontSize: 13, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '8px 10px' };
+export const chip: CSSProperties = { fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '4px 7px', color: 'var(--text)', background: 'var(--bg)' };
+export const linkBtn: CSSProperties = { background: 'none', border: 'none', fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
+export const btn = (active = false): CSSProperties => ({ fontSize: 12.5, fontWeight: 700, letterSpacing: '0.04em', color: active ? 'var(--on-accent)' : 'var(--text)', background: active ? 'var(--you)' : 'var(--bg)', border: `1px solid ${active ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, padding: '7px 10px', cursor: 'pointer' });
+export const inp: CSSProperties = { fontFamily: 'inherit', fontSize: 15, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '8px 10px' };
 
 export function Muted({ text }: { text: string }) {
-  return <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)' }}>{text}</div>;
+  return <div className="mono" style={{ ...mono, fontSize: 13, color: 'var(--faint)' }}>{text}</div>;
 }
 
 /** Human-readable message from ANY thrown value. supabase-js network failures
@@ -73,7 +73,7 @@ export function SideNav<T extends string>({ groups, active, onSelect }: {
   groups: NavGroup<T>[]; active: T; onSelect: (id: T) => void;
 }) {
   return (
-    <nav role="tablist" aria-orientation="vertical" style={{ width: 176, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <nav role="tablist" aria-orientation="vertical" style={{ width: 204, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
       {groups.map((g) => (
         <div key={g.title}>
           <div style={{ ...subhead, marginBottom: 5, paddingLeft: 8 }}>{g.title}</div>
@@ -89,12 +89,12 @@ export function SideNav<T extends string>({ groups, active, onSelect }: {
                     // swap alone left the active row unreadable as active.
                     background: on ? 'var(--bg)' : 'none', border: 'none',
                     borderLeft: `3px solid ${on ? 'var(--you)' : 'transparent'}`, borderRadius: '0 6px 6px 0',
-                    color: on ? 'var(--you)' : 'var(--dim)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+                    color: on ? 'var(--you)' : 'var(--dim)', fontSize: 12.5, fontWeight: 700, letterSpacing: '0.06em',
                     padding: '7px 9px', cursor: 'pointer',
                   }}>
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.label}</span>
                   {t.badge != null && t.badge > 0 && (
-                    <span style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--opp)', borderRadius: 8, padding: '1px 5px', lineHeight: 1.4 }}>{t.badge}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--opp)', borderRadius: 8, padding: '1px 5px', lineHeight: 1.4 }}>{t.badge}</span>
                   )}
                 </button>
               );
@@ -125,12 +125,12 @@ export function TabBar<T extends string>({ tabs, active, onSelect, style, wrap =
           <button key={t.id} role="tab" aria-selected={on} onClick={() => onSelect(t.id)} className="mono"
             style={{
               flexShrink: 0, background: 'none', border: 'none', borderBottom: `2px solid ${on ? 'var(--you)' : 'transparent'}`, marginBottom: -1,
-              color: on ? 'var(--text)' : 'var(--dim)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em',
+              color: on ? 'var(--text)' : 'var(--dim)', fontSize: 13, fontWeight: 700, letterSpacing: '0.08em',
               padding: '9px 11px', cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6,
             }}>
             {t.label}
             {t.badge != null && t.badge > 0 && (
-              <span style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--opp)', borderRadius: 8, padding: '1px 5px', lineHeight: 1.4 }}>{t.badge}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--opp)', borderRadius: 8, padding: '1px 5px', lineHeight: 1.4 }}>{t.badge}</span>
             )}
           </button>
         );
