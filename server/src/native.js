@@ -16,7 +16,21 @@
 import { db } from './supabase.js';
 
 export async function sweepNative(log = () => {}, weeks = []) {
-  let drafts = 0, won = 0, lost = 0, allowance = 0;
+  let drafts = 0, won = 0, lost = 0, allowance = 0, started = 0;
+
+  // Scheduled starts (0177) run FIRST, so a draft whose time arrived this
+  // minute is live before the tick below looks for overdue seats — otherwise
+  // its first pick would wait a whole sweep for its clock to be noticed.
+  // One statement for every league; the RPC is the only thing that decides
+  // whether a start is due, so there's no clock arithmetic out here.
+  try {
+    const { data } = await db().rpc('draft_autostart_sweep');
+    started = Number(data?.started ?? 0);
+    // A scheduled start that CAN'T run (unseeded pool, a seat short) retries on
+    // later sweeps — logged every time, because a league sitting armed and
+    // failing is exactly the thing nobody notices until draft night.
+    for (const e of data?.errors ?? []) log('draft autostart blocked:', e.league_id, e.error);
+  } catch (e) { log('draft_autostart_sweep', e.message); }
 
   const { data: live, error: de } = await db()
     .from('draft').select('league_id').eq('status', 'live');
@@ -48,5 +62,5 @@ export async function sweepNative(log = () => {}, weeks = []) {
     } catch (e) { log('auto_weekly_budget', w, e.message); }
   }
 
-  return { autopicks: drafts, claimsWon: won, claimsLost: lost, allowance };
+  return { autopicks: drafts, claimsWon: won, claimsLost: lost, allowance, drafted: started };
 }

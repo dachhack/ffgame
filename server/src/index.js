@@ -249,8 +249,8 @@ async function tick() {
   // drop each active week's coin allowance (idempotent — see native.js).
   try {
     const nat = await sweepNative(log, contexts.map((c) => c.espnWeek + c.offset));
-    if (nat.autopicks || nat.claimsWon || nat.claimsLost || nat.allowance) {
-      log('native sweep:', nat.autopicks, 'autopicks,', nat.claimsWon, 'claims won,', nat.claimsLost, 'lost,', nat.allowance, 'allowances');
+    if (nat.autopicks || nat.claimsWon || nat.claimsLost || nat.allowance || nat.drafted) {
+      log('native sweep:', nat.autopicks, 'autopicks,', nat.claimsWon, 'claims won,', nat.claimsLost, 'lost,', nat.allowance, 'allowances,', nat.drafted, 'drafts started');
     }
   } catch (e) { log('native sweep error', e.message); }
 

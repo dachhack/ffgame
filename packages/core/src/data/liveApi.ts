@@ -1713,6 +1713,10 @@ export interface DraftState {
    *  caller's own hidden max + highest legal bid on THAT lot. */
   max_lots: number;
   lots: { id: string; slug: string; bid: number; roster_id: number; deadline_at: string; my_proxy: number | null; my_max: number | null }[];
+  /** Armed scheduled start (0177), ISO — the worker opens the draft then.
+   *  Null means a manual start. Kept after the draft goes live, so the room
+   *  can still say what it was scheduled for. */
+  start_at?: string | null;
   /** Overnight quiet hours (minutes since midnight ET); clocks skip them. */
   night: { start_min: number; end_min: number; is_night: boolean } | null;
   budgets: { roster_id: number; budget: number; committed: number; spots_left: number; max_bid: number }[] | null;
@@ -1756,6 +1760,16 @@ export const setDraftSetup = (
       p_league_id: leagueId, p_pick_seconds: pickSeconds, p_mode: mode,
       p_budget: budget, p_lot_seconds: lotSeconds, p_max_lots: maxLots,
     }), Ev.commishAction, { tool: 'draft_setup' });
+
+/** Commissioner: arm a scheduled start (0177). `at` is an ISO timestamp; null
+ *  disarms and goes back to a manual start. The worker's native sweep opens the
+ *  draft when the time comes — deliberately NOT a client poll, which would
+ *  start the draft whenever somebody next happened to look rather than at the
+ *  time the league was told. Refused in the past and beyond a year out. */
+export const setDraftStart = (leagueId: string, at: string | null = null) =>
+  tracked(rpc<{ ok: boolean; error?: string; start_at?: string | null }>(
+    'set_draft_start', { p_league_id: leagueId, p_at: at }),
+    Ev.commishAction, { tool: 'draft_start', armed: at != null });
 
 /** Commissioner: set the draft order BEFORE the draft starts (0176). `order`
  *  null shuffles now — visibly, which is the point of drawing it early. The
