@@ -53,11 +53,21 @@ export function CommishDash({ onBack, focusId, defaultTab }: {
           // starts open) so the list stays scannable; a lone/focused league is
           // always expanded.
           <div key={l.league_id}>
+            {/* v0.212.0: the settings/activity/power-up panels are DESTINATIONS
+                in the league card's own nav now, not cards stacked underneath
+                it. Injection (rather than AdminPage importing them) keeps the
+                admin console free of commissioner-only surfaces and avoids an
+                import cycle — LeagueRow lives in AdminPage, which this file
+                imports. */}
             <LeagueRow l={l} reload={load} admin={false} mine defaultTab={defaultTab ?? 'members'}
-              collapsible={shown.length > 1} defaultOpen={i === 0} />
-            <LastSeenCard leagueId={l.league_id} />
-            <GameModeCard leagueId={l.league_id} />
-            <LiveBuffsCard leagueId={l.league_id} />
+              collapsible={shown.length > 1} defaultOpen={i === 0}
+              panels={{
+                mode: <LeagueSettings leagueId={l.league_id} view="mode" />,
+                lineup: <LeagueSettings leagueId={l.league_id} view="lineup" />,
+                scoring: <LeagueSettings leagueId={l.league_id} view="scoring" />,
+                activity: <LastSeenPanel leagueId={l.league_id} />,
+                buffs: <LiveBuffsPanel leagueId={l.league_id} />,
+              }} />
           </div>
         ))}
 
@@ -73,45 +83,38 @@ export function CommishDash({ onBack, focusId, defaultTab }: {
 // ── Last opened (0151) ───────────────────────────────────────────────────────
 // The commissioner's "is anyone actually here?" — every member with when they
 // last OPENED the league (the hub or the board; badge polls don't count).
-// Collapsed by default; loads on first expand.
-function LastSeenCard({ leagueId }: { leagueId: string }) {
-  const [open, setOpen] = useState(false);
+// v0.212.0: its own ACTIVITY destination, so it loads on arrival — the
+// collapse existed only because this was a card in a stack.
+export function LastSeenPanel({ leagueId }: { leagueId: string }) {
   const [rows, setRows] = useState<LeagueSeenRow[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
-    if (!open || rows !== null) return;
     leagueLastSeen(leagueId)
       .then((r) => { if (r.ok && r.members) setRows(r.members); else setErr(r.error ?? 'load failed'); })
       .catch((e) => setErr(errMsg(e, 'load failed')));
-  }, [open, rows, leagueId]);
+  }, [leagueId]);
   const tone = (lastAt: string | null): string => {
     if (!lastAt) return 'var(--opp)';
     const d = Date.now() - Date.parse(lastAt);
     return d < 24 * 3600_000 ? 'var(--you)' : d < 4 * 24 * 3600_000 ? 'var(--text)' : 'var(--warn)';
   };
   return (
-    <div style={{ ...card, marginTop: 8 }}>
-      <button onClick={() => setOpen((o) => !o)} className="mono"
-        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-        <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>👁 LAST OPENED · who's been in the league</span>
-        <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--dim)' }}>{open ? '▾' : '▸'}</span>
-      </button>
-      {open && (
-        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
-          {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>⚠ {err}</div>}
-          {!err && rows === null && <Muted text="Loading…" />}
-          {rows?.length === 0 && <Muted text="No members yet." />}
-          {rows?.map((m) => (
-            <div key={m.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <span style={{ fontSize: 12, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
-              <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: tone(m.last_at), flexShrink: 0 }}>{seenAgoLabel(m.last_at)}</span>
-            </div>
-          ))}
-          <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
-            When each member last opened this league — on the web or the app. "Never" means they've claimed a seat but not been in yet.
+    <div style={{ marginTop: 12 }}>
+      <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>👁 LAST OPENED · who's been in the league</div>
+      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>⚠ {err}</div>}
+        {!err && rows === null && <Muted text="Loading…" />}
+        {rows?.length === 0 && <Muted text="No members yet." />}
+        {rows?.map((m) => (
+          <div key={m.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontSize: 12, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+            <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: tone(m.last_at), flexShrink: 0 }}>{seenAgoLabel(m.last_at)}</span>
           </div>
+        ))}
+        <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
+          When each member last opened this league — on the web or the app. "Never" means they've claimed a seat but not been in yet.
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -166,7 +169,15 @@ function TeamChips({ value, onChange, disabled }: { value: string; onChange: (ne
   );
 }
 
-function GameModeCard({ leagueId }: { leagueId: string }) {
+/** The league's CLASSIC settings, split into three destinations (v0.212.0).
+ *
+ *  This used to be one card that did five jobs at once — mode, the lineup
+ *  builder, roster shape, pool filters and all 155 scoring knobs — stacked
+ *  below the league card's tab bar where nothing could find it. The state and
+ *  save paths are unchanged; `view` just picks which section renders, so each
+ *  one gets its own nav destination and its own screen. Only the active view
+ *  mounts, so a visit loads the mode once and nothing else. */
+export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mode' | 'lineup' | 'scoring' }) {
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
   const [ppr, setPpr] = useState(1);
   const [classicOk, setClassicOk] = useState(false);
@@ -190,7 +201,6 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
   const [note, setNote] = useState<string | null>(null);
   // Full classic scoring (0160): drafts are strings so partial typing never
   // fights the keyboard; parse + diff against the engine defaults on save.
-  const [scOpen, setScOpen] = useState(false);
   const [scDraft, setScDraft] = useState<Record<string, string>>({});
   const scInit = (over: Record<string, number>) => {
     const d: Record<string, string> = {};
@@ -279,7 +289,8 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
     border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, opacity: busy || mode === null ? 0.5 : 1,
   });
   return (
-    <div style={{ ...card, marginTop: 8 }}>
+    <div style={{ marginTop: 12 }}>
+      {view === 'mode' && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>🎮 GAME MODE</div>
@@ -294,7 +305,8 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
             : <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', alignSelf: 'center' }}>CLASSIC not unlocked</span>}
         </div>
       </div>
-      {mode === 'classic' && (
+      )}
+      {view === 'mode' && mode === 'classic' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10 }}>
           <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', fontWeight: 700 }}>RECEPTIONS</span>
           {([0, 0.5, 1] as const).map((p) => (
@@ -304,7 +316,15 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
           ))}
         </div>
       )}
-      {mode === 'classic' && spots && (
+      {/* A drip league has no classic lineup or scoring to set — say so rather
+          than render an empty pane. */}
+      {view !== 'mode' && mode === 'drip' && (
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.6 }}>
+          This is a DRIP league — {view === 'lineup' ? 'lineups are the drip windows' : 'scoring is the drip engine'}, so there's nothing to set here.
+          Switch to CLASSIC under GAME MODE to shape a traditional {view === 'lineup' ? 'starting lineup' : 'scoring catalog'}.
+        </div>
+      )}
+      {view === 'lineup' && mode === 'classic' && spots && (
         <div style={{ marginTop: 10 }}>
           {/* The roster POSITION BUILDER (0163, the founder's sketch): each row is
               one starting spot — its own eligible-position set, its own best-ball
@@ -407,14 +427,14 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
           </div>
         </div>
       )}
-      {mode === 'classic' && (
-        <div style={{ marginTop: 10 }}>
-          <button onClick={() => setScOpen((o) => !o)} className="mono"
-            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 8.5, fontWeight: 700, color: 'var(--faint)' }}>
-            ⚖ SCORING {scOpen ? '▾' : '▸'} <span style={{ fontWeight: 400 }}>every value is yours to set</span>
-          </button>
-          {scOpen && (
-            <>
+      {view === 'scoring' && mode === 'classic' && (
+        <div>
+          {/* Its own destination now, so the catalog opens EXPANDED — the
+              collapse existed only to keep this off the mode card. */}
+          <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--faint)' }}>
+            ⚖ SCORING <span style={{ fontWeight: 400 }}>every value is yours to set · changed values light up</span>
+          </div>
+          <>
               {CLASSIC_SCORING_SECTIONS.map((sec) => (
                 <div key={sec.section} style={{ marginTop: 8 }}>
                   <div className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: 4 }}>{sec.section}</div>
@@ -438,7 +458,6 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
                 <button onClick={() => void saveScoring(true)} disabled={busy} className="mono" style={pill(false)}>RESET TO STANDARD</button>
               </div>
             </>
-          )}
         </div>
       )}
       {note && <div className="mono" style={{ fontSize: 9, color: note.startsWith('✓') ? 'var(--faint)' : 'var(--warn, #c66)', marginTop: 8 }}>{note}</div>}
@@ -446,7 +465,7 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
   );
 }
 
-function LiveBuffsCard({ leagueId }: { leagueId: string }) {
+export function LiveBuffsPanel({ leagueId }: { leagueId: string }) {
   const [on, setOn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -459,7 +478,7 @@ function LiveBuffsCard({ leagueId }: { leagueId: string }) {
     finally { setBusy(false); }
   };
   return (
-    <div style={{ ...card, marginTop: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>◈ REAL-TIME POWER-UPS</div>
         <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>

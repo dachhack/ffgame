@@ -4,7 +4,7 @@
 // here pairs with the `.mgmt` CSS scope in styles.css, which handles the
 // mobile adjustments (16px inputs so iOS doesn't zoom, taller tap targets,
 // scrollable tab strips).
-import type { CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 
 export const mono: CSSProperties = { fontFamily: 'var(--mono, monospace)' };
 export const card: CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14, marginBottom: 12 };
@@ -34,6 +34,72 @@ export function errMsg(e: unknown, fallback = 'failed'): string {
 }
 
 export interface TabDef<T extends string = string> { id: T; label: string; badge?: number }
+
+/** True on a desktop-width viewport. Drives the management surfaces' one
+ *  structural difference: a grouped LEFT RAIL where there's room for it, the
+ *  scrolling tab strip where there isn't. Media-query driven (not a resize
+ *  listener) so it costs nothing while idle. */
+export function useWide(min = 900): boolean {
+  const q = `(min-width: ${min}px)`;
+  const [wide, setWide] = useState(() => typeof window !== 'undefined' && window.matchMedia(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia(q);
+    const on = () => setWide(m.matches);
+    m.addEventListener('change', on);
+    setWide(m.matches);
+    return () => m.removeEventListener('change', on);
+  }, [q]);
+  return wide;
+}
+
+/** One titled group of destinations in the side rail. */
+export interface NavGroup<T extends string = string> { title: string; items: TabDef<T>[] }
+
+/** Grouped vertical navigation for the management surfaces (desktop).
+ *
+ *  WHY THIS EXISTS: these screens grew to ~15 destinations, and a single
+ *  horizontal strip of 15 gives you no sense of WHEN you'd use any of them —
+ *  season setup, weekly operations and diagnostics all read alike, and the
+ *  overflow scrolls out of sight. Grouping by moment-of-use puts the whole map
+ *  on screen at once and makes "where do I set scoring" answerable without
+ *  hunting. Pairs with TabBar, which stays the narrow-screen presentation of
+ *  the same list. */
+export function SideNav<T extends string>({ groups, active, onSelect }: {
+  groups: NavGroup<T>[]; active: T; onSelect: (id: T) => void;
+}) {
+  return (
+    <nav role="tablist" aria-orientation="vertical" style={{ width: 176, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {groups.map((g) => (
+        <div key={g.title}>
+          <div style={{ ...subhead, marginBottom: 5, paddingLeft: 8 }}>{g.title}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {g.items.map((t) => {
+              const on = t.id === active;
+              return (
+                <button key={t.id} role="tab" aria-selected={on} onClick={() => onSelect(t.id)} className="mono"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left',
+                    // The accent COLOR carries the selection, not a fill: on these
+                    // themes --bg and --surface sit a hair apart, so a background
+                    // swap alone left the active row unreadable as active.
+                    background: on ? 'var(--bg)' : 'none', border: 'none',
+                    borderLeft: `3px solid ${on ? 'var(--you)' : 'transparent'}`, borderRadius: '0 6px 6px 0',
+                    color: on ? 'var(--you)' : 'var(--dim)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+                    padding: '7px 9px', cursor: 'pointer',
+                  }}>
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.label}</span>
+                  {t.badge != null && t.badge > 0 && (
+                    <span style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--opp)', borderRadius: 8, padding: '1px 5px', lineHeight: 1.4 }}>{t.badge}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </nav>
+  );
+}
 
 /** Underline-style tab strip. Scrolls horizontally on narrow screens instead of
  *  wrapping (`.mgmt-tabs` hides its scrollbar), so it stays a single tidy row on
