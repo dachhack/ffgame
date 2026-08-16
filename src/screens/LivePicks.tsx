@@ -352,6 +352,22 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
       <button onClick={() => setWeekSel(Math.max(1, curWeek - 1))} disabled={curWeek <= 1} className="mono" title="previous week" style={{ ...linkBtn, fontSize: 13, padding: '0 4px', opacity: curWeek <= 1 ? 0.35 : 1 }}>‹</button>
       <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)' }}>{weekLabel(curWeek)}</span>
+      {/* WHICH GAME IS THIS (v0.230.0). A league's mode was invisible on the
+          board: a commissioner who meant to build a NORMIE league, and whose
+          switch to classic was refused by the 0158 admin gate, opened this
+          screen to the drip window board with nothing on it saying why. The
+          board was right and the league was drip — but you could not tell that
+          from here, which made a settings problem look like a broken screen.
+          Now the mode is stated where the game is played, not only in the
+          commissioner's settings. */}
+      {gameMode && (
+        <span className="mono" title={gameMode === 'classic'
+          ? 'This league plays NORMAL fantasy — positional lineup, weekly totals.'
+          : 'This league plays DRIP — kickoff windows, live play-by-play, power-ups. Change it in ⚑ COMMISH → MODE.'}
+          style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 6px', color: 'var(--dim)', whiteSpace: 'nowrap' }}>
+          {gameMode === 'classic' ? '🏈 NORMAL' : '◈ DRIP'}
+        </span>
+      )}
       <button onClick={() => setWeekSel(Math.min(REG_SEASON_WEEKS, curWeek + 1))} disabled={curWeek >= REG_SEASON_WEEKS} className="mono" title="next week" style={{ ...linkBtn, fontSize: 13, padding: '0 4px', opacity: curWeek >= REG_SEASON_WEEKS ? 0.35 : 1 }}>›</button>
     </div>
   );
