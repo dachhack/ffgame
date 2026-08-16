@@ -522,6 +522,8 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
   const [teams, setTeams] = useState<{ roster_id: number; team: string | null }[]>([]);
   const [trades, setTrades] = useState<TradeRow[]>([]);
   const [q, setQ] = useState('');
+  // 'all' = every rostered player · 'fa' = the waiver wire · else a roster id.
+  const [view, setView] = useState<string>('all');
   const [dest, setDest] = useState<Record<string, string>>({});   // slug → target roster id
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -545,12 +547,35 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
     finally { setBusy(false); }
   };
   const needle = q.trim().toLowerCase();
-  // default view = everyone rostered (the move tool's main use); searching
-  // reaches the whole pool, so free agents can be placed onto rosters too.
-  const rows = (needle
-    ? pool.filter((p) => p.full_name.toLowerCase().includes(needle))
-    : pool.filter((p) => bySlugRoster.has(p.slug))
-  ).slice(0, 60);
+  // WHICH SET OF PLAYERS (v0.215.0, founder's ask): one team's roster, the
+  // waiver wire (everyone unrostered — who's actually available to move), or
+  // every rostered player as before. Picking a team answers "what does this
+  // manager have" without reading a league-wide list and matching names.
+  const spotOf = new Map(rosters.map((r) => [r.slug, r.spot ?? 'active']));
+  const inView = view === 'all' ? pool.filter((p) => bySlugRoster.has(p.slug))
+    : view === 'fa' ? pool.filter((p) => !bySlugRoster.has(p.slug))
+    : pool.filter((p) => bySlugRoster.get(p.slug) === Number(view));
+  // In the ALL view search still reaches the WHOLE pool — that was the only
+  // way to find a free agent before this selector existed, and muscle memory
+  // shouldn't break. Inside a team / the wire, search filters that set.
+  const searched = needle
+    ? (view === 'all' ? pool : inView).filter((p) => p.full_name.toLowerCase().includes(needle))
+    : inView;
+  const CAP = 60;
+  const rows = searched.slice(0, CAP);
+  const teamCounts = (rid: number) => {
+    const mine = rosters.filter((r) => r.roster_id === rid);
+    const taxi = mine.filter((r) => r.spot === 'taxi').length;
+    const ir = mine.filter((r) => r.spot === 'ir').length;
+    return `${mine.length} rostered${taxi ? ` · ${taxi} taxi` : ''}${ir ? ` · ${ir} IR` : ''}`;
+  };
+  const holdLeft = (until: string | null): string | null => {
+    if (!until) return null;
+    const ms = Date.parse(until) - Date.now();
+    if (!(ms > 0)) return null;
+    const h = Math.floor(ms / 3600_000);
+    return h >= 1 ? `${h}h` : `${Math.max(1, Math.round(ms / 60_000))}m`;
+  };
   const reviewQueue = trades.filter((t) => t.status === 'accepted' || t.status === 'pending');
   const statusColor: Record<string, string> = { executed: 'var(--you)', accepted: 'var(--warn)', pending: 'var(--dim)', vetoed: 'var(--opp)', rejected: 'var(--faint)', cancelled: 'var(--faint)' };
   return (
@@ -579,8 +604,28 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
 
       {/* player mover */}
       <div>
-        <div style={subhead}>MOVE PLAYERS</div>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search the whole pool (free agents too)…" style={{ ...inp, marginBottom: 8 }} />
+        <div style={subhead}>ROSTERS &amp; WAIVER WIRE</div>
+        {/* Pick a roster to see one manager's team, or the wire to see who's
+            actually available. */}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+          <select value={view} onChange={(e) => { setView(e.target.value); setQ(''); }} className="mono"
+            style={{ ...mono, fontSize: 10.5, fontWeight: 700, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '6px 8px', minWidth: 190 }}>
+            <option value="all">ALL ROSTERED PLAYERS</option>
+            <option value="fa">⏳ WAIVER WIRE — available</option>
+            {teams.map((t) => (
+              <option key={t.roster_id} value={String(t.roster_id)}>{t.team ?? `Team ${t.roster_id}`}</option>
+            ))}
+          </select>
+          <input value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder={view === 'all' ? 'Search the whole pool (free agents too)…' : view === 'fa' ? 'Search the wire…' : 'Search this roster…'}
+            style={{ ...inp, flex: '1 1 200px', minWidth: 0 }} />
+        </div>
+        <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginBottom: 6 }}>
+          {view === 'all' ? `${inView.length} rostered across ${teams.length} teams`
+            : view === 'fa' ? `${inView.length} available — nobody's roster`
+            : teamCounts(Number(view))}
+          {searched.length > CAP && <span> · showing first {CAP} of {searched.length}</span>}
+        </div>
         <div style={{ maxHeight: 380, overflowY: 'auto' }}>
           {rows.map((p) => {
             const rid = bySlugRoster.get(p.slug);
@@ -590,6 +635,19 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
                 <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, minWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {p.full_name} <span className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
                 </span>
+                {/* Stash spot (taxi/IR) and any live waiver hold — the two
+                    facts that decide whether a move is even sensible. */}
+                {rid != null && spotOf.get(p.slug) && spotOf.get(p.slug) !== 'active' && (
+                  <span className="mono" style={{ ...mono, fontSize: 8, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: RADIUS, padding: '1px 4px' }}>
+                    {String(spotOf.get(p.slug)).toUpperCase()}
+                  </span>
+                )}
+                {rid == null && holdLeft(p.waived_until) && (
+                  <span className="mono" style={{ ...mono, fontSize: 8, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: RADIUS, padding: '1px 4px' }}
+                    title="on waivers — claims are open; a commissioner move clears the hold">
+                    ⏳ {holdLeft(p.waived_until)}
+                  </span>
+                )}
                 <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, color: rid != null ? 'var(--you)' : 'var(--faint)', minWidth: 76, textAlign: 'right' }}>
                   {rid != null ? teamName(rid) : 'FREE AGENT'}
                 </span>
@@ -609,7 +667,14 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
               </div>
             );
           })}
-          {rows.length === 0 && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', padding: '6px 0' }}>No matches.</div>}
+          {rows.length === 0 && (
+            <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', padding: '6px 0' }}>
+              {needle ? 'No matches.'
+                : view === 'fa' ? 'Nobody on the wire — every pool player is rostered.'
+                : view === 'all' ? 'Nobody rostered yet — run the draft first.'
+                : 'This roster is empty.'}
+            </div>
+          )}
         </div>
         <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
           Moves clear waiver holds and bypass position limits (roster size still applies). WAIVE starts a 24h claim window; CUT frees the player immediately.
