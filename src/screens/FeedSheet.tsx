@@ -1,11 +1,18 @@
 // Admin "feed sheet": the per-player play-by-play for a real matchup's two
 // lineups, PLAYED BACK as a live feed — a clock advances and each play is
 // revealed as its delivery time (t+) arrives, totals counting up, exactly the
-// order the live sim drips into live_play. Data is the baked source week (the
-// React twin of scripts/feedlog.mjs). Pure read; reuses admin_matchup_picks.
+// order the live sim drips into live_play. Pure read; reuses admin_matchup_picks.
+//
+// v0.214.0 — REPLAYS THE ACTUAL MATCHUP. It used to render whatever week the
+// admin typed into the "from 2025 wk" box against the BAKED 2025 play-by-play,
+// so a real 2026 matchup replayed somebody else's games: right lineups, wrong
+// football. Now it reads the matchup's OWN week from live_play (the rows the
+// worker wrote while the games ran) and only falls back to the baked set when
+// that week has no live rows — which is the admin's baked-resolve test flow,
+// labelled as such so the two can never be confused again.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { adminMatchupPicks, type MatchupPicks } from '@drip/core/data/liveApi';
-import { loadRealWeek, realPbpFor, realPointsFor, type RealPlay } from '@drip/core/data/realPbp';
+import { adminMatchupPicks, weekLivePlays, type MatchupPicks } from '@drip/core/data/liveApi';
+import { loadRealWeek, realPbpFor, realPointsFor, setLivePlays, liveRowsToPbp, type RealPlay } from '@drip/core/data/realPbp';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { PlayerImg } from '../app/ui';
 import type { Pos } from '@drip/core/types';
@@ -82,7 +89,7 @@ function PlayerCard({ f, clock }: { f: PlayerFeed; clock: number }) {
         </div>
       </div>
       {f.evs.length === 0
-        ? <div style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', marginTop: 6 }}>no baked plays this week</div>
+        ? <div style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', marginTop: 6 }}>no plays this week</div>
         : rev.length === 0
           ? <div style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', marginTop: 6 }}>waiting for kickoff…</div>
           : <div style={{ marginTop: 7, borderTop: '1px solid var(--bd)', paddingTop: 5, maxHeight: 150, overflow: 'auto' }}>
@@ -106,6 +113,9 @@ export function FeedSheet({ matchupId, week, onClose }: { matchupId: string; wee
   const [data, setData] = useState<MatchupPicks | null>(null);
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Which play stream is on screen — the matchup's real rows, or the baked
+  // 2025 set when the week has none (admin's resolve-from-baked flow).
+  const [src, setSrc] = useState<'live' | 'baked'>('live');
   const [clock, setClock] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [rate, setRate] = useState(600); // game-seconds per real second
@@ -116,7 +126,12 @@ export function FeedSheet({ matchupId, week, onClose }: { matchupId: string; wee
     (async () => {
       try {
         const d = await adminMatchupPicks(matchupId);
-        await loadRealWeek(week);
+        // The matchup's OWN plays first: the rows the worker wrote as the
+        // games ran. Empty means nothing was ever recorded for this week, so
+        // fall back to the baked set rather than showing an empty sheet.
+        const rows = await weekLivePlays(week).catch(() => []);
+        if (rows.length) { setLivePlays(week, liveRowsToPbp(rows)); if (alive) setSrc('live'); }
+        else { await loadRealWeek(week); if (alive) setSrc('baked'); }
         if (alive) { setData(d); setReady(true); }
       } catch (e) { if (alive) setErr(e instanceof Error ? e.message : 'load failed'); }
     })();
@@ -160,12 +175,13 @@ export function FeedSheet({ matchupId, week, onClose }: { matchupId: string; wee
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 760, background: 'var(--bg)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 10, padding: 16, margin: 'auto 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <span className="mono" style={{ ...mono, fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)', fontWeight: 700 }}>
-            FEED SHEET · 2025 wk {week} · {done ? <span style={{ color: 'var(--faint)' }}>FINAL</span> : <span style={{ color: 'var(--you)' }}>● LIVE</span>}
+            REPLAY · WK {week}{src === 'baked' ? ' · baked 2025' : ''} · {done ? <span style={{ color: 'var(--faint)' }}>FINAL</span> : <span style={{ color: 'var(--you)' }}>● PLAYING</span>}
           </span>
           <button onClick={onClose} className="mono" style={linkBtn}>✕ close</button>
         </div>
         {err && <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--opp)' }}>{err}</div>}
         {!ready && !err && <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)' }}>Loading lineups + week {week} plays…</div>}
+        {ready && maxAt === 0 && <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)' }}>No plays recorded for week {week} — nothing to replay yet.</div>}
         {ready && data && (
           <>
             {/* transport */}

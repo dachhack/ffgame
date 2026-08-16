@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  adminOverview, adminMatchups, adminSetMatchup, adminSetCoin, adminOverrides, adminSetOverride, adminAudit,
+  adminOverview, adminMatchups, adminSetMatchup, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, redeemCommish, commishOverview, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminSetCodeRequestEmail, adminMatchupBoard, adminResetMatchup, dispatchSim,
   adminMatchupPicks, adminPickReadiness, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
@@ -727,10 +727,10 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
   const [srcWeek, setSrcWeek] = useState('1');
   const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [coinEdit, setCoinEdit] = useState<string | null>(null);
-  const [coinVals, setCoinVals] = useState<{ home: string; away: string }>({ home: '', away: '' });
   const [watch, setWatch] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<string | null>(null);
+  // The replay target: the matchup AND its own week (v0.214.0) — the sheet
+  // replays that week's real plays, not whatever the baked-source box says.
+  const [sheet, setSheet] = useState<{ id: string; week: number } | null>(null);
   const [policy, setPolicy] = useState<LineupPolicy>(l.lineup_policy ?? 'best_lineup');
   const changePolicy = async (p: LineupPolicy) => { setPolicy(p); try { await setLineupPolicy(l.league_id, p); } catch { /* keep optimistic */ } };
   const toggleMemberAi = async (rosterId: number, cur: Controller | undefined) => {
@@ -749,8 +749,6 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
     return r;
   };
   const [running, setRunning] = useState(false);
-  const openCoin = (m: AdminMatchup) => { setCoinEdit(m.id); setCoinVals({ home: String(m.home_coin ?? ''), away: String(m.away_coin ?? '') }); };
-  const saveCoin = async (id: string) => { await adminSetCoin(id, Number(coinVals.home || 0), Number(coinVals.away || 0)); setCoinEdit(null); await loadM(); };
   // Wrap an async demo action: guard double-clicks, surface progress + result/error.
   const run = async (label: string, fn: () => Promise<string>) => {
     if (running) return;
@@ -970,7 +968,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
   return (
     <div style={card}>
       {watch && <AdminMatchupBoard matchupId={watch} onClose={() => setWatch(null)} />}
-      {sheet && <FeedSheet matchupId={sheet} week={Number(srcWeek) || 1} onClose={() => setSheet(null)} />}
+      {sheet && <FeedSheet matchupId={sheet.id} week={sheet.week} onClose={() => setSheet(null)} />}
 
       {crestOpen && <AvatarPicker title="Pick the league crest" onPick={pickCrest} onClose={() => setCrestOpen(false)} />}
 
@@ -1238,8 +1236,10 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
                   <span className="mono" style={{ fontSize: 8.5, color: m.enrolled ? 'var(--you)' : m.claim_email ? 'var(--dim)' : 'var(--faint)', border: `1px solid ${m.enrolled ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '2px 6px' }}>{m.enrolled ? 'JOINED' : m.claim_email ? 'PENDING' : '—'}</span>
                 </div>
               </div>
+              {/* Coin left this row in v0.214.0 — balances and grants live on
+                  the ◈ COIN tab, where every team is comparable side by side.
+                  MEMBERS is about seats: who holds one, who hasn't claimed. */}
               <AssignRoster initial={m.email ?? m.claim_email ?? ''} seated={m.enrolled || !!m.claim_email} stillOnPlatform={!!m.owner} joiners={joiners} onAssign={(a) => assign(m.roster_id, a)} onClaimSelf={() => claimSelf(m.roster_id)} />
-              <SeedCoin balance={wallets[m.roster_id] ?? 0} onSeed={(amt) => seedCoin(m.roster_id, amt)} />
             </div>
           ))}
           <CoManagerPanel leagueId={l.league_id} members={members} />
@@ -1307,7 +1307,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
             {' '}<b style={{ color: 'var(--dim)' }}>Open</b> (picks open, pre-kickoff) →
             {' '}<b style={{ color: 'var(--you)' }}>Lock</b> (kickoff — seals both lineups, scoring starts) →
             {' '}<b style={{ color: 'var(--dim)' }}>Final</b>.
-            <br />◇ edit drip coin · ▦ watch the live board · ≣ play-by-play feed{admin ? ' · ▶ resolve from baked data · ↺ reset' : ''}.
+            <br />▦ this matchup's live board · ≣ replay its play-by-play (once it kicks off){admin ? ' · ▶ resolve from baked data · ↺ reset' : ''}.
           </div>
           {admin && (
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
@@ -1330,23 +1330,15 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
                   <button style={btn(m.status === 'scheduled')} onClick={() => set(m.id, 'scheduled')} title="Picks open — pre-kickoff">Open</button>
                   <button style={btn(m.status === 'live')} onClick={() => set(m.id, 'live', true)} title="Lock & score — seals both lineups at kickoff, scoring starts">Lock</button>
                   <button style={btn(m.status === 'final')} onClick={() => set(m.id, 'final')} title="Final — week complete">Final</button>
-                  <button style={btn(coinEdit === m.id)} onClick={() => (coinEdit === m.id ? setCoinEdit(null) : openCoin(m))} title="edit drip coin">◇</button>
-                  <button style={btn(false)} onClick={() => setWatch(m.id)} title="watch the live board"><GameIcon name={UI_ART.liveboard} emoji="▦" size="1.4em" /></button>
-                  <button style={btn(false)} onClick={() => setSheet(m.id)} title={`feed sheet — per-player play log (2025 wk ${srcWeek})`}>≣</button>
+                  <button style={btn(false)} onClick={() => setWatch(m.id)} title={`this matchup's live board — W${m.week} ${teamName(m.home_roster_id)} v ${teamName(m.away_roster_id)}`}><GameIcon name={UI_ART.liveboard} emoji="▦" size="1.4em" /></button>
+                  <button style={{ ...btn(false), opacity: m.status === 'scheduled' ? 0.4 : 1, cursor: m.status === 'scheduled' ? 'not-allowed' : 'pointer' }}
+                    onClick={() => setSheet({ id: m.id, week: m.week })} disabled={m.status === 'scheduled'}
+                    title={m.status === 'scheduled' ? 'replay unlocks once this matchup kicks off' : `replay this matchup — week ${m.week} play-by-play`}
+                    >≣</button>
                   {admin && <button style={btn(false)} onClick={() => resolve(m.id)} title="run real engine on baked 2025 data">▶</button>}
                   {admin && <button style={btn(false)} onClick={() => resetOne(m.id)} title="reset this matchup → scheduled, scores cleared">↺</button>}
                 </div>
               </div>
-              {coinEdit === m.id && (
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center', paddingBottom: 8 }}>
-                  <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>◇ home</span>
-                  <input value={coinVals.home} onChange={(e) => setCoinVals((v) => ({ ...v, home: e.target.value.replace(/[^\d.-]/g, '') }))} style={{ ...inp, width: 56, padding: '4px 5px', textAlign: 'center' }} />
-                  <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>away</span>
-                  <input value={coinVals.away} onChange={(e) => setCoinVals((v) => ({ ...v, away: e.target.value.replace(/[^\d.-]/g, '') }))} style={{ ...inp, width: 56, padding: '4px 5px', textAlign: 'center' }} />
-                  <button style={btn(true)} onClick={() => saveCoin(m.id)}>save</button>
-                  <span className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)' }}>(audited)</span>
-                </div>
-              )}
             </div>
           ))}
         </div>
