@@ -1,4 +1,5 @@
-// Expo config plugin: turn on R8 + resource shrinking for release builds.
+// Expo config plugin: R8 + resource shrinking + compressed native libs for
+// release builds.
 //
 // WHY: the release APK is mostly Dalvik bytecode — 19.7 MB uncompressed across
 // three .dex files against 17.9 MB of native libs — and none of it was being
@@ -27,6 +28,21 @@ const PROPS = {
   // Drop resources nothing references. Gated on minify by AGP, so it only does
   // anything alongside the flag above.
   'android.enableShrinkResourcesInReleaseBuilds': 'true',
+  // Compress the native libs inside the APK (the template's
+  // packagingOptions.jniLibs reads this property). AGP's modern default
+  // stores .so files UNCOMPRESSED so the loader can mmap them straight from
+  // the APK — which was ~19 MB of our ~30 MB APK stored raw. Legacy
+  // packaging deflates them and extracts at install time instead: the APK
+  // shrinks by ~8–9 MB; the costs are a slower install and a bigger
+  // installed footprint (libs exist extracted AND in the APK). For a
+  // sideloaded playtest build under a 30 MB delivery cap, that is the right
+  // trade. Cold-start is unaffected — after install the libs load from disk
+  // either way.
+  'expo.useLegacyPackaging': 'true',
+  // DELIBERATELY NOT SET: android.enableBundleCompression (the react{} block
+  // reads it). It would save ~2.5 MB by deflating the Hermes bundle, but a
+  // compressed bundle can't be mmap'd — every cold start pays an inflate.
+  // With the jniLibs win above we're well under the cap; keep startup fast.
 };
 
 module.exports = function withReleaseShrink(config) {
