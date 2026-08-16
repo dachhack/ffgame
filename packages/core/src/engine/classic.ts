@@ -53,6 +53,45 @@ export const DEFAULT_CLASSIC_ROSTER: ClassicRoster = { QB: 1, RB: 2, WR: 2, TE: 
 export const CLASSIC_ROSTER_MAX = 20; // starters cap, mirrored by SQL's sanitize + the slot-cap trigger
 
 /** The league's generated slot list, in catalog order. */
+// ── The roster POSITION BUILDER (0163, founder's sketch) ────────────────────
+// A builder league stores an ORDERED list of starting spots, each with its OWN
+// eligible-position set (any combination) and best-ball flag — superseding the
+// counts-per-type model and the separate best-ball name array. Slot names are
+// positional (S1..Sn): the list is draft-frozen, so names never shift under
+// stored rows.
+export interface SlotSpec { pos: string[]; bb?: boolean }
+
+export function classicSlotsFromSpec(spec?: SlotSpec[] | null): ClassicSlotDef[] | null {
+  if (!Array.isArray(spec) || !spec.length) return null;
+  return spec.slice(0, CLASSIC_ROSTER_MAX).map((s, i) => {
+    const pos = [...new Set((s.pos ?? []).map((p) => String(p).toUpperCase()))] as Pos[];
+    // A spot whose eligibility matches a catalog type keeps that type's label.
+    const known = CLASSIC_SLOT_TYPES.find((t) => t.pos.length === pos.length && t.pos.every((p) => pos.includes(p)));
+    return { slot: `S${i + 1}`, type: known?.type ?? pos.join('/'), pos };
+  });
+}
+
+/** One resolver for "what are this league's slots": builder spec wins, then
+ *  the 0161 counts, then the default nine. */
+export function leagueSlotDefs(mode?: { roster?: ClassicRoster | null; slots?: SlotSpec[] | null } | null): ClassicSlotDef[] {
+  return classicSlotsFromSpec(mode?.slots) ?? classicSlots(mode?.roster);
+}
+
+/** The league's best-ball slot names: per-spot flags for a builder league,
+ *  else the 0159 name array. */
+export function leagueBestball(mode?: { bestball?: string[] | null; slots?: SlotSpec[] | null } | null): string[] {
+  const fromSpec = (mode?.slots ?? []).flatMap((s, i) => (s?.bb ? [`S${i + 1}`] : []));
+  if (Array.isArray(mode?.slots) && mode.slots.length) return fromSpec; // builder league: spec is authoritative (even all-off)
+  return mode?.bestball ?? [];
+}
+
+/** Display label for a spot's eligibility ("FLEX (RB/WR/TE)" or "QB/RB/K"). */
+export function slotSpecLabel(pos: string[]): string {
+  const up = pos.map((p) => p.toUpperCase());
+  const known = CLASSIC_SLOT_TYPES.find((t) => t.pos.length === up.length && t.pos.every((p) => up.includes(p as Pos)));
+  return known ? known.label : up.join('/');
+}
+
 export function classicSlots(roster?: ClassicRoster | null): ClassicSlotDef[] {
   const cfg = roster && Object.keys(roster).length ? roster : DEFAULT_CLASSIC_ROSTER;
   const out: ClassicSlotDef[] = [];

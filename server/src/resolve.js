@@ -19,7 +19,7 @@
 // cross-window TE-TD nukes, and the K banker bonus remain simplified there.
 import { db } from './supabase.js';
 import { config } from './config.js';
-import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY, resolveClassicMatchup, CLASSIC_WIN, classicSlots, assignSealedRows, playsFor } from './engine.js';
+import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY, resolveClassicMatchup, CLASSIC_WIN, classicSlots, leagueSlotDefs, leagueBestball, assignSealedRows, playsFor } from './engine.js';
 import { matchupPremium, premiumTier, hasPremiumContent, gateSide, hasPremiumTargeted, gateTargeted } from './premium.js';
 import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
 import { starterSlugs } from '../../packages/core/src/data/poolEntry.ts';
@@ -160,9 +160,13 @@ const modeOfSettings = (s) => ({
   scoring: (s?.scoring_classic && typeof s.scoring_classic === 'object') ? s.scoring_classic : null,
   // The configured starting lineup (0161) — raw counts; classicSlots defaults.
   roster: (s?.roster_classic && typeof s.roster_classic === 'object') ? s.roster_classic : null,
+  // The roster BUILDER spec (0163) — ordered spots with per-spot eligibility +
+  // best ball; when present it wins over roster/bestball (leagueSlotDefs /
+  // leagueBestball resolve the precedence engine-side).
+  slots: Array.isArray(s?.roster_slots) ? s.roster_slots : null,
 });
 async function leagueModeOf(leagueId, ctx) {
-  if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1, bestball: [], scoring: null, roster: null };
+  if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1, bestball: [], scoring: null, roster: null, slots: null };
   const { data } = await db().from('league').select('settings_json').eq('id', leagueId).maybeSingle();
   return modeOfSettings(data?.settings_json);
 }
@@ -412,7 +416,8 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     // Best ball (0159): the flagged slots pick from the FULL drafted roster,
     // so those sides carry it. One 2-row query, only for best-ball leagues.
     const rosters = new Map();
-    if (gameMode.bestball.length) {
+    const bestball = leagueBestball(gameMode);
+    if (bestball.length) {
       const { data: ros } = await db().from('native_roster').select('roster_id,slug')
         .eq('league_id', matchup.league_id).in('roster_id', [matchup.home_roster_id, matchup.away_roster_id]);
       for (const row of ros ?? []) {
@@ -423,7 +428,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     const sideOf = (picks, rosterId) => ({
       picks: classify(picks),
       roster: rosters.get(rosterId) ?? [],
-      bestball: gameMode.bestball,
+      bestball,
     });
     // Flags (0144) bite classic scoring too (bonus_mult / bonus_pts /
     // no_start-in-best-ball) — install synchronously right before the resolve,
@@ -431,7 +436,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     setLeagueFlags(matchup.league_id, flagRows);
     const r = resolveClassicMatchup(
       sideOf(homePicks, matchup.home_roster_id), sideOf(awayPicks, matchup.away_roster_id),
-      matchup.week, { ...(gameMode.scoring ?? {}), ppr: gameMode.ppr }, classicSlots(gameMode.roster));
+      matchup.week, { ...(gameMode.scoring ?? {}), ppr: gameMode.ppr }, leagueSlotDefs(gameMode));
     for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
     slotRows = r.slots;
     homeTotal = r.home; awayTotal = r.away;

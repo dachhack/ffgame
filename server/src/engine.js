@@ -12,7 +12,7 @@
 // .ts imports resolve in Node.
 import { resolveSlot, EMPTY_PLAYER } from '../../packages/core/src/engine/sim.ts';
 import { resolveLiveMatchup } from '../../packages/core/src/engine/liveResolve.ts';
-import { resolveClassicMatchup, CLASSIC_WIN, classicSlots } from '../../packages/core/src/engine/classic.ts';
+import { resolveClassicMatchup, CLASSIC_WIN, classicSlots, leagueSlotDefs, leagueBestball } from '../../packages/core/src/engine/classic.ts';
 import { assignSealedRows } from '../../packages/core/src/engine/seatPicks.ts';
 import { setSyntheticWeeks, clearSyntheticWeeks, realPbpFor } from '../../packages/core/src/data/realPbp.ts';
 
@@ -33,7 +33,7 @@ export function makePlayer(slug, pos, team, full) {
 }
 
 export const EMPTY = EMPTY_PLAYER;
-export { clearSyntheticWeeks, resolveLiveMatchup, aiLiveBuffs, resolveClassicMatchup, CLASSIC_WIN, classicSlots, assignSealedRows };
+export { clearSyntheticWeeks, resolveLiveMatchup, aiLiveBuffs, resolveClassicMatchup, CLASSIC_WIN, classicSlots, leagueSlotDefs, leagueBestball, assignSealedRows };
 
 /** AI auto-lineup for a real LIVE game — delegates to the shared honest builder
  *  (src/data/aiLineup.ts): place a roster's Sleeper starters on sensible default

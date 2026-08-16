@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
-import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueBestball, setLeagueClassicScoring, setLeagueClassicRoster, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
-import { classicSlots, CLASSIC_SLOT_TYPES, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, DEFAULT_CLASSIC_ROSTER } from '@drip/core/engine/classic';
+import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
+import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
+
+// The builder's position chips (0163) — base positions only; combos are made by
+// lighting several chips on one spot.
+const BUILDER_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'] as const;
 import { LeagueRow, type LeagueTab } from './AdminPage';
 import { card, linkBtn, mono, Muted, errMsg } from './adminUi';
 
@@ -120,11 +124,14 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
   const [ppr, setPpr] = useState(1);
   const [classicOk, setClassicOk] = useState(false);
-  const [bestball, setBestball] = useState<string[]>([]);
-  const [rosterCfg, setRosterCfg] = useState<Record<string, number>>({});
+  // The roster POSITION BUILDER (0163, founder's sketch): draft rows edited
+  // locally, one SAVE writes the whole spec. Initialized from the stored spec,
+  // or derived from the 0161 counts + best-ball names so a legacy league's
+  // first SAVE migrates it to the builder model losslessly.
+  const [spots, setSpots] = useState<SlotSpec[] | null>(null);
+  const [spotsDirty, setSpotsDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const slotDefs = classicSlots(rosterCfg);
   // Full classic scoring (0160): drafts are strings so partial typing never
   // fights the keyboard; parse + diff against the engine defaults on save.
   const [scOpen, setScOpen] = useState(false);
@@ -135,7 +142,12 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
     setScDraft(d);
   };
   useEffect(() => {
-    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setBestball(r.bestball ?? []); scInit(r.scoring ?? {}); setRosterCfg(r.roster && Object.keys(r.roster).length ? r.roster : { ...DEFAULT_CLASSIC_ROSTER }); } }).catch(() => {});
+    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); scInit(r.scoring ?? {});
+      const legacy = classicSlots(r.roster && Object.keys(r.roster).length ? r.roster : null);
+      setSpots(r.slots?.length
+        ? r.slots.map((x) => ({ pos: [...x.pos], bb: !!x.bb }))
+        : legacy.map((d) => ({ pos: [...d.pos], bb: (r.bestball ?? []).includes(d.slot) })));
+      setSpotsDirty(false); } }).catch(() => {});
   }, [leagueId]);
   const saveScoring = async (reset = false) => {
     if (busy) return;
@@ -153,12 +165,12 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
-  const saveBestball = async (slots: string[]) => {
-    if (busy) return;
+  const saveSpots = async () => {
+    if (busy || !spots || !spots.length) return;
     setBusy(true); setNote(null);
     try {
-      const r = await setLeagueBestball(leagueId, slots);
-      if (r.ok) setBestball(r.bestball ?? slots);
+      const r = await setLeagueClassicSlots(leagueId, spots);
+      if (r.ok) { setSpots((r.slots ?? spots).map((x) => ({ pos: [...x.pos], bb: !!x.bb }))); setSpotsDirty(false); setNote('✓ lineup saved'); }
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
@@ -202,56 +214,44 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
           ))}
         </div>
       )}
-      {mode === 'classic' && (
+      {mode === 'classic' && spots && (
         <div style={{ marginTop: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', fontWeight: 700 }}>🧩 STARTING LINEUP · {slotDefs.length} STARTERS</span>
+          {/* The roster POSITION BUILDER (0163, the founder's sketch): each row is
+              one starting spot — its own eligible-position set, its own best-ball
+              flag — plus ADD. Bench = draft rounds − starters (league creation). */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', fontWeight: 700 }}>🧩 ROSTER BUILDER · {spots.length} STARTING SPOTS</span>
+            {spotsDirty && <button onClick={() => void saveSpots()} disabled={busy} className="mono" style={{ ...pill(true), padding: '4px 12px' }}>SAVE LINEUP</button>}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
-            {CLASSIC_SLOT_TYPES.map((t) => {
-              const n = Math.max(0, Math.floor(Number(rosterCfg[t.type]) || 0));
-              const step = async (d: number) => {
-                if (busy) return;
-                const next = { ...rosterCfg, [t.type]: Math.max(0, Math.min(6, n + d)) };
-                if (!Object.values(next).some((v) => Number(v) > 0)) return;
-                setBusy(true); setNote(null);
-                try {
-                  const r = await setLeagueClassicRoster(leagueId, next);
-                  if (r.ok) setRosterCfg(r.roster ?? next);
-                  else setNote(r.error ?? 'failed');
-                } finally { setBusy(false); }
-              };
-              return (
-                <span key={t.type} title={t.label} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 8.5, fontWeight: 700, color: n ? 'var(--you)' : 'var(--faint)', border: `1px solid ${n ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 6, padding: '3px 6px' }}>
-                  {t.type}
-                  <button onClick={() => void step(-1)} disabled={busy || n === 0} className="mono" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 10, padding: '0 2px' }}>−</button>
-                  <span style={{ minWidth: 10, textAlign: 'center' }}>{n}</span>
-                  <button onClick={() => void step(1)} disabled={busy || n >= 6} className="mono" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 10, padding: '0 2px' }}>＋</button>
-                </span>
-              );
-            })}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 6 }}>
+            {spots.map((sp, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', border: '1px solid var(--bd)', borderRadius: 6, padding: '5px 8px' }}>
+                <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--dim)', width: 22 }}>{i + 1}</span>
+                {BUILDER_POSITIONS.map((p) => {
+                  const on = sp.pos.includes(p);
+                  return (
+                    <button key={p} disabled={busy}
+                      onClick={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, pos: on ? x.pos.filter((q) => q !== p) : [...x.pos, p] })); setSpotsDirty(true); }}
+                      className="mono" style={{ ...pill(on), padding: '3px 7px', fontSize: 8.5 }}>{p}</button>
+                  );
+                })}
+                <span className="mono" style={{ flex: 1, minWidth: 60, fontSize: 8, color: 'var(--faint)', textAlign: 'right' }}>{slotSpecLabel(sp.pos)}</span>
+                <button disabled={busy} title="Best ball: this spot fills itself with the top scorer"
+                  onClick={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, bb: !x.bb })); setSpotsDirty(true); }}
+                  className="mono" style={{ ...pill(!!sp.bb), padding: '3px 8px', fontSize: 8.5 }}>🎯 BB</button>
+                <button disabled={busy || spots.length <= 1} title="Remove this spot"
+                  onClick={() => { setSpots((cur) => cur!.filter((_, j) => j !== i)); setSpotsDirty(true); }}
+                  className="mono" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--opp)', fontSize: 11, padding: '0 3px' }}>✕</button>
+              </div>
+            ))}
           </div>
-          <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
-            Any combination — flex spots take multiple positions (FLEX = RB/WR/TE, SFLX adds QB, WRT = WR/TE, IDP = DL/LB/DB). Locks once the draft starts.
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-            <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', fontWeight: 700 }}>🎯 BEST BALL</span>
-            <button onClick={() => void saveBestball(slotDefs.map((d) => d.slot))} disabled={busy} className="mono" style={pill(bestball.length >= slotDefs.length && slotDefs.length > 0)}>ENTIRE ROSTER</button>
-            <button onClick={() => void saveBestball([])} disabled={busy} className="mono" style={pill(bestball.length === 0)}>OFF</button>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
-            {slotDefs.map((d) => {
-              const on = bestball.includes(d.slot);
-              return (
-                <button key={d.slot} onClick={() => void saveBestball(on ? bestball.filter((s) => s !== d.slot) : [...bestball, d.slot])}
-                  disabled={busy} className="mono" style={{ ...pill(on), padding: '4px 9px', fontSize: 9 }}>
-                  {d.slot}
-                </button>
-              );
-            })}
-          </div>
-          <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
-            Lit slots fill themselves with the highest-scoring rostered player not already started by hand. All nine = pure best ball: nothing to set, ever.
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+            <button disabled={busy || spots.length >= 20}
+              onClick={() => { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'] }]); setSpotsDirty(true); }}
+              className="mono" style={{ ...pill(false), padding: '4px 14px' }}>＋ ADD SPOT</button>
+            <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', lineHeight: 1.5 }}>
+              Any position combination per spot · 🎯 BB spots fill themselves with the top scorer · bench = draft rounds − starters · locks once the draft starts.
+            </span>
           </div>
         </div>
       )}
