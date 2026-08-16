@@ -151,6 +151,46 @@ export function slotSpecLabel(pos: string[]): string {
   return known ? known.label : up.join('/');
 }
 
+/** A spot's own player filter (0172) in a few characters: "KC/BUF",
+ *  "ROOKIES ONLY", "2–5 YRS". Empty when the spot filters on nothing. */
+export function slotFilterLabel(f?: SlotFilter | null): string {
+  if (!f) return '';
+  const parts: string[] = [];
+  if (f.teams?.length) parts.push(f.teams.join('/'));
+  if (f.min_exp != null || f.max_exp != null) {
+    parts.push(f.max_exp === 0 ? 'ROOKIES ONLY' : `${f.min_exp ?? 0}–${f.max_exp ?? '30'} YRS`);
+  }
+  return parts.join(' · ');
+}
+
+/** What a spot ACCEPTS, for the line under its name — the half of eligibility
+ *  the name doesn't already say. A commissioner's own label (0174) is free
+ *  text, so "Only NFC Players" tells you nothing about which POSITIONS may
+ *  stand there; the derived label always does, and repeating it would be
+ *  noise. Filters (0172) are never in either, so they always show. */
+export function slotAcceptsLabel(d: { label?: string; pos: string[]; flt?: SlotFilter | null }): string {
+  return [d.label?.trim() ? d.pos.map((p) => p.toUpperCase()).join('/') : '', slotFilterLabel(d.flt)]
+    .filter(Boolean).join(' · ');
+}
+
+/** Display names for a WHOLE lineup, disambiguated. Under the position builder
+ *  every RB spot is named "RB" (the counts model generated RB1/RB2 instead), so
+ *  a lineup with two of anything would show two identical rows and a manager
+ *  couldn't tell which one they were setting. Repeats — and only repeats — get
+ *  a trailing index, in the league's own spot order. */
+export function slotDisplayNames(slots: { label?: string; pos: string[] }[]): string[] {
+  const names = slots.map(slotDisplayName);
+  const total = new Map<string, number>();
+  for (const n of names) total.set(n, (total.get(n) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  return names.map((n) => {
+    if ((total.get(n) ?? 0) < 2) return n;
+    const i = (seen.get(n) ?? 0) + 1;
+    seen.set(n, i);
+    return `${n} ${i}`;
+  });
+}
+
 export function classicSlots(roster?: ClassicRoster | null): ClassicSlotDef[] {
   const cfg = roster && Object.keys(roster).length ? roster : DEFAULT_CLASSIC_ROSTER;
   const out: ClassicSlotDef[] = [];

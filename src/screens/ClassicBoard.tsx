@@ -10,7 +10,7 @@
 // stream the drip boards run on, refreshed every 60s.
 import { useEffect, useMemo, useState } from 'react';
 import type { Pos } from '@drip/core/types';
-import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayName, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec, type SlotFilter } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { buildMatchupBoard, gameFor, entryState, type BoardEntry } from '@drip/core/engine/matchupBoard';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
@@ -49,17 +49,6 @@ const prettySlug = (slug: string): string => {
 const fmtKick = (iso: string): string => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
-};
-
-// Short human label for a spot's player filter (0172): "KC/SF · ROOKIES".
-const fltLabel = (f?: SlotFilter | null): string => {
-  if (!f) return '';
-  const parts: string[] = [];
-  if (f.teams?.length) parts.push(f.teams.join('/'));
-  if (f.min_exp != null || f.max_exp != null) {
-    parts.push(f.max_exp === 0 ? 'ROOKIES ONLY' : `${f.min_exp ?? 0}–${f.max_exp ?? '30'} YRS`);
-  }
-  return parts.join(' · ');
 };
 
 const fmtLock = (iso: string | null) => {
@@ -280,6 +269,16 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   const sc = useMemo<Partial<ClassicScoring>>(() => ({ ...scoring, ppr }), [scoring, ppr]);
   // The league's configured lineup (0161) — slot names, types, eligibility.
   const slotDefs = useMemo(() => leagueSlotDefs({ roster, slots: slotsSpec }), [roster, slotsSpec]);
+  // What each spot is CALLED on screen. The stored name (S1, RB2) is a storage
+  // key, not something to set a lineup against — this is the commissioner's own
+  // label (0174) or the derived one, with repeats numbered so two identical
+  // rows can be told apart. One map, so the setter, the picker and the locked
+  // board can never disagree about what a spot is called.
+  const slotName = useMemo(() => {
+    const names = slotDisplayNames(slotDefs);
+    return new Map(slotDefs.map((d, i) => [d.slot, names[i]]));
+  }, [slotDefs]);
+  const nameOf = (d: { slot: string; label?: string; pos: string[] }) => slotName.get(d.slot) ?? d.slot;
   const pts = useMemo(() => {
     void playsAt; void flagsVer;
     if (!matchup) return () => 0;
@@ -373,7 +372,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
       ir: benchList.filter((p) => stashed.has(p.slug)).map((p) => entryFor(p.slug)).filter((e): e is BoardEntry => !!e),
     });
     return buildMatchupBoard({
-      week: matchup.week, locked, slots: slotDefs, labelFor: slotDisplayName,
+      week: matchup.week, locked, slots: slotDefs, labelFor: nameOf,
       home: mkSide(ros.rosterId, names.me, avatars.me, effective.mine, bench),
       // The opponent's bench is not readable pre-lock (and shouldn't be) —
       // their rows exist only as starters, which is what the board shows.
@@ -516,15 +515,23 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
           const auto = bb.has(d.slot);
           const my = effective.mine[d.slot];
           const their = effective.theirs[d.slot];
+          // The spot as the commissioner built it: what it's CALLED, and — when
+          // the name doesn't already say it — what it ACCEPTS. A custom label
+          // ("Only NFC Players") hides eligibility entirely, which is exactly
+          // when a manager needs the positions spelled out.
+          const accepts = slotAcceptsLabel(d);
           return (
-            <div key={d.slot} style={{ display: 'grid', gridTemplateColumns: '44px 1fr 52px 52px 1fr', alignItems: 'center', gap: 6, padding: '8px 12px', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
-              <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: auto ? 'var(--you)' : 'var(--dim)' }}>{d.slot}{auto ? ' 🎯' : ''}</span>
+            <div key={d.slot} style={{ display: 'grid', gridTemplateColumns: '104px 1fr 52px 52px 1fr', alignItems: 'center', gap: 6, padding: '8px 12px', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
+              <div style={{ minWidth: 0 }}>
+                <div className="mono" title={nameOf(d)} style={{ fontSize: 9.5, fontWeight: 700, color: auto ? 'var(--you)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(d)}{auto ? ' 🎯' : ''}</div>
+                {accepts && <div className="mono" title={accepts} style={{ fontSize: 8, color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{accepts}</div>}
+              </div>
               {auto && !locked ? (
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>BEST BALL — fills itself with your top scorer</span>
               ) : locked || auto ? <PlayerCell slug={my} /> : (
                 <button onClick={() => setPickerSlot(pickerSlot === d.slot ? null : d.slot)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0, color: 'inherit' }}>
-                  {my ? <PlayerCell slug={my} /> : <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>+ SET {d.slot}</span>}
+                  {my ? <PlayerCell slug={my} /> : <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>+ SET</span>}
                 </button>
               )}
               <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, textAlign: 'right', color: 'var(--you)' }}>{locked || my ? r1(pts(my, d.pos)) : ''}</span>
@@ -540,10 +547,16 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
       {/* Picker: eligible, unused roster players for the open slot */}
       {!locked && pickerSlot && (
         <div style={card}>
-          <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--faint)', marginBottom: 8 }}>
-            SET {(() => { const d = slotDefs.find((x) => x.slot === pickerSlot); return d ? slotDisplayName(d) : pickerSlot; })()} — {slotDefs.find((d) => d.slot === pickerSlot)?.pos.join(' / ')}
-            {(() => { const l = fltLabel(slotDefs.find((d) => d.slot === pickerSlot)?.flt); return l ? <span style={{ color: 'var(--you)' }}> · {l}</span> : null; })()}
-          </div>
+          {(() => {
+            const d = slotDefs.find((x) => x.slot === pickerSlot);
+            const f = slotFilterLabel(d?.flt);
+            return (
+              <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--faint)', marginBottom: 8 }}>
+                SET {d ? nameOf(d) : pickerSlot} — {d?.pos.join(' / ')}
+                {f ? <span style={{ color: 'var(--you)' }}> · {f}</span> : null}
+              </div>
+            );
+          })()}
           {mine[pickerSlot] && (
             <button onClick={() => { void assign(pickerSlot, null); }} className="mono"
               style={{ display: 'block', width: '100%', textAlign: 'left', fontSize: 10.5, padding: '7px 8px', marginBottom: 4, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, color: 'var(--dim)', cursor: 'pointer' }}>

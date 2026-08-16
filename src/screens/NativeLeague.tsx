@@ -30,7 +30,7 @@ import {
   myFavorites, tradeSignals, setTradeSignal, playerFlags, leaguePoolExp,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
 } from '@drip/core/data/liveApi';
-import { leagueSlotDefs, assignSpots, slotDisplayName, type SpotPlayer } from '@drip/core/engine/classic';
+import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, type SpotPlayer } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { webPushState, enableWebPush, disableWebPush, type WebPushState } from '../app/webPush';
 
@@ -769,6 +769,9 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   // The league's starting spots, in the commissioner's own order. Null for a
   // drip league (no starting spec) or while the mode read is outstanding.
   const spotDefs = gm?.mode === 'classic' ? leagueSlotDefs({ roster: gm.roster ?? null, slots: gm.slots ?? null }) : null;
+  // Repeats numbered (RB 1 / RB 2) so two identical rows can be told apart —
+  // the same names the lineup setter uses, from the same core helper.
+  const spotNames = spotDefs ? slotDisplayNames(spotDefs) : [];
   /** A seat's picks mapped onto the spots they'll fill — see assignSpots.
    *  A pick the pool doesn't know (pos '?') matches nothing and benches, so a
    *  missing pool row costs a spot, never a row. */
@@ -1149,12 +1152,14 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                 <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.14em', color: 'var(--faint)', paddingBottom: 4 }}>
                   STARTING LINEUP · {seated}/{fill.spots.length} FILLED
                 </div>
-                {fill.spots.map((s) => (s.player
-                  ? row(s.def.slot, slotDisplayName(s.def), s.player.id, true)
+                {fill.spots.map((s, si) => (s.player
+                  ? row(s.def.slot, spotNames[si], s.player.id, true)
                   : (
                     <div key={s.def.slot} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderTop: '1px solid var(--bd)', opacity: 0.55 }}>
-                      <span className="mono" title={slotDisplayName(s.def)} style={{ fontSize: 9, color: 'var(--faint)', width: 92, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slotDisplayName(s.def)}</span>
-                      <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', flex: 1 }}>— empty</span>
+                      <span className="mono" title={spotNames[si]} style={{ fontSize: 9, color: 'var(--faint)', width: 92, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{spotNames[si]}</span>
+                      <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', flex: 1 }}>
+                        — empty{slotAcceptsLabel(s.def) ? ` · ${slotAcceptsLabel(s.def)}` : ''}
+                      </span>
                     </div>
                   )))}
                 <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.14em', color: 'var(--faint)', padding: '10px 0 4px' }}>
