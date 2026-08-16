@@ -1738,6 +1738,34 @@ export const setAutodraft = (leagueId: string, rosterId: number, on: boolean) =>
 /** Commissioner sets/clears the draft's overnight quiet hours (0153). Both
  *  null clears; minutes since midnight ET. A live draft's running clocks are
  *  re-based server-side so a fresh pause can't be beaten by an old deadline. */
+/** Commissioner: change the draft's shape while it's still PENDING (0176).
+ *  Nulls mean "unchanged", so one control can move without restating the rest.
+ *  Everything here freezes the moment the draft starts — the same rule the
+ *  game mode, lineup spec and roster rules already follow. */
+export const setDraftSetup = (
+  leagueId: string,
+  pickSeconds: number | null = null,
+  mode: 'snake' | 'auction' | null = null,
+  budget: number | null = null,
+  lotSeconds: number | null = null,
+  maxLots: number | null = null,
+) =>
+  tracked(rpc<{ ok: boolean; error?: string; pick_seconds?: number; mode?: 'snake' | 'auction';
+                budget?: number; lot_seconds?: number; max_lots?: number }>(
+    'set_draft_setup', {
+      p_league_id: leagueId, p_pick_seconds: pickSeconds, p_mode: mode,
+      p_budget: budget, p_lot_seconds: lotSeconds, p_max_lots: maxLots,
+    }), Ev.commishAction, { tool: 'draft_setup' });
+
+/** Commissioner: set the draft order BEFORE the draft starts (0176). `order`
+ *  null shuffles now — visibly, which is the point of drawing it early. The
+ *  order is rechecked against the current seats at start, so a team added
+ *  afterwards can't be dropped by a stale list. */
+export const setDraftOrder = (leagueId: string, order: number[] | null = null) =>
+  tracked(rpc<{ ok: boolean; error?: string; order?: number[] }>(
+    'set_draft_order', { p_league_id: leagueId, p_order: order }),
+    Ev.commishAction, { tool: 'draft_order', random: order == null });
+
 export const setDraftNight = (leagueId: string, startMin: number | null = null, endMin: number | null = null) =>
   tracked(rpc<{ ok: boolean; error?: string; start_min?: number | null; end_min?: number | null }>('set_draft_night', {
     p_league_id: leagueId, p_start_min: startMin, p_end_min: endMin,

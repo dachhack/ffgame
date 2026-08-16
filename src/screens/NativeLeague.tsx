@@ -19,6 +19,7 @@ import {
   startDraft, draftState, makeDraftPick, draftTick,
   POS_CAP_KEYS, type PosCaps,
   leaguePool, nativeRosters, nativeTeamState, dropPlayer, addFreeAgent, setRosterSpot,
+  setDraftSetup, setDraftOrder,
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
   setTeamName, setTeamAvatar, setLeagueAvatar,
   setDraftQueue, myDraftQueue, setAutodraft,
@@ -358,6 +359,175 @@ function PlayerCard({ p, onClose, action, queued, onQueue }: {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Draft setup — the commissioner's pre-draft controls (0176)
+// ─────────────────────────────────────────────────────────────────────────────
+/** Everything the create screen no longer asks, plus the draft order.
+ *
+ *  v0.221.0 trimmed league creation on the rule "anything with a setter after
+ *  creation doesn't need to be asked up front" — and four controls stayed only
+ *  because they had NO setter. This is that setter, and it lives in the
+ *  WAITING-TO-START card because that's where a commissioner already is while
+ *  seats fill: the moment you'd want to stretch the clock because half the
+ *  league is at work, or switch to auction because someone asked.
+ *
+ *  It disappears once the draft starts. Not a limitation — the same freeze the
+ *  game mode, lineup spec and roster rules all use, for the same reason:
+ *  change the format at pick 40 and there's no coherent reading of the first
+ *  39 picks. */
+function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
+  leagueId: string;
+  st: DraftState;
+  /** Every seat in the league, ascending — the order editor's universe. */
+  seats: number[];
+  onSaved: () => void;
+  teamName: (rid: number) => string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<'snake' | 'auction'>(st.mode);
+  // Slow drafts are hour-scale; showing 172800 in a seconds box helps nobody,
+  // so the unit follows the value the same way the create screen's pace does.
+  const slow = st.pick_seconds >= 3600;
+  const [clock, setClock] = useState(String(slow ? Math.round(st.pick_seconds / 3600) : st.pick_seconds));
+  const [hrs, setHrs] = useState(slow);
+  const [budget, setBudget] = useState(String(st.budget ?? 200));
+  const [bell, setBell] = useState(String(st.lot_seconds >= 3600 ? Math.round(st.lot_seconds / 3600) : st.lot_seconds));
+  const [bellHrs, setBellHrs] = useState(st.lot_seconds >= 3600);
+  const [lots, setLots] = useState(String(st.max_lots));
+  // The order is DRAFTED here and only committed on save, so a mis-tap while
+  // reordering isn't immediately visible to the whole league.
+  const [ord, setOrd] = useState<number[] | null>(st.order);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, done: string) => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fn();
+      if (r.ok) { setMsg(done); onSaved(); } else setMsg(friendlyError(r.error ?? 'that didn’t work'));
+    } catch (e) { setMsg(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
+  const saveSetup = () => {
+    const c = Math.round(Number(clock) * (hrs ? 3600 : 1));
+    const b = Math.round(Number(bell) * (bellHrs ? 3600 : 1));
+    if (!Number.isFinite(c) || c <= 0) { setMsg('pick clock needs a number'); return; }
+    void run(() => setDraftSetup(leagueId, c, mode,
+      mode === 'auction' ? Math.round(Number(budget)) : null,
+      mode === 'auction' ? b : null,
+      mode === 'auction' ? Math.round(Number(lots)) : null), '✓ draft setup saved');
+  };
+
+  // Reorders whatever the rows currently SHOW, seeding the draft from seat
+  // order on the first move. Operating on `ord` instead left the arrows dead
+  // until you'd randomized once — so hand-setting an order from scratch, which
+  // is the whole point of a reveal, silently did nothing.
+  const move = (i: number, d: -1 | 1) => {
+    const base = ord ?? seats;
+    const j = i + d;
+    if (j < 0 || j >= base.length) return;
+    const next = [...base];
+    [next[i], next[j]] = [next[j], next[i]];
+    setOrd(next);
+  };
+
+  const fieldStyle: React.CSSProperties = { ...input, width: 78, padding: '7px 9px', fontSize: 13 };
+  // The order the editor works on: whatever's stored, else the seats in seat
+  // order as a starting point to drag from.
+  const rows = ord ?? seats;
+  const stale = ord != null && (ord.length !== seats.length || seats.some((s) => !ord.includes(s)));
+
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
+      <button onClick={() => setOpen(!open)} className="mono" style={{ ...linkBtn, fontSize: 12 }}>
+        {open ? '▾' : '▸'} ⚙ DRAFT SETUP {open ? '' : '— clock, format, order'}
+      </button>
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          <div className="mono" style={label}>DRAFT TYPE</div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+            <Chip on={mode === 'snake'} onClick={() => setMode('snake')}>SNAKE</Chip>
+            <Chip on={mode === 'auction'} onClick={() => setMode('auction')}>AUCTION</Chip>
+          </div>
+          <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div>
+              <div className="mono" style={label}>{mode === 'auction' ? 'NOMINATION CLOCK' : 'PICK CLOCK'}</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 7, alignItems: 'center' }}>
+                <input value={clock} inputMode="numeric" onChange={(e) => setClock(e.target.value.replace(/\D/g, ''))} style={fieldStyle} />
+                <Chip on={!hrs} onClick={() => setHrs(false)}>SEC</Chip>
+                <Chip on={hrs} onClick={() => setHrs(true)}>HRS</Chip>
+              </div>
+            </div>
+            {mode === 'auction' && (
+              <>
+                <div>
+                  <div className="mono" style={label}>BUDGET ($ / TEAM)</div>
+                  <input value={budget} inputMode="numeric" onChange={(e) => setBudget(e.target.value.replace(/\D/g, ''))} style={{ ...fieldStyle, marginTop: 7 }} />
+                </div>
+                <div>
+                  <div className="mono" style={label}>BID BELL</div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 7, alignItems: 'center' }}>
+                    <input value={bell} inputMode="numeric" onChange={(e) => setBell(e.target.value.replace(/\D/g, ''))} style={fieldStyle} />
+                    <Chip on={!bellHrs} onClick={() => setBellHrs(false)}>SEC</Chip>
+                    <Chip on={bellHrs} onClick={() => setBellHrs(true)}>HRS</Chip>
+                  </div>
+                </div>
+                <div>
+                  <div className="mono" style={label}>LOTS AT ONCE</div>
+                  <input value={lots} inputMode="numeric" onChange={(e) => setLots(e.target.value.replace(/\D/g, ''))} style={{ ...fieldStyle, marginTop: 7 }} />
+                </div>
+              </>
+            )}
+            <button onClick={saveSetup} disabled={busy} className="mono" style={{ ...btn, opacity: busy ? 0.6 : 1 }}>SAVE SETUP</button>
+          </div>
+          <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
+            Roster size and position limits live on the league's ROSTER settings; the overnight pause is the 🌙 control above. All of it, this included, locks when the draft starts.
+          </div>
+
+          {/* ── the order, drawn early and on purpose ── */}
+          <div className="mono" style={{ ...label, marginTop: 16 }}>DRAFT ORDER</div>
+          <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+            {st.order
+              ? 'Set — the draft will start on this order, and everyone can see it now.'
+              : 'Not set. Left alone, the order is randomized the moment the draft starts. Draw it here instead and the league sees the result before anyone is on the clock.'}
+          </div>
+          {stale && (
+            <div className="mono" style={{ fontSize: 11, color: 'var(--warn)', marginTop: 6, lineHeight: 1.5 }}>
+              ⚠ This order no longer matches the league's seats — a team joined or left since it was drawn. Randomize or re-save it; if it's still stale at start, the draft randomizes rather than leaving anyone out.
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 8 }}>
+            {rows.map((rid, i) => (
+              <div key={rid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: 'var(--bg)', borderRadius: 5 }}>
+                <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--faint)', width: 22 }}>{i + 1}.</span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {teamName(rid) ?? `Team ${rid}`}
+                </span>
+                <button onClick={() => move(i, -1)} disabled={i === 0} className="mono"
+                  style={{ ...ghostBtn, padding: '3px 8px', fontSize: 11, opacity: i === 0 ? 0.35 : 1 }} title="move up">▲</button>
+                <button onClick={() => move(i, 1)} disabled={i === rows.length - 1} className="mono"
+                  style={{ ...ghostBtn, padding: '3px 8px', fontSize: 11, opacity: i === rows.length - 1 ? 0.35 : 1 }} title="move down">▼</button>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+            <button onClick={() => void run(async () => {
+              const r = await setDraftOrder(leagueId, null);
+              if (r.ok && r.order) setOrd(r.order);
+              return r;
+            }, '✓ order drawn')} disabled={busy} className="mono" style={{ ...ghostBtn, opacity: busy ? 0.6 : 1 }}>🎲 RANDOMIZE</button>
+            <button onClick={() => void run(() => setDraftOrder(leagueId, rows), '✓ order saved')}
+              disabled={busy} className="mono" style={{ ...btn, opacity: busy ? 0.6 : 1 }}>SAVE ORDER</button>
+          </div>
+          {msg && <div className="mono" style={{ fontSize: 12, marginTop: 8, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Draft room
 // ─────────────────────────────────────────────────────────────────────────────
 type DraftTab = 'players' | 'teams' | 'queue';
@@ -578,6 +748,13 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
             return r;
           })} disabled={busy} className="mono" style={{ ...ghostBtn, width: '100%', marginTop: 8, opacity: busy ? 0.6 : 1 }}>↻ REFRESH PLAYER POOL (2026 ADP)</button>}
           {err && <div className="mono" style={errStyle}>{err}</div>}
+          {/* 0176: the commissioner's pre-draft controls. Collapsed by default —
+              most visits here are to hit START, not to re-tune the format. */}
+          {isCommish && (
+            <DraftSetup leagueId={leagueId} st={st} teamName={teamName}
+              seats={(team?.waiver_order ?? []).map((w) => w.roster_id).sort((a, b) => a - b)}
+              onSaved={() => { void refresh(); }} />
+          )}
         </div>
       )}
 

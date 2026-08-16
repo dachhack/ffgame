@@ -106,3 +106,4 @@ $RUN -f scripts/db/auto-playoffs-probes.sql | grep -E "PROBE FAIL|ALL AUTO-PLAYO
 $RUN -f scripts/db/roster-builder-probes.sql | grep -E "PROBE FAIL|ALL ROSTER-BUILDER PROBES" || { echo "ROSTER-BUILDER PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/taxi-ir-probes.sql | grep -E "PROBE FAIL|ALL TAXI-IR PROBES" || { echo "TAXI-IR PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/faab-grant-probes.sql | grep -E "PROBE FAIL|ALL FAAB-GRANT PROBES" || { echo "FAAB-GRANT PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/draft-setup-probes.sql | grep -E "PROBE FAIL|ALL DRAFT-SETUP PROBES" || { echo "DRAFT-SETUP PROBES FAILED"; exit 1; }
