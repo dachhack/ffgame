@@ -72,11 +72,19 @@ insert into matchup (league_id, week, home_roster_id, away_roster_id, status) va
 -- Preseason slate rows so the pool seeder has teams. Week 101's kickoff is in the
 -- PAST (the real Hall of Fame game, Aug 2026) — 0113 must skip it; the rest are
 -- pushed far enough out that these probes keep passing after the real preseason.
+--
+-- PHANTOM home codes (ZZx), deliberately: nfl_slate's PK is (season, week,
+-- home), and 0056 bakes the REAL 2026 preseason — a fixture row sharing a real
+-- home team ('CIN' week 102) silently dropped on conflict, so the "future
+-- kickoff" this fixture promises never landed. The suite then kept passing
+-- only until the real week-102 games aged past the 4h skip rule (2026-08-16
+-- 04:00Z, the morning it first went red). A phantom home can never collide,
+-- so each week keeps one genuinely-future kickoff and stays playable.
 insert into nfl_slate (season, week, home, away, win, kickoff) values
   ('2026', 101, 'ARI', 'CAR', 'tnf', '2026-08-07T00:00Z'),
-  ('2026', 102, 'CIN', 'DET', 'tnf', (now() + interval '30 days')::timestamptz),
-  ('2026', 103, 'HOU', 'LV',  'tnf', (now() + interval '37 days')::timestamptz),
-  ('2026', 104, 'BUF', 'PIT', 'tnf', (now() + interval '44 days')::timestamptz)
+  ('2026', 102, 'ZZA', 'ZZB', 'tnf', (now() + interval '30 days')::timestamptz),
+  ('2026', 103, 'ZZC', 'ZZD', 'tnf', (now() + interval '37 days')::timestamptz),
+  ('2026', 104, 'ZZE', 'ZZF', 'tnf', (now() + interval '44 days')::timestamptz)
 on conflict do nothing;
 
 -- ── 1. the predicate ─────────────────────────────────────────────────────────

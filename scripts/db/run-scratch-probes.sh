@@ -103,3 +103,4 @@ $RUN -f scripts/db/live-buffs-probes.sql | grep -E "PROBE FAIL|ALL LIVE-BUFFS PR
 $RUN -f scripts/db/league-preview-probes.sql | grep -E "PROBE FAIL|ALL LEAGUE-PREVIEW PROBES" || { echo "LEAGUE-PREVIEW PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/game-mode-probes.sql | grep -E "PROBE FAIL|ALL GAME-MODE PROBES" || { echo "GAME-MODE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/auto-playoffs-probes.sql | grep -E "PROBE FAIL|ALL AUTO-PLAYOFFS PROBES" || { echo "AUTO-PLAYOFFS PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/roster-builder-probes.sql | grep -E "PROBE FAIL|ALL ROSTER-BUILDER PROBES" || { echo "ROSTER-BUILDER PROBES FAILED"; exit 1; }

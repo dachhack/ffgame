@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
 import type { Pos } from '@drip/core/types';
-import { classicSlots, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
@@ -49,6 +49,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const [roster, setRosterCfg] = useState<Record<string, number>>({});
   const [flagsVer, setFlagsVer] = useState(0);
   const [bestball, setBestball] = useState<string[]>([]);
+  const [slotsSpec, setSlotsSpec] = useState<SlotSpec[] | null>(null);
   const [pool, setPool] = useState<PoolPlayer[]>([]);
   const [oppPool, setOppPool] = useState<PoolPlayer[]>([]);
   const [mine, setMine] = useState<Record<string, string | null>>({});
@@ -67,7 +68,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         const m = await myMatchup(leagueId, rosterId);
         if (!m) { setState('none'); return; }
         setMatchup(m);
-        leagueGameMode(leagueId).then((gm) => { if (gm.ok) { if (gm.ppr != null) setPpr(Number(gm.ppr)); setBestball(gm.bestball ?? []); setScoring(gm.scoring ?? {}); setRosterCfg(gm.roster ?? {}); } }).catch(() => {});
+        leagueGameMode(leagueId).then((gm) => { if (gm.ok) { if (gm.ppr != null) setPpr(Number(gm.ppr)); setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRosterCfg(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); } }).catch(() => {});
         // Flag rules (0144) bite classic scoring (bonus_mult / bonus_pts) and
         // the best-ball fill (no_start) — same cache the drip screens keep.
         playerFlags(leagueId).then((f) => {
@@ -128,7 +129,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
 
   const sc = useMemo<Partial<ClassicScoring>>(() => ({ ...scoring, ppr }), [scoring, ppr]);
   // The league's configured lineup (0161) — slot names, types, eligibility.
-  const slotDefs = useMemo(() => classicSlots(roster), [roster]);
+  const slotDefs = useMemo(() => leagueSlotDefs({ roster, slots: slotsSpec }), [roster, slotsSpec]);
   const pts = useMemo(() => {
     void playsAt; void flagsVer;
     if (!matchup) return () => 0;
