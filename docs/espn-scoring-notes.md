@@ -71,3 +71,49 @@ forced fumbles, fumble (not lost) + offensive fumble-recovery TD,
 solo/assist tackle splits, TFL, QB hits, pass defended, sack yards,
 INT/fumble return yards, ST player stats, 3-and-out/4th-down-stop/forced
 punt. Each needs richer play-feed fields before an honest knob can exist.
+
+## Upstream audit (2026-08-16): the data EXISTS — the gap is our reduction
+
+The founder asked whether the feed has the data or it can be found
+upstream. Checked both layers against live 2025 pulls. Verdict: nearly
+every "unsupportable" category above is present upstream; our
+`RealPlay` reduction (`{kind, yards, td, catch, target, turnover}`) is
+what drops it.
+
+**Stathead MCP (nflverse pbp — the bake + 2025 season source), verified
+by projection on real week-1 2025 rows:**
+
+- `get_fantasy_pbp idp=true` already emits, per credited defender with
+  gsis ids: `tackle` (tackle_type **solo|assist**), `tfl`, `sack`
+  (incl. 0.5 halves), `qb_hit`, `pd` (pass defended), `int`, `ff`, `fr`,
+  `def_td` — watched an ARI/NO sack play fan out to
+  solo-tackle + TFL + sack + QB-hit events on one defender. Plus `kr`/`pr`
+  return events with yards, `two_point` + `two_point_result` on offensive
+  events, `int_thrown`/`fumble_lost`, kicker `fg`/`xp` with distance and
+  result, team-defense events, and a **points_allowed summary per
+  team-game** (the PA brackets knob, ready-made).
+- `get_play_by_play` slim columns add: `down`, `ydstogo`, `yards_gained`
+  (⇒ **first downs** derive exactly), `complete_pass`
+  (⇒ **completions / incompletions / attempts** distinguishable, unlike
+  our 0-yd rows), `two_point_attempt`/`two_point_conv_result`,
+  `kick_distance`, `fair_catch`, `total_home/away_score` (per-play score
+  ⇒ PA/yardage-allowed brackets, coach win margins), and
+  `play_type=punt` rows (punt yards via kick_distance + return columns).
+  Punter ATTRIBUTION (punter_player_id) did not come back in the slim
+  projection — the one thing to confirm before a punter position.
+
+**Live ESPN feed (worker poll):** richer than the adapter keeps —
+`start.down`/`start.distance` are already parsed (drive builder),
+`Punt` typeText arrives and is currently skipped, per-play score is in
+the summary (PA brackets live), tackler names ride the play text, and
+2-pt attempts are typed/texted. Solo/assist splits and QB hits are the
+weak spot live (text parsing, lower fidelity than nflverse).
+
+**So the path**: extend `RealPlay` with the missing fields/kinds
+(first-down flag, complete/incomplete distinction, 2-pt, punt kinds,
+defender-attributed splash detail, per-play score), widen the bake from
+`get_fantasy_pbp`+`get_play_by_play`, widen the ESPN adapter for the
+live layer, then the scoring knobs above become honest. Engineering
+project, not a data hunt — no category is blocked on missing data
+except punter attribution (confirm) and coach scoring's HC pseudo-player
+(needs the per-game result, which the score columns carry).
