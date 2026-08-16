@@ -82,26 +82,34 @@ because each one is a trap the next person can fall into.
 ### NEXT, in priority order
 
 1. **Draft TEAMS panel by roster spot** — the founder's open ask, and the
-   largest piece. Today the draft room lists picks as R1..R12; it should show
-   them against the roster SPOTS they will fill, labels included. This is an
-   ASSIGNMENT problem, not a relabel: with per-spot filters (0172) and custom
-   labels (0174), a player can be legal for several spots, so the mapping
-   belongs in core beside `bestballFill` with its own probes — otherwise the
-   panel shows a lineup the engine then fills differently, which is worse than
-   R1..R12.
-2. **`myRoster()` picks arbitrarily** — `.eq(...).eq(...).limit(1)` with no
-   ORDER BY (`liveApi.ts` ~line 631). An ORDER BY makes it stable but still
-   guesses; the better answer is probably that a board with no league should
-   refuse to guess and say so. Behaviour change — make it on purpose.
-3. **`src/screens/Matchup.tsx` has NO game-mode branch at all.** It serves the
-   web's `matchup`/demo routes, so anything reaching a board through there
-   gets the drip card board regardless of league mode. Confirmed defect,
-   separate from the chase above.
-4. **Mode chip is web-only** (`◈ DRIP` / `🏈 NORMAL` on the week strip) — port
-   to the app.
+   largest remaining piece. Today the draft room lists picks as R1..R12; it
+   should show them against the roster SPOTS they will fill, labels included.
+   This is an ASSIGNMENT problem, not a relabel: with per-spot filters (0172)
+   and custom labels (0174) a player can be legal for several spots, so the
+   mapping belongs in core beside `bestballFill` in `engine/classic.ts` (reuse
+   `slotAllows` for eligibility) with its own probes. A first-fit that
+   disagrees with the engine's own fill would show a lineup that then changes,
+   which is worse than R1..R12. Leftovers render as bench.
+2. **The create form defaults to DRIP with no confirmation.** `useState<'drip'
+   | 'classic'>('drip')` on both hosts, so a commissioner who does not click
+   🏈 NORMAL gets a drip league with a normie name — which is how "Normie Test"
+   happened. Fix: no default (the form cannot submit until a game is chosen),
+   and name the game in the created-league confirmation.
+3. **`myRoster()` picks arbitrarily** — `.eq(...).eq(...).limit(1)` with no
+   ORDER BY (`liveApi.ts` ~631). An ORDER BY makes it stable but still guesses;
+   the better answer is probably that a board with no league should refuse to
+   guess and say so. Behaviour change — make it on purpose.
+4. **Mode chip is web-only and LivePicks-only** — `◈ DRIP` / `🏈 NORMAL` on the
+   week strip. Port to the app, and consider putting it on `Matchup.tsx` too
+   now that it branches (v0.234.0).
 5. **The web has no public LEAGUE BOARD** — browse/post/join is app-only. The
-   reverse of the invite-code gap, and it is costing signups on the marketing
+   mirror of the invite-code gap, and it costs signups on the marketing
    surface. Small next to solo/DFS.
+6. **A spec frozen post-draft cannot be shrunk.** `set_league_classic_slots`
+   refuses once the draft leaves pending (0174:38), which is right in general
+   but leaves a league with more starting spots than draft rounds permanently
+   unplayable. v0.233.0 warns BEFORE the draft; consider a narrow escape hatch
+   that only ever shrinks a spec toward legality.
 
 ### Known-open, not blocking
 
@@ -122,9 +130,18 @@ because each one is a trap the next person can fall into.
   four wrong turns above would each have been settled by one query.
 - `scripts/check-matchup-board.mjs` — the board arithmetic, in `check:parity`.
 
-### The founder's league, as of this session
+### The founder's leagues, as of this session
 
-`Normie Test`: classic ✓, drafted, 1/8 enrolled — but **13 starting spots
+`normie try2` — the fresh one. Created after the fixes; open it and it should
+land on the classic board (pre-lock: the lineup setter; head-to-head at first
+kickoff). If it still shows the card board, check its `game_mode` first with
+the diagnostic — the create form's DRIP default (NEXT #2) is the likely cause.
+
+
+
+`Normie Test` (the first one, confirmed by the diagnostic): classic ✓,
+drafted, 1/8 enrolled, `lock_at` healthy on all 56 matchups (week 1 locks
+2026-09-10) — but **13 starting spots
 against a 12-round draft**, so no team can field a legal lineup. v0.233.0 warns
 about this in the builder; the league itself still needs a spot removed or a
 longer draft. The seven unclaimed seats drafted rosters but nobody set their
