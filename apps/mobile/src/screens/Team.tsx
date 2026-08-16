@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   addFreeAgent, cancelWaiverClaim, dropPlayer,
-  friendlyError, leagueInvite, leaguePool, nativeRosters,
+  friendlyError, leagueInvite, leaguePool, nativeRosters, setRosterSpot,
   nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
   myFavorites, loadTeamOverrides, playerFlags,
   type LeaguePoolPlayer, type NativeTeamState,
@@ -54,7 +54,7 @@ function Face({ slug, pos, size = 24 }: { slug: string; pos: string; size?: numb
 export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: () => void; onDraft: () => void }) {
   const t = useTheme();
   const [team, setTeam] = useState<NativeTeamState | null>(null);
-  const [rosters, setRosters] = useState<{ roster_id: number; slug: string }[]>([]);
+  const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' }[]>([]);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
@@ -95,7 +95,8 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   const rostered = useMemo(() => new Set(rosters.map((r) => r.slug)), [rosters]);
   const myRoster = team?.my_roster_id ?? null;
   const mine = useMemo(() => rosters.filter((r) => r.roster_id === myRoster)
-    .map((r) => poolBySlug.get(r.slug)).filter(Boolean) as LeaguePoolPlayer[], [rosters, myRoster, poolBySlug]);
+    .map((r) => { const p = poolBySlug.get(r.slug); return p ? { ...p, spot: r.spot ?? 'active' } : null; })
+    .filter(Boolean) as (LeaguePoolPlayer & { spot: string })[], [rosters, myRoster, poolBySlug]);
   const cap = team?.roster_cap ?? null;
   const full = cap != null && mine.length >= cap;
 
@@ -274,7 +275,17 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
             <PosPill pos={p.pos} size={8} />
             <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, color: t.text }}>{p.full_name}</Text>
             <FlagChip slug={p.slug} size={7.5} />
+            {p.spot !== 'active' && <Mono size={7.5} weight="700" tone="opp">{p.spot.toUpperCase()}</Mono>}
             <Mono size={9} tone="faint">{p.team}</Mono>
+            {/* TAXI/IR designations (0164): cycle active → taxi → ir → active;
+                the server enforces caps + the IR injury gate and says why not. */}
+            <Pressable disabled={busy} onPress={() => {
+              tap();
+              const next = p.spot === 'active' ? 'taxi' : p.spot === 'taxi' ? 'ir' : 'active';
+              void run(() => setRosterSpot(leagueId, p.slug, next as 'active' | 'taxi' | 'ir'));
+            }} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 5, opacity: busy ? 0.5 : 1 }}>
+              <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.dim }}>{p.spot === 'active' ? '→TAXI' : p.spot === 'taxi' ? '→IR' : '→ACT'}</Text>
+            </Pressable>
             <Pressable disabled={busy} onPress={() => { tap(); myRoster != null && void run(() => dropPlayer(leagueId, myRoster, p.slug)); }}
               style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 9, paddingVertical: 5, opacity: busy ? 0.5 : 1 }}>
               <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.opp }}>DROP</Text>

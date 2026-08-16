@@ -21,7 +21,7 @@ import {
   setTeamAvatar, setTeamController, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
-  leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots,
+  leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape,
 } from '@drip/core/data/liveApi';
 import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
 
@@ -615,6 +615,8 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
   // The roster POSITION BUILDER (0163): draft rows, one SAVE writes the spec.
   const [spots, setSpots] = useState<SlotSpec[] | null>(null);
   const [spotsDirty, setSpotsDirty] = useState(false);
+  const [shape, setShape] = useState<{ bench: number; taxi: number; ir: number }>({ bench: 6, taxi: 0, ir: 0 });
+  const [rounds, setRounds] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   // Full classic scoring (0160): string drafts; parse + diff on save.
@@ -633,6 +635,8 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
         ? r.slots.map((x) => ({ pos: [...x.pos], bb: !!x.bb }))
         : legacy.map((d) => ({ pos: [...d.pos], bb: (r.bestball ?? []).includes(d.slot) })));
       setSpotsDirty(false);
+      if (r.shape) setShape({ bench: r.shape.bench ?? 6, taxi: r.shape.taxi ?? 0, ir: r.shape.ir ?? 0 });
+      setRounds(r.rounds ?? null);
     } }).catch(() => {});
   }, [leagueId]);
   const saveScoring = async (reset = false) => {
@@ -658,6 +662,16 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
     try {
       const r = await setLeagueClassicSlots(leagueId, spots);
       if (r.ok) { commit(); setSpots((r.slots ?? spots).map((x) => ({ pos: [...x.pos], bb: !!x.bb }))); setSpotsDirty(false); setNote('✓ lineup saved'); }
+      else { warn(); setNote(r.error ?? 'failed'); }
+    } catch { warn(); }
+    finally { setBusy(false); }
+  };
+  const saveShape = async (next: { bench: number; taxi: number; ir: number }) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueRosterShape(leagueId, next.bench, next.taxi, next.ir);
+      if (r.ok) { commit(); setShape(r.shape ?? next); setRounds(r.rounds ?? null); setNote('✓ roster shape saved'); }
       else { warn(); setNote(r.error ?? 'failed'); }
     } catch { warn(); }
     finally { setBusy(false); }
@@ -738,8 +752,23 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
             <Pill on={false} label="＋ ADD SPOT" onPress={() => { if (spots.length < 20) { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'] }]); setSpotsDirty(true); } }} />
           </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+            {([['BENCH', 'bench', 20], ['TAXI', 'taxi', 8], ['IR', 'ir', 8]] as const).map(([label, key, max]) => (
+              <View key={key} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.dim }}>{label}</Text>
+                <Pressable disabled={busy || shape[key] === 0} onPress={() => { tap(); void saveShape({ ...shape, [key]: Math.max(0, shape[key] - 1) }); }} hitSlop={6}>
+                  <Text style={{ fontFamily: MONO, fontSize: 11, color: t.you }}> − </Text>
+                </Pressable>
+                <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you, minWidth: 12, textAlign: 'center' }}>{shape[key]}</Text>
+                <Pressable disabled={busy || shape[key] >= max} onPress={() => { tap(); void saveShape({ ...shape, [key]: Math.min(max, shape[key] + 1) }); }} hitSlop={6}>
+                  <Text style={{ fontFamily: MONO, fontSize: 11, color: t.you }}> ＋ </Text>
+                </Pressable>
+              </View>
+            ))}
+            <Mono size={8.5} weight="700" tone="you">DRAFT = {rounds ?? spots.length + shape.bench + shape.taxi + shape.ir} ROUNDS</Mono>
+          </View>
           <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
-            Any position combination per spot · 🎯 BB spots fill themselves with the top scorer · bench = draft rounds − starters · locks once the draft starts.
+            Any position combination per spot · 🎯 BB fills itself · you draft the whole roster (starters + bench + taxi + IR), then stash · IR needs a real IR/Out designation · stashed players can't start · locks at draft.
           </Mono>
         </View>
       )}

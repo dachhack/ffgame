@@ -18,7 +18,7 @@ import {
   createNativeLeague, createMockDraft, deleteMockDraft, seedLeaguePool, nativeGenerateSchedule,
   startDraft, draftState, makeDraftPick, draftTick,
   POS_CAP_KEYS, type PosCaps,
-  leaguePool, nativeRosters, nativeTeamState, dropPlayer, addFreeAgent,
+  leaguePool, nativeRosters, nativeTeamState, dropPlayer, addFreeAgent, setRosterSpot,
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
   setTeamName, setTeamAvatar, setLeagueAvatar,
   setDraftQueue, myDraftQueue, setAutodraft,
@@ -919,7 +919,7 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
   leagueId: string; onBack: () => void; onDraft: () => void; focus?: TeamFocus;
 }) {
   const [team, setTeam] = useState<NativeTeamState | null>(null);
-  const [rosters, setRosters] = useState<{ roster_id: number; slug: string }[]>([]);
+  const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' }[]>([]);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
@@ -972,7 +972,8 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
   const rostered = useMemo(() => new Set(rosters.map((r) => r.slug)), [rosters]);
   const myRoster = team?.my_roster_id ?? null;
   const mine = useMemo(() => rosters.filter((r) => r.roster_id === myRoster)
-    .map((r) => poolBySlug.get(r.slug)).filter(Boolean) as LeaguePoolPlayer[], [rosters, myRoster, poolBySlug]);
+    .map((r) => { const p = poolBySlug.get(r.slug); return p ? { ...p, spot: r.spot ?? 'active' } : null; })
+    .filter(Boolean) as (LeaguePoolPlayer & { spot: string })[], [rosters, myRoster, poolBySlug]);
   const cap = team?.roster_cap ?? null;
   const full = cap != null && mine.length >= cap;
 
@@ -1141,7 +1142,14 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
             <PosPill pos={p.pos as Pos} />
             <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
             <FlagChip slug={p.slug} />
+            {p.spot !== 'active' && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--opp)' }}>{p.spot.toUpperCase()}</span>}
             <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 34 }}>{p.team}</span>
+            {/* TAXI/IR designations (0164): cycle active → taxi → ir → active;
+                the server enforces caps + the IR injury gate and says why not. */}
+            <button onClick={() => run(() => setRosterSpot(leagueId, p.slug,
+                (p.spot === 'active' ? 'taxi' : p.spot === 'taxi' ? 'ir' : 'active')))} disabled={busy}
+              className="mono" style={{ ...ghostBtn, padding: '5px 8px', fontSize: 9.5, color: 'var(--dim)' }}>
+              {p.spot === 'active' ? '→TAXI' : p.spot === 'taxi' ? '→IR' : '→ACT'}</button>
             <button onClick={() => myRoster != null && run(() => dropPlayer(leagueId, myRoster, p.slug))} disabled={busy}
               className="mono" style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9.5, color: 'var(--opp)' }}>DROP</button>
           </div>

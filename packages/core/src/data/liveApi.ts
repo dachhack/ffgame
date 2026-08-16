@@ -1233,7 +1233,7 @@ export const leagueLiveBuffs = (leagueId: string) =>
 /** 'drip' (default) or 'classic' — classic = standard scoring, one weekly
  *  QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses, no power-ups. Frozen once
  *  the draft starts. `ppr` (0 | 0.5 | 1, default 1) applies in classic only. */
-export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean }[] | null; can_edit?: boolean }
+export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean }[] | null; shape?: { bench?: number; taxi?: number; ir?: number } | null; rounds?: number | null; can_edit?: boolean }
 export const setLeagueGameMode = (leagueId: string, mode: 'drip' | 'classic', ppr?: number) =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_game_mode',
     { p_league_id: leagueId, p_mode: mode, p_ppr: ppr ?? null }),
@@ -1265,6 +1265,17 @@ export const setLeagueClassicSlots = (leagueId: string, slots: { pos: string[]; 
   tracked(rpc<{ ok: boolean; error?: string; slots?: { pos: string[]; bb?: boolean }[] | null; starters?: number }>('set_league_classic_slots',
     { p_league_id: leagueId, p_slots: slots }),
     Ev.commishAction, { tool: 'roster_builder', count: slots?.length ?? 0 });
+/** BENCH/TAXI/IR counts (0164) — classic, pre-draft; draft rounds re-derive as
+ *  starters + bench + taxi + ir. */
+export const setLeagueRosterShape = (leagueId: string, bench: number, taxi: number, ir: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; shape?: { bench: number; taxi: number; ir: number }; rounds?: number }>('set_league_roster_shape',
+    { p_league_id: leagueId, p_bench: bench, p_taxi: taxi, p_ir: ir }),
+    Ev.commishAction, { tool: 'roster_shape' });
+/** Move a rostered player between ACTIVE / TAXI / IR (0164). Owner or commish;
+ *  IR needs a real injury designation; caps enforced server-side. */
+export const setRosterSpot = (leagueId: string, slug: string, spot: 'active' | 'taxi' | 'ir') =>
+  rpc<{ ok: boolean; error?: string; slug?: string; spot?: string }>('set_roster_spot',
+    { p_league_id: leagueId, p_slug: slug, p_spot: spot });
 /** Full classic scoring overrides (0160) — camelCase ClassicScoring keys,
  *  sanitized + clamped server-side; {} resets to the engine defaults. */
 export const setLeagueClassicScoring = (leagueId: string, scoring: Record<string, number>) =>
@@ -1732,10 +1743,10 @@ export async function leaguePool(leagueId: string): Promise<LeaguePoolPlayer[]> 
   if (error) throw error;
   return (data ?? []) as LeaguePoolPlayer[];
 }
-export interface NativeRosterRow { roster_id: number; slug: string; acquired: string; }
+export interface NativeRosterRow { roster_id: number; slug: string; acquired: string; spot?: 'active' | 'taxi' | 'ir'; }
 export async function nativeRosters(leagueId: string): Promise<NativeRosterRow[]> {
   const { data, error } = await (await client()).from('native_roster')
-    .select('roster_id, slug, acquired').eq('league_id', leagueId).range(0, 1999);
+    .select('roster_id, slug, acquired, spot').eq('league_id', leagueId).range(0, 1999);
   if (error) throw error;
   return (data ?? []) as NativeRosterRow[];
 }

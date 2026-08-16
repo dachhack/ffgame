@@ -419,7 +419,8 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     const bestball = leagueBestball(gameMode);
     if (bestball.length) {
       const { data: ros } = await db().from('native_roster').select('roster_id,slug')
-        .eq('league_id', matchup.league_id).in('roster_id', [matchup.home_roster_id, matchup.away_roster_id]);
+        .eq('league_id', matchup.league_id).eq('spot', 'active') // taxi/IR stashes never fill (0164)
+        .in('roster_id', [matchup.home_roster_id, matchup.away_roster_id]);
       for (const row of ros ?? []) {
         if (!rosters.has(row.roster_id)) rosters.set(row.roster_id, []);
         rosters.get(row.roster_id).push(player(row.slug));

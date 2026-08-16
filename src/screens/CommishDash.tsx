@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
+import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
 
 // The builder's position chips (0163) — base positions only; combos are made by
@@ -130,6 +130,9 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
   // first SAVE migrates it to the builder model losslessly.
   const [spots, setSpots] = useState<SlotSpec[] | null>(null);
   const [spotsDirty, setSpotsDirty] = useState(false);
+  // BENCH/TAXI/IR (0164) — with the derived draft-rounds readout.
+  const [shape, setShape] = useState<{ bench: number; taxi: number; ir: number }>({ bench: 6, taxi: 0, ir: 0 });
+  const [rounds, setRounds] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   // Full classic scoring (0160): drafts are strings so partial typing never
@@ -147,7 +150,9 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
       setSpots(r.slots?.length
         ? r.slots.map((x) => ({ pos: [...x.pos], bb: !!x.bb }))
         : legacy.map((d) => ({ pos: [...d.pos], bb: (r.bestball ?? []).includes(d.slot) })));
-      setSpotsDirty(false); } }).catch(() => {});
+      setSpotsDirty(false);
+      if (r.shape) setShape({ bench: r.shape.bench ?? 6, taxi: r.shape.taxi ?? 0, ir: r.shape.ir ?? 0 });
+      setRounds(r.rounds ?? null); } }).catch(() => {});
   }, [leagueId]);
   const saveScoring = async (reset = false) => {
     if (busy) return;
@@ -171,6 +176,15 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
     try {
       const r = await setLeagueClassicSlots(leagueId, spots);
       if (r.ok) { setSpots((r.slots ?? spots).map((x) => ({ pos: [...x.pos], bb: !!x.bb }))); setSpotsDirty(false); setNote('✓ lineup saved'); }
+      else setNote(r.error ?? 'failed');
+    } finally { setBusy(false); }
+  };
+  const saveShape = async (next: { bench: number; taxi: number; ir: number }) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueRosterShape(leagueId, next.bench, next.taxi, next.ir);
+      if (r.ok) { setShape(r.shape ?? next); setRounds(r.rounds ?? null); setNote('✓ roster shape saved'); }
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
@@ -250,8 +264,24 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
               onClick={() => { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'] }]); setSpotsDirty(true); }}
               className="mono" style={{ ...pill(false), padding: '4px 14px' }}>＋ ADD SPOT</button>
             <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', lineHeight: 1.5 }}>
-              Any position combination per spot · 🎯 BB spots fill themselves with the top scorer · bench = draft rounds − starters · locks once the draft starts.
+              Any position combination per spot · 🎯 BB spots fill themselves with the top scorer · locks once the draft starts.
             </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+            {([['BENCH', 'bench', 20], ['TAXI', 'taxi', 8], ['IR', 'ir', 8]] as const).map(([label, key, max]) => (
+              <span key={key} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 8.5, fontWeight: 700, color: 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 6, padding: '4px 8px' }}>
+                {label}
+                <button onClick={() => void saveShape({ ...shape, [key]: Math.max(0, shape[key] - 1) })} disabled={busy || shape[key] === 0} className="mono" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 10 }}>−</button>
+                <span style={{ minWidth: 12, textAlign: 'center', color: 'var(--you)' }}>{shape[key]}</span>
+                <button onClick={() => void saveShape({ ...shape, [key]: Math.min(max, shape[key] + 1) })} disabled={busy || shape[key] >= max} className="mono" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 10 }}>＋</button>
+              </span>
+            ))}
+            <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--you)' }}>
+              DRAFT = {rounds ?? spots.length + shape.bench + shape.taxi + shape.ir} ROUNDS
+            </span>
+          </div>
+          <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
+            You draft the whole roster (starters + bench + taxi + IR), then stash. IR takes a real IR/Out designation only; taxi and IR players can't be started.
           </div>
         </div>
       )}
