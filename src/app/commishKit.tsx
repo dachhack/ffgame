@@ -22,8 +22,8 @@ import { ModalBackdrop, Img } from './ui';
 
 const FLAG_PURPLE = '#A87BD8';
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, width: '100%', maxWidth: 420, maxHeight: '80vh', overflowY: 'auto', boxSizing: 'border-box' };
-const input: React.CSSProperties = { fontFamily: 'inherit', fontSize: 13, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '9px 11px', outline: 'none', width: '100%', boxSizing: 'border-box' };
-const btn: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 5, padding: '9px 14px', cursor: 'pointer', whiteSpace: 'nowrap' };
+const input: React.CSSProperties = { fontFamily: 'inherit', fontSize: 13, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '9px 11px', outline: 'none', width: '100%', boxSizing: 'border-box' };
+const btn: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 3, padding: '9px 14px', cursor: 'pointer', whiteSpace: 'nowrap' };
 const ghostBtn: React.CSSProperties = { ...btn, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)' };
 const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer', padding: '2px 4px' };
 
@@ -74,7 +74,7 @@ export function CommishToolsPanel({ leagueId }: { leagueId: string }) {
   const [note, setNote] = useState<{ text: string | null; canEdit: boolean } | null>(null);
   const [scoring, setScoring] = useState<LeagueScoring | null>(null);
   const [flags, setFlags] = useState<PlayerFlagRow[] | null>(null);
-  const [openTool, setOpenTool] = useState<null | 'note' | 'flags' | 'scoring'>(null);
+  const [openTool, setOpenTool] = useState<null | 'note' | 'flags'>(null);
   const load = async () => {
     const [n, f, sc] = await Promise.all([
       leagueNote(leagueId).catch(() => null),
@@ -89,7 +89,7 @@ export function CommishToolsPanel({ leagueId }: { leagueId: string }) {
 
   const section: React.CSSProperties = { border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' };
   const sHdr: React.CSSProperties = { fontSize: 9, letterSpacing: '0.12em', color: FLAG_PURPLE, fontWeight: 700, flex: 'none' };
-  const editBtn = (tool: 'note' | 'flags' | 'scoring', label: string) => (
+  const editBtn = (tool: 'note' | 'flags', label: string) => (
     <button onClick={() => setOpenTool(tool)} className="mono" style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9, marginLeft: 'auto', flex: 'none' }}>{label}</button>
   );
   return (
@@ -113,13 +113,20 @@ export function CommishToolsPanel({ leagueId }: { leagueId: string }) {
         </span>
         {editBtn('flags', '⚑ MANAGE')}
       </div>
-      <div style={section}>
-        <span className="mono" style={sHdr}>⚖ SCORING</span>
-        <span className="mono" style={{ fontSize: 10.5, color: scoring && !scoringIsDefault(scoring) ? 'var(--warn)' : 'var(--faint)', flex: '1 1 200px', minWidth: 0 }}>
-          {scoring == null ? 'loading…' : scoringIsDefault(scoring) ? 'base rules — no adjustments' : scoringLabel(scoring)}
-        </span>
-        {editBtn('scoring', '⚖ ADJUST')}
-      </div>
+      {/* v0.213.0: SCORING moved out of the kit. It lived here AND on the
+          settings page, so "where do I change scoring" had two answers; the
+          adjustments are now a tab on the one SCORING destination. This row
+          stays only as a read-only pointer when adjustments are in force, so
+          the kit still tells you the league isn't scoring at base rules. */}
+      {scoring && !scoringIsDefault(scoring) && (
+        <div style={section}>
+          <span className="mono" style={sHdr}>⚖ SCORING</span>
+          <span className="mono" style={{ fontSize: 10.5, color: 'var(--warn)', flex: '1 1 200px', minWidth: 0 }}>
+            {scoringLabel(scoring)}
+          </span>
+          <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginLeft: 'auto', flex: 'none' }}>edit under ⚖ SCORING → ADJUSTMENTS</span>
+        </div>
+      )}
       {openTool === 'note' && note && (
         <NoteEditor leagueId={leagueId} initial={note.text ?? ''}
           onDone={() => { setOpenTool(null); void load(); }} onClose={() => setOpenTool(null)} />
@@ -127,16 +134,20 @@ export function CommishToolsPanel({ leagueId }: { leagueId: string }) {
       {openTool === 'flags' && (
         <FlagsEditor leagueId={leagueId} onChanged={() => void load()} onClose={() => { setOpenTool(null); void load(); }} />
       )}
-      {openTool === 'scoring' && scoring && (
-        <ScoringEditor leagueId={leagueId} initial={scoring}
-          onDone={() => { setOpenTool(null); void load(); }} onClose={() => setOpenTool(null)} />
-      )}
     </div>
   );
 }
 
-function ScoringEditor({ leagueId, initial, onDone, onClose }: {
-  leagueId: string; initial: LeagueScoring; onDone: () => void; onClose: () => void;
+/** The DRIP-side scoring adjustments — TD bonus, yardage multiplier, turnover
+ *  penalty, scoped bonuses.
+ *
+ *  v0.213.0: `inline` renders the same editor as a plain section instead of a
+ *  modal, so the commissioner's SCORING destination can host it as one tab
+ *  beside the classic catalog. The founder's note was that scoring lived in
+ *  two places at once — the kit and the settings page — and you had to know
+ *  which was which. Same component, same save path, two presentations. */
+export function ScoringEditor({ leagueId, initial, onDone, onClose, inline = false }: {
+  leagueId: string; initial: LeagueScoring; onDone: () => void; onClose: () => void; inline?: boolean;
 }) {
   const [td, setTd] = useState(initial.tdBonus);
   const [yd, setYd] = useState(initial.ydMult);
@@ -195,10 +206,18 @@ function ScoringEditor({ leagueId, initial, onDone, onClose }: {
       </div>
     </div>
   );
+  // Inline (a tab on the SCORING page) drops the backdrop + fixed-width card
+  // and lets the content fill the pane; modal keeps the original chrome.
+  const Shell = ({ children }: { children: React.ReactNode }) => (inline
+    ? <div>{children}</div>
+    : (
+      <ModalBackdrop onClick={onClose}>
+        <div onClick={(e) => e.stopPropagation()} style={card}>{children}</div>
+      </ModalBackdrop>
+    ));
   return (
-    <ModalBackdrop onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={card}>
-        <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>⚖ League scoring</div>
+    <Shell>
+        {!inline && <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>⚖ League scoring</div>}
         <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 4, lineHeight: 1.5 }}>
           Adjustments layer on the base game — the metric catalog stays as written; these apply on top, to every matchup in this league. Every member sees them on their board. Changing them mid-week changes how the current week scores from the next tick.
         </div>
@@ -223,7 +242,7 @@ function ScoringEditor({ leagueId, initial, onDone, onClose }: {
             const on = dPos.has(p);
             return (
               <button key={p} onClick={() => setDPos((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; })} className="mono"
-                style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 999, padding: '3px 8px', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}` }}>{p}</button>
+                style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}` }}>{p}</button>
             );
           })}
           <select value={dTeam} onChange={(e) => setDTeam(e.target.value)} className="mono"
@@ -233,7 +252,7 @@ function ScoringEditor({ leagueId, initial, onDone, onClose }: {
           </select>
           {TENURES.map((t) => (
             <button key={t.id} onClick={() => setDTen(dTen === t.id ? 'ALL' : t.id)} className="mono"
-              style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 999, padding: '3px 8px', color: dTen === t.id ? 'var(--on-accent)' : 'var(--dim)', background: dTen === t.id ? 'var(--warn)' : 'var(--bg)', border: `1px solid ${dTen === t.id ? 'var(--warn)' : 'var(--bd)'}` }}>{t.label}</button>
+              style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: dTen === t.id ? 'var(--on-accent)' : 'var(--dim)', background: dTen === t.id ? 'var(--warn)' : 'var(--bg)', border: `1px solid ${dTen === t.id ? 'var(--warn)' : 'var(--bd)'}` }}>{t.label}</button>
           ))}
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 7 }}>
@@ -263,9 +282,8 @@ function ScoringEditor({ leagueId, initial, onDone, onClose }: {
           <button onClick={() => save(td, yd, to)} disabled={busy} className="mono" style={{ ...btn, flex: 1, opacity: busy ? 0.5 : 1 }}>SAVE</button>
           <button onClick={() => save(DEFAULT_SCORING.tdBonus, DEFAULT_SCORING.ydMult, DEFAULT_SCORING.toPenalty, [])} disabled={busy} className="mono" style={{ ...ghostBtn }}>RESET TO BASE</button>
         </div>
-        <div style={{ textAlign: 'center', marginTop: 8 }}><button onClick={onClose} className="mono" style={linkBtn}>cancel</button></div>
-      </div>
-    </ModalBackdrop>
+        {!inline && <div style={{ textAlign: 'center', marginTop: 8 }}><button onClick={onClose} className="mono" style={linkBtn}>cancel</button></div>}
+    </Shell>
   );
 }
 
@@ -354,7 +372,7 @@ function RuleControls({ draft, set }: { draft: FlagRulesRaw; set: (r: FlagRulesR
         const on = draft[d.key] === true;
         return (
           <button key={d.key} onClick={() => set({ ...draft, [d.key]: on ? undefined : true })} title={d.hint} className="mono"
-            style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 999, padding: '3px 8px', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? FLAG_PURPLE : 'var(--bg)', border: `1px solid ${on ? FLAG_PURPLE : 'var(--bd)'}` }}>
+            style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? FLAG_PURPLE : 'var(--bg)', border: `1px solid ${on ? FLAG_PURPLE : 'var(--bd)'}` }}>
             {d.label}
           </button>
         );
@@ -518,7 +536,7 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginTop: 7 }}>
             {['ALL', ...FILTER_POS].map((p) => (
               <button key={p} onClick={() => setFPos(p)} className="mono"
-                style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 999, padding: '3px 8px', color: fPos === p ? 'var(--on-accent)' : 'var(--dim)', background: fPos === p ? 'var(--you)' : 'var(--bg)', border: `1px solid ${fPos === p ? 'var(--you)' : 'var(--bd)'}` }}>{p}</button>
+                style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: fPos === p ? 'var(--on-accent)' : 'var(--dim)', background: fPos === p ? 'var(--you)' : 'var(--bg)', border: `1px solid ${fPos === p ? 'var(--you)' : 'var(--bd)'}` }}>{p}</button>
             ))}
             <select value={fTeam} onChange={(e) => setFTeam(e.target.value)} className="mono"
               style={{ fontSize: 9.5, background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, padding: '3px 6px' }}>
@@ -527,7 +545,7 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
             </select>
             {TENURES.map((t) => (
               <button key={t.id} onClick={() => setFTen(fTen === t.id ? 'ALL' : t.id)} className="mono"
-                style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 999, padding: '3px 8px', color: fTen === t.id ? 'var(--on-accent)' : 'var(--dim)', background: fTen === t.id ? 'var(--warn)' : 'var(--bg)', border: `1px solid ${fTen === t.id ? 'var(--warn)' : 'var(--bd)'}` }}>{t.label}</button>
+                style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: fTen === t.id ? 'var(--on-accent)' : 'var(--dim)', background: fTen === t.id ? 'var(--warn)' : 'var(--bg)', border: `1px solid ${fTen === t.id ? 'var(--warn)' : 'var(--bd)'}` }}>{t.label}</button>
             ))}
             {matches.length > 0 && (
               <button onClick={() => setSelected(new Set(matches))} className="mono" style={{ ...ghostBtn, padding: '3px 9px', fontSize: 8.5 }}>

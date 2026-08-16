@@ -10,10 +10,15 @@ export const mono: CSSProperties = { fontFamily: 'var(--mono, monospace)' };
 export const card: CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14, marginBottom: 12 };
 export const h: CSSProperties = { fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginBottom: 10 };
 export const subhead: CSSProperties = { ...mono, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginBottom: 7 };
-export const chip: CSSProperties = { fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 7px', color: 'var(--text)', background: 'var(--bg)' };
+// SQUARE, not pill (v0.213.0, founder's call: "I don't like the pill look of
+// the buttons and field entrys"). One radius token for every control on the
+// management surfaces, so a button and the input beside it share an edge
+// treatment instead of one being a lozenge and the other a rounded rect.
+export const RADIUS = 3;
+export const chip: CSSProperties = { fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '4px 7px', color: 'var(--text)', background: 'var(--bg)' };
 export const linkBtn: CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
-export const btn = (active = false): CSSProperties => ({ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', color: active ? 'var(--on-accent)' : 'var(--text)', background: active ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 10px', cursor: 'pointer' });
-export const inp: CSSProperties = { fontFamily: 'inherit', fontSize: 13, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '8px 10px' };
+export const btn = (active = false): CSSProperties => ({ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', color: active ? 'var(--on-accent)' : 'var(--text)', background: active ? 'var(--you)' : 'var(--bg)', border: `1px solid ${active ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, padding: '7px 10px', cursor: 'pointer' });
+export const inp: CSSProperties = { fontFamily: 'inherit', fontSize: 13, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '8px 10px' };
 
 export function Muted({ text }: { text: string }) {
   return <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)' }}>{text}</div>;
