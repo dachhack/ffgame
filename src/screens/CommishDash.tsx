@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
+import { NFL_CODES } from '@drip/core/data/kdst';
 
 // The builder's position chips (0163) — base positions only; combos are made by
 // lighting several chips on one spot.
@@ -141,6 +142,29 @@ const fromSpotDraft = (s: SpotDraft): SlotSpec => {
   };
 };
 const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim());
+
+// Team-acronym helper (founder ask): a tappable 32-team grid under every teams
+// input, kept in SYNC with the free-text field — a chip toggles its code in or
+// out of the comma list, and hand-typed codes light their chips.
+const ALL_TEAMS = NFL_CODES.map((c) => c.toUpperCase());
+const teamList = (s: string) => s.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
+const toggleTeam = (s: string, tm: string) => {
+  const list = teamList(s);
+  return (list.includes(tm) ? list.filter((x) => x !== tm) : [...list, tm]).join(', ');
+};
+function TeamChips({ value, onChange, disabled }: { value: string; onChange: (next: string) => void; disabled?: boolean }) {
+  const on = new Set(teamList(value));
+  return (
+    <div style={{ flexBasis: '100%', display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 4 }}>
+      {ALL_TEAMS.map((tm) => (
+        <button key={tm} disabled={disabled} onClick={() => onChange(toggleTeam(value, tm))} className="mono"
+          style={{ fontSize: 8, fontWeight: 700, padding: '2px 5px', borderRadius: 4, cursor: 'pointer',
+            color: on.has(tm) ? 'var(--on-accent)' : 'var(--dim)', background: on.has(tm) ? 'var(--you)' : 'var(--bg)',
+            border: `1px solid ${on.has(tm) ? 'var(--you)' : 'var(--bd)'}`, opacity: disabled ? 0.5 : 1 }}>{tm}</button>
+      ))}
+    </div>
+  );
+}
 
 function GameModeCard({ leagueId }: { leagueId: string }) {
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
@@ -325,6 +349,8 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
                       placeholder="max yrs" inputMode="numeric"
                       className="mono" style={{ fontFamily: 'inherit', fontSize: 9.5, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, width: 58 }} />
                     <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>rookies only → max 0 · SAVE LINEUP applies</span>
+                    <TeamChips value={sp.fTeams} disabled={busy}
+                      onChange={(next) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fTeams: next })); setSpotsDirty(true); }} />
                   </div>
                 )}
               </div>
@@ -373,6 +399,7 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
                 className="mono" style={{ fontFamily: 'inherit', fontSize: 10, padding: '5px 7px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, width: 64 }} />
               <button onClick={() => void saveFilter()} disabled={busy} className="mono" style={pill(true)}>SAVE FILTER</button>
               <button onClick={() => void saveFilter(true)} disabled={busy} className="mono" style={pill(false)}>CLEAR</button>
+              <TeamChips value={fltTeams} disabled={busy} onChange={setFltTeams} />
             </div>
             <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
               Rookies only → max 0. Vets with 8+ years → min 8. One-team league → list the team. Players whose tenure Sleeper doesn't know are excluded while a tenure filter is set. Filters bite when the pool is (re)seeded — pre-draft only.
