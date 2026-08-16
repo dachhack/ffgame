@@ -2928,7 +2928,14 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
   const youShown = shownFor('you');
   const theirShown = shownFor('their');
 
-  const visibleEvents = slot.events.filter((e) => e.clock <= (e.side === 'you' ? youClock : theirClock));
+  // At FINAL the log gets the FULL stream: the last-play clock ceiling cut the
+  // settle tail (drip + buff lift between the last play and game end), so BANK
+  // NOW read below the card the moment the card moved to settled values
+  // (0200.3) — the founder's "log score is very different than the banked
+  // score". Live windows stay clock-capped, revealing plays as they land.
+  const visibleEvents = (phase === 'final' || done)
+    ? slot.events
+    : slot.events.filter((e) => e.clock <= (e.side === 'you' ? youClock : theirClock));
   const lastEffect = [...visibleEvents].reverse().find((e) => e.effect)?.effect;
   const yMet = metricById(slot.you.player.pos, slot.you.metricId);
   const tMet = metricById(slot.their.player.pos, slot.their.metricId);
