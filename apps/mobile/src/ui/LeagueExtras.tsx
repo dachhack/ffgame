@@ -213,6 +213,8 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [moveFor, setMoveFor] = useState<LeaguePoolPlayer | null>(null);
+  /** 'all' = everyone rostered · 'fa' = the waiver wire · a roster id = one team. */
+  const [view, setView] = useState<'all' | 'fa' | number>('all');
 
   const load = async () => {
     const [p, r, s] = await Promise.all([
@@ -236,21 +238,58 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
     finally { setBusy(false); await load(); onChanged(); }
   };
 
-  // Default view: everyone ROSTERED (the move tool's main use). Searching
-  // reaches the whole pool, so free agents can be placed onto rosters too —
-  // the same rule as the web's NativeRosterTools.
+  // VIEW SELECTOR (v0.225.0, the web's v0.215.0 ported). A single flat list of
+  // every rostered player meant answering "what does this manager actually
+  // have" by reading a league-wide list and matching team names by eye, and
+  // there was no way at all to browse who was AVAILABLE — a free agent could
+  // only be reached by typing a name you already knew.
+  //
+  // SEARCH BEHAVIOUR IS PRESERVED DELIBERATELY: in the ALL view it still
+  // reaches the whole pool, because that was the only route to a free agent
+  // before this selector existed and muscle memory shouldn't break. Inside a
+  // team or the wire it filters that set instead.
   const needle = q.trim().toLowerCase();
-  const rows = (needle
-    ? pool.filter((p) => p.full_name.toLowerCase().includes(needle))
-    : pool.filter((p) => bySlug.has(p.slug))
-  ).slice(0, 40);
+  const inView = (p: LeaguePoolPlayer) => {
+    const rid = bySlug.get(p.slug);
+    if (view === 'all') return needle ? true : rid != null;
+    if (view === 'fa') return rid == null;
+    return rid === view;
+  };
+  const rows = pool
+    .filter((p) => inView(p) && (!needle || p.full_name.toLowerCase().includes(needle)))
+    .slice(0, 40);
+  const rosteredCount = pool.filter((p) => bySlug.has(p.slug)).length;
+  const faCount = pool.length - rosteredCount;
+  const teamIds = [...new Set(rosters.map((r) => r.roster_id))].sort((a, b) => a - b);
 
   return (
     <Card>
-      <Mono size={9} tone="faint" track={0.12}>⚑ PLAYER MOVES — ANY ROSTER</Mono>
+      <Mono size={9} tone="faint" track={0.12}>⚑ ROSTERS &amp; WAIVER WIRE</Mono>
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 4 }}>{note}</Mono>}
-      <TextInput value={q} onChangeText={setQ} placeholder="Search the whole pool (free agents too)…" placeholderTextColor={t.faint}
+      <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', marginTop: 7 }}>
+        <Chip label="ALL ROSTERED" on={view === 'all'} onPress={() => { tap(); setView('all'); }} />
+        <Chip label={`⏳ WAIVER WIRE (${faCount})`} on={view === 'fa'} onPress={() => { tap(); setView('fa'); }} />
+        {teamIds.map((rid) => (
+          <Chip key={rid} label={teams.get(rid) ?? `Roster ${rid}`} on={view === rid} onPress={() => { tap(); setView(rid); }} />
+        ))}
+      </View>
+      <Mono size={8.5} tone="faint" style={{ marginTop: 6 }}>
+        {view === 'all' ? `${rosteredCount} rostered across the league · search reaches free agents too`
+          : view === 'fa' ? `${faCount} available — nobody's roster`
+          : `${pool.filter((p) => bySlug.get(p.slug) === view).length} on ${teams.get(view as number) ?? `roster ${view}`}`}
+      </Mono>
+      <TextInput value={q} onChangeText={setQ}
+        placeholder={view === 'all' ? 'Search the whole pool (free agents too)…' : 'Search this list…'}
+        placeholderTextColor={t.faint}
         style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12.5, color: t.text, backgroundColor: t.bg, marginTop: 8, marginBottom: 4 }} />
+      {rows.length === 0 && (
+        <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>
+          {needle ? 'No player matches that search here.'
+            : view === 'fa' ? 'Every player in the pool is on a roster.'
+            : view === 'all' ? 'Nobody is rostered yet — the draft fills this.'
+            : 'This team has no players yet.'}
+        </Mono>
+      )}
       {rows.map((p) => {
         const rid = bySlug.get(p.slug);
         return (
