@@ -12,7 +12,7 @@ import {
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from '../ui/feedback';
-import { Card, Chip, Display, LinkButton, Mono } from '../ui/prims';
+import { Card, Chip, Display, LinkButton, Mono, PrimaryButton } from '../ui/prims';
 import { CardUnreadPill, CardSignalPills } from '../ui/unread';
 import { BrandLoading } from '../ui/BrandLoading';
 
@@ -140,10 +140,17 @@ export function Leagues({ userId, onOpen, onBoard }: {
       {rows.length === 0 && !err && (
         <Card>
           <Display size={15}>No leagues yet</Display>
-          <Mono size={10.5} style={{ marginTop: 8 }}>
-            Join with an invite code at dripfantasy.com — it's the same account, and your
-            leagues show up here straight after. Pull down once you've joined.
+          {/* This used to send people to dripfantasy.com to redeem a code —
+              true when written, wrong as of v0.225.0/v0.226.0: the app now
+              takes an invite code AND creates leagues. A stale instruction
+              here would push every new user straight back off the app. */}
+          <Mono size={10.5} style={{ marginTop: 8, lineHeight: 16 }}>
+            Browse open leagues, paste a friend's invite code, or start your own — all from the
+            league board below.
           </Mono>
+          <View style={{ marginTop: 10 }}>
+            <PrimaryButton label="🔎 OPEN THE LEAGUE BOARD" onPress={() => { tap(); onBoard(); }} />
+          </View>
         </Card>
       )}
 

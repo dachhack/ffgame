@@ -8,13 +8,19 @@
 //     Closing (or the seats filling) takes a league off the board immediately.
 //   · RECRUIT — any enrolled member can share their league's invite code
 //     through the OS share sheet (league_invite gates on enrollment).
+//   · START — create a league outright (v0.226.0), and redeem an invite code
+//     someone sent you (v0.225.0). Both landed here rather than on their own
+//     screens because this is already the one place the app answers "how do I
+//     get into a league"; a separate screen would split that question in two.
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   closeLeagueListing, commishOverview, friendlyError, joinFromBoard, leagueBoard, leagueInvite, leaguePreview, type BoardPreview,
-  postLeagueListing, redeemCommish, nativeJoin, type AdminLeague, type BoardListing,
+  postLeagueListing, redeemCommish, nativeJoin, createNativeLeague, seedLeaguePool,
+  nativeGenerateSchedule, myFeatures, isAdmin, type AdminLeague, type BoardListing,
 } from '@drip/core/data/liveApi';
 import { rosterLabel } from '@drip/core/engine/classic';
+import { buildDraftPool } from '@drip/core/data/nativeLeague';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
@@ -55,6 +61,19 @@ export function Recruit({ onBack, onJoined }: {
   const [commishDraft, setCommishDraft] = useState('');      // commish-code redemption
   const [inviteDraft, setInviteDraft] = useState('');        // invite-code join (native_join)
   const [inviteTeam, setInviteTeam] = useState('');
+  // Create-a-league (v0.226.0). The form is the web's post-v0.221.0 trim:
+  // only what has NO setter after creation gets asked here — game type, name,
+  // teams, draft type, pace, clock. Roster size and position limits are
+  // defaults the game type picks, adjustable from ⚑ COMMISH until the draft.
+  const [canCreate, setCanCreate] = useState(false);
+  const [makeOpen, setMakeOpen] = useState(false);
+  const [game, setGame] = useState<'drip' | 'classic'>('drip');
+  const [nameDraft, setNameDraft] = useState('');
+  const [teamCount, setTeamCount] = useState(8);
+  const [draftMode, setDraftMode] = useState<'snake' | 'auction'>('snake');
+  const [pace, setPace] = useState<'live' | 'slow'>('live');
+  const [clockDraft, setClockDraft] = useState('90');
+  const [makeNote, setMakeNote] = useState('');
 
   const load = useCallback(async () => {
     setErr(null);
@@ -69,6 +88,13 @@ export function Recruit({ onBack, onJoined }: {
     } catch (e) { setErr(friendlyError(e)); setRows([]); }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  // Same entitlement the web's create button checks — admins always qualify
+  // (has_native() is `is_admin() or the flag`), so both are asked here rather
+  // than advertising a door the server would shut.
+  useEffect(() => {
+    Promise.all([myFeatures().catch(() => ({} as Record<string, boolean>)), isAdmin().catch(() => false)])
+      .then(([f, a]) => setCanCreate(!!a || f.native === true));
+  }, []);
   const refresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const listedIds = new Set((rows ?? []).filter((r) => r.commish).map((r) => r.league_id));
@@ -148,6 +174,38 @@ export function Recruit({ onBack, onJoined }: {
     finally { setBusy(false); await load(); }
   };
 
+  // Create → seed the pool → generate the schedule. Three steps, and the
+  // ORDER is load-bearing: a league with no pool can't draft and a league with
+  // no schedule has no season, so a failure in either later step leaves the
+  // league standing but incomplete — which is why each one reports what broke
+  // rather than a generic failure, and why the league still lands on the
+  // leagues screen either way (it exists; it just needs another go).
+  const doCreate = async () => {
+    const nm = nameDraft.trim();
+    if (!nm || busy) return;
+    setBusy(true); setErr(null); setMakeNote('Creating your league…');
+    try {
+      const secs = pace === 'slow' ? Math.max(1, Number(clockDraft) || 12) * 3600 : Math.max(15, Number(clockDraft) || 90);
+      // Same defaults the web derives from the game type (v0.221.0): drip
+      // keeps the pre-0071 position limits, classic takes none because its
+      // shape is the starting-lineup spec.
+      const rounds = game === 'classic' ? 15 : 12;
+      const caps = game === 'classic' ? null : { QB: 3, RB: null, WR: null, TE: 3, K: 1, DEF: 1 };
+      const r = await createNativeLeague(nm, '2026', teamCount, rounds, secs, draftMode, 200, 15, 1, null, null, caps, game);
+      if (!r.ok || !r.league_id) { warn(); setErr(friendlyError(r.error ?? 'could not create the league')); return; }
+      setMakeNote('Building the 2026 player pool…');
+      const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setMakeNote));
+      if (!pool.ok) { warn(); setErr(friendlyError(pool.error ?? 'league created, but the player pool failed — reseed it from the draft room')); return; }
+      setMakeNote('Generating the season schedule…');
+      const sched = await nativeGenerateSchedule(r.league_id, 14);
+      if (!sched.ok) { warn(); setErr(friendlyError(sched.error ?? 'league created, but the schedule failed — regenerate it from ⚑ COMMISH')); return; }
+      commit();
+      setJoined(`${nm} — you're its commissioner`);
+      setMakeOpen(false); setNameDraft('');
+    } catch (e) { warn(); setErr(friendlyError(e)); }
+    finally { setBusy(false); setMakeNote(''); onJoined(); await load(); }
+  };
+
   const share = async (leagueId: string) => {
     tap();
     try {
@@ -186,6 +244,76 @@ export function Recruit({ onBack, onJoined }: {
         <Notice tone="you">
           <Mono size={10} tone="you">✓ You're in {joined} — it's on your leagues screen now.</Mono>
         </Notice>
+      )}
+
+      {/* START A LEAGUE (v0.226.0) — the last thing the app couldn't do.
+          Gated on the same `native` entitlement the web button uses, so the
+          card doesn't advertise a door the server would shut. */}
+      {canCreate && (
+        <Card>
+          <Pressable onPress={() => { tap(); setMakeOpen((v) => !v); }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ flex: 1 }}>
+                <Mono size={9} tone="faint" track={0.12}>START YOUR OWN LEAGUE</Mono>
+                <Mono size={9.5} style={{ marginTop: 5, lineHeight: 14 }}>
+                  Create it here, invite friends, draft in the app. No Sleeper / ESPN / Yahoo league required.
+                </Mono>
+              </View>
+              <Mono size={12} tone="dim">{makeOpen ? '▾' : '▸'}</Mono>
+            </View>
+          </Pressable>
+          {makeOpen && (
+            <View style={{ marginTop: 10, gap: 10 }}>
+              {/* Same first question as the web (0175): the one choice that
+                  changes what you're playing rather than how it's set up. */}
+              <View>
+                <Mono size={8.5} tone="faint" track={0.1}>WHICH GAME?</Mono>
+                <View style={{ flexDirection: 'row', gap: 5, marginTop: 5 }}>
+                  <Chip label="◈ DRIP" on={game === 'drip'} onPress={() => { tap(); setGame('drip'); }} />
+                  <Chip label="🏈 NORMAL" on={game === 'classic'} onPress={() => { tap(); setGame('classic'); }} />
+                </View>
+                <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
+                  {game === 'drip'
+                    ? 'Drip: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.'
+                    : 'Normal: fantasy the way you already know it. A positional starting lineup, weekly point totals, standard scoring you can tune.'}
+                </Mono>
+              </View>
+              <TextInput value={nameDraft} maxLength={40} placeholder="League name" placeholderTextColor={t.faint}
+                onChangeText={(v) => { setNameDraft(v); setErr(null); }}
+                style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <Mono size={8.5} tone="faint" track={0.1}>TEAMS</Mono>
+                <Pressable hitSlop={6} onPress={() => { tap(); setTeamCount((n) => Math.max(2, n - 1)); }}>
+                  <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>−</Text>
+                </Pressable>
+                <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: t.text, minWidth: 26, textAlign: 'center' }}>{teamCount}</Text>
+                <Pressable hitSlop={6} onPress={() => { tap(); setTeamCount((n) => Math.min(14, n + 1)); }}>
+                  <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>＋</Text>
+                </Pressable>
+                <View style={{ flex: 1 }} />
+                <Chip label="SNAKE" on={draftMode === 'snake'} onPress={() => { tap(); setDraftMode('snake'); }} />
+                <Chip label="AUCTION" on={draftMode === 'auction'} onPress={() => { tap(); setDraftMode('auction'); }} />
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <Mono size={8.5} tone="faint" track={0.1}>PACE</Mono>
+                <Chip label="⚡ LIVE" on={pace === 'live'} onPress={() => { tap(); setPace('live'); }} />
+                <Chip label="🐢 SLOW" on={pace === 'slow'} onPress={() => { tap(); setPace('slow'); }} />
+                <View style={{ flex: 1 }} />
+                <Mono size={8.5} tone="faint" track={0.1}>{pace === 'live' ? 'CLOCK (SEC)' : 'CLOCK (HRS)'}</Mono>
+                <TextInput value={clockDraft} keyboardType="number-pad" onChangeText={(v) => setClockDraft(v.replace(/\D/g, ''))}
+                  style={{ width: 62, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+              </View>
+              <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>
+                {game === 'classic'
+                  ? '15 roster spots per team. Set the starting lineup and scoring from ⚑ COMMISH before the draft.'
+                  : '12 roster spots per team: 8 weekly starters, 4 bench. Roster size, position limits and the draft schedule are all adjustable before the draft.'}
+                {' '}You take seat 1 as commissioner and a 14-week schedule is generated automatically.
+              </Mono>
+              <PrimaryButton label={busy ? (makeNote || 'CREATING…') : '⚡ CREATE LEAGUE'}
+                disabled={busy || !nameDraft.trim()} onPress={() => void doCreate()} />
+            </View>
+          )}
+        </Card>
       )}
 
       {/* POST — the commissioner's own native leagues */}
