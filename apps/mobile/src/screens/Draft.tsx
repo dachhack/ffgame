@@ -17,6 +17,7 @@ import {
   draftState, draftTick, leaguePool, makeDraftPick, myDraftQueue, nativeTeamState, nominate, placeBid,
   setAutodraft, setDraftQueue, setLotProxy, startDraft, seedLeaguePool, leagueGameMode,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
+  setDraftSetup, setDraftOrder, setDraftStart,
   friendlyError, type DraftState, type LeaguePoolPlayer, type NativeTeamState, type PosCaps,
 } from '@drip/core/data/liveApi';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
@@ -36,6 +37,14 @@ const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 function fmtCountdown(secs: number): string {
   const m = Math.floor(secs / 60), s = secs % 60;
   return m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `0:${String(s).padStart(2, '0')}`;
+}
+
+/** Countdown at DAY scale — a scheduled start can be a week out, where
+ *  fmtCountdown's m:ss would read "10080:00" and mean nothing. */
+function fmtLong(secs: number): string {
+  if (secs >= 86400) return `${Math.floor(secs / 86400)}d ${Math.floor((secs % 86400) / 3600)}h`;
+  if (secs >= 3600) return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
+  return fmtCountdown(secs);
 }
 
 /** Small round headshot with a position-pill fallback — the row identity. */
@@ -241,9 +250,27 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
               ? `${st.rounds} roster spots · $${st.budget} budget per team · nomination rotates the draft order. Queue players now — empty seats auto-nominate.`
               : `${st.rounds} rounds · ${st.pick_seconds}s per pick · snake order (randomized at start). Queue players now — your queue drafts for you if the clock runs out.`}
           </Mono>
+          {/* 0177: the countdown is EVERY member's, not the commissioner's —
+              knowing when to show up is the whole point of a schedule. Counted
+              off the server's own clock so a skewed phone agrees with everyone
+              else. */}
+          {!!st.start_at && (() => {
+            const left = Math.round((Date.parse(st.start_at) - Date.parse(st.server_now)) / 1000);
+            const when = new Date(st.start_at).toLocaleString(undefined,
+              { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+            return (
+              <View style={{ marginTop: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: left > 0 ? t.you : t.warn, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
+                <Mono size={10} tone={left > 0 ? 'you' : 'warn'} style={{ lineHeight: 15 }}>
+                  {left > 0
+                    ? `⏱ Drafting in ${fmtLong(left)} — ${when}. It opens on its own; nobody has to press anything.`
+                    : `⏱ Scheduled for ${when} — starting now. If it doesn't open shortly, the pool or a seat is missing.`}
+                </Mono>
+              </View>
+            );
+          })()}
           {isCommish && (
             <View style={{ marginTop: 12, gap: 8 }}>
-              <PrimaryButton label="▶ START THE DRAFT" disabled={busy} onPress={() => run(() => startDraft(leagueId))} />
+              <PrimaryButton label={st.start_at ? '▶ START THE DRAFT NOW' : '▶ START THE DRAFT'} disabled={busy} onPress={() => run(() => startDraft(leagueId))} />
               {pool.length === 0 && (
                 <PrimaryButton label="↻ SEED PLAYER POOL (2026 ADP)" disabled={busy}
                   onPress={() => run(async () => {
@@ -255,6 +282,11 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                   })} />
               )}
             </View>
+          )}
+          {isCommish && (
+            <DraftSetupCard leagueId={leagueId} st={st} busy={busy} teamName={teamName}
+              seats={(team?.waiver_order ?? []).map((w) => w.roster_id).sort((a, b) => a - b)}
+              onDone={(fn) => void run(fn)} />
           )}
         </Card>
       )}
@@ -579,6 +611,212 @@ const fmtHour = (m: number) => {
   return `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? 'a' : 'p'}`;
 };
 const fmtNight = (n: { start_min: number; end_min: number }) => `${fmtHour(n.start_min)}–${fmtHour(n.end_min)} ET`;
+
+/** The commissioner's PRE-DRAFT controls (0176/0177), ported to the app.
+ *
+ *  The live-draft levers — pause, force pick, undo, quiet hours — have been
+ *  here for a while; the settings that decide what the draft IS were web-only,
+ *  so a commissioner running a league from a phone could start a draft but not
+ *  shape one. Same three sections as the web panel, collapsed by default
+ *  because most visits to this card are to press START.
+ *
+ *  THE ONE REAL DIVERGENCE is the scheduler. The web uses <input
+ *  type="datetime-local">; React Native has no such control, and pulling in a
+ *  native date-picker module for one field means a new native dependency in
+ *  every build. Relative day chips plus common draft times cover the actual
+ *  use ("tonight at 8", "Sunday at 8") in two taps and no dependency — with
+ *  the resolved date spelled out underneath, because "TOMORROW + 8 PM" is only
+ *  unambiguous once you can read back what it landed on. */
+function DraftSetupCard({ leagueId, st, seats, busy, teamName, onDone }: {
+  leagueId: string; st: DraftState; seats: number[]; busy: boolean;
+  teamName: (rid: number) => string | null;
+  onDone: (fn: () => Promise<{ ok: boolean; error?: string }>) => void;
+}) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<'snake' | 'auction'>(st.mode);
+  const slow = st.pick_seconds >= 3600;
+  const [clock, setClock] = useState(String(slow ? Math.round(st.pick_seconds / 3600) : st.pick_seconds));
+  const [hrs, setHrs] = useState(slow);
+  const [budget, setBudget] = useState(String(st.budget ?? 200));
+  const [bell, setBell] = useState(String(st.lot_seconds >= 3600 ? Math.round(st.lot_seconds / 3600) : st.lot_seconds));
+  const [bellHrs, setBellHrs] = useState(st.lot_seconds >= 3600);
+  const [lots, setLots] = useState(String(st.max_lots));
+  const [ord, setOrd] = useState<number[] | null>(st.order);
+  const [days, setDays] = useState(0);        // 0 = today, 1 = tomorrow, …
+  const [mins, setMins] = useState(20 * 60);  // local minutes past midnight
+
+  const box = (w: number) => ({
+    width: w, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6,
+    paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg,
+  } as const);
+
+  const saveSetup = () => {
+    const c = Math.round(Number(clock) * (hrs ? 3600 : 1));
+    const b = Math.round(Number(bell) * (bellHrs ? 3600 : 1));
+    if (!Number.isFinite(c) || c <= 0) return;
+    onDone(() => setDraftSetup(leagueId, c, mode,
+      mode === 'auction' ? Math.round(Number(budget)) : null,
+      mode === 'auction' ? b : null,
+      mode === 'auction' ? Math.round(Number(lots)) : null));
+  };
+
+  // Day + time resolved against the DEVICE's local calendar, which is what a
+  // commissioner means by "tomorrow at 8" — then sent as a real instant so
+  // every member's countdown agrees regardless of where they are.
+  const target = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    d.setHours(Math.floor(mins / 60), mins % 60, 0, 0);
+    return d;
+  })();
+  const past = target.getTime() <= Date.now();
+
+  // Reorders whatever the rows SHOW, seeding from seat order on the first
+  // move — same fix the web panel needed, so hand-setting an order from
+  // scratch works before you've ever randomized.
+  const rows = ord ?? seats;
+  const move = (i: number, d: -1 | 1) => {
+    const base = ord ?? seats;
+    const j = i + d;
+    if (j < 0 || j >= base.length) return;
+    const next = [...base];
+    [next[i], next[j]] = [next[j], next[i]];
+    setOrd(next);
+  };
+
+  return (
+    <View style={{ marginTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
+      <Pressable onPress={() => { tap(); setOpen((v) => !v); }}>
+        <Mono size={9.5} tone="dim" weight="700" track={0.08}>
+          {open ? '▾' : '▸'} ⚙ DRAFT SETUP{open ? '' : ' — clock, format, when, order'}
+        </Mono>
+      </Pressable>
+      {open && (
+        <View style={{ marginTop: 10, gap: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Mono size={8.5} tone="faint" track={0.1}>FORMAT</Mono>
+            <Chip label="SNAKE" on={mode === 'snake'} onPress={() => { tap(); setMode('snake'); }} />
+            <Chip label="AUCTION" on={mode === 'auction'} onPress={() => { tap(); setMode('auction'); }} />
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Mono size={8.5} tone="faint" track={0.1}>{mode === 'auction' ? 'NOMINATE' : 'PICK CLOCK'}</Mono>
+            <TextInput value={clock} keyboardType="number-pad" onChangeText={(v) => setClock(v.replace(/\D/g, ''))} style={box(64)} />
+            <Chip label="SEC" on={!hrs} onPress={() => { tap(); setHrs(false); }} />
+            <Chip label="HRS" on={hrs} onPress={() => { tap(); setHrs(true); }} />
+          </View>
+          {mode === 'auction' && (
+            <>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <Mono size={8.5} tone="faint" track={0.1}>BUDGET $</Mono>
+                <TextInput value={budget} keyboardType="number-pad" onChangeText={(v) => setBudget(v.replace(/\D/g, ''))} style={box(72)} />
+                <Mono size={8.5} tone="faint" track={0.1}>LOTS</Mono>
+                <TextInput value={lots} keyboardType="number-pad" onChangeText={(v) => setLots(v.replace(/\D/g, ''))} style={box(48)} />
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <Mono size={8.5} tone="faint" track={0.1}>BID BELL</Mono>
+                <TextInput value={bell} keyboardType="number-pad" onChangeText={(v) => setBell(v.replace(/\D/g, ''))} style={box(64)} />
+                <Chip label="SEC" on={!bellHrs} onPress={() => { tap(); setBellHrs(false); }} />
+                <Chip label="HRS" on={bellHrs} onPress={() => { tap(); setBellHrs(true); }} />
+              </View>
+            </>
+          )}
+          <PrimaryButton label="SAVE FORMAT" disabled={busy} onPress={saveSetup} />
+          <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>
+            Roster size and position limits are in ⚑ COMMISH → MODE &amp; SCORING. All of this locks when the draft starts.
+          </Mono>
+
+          {/* ── when ── */}
+          <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
+            <Mono size={8.5} tone="faint" track={0.1}>SCHEDULED START</Mono>
+            <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+              {[0, 1, 2, 3, 7].map((d) => (
+                <Chip key={d} label={d === 0 ? 'TODAY' : d === 1 ? 'TOMORROW' : `+${d}d`}
+                  on={days === d} onPress={() => { tap(); setDays(d); }} />
+              ))}
+            </View>
+            <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', marginTop: 6, alignItems: 'center' }}>
+              {[18, 19, 20, 21].map((h) => (
+                <Chip key={h} label={`${h % 12 || 12} PM`} on={mins === h * 60} onPress={() => { tap(); setMins(h * 60); }} />
+              ))}
+              <Pressable hitSlop={6} onPress={() => { tap(); setMins((m) => (m + 1410) % 1440); }}>
+                <Text style={{ fontFamily: MONO, fontSize: 14, color: t.dim }}>−</Text>
+              </Pressable>
+              <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '700', color: t.text, minWidth: 52, textAlign: 'center' }}>
+                {fmtHour(mins)}
+              </Text>
+              <Pressable hitSlop={6} onPress={() => { tap(); setMins((m) => (m + 30) % 1440); }}>
+                <Text style={{ fontFamily: MONO, fontSize: 14, color: t.dim }}>＋</Text>
+              </Pressable>
+            </View>
+            <Mono size={9} tone={past ? 'opp' : 'you'} style={{ marginTop: 7 }}>
+              {past
+                ? `${target.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} has already passed — pick a later day or time.`
+                : `→ ${target.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`}
+            </Mono>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              <Pressable disabled={busy || past} onPress={() => { tap(); onDone(() => setDraftStart(leagueId, target.toISOString())); }}
+                style={{ backgroundColor: t.you, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 7, opacity: busy || past ? 0.5 : 1 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.onAccent }}>SCHEDULE IT</Text>
+              </Pressable>
+              {st.start_at && (
+                <Pressable disabled={busy} onPress={() => { tap(); onDone(() => setDraftStart(leagueId, null)); }}
+                  style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 7 }}>
+                  <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.opp }}>✕ CLEAR</Text>
+                </Pressable>
+              )}
+            </View>
+            <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
+              {st.start_at
+                ? 'Armed. The draft opens itself at that time whether or not anyone has the app open, and the league gets a reminder about an hour out.'
+                : 'Optional — leave it and the draft starts when you press the button.'}
+            </Mono>
+          </View>
+
+          {/* ── order ── */}
+          <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
+            <Mono size={8.5} tone="faint" track={0.1}>DRAFT ORDER</Mono>
+            <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 13 }}>
+              {st.order
+                ? 'Set — the draft starts on this order, and everyone can see it now.'
+                : 'Not set: randomized the moment the draft starts. Draw it here instead and the league sees it first.'}
+            </Mono>
+            <View style={{ marginTop: 7, gap: 2 }}>
+              {rows.map((rid, i) => (
+                <View key={rid} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: t.bg, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 6 }}>
+                  <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', color: t.faint, width: 18 }}>{i + 1}.</Text>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: t.text }}>{teamName(rid) ?? `Team ${rid}`}</Text>
+                  <Pressable hitSlop={6} disabled={i === 0} onPress={() => { tap(); move(i, -1); }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 13, color: i === 0 ? t.faint : t.dim }}>▲</Text>
+                  </Pressable>
+                  <Pressable hitSlop={6} disabled={i === rows.length - 1} onPress={() => { tap(); move(i, 1); }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 13, color: i === rows.length - 1 ? t.faint : t.dim }}>▼</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              <Pressable disabled={busy} onPress={() => {
+                tap();
+                onDone(async () => {
+                  const r = await setDraftOrder(leagueId, null);
+                  if (r.ok && r.order) setOrd(r.order);
+                  return r;
+                });
+              }} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 7, opacity: busy ? 0.5 : 1 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.dim }}>🎲 RANDOMIZE</Text>
+              </Pressable>
+              <Pressable disabled={busy} onPress={() => { tap(); onDone(() => setDraftOrder(leagueId, rows)); }}
+                style={{ backgroundColor: t.you, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 7, opacity: busy ? 0.5 : 1 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.onAccent }}>SAVE ORDER</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
 
 function NightEditor({ current, busy, onSet, onClear }: {
   current: { start_min: number; end_min: number } | null;
