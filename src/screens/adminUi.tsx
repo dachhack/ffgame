@@ -60,6 +60,37 @@ export function useWide(min = 900): boolean {
 /** One titled group of destinations in the side rail. */
 export interface NavGroup<T extends string = string> { title: string; items: TabDef<T>[] }
 
+/** The same grouped map as a NATIVE SELECT — the narrow-screen presentation
+ *  (v0.219.0). The flattened tab strip put ~1,450px of ~1,830px off-screen
+ *  behind a swipe with no scrollbar (`.mgmt-tabs` hides it), so on a phone
+ *  most destinations simply could not be found. A select shows every one in
+ *  the OS picker, keeps the four groups as <optgroup> headings, and costs one
+ *  tap instead of a blind horizontal scroll. */
+export function NavSelect<T extends string>({ groups, active, onSelect }: {
+  groups: NavGroup<T>[]; active: T; onSelect: (id: T) => void;
+}) {
+  const current = groups.flatMap((g) => g.items).find((i) => i.id === active);
+  return (
+    <label style={{ display: 'block', margin: '10px 0 0' }}>
+      <span style={{ ...subhead, display: 'block', marginBottom: 4 }}>SECTION</span>
+      <select value={active} onChange={(e) => onSelect(e.target.value as T)} className="mono"
+        aria-label="league management section"
+        style={{ ...inp, width: '100%', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)' }}>
+        {groups.map((g) => (
+          <optgroup key={g.title} label={g.title}>
+            {g.items.map((t) => (
+              <option key={t.id} value={t.id}>{t.label}{t.badge ? ` (${t.badge})` : ''}</option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+      {current && <span className="mono" style={{ display: 'block', fontSize: 10, color: 'var(--faint)', marginTop: 3 }}>
+        {groups.find((g) => g.items.some((i) => i.id === active))?.title}
+      </span>}
+    </label>
+  );
+}
+
 /** Grouped vertical navigation for the management surfaces (desktop).
  *
  *  WHY THIS EXISTS: these screens grew to ~15 destinations, and a single

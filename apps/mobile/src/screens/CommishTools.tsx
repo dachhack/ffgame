@@ -37,6 +37,23 @@ import { CommishSettings } from '../ui/CommishSettings';
 import { CommishPlayers } from '../ui/LeagueExtras';
 import { CommishToolsCard } from '../ui/CommishKit';
 
+// The app's commissioner map — the same grouping as the web side rail, so a
+// commissioner who learns one host already knows the other. `nativeOnly`
+// hides what a Sleeper-backed league manages on its own platform.
+const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnly?: boolean }[] }[] = [
+  { title: 'SET UP', items: [{ id: 'mode', label: '🎮 MODE & SCORING' }] },
+  { title: 'RUN THE SEASON', items: [
+    { id: 'seats', label: '👥 SEATS' },
+    { id: 'players', label: '🧑 PLAYERS', nativeOnly: true },
+  ] },
+  { title: 'ENGAGE', items: [
+    { id: 'kit', label: '⚑ KIT' },
+    { id: 'activity', label: '👁 ACTIVITY' },
+    { id: 'buffs', label: '◈ POWER-UPS' },
+  ] },
+  { title: 'MONEY', items: [{ id: 'coin', label: '◈ DRIP COIN' }] },
+];
+
 export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassigned }: {
   leagueId: string;
   /** Platform (Sleeper) leagues get seat/co-manager/coin management only —
@@ -56,6 +73,8 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
   const [team, setTeam] = useState<NativeTeamState | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Which destination is showing (v0.219.0) — see NAV_GROUPS.
+  const [section, setSection] = useState<string>('seats');
   // Remount lever for the child cards after a settings save — rules changes
   // (roster caps, coin budget) alter what CommishPlayers/CommishTeams show.
   const [epoch, setEpoch] = useState(0);
@@ -131,25 +150,44 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
         {!!err && <Mono size={10} tone="opp" style={{ marginTop: 6 }}>⚠ {err}</Mono>}
       </Card>
 
-      {/* the commissioner's kit — note / player flags / scoring (0141/0143/0144) */}
-      <CommishToolsCard leagueId={leagueId} />
+      {/* ── The grouped map (v0.219.0), ported from the web restructure ──
+          This screen was one long scroll: kit, seats, activity, mode, buffs,
+          coin and players stacked end to end, so finding anything meant
+          remembering how far down it lived. Same four groups as the web rail,
+          but WRAPPED rather than scrolled — with this few destinations they
+          all fit on screen, so nothing hides behind a swipe (the mistake the
+          web's phone strip made). One section renders at a time. */}
+      <Card>
+        {NAV_GROUPS.filter((g) => g.items.some((it) => !it.nativeOnly || native)).map((g) => (
+          <View key={g.title} style={{ marginBottom: 6 }}>
+            <Mono size={8.5} tone="faint" weight="700" track={0.14}>{g.title}</Mono>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 4 }}>
+              {g.items.filter((it) => !it.nativeOnly || native).map((it) => {
+                const on = section === it.id;
+                return (
+                  <Pressable key={it.id} onPress={() => { tap(); setSection(it.id); }}
+                    style={{ borderRadius: 3, paddingHorizontal: 9, paddingVertical: 6, backgroundColor: on ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: on ? t.onAccent : t.dim }}>{it.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ))}
+      </Card>
 
-      <CommishTeams key={`teams-${epoch}`} leagueId={leagueId} myRoster={myRoster}
-        onChanged={() => void refresh()} onSelfUnassigned={onSelfUnassigned} />
-
-      {/* who's actually been in the league (0151) — collapsed, loads on open */}
-      <CommishSeen leagueId={leagueId} />
-
-      {/* the real-time power-up switch (0155) */}
-      <GameModeCard leagueId={leagueId} />
-      <LiveBuffsCard leagueId={leagueId} />
-
-      {/* league-wide coin: the allowance and the bulk levers, right under the
-          seat rows whose 💰 chips they move. onChanged remounts the cards so
-          those balances re-read after every bulk move. */}
-      <CommishCoin leagueId={leagueId} onChanged={() => { setEpoch((n) => n + 1); void refresh(); }} />
-
-      {native && <CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} />}
+      {section === 'kit' && <CommishToolsCard leagueId={leagueId} />}
+      {section === 'seats' && (
+        <CommishTeams key={`teams-${epoch}`} leagueId={leagueId} myRoster={myRoster}
+          onChanged={() => void refresh()} onSelfUnassigned={onSelfUnassigned} />
+      )}
+      {section === 'activity' && <CommishSeen leagueId={leagueId} />}
+      {section === 'mode' && <GameModeCard leagueId={leagueId} />}
+      {section === 'buffs' && <LiveBuffsCard leagueId={leagueId} />}
+      {section === 'coin' && (
+        <CommishCoin leagueId={leagueId} onChanged={() => { setEpoch((n) => n + 1); void refresh(); }} />
+      )}
+      {section === 'players' && native && <CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} />}
 
       {native && (
         <CommishSettings visible={settingsOpen} leagueId={leagueId}
@@ -631,6 +669,27 @@ const fromSpotDraft = (s: SpotDraft): SlotSpec => {
 };
 const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim());
 
+// Scoring groups + presets, mirroring the web (v0.219.0) so the two hosts
+// describe the catalog the same way. A preset RESETS then applies its deltas,
+// and carries the league's receptions setting.
+const SCORING_TABS: { id: string; label: string; sections: string[] }[] = [
+  { id: 'passing', label: 'PASSING', sections: ['PASSING'] },
+  { id: 'receiving', label: 'RECEIVING', sections: ['RECEIVING'] },
+  { id: 'rushing', label: 'RUSHING', sections: ['RUSHING'] },
+  { id: 'offother', label: 'OTHER', sections: ['COMBINED RUSH + REC', 'FIRST DOWNS BY POSITION'] },
+  { id: 'turnovers', label: 'TURNOVERS', sections: ['TURNOVERS & RETURNS', 'SPECIAL TEAMS PLAYER'] },
+  { id: 'kicking', label: 'KICKING', sections: ['KICKING', 'PUNTING'] },
+  { id: 'defense', label: 'DEFENSE', sections: ['TEAM DEFENSE', 'POINTS ALLOWED', 'YARDAGE ALLOWED'] },
+  { id: 'idp', label: 'IDP', sections: ['IDP'] },
+  { id: 'coach', label: 'HEAD COACH', sections: ['HEAD COACH'] },
+];
+const SCORING_PRESETS: { id: string; label: string; ppr: number; over: Record<string, number> }[] = [
+  { id: 'std', label: 'STANDARD', ppr: 0, over: {} },
+  { id: 'half', label: '½ PPR', ppr: 0.5, over: {} },
+  { id: 'full', label: 'FULL PPR', ppr: 1, over: {} },
+  { id: 'tep', label: 'TE PREMIUM', ppr: 1, over: { teRec: 0.5 } },
+];
+
 // Team-acronym helper (founder ask): a tappable 32-team grid under every teams
 // input, kept in SYNC with the free-text field — a chip toggles its code in or
 // out of the comma list, and hand-typed codes light their chips.
@@ -675,7 +734,8 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   // Full classic scoring (0160): string drafts; parse + diff on save.
-  const [scOpen, setScOpen] = useState(false);
+  const [scTab, setScTab] = useState('passing');
+  const [armed, setArmed] = useState<string | null>(null);
   const [scDraft, setScDraft] = useState<Record<string, string>>({});
   const scInit = (over: Record<string, number>) => {
     const d: Record<string, string> = {};
@@ -711,6 +771,21 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
     try {
       const r = await setLeagueClassicScoring(leagueId, over);
       if (r.ok) { commit(); scInit(r.scoring ?? {}); setNote('✓ scoring saved'); }
+      else { warn(); setNote(r.error ?? 'failed'); }
+    } catch { warn(); }
+    finally { setBusy(false); }
+  };
+  // Two clicks to apply — a preset replaces all 155 values (web parity).
+  const applyPreset = async (pr: typeof SCORING_PRESETS[number]) => {
+    if (busy) return;
+    if (armed !== pr.id) { setArmed(pr.id); setNote(`${pr.label} replaces every scoring value — tap again to confirm`); return; }
+    setBusy(true); setArmed(null); setNote(null);
+    try {
+      const m = await setLeagueGameMode(leagueId, 'classic', pr.ppr);
+      if (!m.ok) { warn(); setNote(m.error ?? 'failed'); return; }
+      setPpr(pr.ppr);
+      const r = await setLeagueClassicScoring(leagueId, pr.over);
+      if (r.ok) { commit(); scInit(r.scoring ?? {}); setNote(`✓ ${pr.label} applied`); }
       else { warn(); setNote(r.error ?? 'failed'); }
     } catch { warn(); }
     finally { setBusy(false); }
@@ -767,13 +842,12 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
             : <Mono size={8} tone="faint" style={{ alignSelf: 'center' }}>CLASSIC{'\n'}not unlocked</Mono>}
         </View>
       </View>
+      {/* The RECEPTIONS pills moved into the scoring presets below (web
+          parity) — receptions are a scoring decision. */}
       {mode === 'classic' && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
-          <Mono size={8.5} tone="faint" weight="700">RECEPTIONS</Mono>
-          <Pill on={ppr === 0} label="NON-PPR" onPress={() => void set('classic', 0)} />
-          <Pill on={ppr === 0.5} label="½ PPR" onPress={() => void set('classic', 0.5)} />
-          <Pill on={ppr === 1} label="FULL PPR" onPress={() => void set('classic', 1)} />
-        </View>
+        <Mono size={8} tone="faint" style={{ marginTop: 8, lineHeight: 12 }}>
+          Receptions and every other value live under ⚖ SCORING — start from a preset, then tune.
+        </Mono>
       )}
       {mode === 'classic' && spots && (
         <View style={{ marginTop: 10 }}>
@@ -898,12 +972,32 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
       )}
       {mode === 'classic' && (
         <View style={{ marginTop: 10 }}>
-          <Pressable onPress={() => { tap(); setScOpen((o) => !o); }}>
-            <Mono size={8.5} tone="faint" weight="700">⚖ SCORING {scOpen ? '▾' : '▸'}  every value is yours to set</Mono>
-          </Pressable>
-          {scOpen && (
+          <Mono size={8.5} tone="faint" weight="700">⚖ SCORING  every value is yours to set</Mono>
+          {/* START FROM: the recognised systems, so a standard league isn't 155
+              decisions. Carries receptions, which is why the PPR pills left
+              the mode row. */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, alignItems: 'center', marginTop: 6 }}>
+            <Mono size={8} tone="faint" weight="700">START FROM</Mono>
+            {SCORING_PRESETS.map((pr) => (
+              <Pressable key={pr.id} disabled={busy} onPress={() => { tap(); void applyPreset(pr); }}
+                style={{ borderRadius: 3, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: armed === pr.id ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: armed === pr.id ? t.you : t.bd }}>
+                <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: armed === pr.id ? t.onAccent : t.dim }}>{armed === pr.id ? `CONFIRM ${pr.label}` : pr.label}</Text>
+              </Pressable>
+            ))}
+            <Mono size={8} tone="faint">RECEPTIONS: {ppr === 1 ? 'FULL PPR' : ppr === 0.5 ? '½ PPR' : 'NON-PPR'}</Mono>
+          </View>
+          {/* Groups, not one endless column. */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+            {SCORING_TABS.map((tb) => (
+              <Pressable key={tb.id} onPress={() => { tap(); setScTab(tb.id); }}
+                style={{ borderRadius: 3, paddingHorizontal: 7, paddingVertical: 4, backgroundColor: scTab === tb.id ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: scTab === tb.id ? t.you : t.bd }}>
+                <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: scTab === tb.id ? t.onAccent : t.dim }}>{tb.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+          {(
             <>
-              {CLASSIC_SCORING_SECTIONS.map((sec) => (
+              {CLASSIC_SCORING_SECTIONS.filter((sec) => (SCORING_TABS.find((tb) => tb.id === scTab)?.sections ?? []).includes(sec.section)).map((sec) => (
                 <View key={sec.section} style={{ marginTop: 8 }}>
                   <Mono size={7.5} tone="dim" weight="700" track={0.1}>{sec.section}</Mono>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
