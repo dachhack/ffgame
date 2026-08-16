@@ -275,9 +275,9 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 // the commissioner's settings panels (injected by CommishDash) are first-class
 // destinations rather than cards stacked below the card.
 export type LeagueTab =
-  | 'overview' | 'rules' | 'season' | 'admin'
+  | 'overview' | 'waivers' | 'season' | 'admin'
   | 'mode' | 'lineup' | 'scoring'
-  | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'matchups' | 'members' | 'audit' | 'ready' | 'kdst'
+  | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'matchups' | 'members' | 'coin' | 'audit' | 'ready' | 'kdst'
   | 'activity' | 'buffs';
 
 // ── Roster rules editor (native leagues, 0071): per-position limits any time,
@@ -922,9 +922,12 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       items: [
         { id: 'overview', label: 'INVITE & ACCESS' },
         ...(has('mode') ? [{ id: 'mode', label: '🎮 GAME MODE' } as TabDef<LeagueTab>] : []),
-        ...(has('lineup') ? [{ id: 'lineup', label: '🧩 LINEUP' } as TabDef<LeagueTab>] : []),
+        // ROSTER = the lineup builder AND the roster rules that bound it
+        // (v0.213.1, founder's call) — one page for "what shape is a team".
+        // Shows for the admin console too, where only the rules half exists.
+        ...(has('lineup') || native ? [{ id: 'lineup', label: '🧩 ROSTER' } as TabDef<LeagueTab>] : []),
         ...(has('scoring') ? [{ id: 'scoring', label: '⚖ SCORING' } as TabDef<LeagueTab>] : []),
-        ...(native ? [{ id: 'rules', label: 'ROSTER RULES' } as TabDef<LeagueTab>] : []),
+        ...(native ? [{ id: 'waivers', label: 'WAIVERS & TRADES' } as TabDef<LeagueTab>] : []),
         { id: 'season', label: 'SEASON' },
       ],
     },
@@ -933,6 +936,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       items: [
         ...(native ? [{ id: 'draft', label: '⛏ DRAFT' } as TabDef<LeagueTab>] : []),
         { id: 'members', label: 'MEMBERS' },
+        { id: 'coin', label: '◈ COIN' },
         { id: 'ready', label: 'PICKS' },
         { id: 'matchups', label: 'MATCHUPS' },
         ...(native ? [
@@ -1069,19 +1073,22 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         </div>
       )}
 
-      {/* ROSTER RULES — native leagues only (imported rosters live on their
-          own platform). Its own destination since v0.212.0: these are two full
-          editors that used to sit below the invite codes. */}
-      {tab === 'rules' && l.provider === 'native' && (
-        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <div style={subhead}>ROSTER RULES</div>
-            <RosterRulesEditor leagueId={l.league_id} />
-          </div>
-          <div>
-            <div style={subhead}>WAIVERS &amp; TRADES</div>
-            <TransactionRulesEditor leagueId={l.league_id} />
-          </div>
+      {/* ROSTER RULES ride along under the lineup builder (v0.213.1) — the
+          builder says what the starting spots are, these say how big the
+          roster is and how it may change. Native leagues only; imported
+          rosters are governed on their own platform. */}
+      {tab === 'lineup' && l.provider === 'native' && (
+        <div style={{ marginTop: 14, borderTop: panels?.lineup ? '1px solid var(--bd)' : 'none', paddingTop: panels?.lineup ? 14 : 0 }}>
+          <div style={subhead}>ROSTER RULES</div>
+          <RosterRulesEditor leagueId={l.league_id} />
+        </div>
+      )}
+
+      {/* WAIVERS & TRADES — its own destination (v0.213.1). */}
+      {tab === 'waivers' && l.provider === 'native' && (
+        <div style={{ marginTop: 12 }}>
+          <div style={subhead}>WAIVERS &amp; TRADES</div>
+          <TransactionRulesEditor leagueId={l.league_id} />
         </div>
       )}
 
@@ -1147,9 +1154,16 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         </div>
       )}
       {tab === 'members' && !members && <div style={{ marginTop: 12 }}><Muted text="Loading…" /></div>}
+      {/* COIN (v0.213.1): the weekly allowance + one-off grants get their own
+          destination. They rode on top of MEMBERS, which meant scrolling past
+          an economy control every time you wanted to check who had joined. */}
+      {tab === 'coin' && (
+        <div style={{ marginTop: 12 }}>
+          <WeeklyBudget l={l} onGranted={() => { if (members) loadMembers().catch(() => {}); }} />
+        </div>
+      )}
       {tab === 'members' && members && (
         <div style={{ marginTop: 12 }}>
-          <WeeklyBudget l={l} onGranted={() => loadMembers()} />
           {(() => { const nj = members.filter((m) => !m.enrolled).length; const nd = members.filter((m) => m.drifted).length; return (<>
             <div className="mono" style={{ ...mono, fontSize: 9.5, color: nj ? 'var(--dim)' : 'var(--you)', marginBottom: 6 }}>
               {members.length - nj}/{members.length} joined{nj ? ` · ${nj} not yet` : ''}

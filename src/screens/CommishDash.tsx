@@ -157,14 +157,35 @@ const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fM
 // section added to the core catalog still shows up (under MORE) instead of
 // silently vanishing from the editor.
 const SCORING_TABS: { id: string; label: string; sections: string[] }[] = [
-  { id: 'offense', label: 'OFFENSE', sections: ['PASSING', 'RUSHING', 'RECEIVING', 'COMBINED RUSH + REC', 'FIRST DOWNS BY POSITION'] },
-  { id: 'turnovers', label: 'TURNOVERS & ST', sections: ['TURNOVERS & RETURNS', 'SPECIAL TEAMS PLAYER'] },
+  // Offense splits one-per-skill (founder's call) — a QB's knobs and a WR's
+  // knobs are different jobs and were sharing a tab.
+  { id: 'passing', label: 'PASSING', sections: ['PASSING'] },
+  { id: 'receiving', label: 'RECEIVING', sections: ['RECEIVING'] },
+  { id: 'rushing', label: 'RUSHING', sections: ['RUSHING'] },
+  // What's left of offense: the cross-skill totals and the per-position
+  // first-down bonuses, neither of which belongs under a single skill.
+  { id: 'offother', label: 'OTHER', sections: ['COMBINED RUSH + REC', 'FIRST DOWNS BY POSITION'] },
+  { id: 'turnovers', label: 'TURNOVERS', sections: ['TURNOVERS & RETURNS', 'SPECIAL TEAMS PLAYER'] },
   { id: 'kicking', label: 'KICKING', sections: ['KICKING', 'PUNTING'] },
-  { id: 'defense', label: 'TEAM DEFENSE', sections: ['TEAM DEFENSE', 'POINTS ALLOWED', 'YARDAGE ALLOWED'] },
+  { id: 'defense', label: 'DEFENSE', sections: ['TEAM DEFENSE', 'POINTS ALLOWED', 'YARDAGE ALLOWED'] },
   { id: 'idp', label: 'IDP', sections: ['IDP'] },
   { id: 'coach', label: 'HEAD COACH', sections: ['HEAD COACH'] },
 ];
 const KNOWN_SECTIONS = new Set(SCORING_TABS.flatMap((t) => t.sections));
+
+// ── Scoring presets (v0.213.1) ──────────────────────────────────────────────
+// The starting points every commissioner recognises, so nobody has to build a
+// standard league out of 155 individual knobs. A preset is a RESET plus its
+// own deltas: applying one returns the whole catalog to engine defaults and
+// then sets `over`, so the result is exactly the named system and never a
+// half-merge with whatever was there before. `ppr` rides along because
+// receptions are a league setting (set_league_game_mode), not a catalog key.
+const SCORING_PRESETS: { id: string; label: string; hint: string; ppr: number; over: Record<string, number> }[] = [
+  { id: 'std', label: 'STANDARD', hint: 'no points per catch — the classic scoring most old leagues grew up on', ppr: 0, over: {} },
+  { id: 'half', label: '½ PPR', hint: 'half a point per catch — the modern middle ground', ppr: 0.5, over: {} },
+  { id: 'full', label: 'FULL PPR', hint: 'a point per catch — the Sleeper/ESPN default', ppr: 1, over: {} },
+  { id: 'tep', label: 'TE PREMIUM', hint: 'full PPR plus an extra ½ point on every tight-end catch', ppr: 1, over: { teRec: 0.5 } },
+];
 
 // Team-acronym helper (founder ask): a tappable 32-team grid under every teams
 // input, kept in SYNC with the free-text field — a chip toggles its code in or
@@ -211,7 +232,9 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   const [fltOpen, setFltOpen] = useState<number | null>(null);
   // Which SCORING tab is showing (v0.213.0), and the drip-side adjustments
   // that the ADJUSTMENTS tab edits (loaded lazily — only that tab needs them).
-  const [scTab, setScTab] = useState('offense');
+  const [scTab, setScTab] = useState('passing');
+  // Which preset is armed for its confirming second click (v0.213.1).
+  const [armed, setArmed] = useState<string | null>(null);
   const [adjust, setAdjust] = useState<LeagueScoring | null>(null);
   useEffect(() => {
     if (view !== 'scoring' || adjust) return;
@@ -284,6 +307,22 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
+  // Applying a preset REPLACES every value, so it asks twice: the first click
+  // arms the button, the second commits. A stray click can't wipe a catalog
+  // someone spent the evening tuning.
+  const applyPreset = async (p: typeof SCORING_PRESETS[number]) => {
+    if (busy) return;
+    if (armed !== p.id) { setArmed(p.id); setNote(`${p.label} replaces every scoring value — click again to confirm`); return; }
+    setBusy(true); setArmed(null); setNote(null);
+    try {
+      const m = await setLeagueGameMode(leagueId, 'classic', p.ppr);
+      if (!m.ok) { setNote(m.error ?? 'failed'); return; }
+      setPpr(p.ppr);
+      const r = await setLeagueClassicScoring(leagueId, p.over);
+      if (r.ok) { scInit(r.scoring ?? {}); setNote(`✓ ${p.label} applied`); }
+      else setNote(r.error ?? 'failed');
+    } finally { setBusy(false); }
+  };
   const saveSpots = async () => {
     if (busy || !spots || !spots.length) return;
     setBusy(true); setNote(null);
@@ -335,14 +374,12 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
         </div>
       </div>
       )}
+      {/* The RECEPTIONS pills used to live here (v0.213.1: removed). PPR is a
+          scoring decision, so it rides the SCORING page's presets now — this
+          tab is just "which game are we playing". */}
       {view === 'mode' && mode === 'classic' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10 }}>
-          <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', fontWeight: 700 }}>RECEPTIONS</span>
-          {([0, 0.5, 1] as const).map((p) => (
-            <button key={p} onClick={() => void set('classic', p)} disabled={busy} className="mono" style={pill(ppr === p)}>
-              {p === 0 ? 'NON-PPR' : p === 0.5 ? '½ PPR' : 'FULL PPR'}
-            </button>
-          ))}
+        <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
+          Receptions, bonuses and every other value live under ⚖ SCORING — start from a preset there, then tune anything.
         </div>
       )}
       {/* A drip league has no classic lineup or scoring to set — say so rather
@@ -461,6 +498,29 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--faint)' }}>
             ⚖ SCORING <span style={{ fontWeight: 400 }}>every value is yours to set · changed values light up</span>
           </div>
+          {/* PRESETS (v0.213.1): the recognised starting points, so a standard
+              league is one click instead of 155 decisions. Each one resets the
+              catalog and applies its own deltas, and carries the receptions
+              setting that used to be a separate control on GAME MODE. */}
+          {mode === 'classic' && (
+            <div style={{ marginTop: 8, border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '8px 10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--faint)' }}>START FROM</span>
+                {SCORING_PRESETS.map((p) => (
+                  <button key={p.id} onClick={() => void applyPreset(p)} disabled={busy} title={p.hint}
+                    className="mono" style={{ ...pill(armed === p.id), padding: '4px 11px' }}>
+                    {armed === p.id ? `CONFIRM ${p.label}` : p.label}
+                  </button>
+                ))}
+                <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginLeft: 'auto' }}>
+                  RECEPTIONS: <span style={{ color: 'var(--you)', fontWeight: 700 }}>{ppr === 1 ? 'FULL PPR' : ppr === 0.5 ? '½ PPR' : 'NON-PPR'}</span>
+                </span>
+              </div>
+              <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
+                A preset RESETS every value to that system, then you tune whatever you like below. Applying one asks twice — it replaces the whole catalog.
+              </div>
+            </div>
+          )}
           {/* Tabs across the top (v0.213.0): six catalog groups + the drip
               ADJUSTMENTS that used to live in the commish kit. A drip league
               only has ADJUSTMENTS to show, so it opens straight on it. */}
@@ -469,10 +529,10 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
               // A section the core catalog grows that no bucket claims still
               // gets an editor rather than disappearing.
               ...(mode === 'classic' && CLASSIC_SCORING_SECTIONS.some((s) => !KNOWN_SECTIONS.has(s.section))
-                ? [{ id: 'more', label: 'MORE' }] : []),
-              { id: 'adjust', label: '⚖ ADJUSTMENTS' }]}
+                ? [{ id: 'more', label: 'UNGROUPED' }] : []),
+              { id: 'adjust', label: 'ADJUSTMENTS' }]}
             active={mode === 'classic' ? scTab : 'adjust'}
-            onSelect={setScTab}
+            onSelect={setScTab} wrap
             style={{ margin: '8px 0 0' }} />
         </div>
       )}
