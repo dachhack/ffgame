@@ -19,6 +19,21 @@ export const NFL_CODES = [
   'nyg', 'nyj', 'phi', 'pit', 'sea', 'sf', 'tb', 'ten', 'was',
 ];
 
+/** The league's real shape — conference → division → teams, in the codes above
+ *  (v0.216.1). A flat alphabetical run of 32 abbreviations is only scannable if
+ *  you already know every code; grouped by division, you find a team the way
+ *  you think about one. Codes match NFL_CODES exactly ('la' = the Rams). */
+export const NFL_DIVISIONS: { conf: 'AFC' | 'NFC'; div: 'East' | 'North' | 'South' | 'West'; teams: string[] }[] = [
+  { conf: 'AFC', div: 'East', teams: ['buf', 'mia', 'ne', 'nyj'] },
+  { conf: 'AFC', div: 'North', teams: ['bal', 'cin', 'cle', 'pit'] },
+  { conf: 'AFC', div: 'South', teams: ['hou', 'ind', 'jax', 'ten'] },
+  { conf: 'AFC', div: 'West', teams: ['den', 'kc', 'lv', 'lac'] },
+  { conf: 'NFC', div: 'East', teams: ['dal', 'nyg', 'phi', 'was'] },
+  { conf: 'NFC', div: 'North', teams: ['chi', 'det', 'gb', 'min'] },
+  { conf: 'NFC', div: 'South', teams: ['atl', 'car', 'no', 'tb'] },
+  { conf: 'NFC', div: 'West', teams: ['ari', 'la', 'sf', 'sea'] },
+];
+
 export type KdstMode = 'off' | 'random' | 'manual';
 
 /** Deterministic 32-bit hash (FNV-1a) — no Math.random, so a re-sync is stable. */

@@ -275,7 +275,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 // the commissioner's settings panels (injected by CommishDash) are first-class
 // destinations rather than cards stacked below the card.
 export type LeagueTab =
-  | 'overview' | 'waivers' | 'season' | 'admin'
+  | 'overview' | 'waivers' | 'admin'
   | 'mode' | 'lineup' | 'scoring'
   | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'matchups' | 'members' | 'coin' | 'audit' | 'ready' | 'kdst'
   | 'activity' | 'buffs';
@@ -290,6 +290,15 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
   const [caps, setCaps] = useState<Record<(typeof POS_CAP_KEYS)[number], number> | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // v0.216.1: in a CLASSIC league the roster builder already derives roster
+  // size (starters + bench + taxi + IR → draft rounds), so a second stepper
+  // writing the same number is worse than redundant — the two can disagree.
+  // It becomes a read-only readout there. A DRIP league has no builder, so
+  // this stays its only way to set roster size.
+  const [derived, setDerived] = useState(false);
+  useEffect(() => {
+    leagueGameMode(leagueId).then((r) => { if (r.ok) setDerived(r.mode === 'classic'); }).catch(() => {});
+  }, [leagueId]);
   useEffect(() => {
     rosterRules(leagueId).then((r) => {
       if (r.error || !r.ok) { setMsg(r.error ?? 'could not load roster rules'); return; }
@@ -307,7 +316,7 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
     try {
       const posCaps = Object.fromEntries(POS_CAP_KEYS.map((k) =>
         [k, caps[k] >= CAP_UNLIMITED ? null : caps[k]])) as PosCaps;
-      const r = await setRosterRules(leagueId, pending ? rounds : null, posCaps);
+      const r = await setRosterRules(leagueId, pending && !derived ? rounds : null, posCaps);
       setMsg(r.ok ? '✓ saved — new limits apply immediately' : (r.error ?? 'save failed'));
     } catch (e) { setMsg(errMsg(e, 'save failed')); }
     finally { setSaving(false); }
@@ -316,14 +325,22 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
   return (
     <div>
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>ROSTER SIZE</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, opacity: pending ? 1 : 0.5 }}>
-            <button onClick={() => pending && setRounds(Math.max(5, rounds - 1))} className="mono" style={stepBtn} disabled={!pending}>−</button>
-            <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{rounds}</span>
-            <button onClick={() => pending && setRounds(Math.min(25, rounds + 1))} className="mono" style={stepBtn} disabled={!pending}>＋</button>
+        {derived ? (
+          <div style={{ textAlign: 'center' }}>
+            <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>ROSTER SIZE</div>
+            <div className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', marginTop: 4 }} title="starters + bench + taxi + IR — set on the ROSTER tab's builder">{rounds}</div>
+            <div className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)', marginTop: 2 }}>from the builder</div>
           </div>
-        </div>
+        ) : (
+          <div style={{ textAlign: 'center' }}>
+            <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>ROSTER SIZE</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, opacity: pending ? 1 : 0.5 }}>
+              <button onClick={() => pending && setRounds(Math.max(5, rounds - 1))} className="mono" style={stepBtn} disabled={!pending}>−</button>
+              <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{rounds}</span>
+              <button onClick={() => pending && setRounds(Math.min(25, rounds + 1))} className="mono" style={stepBtn} disabled={!pending}>＋</button>
+            </div>
+          </div>
+        )}
         {POS_CAP_KEYS.map((k) => (
           <div key={k} style={{ textAlign: 'center' }}>
             <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{posShort(k)} MAX</div>
@@ -337,7 +354,7 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
         <button onClick={save} disabled={saving} className="mono" style={btn(true)}>{saving ? 'saving…' : '✓ save rules'}</button>
       </div>
       <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
-        Limits cap how many of a position a roster may hold (∞ = no limit, 0 bans it) — enforced at the draft, free agency, waivers, and auction bids; the AI drafts to them too. Roster size {pending ? 'can change until the draft starts' : 'is locked once the draft starts'}. Rosters already over a lowered limit keep their players — the limit blocks new adds.
+        Limits cap how many of a position a roster may hold (∞ = no limit, 0 bans it) — enforced at the draft, free agency, waivers, and auction bids; the AI drafts to them too. {derived ? 'Roster size comes from the builder (starters + bench + taxi + IR) on the ROSTER tab.' : `Roster size ${pending ? 'can change until the draft starts' : 'is locked once the draft starts'}.`} Rosters already over a lowered limit keep their players — the limit blocks new adds.
       </div>
       {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{msg}</div>}
     </div>
@@ -405,18 +422,27 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
     finally { setSaving(false); }
   };
   const hour12 = (m: number) => { const h = Math.floor(m / 60) % 24; return `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? 'AM' : 'PM'}`; };
+  // ANY time of day, not just the top of the hour (v0.216.1, founder's ask).
+  // The 15-minute nudges keep the common cases one click away; the field
+  // itself takes whatever a commissioner types.
+  const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
   const hourStep = (v: number, set: (m: number) => void, keyLabel: string) => (
-    <div style={{ textAlign: 'center' }}>
-      <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{keyLabel} ({hour12(v)})</div>
+    <div>
+      <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{keyLabel} ({hour12(v)} ET)</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
-        <button onClick={() => set((v + 1380) % 1440)} className="mono" style={stepBtnStyle}>−</button>
-        <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 26, textAlign: 'center' }}>{Math.floor(v / 60)}</span>
-        <button onClick={() => set((v + 60) % 1440)} className="mono" style={stepBtnStyle}>＋</button>
+        <button onClick={() => set((v + 1425) % 1440)} className="mono" style={stepBtnStyle} title="15 minutes earlier">−</button>
+        <input type="time" value={hhmm(v)} step={300}
+          onChange={(e) => {
+            const [h, mi] = e.target.value.split(':').map(Number);
+            if (Number.isFinite(h) && Number.isFinite(mi)) set(((h * 60 + mi) % 1440 + 1440) % 1440);
+          }}
+          className="mono" style={{ ...inp, fontSize: 13.5, padding: '4px 6px', colorScheme: 'dark' }} />
+        <button onClick={() => set((v + 15) % 1440)} className="mono" style={stepBtnStyle} title="15 minutes later">＋</button>
       </div>
     </div>
   );
   const toggle = (on: boolean, label: string, onClick: () => void) => (
-    <button onClick={onClick} className="mono" style={{ ...mono, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 999, padding: '4px 10px' }}>{label}</button>
+    <button onClick={onClick} className="mono" style={{ ...mono, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, padding: '4px 10px' }}>{label}</button>
   );
   return (
     <div>
@@ -710,7 +736,7 @@ function PositionAccessRow({ leagueId }: { leagueId: string }) {
         const lit = on?.includes(g) ?? false;
         return (
           <button key={g} onClick={() => void flip(g)} disabled={on === null || busy} className="mono"
-            style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: '3px 10px', cursor: 'pointer',
+            style={{ fontSize: 11.5, fontWeight: 700, borderRadius: RADIUS, padding: '3px 10px', cursor: 'pointer',
               color: lit ? 'var(--on-accent)' : 'var(--dim)', background: lit ? 'var(--you)' : 'var(--bg)',
               border: `1px solid ${lit ? 'var(--you)' : 'var(--bd)'}`, opacity: on === null || busy ? 0.5 : 1 }}>
             {g}
@@ -744,7 +770,7 @@ function ClassicAccessRow({ leagueId }: { leagueId: string }) {
         🎮 CLASSIC (NORMIE) AVAILABILITY {mode === 'classic' ? '· league is CLASSIC now' : ''}
       </span>
       <button onClick={() => void flip()} disabled={on === null || busy} className="mono"
-        style={{ fontSize: 12, fontWeight: 700, borderRadius: 999, padding: '4px 12px', cursor: 'pointer',
+        style={{ fontSize: 12, fontWeight: 700, borderRadius: RADIUS, padding: '4px 12px', cursor: 'pointer',
           color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)',
           border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, opacity: on === null || busy ? 0.5 : 1 }}>
         {on === null ? '…' : on ? 'UNLOCKED' : 'LOCKED'}
@@ -984,14 +1010,13 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       title: 'SET UP',
       items: [
         { id: 'overview', label: 'INVITE & ACCESS' },
-        ...(has('mode') ? [{ id: 'mode', label: '🎮 GAME MODE' } as TabDef<LeagueTab>] : []),
+        { id: 'mode', label: '🎮 MODE & SEASON' },
         // ROSTER = the lineup builder AND the roster rules that bound it
         // (v0.213.1, founder's call) — one page for "what shape is a team".
         // Shows for the admin console too, where only the rules half exists.
         ...(has('lineup') || native ? [{ id: 'lineup', label: '🧩 ROSTER' } as TabDef<LeagueTab>] : []),
         ...(has('scoring') ? [{ id: 'scoring', label: '⚖ SCORING' } as TabDef<LeagueTab>] : []),
         ...(native ? [{ id: 'waivers', label: 'WAIVERS & TRADES' } as TabDef<LeagueTab>] : []),
-        { id: 'season', label: 'SEASON' },
       ],
     },
     {
@@ -999,7 +1024,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       items: [
         ...(native ? [{ id: 'draft', label: '⛏ DRAFT' } as TabDef<LeagueTab>] : []),
         { id: 'members', label: 'MEMBERS' },
-        { id: 'coin', label: '◈ COIN' },
+        { id: 'coin', label: '◈ DRIP COIN' },
         { id: 'ready', label: 'PICKS' },
         { id: 'matchups', label: 'MATCHUPS' },
         ...(native ? [
@@ -1155,10 +1180,11 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         </div>
       )}
 
-      {/* SEASON — the once-per-season plumbing: schedule sync, member re-pull,
-          preseason practice. */}
-      {tab === 'season' && (
-        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* SEASON plumbing — schedule sync, member re-pull, preseason practice.
+          Folded under MODE (v0.216.1): both answer "what is this league and
+          how does its season run", and neither filled a page alone. */}
+      {tab === 'mode' && (
+        <div style={{ marginTop: 14, borderTop: panels?.mode ? '1px solid var(--bd)' : 'none', paddingTop: panels?.mode ? 14 : 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
           {l.provider !== 'native' && (
           <div>
             <div style={subhead}>SCHEDULE</div>
@@ -1227,7 +1253,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
               questions are "who has what" and "give this team some" — both were
               only answerable by scrolling the MEMBERS list, one team at a time,
               with no way to compare. One table answers both. */}
-          <div style={{ ...subhead, marginTop: 16 }}>COIN BY TEAM</div>
+          <div style={{ ...subhead, marginTop: 16 }}>DRIP COIN BY TEAM</div>
           {!members ? <Muted text="Loading…" /> : members.length === 0 ? <Muted text="No teams yet." /> : (
             <>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
@@ -1254,6 +1280,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
               </div>
               <div className="mono" style={{ ...mono, fontSize: 11, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
                 Grants are additive and immediate — a negative number claws coin back. The weekly allowance above pays every team automatically as each week's games arrive.
+                <br />DRIP COIN is the in-game currency for power-ups and live buffs. It is NOT the FAAB waiver budget — that's a separate wallet under WAIVERS &amp; TRADES.
               </div>
             </>
           )}
@@ -1784,7 +1811,7 @@ function SeedCoin({ balance, onSeed, hideBalance = false }: {
     <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: hideBalance ? 0 : 6 }}>
       {!hideBalance && <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>◇ {Math.round(balance)}</span>}
       <input value={amt} onChange={(e) => { setAmt(e.target.value.replace(/[^\d-]/g, '')); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
-        placeholder="grant coin…" inputMode="numeric" style={{ ...inp, fontSize: 12.5, padding: '5px 7px', width: 104 }} />
+        placeholder="grant drip…" inputMode="numeric" style={{ ...inp, fontSize: 12.5, padding: '5px 7px', width: 104 }} />
       <button onClick={go} disabled={busy || !amt} className="mono" style={{ ...btn(false), opacity: busy || !amt ? 0.6 : 1 }}>{busy ? '…' : 'grant'}</button>
       {msg && <span className="mono" style={{ ...mono, fontSize: 11.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp, #e5484d)' }}>{msg}</span>}
     </div>
@@ -1883,7 +1910,7 @@ function WeeklyBudget({ l, onGranted }: { l: AdminLeague; onGranted: () => void 
   };
   return (
     <div style={{ marginBottom: 10, padding: '9px 10px', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6 }}>
-      <div className="mono" style={{ ...mono, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 7 }}>◈ WEEKLY BUDGET</div>
+      <div className="mono" style={{ ...mono, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 7 }}>◈ WEEKLY DRIP COIN</div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <input value={amt} onChange={(e) => { setAmt(e.target.value.replace(/[^\d]/g, '')); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
           placeholder="coin / week" inputMode="numeric" style={{ ...inp, fontSize: 13.5, padding: '5px 7px', width: 90 }} />
@@ -2876,7 +2903,7 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
     setSeedOrder(next);
   };
   const toggle = (on: boolean, label: string, onClick: () => void, off = false) => (
-    <button onClick={onClick} disabled={off} className="mono" style={{ ...mono, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.04em', cursor: off ? 'default' : 'pointer', opacity: off ? 0.5 : 1, color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 999, padding: '4px 10px' }}>{label}</button>
+    <button onClick={onClick} disabled={off} className="mono" style={{ ...mono, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.04em', cursor: off ? 'default' : 'pointer', opacity: off ? 0.5 : 1, color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, padding: '4px 10px' }}>{label}</button>
   );
   const side = (m: PlayoffMatchup, rid: number, score: number | null) => {
     const won = m.winner === rid;
