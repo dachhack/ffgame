@@ -186,13 +186,28 @@ for (const rows of games.values()) {
     // Does `roleId` own the lost fumble? Exact id match, else role-default flag.
     const fumbledBy = (roleId, roleDefault) => fumLost && (fumbler ? fumbler === roleId : roleDefault);
 
+    // Truth flags (0166). cp/ic/sk derive from columns the dumps already carry
+    // (yards_after_catch presence = completion; `sack`). fd and tp need columns
+    // this dump set predates (down/ydstogo/first_down, two_point_*) — the reads
+    // are guarded so the NEXT re-pull lights them up with no code change.
+    const isTp = Number(d.two_point_attempt ?? 0) === 1;
+    const tpGood = isTp && d.two_point_conv_result === 'success';
+    const fdOn = Number(d.first_down ?? 0) === 1
+      || (isSet(d.down) && isSet(d.ydstogo) && Number(d.down) > 0
+          && (Number(d.yards_gained) || 0) >= Number(d.ydstogo) && !intc && !fumLost);
+    const FD = fdOn ? { fd: 1 } : {};
+
     // Passer (QB) — completed pass adds passing yards; incomplete/sack = 0.
     if (pt === 'pass' && isSet(d.passer_player_id) && byGsis.has(d.passer_player_id)) {
       const caught = isSet(d.yards_after_catch);
       const y = caught ? Number(d.yards_gained) || 0 : 0;
       const to = intc || fumbledBy(d.passer_player_id, !caught) ? 1 : 0;
       const slug = byGsis.get(d.passer_player_id).slug;
-      push(week, slug, { c, ...T, k:'pass', y, td: caught && td ? 1 : 0, ca: 0, tg: 0, ...(to ? { to: 1 } : {}) });
+      if (isTp) { if (tpGood) push(week, slug, { c, ...T, k:'tp_pass', y: 0, td: 0, ca: 0, tg: 0 }); }
+      else {
+        const QF = caught ? { cp: 1 } : Number(d.sack) === 1 ? { sk: 1 } : { ic: 1 };
+        push(week, slug, { c, ...T, k:'pass', y, td: caught && td ? 1 : 0, ca: 0, tg: 0, ...(to ? { to: 1 } : {}), ...QF, ...(caught ? FD : {}) });
+      }
       bumpTeam(slug, d.posteam);
       playCount++;
     }
@@ -200,7 +215,8 @@ for (const rows of games.values()) {
     if (pt === 'run' && isSet(d.rusher_player_id) && byGsis.has(d.rusher_player_id)) {
       const to = fumbledBy(d.rusher_player_id, true) ? 1 : 0;
       const slug = byGsis.get(d.rusher_player_id).slug;
-      push(week, slug, { c, ...T, k:'rush', y: Number(d.yards_gained) || 0, td: td ? 1 : 0, ca: 0, tg: 0, ...(to ? { to: 1 } : {}) });
+      if (isTp) { if (tpGood) push(week, slug, { c, ...T, k:'tp_rush', y: 0, td: 0, ca: 0, tg: 0 }); }
+      else push(week, slug, { c, ...T, k:'rush', y: Number(d.yards_gained) || 0, td: td ? 1 : 0, ca: 0, tg: 0, ...(to ? { to: 1 } : {}), ...FD });
       bumpTeam(slug, d.posteam);
       playCount++;
     }
@@ -209,8 +225,9 @@ for (const rows of games.values()) {
       const caught = isSet(d.yards_after_catch);
       const to = caught && fumbledBy(d.receiver_player_id, true) ? 1 : 0;
       const slug = byGsis.get(d.receiver_player_id).slug;
-      push(week, slug, caught
-        ? { c, ...T, k:'rec', y: Number(d.yards_gained) || 0, td: td ? 1 : 0, ca: 1, tg: 1, ...(to ? { to: 1 } : {}) }
+      if (isTp) { if (tpGood && caught) push(week, slug, { c, ...T, k:'tp_rec', y: 0, td: 0, ca: 0, tg: 0 }); }
+      else push(week, slug, caught
+        ? { c, ...T, k:'rec', y: Number(d.yards_gained) || 0, td: td ? 1 : 0, ca: 1, tg: 1, ...(to ? { to: 1 } : {}), ...FD }
         : { c, ...T, k:'incomplete', y: 0, td: 0, ca: 0, tg: 1 });
       bumpTeam(slug, d.posteam);
       playCount++;

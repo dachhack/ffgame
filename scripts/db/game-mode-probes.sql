@@ -213,6 +213,13 @@ begin
   perform assert_true((league_game_mode(lid) -> 'scoring' ->> 'carries20')::numeric = 1.5, 'cs16 member reads parity keys');
   perform probe_as('b');
 
+  -- 0166 truth-flag knobs: first downs (stat + position), efficiency, 2-pt
+  r := set_league_classic_scoring(lid,
+    '{"passFd": 0.5, "fdRb": 1, "passCmp": 0.2, "passInc": -0.3, "passAtt": 0.1, "cmp25": 2, "qbSacked": -1, "rush2pt": 2.5}'::jsonb);
+  perform assert_ok(r, 'cs17 truth-flag keys accepted');
+  perform assert_true((r -> 'scoring' ->> 'passFd')::numeric = 0.5 and (r -> 'scoring' ->> 'qbSacked')::numeric = -1
+    and (r -> 'scoring' ->> 'rush2pt')::numeric = 2.5 and (r -> 'scoring' ->> 'fdRb')::numeric = 1, 'cs18 truth-flag values stored');
+
   -- best ball + classic scoring have no meaning in a drip league
   perform assert_ok(set_league_game_mode(lid, 'drip'), 'bb8 back to drip');
   perform assert_err(set_league_bestball(lid, '["FLEX"]'::jsonb), 'classic-league setting', 'bb9 refused in drip');
