@@ -75,6 +75,19 @@ export function extractCredits(csvText) {
       if (gsis) { anyPd = true; out.push({ ...base, k: 'pd', gsis, name: g(`pass_defense_${n}_player_name`).trim() }); }
     }
     if (anyPd) out.push({ ...base, k: 'pd', gsis: '', name: '' }); // team credit
+    // 0170: INDIVIDUAL defensive TD + safety credit — the two knobs live ESPN
+    // text can't attribute to a person. Individual rows ONLY: the ESPN poller
+    // already emits the team dst_td/safety rows, so a team credit here would
+    // double-count across the two game-id namespaces.
+    const tdTeam = g('td_team').trim();
+    if (tdTeam && tdTeam === base.defteam) {
+      const gsis = g('td_player_id').trim();
+      if (gsis) out.push({ ...base, k: 'dst_td', gsis, name: g('td_player_name').trim() });
+    }
+    if (g('safety') === '1') {
+      const gsis = g('safety_player_id').trim();
+      if (gsis) out.push({ ...base, k: 'safety', gsis, name: g('safety_player_name').trim() });
+    }
   }
   return out;
 }
@@ -96,7 +109,7 @@ export function creditsToRows(credits, resolve) {
     rows.push({
       week: cr.week, game_id: cr.gid, player_slug: slug,
       c: cr.c, t: null, pid: cr.pid, k: cr.k, y: 0, td: 0, ca: 0, tg: 0, to: null,
-      fd: null, cp: null, ic: null, sk: null, rk: null, tt: null, hf: null,
+      fd: null, cp: null, ic: null, sk: null, rk: null, tt: null, hf: null, p6: null,
     });
   }
   return { rows, dropped };

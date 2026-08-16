@@ -35,7 +35,7 @@ export async function pollGame(eventId, week, playerIndex) {
         k: p.k, y: p.y, td: p.td, ca: p.ca, tg: p.tg, to: p.to ?? null,
         // 0166 truth flags + 0167 return kind + 0168 tackle detail — null when absent
         fd: p.fd ?? null, cp: p.cp ?? null, ic: p.ic ?? null, sk: p.sk ?? null, rk: p.rk ?? null,
-        tt: p.tt ?? null, hf: p.hf ?? null,
+        tt: p.tt ?? null, hf: p.hf ?? null, p6: p.p6 ?? null,
       });
     }
   }

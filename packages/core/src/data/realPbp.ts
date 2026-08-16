@@ -29,10 +29,16 @@ export type RealPlayKind =
                                                      // forced fumble ('ff' also rides on
                                                      // the DEF pseudo-player for the team
                                                      // forced-fumble knob)
-  | 'qbhit' | 'pd';                                  // IDP + DEF (0169): QB hit, pass
+  | 'qbhit' | 'pd'                                   // IDP + DEF (0169): QB hit, pass
                                                      // defended — landed by the nflverse
                                                      // true-up ~a day after games (never
                                                      // reliably in live ESPN text)
+  | 'fum' | 'frtd'                                   // offense (0170): any fumble (kept or
+                                                     // lost) by the fumbler; own-team
+                                                     // fumble-recovery TD by the recoverer
+  | 'st_tkl';                                        // special-teams tackle (0170) — any
+                                                     // position, kick/punt coverage; tt
+                                                     // rides like scrimmage tackles
 // `c` is the game-elapsed clock (seconds). `t` is the REAL wall-clock time of
 // the play, in seconds since the game's first snap (baked from nflverse
 // time_of_day) — used to gate real-time power-ups so a delayed feed can't be
@@ -46,7 +52,8 @@ export type RealPlayKind =
 // split return-yardage knobs (legacy return rows score the combined knob only).
 // Phase-3 (0168): `tt` on tackle rows — 's' solo / 'a' assist — and `hf` on an
 // individual defender's sack row when the credit is split (scores half).
-export interface RealPlay { c: number; t?: number; pid?: number; k: RealPlayKind; y: number; td: number; ca: number; tg: number; to?: number; fd?: number; cp?: number; ic?: number; sk?: number; rk?: string; tt?: string; hf?: number; }
+// 0170: `p6` on a QB's INT row — the pick was returned for a TD (pick-6).
+export interface RealPlay { c: number; t?: number; pid?: number; k: RealPlayKind; y: number; td: number; ca: number; tg: number; to?: number; fd?: number; cp?: number; ic?: number; sk?: number; rk?: string; tt?: string; hf?: number; p6?: number; }
 
 interface WeekData { pbp: Record<string, RealPlay[]>; points: Record<string, number>; poss?: Record<string, number[][]>; wall?: Record<string, number[]>; ends?: Record<string, number>; kick?: Record<string, number>; }
 
@@ -82,13 +89,14 @@ export function setLivePlays(week: number, pbp: Record<string, RealPlay[]>, poin
 export function clearLivePlays(): void { livePbp.clear(); livePts.clear(); }
 
 /** live_play DB rows → {slug: RealPlay[]} (mirrors the worker's rowsToPbp). */
-export function liveRowsToPbp(rows: { player_slug: string; c: number; t: number | null; pid: number | null; k: string; y: number; td: number; ca: number; tg: number; to: number | null; fd?: number | null; cp?: number | null; ic?: number | null; sk?: number | null; rk?: string | null; tt?: string | null; hf?: number | null }[]): Record<string, RealPlay[]> {
+export function liveRowsToPbp(rows: { player_slug: string; c: number; t: number | null; pid: number | null; k: string; y: number; td: number; ca: number; tg: number; to: number | null; fd?: number | null; cp?: number | null; ic?: number | null; sk?: number | null; rk?: string | null; tt?: string | null; hf?: number | null; p6?: number | null }[]): Record<string, RealPlay[]> {
   const by: Record<string, RealPlay[]> = {};
   for (const r of rows) (by[r.player_slug] ||= []).push({
     c: r.c, t: r.t ?? undefined, pid: r.pid ?? undefined, k: r.k as RealPlayKind, y: r.y, td: r.td, ca: r.ca, tg: r.tg,
     ...(r.to ? { to: r.to } : {}),
     ...(r.fd ? { fd: 1 } : {}), ...(r.cp ? { cp: 1 } : {}), ...(r.ic ? { ic: 1 } : {}), ...(r.sk ? { sk: 1 } : {}),
     ...(r.rk ? { rk: r.rk } : {}), ...(r.tt ? { tt: r.tt } : {}), ...(r.hf ? { hf: 1 } : {}),
+    ...(r.p6 ? { p6: 1 } : {}),
   });
   for (const s of Object.keys(by)) by[s].sort((a, b) => a.c - b.c);
   return by;

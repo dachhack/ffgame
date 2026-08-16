@@ -56,6 +56,8 @@ export interface RawPlay {
   rk?: 'kr' | 'pr'; // return row: kickoff vs punt return (0167 split knobs)
   tt?: 's' | 'a';   // tackle row: solo vs assist (0168 split knobs)
   hf?: boolean;     // individual sack row: split credit — scores half (0168)
+  pick6?: boolean;  // QB INT row: returned for a TD (0170) — never sets `td`,
+                    // so drip's TD points can't fire on a pick thrown
 }
 
 // Effect family of a metric → how it scores a single play and what it does.
@@ -225,6 +227,9 @@ function playText(p: Player, play: RawPlay): string {
   if (play.kind === 'ff') return `${t} D: forced fumble`;
   if (play.kind === 'qbhit') return `${t} D: QB hit`;
   if (play.kind === 'pd') return `${t} D: pass defended`;
+  if (play.kind === 'fum') return `${t}: fumble`;
+  if (play.kind === 'frtd') return `${t}: fumble recovery TD`;
+  if (play.kind === 'st_tkl') return `${t} ST: ${play.tt === 's' ? 'solo tackle' : 'tackle'}`;
   return `${t}: incomplete`;
 }
 
@@ -249,6 +254,7 @@ export function realRawPlays(playerId: string, week: number): RawPlay[] | null {
       ...(p.fd ? { fd: true } : {}), ...(p.cp ? { cmp: true } : {}), ...(p.ic ? { inc: true } : {}),
       ...(p.sk ? { skd: true } : {}), ...(p.rk === 'kr' || p.rk === 'pr' ? { rk: p.rk as 'kr' | 'pr' } : {}),
       ...(p.tt === 's' || p.tt === 'a' ? { tt: p.tt as 's' | 'a' } : {}), ...(p.hf ? { hf: true } : {}),
+      ...(p.p6 ? { pick6: true } : {}),
     }))
     .sort((a, b) => a.clock - b.clock);
 }

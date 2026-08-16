@@ -242,6 +242,16 @@ begin
   perform assert_ok(r, 'cs23 true-up keys accepted');
   perform assert_true((r -> 'scoring' ->> 'idpQbHit')::numeric = 1 and (r -> 'scoring' ->> 'dstPd')::numeric = 0.5, 'cs24 true-up values stored');
 
+  -- 0170 gap-close keys: miss bands, sack/return yardage rates, game bonuses,
+  -- pick-6, fumble kinds, ST player stats
+  r := set_league_classic_scoring(lid,
+    '{"fgM40": -2, "idpSackYd": 0.1, "idpIntRetYd": 0.05, "dstFumRetYd": 0.02, "idpSack2": 3, "idpPd3": 2, "qbPick6": -3, "fumbleAny": -1, "fumRecTd": 6, "stTackle": 1, "stFf": 1, "stFr": 1, "idpIntRetTd50": 2}'::jsonb);
+  perform assert_ok(r, 'cs25 gap-close keys accepted');
+  perform assert_true((r -> 'scoring' ->> 'fgM40')::numeric = -2 and (r -> 'scoring' ->> 'idpSackYd')::numeric = 0.1
+    and (r -> 'scoring' ->> 'qbPick6')::numeric = -3 and (r -> 'scoring' ->> 'stTackle')::numeric = 1
+    and (r -> 'scoring' ->> 'dstFumRetYd')::numeric = 0.02 and (r -> 'scoring' ->> 'idpSack2')::numeric = 3,
+    'cs26 gap-close values stored (yard rates keep 3dp)');
+
   -- best ball + classic scoring have no meaning in a drip league
   perform assert_ok(set_league_game_mode(lid, 'drip'), 'bb8 back to drip');
   perform assert_err(set_league_bestball(lid, '["FLEX"]'::jsonb), 'classic-league setting', 'bb9 refused in drip');

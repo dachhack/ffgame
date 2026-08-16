@@ -137,16 +137,21 @@ export interface ClassicScoring {
   recTd40: number; recTd50: number;
   rr100: number; rr200: number;
   fumble: number; retYd: number; retTd: number; krYd: number; prYd: number;
+  fumbleAny: number; fumRecTd: number; qbPick6: number;
   fg0: number; fg20: number; fg30: number; fg40: number; fg50: number; fg60: number;
   fgYd: number; fgYd30: number; fgMiss: number; xp: number; xpMiss: number;
+  fgM0: number; fgM20: number; fgM30: number; fgM40: number; fgM50: number; fgM60: number;
   sack: number; dstInt: number; fumRec: number; dstTd: number; safety: number; dstBlk: number; dstFf: number;
-  dstQbHit: number; dstPd: number;
+  dstQbHit: number; dstPd: number; dstIntRetYd: number; dstFumRetYd: number;
   paPt: number; pa0: number; pa1: number; pa7: number; pa14: number; pa21: number; pa28: number; pa35: number;
   yaPt: number; ya100: number; ya199: number; ya299: number; ya349: number; ya399: number;
   ya449: number; ya499: number; ya549: number; ya550: number;
   idpTackle: number; idpSack: number; idpInt: number; idpFr: number; idpTd: number; idpSafety: number;
   idpTackle10: number; idpSolo: number; idpAst: number; idpTfl: number; idpFf: number;
   idpQbHit: number; idpPd: number;
+  idpSackYd: number; idpIntRetYd: number; idpFumRetYd: number;
+  idpIntRetTd50: number; idpFumRetTd50: number; idpSack2: number; idpPd3: number;
+  stTackle: number; stFf: number; stFr: number;
 }
 export const DEFAULT_CLASSIC_SCORING: ClassicScoring = {
   passYd: 0.04, passTd: 4, int: -2, pass300: 0, pass400: 0,
@@ -165,12 +170,15 @@ export const DEFAULT_CLASSIC_SCORING: ClassicScoring = {
   recTd40: 0, recTd50: 0,
   rr100: 0, rr200: 0,
   fumble: -2, retYd: 0, retTd: 6, krYd: 0, prYd: 0,
+  // fumRecTd defaults to Sleeper's 6 — only new 'frtd' rows carry the kind.
+  fumbleAny: 0, fumRecTd: 6, qbPick6: 0,
   // fg60 defaults to fg50's value so a 60-yarder scores exactly what it did
   // before the band existed — the knob is there for Sleeper's 6, not forced.
   fg0: 3, fg20: 3, fg30: 3, fg40: 4, fg50: 5, fg60: 5,
   fgYd: 0, fgYd30: 0, fgMiss: -1, xp: 1, xpMiss: -1,
+  fgM0: 0, fgM20: 0, fgM30: 0, fgM40: 0, fgM50: 0, fgM60: 0,
   sack: 1, dstInt: 2, fumRec: 2, dstTd: 6, safety: 2, dstBlk: 2, dstFf: 1,
-  dstQbHit: 0, dstPd: 0,
+  dstQbHit: 0, dstPd: 0, dstIntRetYd: 0, dstFumRetYd: 0,
   // Points-allowed brackets default to Sleeper's ladder — only 0167 pa rows
   // (emitted at game FINAL) can carry the kind, so no historical total moves;
   // going forward this is the standard DEF scoring every normie expects.
@@ -180,6 +188,10 @@ export const DEFAULT_CLASSIC_SCORING: ClassicScoring = {
   idpTackle: 1, idpSack: 2, idpInt: 3, idpFr: 2, idpTd: 6, idpSafety: 2,
   idpTackle10: 0, idpSolo: 0, idpAst: 0, idpTfl: 0, idpFf: 0,
   idpQbHit: 0, idpPd: 0,
+  idpSackYd: 0, idpIntRetYd: 0, idpFumRetYd: 0,
+  idpIntRetTd50: 0, idpFumRetTd50: 0, idpSack2: 0, idpPd3: 0,
+  // ST FF/FR default to Sleeper's 1 — new-emission kinds on ST plays only.
+  stTackle: 0, stFf: 1, stFr: 1,
 };
 /** Editor metadata, grouped the way Sleeper/ESPN group their settings pages. */
 export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof ClassicScoring; label: string; perYard?: boolean }[] }[] = [
@@ -189,7 +201,7 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
     { key: 'pass40', label: '40+ YD COMP' }, { key: 'passTd40', label: '40+ YD TD' }, { key: 'passTd50', label: '50+ YD TD' },
     { key: 'passCmp', label: 'COMPLETION' }, { key: 'passInc', label: 'INCOMPLETE' }, { key: 'passAtt', label: 'ATTEMPT' },
     { key: 'cmp25', label: '25+ CMP GAME' }, { key: 'qbSacked', label: 'QB SACKED' },
-    { key: 'passFd', label: '1ST DOWN' }, { key: 'pass2pt', label: '2-PT PASS' },
+    { key: 'passFd', label: '1ST DOWN' }, { key: 'pass2pt', label: '2-PT PASS' }, { key: 'qbPick6', label: 'PICK-6 THROWN' },
   ] },
   { section: 'RUSHING', fields: [
     { key: 'rushYd', label: 'RUSH YD', perYard: true }, { key: 'rushTd', label: 'RUSH TD' },
@@ -214,19 +226,26 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
     { key: 'fdQb', label: 'QB' }, { key: 'fdRb', label: 'RB' }, { key: 'fdWr', label: 'WR' }, { key: 'fdTe', label: 'TE' },
   ] },
   { section: 'TURNOVERS & RETURNS', fields: [
-    { key: 'fumble', label: 'FUMBLE LOST' }, { key: 'retYd', label: 'RETURN YD', perYard: true }, { key: 'retTd', label: 'RETURN TD' },
+    { key: 'fumble', label: 'FUMBLE LOST' }, { key: 'fumbleAny', label: 'FUMBLE (ANY)' }, { key: 'fumRecTd', label: 'FUM REC TD' },
+    { key: 'retYd', label: 'RETURN YD', perYard: true }, { key: 'retTd', label: 'RETURN TD' },
     { key: 'krYd', label: 'KICK RET YD', perYard: true }, { key: 'prYd', label: 'PUNT RET YD', perYard: true },
+  ] },
+  { section: 'SPECIAL TEAMS PLAYER', fields: [
+    { key: 'stTackle', label: 'SOLO TACKLE' }, { key: 'stFf', label: 'FORCED FUMBLE' }, { key: 'stFr', label: 'FUM RECOVERY' },
   ] },
   { section: 'KICKING', fields: [
     { key: 'fg0', label: 'FG 0-19' }, { key: 'fg20', label: 'FG 20-29' }, { key: 'fg30', label: 'FG 30-39' },
     { key: 'fg40', label: 'FG 40-49' }, { key: 'fg50', label: 'FG 50-59' }, { key: 'fg60', label: 'FG 60+' },
     { key: 'fgYd', label: 'PER FG YD', perYard: true }, { key: 'fgYd30', label: 'PER FG YD >30', perYard: true },
     { key: 'fgMiss', label: 'FG MISS' }, { key: 'xp', label: 'XP' }, { key: 'xpMiss', label: 'XP MISS' },
+    { key: 'fgM0', label: 'MISS 0-19' }, { key: 'fgM20', label: 'MISS 20-29' }, { key: 'fgM30', label: 'MISS 30-39' },
+    { key: 'fgM40', label: 'MISS 40-49' }, { key: 'fgM50', label: 'MISS 50-59' }, { key: 'fgM60', label: 'MISS 60+' },
   ] },
   { section: 'TEAM DEFENSE', fields: [
     { key: 'sack', label: 'SACK' }, { key: 'dstInt', label: 'INT' }, { key: 'fumRec', label: 'FUM REC' },
     { key: 'dstTd', label: 'TD' }, { key: 'safety', label: 'SAFETY' }, { key: 'dstBlk', label: 'BLOCKED KICK' },
     { key: 'dstFf', label: 'FORCED FUMBLE' }, { key: 'dstQbHit', label: 'QB HIT' }, { key: 'dstPd', label: 'PASS DEFENDED' },
+    { key: 'dstIntRetYd', label: 'INT RET YD', perYard: true }, { key: 'dstFumRetYd', label: 'FUM RET YD', perYard: true },
   ] },
   { section: 'POINTS ALLOWED', fields: [
     { key: 'paPt', label: 'PER PT ALLOWED' },
@@ -245,7 +264,10 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
     { key: 'idpTfl', label: 'TACKLE FOR LOSS' }, { key: 'idpSack', label: 'SACK' }, { key: 'idpFf', label: 'FORCED FUMBLE' },
     { key: 'idpQbHit', label: 'QB HIT' }, { key: 'idpPd', label: 'PASS DEFENDED' },
     { key: 'idpInt', label: 'INT' }, { key: 'idpFr', label: 'FUM REC' }, { key: 'idpTd', label: 'TD' },
-    { key: 'idpSafety', label: 'SAFETY' }, { key: 'idpTackle10', label: '10+ TACKLE GAME' },
+    { key: 'idpSafety', label: 'SAFETY' }, { key: 'idpSackYd', label: 'SACK YD', perYard: true },
+    { key: 'idpIntRetYd', label: 'INT RET YD', perYard: true }, { key: 'idpFumRetYd', label: 'FUM RET YD', perYard: true },
+    { key: 'idpIntRetTd50', label: '50+ INT RET TD' }, { key: 'idpFumRetTd50', label: '50+ FUM RET TD' },
+    { key: 'idpTackle10', label: '10+ TACKLE GAME' }, { key: 'idpSack2', label: '2+ SACK GAME' }, { key: 'idpPd3', label: '3+ PD GAME' },
   ] },
 ];
 /** Flat field list — the 0160 editors and the SQL sanitizer key off it. */
@@ -274,21 +296,29 @@ export function classicScorePlay(play: RawPlay, pos: Pos, sc: ClassicScoring): n
       const band = play.yards < 20 ? sc.fg0 : play.yards < 30 ? sc.fg20 : play.yards < 40 ? sc.fg30 : play.yards < 50 ? sc.fg40 : play.yards < 60 ? sc.fg50 : sc.fg60;
       return band + play.yards * sc.fgYd + Math.max(0, play.yards - 30) * sc.fgYd30;
     }
-    if (play.kind === 'fgmiss') return sc.fgMiss;
+    if (play.kind === 'fgmiss') {
+      // Distance-banded miss penalties (0170) stack on the flat miss; rows
+      // with no recorded distance take only the flat knob.
+      const y = play.yards;
+      return sc.fgMiss + (y <= 0 ? 0
+        : y < 20 ? sc.fgM0 : y < 30 ? sc.fgM20 : y < 40 ? sc.fgM30 : y < 50 ? sc.fgM40 : y < 60 ? sc.fgM50 : sc.fgM60);
+    }
     if (play.kind === 'xp') return sc.xp;
     if (play.kind === 'xpmiss') return sc.xpMiss;
     return 0;
   }
   if (pos === 'DEF') {
     if (play.kind === 'sack') return sc.sack;
-    if (play.kind === 'int') return sc.dstInt;
-    if (play.kind === 'fumrec') return sc.fumRec;
+    if (play.kind === 'int') return sc.dstInt + play.yards * sc.dstIntRetYd;
+    if (play.kind === 'fumrec') return sc.fumRec + play.yards * sc.dstFumRetYd;
     if (play.kind === 'dst_td') return sc.dstTd;
     if (play.kind === 'safety') return sc.safety;
     if (play.kind === 'blk') return sc.dstBlk;
     if (play.kind === 'ff') return sc.dstFf;
     if (play.kind === 'qbhit') return sc.dstQbHit;
     if (play.kind === 'pd') return sc.dstPd;
+    // (int/fumrec above gained return-yardage rates in 0170 — see the early
+    // returns; DEF rows carry return yards in `y` on flag-aware data.)
     // Team brackets (0167): one pa + one ya game-summary row per DEF at final,
     // y = points / total yards allowed. Bracket + per-unit rate, Sleeper-style.
     if (play.kind === 'pa') {
@@ -311,11 +341,14 @@ export function classicScorePlay(play: RawPlay, pos: Pos, sc: ClassicScoring): n
     if (play.kind === 'ff') return sc.idpFf;
     if (play.kind === 'qbhit') return sc.idpQbHit;
     if (play.kind === 'pd') return sc.idpPd;
-    if (play.kind === 'sack') return sc.idpSack * (play.hf ? 0.5 : 1);
-    if (play.kind === 'int') return sc.idpInt;
-    if (play.kind === 'fumrec') return sc.idpFr;
+    // 0170: sack yards ride `y` on individual sack rows (halved when split at
+    // emission); INT/fumble recoveries carry return yards + the 50+ TD bonus.
+    if (play.kind === 'sack') return sc.idpSack * (play.hf ? 0.5 : 1) + play.yards * sc.idpSackYd;
+    if (play.kind === 'int') return sc.idpInt + play.yards * sc.idpIntRetYd + (play.td && play.yards >= 50 ? sc.idpIntRetTd50 : 0);
+    if (play.kind === 'fumrec') return sc.idpFr + play.yards * sc.idpFumRetYd + (play.td && play.yards >= 50 ? sc.idpFumRetTd50 : 0);
     if (play.kind === 'dst_td') return sc.idpTd;
     if (play.kind === 'safety') return sc.idpSafety;
+    if (play.kind === 'st_tkl') return play.tt === 's' ? sc.stTackle : 0;
     return 0;
   }
   // Skill positions: every stat counts, all at once — the whole point of classic.
@@ -338,6 +371,7 @@ export function classicScorePlay(play: RawPlay, pos: Pos, sc: ClassicScoring): n
     if (play.cmp) pts += sc.passCmp;
     if (play.inc) pts += sc.passInc;
     if (play.fd) pts += sc.passFd;
+    if (play.pick6) pts += sc.qbPick6;
   }
   if (play.kind === 'rush') {
     pts += play.yards * sc.rushYd + (play.td ? sc.rushTd : 0);
@@ -357,6 +391,13 @@ export function classicScorePlay(play: RawPlay, pos: Pos, sc: ClassicScoring): n
   // Per-position first-down bonus (Sleeper's MISC section) stacks on the stat
   // first down — both sides of a completed pass earn theirs independently.
   if (play.fd) pts += pos === 'QB' ? sc.fdQb : pos === 'RB' ? sc.fdRb : pos === 'WR' ? sc.fdWr : pos === 'TE' ? sc.fdTe : 0;
+  // 0170: fumble events + special-teams contributions for offense-rostered
+  // players (gunners and coverage men are usually WRs/RBs/TEs).
+  if (play.kind === 'fum') pts += sc.fumbleAny;              // any fumble, kept or lost
+  if (play.kind === 'frtd') pts += sc.fumRecTd;              // own-team recovery TD
+  if (play.kind === 'st_tkl' && play.tt === 's') pts += sc.stTackle;
+  if (play.kind === 'ff') pts += sc.stFf;                    // ST/coverage forced fumble
+  if (play.kind === 'fumrec') pts += sc.stFr;                // ST recovery (muffed punt)
   // ESPN-style per-target points (founder's ask) — pays on every target,
   // caught or not: rec rows and incomplete-target rows both carry the flag.
   if (play.target) pts += sc.targetPt;
@@ -381,7 +422,7 @@ const round1 = (n: number): number => Math.round(n * 10) / 10;
 export function classicPoints(player: Player, week: number, sc?: number | Partial<ClassicScoring>): number {
   const s = normalizeClassicScoring(sc);
   const { plays } = playsForPlayer(player, week);
-  let raw = 0, passYds = 0, rushYds = 0, recYds = 0, carries = 0, tackles = 0, cmps = 0;
+  let raw = 0, passYds = 0, rushYds = 0, recYds = 0, carries = 0, tackles = 0, cmps = 0, sacks = 0, pds = 0;
   for (const p of plays) {
     raw += classicScorePlay(p, player.pos, s);
     if (p.kind === 'pass') passYds += p.yards;
@@ -389,6 +430,8 @@ export function classicPoints(player: Player, week: number, sc?: number | Partia
     if (p.catch && p.kind !== 'tp_rec') recYds += p.yards;
     if (p.cmp) cmps++;
     if (p.kind === 'tackle') tackles++;
+    if (p.kind === 'sack') sacks += p.hf ? 0.5 : 1;
+    if (p.kind === 'pd') pds++;
   }
   if (passYds >= 300) raw += s.pass300;
   if (passYds >= 400) raw += s.pass400;
@@ -401,6 +444,12 @@ export function classicPoints(player: Player, week: number, sc?: number | Partia
   if (carries >= 20) raw += s.carries20;
   if (cmps >= 25) raw += s.cmp25;
   if (tackles >= 10) raw += s.idpTackle10;
+  // IDP-gated game bonuses (0170) — a team DEF racks up 2+ sacks most weeks,
+  // so these fire only for individual defenders.
+  if (player.pos === 'DL' || player.pos === 'LB' || player.pos === 'DB') {
+    if (sacks >= 2) raw += s.idpSack2;
+    if (pds >= 3) raw += s.idpPd3;
+  }
   const fr = flagRulesFor(player.id);
   return round1(raw * (fr.bonusMult ?? 1) + (fr.bonusPts ?? 0));
 }
