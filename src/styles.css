@@ -33,7 +33,12 @@ a { color: inherit; }
    Tab strips stay one row and scroll sideways instead of wrapping. */
 .mgmt-tabs { scrollbar-width: none; }
 .mgmt-tabs::-webkit-scrollbar { display: none; }
-@media (max-width: 760px) {
+/* 899px, NOT 760: this must end exactly where the desktop side rail begins
+   (adminUi's useWide default). At 760 there was a dead band — 761–899px, which
+   is iPad portrait — where a tablet got the phone's cramped scrolling nav AND
+   the desktop's 21px tap targets and 13.5px inputs that iOS zooms on focus.
+   Neither treatment, in the gap between them. One number, no gap. */
+@media (max-width: 899px) {
   /* 16px inputs stop iOS Safari from zooming the page on focus; taller buttons
      make the dense tool rows comfortably tappable. */
   .mgmt input, .mgmt select { font-size: 16px !important; }
