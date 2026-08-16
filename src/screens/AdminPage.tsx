@@ -13,7 +13,7 @@ import {
   commishSetManager, teamManagers, type TeamManagerRow,
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
   playoffState, setPlayoffRules, generatePlayoffs, advancePlayoffs, autoGeneratePlayoffs,
-  leagueGameMode, setLeagueClassicAccess,
+  leagueGameMode, setLeagueClassicAccess, setLeaguePositionAccess,
   type WaiverMode, type TradeReview, type TradeRow, type LeaguePoolPlayer, type NativeRosterRow,
   type PlayoffState, type PlayoffMatchup,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
@@ -223,6 +223,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
               <div key={l.league_id}>
                 <LeagueRow l={l} reload={load} mine={mine.has(l.league_id)} />
                 <ClassicAccessRow leagueId={l.league_id} />
+                <PositionAccessRow leagueId={l.league_id} />
               </div>
             ))}
         </>
@@ -606,6 +607,44 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
           Moves clear waiver holds and bypass position limits (roster size still applies). WAIVE starts a 24h claim window; CUT frees the player immediately.
         </div>
       </div>
+    </div>
+  );
+}
+
+// Per-league POSITION flags (0171): which extra position groups the admin has
+// unlocked — HC / P / IDP / FB / RET. Commissioners see the builder chips and
+// pool entries only where these are on. Rendered beside the classic unlock.
+function PositionAccessRow({ leagueId }: { leagueId: string }) {
+  const GROUPS = ['HC', 'P', 'IDP', 'FB', 'RET'] as const;
+  const [on, setOn] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    leagueGameMode(leagueId).then((r) => { if (r.ok) setOn(r.positions ?? []); }).catch(() => {});
+  }, [leagueId]);
+  const flip = async (g: string) => {
+    if (on === null || busy) return;
+    setBusy(true);
+    try {
+      const next = on.includes(g) ? on.filter((x) => x !== g) : [...on, g];
+      const r = await setLeaguePositionAccess(leagueId, next);
+      if (r.ok) setOn(r.positions ?? next);
+    } finally { setBusy(false); }
+  };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px 12px', flexWrap: 'wrap' }}>
+      <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)' }}>🧩 EXTRA POSITIONS</span>
+      {GROUPS.map((g) => {
+        const lit = on?.includes(g) ?? false;
+        return (
+          <button key={g} onClick={() => void flip(g)} disabled={on === null || busy} className="mono"
+            style={{ fontSize: 9, fontWeight: 700, borderRadius: 999, padding: '3px 10px', cursor: 'pointer',
+              color: lit ? 'var(--on-accent)' : 'var(--dim)', background: lit ? 'var(--you)' : 'var(--bg)',
+              border: `1px solid ${lit ? 'var(--you)' : 'var(--bd)'}`, opacity: on === null || busy ? 0.5 : 1 }}>
+            {g}
+          </button>
+        );
+      })}
+      <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>commish must ↻ refresh the pool after a flip</span>
     </div>
   );
 }

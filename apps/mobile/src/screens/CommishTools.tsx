@@ -21,7 +21,7 @@ import {
   setTeamAvatar, setTeamController, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
-  leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape,
+  leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter,
 } from '@drip/core/data/liveApi';
 import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
 
@@ -617,6 +617,11 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
   const [spotsDirty, setSpotsDirty] = useState(false);
   const [shape, setShape] = useState<{ bench: number; taxi: number; ir: number }>({ bench: 6, taxi: 0, ir: 0 });
   const [rounds, setRounds] = useState<number | null>(null);
+  // 0171: admin-enabled extra positions + the commissioner's pool filter.
+  const [extraPos, setExtraPos] = useState<string[]>([]);
+  const [fltTeams, setFltTeams] = useState('');
+  const [fltMin, setFltMin] = useState('');
+  const [fltMax, setFltMax] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   // Full classic scoring (0160): string drafts; parse + diff on save.
@@ -637,6 +642,10 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
       setSpotsDirty(false);
       if (r.shape) setShape({ bench: r.shape.bench ?? 6, taxi: r.shape.taxi ?? 0, ir: r.shape.ir ?? 0 });
       setRounds(r.rounds ?? null);
+      setExtraPos(r.positions ?? []);
+      setFltTeams((r.pool_filter?.teams ?? []).join(', '));
+      setFltMin(r.pool_filter?.min_exp != null ? String(r.pool_filter.min_exp) : '');
+      setFltMax(r.pool_filter?.max_exp != null ? String(r.pool_filter.max_exp) : '');
     } }).catch(() => {});
   }, [leagueId]);
   const saveScoring = async (reset = false) => {
@@ -728,7 +737,7 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
             {spots.map((sp, i) => (
               <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap', borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4 }}>
                 <Mono size={8.5} weight="700" tone="dim" style={{ width: 16 }}>{i + 1}</Mono>
-                {BUILDER_POSITIONS.map((p) => {
+                {[...BUILDER_POSITIONS.filter((q) => !['DL','LB','DB'].includes(q) || extraPos.includes('IDP')), ...['FB','HC','P','RET'].filter((q) => extraPos.includes(q))].map((p) => {
                   const on = sp.pos.includes(p);
                   return (
                     <Pressable key={p} disabled={busy}
@@ -770,6 +779,33 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
           <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
             Any position combination per spot · 🎯 BB fills itself · you draft the whole roster (starters + bench + taxi + IR), then stash · IR needs a real IR/Out designation · stashed players can't start · locks at draft.
           </Mono>
+          {extraPos.length > 0 && (
+            <Mono size={8} tone="you" style={{ marginTop: 4 }}>UNLOCKED: {extraPos.join(' · ')} — refresh the player pool (draft room) after changes.</Mono>
+          )}
+          {/* PLAYER FILTERS (0171): pool allow-list — teams + tenure window. */}
+          <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
+            <Mono size={8.5} tone="faint" weight="700">🔎 PLAYER FILTERS · who's allowed in the pool</Mono>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+              <TextInput value={fltTeams} onChangeText={setFltTeams} placeholder="teams (KC, SF…) — empty = all" placeholderTextColor={t.faint}
+                style={{ fontFamily: MONO, fontSize: 10, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 5, flexGrow: 1, minWidth: 150 }} />
+              <TextInput value={fltMin} onChangeText={setFltMin} placeholder="min yrs" keyboardType="number-pad" placeholderTextColor={t.faint}
+                style={{ fontFamily: MONO, fontSize: 10, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 5, width: 62 }} />
+              <TextInput value={fltMax} onChangeText={setFltMax} placeholder="max yrs" keyboardType="number-pad" placeholderTextColor={t.faint}
+                style={{ fontFamily: MONO, fontSize: 10, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 5, width: 62 }} />
+              <Pressable disabled={busy} onPress={() => { tap(); void (async () => {
+                const teams = fltTeams.split(/[\s,]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+                const mn = fltMin.trim() === '' ? null : Number(fltMin);
+                const mx = fltMax.trim() === '' ? null : Number(fltMax);
+                const r = await setLeaguePoolFilter(leagueId, (!teams.length && mn == null && mx == null) ? null : { teams: teams.length ? teams : null, min_exp: mn, max_exp: mx });
+                setNote(r.ok ? '✓ filter saved — refresh the player pool to apply' : (r.error ?? 'failed'));
+              })(); }} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.you }}>SAVE</Text>
+              </Pressable>
+            </View>
+            <Mono size={7.5} tone="faint" style={{ marginTop: 4, lineHeight: 11 }}>
+              Rookies only → max 0 · 8+ yr vets → min 8 · empty = clear · applies on pool (re)seed, pre-draft only.
+            </Mono>
+          </View>
         </View>
       )}
       {mode === 'classic' && (

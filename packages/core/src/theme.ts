@@ -25,7 +25,7 @@ export interface Theme {
 export type FxKey = 'nuke' | 'erase' | 'reset' | 'streak' | 'mult' | 'compression' | 'stop' | 'sys';
 // Offensive + K/DEF positions, plus IDP groups (DL/LB/DB). IDP currently shares
 // each theme's neutral DEF palette; it can be themed per-group later.
-export type Pos = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF' | 'DL' | 'LB' | 'DB';
+export type Pos = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF' | 'DL' | 'LB' | 'DB' | 'FB' | 'HC' | 'P' | 'RET';
 
 const POS_TACTICAL: Theme['pos'] = {
   QB: { bg: '#102339', fg: '#79B3FF', bd: '#1F3A60' },
@@ -37,6 +37,10 @@ const POS_TACTICAL: Theme['pos'] = {
   DL: { bg: '#2A1A12', fg: '#E0A87E', bd: '#4A2F1F' },
   LB: { bg: '#12211F', fg: '#73D6C4', bd: '#21433E' },
   DB: { bg: '#1C1730', fg: '#A99AE0', bd: '#332A55' },
+  FB: { bg: '#1F2412', fg: '#C4D67E', bd: '#3C471F' },
+  HC: { bg: '#241212', fg: '#D67E7E', bd: '#471F1F' },
+  P: { bg: '#12202A', fg: '#7EB8E0', bd: '#1F3A4A' },
+  RET: { bg: '#241224', fg: '#D67ED6', bd: '#471F47' },
 };
 
 export const THEMES: Record<ThemeName, Theme> = {
@@ -62,6 +66,10 @@ export const THEMES: Record<ThemeName, Theme> = {
       DL: { bg: '#2A1A12', fg: '#E0A87E', bd: '#4A2F1F' },
       LB: { bg: '#12211F', fg: '#73D6C4', bd: '#21433E' },
       DB: { bg: '#1C1730', fg: '#A99AE0', bd: '#332A55' },
+      FB: { bg: '#1F2412', fg: '#C4D67E', bd: '#3C471F' },
+      HC: { bg: '#241212', fg: '#D67E7E', bd: '#471F1F' },
+      P: { bg: '#12202A', fg: '#7EB8E0', bd: '#1F3A4A' },
+      RET: { bg: '#241224', fg: '#D67ED6', bd: '#471F47' },
     },
   },
   prime: {
@@ -79,6 +87,10 @@ export const THEMES: Record<ThemeName, Theme> = {
       DL: { bg: '#2A1A12', fg: '#E0A87E', bd: '#4A2F1F' },
       LB: { bg: '#12211F', fg: '#73D6C4', bd: '#21433E' },
       DB: { bg: '#1C1730', fg: '#A99AE0', bd: '#332A55' },
+      FB: { bg: '#1F2412', fg: '#C4D67E', bd: '#3C471F' },
+      HC: { bg: '#241212', fg: '#D67E7E', bd: '#471F1F' },
+      P: { bg: '#12202A', fg: '#7EB8E0', bd: '#1F3A4A' },
+      RET: { bg: '#241224', fg: '#D67ED6', bd: '#471F47' },
     },
   },
 
@@ -100,6 +112,10 @@ export const THEMES: Record<ThemeName, Theme> = {
       DL: { bg: '#FBE7D6', fg: '#9A5A24', bd: '#EBC9A6' },
       LB: { bg: '#D7F0EB', fg: '#0E7A6A', bd: '#A6DAD0' },
       DB: { bg: '#E6DEF8', fg: '#5B3FB0', bd: '#C7B8EC' },
+      FB: { bg: '#EFF7D6', fg: '#5A7A24', bd: '#D5EBA6' },
+      HC: { bg: '#FBD6D6', fg: '#9A2424', bd: '#EBA6A6' },
+      P: { bg: '#D6EBFB', fg: '#24619A', bd: '#A6CFEB' },
+      RET: { bg: '#F7D6F7', fg: '#7A247A', bd: '#EBA6EB' },
     },
   },
   // Cool, crisp light mode.
@@ -118,6 +134,10 @@ export const THEMES: Record<ThemeName, Theme> = {
       DL: { bg: '#FBE7D6', fg: '#9A5A24', bd: '#EBC9A6' },
       LB: { bg: '#D7F0EB', fg: '#0E7A6A', bd: '#A6DAD0' },
       DB: { bg: '#E6DEF8', fg: '#5B3FB0', bd: '#C7B8EC' },
+      FB: { bg: '#EFF7D6', fg: '#5A7A24', bd: '#D5EBA6' },
+      HC: { bg: '#FBD6D6', fg: '#9A2424', bd: '#EBA6A6' },
+      P: { bg: '#D6EBFB', fg: '#24619A', bd: '#A6CFEB' },
+      RET: { bg: '#F7D6F7', fg: '#7A247A', bd: '#EBA6EB' },
     },
   },
   // Daylight's palette (green primary, red/blue accents) on a warm dark backdrop
@@ -137,6 +157,10 @@ export const THEMES: Record<ThemeName, Theme> = {
       DL: { bg: '#2A1A12', fg: '#E0A87E', bd: '#4A2F1F' },
       LB: { bg: '#12211F', fg: '#73D6C4', bd: '#21433E' },
       DB: { bg: '#1C1730', fg: '#A99AE0', bd: '#332A55' },
+      FB: { bg: '#1F2412', fg: '#C4D67E', bd: '#3C471F' },
+      HC: { bg: '#241212', fg: '#D67E7E', bd: '#471F1F' },
+      P: { bg: '#12202A', fg: '#7EB8E0', bd: '#1F3A4A' },
+      RET: { bg: '#241224', fg: '#D67ED6', bd: '#471F47' },
     },
   },
   // Cool dark slate-blue, teal accent.
@@ -155,6 +179,10 @@ export const THEMES: Record<ThemeName, Theme> = {
       DL: { bg: '#2A1A12', fg: '#E0A87E', bd: '#4A2F1F' },
       LB: { bg: '#12211F', fg: '#73D6C4', bd: '#21433E' },
       DB: { bg: '#1C1730', fg: '#A99AE0', bd: '#332A55' },
+      FB: { bg: '#1F2412', fg: '#C4D67E', bd: '#3C471F' },
+      HC: { bg: '#241212', fg: '#D67E7E', bd: '#471F1F' },
+      P: { bg: '#12202A', fg: '#7EB8E0', bd: '#1F3A4A' },
+      RET: { bg: '#241224', fg: '#D67ED6', bd: '#471F47' },
     },
   },
 };

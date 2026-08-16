@@ -36,9 +36,13 @@ export type RealPlayKind =
   | 'fum' | 'frtd'                                   // offense (0170): any fumble (kept or
                                                      // lost) by the fumbler; own-team
                                                      // fumble-recovery TD by the recoverer
-  | 'st_tkl';                                        // special-teams tackle (0170) — any
+  | 'st_tkl'                                         // special-teams tackle (0170) — any
                                                      // position, kick/punt coverage; tt
                                                      // rides like scrimmage tackles
+  | 'hc_3dc' | 'hc_4dc' | 'hc_2pt'                   // head coach (0171, "xxx-hc"): 3rd/4th
+                                                     // down conversions, team 2-pt success
+  | 'hc_res' | 'hc_pts';                             // head coach at FINAL: y = signed win
+                                                     // margin (0 = tie) / team points scored
 // `c` is the game-elapsed clock (seconds). `t` is the REAL wall-clock time of
 // the play, in seconds since the game's first snap (baked from nflverse
 // time_of_day) — used to gate real-time power-ups so a delayed feed can't be

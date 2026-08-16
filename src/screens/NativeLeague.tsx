@@ -15,7 +15,7 @@ import { ADP_2026, ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_2026, PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { statsForSlug } from '@drip/core/data/players';
 import {
-  createNativeLeague, createMockDraft, deleteMockDraft, seedLeaguePool, nativeGenerateSchedule,
+  createNativeLeague, createMockDraft, deleteMockDraft, seedLeaguePool, nativeGenerateSchedule, leagueGameMode,
   startDraft, draftState, makeDraftPick, draftTick,
   POS_CAP_KEYS, type PosCaps,
   leaguePool, nativeRosters, nativeTeamState, dropPlayer, addFreeAgent, setRosterSpot,
@@ -41,7 +41,7 @@ const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontS
 const errStyle: React.CSSProperties = { fontSize: 10.5, color: 'var(--opp)', marginTop: 9, lineHeight: 1.4 };
 const hdr: React.CSSProperties = { fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginBottom: 8 };
 
-const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
+const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB', 'FB', 'HC', 'P'] as const;
 const posLabel = (p: string) => (p === 'DEF' ? 'D/ST' : p);
 /** Cap stepper sentinel: values ≥ this render as ∞ and are stored as null. */
 const CAP_UNLIMITED = 11;
@@ -572,7 +572,13 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
               : <>{st.rounds} rounds · {st.pick_seconds}s per pick · snake order (randomized at start). Queue players now — your queue drafts for you if the clock runs out.</>}
           </div>
           {isCommish && <button onClick={() => run(() => startDraft(leagueId))} disabled={busy} className="mono" style={{ ...btn, width: '100%', marginTop: 12, opacity: busy ? 0.6 : 1 }}>▶ START THE DRAFT</button>}
-          {isCommish && <button onClick={() => run(async () => seedLeaguePool(leagueId, await buildDraftPool()).then(async (r) => { setPool(await leaguePool(leagueId)); return r; }))} disabled={busy} className="mono" style={{ ...ghostBtn, width: '100%', marginTop: 8, opacity: busy ? 0.6 : 1 }}>↻ REFRESH PLAYER POOL (2026 ADP)</button>}
+          {isCommish && <button onClick={() => run(async () => {
+            // 0171: reseed under the league's enabled positions + player filter.
+            const gm = await leagueGameMode(leagueId).catch(() => null);
+            const r = await seedLeaguePool(leagueId, await buildDraftPool(undefined, { positions: gm?.positions ?? null, filter: gm?.pool_filter ?? null }));
+            setPool(await leaguePool(leagueId));
+            return r;
+          })} disabled={busy} className="mono" style={{ ...ghostBtn, width: '100%', marginTop: 8, opacity: busy ? 0.6 : 1 }}>↻ REFRESH PLAYER POOL (2026 ADP)</button>}
           {err && <div className="mono" style={errStyle}>{err}</div>}
         </div>
       )}

@@ -22,6 +22,8 @@ import { hasSlate, windowForTeam, windowsForWeek } from './nflSlate';
 export const DEFAULT_AI_METRIC: Record<Pos, string> = {
   QB: 'pass', RB: 'rush', WR: 'recyd', TE: 'recyd',
   K: 'banker', DEF: 'earn', DL: 'idp_tackles', LB: 'idp_tackles', DB: 'idp_tackles',
+  // 0171 positions are classic-only today; drip metrics are placeholders.
+  FB: 'rush', HC: 'earn', P: 'banker', RET: 'recyd',
 };
 
 /** The honest default scoring metric for a position. */

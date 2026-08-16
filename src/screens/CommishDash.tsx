@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
+import { useEffect, useMemo, useState } from 'react';
+import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
 
 // The builder's position chips (0163) — base positions only; combos are made by
@@ -133,6 +133,11 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
   // BENCH/TAXI/IR (0164) — with the derived draft-rounds readout.
   const [shape, setShape] = useState<{ bench: number; taxi: number; ir: number }>({ bench: 6, taxi: 0, ir: 0 });
   const [rounds, setRounds] = useState<number | null>(null);
+  // 0171: admin-enabled extra positions + the commissioner's pool filter.
+  const [extraPos, setExtraPos] = useState<string[]>([]);
+  const [fltTeams, setFltTeams] = useState('');
+  const [fltMin, setFltMin] = useState('');
+  const [fltMax, setFltMax] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   // Full classic scoring (0160): drafts are strings so partial typing never
@@ -152,8 +157,31 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
         : legacy.map((d) => ({ pos: [...d.pos], bb: (r.bestball ?? []).includes(d.slot) })));
       setSpotsDirty(false);
       if (r.shape) setShape({ bench: r.shape.bench ?? 6, taxi: r.shape.taxi ?? 0, ir: r.shape.ir ?? 0 });
-      setRounds(r.rounds ?? null); } }).catch(() => {});
+      setRounds(r.rounds ?? null);
+      setExtraPos(r.positions ?? []);
+      setFltTeams((r.pool_filter?.teams ?? []).join(', '));
+      setFltMin(r.pool_filter?.min_exp != null ? String(r.pool_filter.min_exp) : '');
+      setFltMax(r.pool_filter?.max_exp != null ? String(r.pool_filter.max_exp) : ''); } }).catch(() => {});
   }, [leagueId]);
+  const saveFilter = async (clear = false) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const teams = fltTeams.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
+      const mn = fltMin.trim() === '' ? null : Number(fltMin);
+      const mx = fltMax.trim() === '' ? null : Number(fltMax);
+      const r = await setLeaguePoolFilter(leagueId, clear || (!teams.length && mn == null && mx == null)
+        ? null : { teams: teams.length ? teams : null, min_exp: mn, max_exp: mx });
+      if (r.ok) setNote(clear ? '✓ filter cleared — REFRESH PLAYER POOL to re-open the universe' : '✓ filter saved — REFRESH PLAYER POOL to apply it');
+      else setNote(r.error ?? 'failed');
+    } finally { setBusy(false); }
+  };
+  // The builder's chips: base positions + this league's admin-enabled extras.
+  const builderPos = useMemo(() => {
+    const out: string[] = BUILDER_POSITIONS.filter((p) => !(['DL', 'LB', 'DB'] as string[]).includes(p) || extraPos.includes('IDP')).slice();
+    for (const p of ['FB', 'HC', 'P', 'RET']) if (extraPos.includes(p)) out.push(p);
+    return out;
+  }, [extraPos]);
   const saveScoring = async (reset = false) => {
     if (busy) return;
     setBusy(true); setNote(null);
@@ -241,7 +269,7 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
             {spots.map((sp, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', border: '1px solid var(--bd)', borderRadius: 6, padding: '5px 8px' }}>
                 <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--dim)', width: 22 }}>{i + 1}</span>
-                {BUILDER_POSITIONS.map((p) => {
+                {builderPos.map((p) => {
                   const on = sp.pos.includes(p);
                   return (
                     <button key={p} disabled={busy}
@@ -282,6 +310,30 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
           </div>
           <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
             You draft the whole roster (starters + bench + taxi + IR), then stash. IR takes a real IR/Out designation only; taxi and IR players can't be started.
+          </div>
+          {extraPos.length > 0 && (
+            <div className="mono" style={{ fontSize: 8.5, color: 'var(--you)', marginTop: 4 }}>
+              UNLOCKED FOR THIS LEAGUE: {extraPos.join(' · ')} — after changing spots or filters, hit ↻ REFRESH PLAYER POOL (league page) so the draft pool matches.
+            </div>
+          )}
+          {/* PLAYER FILTERS (0171): who is ALLOWED in this league's pool — a team
+              whitelist and/or a tenure window (0 = rookie). Applies when the pool
+              is (re)seeded; locks at the draft like everything else. */}
+          <div style={{ marginTop: 10, border: '1px solid var(--bd)', borderRadius: 6, padding: '8px 10px' }}>
+            <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', fontWeight: 700 }}>🔎 PLAYER FILTERS · who's allowed in the pool</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+              <input value={fltTeams} onChange={(e) => setFltTeams(e.target.value)} placeholder="teams (e.g. KC, SF, BUF) — empty = all"
+                className="mono" style={{ fontFamily: 'inherit', fontSize: 10, padding: '5px 7px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, flex: '1 1 220px' }} />
+              <input value={fltMin} onChange={(e) => setFltMin(e.target.value)} placeholder="min yrs" inputMode="numeric"
+                className="mono" style={{ fontFamily: 'inherit', fontSize: 10, padding: '5px 7px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, width: 64 }} />
+              <input value={fltMax} onChange={(e) => setFltMax(e.target.value)} placeholder="max yrs" inputMode="numeric"
+                className="mono" style={{ fontFamily: 'inherit', fontSize: 10, padding: '5px 7px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, width: 64 }} />
+              <button onClick={() => void saveFilter()} disabled={busy} className="mono" style={pill(true)}>SAVE FILTER</button>
+              <button onClick={() => void saveFilter(true)} disabled={busy} className="mono" style={pill(false)}>CLEAR</button>
+            </div>
+            <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
+              Rookies only → max 0. Vets with 8+ years → min 8. One-team league → list the team. Players whose tenure Sleeper doesn't know are excluded while a tenure filter is set. Filters bite when the pool is (re)seeded — pre-draft only.
+            </div>
           </div>
         </div>
       )}

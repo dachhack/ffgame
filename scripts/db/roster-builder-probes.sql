@@ -71,6 +71,10 @@ begin
   perform assert_err(set_league_classic_slots(lid, big), 'cap at 20', 'sb6 21 spots refused');
 
   -- a good spec saves; dupes dedupe; bb sticks; member reads it via game_mode
+  -- (0171: DL/LB/DB in NEW specs need the admin's IDP flag first)
+  perform probe_as('a');
+  perform assert_ok(set_league_position_access(lid, '["IDP"]'::jsonb), 'sb6b admin enables IDP');
+  perform probe_as('b');
   r := set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB","WR","TE","RB"],"bb":true},{"pos":["QB","RB","WR","TE","K","DEF","DL","LB","DB"]}]'::jsonb);
   perform assert_ok(r, 'sb7 spec saves');
   perform assert_true((r ->> 'starters')::int = 3, 'sb7a three starters');

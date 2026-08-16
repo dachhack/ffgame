@@ -85,6 +85,21 @@ export function leagueBestball(mode?: { bestball?: string[] | null; slots?: Slot
   return mode?.bestball ?? [];
 }
 
+/** Player positions eligible to FILL a spot (0171). RET is a slot identity —
+ *  any ball-carrier can man it (and scores return-only there); HC/P spots take
+ *  the team pseudo-players. Everything else is literal. */
+export function slotEligiblePos(specPos: string[]): string[] {
+  const out = new Set<string>();
+  for (const p of specPos) {
+    if (p === 'RET') { out.add('RB'); out.add('WR'); out.add('TE'); out.add('FB'); }
+    else out.add(p);
+  }
+  return [...out];
+}
+
+/** True when a spot scores return-only (its spec is exactly [RET]). */
+export const isRetSlot = (specPos: string[]): boolean => specPos.length === 1 && specPos[0] === 'RET';
+
 /** Display label for a spot's eligibility ("FLEX (RB/WR/TE)" or "QB/RB/K"). */
 export function slotSpecLabel(pos: string[]): string {
   const up = pos.map((p) => p.toUpperCase());
@@ -152,6 +167,12 @@ export interface ClassicScoring {
   idpSackYd: number; idpIntRetYd: number; idpFumRetYd: number;
   idpIntRetTd50: number; idpFumRetTd50: number; idpSack2: number; idpPd3: number;
   stTackle: number; stFf: number; stFr: number;
+  hcWin: number; hcLoss: number; hcTie: number; hcPts: number;
+  hcWm1: number; hcWm5: number; hcWm10: number; hcWm15: number; hcWm20: number; hcWm25: number;
+  hcLm1: number; hcLm5: number; hcLm10: number; hcLm15: number; hcLm20: number; hcLm25: number;
+  hc3dc: number; hc4dc: number; hc2pt: number;
+  puntPt: number; puntYd: number;
+  pta44: number; pta42: number; pta40: number; pta38: number; pta36: number; pta34: number; pta33: number;
 }
 export const DEFAULT_CLASSIC_SCORING: ClassicScoring = {
   passYd: 0.04, passTd: 4, int: -2, pass300: 0, pass400: 0,
@@ -192,6 +213,14 @@ export const DEFAULT_CLASSIC_SCORING: ClassicScoring = {
   idpIntRetTd50: 0, idpFumRetTd50: 0, idpSack2: 0, idpPd3: 0,
   // ST FF/FR default to Sleeper's 1 — new-emission kinds on ST plays only.
   stTackle: 0, stFf: 1, stFr: 1,
+  // Head coach + punter (0171): every knob defaults 0 — the admin's position
+  // flags gate the positions, the commissioner opts into the values.
+  hcWin: 0, hcLoss: 0, hcTie: 0, hcPts: 0,
+  hcWm1: 0, hcWm5: 0, hcWm10: 0, hcWm15: 0, hcWm20: 0, hcWm25: 0,
+  hcLm1: 0, hcLm5: 0, hcLm10: 0, hcLm15: 0, hcLm20: 0, hcLm25: 0,
+  hc3dc: 0, hc4dc: 0, hc2pt: 0,
+  puntPt: 0, puntYd: 0,
+  pta44: 0, pta42: 0, pta40: 0, pta38: 0, pta36: 0, pta34: 0, pta33: 0,
 };
 /** Editor metadata, grouped the way Sleeper/ESPN group their settings pages. */
 export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof ClassicScoring; label: string; perYard?: boolean }[] }[] = [
@@ -258,6 +287,21 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
     { key: 'ya100', label: '< 100 YD' }, { key: 'ya199', label: '100-199' }, { key: 'ya299', label: '200-299' },
     { key: 'ya349', label: '300-349' }, { key: 'ya399', label: '350-399' }, { key: 'ya449', label: '400-449' },
     { key: 'ya499', label: '450-499' }, { key: 'ya549', label: '500-549' }, { key: 'ya550', label: '550+' },
+  ] },
+  { section: 'HEAD COACH', fields: [
+    { key: 'hcWin', label: 'WIN' }, { key: 'hcLoss', label: 'LOSS' }, { key: 'hcTie', label: 'TIE' },
+    { key: 'hcPts', label: 'PER PT SCORED' },
+    { key: 'hc3dc', label: '3RD DOWN CONV' }, { key: 'hc4dc', label: '4TH DOWN CONV' }, { key: 'hc2pt', label: '2-PT CONV' },
+    { key: 'hcWm1', label: 'WIN BY 1-4' }, { key: 'hcWm5', label: 'WIN BY 5-9' }, { key: 'hcWm10', label: 'WIN BY 10-14' },
+    { key: 'hcWm15', label: 'WIN BY 15-19' }, { key: 'hcWm20', label: 'WIN BY 20-24' }, { key: 'hcWm25', label: 'WIN BY 25+' },
+    { key: 'hcLm1', label: 'LOSS BY 1-4' }, { key: 'hcLm5', label: 'LOSS BY 5-9' }, { key: 'hcLm10', label: 'LOSS BY 10-14' },
+    { key: 'hcLm15', label: 'LOSS BY 15-19' }, { key: 'hcLm20', label: 'LOSS BY 20-24' }, { key: 'hcLm25', label: 'LOSS BY 25+' },
+  ] },
+  { section: 'PUNTING', fields: [
+    { key: 'puntPt', label: 'PUNT' }, { key: 'puntYd', label: 'PUNT YD', perYard: true },
+    { key: 'pta44', label: 'AVG 44+' }, { key: 'pta42', label: 'AVG 42-43.9' }, { key: 'pta40', label: 'AVG 40-41.9' },
+    { key: 'pta38', label: 'AVG 38-39.9' }, { key: 'pta36', label: 'AVG 36-37.9' }, { key: 'pta34', label: 'AVG 34-35.9' },
+    { key: 'pta33', label: 'AVG < 34' },
   ] },
   { section: 'IDP', fields: [
     { key: 'idpTackle', label: 'TACKLE' }, { key: 'idpSolo', label: 'SOLO BONUS' }, { key: 'idpAst', label: 'ASSIST BONUS' },
@@ -330,6 +374,39 @@ export function classicScorePlay(play: RawPlay, pos: Pos, sc: ClassicScoring): n
       const y = play.yards;
       return (y < 100 ? sc.ya100 : y < 200 ? sc.ya199 : y < 300 ? sc.ya299 : y < 350 ? sc.ya349
             : y < 400 ? sc.ya399 : y < 450 ? sc.ya449 : y < 500 ? sc.ya499 : y < 550 ? sc.ya549 : sc.ya550) + y * sc.yaPt;
+    }
+    return 0;
+  }
+  // Head coach pseudo-player (0171, "xxx-hc"): conversions live per play,
+  // result + points at FINAL (the hc_res margin picks the win/loss brackets).
+  if (pos === 'HC') {
+    if (play.kind === 'hc_3dc') return sc.hc3dc;
+    if (play.kind === 'hc_4dc') return sc.hc4dc;
+    if (play.kind === 'hc_2pt') return sc.hc2pt;
+    if (play.kind === 'hc_pts') return play.yards * sc.hcPts;
+    if (play.kind === 'hc_res') {
+      const m = play.yards;
+      if (m === 0) return sc.hcTie;
+      const a = Math.abs(m);
+      const br = a <= 4 ? 0 : a <= 9 ? 1 : a <= 14 ? 2 : a <= 19 ? 3 : a <= 24 ? 4 : 5;
+      return m > 0
+        ? sc.hcWin + [sc.hcWm1, sc.hcWm5, sc.hcWm10, sc.hcWm15, sc.hcWm20, sc.hcWm25][br]
+        : sc.hcLoss + [sc.hcLm1, sc.hcLm5, sc.hcLm10, sc.hcLm15, sc.hcLm20, sc.hcLm25][br];
+    }
+    return 0;
+  }
+  // Punter pseudo-player (0171, "xxx-p"): per punt + per yard; the ESPN-style
+  // punt-average bands are week totals — classicPoints applies them.
+  if (pos === 'P') {
+    if (play.kind === 'punt') return sc.puntPt + play.yards * sc.puntYd;
+    return 0;
+  }
+  // RET is a SLOT identity, not a player position (0171): a player scored "as
+  // RET" banks return production only — everything else on their day is mute.
+  if (pos === 'RET') {
+    if (play.kind === 'return') {
+      return play.yards * (sc.retYd + (play.rk === 'kr' ? sc.krYd : play.rk === 'pr' ? sc.prYd : 0))
+           + (play.td ? sc.retTd : 0);
     }
     return 0;
   }
@@ -419,12 +496,14 @@ const round1 = (n: number): number => Math.round(n * 10) / 10;
  *  The commissioner's flag rules (0144) apply exactly as in drip: bonus_mult
  *  scales the points, bonus_pts lands flat on the final. Requires the flag
  *  cache installed (setLeagueFlags) — both resolvers and both boards keep it. */
-export function classicPoints(player: Player, week: number, sc?: number | Partial<ClassicScoring>): number {
+export function classicPoints(player: Player, week: number, sc?: number | Partial<ClassicScoring>, scoreAs?: Pos): number {
   const s = normalizeClassicScoring(sc);
+  const pos = scoreAs ?? player.pos;
   const { plays } = playsForPlayer(player, week);
   let raw = 0, passYds = 0, rushYds = 0, recYds = 0, carries = 0, tackles = 0, cmps = 0, sacks = 0, pds = 0;
+  let punts = 0, puntYds = 0;
   for (const p of plays) {
-    raw += classicScorePlay(p, player.pos, s);
+    raw += classicScorePlay(p, pos, s);
     if (p.kind === 'pass') passYds += p.yards;
     if (p.kind === 'rush') { rushYds += p.yards; carries++; }
     if (p.catch && p.kind !== 'tp_rec') recYds += p.yards;
@@ -432,6 +511,7 @@ export function classicPoints(player: Player, week: number, sc?: number | Partia
     if (p.kind === 'tackle') tackles++;
     if (p.kind === 'sack') sacks += p.hf ? 0.5 : 1;
     if (p.kind === 'pd') pds++;
+    if (p.kind === 'punt') { punts++; puntYds += p.yards; }
   }
   if (passYds >= 300) raw += s.pass300;
   if (passYds >= 400) raw += s.pass400;
@@ -446,9 +526,15 @@ export function classicPoints(player: Player, week: number, sc?: number | Partia
   if (tackles >= 10) raw += s.idpTackle10;
   // IDP-gated game bonuses (0170) — a team DEF racks up 2+ sacks most weeks,
   // so these fire only for individual defenders.
-  if (player.pos === 'DL' || player.pos === 'LB' || player.pos === 'DB') {
+  if (pos === 'DL' || pos === 'LB' || pos === 'DB') {
     if (sacks >= 2) raw += s.idpSack2;
     if (pds >= 3) raw += s.idpPd3;
+  }
+  // Punter average bands (0171, ESPN's ladder) — a week-total fact.
+  if (pos === 'P' && punts > 0) {
+    const avg = puntYds / punts;
+    raw += avg >= 44 ? s.pta44 : avg >= 42 ? s.pta42 : avg >= 40 ? s.pta40 : avg >= 38 ? s.pta38
+         : avg >= 36 ? s.pta36 : avg >= 34 ? s.pta34 : s.pta33;
   }
   const fr = flagRulesFor(player.id);
   return round1(raw * (fr.bonusMult ?? 1) + (fr.bonusPts ?? 0));
@@ -479,15 +565,25 @@ export function bestballFill(manual: ClassicPick[], bestball: string[], roster: 
   // drip auto-lineup's noStart set.
   const cands = roster.filter((p) => !started.has(p.id) && !flagRulesFor(p.id).noStart);
   const score = new Map(cands.map((p) => [p.id, classicPoints(p, week, sc)]));
+  // RET spots (0171) rank candidates by their RETURN production, since that's
+  // all the spot will bank.
+  const retScore = new Map<string, number>();
   const order = [...slots].sort((a, b) => a.pos.length - b.pos.length);
   const used = new Set<string>();
   const fills: ClassicPick[] = [];
   for (const d of order) {
     if (!bb.has(d.slot)) continue;
+    const ret = isRetSlot(d.pos);
+    const elig = slotEligiblePos(d.pos);
+    const scoreOf = (id: string, pl: Player): number => {
+      if (!ret) return score.get(id) ?? 0;
+      if (!retScore.has(id)) retScore.set(id, classicPoints(pl, week, sc, 'RET'));
+      return retScore.get(id) ?? 0;
+    };
     let best: Player | null = null;
     for (const c of cands) {
-      if (used.has(c.id) || !d.pos.includes(c.pos)) continue;
-      if (!best || (score.get(c.id) ?? 0) > (score.get(best.id) ?? 0)) best = c;
+      if (used.has(c.id) || !elig.includes(c.pos)) continue;
+      if (!best || scoreOf(c.id, c) > scoreOf(best.id, best)) best = c;
     }
     if (best) { used.add(best.id); fills.push({ slot: d.slot, player: best }); }
   }
@@ -513,12 +609,15 @@ export function classicLineup(s: ClassicSide, week: number, sc?: number | Partia
 export function resolveClassicMatchup(home: ClassicSide, away: ClassicSide, week: number, sc?: number | Partial<ClassicScoring>, slots: ClassicSlotDef[] = CLASSIC_SLOTS): ClassicResult {
   const scoring = normalizeClassicScoring(sc);
   const order = new Map(slots.map((s, i) => [s.slot, i]));
+  // RET spots (0171) score their occupant as a RETURNER — return production
+  // only — no matter what else the player did that day.
+  const specOf = new Map(slots.map((s) => [s.slot, s.pos as string[]]));
   const side = (s: ClassicSide, which: 'home' | 'away') => {
     const rows = classicLineup(s, week, scoring, slots)
       .sort((a, b) => (order.get(a.slot) ?? 99) - (order.get(b.slot) ?? 99))
       .map((p) => ({
         win: CLASSIC_WIN, side: which, slot: p.slot, slug: p.player.id, metric: null as null,
-        score: classicPoints(p.player, week, scoring),
+        score: classicPoints(p.player, week, scoring, isRetSlot(specOf.get(p.slot) ?? []) ? 'RET' : undefined),
       }));
     return { rows, total: round1(rows.reduce((s2, r) => s2 + r.score, 0)) };
   };

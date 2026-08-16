@@ -1233,7 +1233,7 @@ export const leagueLiveBuffs = (leagueId: string) =>
 /** 'drip' (default) or 'classic' — classic = standard scoring, one weekly
  *  QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses, no power-ups. Frozen once
  *  the draft starts. `ppr` (0 | 0.5 | 1, default 1) applies in classic only. */
-export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean }[] | null; shape?: { bench?: number; taxi?: number; ir?: number } | null; rounds?: number | null; can_edit?: boolean }
+export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean }[] | null; shape?: { bench?: number; taxi?: number; ir?: number } | null; rounds?: number | null; positions?: string[] | null; pool_filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null } | null; can_edit?: boolean }
 export const setLeagueGameMode = (leagueId: string, mode: 'drip' | 'classic', ppr?: number) =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_game_mode',
     { p_league_id: leagueId, p_mode: mode, p_ppr: ppr ?? null }),
@@ -1654,6 +1654,20 @@ export const nativeJoin = (code: string, teamName?: string) =>
 export const setTeamName = (leagueId: string, rosterId: number, name: string) =>
   rpc<{ ok: boolean; error?: string; team_name?: string }>('set_team_name', { p_league_id: leagueId, p_roster_id: rosterId, p_name: name });
 /** Seed the draftable player universe (commissioner, pre-draft only). */
+/** Admin-only (0171): which extra position groups this league may use
+ *  (subset of HC / P / IDP / FB / RET). */
+export const setLeaguePositionAccess = (leagueId: string, positions: string[]) =>
+  rpc<{ ok: boolean; error?: string; positions?: string[] }>('set_league_position_access', {
+    p_league_id: leagueId, p_positions: positions,
+  });
+
+/** Commissioner (0171, pre-draft): allowable-player filter for the pool —
+ *  team whitelist and/or tenure window. Null/empty clears. */
+export const setLeaguePoolFilter = (leagueId: string, filter: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null } | null) =>
+  rpc<{ ok: boolean; error?: string; filter?: unknown }>('set_league_pool_filter', {
+    p_league_id: leagueId, p_filter: filter,
+  });
+
 export const seedLeaguePool = (leagueId: string, players: { slug: string; full: string; pos: string; team: string; espnId?: string }[]) =>
   rpc<{ ok: boolean; error?: string; players?: number }>('seed_league_pool', {
     p_league_id: leagueId,

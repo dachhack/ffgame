@@ -321,6 +321,10 @@ export async function sleeperNormalize(
     if (players[sid]) return;
     const meta = dir.get(sid);
     if (!meta) return;
+    // DRIP GATE (0171): the directory now carries IDP/FB ungated, but the drip
+    // Sleeper-sync keeps its pre-IDP behavior — defenders and fullbacks stay
+    // off drip rosters until drip's own feature-flagged rollout.
+    if (meta.pos === 'DL' || meta.pos === 'LB' || meta.pos === 'DB' || meta.pos === 'FB') return;
     players[sid] = { key: sid, full: meta.full, pos: meta.pos, nflTeam: meta.team, sleeperId: sid, espnId: meta.espnId };
   };
   for (const r of rosters) for (const sid of r.players ?? []) include(sid);

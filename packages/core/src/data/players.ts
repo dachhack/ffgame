@@ -82,6 +82,10 @@ const DEFAULTS: Record<Pos, PlayerStats> = {
   DL: { games: 16, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 90 },
   LB: { games: 16, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 100 },
   DB: { games: 16, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 90 },
+  FB: { games: 14, carries: 20, rushYds: 70, rushTds: 1, targets: 8, receptions: 6, recYds: 40, recTds: 0, passYds: 0, passTds: 0, ints: 0, ppr: 25 },
+  HC: { games: 14, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 },
+  P: { games: 14, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 },
+  RET: { games: 14, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 },
 };
 
 export function statsForName(fullName: string, pos: Pos): PlayerStats {

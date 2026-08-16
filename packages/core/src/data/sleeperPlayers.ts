@@ -9,12 +9,15 @@ export interface PlayerMeta {
   depth?: number;
   /** False only when Sleeper marks the player inactive (retired/out of the league). */
   active?: boolean;
+  /** Sleeper years_exp — 0 for rookies; undefined when Sleeper doesn't know.
+   *  Powers the pool tenure filters (0171). */
+  exp?: number;
 }
 
 const URL_ALL = 'https://api.sleeper.app/v1/players/nfl';
 const DB = 'gridiron-clash';
 const STORE = 'kv';
-const KEY = 'sleeper-players-nfl';
+const KEY = 'sleeper-players-nfl-v2'; // v2 (0171): +years_exp, +IDP/FB — bust stale caches
 const TTL = 24 * 60 * 60 * 1000; // refresh at most once a day
 
 let mem: Map<string, PlayerMeta> | null = null;
@@ -49,20 +52,16 @@ function idbSet(db: IDBDatabase, key: string, val: unknown): Promise<void> {
   });
 }
 
-// IDP (DL/LB/DB) is fully wired but NOT enabled yet — flip to true once real
-// per-defender play-by-play lands (Phase 2; see docs/mcp-requests.md item 8).
-// While false, defenders are dropped from Sleeper rosters (pre-IDP behavior) and
-// nothing IDP-related surfaces in the app.
-export const IDP_ENABLED = false;
-
+// The directory now carries EVERY rosterable position (0171): defenders (real
+// per-defender play-by-play landed in 0168/0169) and fullbacks live here
+// ungated — per-league exposure is decided at POOL SEED time by the admin's
+// positions_extra flags, and the drip Sleeper-sync path keeps its own gate in
+// buildLeague until drip gets its flagged rollout.
 const FANTASY: Record<string, Pos> = {
-  QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', K: 'K', DEF: 'DEF',
-  // IDP — collapse Sleeper's sub-positions into the three groups (gated above).
-  ...(IDP_ENABLED ? {
-    DL: 'DL', DE: 'DL', DT: 'DL', NT: 'DL', EDGE: 'DL',
-    LB: 'LB', ILB: 'LB', OLB: 'LB', MLB: 'LB',
-    DB: 'DB', CB: 'DB', S: 'DB', FS: 'DB', SS: 'DB',
-  } as Record<string, Pos> : {}),
+  QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', K: 'K', DEF: 'DEF', FB: 'FB',
+  DL: 'DL', DE: 'DL', DT: 'DL', NT: 'DL', EDGE: 'DL',
+  LB: 'LB', ILB: 'LB', OLB: 'LB', MLB: 'LB',
+  DB: 'DB', CB: 'DB', S: 'DB', FS: 'DB', SS: 'DB',
 };
 
 function parse(raw: Record<string, Record<string, unknown>>): Map<string, PlayerMeta> {
@@ -80,10 +79,12 @@ function parse(raw: Record<string, Record<string, unknown>>): Map<string, Player
     const sr = Number(p.search_rank);
     const rank = Number.isFinite(sr) && sr > 0 && sr < 100000 ? sr : undefined;
     const dc = Number(p.depth_chart_order);
+    const yx = Number(p.years_exp);
     out.set(id, {
       id, full, pos, team: (p.team as string) ?? (pos === 'DEF' ? id : null), espnId, rank,
       depth: Number.isFinite(dc) && dc > 0 ? dc : undefined,
       active: p.active !== false,
+      exp: Number.isFinite(yx) && yx >= 0 ? yx : undefined,
     });
   }
   return out;
