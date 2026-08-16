@@ -109,11 +109,16 @@ export function SideNav<T extends string>({ groups, active, onSelect }: {
 /** Underline-style tab strip. Scrolls horizontally on narrow screens instead of
  *  wrapping (`.mgmt-tabs` hides its scrollbar), so it stays a single tidy row on
  *  mobile. `badge` renders an attention count (e.g. open code requests). */
-export function TabBar<T extends string>({ tabs, active, onSelect, style }: {
+export function TabBar<T extends string>({ tabs, active, onSelect, style, wrap = false }: {
   tabs: TabDef<T>[]; active: T; onSelect: (id: T) => void; style?: CSSProperties;
+  /** Wrap onto a second line instead of scrolling sideways. For a SECONDARY
+   *  strip inside an already-narrowed pane (the scoring groups), where a
+   *  scrolled-off tab is a tab nobody finds — the primary league strip keeps
+   *  scrolling, since it's full-width and one tidy row matters more there. */
+  wrap?: boolean;
 }) {
   return (
-    <div className="mgmt-tabs" role="tablist" style={{ display: 'flex', gap: 2, overflowX: 'auto', borderBottom: '1px solid var(--bd)', ...style }}>
+    <div className="mgmt-tabs" role="tablist" style={{ display: 'flex', gap: 2, ...(wrap ? { flexWrap: 'wrap' } : { overflowX: 'auto' }), borderBottom: '1px solid var(--bd)', ...style }}>
       {tabs.map((t) => {
         const on = t.id === active;
         return (
