@@ -35,7 +35,7 @@ import { slugMeta } from '@drip/core/data/slugMeta';
 import { isMarkFree, setMarkFree } from '@drip/core/data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '@drip/core/data/liveApi';
 import { POWERUPS } from '@drip/core/data/powerups';
-import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, useWide, errMsg, RADIUS, type TabDef, type NavGroup } from './adminUi';
+import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, NavSelect, useWide, errMsg, RADIUS, type TabDef, type NavGroup } from './adminUi';
 import { DraftRoom } from './NativeLeague';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
@@ -1125,8 +1125,6 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       ],
     },
   ];
-  // Mobile keeps the single scrolling strip — same destinations, flattened.
-  const leagueTabs: TabDef<LeagueTab>[] = navGroups.flatMap((g) => g.items);
 
   return (
     <div style={card}>
@@ -1176,7 +1174,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       {/* Desktop gets the grouped rail; narrow screens keep the scrolling strip.
           Both drive the same `tab` state, so a destination behaves identically
           either way. */}
-      {!wide && <TabBar tabs={leagueTabs} active={tab} onSelect={showTab} style={{ margin: '10px -14px 0', padding: '0 8px' }} />}
+      {!wide && <NavSelect groups={navGroups} active={tab} onSelect={showTab} />}
       <div style={wide ? { display: 'flex', gap: 18, marginTop: 12, alignItems: 'flex-start' } : undefined}>
         {wide && <SideNav groups={navGroups} active={tab} onSelect={showTab} />}
         <div style={wide ? { flex: 1, minWidth: 0, borderLeft: '1px solid var(--bd)', paddingLeft: 18 } : undefined}>
