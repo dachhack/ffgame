@@ -15,7 +15,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View
 import { LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
 import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, nflGameForTeam, kickoffLabel, isPreseasonWeek, LOCK_LEAD_MS, windowKickoffMs } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
-import { slugMeta } from '@drip/core/data/slugMeta';
+import { slugMeta, setSlugMetaOverrides } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { powerupById, POWERUPS, isAmplifier, ampCapacity } from '@drip/core/data/powerups';
 import { REG_SEASON_WEEKS } from '@drip/core/data/league';
@@ -29,7 +29,7 @@ import {
   getMatchup, getMatchupState, getRevealedPicks, revealedOppBuffs, subscribeMatchup, weekGameFeeds, weekLivePlays,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
   type WindowScore, type RevealedPick, type GameFeedRow,
-  nativeTeamState, loadLiveInjuries, loadTeamOverrides,
+  nativeTeamState, loadLiveInjuries, loadTeamOverrides, leaguePool,
 } from '@drip/core/data/liveApi';
 import { clearLiveInjuries } from '@drip/core/data/injuries';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/gameFeed';
@@ -208,6 +208,13 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         const gm = await leagueGameMode(r.leagueId).catch(() => null);
         if (gm?.ok && gm.mode === 'classic') { if (alive) { setGameMode('classic'); setState('ready'); } return; }
         if (alive) setGameMode('drip');
+        // Live meta for the DUEL LOG's engine call (0200.1): the baked slug
+        // table only knows the 2025 demo names, so a 2026 fringe player fell
+        // to the WR/no-team fallback and his client-resolved duel banked 0.0
+        // with no drip events while the server scored him. The league pool
+        // knows every rostered player's pos+team — install it as the slugMeta
+        // overlay so the log resolves the same players the worker does.
+        if (native) leaguePool(r.leagueId).then((lp) => setSlugMetaOverrides(lp)).catch(() => {});
         leagueLiveBuffs(r.leagueId).then((lb) => { if (lb.ok) setLiveBuffsOn(lb.on !== false); }).catch(() => {});
         myMembership(r.leagueId, r.rosterId).then((mm) => { if (mm?.controller) setController(mm.controller); }).catch(() => {});
         const m = await myMatchup(r.leagueId, r.rosterId, weekSel ?? undefined);
