@@ -788,11 +788,15 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
                 <Mono size={8.5} weight="700" tone="dim" style={{ width: 16 }}>{i + 1}</Mono>
                 {[...BUILDER_POSITIONS.filter((q) => !['DL','LB','DB'].includes(q) || extraPos.includes('IDP')), ...['FB','HC','P','RET'].filter((q) => extraPos.includes(q))].map((p) => {
                   const on = sp.pos.includes(p);
+                  // A lit chip wears the POSITION's colour (v0.216.1) — same
+                  // palette PosPill uses, so the builder speaks the draft
+                  // board's language. Unknown tokens fall back to neutral.
+                  const c = t.pos[p as keyof typeof t.pos] ?? { bg: t.you, fg: t.onAccent, bd: t.you };
                   return (
                     <Pressable key={p} disabled={busy}
                       onPress={() => { tap(); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, pos: on ? x.pos.filter((q) => q !== p) : [...x.pos, p] })); setSpotsDirty(true); }}
-                      style={{ borderRadius: 999, paddingHorizontal: 6, paddingVertical: 3, backgroundColor: on ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd }}>
-                      <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: on ? t.onAccent : t.dim }}>{p}</Text>
+                      style={{ borderRadius: 3, paddingHorizontal: 6, paddingVertical: 3, backgroundColor: on ? c.bg : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? c.bd : t.bd }}>
+                      <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: on ? c.fg : t.dim }}>{p}</Text>
                     </Pressable>
                   );
                 })}

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
-import { NFL_CODES } from '@drip/core/data/kdst';
+import { NFL_DIVISIONS } from '@drip/core/data/kdst';
+import { teamLogo } from '@drip/core/data/media';
 import { leagueScoringGet } from '@drip/core/data/liveApi';
 import { parseScoring, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 
@@ -190,21 +191,59 @@ const SCORING_PRESETS: { id: string; label: string; hint: string; ppr: number; o
 // Team-acronym helper (founder ask): a tappable 32-team grid under every teams
 // input, kept in SYNC with the free-text field — a chip toggles its code in or
 // out of the comma list, and hand-typed codes light their chips.
-const ALL_TEAMS = NFL_CODES.map((c) => c.toUpperCase());
 const teamList = (s: string) => s.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
 const toggleTeam = (s: string, tm: string) => {
   const list = teamList(s);
   return (list.includes(tm) ? list.filter((x) => x !== tm) : [...list, tm]).join(', ');
 };
+/** The 32 teams laid out the way the league is actually organised (v0.216.1):
+ *  AFC beside NFC, four divisions each, every chip carrying its logo. A flat
+ *  alphabetical run of abbreviations only works if you already know all 32; by
+ *  division you find a team the way you think about one — and the division
+ *  label is itself a button, so "the whole NFC West" is one click. */
 function TeamChips({ value, onChange, disabled }: { value: string; onChange: (next: string) => void; disabled?: boolean }) {
   const on = new Set(teamList(value));
+  const setMany = (codes: string[], turnOn: boolean) => {
+    const cur = teamList(value).filter((c) => turnOn || !codes.includes(c));
+    onChange((turnOn ? [...new Set([...cur, ...codes])] : cur).join(', '));
+  };
   return (
-    <div style={{ flexBasis: '100%', display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 4 }}>
-      {ALL_TEAMS.map((tm) => (
-        <button key={tm} disabled={disabled} onClick={() => onChange(toggleTeam(value, tm))} className="mono"
-          style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 5px', borderRadius: RADIUS, cursor: 'pointer',
-            color: on.has(tm) ? 'var(--on-accent)' : 'var(--dim)', background: on.has(tm) ? 'var(--you)' : 'var(--bg)',
-            border: `1px solid ${on.has(tm) ? 'var(--you)' : 'var(--bd)'}`, opacity: disabled ? 0.5 : 1 }}>{tm}</button>
+    <div style={{ flexBasis: '100%', marginTop: 6, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '10px 18px' }}>
+      {(['AFC', 'NFC'] as const).map((conf) => (
+        <div key={conf} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)' }}>{conf}</div>
+          {NFL_DIVISIONS.filter((d) => d.conf === conf).map((d) => {
+            const codes = d.teams.map((t) => t.toUpperCase());
+            const allOn = codes.every((c) => on.has(c));
+            return (
+              <div key={d.div} style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                <button disabled={disabled} onClick={() => setMany(codes, !allOn)}
+                  title={`${allOn ? 'clear' : 'select'} all of ${conf} ${d.div}`}
+                  className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: allOn ? 'var(--you)' : 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', width: 52, textAlign: 'left', padding: 0 }}>
+                  {d.div.toUpperCase()}
+                </button>
+                {d.teams.map((code) => {
+                  const tm = code.toUpperCase();
+                  const lit = on.has(tm);
+                  const logo = teamLogo(code);
+                  return (
+                    <button key={tm} disabled={disabled} onClick={() => onChange(toggleTeam(value, tm))} className="mono"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10.5, fontWeight: 700, padding: '2px 6px 2px 3px', borderRadius: RADIUS, cursor: 'pointer',
+                        color: lit ? 'var(--on-accent)' : 'var(--dim)', background: lit ? 'var(--you)' : 'var(--bg)',
+                        border: `1px solid ${lit ? 'var(--you)' : 'var(--bd)'}`, opacity: disabled ? 0.5 : 1 }}>
+                      {/* teamLogo() is null in mark-free mode (trademarks
+                          suppressed) and the chip falls back to the abbr; a
+                          load failure collapses the same way. */}
+                      {logo && <img src={logo} alt="" width={15} height={15} style={{ display: 'block', flexShrink: 0 }}
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
+                      {tm}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
       ))}
     </div>
   );
@@ -350,6 +389,18 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
+  // A LIT position chip wears that position's colour (v0.216.1) — the same
+  // --pos-* palette the draft board's PosPill uses, so QB reads as QB
+  // everywhere instead of "selected" reading as one undifferentiated accent.
+  // Unlit stays neutral so the spot's actual eligibility is what stands out.
+  const posChip = (p: string, on: boolean): React.CSSProperties => ({
+    fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', borderRadius: RADIUS,
+    padding: '3px 7px', cursor: 'pointer',
+    color: on ? `var(--pos-${p}-fg)` : 'var(--dim)',
+    background: on ? `var(--pos-${p}-bg)` : 'var(--bg)',
+    border: `1px solid ${on ? `var(--pos-${p}-bd)` : 'var(--bd)'}`,
+    opacity: busy ? 0.5 : 1,
+  });
   // Square controls (v0.213.0) — see adminUi's RADIUS note.
   const pill = (on: boolean): React.CSSProperties => ({
     fontSize: 12.5, fontWeight: 700, borderRadius: RADIUS, padding: '6px 13px', cursor: 'pointer',
@@ -408,7 +459,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                   return (
                     <button key={p} disabled={busy}
                       onClick={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, pos: on ? x.pos.filter((q) => q !== p) : [...x.pos, p] })); setSpotsDirty(true); }}
-                      className="mono" style={{ ...pill(on), padding: '3px 7px', fontSize: 11 }}>{p}</button>
+                      className="mono" style={posChip(p, on)}>{p}</button>
                   );
                 })}
                 <span className="mono" style={{ flex: 1, minWidth: 60, fontSize: 10.5, color: 'var(--faint)', textAlign: 'right' }}>{slotSpecLabel(sp.pos)}</span>
