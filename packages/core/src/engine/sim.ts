@@ -46,10 +46,20 @@ export interface RawPlay {
   catch: boolean;   // a reception happened
   target: boolean;  // the player was targeted
   turnover?: boolean; // the player committed a turnover on this play (INT thrown / fumble lost)
+  // Phase-1 truth flags (0166) — absent on legacy data, so knobs keyed to them
+  // score nothing until the feed carries the flag (never a wrong guess).
+  // (2-pt conversions are their own kinds — tp_pass/tp_rush/tp_rec — not flags.)
+  fd?: boolean;     // the play gained a first down (TDs count, nflverse-style)
+  cmp?: boolean;    // QB row: completed pass
+  inc?: boolean;    // QB row: incomplete attempt (INTs included)
+  skd?: boolean;    // QB row: sacked on this dropback (not a pass attempt)
 }
 
 // Effect family of a metric → how it scores a single play and what it does.
 function scorePlay(play: RawPlay, pos: Pos, metricId: string, hot: boolean): number {
+  // 2-pt conversion rows (0166, kinds tp_pass/tp_rush/tp_rec) exist for CLASSIC
+  // scoring only — no drip metric matches their kind and they carry ca:0, so
+  // drip stays byte-identical to pre-0166 with no special case here.
   // League adjustments (0143) LAYER on the tuned base numbers below: A.ydMult
   // scales every yardage-derived term, A.tdBonus adds to every TD's points.
   // Defaults are the identity, so an unadjusted league scores exactly the
@@ -180,6 +190,7 @@ function playText(p: Player, play: RawPlay): string {
   const t = TEAM_ABBR(p);
   // The player is named on the score card right above the log, so play rows omit
   // the name and show just the action (the team prefix is stripped by actionText).
+  if (play.kind === 'tp_pass' || play.kind === 'tp_rush' || play.kind === 'tp_rec') return `${t}: 2-pt conversion good`;
   if (play.td) {
     if (play.kind === 'rush') return `${t}: ${play.yards}yd rush TD`;
     if (play.kind === 'rec') return `${t}: ${play.yards}yd catch TD`;
@@ -222,7 +233,11 @@ export function realRawPlays(playerId: string, week: number): RawPlay[] | null {
   const ps = realPbpFor(week, playerId);
   if (!ps) return null;
   return ps
-    .map((p) => ({ clock: p.c, t: p.t, kind: p.k, yards: p.y, td: !!p.td, catch: !!p.ca, target: !!p.tg, turnover: !!p.to }))
+    .map((p) => ({
+      clock: p.c, t: p.t, kind: p.k, yards: p.y, td: !!p.td, catch: !!p.ca, target: !!p.tg, turnover: !!p.to,
+      ...(p.fd ? { fd: true } : {}), ...(p.cp ? { cmp: true } : {}), ...(p.ic ? { inc: true } : {}),
+      ...(p.sk ? { skd: true } : {}),
+    }))
     .sort((a, b) => a.clock - b.clock);
 }
 

@@ -125,6 +125,10 @@ export function rosterLabel(roster?: ClassicRoster | null): string {
 export interface ClassicScoring {
   passYd: number; passTd: number; int: number; pass300: number; pass400: number;
   pass40: number; passTd40: number; passTd50: number;
+  passCmp: number; passInc: number; passAtt: number; cmp25: number; qbSacked: number;
+  passFd: number; rushFd: number; recFd: number;
+  fdQb: number; fdRb: number; fdWr: number; fdTe: number;
+  pass2pt: number; rush2pt: number; rec2pt: number;
   rushYd: number; rushTd: number; rush100: number; rush200: number;
   rush40: number; rushTd40: number; rushTd50: number; carries20: number;
   recYd: number; recTd: number; ppr: number; teRec: number; rec100: number; rec200: number;
@@ -142,6 +146,12 @@ export interface ClassicScoring {
 export const DEFAULT_CLASSIC_SCORING: ClassicScoring = {
   passYd: 0.04, passTd: 4, int: -2, pass300: 0, pass400: 0,
   pass40: 0, passTd40: 0, passTd50: 0,
+  passCmp: 0, passInc: 0, passAtt: 0, cmp25: 0, qbSacked: 0,
+  passFd: 0, rushFd: 0, recFd: 0,
+  fdQb: 0, fdRb: 0, fdWr: 0, fdTe: 0,
+  // 2-pt conversions default to Sleeper's 2 — only flag-aware rows (0166 live
+  // feed onward) carry `twoPt`, so no historical total moves.
+  pass2pt: 2, rush2pt: 2, rec2pt: 2,
   rushYd: 0.1, rushTd: 6, rush100: 0, rush200: 0,
   rush40: 0, rushTd40: 0, rushTd50: 0, carries20: 0,
   recYd: 0.1, recTd: 6, ppr: 1, teRec: 0, rec100: 0, rec200: 0,
@@ -164,12 +174,16 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
     { key: 'passYd', label: 'PASS YD', perYard: true }, { key: 'passTd', label: 'PASS TD' }, { key: 'int', label: 'INT' },
     { key: 'pass300', label: '300+ YD GAME' }, { key: 'pass400', label: '400+ YD GAME' },
     { key: 'pass40', label: '40+ YD COMP' }, { key: 'passTd40', label: '40+ YD TD' }, { key: 'passTd50', label: '50+ YD TD' },
+    { key: 'passCmp', label: 'COMPLETION' }, { key: 'passInc', label: 'INCOMPLETE' }, { key: 'passAtt', label: 'ATTEMPT' },
+    { key: 'cmp25', label: '25+ CMP GAME' }, { key: 'qbSacked', label: 'QB SACKED' },
+    { key: 'passFd', label: '1ST DOWN' }, { key: 'pass2pt', label: '2-PT PASS' },
   ] },
   { section: 'RUSHING', fields: [
     { key: 'rushYd', label: 'RUSH YD', perYard: true }, { key: 'rushTd', label: 'RUSH TD' },
     { key: 'rush100', label: '100+ YD GAME' }, { key: 'rush200', label: '200+ YD GAME' },
     { key: 'rush40', label: '40+ YD RUSH' }, { key: 'rushTd40', label: '40+ YD TD' }, { key: 'rushTd50', label: '50+ YD TD' },
     { key: 'carries20', label: '20+ CARRY GAME' },
+    { key: 'rushFd', label: '1ST DOWN' }, { key: 'rush2pt', label: '2-PT RUSH' },
   ] },
   { section: 'RECEIVING', fields: [
     { key: 'recYd', label: 'REC YD', perYard: true }, { key: 'recTd', label: 'REC TD' }, { key: 'teRec', label: 'TE CATCH BONUS' },
@@ -178,9 +192,13 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
     { key: 'recB0', label: 'REC 0-4 YD' }, { key: 'recB5', label: 'REC 5-9 YD' }, { key: 'recB10', label: 'REC 10-19 YD' },
     { key: 'recB20', label: 'REC 20-29 YD' }, { key: 'recB30', label: 'REC 30-39 YD' }, { key: 'recB40', label: 'REC 40+ YD' },
     { key: 'recTd40', label: '40+ YD TD' }, { key: 'recTd50', label: '50+ YD TD' },
+    { key: 'recFd', label: '1ST DOWN' }, { key: 'rec2pt', label: '2-PT CATCH' },
   ] },
   { section: 'COMBINED RUSH + REC', fields: [
     { key: 'rr100', label: '100+ YD GAME' }, { key: 'rr200', label: '200+ YD GAME' },
+  ] },
+  { section: 'FIRST DOWNS BY POSITION', fields: [
+    { key: 'fdQb', label: 'QB' }, { key: 'fdRb', label: 'RB' }, { key: 'fdWr', label: 'WR' }, { key: 'fdTe', label: 'TE' },
   ] },
   { section: 'TURNOVERS & RETURNS', fields: [
     { key: 'fumble', label: 'FUMBLE LOST' }, { key: 'retYd', label: 'RETURN YD', perYard: true }, { key: 'retTd', label: 'RETURN TD' },
@@ -252,16 +270,29 @@ export function classicScorePlay(play: RawPlay, pos: Pos, sc: ClassicScoring): n
   // Skill positions: every stat counts, all at once — the whole point of classic.
   // Distance bonuses key on YARDS, so incompletions/sacks (baked as 0-yd pass
   // rows) can never trip them; the 40/50 TD bonuses STACK, house style.
+  // A 2-pt conversion row (0166, own kinds) carries no yardage/reception
+  // credit — the NFL awards no stats for the try — just the 2-pt knob.
+  if (play.kind === 'tp_pass') return sc.pass2pt;
+  if (play.kind === 'tp_rush') return sc.rush2pt;
+  if (play.kind === 'tp_rec') return sc.rec2pt;
   let pts = 0;
   if (play.kind === 'pass') {
     pts += play.yards * sc.passYd + (play.td ? sc.passTd : 0);
     if (play.yards >= 40) pts += sc.pass40 + (play.td ? sc.passTd40 : 0);
     if (play.yards >= 50 && play.td) pts += sc.passTd50;
+    // Truth flags (0166): exactly one of cmp/inc/skd on flag-aware QB rows;
+    // legacy rows carry none and score none of these — never a wrong guess.
+    if (play.skd) pts += sc.qbSacked;
+    if (play.cmp || play.inc) pts += sc.passAtt;
+    if (play.cmp) pts += sc.passCmp;
+    if (play.inc) pts += sc.passInc;
+    if (play.fd) pts += sc.passFd;
   }
   if (play.kind === 'rush') {
     pts += play.yards * sc.rushYd + (play.td ? sc.rushTd : 0);
     if (play.yards >= 40) pts += sc.rush40 + (play.td ? sc.rushTd40 : 0);
     if (play.yards >= 50 && play.td) pts += sc.rushTd50;
+    if (play.fd) pts += sc.rushFd;
   }
   if (play.catch) {
     pts += sc.ppr + (pos === 'TE' ? sc.teRec : pos === 'RB' ? sc.rbRec : pos === 'WR' ? sc.wrRec : 0)
@@ -270,7 +301,11 @@ export function classicScorePlay(play: RawPlay, pos: Pos, sc: ClassicScoring): n
         : play.yards < 30 ? sc.recB20 : play.yards < 40 ? sc.recB30 : sc.recB40;
     if (play.yards >= 40 && play.td) pts += sc.recTd40;
     if (play.yards >= 50 && play.td) pts += sc.recTd50;
+    if (play.fd) pts += sc.recFd;
   }
+  // Per-position first-down bonus (Sleeper's MISC section) stacks on the stat
+  // first down — both sides of a completed pass earn theirs independently.
+  if (play.fd) pts += pos === 'QB' ? sc.fdQb : pos === 'RB' ? sc.fdRb : pos === 'WR' ? sc.fdWr : pos === 'TE' ? sc.fdTe : 0;
   // ESPN-style per-target points (founder's ask) — pays on every target,
   // caught or not: rec rows and incomplete-target rows both carry the flag.
   if (play.target) pts += sc.targetPt;
@@ -290,12 +325,13 @@ const round1 = (n: number): number => Math.round(n * 10) / 10;
 export function classicPoints(player: Player, week: number, sc?: number | Partial<ClassicScoring>): number {
   const s = normalizeClassicScoring(sc);
   const { plays } = playsForPlayer(player, week);
-  let raw = 0, passYds = 0, rushYds = 0, recYds = 0, carries = 0, tackles = 0;
+  let raw = 0, passYds = 0, rushYds = 0, recYds = 0, carries = 0, tackles = 0, cmps = 0;
   for (const p of plays) {
     raw += classicScorePlay(p, player.pos, s);
     if (p.kind === 'pass') passYds += p.yards;
     if (p.kind === 'rush') { rushYds += p.yards; carries++; }
-    if (p.catch) recYds += p.yards;
+    if (p.catch && p.kind !== 'tp_rec') recYds += p.yards;
+    if (p.cmp) cmps++;
     if (p.kind === 'tackle') tackles++;
   }
   if (passYds >= 300) raw += s.pass300;
@@ -307,6 +343,7 @@ export function classicPoints(player: Player, week: number, sc?: number | Partia
   if (rushYds + recYds >= 100) raw += s.rr100;
   if (rushYds + recYds >= 200) raw += s.rr200;
   if (carries >= 20) raw += s.carries20;
+  if (cmps >= 25) raw += s.cmp25;
   if (tackles >= 10) raw += s.idpTackle10;
   const fr = flagRulesFor(player.id);
   return round1(raw * (fr.bonusMult ?? 1) + (fr.bonusPts ?? 0));

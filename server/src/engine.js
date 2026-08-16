@@ -69,11 +69,16 @@ export function resolveWindow(you, their, week, label = '', opts = {}) {
 }
 
 /** Convenience: turn live_play DB rows into the RealPlay shape the engine wants,
- *  grouped by slug. Rows: { player_slug, c, t, pid, k, y, td, ca, tg, to }. */
+ *  grouped by slug. Rows: { player_slug, c, t, pid, k, y, td, ca, tg, to } plus
+ *  the 0166 truth flags fd/cp/ic/sk when the poller stored them. */
 export function rowsToPbp(rows) {
   const by = {};
   for (const r of rows) {
-    (by[r.player_slug] ||= []).push({ c: r.c, t: r.t ?? undefined, pid: r.pid ?? undefined, k: r.k, y: r.y, td: r.td, ca: r.ca, tg: r.tg, ...(r.to ? { to: r.to } : {}) });
+    (by[r.player_slug] ||= []).push({
+      c: r.c, t: r.t ?? undefined, pid: r.pid ?? undefined, k: r.k, y: r.y, td: r.td, ca: r.ca, tg: r.tg,
+      ...(r.to ? { to: r.to } : {}),
+      ...(r.fd ? { fd: 1 } : {}), ...(r.cp ? { cp: 1 } : {}), ...(r.ic ? { ic: 1 } : {}), ...(r.sk ? { sk: 1 } : {}),
+    });
   }
   for (const s of Object.keys(by)) by[s].sort((a, b) => a.c - b.c);
   return by;

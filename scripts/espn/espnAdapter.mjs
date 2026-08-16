@@ -114,6 +114,11 @@ export function playToRows(p, roster, eventId, gameStartMs) {
   const ride = { ...(t != null ? { t } : {}), ...(pid != null ? { pid } : {}) };
   const yds = Number(p?.statYardage ?? 0) || 0;
   const isTD = !!p?.scoringPlay && /TOUCHDOWN/i.test(text);
+  // First down gained (0166): a scrimmage play that covered the distance —
+  // TDs count, nflverse-style. Turnovers never award one; down 0 = free kicks.
+  const dn = Number(p?.start?.down ?? 0) || 0;
+  const dist = Number(p?.start?.distance ?? 0) || 0;
+  const fd = dn > 0 && dist > 0 && yds >= dist && !p?.isTurnover ? { fd: 1 } : undefined;
   const offTeam = fixTeam(offenseAbbr(p, summaryTeamCache));
   const names = findNames(text, roster);
   const resolve = (abbr) => roster.get(abbr);
@@ -136,29 +141,53 @@ export function playToRows(p, roster, eventId, gameStartMs) {
   // "Pass Incompletion" / "… Touchdown" and are NOT defensive turnovers.
   const isInt = typeText.includes('Interception');
 
+  // Truth flags (0166) ride on the QB row — the adapter is branch-aware here,
+  // so cp/ic/sk are exact: exactly one of them on every flag-aware dropback.
   if (typeText === 'Rush' || typeText === 'Rushing Touchdown') {
     const r = names[0] && resolve(names[0].abbr); // ball-carrier is the first name
-    if (r) out.push({ slug: r.slug, play: row(c, ride, 'rush', yds, isTD ? 1 : 0, 0, 0, fumbler === r.slug ? 1 : 0) });
+    if (r) out.push({ slug: r.slug, play: row(c, ride, 'rush', yds, isTD ? 1 : 0, 0, 0, fumbler === r.slug ? 1 : 0, fd) });
   } else if (typeText === 'Pass Reception' || typeText === 'Passing Touchdown') {
     const passer = nameBefore(' pass');
     const recv = nameAfter(' to ');
-    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', yds, isTD ? 1 : 0, 0, 0, fumbler === passer.slug ? 1 : 0) });
-    if (recv) out.push({ slug: recv.slug, play: row(c, ride, 'rec', yds, isTD ? 1 : 0, 1, 1, fumbler === recv.slug ? 1 : 0) });
+    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', yds, isTD ? 1 : 0, 0, 0, fumbler === passer.slug ? 1 : 0, { cp: 1, ...fd }) });
+    if (recv) out.push({ slug: recv.slug, play: row(c, ride, 'rec', yds, isTD ? 1 : 0, 1, 1, fumbler === recv.slug ? 1 : 0, fd) });
   } else if (typeText === 'Pass Incompletion') {
     const passer = nameBefore(' pass');
     const recv = nameAfter(' to '); // absent on a throwaway
-    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', 0, 0, 0, 0, 0) });
+    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', 0, 0, 0, 0, 0, { ic: 1 }) });
     if (recv) out.push({ slug: recv.slug, play: row(c, ride, 'incomplete', 0, 0, 0, 1, 0) });
   } else if (isInt) {
     // Interception (return / return-TD): passer threw it (pass y=0, turnover); the
     // intended receiver gets a target (incomplete); the TD, if any, is the defense's.
+    // An INT is a pass ATTEMPT and an incompletion in the books — ic rides along.
     const passer = nameBefore(' pass');
     const recv = nameAfter('intended for');
-    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', 0, 0, 0, 0, 1) });
+    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', 0, 0, 0, 0, 1, { ic: 1 }) });
     if (recv) out.push({ slug: recv.slug, play: row(c, ride, 'incomplete', 0, 0, 0, 1, 0) });
   } else if (typeText.startsWith('Sack')) {
     const passer = nameBefore(' sacked');
-    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', 0, 0, 0, 0, fumbler === passer.slug ? 1 : 0) });
+    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', 0, 0, 0, 0, fumbler === passer.slug ? 1 : 0, { sk: 1 }) });
+  }
+
+  // 2-pt conversions (0166) ride inside the scoring play's text ("TWO-POINT
+  // CONVERSION ATTEMPT. X pass to Y is complete. ATTEMPT SUCCEEDS."). Only
+  // successes emit rows, as their OWN kinds (tp_*) with zero yards and ca:0 —
+  // distinct on live_play's (pid,slug,k) key from the same play's TD row, paid
+  // only by the classic 2-pt knob, invisible to every drip metric.
+  const tpi = text.search(/TWO-POINT CONVERSION ATTEMPT/i);
+  if (tpi >= 0 && /ATTEMPT SUCCEEDS/i.test(text)) {
+    const seg = names.filter((n) => n.idx > tpi);
+    const passIdx = text.indexOf(' pass', tpi);
+    if (passIdx > tpi && seg.length) {
+      const passer = seg[0].idx < passIdx ? resolve(seg[0].abbr) : null;
+      const recvHit = seg.find((n) => n.idx > passIdx);
+      const recv = recvHit ? resolve(recvHit.abbr) : null;
+      if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'tp_pass', 0, 0, 0, 0, 0) });
+      if (recv) out.push({ slug: recv.slug, play: row(c, ride, 'tp_rec', 0, 0, 0, 0, 0) });
+    } else if (seg.length) {
+      const runner = resolve(seg[0].abbr);
+      if (runner) out.push({ slug: runner.slug, play: row(c, ride, 'tp_rush', 0, 0, 0, 0, 0) });
+    }
   }
 
   // Kicker — FG (own play, incl. missed/blocked) + XP (rides inside a TD play).
@@ -207,8 +236,8 @@ export function playToRows(p, roster, eventId, gameStartMs) {
   return out;
 }
 
-function row(c, ride, k, y, td, ca, tg, to) {
-  return { c, ...ride, k, y, td, ca, tg, ...(to ? { to: 1 } : {}) };
+function row(c, ride, k, y, td, ca, tg, to, fl) {
+  return { c, ...ride, k, y, td, ca, tg, ...(to ? { to: 1 } : {}), ...(fl || {}) };
 }
 
 // Offense/defense team abbreviations for a play. ESPN's `start.team.id` is the
