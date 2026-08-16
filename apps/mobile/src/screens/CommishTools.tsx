@@ -24,6 +24,7 @@ import {
   leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter,
 } from '@drip/core/data/liveApi';
 import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
+import { NFL_CODES } from '@drip/core/data/kdst';
 
 // The builder's position chips (0163) — combos are made by lighting several.
 const BUILDER_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'];
@@ -629,6 +630,30 @@ const fromSpotDraft = (s: SpotDraft): SlotSpec => {
 };
 const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim());
 
+// Team-acronym helper (founder ask): a tappable 32-team grid under every teams
+// input, kept in SYNC with the free-text field — a chip toggles its code in or
+// out of the comma list, and hand-typed codes light their chips.
+const ALL_TEAMS = NFL_CODES.map((c) => c.toUpperCase());
+const teamList = (s: string) => s.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
+const toggleTeam = (s: string, tm: string) => {
+  const list = teamList(s);
+  return (list.includes(tm) ? list.filter((x) => x !== tm) : [...list, tm]).join(', ');
+};
+function TeamChips({ value, onChange, disabled }: { value: string; onChange: (next: string) => void; disabled?: boolean }) {
+  const t = useTheme();
+  const on = new Set(teamList(value));
+  return (
+    <View style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 3, marginTop: 4 }}>
+      {ALL_TEAMS.map((tm) => (
+        <Pressable key={tm} disabled={disabled} onPress={() => { tap(); onChange(toggleTeam(value, tm)); }}
+          style={{ borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, backgroundColor: on.has(tm) ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on.has(tm) ? t.you : t.bd, opacity: disabled ? 0.5 : 1 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: on.has(tm) ? t.onAccent : t.dim }}>{tm}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 function GameModeCard({ leagueId }: { leagueId: string }) {
   const t = useTheme();
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
@@ -797,6 +822,8 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
                       placeholder="max" keyboardType="number-pad" placeholderTextColor={t.faint}
                       style={{ fontFamily: MONO, fontSize: 9.5, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4, width: 48 }} />
                     <Mono size={7.5} tone="faint">rookies → max 0 · SAVE LINEUP applies</Mono>
+                    <TeamChips value={sp.fTeams} disabled={busy}
+                      onChange={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fTeams: v })); setSpotsDirty(true); }} />
                   </View>
                 )}
               </View>
@@ -845,6 +872,7 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
               })(); }} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 }}>
                 <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.you }}>SAVE</Text>
               </Pressable>
+              <TeamChips value={fltTeams} disabled={busy} onChange={setFltTeams} />
             </View>
             <Mono size={7.5} tone="faint" style={{ marginTop: 4, lineHeight: 11 }}>
               Rookies only → max 0 · 8+ yr vets → min 8 · empty = clear · applies on pool (re)seed, pre-draft only.
