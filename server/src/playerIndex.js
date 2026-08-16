@@ -50,7 +50,10 @@ export async function buildPlayerIndex(directory) {
     groups.get(e.base).push(e);
   }
   const byEspnId = new Map(); // "12345" -> that player's own minted slug
+  const byGsis = new Map();   // nflverse gsis_id ("00-0035057", trimmed — Sleeper pads it) -> own slug (0169 true-up)
   const byName = new Map();   // normName(full) -> the PRIMARY holder's slug
+  const byAbbr = new Map();   // "c.jordan"-style nflverse short name -> best-ranked slug (0169 fallback)
+  const abbrBest = new Map();
   const bySleeperId = new Map(); // sleeper player_id -> { slug, full, pos, team, espnId }
   const bySlug = new Map();    // minted slug -> { full, pos, team } (engine Player objects)
   const nameBest = new Map();  // normName -> best rank seen
@@ -70,15 +73,25 @@ export async function buildPlayerIndex(directory) {
       used.add(slug);
       bySleeperId.set(e.sid, { slug, full: e.full, pos: e.p.position, team: e.p.team, espnId: e.p.espn_id ? String(e.p.espn_id) : null });
       if (e.p.espn_id) byEspnId.set(String(e.p.espn_id), slug);
+      if (e.p.gsis_id && String(e.p.gsis_id).trim()) byGsis.set(String(e.p.gsis_id).trim(), slug);
       bySlug.set(slug, { full: e.full, pos: e.p.position, team: e.p.team, sid: e.sid });
       const nk = normName(e.full);
       if (!nameBest.has(nk) || e.rank < nameBest.get(nk)) { nameBest.set(nk, e.rank); byName.set(nk, slug); }
+      // nflverse short-name key ("C.Jordan" → "c jordan"), best rank wins.
+      const parts = e.full.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        const ak = normName(`${parts[0][0]} ${parts.slice(1).join(' ')}`);
+        if (!abbrBest.has(ak) || e.rank < abbrBest.get(ak)) { abbrBest.set(ak, e.rank); byAbbr.set(ak, slug); }
+      }
     }
   }
   console.log(new Date().toISOString(), `player index: ${bySleeperId.size} players, ${collisions} colliding slugs disambiguated`);
   return {
     slugForEspnId: (id) => (id != null ? byEspnId.get(String(id)) ?? null : null),
+    slugForGsis: (id) => (id ? byGsis.get(String(id).trim()) ?? null : null),
     slugForName: (name) => byName.get(normName(name)) ?? null,
+    /** nflverse short names ("C.Jordan"): initial + last, best-ranked holder. */
+    slugForNflAbbr: (name) => byAbbr.get(normName(String(name).replace('.', ' '))) ?? null,
     sleeper: (sid) => bySleeperId.get(String(sid)) ?? null,
     metaForSlug: (slug) => bySlug.get(slug) ?? null,
     /** Every indexed player as { slug, full, pos, team, sid } (pod dealing). */

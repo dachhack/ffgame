@@ -61,6 +61,16 @@ Data note: needs final team scores / margins, which the play stream
 doesn't carry per-player today — an HC pseudo-player would score off the
 game result the way DEF scores off defensive events.
 
+> **Update (same day, v0.205.0–v0.208.0)**: the enrichment scope shipped all
+> three phases plus the true-up loop. Now scoreable: first downs (incl.
+> per-position), completions/incompletions/attempts, 25+ comp game, QB
+> sacked, 2-pt conversions, KR/PR split, blocked kicks, PA/yardage-allowed
+> brackets, solo/assist splits, TFL, forced fumbles, per-defender sack/INT/
+> recovery credit, and — via the worker's 6-hourly nflverse true-up — QB
+> hits and passes defended (~a day behind the games; regular season only).
+> Still open below: punting/coach scoring (need the positions), sack yards,
+> INT/fumble return yards, ST player stats, situational, fumble-not-lost.
+
 ## Sleeper categories the play feed can't support yet (same pass)
 
 First downs (pass/rush/rec, per-position bonuses), 2-pt conversions,

@@ -25,10 +25,14 @@ export type RealPlayKind =
                                                  // each per DEF once the game is FINAL —
                                                  // the brackets knobs score off them
   | 'tackle'                                         // IDP (individual defender)
-  | 'tfl' | 'ff';                                    // IDP (0168): tackle for loss,
+  | 'tfl' | 'ff'                                     // IDP (0168): tackle for loss,
                                                      // forced fumble ('ff' also rides on
                                                      // the DEF pseudo-player for the team
                                                      // forced-fumble knob)
+  | 'qbhit' | 'pd';                                  // IDP + DEF (0169): QB hit, pass
+                                                     // defended — landed by the nflverse
+                                                     // true-up ~a day after games (never
+                                                     // reliably in live ESPN text)
 // `c` is the game-elapsed clock (seconds). `t` is the REAL wall-clock time of
 // the play, in seconds since the game's first snap (baked from nflverse
 // time_of_day) — used to gate real-time power-ups so a delayed feed can't be

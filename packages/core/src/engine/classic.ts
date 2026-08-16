@@ -140,11 +140,13 @@ export interface ClassicScoring {
   fg0: number; fg20: number; fg30: number; fg40: number; fg50: number; fg60: number;
   fgYd: number; fgYd30: number; fgMiss: number; xp: number; xpMiss: number;
   sack: number; dstInt: number; fumRec: number; dstTd: number; safety: number; dstBlk: number; dstFf: number;
+  dstQbHit: number; dstPd: number;
   paPt: number; pa0: number; pa1: number; pa7: number; pa14: number; pa21: number; pa28: number; pa35: number;
   yaPt: number; ya100: number; ya199: number; ya299: number; ya349: number; ya399: number;
   ya449: number; ya499: number; ya549: number; ya550: number;
   idpTackle: number; idpSack: number; idpInt: number; idpFr: number; idpTd: number; idpSafety: number;
   idpTackle10: number; idpSolo: number; idpAst: number; idpTfl: number; idpFf: number;
+  idpQbHit: number; idpPd: number;
 }
 export const DEFAULT_CLASSIC_SCORING: ClassicScoring = {
   passYd: 0.04, passTd: 4, int: -2, pass300: 0, pass400: 0,
@@ -168,6 +170,7 @@ export const DEFAULT_CLASSIC_SCORING: ClassicScoring = {
   fg0: 3, fg20: 3, fg30: 3, fg40: 4, fg50: 5, fg60: 5,
   fgYd: 0, fgYd30: 0, fgMiss: -1, xp: 1, xpMiss: -1,
   sack: 1, dstInt: 2, fumRec: 2, dstTd: 6, safety: 2, dstBlk: 2, dstFf: 1,
+  dstQbHit: 0, dstPd: 0,
   // Points-allowed brackets default to Sleeper's ladder — only 0167 pa rows
   // (emitted at game FINAL) can carry the kind, so no historical total moves;
   // going forward this is the standard DEF scoring every normie expects.
@@ -176,6 +179,7 @@ export const DEFAULT_CLASSIC_SCORING: ClassicScoring = {
   ya449: 0, ya499: 0, ya549: 0, ya550: 0,
   idpTackle: 1, idpSack: 2, idpInt: 3, idpFr: 2, idpTd: 6, idpSafety: 2,
   idpTackle10: 0, idpSolo: 0, idpAst: 0, idpTfl: 0, idpFf: 0,
+  idpQbHit: 0, idpPd: 0,
 };
 /** Editor metadata, grouped the way Sleeper/ESPN group their settings pages. */
 export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof ClassicScoring; label: string; perYard?: boolean }[] }[] = [
@@ -222,7 +226,7 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
   { section: 'TEAM DEFENSE', fields: [
     { key: 'sack', label: 'SACK' }, { key: 'dstInt', label: 'INT' }, { key: 'fumRec', label: 'FUM REC' },
     { key: 'dstTd', label: 'TD' }, { key: 'safety', label: 'SAFETY' }, { key: 'dstBlk', label: 'BLOCKED KICK' },
-    { key: 'dstFf', label: 'FORCED FUMBLE' },
+    { key: 'dstFf', label: 'FORCED FUMBLE' }, { key: 'dstQbHit', label: 'QB HIT' }, { key: 'dstPd', label: 'PASS DEFENDED' },
   ] },
   { section: 'POINTS ALLOWED', fields: [
     { key: 'paPt', label: 'PER PT ALLOWED' },
@@ -239,6 +243,7 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
   { section: 'IDP', fields: [
     { key: 'idpTackle', label: 'TACKLE' }, { key: 'idpSolo', label: 'SOLO BONUS' }, { key: 'idpAst', label: 'ASSIST BONUS' },
     { key: 'idpTfl', label: 'TACKLE FOR LOSS' }, { key: 'idpSack', label: 'SACK' }, { key: 'idpFf', label: 'FORCED FUMBLE' },
+    { key: 'idpQbHit', label: 'QB HIT' }, { key: 'idpPd', label: 'PASS DEFENDED' },
     { key: 'idpInt', label: 'INT' }, { key: 'idpFr', label: 'FUM REC' }, { key: 'idpTd', label: 'TD' },
     { key: 'idpSafety', label: 'SAFETY' }, { key: 'idpTackle10', label: '10+ TACKLE GAME' },
   ] },
@@ -282,6 +287,8 @@ export function classicScorePlay(play: RawPlay, pos: Pos, sc: ClassicScoring): n
     if (play.kind === 'safety') return sc.safety;
     if (play.kind === 'blk') return sc.dstBlk;
     if (play.kind === 'ff') return sc.dstFf;
+    if (play.kind === 'qbhit') return sc.dstQbHit;
+    if (play.kind === 'pd') return sc.dstPd;
     // Team brackets (0167): one pa + one ya game-summary row per DEF at final,
     // y = points / total yards allowed. Bracket + per-unit rate, Sleeper-style.
     if (play.kind === 'pa') {
@@ -302,6 +309,8 @@ export function classicScorePlay(play: RawPlay, pos: Pos, sc: ClassicScoring): n
     if (play.kind === 'tackle') return sc.idpTackle + (play.tt === 's' ? sc.idpSolo : play.tt === 'a' ? sc.idpAst : 0);
     if (play.kind === 'tfl') return sc.idpTfl;
     if (play.kind === 'ff') return sc.idpFf;
+    if (play.kind === 'qbhit') return sc.idpQbHit;
+    if (play.kind === 'pd') return sc.idpPd;
     if (play.kind === 'sack') return sc.idpSack * (play.hf ? 0.5 : 1);
     if (play.kind === 'int') return sc.idpInt;
     if (play.kind === 'fumrec') return sc.idpFr;
