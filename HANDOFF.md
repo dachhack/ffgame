@@ -1,8 +1,24 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-08-16 · Build `v0.233.0`_
+_Last updated: 2026-08-16 · Build `v0.234.0`_
 
-## Where this session left off (v0.233.0, 2026-08-16)
+## Where this session left off (v0.234.0, 2026-08-16)
+
+**THE CARD-BOARD BUG WAS `Matchup.tsx` ALL ALONG — fixed in v0.234.0.**
+Read this before anything else in this section: the chase recorded below spent
+four rounds in `LivePicks.tsx`, which was never the file being rendered.
+`src/screens/Matchup.tsx` serves the `matchup` route — the one that
+"my leagues → a league → the matchup" actually lands on — and it had NO
+game-mode branch at all. I flagged that twice as a separate defect and never
+connected it to the report. The founder's screenshot showing the drip board at
+`v0.233.0`, with the mode chip I had added to LivePicks' week strip absent from
+the header, is what finally gave it away: the chip was missing because the
+screen rendering it was a different file.
+
+Lesson worth more than the fix: **when a UI bug survives several correct-looking
+fixes, confirm WHICH COMPONENT is on screen before touching another line.** One
+`grep` for a string in the screenshot ("Set Your Windows") would have settled it
+in round one.
 
 **Read this first if you are picking the matchup board back up.**
 
