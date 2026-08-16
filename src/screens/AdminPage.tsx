@@ -84,7 +84,7 @@ function fmtLock(iso: string): string {
 function CodeChip({ v }: { v: string }) {
   const [done, setDone] = useState(false);
   return (
-    <span className="mono" style={{ ...mono, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', cursor: 'pointer' }}
+    <span className="mono" style={{ ...mono, fontSize: 14, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', cursor: 'pointer' }}
       onClick={() => { navigator.clipboard?.writeText(v); setDone(true); setTimeout(() => setDone(false), 1200); }}
       title="click to copy">{done ? 'copied ✓' : v}</span>
   );
@@ -100,9 +100,9 @@ function MarkFreeToggle() {
     <div style={card}>
       <div style={h}>BRANDING</div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <span className="mono" style={{ fontSize: 11, color: 'var(--text)' }}>
+        <span className="mono" style={{ fontSize: 13.5, color: 'var(--text)' }}>
           Mark-free mode · <b>{on ? 'ON' : 'OFF'}</b>
-          <span style={{ display: 'block', fontSize: 9.5, color: 'var(--dim)', marginTop: 3, maxWidth: 360 }}>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--dim)', marginTop: 3, maxWidth: 360 }}>
             Hides NFL team logos + player headshots (shows generic position pills / abbreviations / initials). For licensing-free commercial builds. Reloads to apply everywhere.
           </span>
         </span>
@@ -134,16 +134,16 @@ function PremiumTierPanel() {
   return (
     <div style={card}>
       <div style={h}>PREMIUM TIER{busy ? ' · saving…' : ''}</div>
-      <div style={{ fontSize: 9.5, color: 'var(--dim)', marginBottom: 8 }}>Tap to toggle FREE ↔ premium. Highlighted = free (no payment); the rest need premium. Both sides of a premium matchup get the full set.</div>
-      {!tier ? <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)' }}>loading…</div> : (
+      <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 8 }}>Tap to toggle FREE ↔ premium. Highlighted = free (no payment); the rest need premium. Both sides of a premium matchup get the full set.</div>
+      {!tier ? <div className="mono" style={{ fontSize: 13, color: 'var(--dim)' }}>loading…</div> : (
         <>
-          <div style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: 5 }}>POSITIONS</div>
+          <div style={{ fontSize: 11.5, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: 5 }}>POSITIONS</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
             {ALL_POSITIONS.map((p) => { const free = tier.free_positions.includes(p); return (
               <button key={p} onClick={() => save({ ...tier, free_positions: flip(tier.free_positions, p) })} style={btn(free)}>{p === 'DEF' ? 'DST' : p}{free ? ' · free' : ' · 🔒'}</button>
             ); })}
           </div>
-          <div style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: 5 }}>POWER-UPS</div>
+          <div style={{ fontSize: 11.5, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: 5 }}>POWER-UPS</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {POWERUPS.map((pu) => { const free = tier.free_powerups.includes(pu.id); return (
               <button key={pu.id} onClick={() => save({ ...tier, free_powerups: flip(tier.free_powerups, pu.id) })} style={btn(free)} title={pu.name}><PuIcon id={pu.id} emoji={pu.icon} size="1.4em" /> {pu.name}{free ? ' · free' : ' · 🔒'}</button>
@@ -151,7 +151,7 @@ function PremiumTierPanel() {
           </div>
         </>
       )}
-      {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8 }}>{err}</div>}
+      {err && <div className="mono" style={{ fontSize: 12.5, color: 'var(--opp)', marginTop: 8 }}>{err}</div>}
     </div>
   );
 }
@@ -203,14 +203,14 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
     <div className="mgmt">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
         <div style={{ minWidth: 0 }}>
-          <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>⚙ Super admin</div>
-          <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', marginTop: 2 }}>
+          <div className="grotesk" style={{ fontSize: 19.5, fontWeight: 700, color: 'var(--text)' }}>⚙ Super admin</div>
+          <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', marginTop: 2 }}>
             {leagues === null ? '…' : `${leagues.length} league${leagues.length === 1 ? '' : 's'}`}{pendingReqs ? ` · ${pendingReqs} open request${pendingReqs === 1 ? '' : 's'}` : ''}
           </div>
         </div>
         <button onClick={load} className="mono" style={{ ...linkBtn, flexShrink: 0 }}>↻ refresh</button>
       </div>
-      {err && <div className="mono" style={{ fontSize: 10.5, color: 'var(--opp)', marginBottom: 10, lineHeight: 1.5, wordBreak: 'break-word' }}>⚠ {err}</div>}
+      {err && <div className="mono" style={{ fontSize: 13, color: 'var(--opp)', marginBottom: 10, lineHeight: 1.5, wordBreak: 'break-word' }}>⚠ {err}</div>}
 
       <TabBar tabs={tabs} active={tab} onSelect={setTab} style={{ marginBottom: 14 }} />
 
@@ -254,9 +254,9 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
         <div style={card}>
           <div style={h}>RECENT AUDIT</div>
           {audit.length === 0 ? <Muted text="No activity." /> : audit.map((a, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 10.5, gap: 8, borderTop: i ? '1px solid var(--bd)' : 'none' }}>
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13, gap: 8, borderTop: i ? '1px solid var(--bd)' : 'none' }}>
               <span className="mono" style={{ ...mono, color: 'var(--text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.op} <span style={{ color: 'var(--dim)' }}>{a.table}</span>{a.detail && <span style={{ color: 'var(--you)' }}> · {a.detail}</span>}{a.actor && <span style={{ color: 'var(--faint)' }}> · {a.actor}</span>}</span>
-              <span className="mono" style={{ ...mono, color: 'var(--faint)', fontSize: 9.5, whiteSpace: 'nowrap' }}>{new Date(a.at).toLocaleString()}</span>
+              <span className="mono" style={{ ...mono, color: 'var(--faint)', fontSize: 12, whiteSpace: 'nowrap' }}>{new Date(a.at).toLocaleString()}</span>
             </div>
           ))}
         </div>
@@ -299,7 +299,7 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
         [k, r.pos_caps?.[k] ?? CAP_UNLIMITED])) as Record<(typeof POS_CAP_KEYS)[number], number>);
     }).catch((e) => setMsg(errMsg(e, 'could not load roster rules')));
   }, [leagueId]);
-  if (!caps || rounds == null) return <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>{msg ?? 'loading rules…'}</div>;
+  if (!caps || rounds == null) return <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)' }}>{msg ?? 'loading rules…'}</div>;
   const pending = draftStatus === 'pending';
   const save = async () => {
     if (saving) return;
@@ -312,34 +312,34 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
     } catch (e) { setMsg(errMsg(e, 'save failed')); }
     finally { setSaving(false); }
   };
-  const stepBtn: React.CSSProperties = { ...mono, fontSize: 11, fontWeight: 700, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 8px', cursor: 'pointer' };
+  const stepBtn: React.CSSProperties = { ...mono, fontSize: 13.5, fontWeight: 700, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 8px', cursor: 'pointer' };
   return (
     <div>
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div style={{ textAlign: 'center' }}>
-          <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>ROSTER SIZE</div>
+          <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>ROSTER SIZE</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, opacity: pending ? 1 : 0.5 }}>
             <button onClick={() => pending && setRounds(Math.max(5, rounds - 1))} className="mono" style={stepBtn} disabled={!pending}>−</button>
-            <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{rounds}</span>
+            <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{rounds}</span>
             <button onClick={() => pending && setRounds(Math.min(25, rounds + 1))} className="mono" style={stepBtn} disabled={!pending}>＋</button>
           </div>
         </div>
         {POS_CAP_KEYS.map((k) => (
           <div key={k} style={{ textAlign: 'center' }}>
-            <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{posShort(k)} MAX</div>
+            <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{posShort(k)} MAX</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
               <button onClick={() => setCaps({ ...caps, [k]: Math.max(0, caps[k] - 1) })} className="mono" style={stepBtn}>−</button>
-              <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{caps[k] >= CAP_UNLIMITED ? '∞' : caps[k]}</span>
+              <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{caps[k] >= CAP_UNLIMITED ? '∞' : caps[k]}</span>
               <button onClick={() => setCaps({ ...caps, [k]: Math.min(CAP_UNLIMITED, caps[k] + 1) })} className="mono" style={stepBtn}>＋</button>
             </div>
           </div>
         ))}
         <button onClick={save} disabled={saving} className="mono" style={btn(true)}>{saving ? 'saving…' : '✓ save rules'}</button>
       </div>
-      <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+      <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
         Limits cap how many of a position a roster may hold (∞ = no limit, 0 bans it) — enforced at the draft, free agency, waivers, and auction bids; the AI drafts to them too. Roster size {pending ? 'can change until the draft starts' : 'is locked once the draft starts'}. Rosters already over a lowered limit keep their players — the limit blocks new adds.
       </div>
-      {msg && <div className="mono" style={{ ...mono, fontSize: 9.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{msg}</div>}
+      {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{msg}</div>}
     </div>
   );
 }
@@ -380,7 +380,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
       setClearMin(cur.clearMin); setClearDow(cur.clearDow); setFaDow(cur.faDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd);
     }).catch((e) => setMsg(errMsg(e, 'could not load rules')));
   }, [leagueId]);
-  if (!init) return <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>{msg ?? 'loading rules…'}</div>;
+  if (!init) return <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)' }}>{msg ?? 'loading rules…'}</div>;
   const save = async () => {
     if (saving) return;
     setSaving(true); setMsg(null);
@@ -407,22 +407,22 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
   const hour12 = (m: number) => { const h = Math.floor(m / 60) % 24; return `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? 'AM' : 'PM'}`; };
   const hourStep = (v: number, set: (m: number) => void, keyLabel: string) => (
     <div style={{ textAlign: 'center' }}>
-      <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{keyLabel} ({hour12(v)})</div>
+      <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{keyLabel} ({hour12(v)})</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
         <button onClick={() => set((v + 1380) % 1440)} className="mono" style={stepBtnStyle}>−</button>
-        <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', minWidth: 26, textAlign: 'center' }}>{Math.floor(v / 60)}</span>
+        <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 26, textAlign: 'center' }}>{Math.floor(v / 60)}</span>
         <button onClick={() => set((v + 60) % 1440)} className="mono" style={stepBtnStyle}>＋</button>
       </div>
     </div>
   );
   const toggle = (on: boolean, label: string, onClick: () => void) => (
-    <button onClick={onClick} className="mono" style={{ ...mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 999, padding: '4px 10px' }}>{label}</button>
+    <button onClick={onClick} className="mono" style={{ ...mono, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 999, padding: '4px 10px' }}>{label}</button>
   );
   return (
     <div>
       <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div>
-          <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>WAIVERS</div>
+          <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>WAIVERS</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
             {toggle(mode === 'rolling', 'ROLLING', () => setMode('rolling'))}
             {toggle(mode === 'standings', 'REVERSE STANDINGS', () => setMode('standings'))}
@@ -431,16 +431,16 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         </div>
         {mode === 'faab' && (
           <div style={{ textAlign: 'center' }}>
-            <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>SEASON BUDGET ($)</div>
+            <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>SEASON BUDGET ($)</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
               <button onClick={() => setBudget(Math.max(10, budget - 10))} className="mono" style={stepBtnStyle}>−</button>
-              <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', minWidth: 34, textAlign: 'center' }}>{budget}</span>
+              <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 34, textAlign: 'center' }}>{budget}</span>
               <button onClick={() => setBudget(Math.min(1000, budget + 10))} className="mono" style={stepBtnStyle}>＋</button>
             </div>
           </div>
         )}
         <div>
-          <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>TRADE REVIEW</div>
+          <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>TRADE REVIEW</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
             {toggle(review === 'none', 'AUTO-ACCEPT', () => setReview('none'))}
             {toggle(review === 'commish', '⚑ COMMISH APPROVES', () => setReview('commish'))}
@@ -450,7 +450,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
       {/* waiver clear schedule + free-agency window (daily, ET) */}
       <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 12 }}>
         <div>
-          <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>WAIVERS CLEAR</div>
+          <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>WAIVERS CLEAR</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
             {toggle(clearMin == null, '24H AFTER DROP', () => setClearMin(null))}
             {toggle(clearMin != null, '🕒 DAILY AT A SET TIME', () => setClearMin(clearMin ?? 180))}
@@ -459,17 +459,17 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         {clearMin != null && hourStep(clearMin, setClearMin, 'CLEAR TIME')}
         {clearMin != null && (
           <div style={{ textAlign: 'center' }}>
-            <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>HOLD (DAYS)</div>
+            <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>HOLD (DAYS)</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
               <button onClick={() => setHoldDays(Math.max(1, holdDays - 1))} className="mono" style={stepBtnStyle}>−</button>
-              <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{holdDays}</span>
+              <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{holdDays}</span>
               <button onClick={() => setHoldDays(Math.min(7, holdDays + 1))} className="mono" style={stepBtnStyle}>＋</button>
             </div>
           </div>
         )}
         {clearMin != null && (
           <div>
-            <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>RUN DAYS (ET)</div>
+            <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>RUN DAYS (ET)</div>
             <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
               {toggle(clearDow === null, 'ALL', () => setClearDow(null))}
               {(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const).map((d, i) => (
@@ -483,7 +483,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
           </div>
         )}
         <div>
-          <div className="mono" title="On checked days, instant adds stay closed until that day's waiver run has cleared." style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>FA WAITS FOR THE RUN ON</div>
+          <div className="mono" title="On checked days, instant adds stay closed until that day's waiver run has cleared." style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>FA WAITS FOR THE RUN ON</div>
           <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
             {toggle(faDow === null, 'NEVER', () => setFaDow(null))}
             {(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const).map((d, i) => (
@@ -496,7 +496,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
           </div>
         </div>
         <div>
-          <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>FREE AGENCY</div>
+          <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>FREE AGENCY</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
             {toggle(faStart == null, 'ALWAYS OPEN', () => { setFaStart(null); setFaEnd(null); })}
             {toggle(faStart != null, '🕒 DAILY WINDOW', () => { setFaStart(faStart ?? 600); setFaEnd(faEnd ?? 1320); })}
@@ -506,14 +506,14 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         {faStart != null && hourStep(faEnd ?? 1320, (m) => setFaEnd(m), 'CLOSES')}
         <button onClick={save} disabled={saving} className="mono" style={btn(true)}>{saving ? 'saving…' : '✓ save'}</button>
       </div>
-      <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+      <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
         FAAB: claims carry blind bids against a season budget — highest bid wins, winner pays, losers keep their money. Changing the mode or budget resets every team's balance. Trade review parks accepted trades until you approve or veto them. A daily clear time holds dropped players until that ET time (× hold days); the free-agency window gates instant pickups only — claims can be submitted around the clock.
       </div>
-      {msg && <div className="mono" style={{ ...mono, fontSize: 9.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{msg}</div>}
+      {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{msg}</div>}
     </div>
   );
 }
-const stepBtnStyle: React.CSSProperties = { ...mono, fontSize: 11, fontWeight: 700, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 8px', cursor: 'pointer' };
+const stepBtnStyle: React.CSSProperties = { ...mono, fontSize: 13.5, fontWeight: 700, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 8px', cursor: 'pointer' };
 
 // ── ROSTERS tab (native leagues): move any player anywhere + rule on trades.
 function NativeRosterTools({ leagueId }: { leagueId: string }) {
@@ -580,20 +580,20 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
   const statusColor: Record<string, string> = { executed: 'var(--you)', accepted: 'var(--warn)', pending: 'var(--dim)', vetoed: 'var(--opp)', rejected: 'var(--faint)', cancelled: 'var(--faint)' };
   return (
     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {msg && <div className="mono" style={{ ...mono, fontSize: 9.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</div>}
+      {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</div>}
 
       {/* trade rulings */}
       <div>
         <div style={subhead}>TRADES</div>
-        {reviewQueue.length === 0 && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>Nothing waiting on you.</div>}
+        {reviewQueue.length === 0 && <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)' }}>Nothing waiting on you.</div>}
         {reviewQueue.map((t) => (
           <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, minWidth: 220, lineHeight: 1.5 }}>
+            <span style={{ fontSize: 13.5, color: 'var(--text)', flex: 1, minWidth: 220, lineHeight: 1.5 }}>
               <b>{teamName(t.from_roster)}</b> sends {t.give.map(playerName).join(', ') || '—'} ·{' '}
               <b>{teamName(t.to_roster)}</b> sends {t.get.map(playerName).join(', ') || '—'}
-              {t.note && <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}> “{t.note}”</span>}
+              {t.note && <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}> “{t.note}”</span>}
             </span>
-            <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, color: statusColor[t.status] ?? 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 6px' }}>{t.status === 'accepted' ? 'AWAITING RULING' : 'OFFERED'}</span>
+            <span className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: statusColor[t.status] ?? 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 6px' }}>{t.status === 'accepted' ? 'AWAITING RULING' : 'OFFERED'}</span>
             {t.status === 'accepted' && (
               <button onClick={() => run(() => commishRuleTrade(t.id, true))} disabled={busy} className="mono" style={btn(true)}>✓ approve</button>
             )}
@@ -609,7 +609,7 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
             actually available. */}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
           <select value={view} onChange={(e) => { setView(e.target.value); setQ(''); }} className="mono"
-            style={{ ...mono, fontSize: 10.5, fontWeight: 700, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '6px 8px', minWidth: 190 }}>
+            style={{ ...mono, fontSize: 13, fontWeight: 700, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '6px 8px', minWidth: 190 }}>
             <option value="all">ALL ROSTERED PLAYERS</option>
             <option value="fa">⏳ WAIVER WIRE — available</option>
             {teams.map((t) => (
@@ -620,7 +620,7 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
             placeholder={view === 'all' ? 'Search the whole pool (free agents too)…' : view === 'fa' ? 'Search the wire…' : 'Search this roster…'}
             style={{ ...inp, flex: '1 1 200px', minWidth: 0 }} />
         </div>
-        <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginBottom: 6 }}>
+        <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginBottom: 6 }}>
           {view === 'all' ? `${inView.length} rostered across ${teams.length} teams`
             : view === 'fa' ? `${inView.length} available — nobody's roster`
             : teamCounts(Number(view))}
@@ -632,27 +632,27 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
             const to = dest[p.slug] ?? '';
             return (
               <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, minWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {p.full_name} <span className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
+                <span style={{ fontSize: 13.5, color: 'var(--text)', flex: 1, minWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {p.full_name} <span className="mono" style={{ ...mono, fontSize: 11, color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
                 </span>
                 {/* Stash spot (taxi/IR) and any live waiver hold — the two
                     facts that decide whether a move is even sensible. */}
                 {rid != null && spotOf.get(p.slug) && spotOf.get(p.slug) !== 'active' && (
-                  <span className="mono" style={{ ...mono, fontSize: 8, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: RADIUS, padding: '1px 4px' }}>
+                  <span className="mono" style={{ ...mono, fontSize: 10.5, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: RADIUS, padding: '1px 4px' }}>
                     {String(spotOf.get(p.slug)).toUpperCase()}
                   </span>
                 )}
                 {rid == null && holdLeft(p.waived_until) && (
-                  <span className="mono" style={{ ...mono, fontSize: 8, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: RADIUS, padding: '1px 4px' }}
+                  <span className="mono" style={{ ...mono, fontSize: 10.5, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: RADIUS, padding: '1px 4px' }}
                     title="on waivers — claims are open; a commissioner move clears the hold">
                     ⏳ {holdLeft(p.waived_until)}
                   </span>
                 )}
-                <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, color: rid != null ? 'var(--you)' : 'var(--faint)', minWidth: 76, textAlign: 'right' }}>
+                <span className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: rid != null ? 'var(--you)' : 'var(--faint)', minWidth: 76, textAlign: 'right' }}>
                   {rid != null ? teamName(rid) : 'FREE AGENT'}
                 </span>
                 <select value={to} onChange={(e) => setDest({ ...dest, [p.slug]: e.target.value })}
-                  className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 6px' }}>
+                  className="mono" style={{ ...mono, fontSize: 12, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 6px' }}>
                   <option value="">move to…</option>
                   {teams.filter((t) => t.roster_id !== rid).map((t) => (
                     <option key={t.roster_id} value={t.roster_id}>{t.team ?? `Team ${t.roster_id}`}</option>
@@ -668,7 +668,7 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
             );
           })}
           {rows.length === 0 && (
-            <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', padding: '6px 0' }}>
+            <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', padding: '6px 0' }}>
               {needle ? 'No matches.'
                 : view === 'fa' ? 'Nobody on the wire — every pool player is rostered.'
                 : view === 'all' ? 'Nobody rostered yet — run the draft first.'
@@ -676,7 +676,7 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
             </div>
           )}
         </div>
-        <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+        <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
           Moves clear waiver holds and bypass position limits (roster size still applies). WAIVE starts a 24h claim window; CUT frees the player immediately.
         </div>
       </div>
@@ -705,19 +705,19 @@ function PositionAccessRow({ leagueId }: { leagueId: string }) {
   };
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px 12px', flexWrap: 'wrap' }}>
-      <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)' }}>🧩 EXTRA POSITIONS</span>
+      <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)' }}>🧩 EXTRA POSITIONS</span>
       {GROUPS.map((g) => {
         const lit = on?.includes(g) ?? false;
         return (
           <button key={g} onClick={() => void flip(g)} disabled={on === null || busy} className="mono"
-            style={{ fontSize: 9, fontWeight: 700, borderRadius: 999, padding: '3px 10px', cursor: 'pointer',
+            style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: '3px 10px', cursor: 'pointer',
               color: lit ? 'var(--on-accent)' : 'var(--dim)', background: lit ? 'var(--you)' : 'var(--bg)',
               border: `1px solid ${lit ? 'var(--you)' : 'var(--bd)'}`, opacity: on === null || busy ? 0.5 : 1 }}>
             {g}
           </button>
         );
       })}
-      <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>commish must ↻ refresh the pool after a flip</span>
+      <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>commish must ↻ refresh the pool after a flip</span>
     </div>
   );
 }
@@ -740,11 +740,11 @@ function ClassicAccessRow({ leagueId }: { leagueId: string }) {
   };
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 14px 14px' }}>
-      <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)' }}>
+      <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)' }}>
         🎮 CLASSIC (NORMIE) AVAILABILITY {mode === 'classic' ? '· league is CLASSIC now' : ''}
       </span>
       <button onClick={() => void flip()} disabled={on === null || busy} className="mono"
-        style={{ fontSize: 9.5, fontWeight: 700, borderRadius: 999, padding: '4px 12px', cursor: 'pointer',
+        style={{ fontSize: 12, fontWeight: 700, borderRadius: 999, padding: '4px 12px', cursor: 'pointer',
           color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)',
           border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, opacity: on === null || busy ? 0.5 : 1 }}>
         {on === null ? '…' : on ? 'UNLOCKED' : 'LOCKED'}
@@ -970,7 +970,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
     reload();
   };
 
-  const statusChip = (color: string): React.CSSProperties => ({ ...mono, fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color, border: `1px solid ${color}`, borderRadius: 4, padding: '2px 5px', whiteSpace: 'nowrap' });
+  const statusChip = (color: string): React.CSSProperties => ({ ...mono, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color, border: `1px solid ${color}`, borderRadius: 4, padding: '2px 5px', whiteSpace: 'nowrap' });
   // ── The management map (v0.212.0) ────────────────────────────────────────
   // Grouped by WHEN a commissioner needs it, not by which subsystem owns it.
   // A flat strip of ~15 destinations told you nothing about sequence and
@@ -1056,14 +1056,14 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         )}
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {collapsible && <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--dim)', flexShrink: 0 }}>{open ? '▾' : '▸'}</span>}
-            <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{l.name}</span>
-            <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>{l.season}</span>
-            {l.provider && l.provider !== 'sleeper' && <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px', textTransform: 'uppercase' }}>{l.provider}</span>}
+            {collapsible && <span className="mono" style={{ ...mono, fontSize: 12.5, color: 'var(--dim)', flexShrink: 0 }}>{open ? '▾' : '▸'}</span>}
+            <span className="grotesk" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--text)' }}>{l.name}</span>
+            <span className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)' }}>{l.season}</span>
+            {l.provider && l.provider !== 'sleeper' && <span className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px', textTransform: 'uppercase' }}>{l.provider}</span>}
             {!!l.test_live_at && <span className="mono" style={statusChip('var(--warn)')}>🧪 LIVE TEST</span>}
             {!!l.preseason_at && <span className="mono" style={statusChip('var(--you)')}>🏈 PRESEASON</span>}
           </div>
-          <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 4 }}>{l.enrolled}/{l.rosters} enrolled · commish {l.commissioner ? '✓' : '—'}</div>
+          <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--dim)', marginTop: 4 }}>{l.enrolled}/{l.rosters} enrolled · commish {l.commissioner ? '✓' : '—'}</div>
         </div>
         {/* Primary way to invite players — the join link (no code to type). The
             code chips live in the Setup tab as a fallback for manual entry. */}
@@ -1073,7 +1073,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       {open && <>
 
       {/* 'sync' / 'members' are in-progress sentinels shown on their own buttons. */}
-      {busy && busy !== 'sync' && busy !== 'members' && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{busy}</div>}
+      {busy && busy !== 'sync' && busy !== 'members' && <div className="mono" style={{ ...mono, fontSize: 12, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{busy}</div>}
 
       {/* Desktop gets the grouped rail; narrow screens keep the scrolling strip.
           Both drive the same `tab` state, so a destination behaves identically
@@ -1109,13 +1109,13 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
                 <span style={chip}>commish&nbsp;<CodeChip v={l.commish_code} /></span>
-                {admin && <button onClick={() => regen('commish')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate the commissioner code">↻ regen</button>}
+                {admin && <button onClick={() => regen('commish')} className="mono" style={{ ...linkBtn, fontSize: 11.5 }} title="regenerate the commissioner code">↻ regen</button>}
                 {admin && !mine && (
                   <button
                     onClick={takeCommish}
                     disabled={takingCommish}
                     className="mono"
-                    style={{ ...linkBtn, fontSize: 9, color: 'var(--warn)' }}
+                    style={{ ...linkBtn, fontSize: 11.5, color: 'var(--warn)' }}
                     title="Redeem this league's commissioner code as yourself — the same path every commissioner goes through"
                   >
                     {takingCommish ? '…' : l.commissioner ? '⚑ take commish seat' : '⚑ make me commish'}
@@ -1124,14 +1124,14 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
                 {/* Admin console only. In CommishDash every row is yours by
                     construction, so the chip would be on every card saying
                     nothing. */}
-                {admin && mine && <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--you)' }}>⚑ you run this</span>}
+                {admin && mine && <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--you)' }}>⚑ you run this</span>}
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
                 <span style={chip}>invite&nbsp;<CodeChip v={l.invite_code} /></span>
-                <button onClick={() => regen('invite')} className="mono" style={{ ...linkBtn, fontSize: 9 }} title="regenerate the invite code">↻ regen</button>
+                <button onClick={() => regen('invite')} className="mono" style={{ ...linkBtn, fontSize: 11.5 }} title="regenerate the invite code">↻ regen</button>
               </span>
             </div>
-            <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>Players join with the invite link (button above) or by typing the invite code. The commish code claims league management.</div>
+            <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>Players join with the invite link (button above) or by typing the invite code. The commish code claims league management.</div>
           </div>
         </div>
       )}
@@ -1164,7 +1164,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
             <div style={subhead}>SCHEDULE</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <button onClick={sync} disabled={busy === 'sync'} className="mono" style={btn(true)} title="schedule every week's matchups">{busy === 'sync' ? 'scheduling…' : '⟳ sync season'}</button>
-              <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>pulls the whole season's matchups + lineups from {l.provider === 'espn' ? 'ESPN' : 'Sleeper'}</span>
+              <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>pulls the whole season's matchups + lineups from {l.provider === 'espn' ? 'ESPN' : 'Sleeper'}</span>
             </div>
           </div>
           )}
@@ -1175,7 +1175,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
             <div style={subhead}>MEMBERS</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <button onClick={refreshMembers} disabled={busy === 'members'} className="mono" style={btn(false)} title="re-pull each roster's owner + team name from Sleeper">{busy === 'members' ? 'refreshing…' : '⟳ refresh members'}</button>
-              <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>re-pulls owners + team names from Sleeper; never un-enrolls anyone who already joined</span>
+              <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>re-pulls owners + team names from Sleeper; never un-enrolls anyone who already joined</span>
             </div>
           </div>
           )}
@@ -1204,10 +1204,10 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       {tab === 'ready' && (
         <div style={{ marginTop: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>week</span>
-            <input value={week} onChange={(e) => setWeek(e.target.value.replace(/\D/g, ''))} inputMode="numeric" style={{ ...inp, width: 48, padding: '5px 6px', textAlign: 'center' }} />
-            <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>on missed pick:</span>
-            <select value={policy} onChange={(e) => changePolicy(e.target.value as LineupPolicy)} style={{ ...inp, padding: '4px 6px', fontSize: 11 }}>
+            <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>week</span>
+            <input value={week} onChange={(e) => setWeek(e.target.value.replace(/\D/g, ''))} inputMode="numeric" style={{ ...inp, width: 56, padding: '5px 6px', textAlign: 'center' }} />
+            <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>on missed pick:</span>
+            <select value={policy} onChange={(e) => changePolicy(e.target.value as LineupPolicy)} style={{ ...inp, padding: '4px 6px', fontSize: 13.5 }}>
               <option value="best_lineup">force best lineup (stay human)</option>
               <option value="ai">flip to AI 🤖</option>
               <option value="empty">leave empty</option>
@@ -1231,7 +1231,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           {!members ? <Muted text="Loading…" /> : members.length === 0 ? <Muted text="No teams yet." /> : (
             <>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-                <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)' }}>
+                <span className="mono" style={{ ...mono, fontSize: 12, color: 'var(--dim)' }}>
                   {members.length} teams · ◇ {Math.round(members.reduce((s, m) => s + (wallets[m.roster_id] ?? 0), 0)).toLocaleString()} in circulation
                 </span>
               </div>
@@ -1241,18 +1241,18 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
                   .sort((a, b) => (wallets[b.roster_id] ?? 0) - (wallets[a.roster_id] ?? 0))
                   .map((m) => (
                     <div key={m.roster_id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '7px 8px', background: 'var(--bg)', borderRadius: RADIUS }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', flex: '1 1 150px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', flex: '1 1 150px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {m.team || `Roster ${m.roster_id}`}
-                        {!m.enrolled && <span className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)', marginLeft: 6 }}>not joined</span>}
+                        {!m.enrolled && <span className="mono" style={{ ...mono, fontSize: 11, color: 'var(--faint)', marginLeft: 6 }}>not joined</span>}
                       </span>
-                      <span className="mono" style={{ ...mono, fontSize: 12, fontWeight: 700, color: (wallets[m.roster_id] ?? 0) > 0 ? 'var(--you)' : 'var(--faint)', minWidth: 64, textAlign: 'right' }}>
+                      <span className="mono" style={{ ...mono, fontSize: 14, fontWeight: 700, color: (wallets[m.roster_id] ?? 0) > 0 ? 'var(--you)' : 'var(--faint)', minWidth: 76, textAlign: 'right' }}>
                         ◇ {Math.round(wallets[m.roster_id] ?? 0).toLocaleString()}
                       </span>
                       <SeedCoin balance={wallets[m.roster_id] ?? 0} onSeed={(amt) => seedCoin(m.roster_id, amt)} hideBalance />
                     </div>
                   ))}
               </div>
-              <div className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
+              <div className="mono" style={{ ...mono, fontSize: 11, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
                 Grants are additive and immediate — a negative number claws coin back. The weekly allowance above pays every team automatically as each week's games arrive.
               </div>
             </>
@@ -1262,12 +1262,12 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       {tab === 'members' && members && (
         <div style={{ marginTop: 12 }}>
           {(() => { const nj = members.filter((m) => !m.enrolled).length; const nd = members.filter((m) => m.drifted).length; return (<>
-            <div className="mono" style={{ ...mono, fontSize: 9.5, color: nj ? 'var(--dim)' : 'var(--you)', marginBottom: 6 }}>
+            <div className="mono" style={{ ...mono, fontSize: 12, color: nj ? 'var(--dim)' : 'var(--you)', marginBottom: 6 }}>
               {members.length - nj}/{members.length} joined{nj ? ` · ${nj} not yet` : ''}
             </div>
             {/* Drift is advisory — refresh never unseats anyone, so say what to do. */}
             {!!nd && (
-              <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--warn)', marginBottom: 6, lineHeight: 1.5 }}>
+              <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--warn)', marginBottom: 6, lineHeight: 1.5 }}>
                 ⚠ {nd} seat{nd > 1 ? 's' : ''} no longer match{nd > 1 ? '' : 'es'} Sleeper — the account holding {nd > 1 ? 'them isn’t' : 'it isn’t'} the roster’s owner there any more, so the real owner can’t claim it. ✕ unassign frees {nd > 1 ? 'them' : 'it'}.
               </div>
             )}
@@ -1283,8 +1283,8 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
                         whoever still holds the Drip seat — two different people.
                         Say "seat held by" there so the row can't be misread as one
                         person who is somehow mismatched with themselves. */}
-                    <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{m.team}</div>
-                    <div className="mono" style={{ ...mono, fontSize: 9, color: m.drifted ? 'var(--warn)' : 'var(--faint)' }}>
+                    <div style={{ fontSize: 13.5, color: 'var(--text)' }}>{m.team}</div>
+                    <div className="mono" style={{ ...mono, fontSize: 11.5, color: m.drifted ? 'var(--warn)' : 'var(--faint)' }}>
                       {m.enrolled
                         ? m.drifted
                           ? `seat held by ${m.sleeper ? `@${m.sleeper}` : m.email ?? 'another account'}${m.sleeper && m.email ? ` · ${m.email}` : ''}`
@@ -1296,9 +1296,9 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   {m.email && <SendLink email={m.email} />}
                   <button onClick={() => toggleMemberAi(m.roster_id, m.controller)} className="mono" title={m.controller === 'ai' ? 'hand back to manager' : 'set team to AI auto-pilot'}
-                    style={{ fontSize: 8.5, fontWeight: 700, color: m.controller === 'ai' ? 'var(--on-accent)' : 'var(--dim)', background: m.controller === 'ai' ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}>🤖 {m.controller === 'ai' ? 'AI' : 'off'}</button>
-                  {m.drifted && <span className="mono" title="Not the Sleeper owner of this roster any more — they left the league, it changed hands, or they unlinked their account. ✕ unassign frees the seat." style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px', whiteSpace: 'nowrap' }}>⚠ MISMATCH</span>}
-                  <span className="mono" style={{ fontSize: 8.5, color: m.enrolled ? 'var(--you)' : m.claim_email ? 'var(--dim)' : 'var(--faint)', border: `1px solid ${m.enrolled ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '2px 6px' }}>{m.enrolled ? 'JOINED' : m.claim_email ? 'PENDING' : '—'}</span>
+                    style={{ fontSize: 11, fontWeight: 700, color: m.controller === 'ai' ? 'var(--on-accent)' : 'var(--dim)', background: m.controller === 'ai' ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}>🤖 {m.controller === 'ai' ? 'AI' : 'off'}</button>
+                  {m.drifted && <span className="mono" title="Not the Sleeper owner of this roster any more — they left the league, it changed hands, or they unlinked their account. ✕ unassign frees the seat." style={{ fontSize: 11, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px', whiteSpace: 'nowrap' }}>⚠ MISMATCH</span>}
+                  <span className="mono" style={{ fontSize: 11, color: m.enrolled ? 'var(--you)' : m.claim_email ? 'var(--dim)' : 'var(--faint)', border: `1px solid ${m.enrolled ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '2px 6px' }}>{m.enrolled ? 'JOINED' : m.claim_email ? 'PENDING' : '—'}</span>
                 </div>
               </div>
               {/* Coin left this row in v0.214.0 — balances and grants live on
@@ -1314,14 +1314,14 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         <div style={{ marginTop: 12 }}>
           {!kdst ? <Muted text="Loading…" /> : (
             <>
-              <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
+              <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
                 {kdst.needs_k || kdst.needs_def
                   ? `This league doesn't roster ${[kdst.needs_k && 'kickers', kdst.needs_def && 'defenses'].filter(Boolean).join(' or ')} — fill them so the Banker / Suppress metrics are playable. Takes effect on the next sync.`
                   : 'This league rosters both K and DEF — no fill needed.'}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>fill mode:</span>
-                <select value={kdst.mode} onChange={(e) => changeKdstMode(e.target.value as KdstMode)} style={{ ...inp, padding: '4px 6px', fontSize: 11 }}>
+                <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>fill mode:</span>
+                <select value={kdst.mode} onChange={(e) => changeKdstMode(e.target.value as KdstMode)} style={{ ...inp, padding: '4px 6px', fontSize: 13.5 }}>
                   <option value="off">off (do nothing)</option>
                   <option value="random">random weekly (not on bye)</option>
                   <option value="manual">manual per team</option>
@@ -1339,13 +1339,13 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
                 const takenDst = new Set(dstCount.keys());
                 return (
                 <div style={{ marginTop: 8 }}>
-                  <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginBottom: 4 }}>Assign each team a K / DEF (season-long; auto-substituted on its bye week). Blank = random not-on-bye. Teams already taken are marked “• taken”; a ⚠ flags a duplicate (allowed, but each NFL K/DEF is usually unique).</div>
+                  <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginBottom: 4 }}>Assign each team a K / DEF (season-long; auto-substituted on its bye week). Blank = random not-on-bye. Teams already taken are marked “• taken”; a ⚠ flags a duplicate (allowed, but each NFL K/DEF is usually unique).</div>
                   {kdst.teams.map((t) => {
                     const dupK = !!t.k_slug && (kCount.get(t.k_slug) ?? 0) > 1;
                     const dupDst = !!t.dst_slug && (dstCount.get(t.dst_slug) ?? 0) > 1;
                     return (
                     <div key={t.roster_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
-                      <span style={{ fontSize: 11, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 13.5, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {(dupK || dupDst) && <span title="duplicate K/DEF" style={{ color: 'var(--warn)' }}>⚠ </span>}{t.team}
                       </span>
                       {kdst.needs_k && (
@@ -1367,7 +1367,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       {tab === 'matchups' && !matchups && <div style={{ marginTop: 12 }}><Muted text="Loading…" /></div>}
       {tab === 'matchups' && matchups && (
         <div style={{ marginTop: 12 }}>
-          <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', lineHeight: 1.6, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '7px 9px', marginBottom: 8 }}>
+          <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', lineHeight: 1.6, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '7px 9px', marginBottom: 8 }}>
             Each matchup auto-advances at the real kickoff, or set it manually:
             {' '}<b style={{ color: 'var(--dim)' }}>Open</b> (picks open, pre-kickoff) →
             {' '}<b style={{ color: 'var(--you)' }}>Lock</b> (kickoff — seals both lineups, scoring starts) →
@@ -1376,8 +1376,8 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           </div>
           {admin && (
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
-              <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>from 2025 wk</span>
-              <input value={srcWeek} onChange={(e) => setSrcWeek(e.target.value.replace(/\D/g, ''))} style={{ ...inp, width: 32, padding: '4px 5px', textAlign: 'center' }} />
+              <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>from 2025 wk</span>
+              <input value={srcWeek} onChange={(e) => setSrcWeek(e.target.value.replace(/\D/g, ''))} style={{ ...inp, width: 40, padding: '4px 5px', textAlign: 'center' }} />
               {admin && <button style={{ ...btn(true), background: 'var(--opp)', borderColor: 'var(--opp)' }} onClick={playLive} disabled={running} title="drive the REAL server feed — plays drip in and the board animates live (then ends final)">{busy === 'starting live feed…' ? 'starting…' : '▶ play LIVE'}</button>}
               <button style={btn(true)} onClick={resolveAll} disabled={running} title="instant: run the real engine on every matchup — fills the whole board at once">{busy === 'resolve all' ? 'resolving…' : '▶▶ resolve all'}</button>
               <button style={btn(false)} onClick={resetAll} disabled={running} title="clear every matchup → scheduled, scores wiped">{busy === 'reset all' ? 'resetting…' : '↺ reset all'}</button>
@@ -1388,7 +1388,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           {matchups.length === 0 ? <Muted text="No matchups (run sync week)." /> : matchups.map((m) => (
             <div key={m.id} style={{ borderTop: '1px solid var(--bd)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', flexWrap: 'wrap', gap: 6 }}>
-                <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)' }}>W{m.week} · {teamName(m.home_roster_id)} v {teamName(m.away_roster_id)} · <span style={{ color: 'var(--you)' }}>{m.status}</span>{m.home_final != null && <span style={{ color: 'var(--faint)' }}> · {m.home_final}-{m.away_final}</span>}{(m.home_coin != null || m.away_coin != null) && <span style={{ color: 'var(--faint)' }}> · ◇ {m.home_coin ?? 0}/{m.away_coin ?? 0}</span>}{m.status === 'scheduled' && (m.lock_at
+                <span className="mono" style={{ ...mono, fontSize: 13, color: 'var(--text)' }}>W{m.week} · {teamName(m.home_roster_id)} v {teamName(m.away_roster_id)} · <span style={{ color: 'var(--you)' }}>{m.status}</span>{m.home_final != null && <span style={{ color: 'var(--faint)' }}> · {m.home_final}-{m.away_final}</span>}{(m.home_coin != null || m.away_coin != null) && <span style={{ color: 'var(--faint)' }}> · ◇ {m.home_coin ?? 0}/{m.away_coin ?? 0}</span>}{m.status === 'scheduled' && (m.lock_at
                   ? <span style={{ color: 'var(--faint)' }} title="The worker seals lineups and starts scoring automatically at kickoff."> · 🔒 auto-locks {fmtLock(m.lock_at)}</span>
                   : <span style={{ color: 'var(--warn)' }} title="No kickoff time yet. The worker backfills it from the live NFL schedule once the week is current, and it auto-locks then. Until it appears you can set Lock manually."> · ⏳ kickoff pending — auto-locks once set</span>)}</span>
                 <div style={{ display: 'flex', gap: 5 }}>
@@ -1412,8 +1412,8 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         <div style={{ marginTop: 12 }}>
           {audit === null ? <Muted text="Loading…" /> : audit.length === 0 ? <Muted text="No matchup activity yet." /> : audit.map((a, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: '1px solid var(--bd)', gap: 8 }}>
-              <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.op} <span style={{ color: 'var(--dim)' }}>{a.table}</span>{a.detail && <span style={{ color: 'var(--you)' }}> · {a.detail}</span>}{a.actor && <span style={{ color: 'var(--faint)' }}> · {a.actor}</span>}</span>
-              <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', whiteSpace: 'nowrap' }}>{new Date(a.at).toLocaleString()}</span>
+              <span className="mono" style={{ ...mono, fontSize: 13, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.op} <span style={{ color: 'var(--dim)' }}>{a.table}</span>{a.detail && <span style={{ color: 'var(--you)' }}> · {a.detail}</span>}{a.actor && <span style={{ color: 'var(--faint)' }}> · {a.actor}</span>}</span>
+              <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', whiteSpace: 'nowrap' }}>{new Date(a.at).toLocaleString()}</span>
             </div>
           ))}
         </div>
@@ -1436,7 +1436,7 @@ function Overrides({ overrides, reload }: { overrides: AdminOverride[]; reload: 
       <div style={h}>COMMISSIONER OVERRIDES</div>
       {overrides.map((o) => (
         <div key={o.sleeper_user_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
-          <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)' }}>{o.sleeper_user_id} <span style={{ color: 'var(--faint)' }}>{o.note}</span></span>
+          <span className="mono" style={{ ...mono, fontSize: 13, color: 'var(--text)' }}>{o.sleeper_user_id} <span style={{ color: 'var(--faint)' }}>{o.note}</span></span>
           <button onClick={() => rm(o.sleeper_user_id)} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>remove</button>
         </div>
       ))}
@@ -1486,8 +1486,8 @@ function ImportLeague({ reload }: { reload: () => void }) {
           <input value={s2} onChange={(e) => setS2(e.target.value)} placeholder="espn_s2 (private only)" style={{ ...inp, flex: 1, minWidth: 0 }} />
         </div>
       )}
-      {msg && <div className="mono" style={{ ...mono, fontSize: 9.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{msg}</div>}
-      <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 8 }}>
+      {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{msg}</div>}
+      <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 8 }}>
         {espn
           ? 'Pulls the ESPN league + rosters + schedule. Public leagues need no cookies; private ones take SWID + espn_s2. Enrollment is admin-mapped (ESPN has no public user id). Then “sync week” for matchups + pick pools. Live scoring runs off the ESPN play feed.'
           : 'Pulls league + rosters from Sleeper, generates the commish/invite codes, and enrolls any managers already signed in. Then “sync week” per league for matchups + lineups.'}
@@ -1508,7 +1508,7 @@ function Admins() {
       <div style={h}>ADMINS</div>
       {admins.map((a) => (
         <div key={a.email} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
-          <span className="mono" style={{ ...mono, fontSize: 11, color: 'var(--text)' }}>{a.email}</span>
+          <span className="mono" style={{ ...mono, fontSize: 13.5, color: 'var(--text)' }}>{a.email}</span>
           <button onClick={() => rm(a.email)} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>remove</button>
         </div>
       ))}
@@ -1620,7 +1620,7 @@ function CodeRequestRow({ r, leagues, onToggle, reloadLeagues, reload }: { r: Co
     else setErr(res.error ?? 'Send failed.');
   };
   const kindBtn = (k: 'commish' | 'player', lbl: string) => (
-    <button onClick={() => { setKind(k); reset(); }} className="mono" style={{ ...btn(kind === k), fontSize: 9 }}>{lbl}</button>
+    <button onClick={() => { setKind(k); reset(); }} className="mono" style={{ ...btn(kind === k), fontSize: 11.5 }}>{lbl}</button>
   );
 
   return (
@@ -1631,35 +1631,35 @@ function CodeRequestRow({ r, leagues, onToggle, reloadLeagues, reload }: { r: Co
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
               <input value={draft} onChange={(e) => { setDraft(e.target.value); setErr(null); }} autoFocus
                 onKeyDown={(e) => { if (e.key === 'Enter') void saveEmail(); if (e.key === 'Escape') { setEditEmail(false); setErr(null); } }}
-                placeholder="email@example.com" className="mono" style={{ ...inp, fontSize: 11, padding: '5px 6px', width: 210, maxWidth: '100%' }} />
+                placeholder="email@example.com" className="mono" style={{ ...inp, fontSize: 13.5, padding: '5px 6px', width: 210, maxWidth: '100%' }} />
               <button onClick={() => void saveEmail()} disabled={savingEmail} className="mono" style={{ ...btn(true), opacity: savingEmail ? 0.6 : 1 }}>{savingEmail ? 'saving…' : 'save'}</button>
               <button onClick={() => { setEditEmail(false); setErr(null); }} className="mono" style={linkBtn}>cancel</button>
               {suggestion && (
-                <button onClick={() => setDraft(suggestion)} className="mono" style={{ ...linkBtn, fontSize: 9.5, color: 'var(--you)' }} title="Use this instead">
+                <button onClick={() => setDraft(suggestion)} className="mono" style={{ ...linkBtn, fontSize: 12, color: 'var(--you)' }} title="Use this instead">
                   did you mean {suggestion}?
                 </button>
               )}
-              {err && <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--opp, #e5484d)' }}>{err}</span>}
+              {err && <span className="mono" style={{ ...mono, fontSize: 12, color: 'var(--opp, #e5484d)' }}>{err}</span>}
             </div>
           ) : (
-            <div style={{ fontSize: 11.5, color: 'var(--text)' }}>
+            <div style={{ fontSize: 13.5, color: 'var(--text)' }}>
               {r.email
                 ? <span className="mono" style={{ ...mono, cursor: 'pointer' }} onClick={() => copy(r.email!)} title="copy">{r.email}</span>
                 : <span className="mono" style={{ ...mono, color: 'var(--faint)' }}>no email</span>}
-              <button onClick={startEdit} className="mono" style={{ ...linkBtn, fontSize: 9.5, marginLeft: 6 }}
+              <button onClick={startEdit} className="mono" style={{ ...linkBtn, fontSize: 12, marginLeft: 6 }}
                 title={r.email ? 'Fix a mistyped address — the invite goes wherever this says' : 'Add an address so the invite can be sent'}>
                 {r.email ? '✎ fix' : '+ add email'}
               </button>
               {r.email && emailTypoFix(r.email) && (
-                <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--warn)' }} title={`Looks like a typo for ${emailTypoFix(r.email)}`}> · likely typo</span>
+                <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--warn)' }} title={`Looks like a typo for ${emailTypoFix(r.email)}`}> · likely typo</span>
               )}
-              {r.sleeper_username && <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}> · {r.sleeper_username}</span>}
+              {r.sleeper_username && <span className="mono" style={{ ...mono, fontSize: 12.5, color: 'var(--faint)' }}> · {r.sleeper_username}</span>}
             </div>
           )}
-          {r.league_name && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginTop: 2 }}>{r.league_name}</div>}
-          {r.league_ref && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--you)', marginTop: 2, cursor: 'pointer', wordBreak: 'break-all' }} onClick={() => copy(r.league_ref!)} title="copy — paste into Import">⛓ {r.league_ref}</div>}
-          {r.note && <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 2, lineHeight: 1.4 }}>{r.note}</div>}
-          <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>{new Date(r.created_at).toLocaleString()}</div>
+          {r.league_name && <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--dim)', marginTop: 2 }}>{r.league_name}</div>}
+          {r.league_ref && <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--you)', marginTop: 2, cursor: 'pointer', wordBreak: 'break-all' }} onClick={() => copy(r.league_ref!)} title="copy — paste into Import">⛓ {r.league_ref}</div>}
+          {r.note && <div style={{ fontSize: 13, color: 'var(--dim)', marginTop: 2, lineHeight: 1.4 }}>{r.note}</div>}
+          <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 2 }}>{new Date(r.created_at).toLocaleString()}</div>
         </div>
         <button onClick={() => onToggle(r.id, !r.handled)} className="mono" style={btn(r.handled)}>{r.handled ? 'handled' : 'mark done'}</button>
       </div>
@@ -1670,17 +1670,17 @@ function CodeRequestRow({ r, leagues, onToggle, reloadLeagues, reload }: { r: Co
             {importing ? 'importing…' : '⤓ import this league'}
           </button>
         )}
-        {ownLeague && <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--you)' }}>✓ imported</span>}
+        {ownLeague && <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--you)' }}>✓ imported</span>}
         <div style={{ display: 'flex', gap: 4 }} title="Commissioner invite (claims the league) or player join invite">
           {kindBtn('commish', 'Commish')}
           {kindBtn('player', 'Player')}
         </div>
         {leagues.length > 0 ? (
-          <select value={leagueId} onChange={(e) => { setLeagueId(e.target.value); reset(); }} className="mono" style={{ ...inp, fontSize: 10, padding: '5px 6px', maxWidth: 220 }} title={`${kind === 'commish' ? 'Commissioner' : 'Invite'} code to send`}>
+          <select value={leagueId} onChange={(e) => { setLeagueId(e.target.value); reset(); }} className="mono" style={{ ...inp, fontSize: 12.5, padding: '5px 6px', maxWidth: 220 }} title={`${kind === 'commish' ? 'Commissioner' : 'Invite'} code to send`}>
             {leagues.map((l) => <option key={l.league_id} value={l.league_id}>{l.name} · {kind === 'commish' ? l.commish_code : l.invite_code}</option>)}
           </select>
         ) : (
-          <input value={manual} onChange={(e) => { setManual(e.target.value); reset(); }} placeholder={kind === 'commish' ? 'commish code' : 'invite code'} className="mono" style={{ ...inp, fontSize: 10, padding: '5px 6px', width: 130 }} />
+          <input value={manual} onChange={(e) => { setManual(e.target.value); reset(); }} placeholder={kind === 'commish' ? 'commish code' : 'invite code'} className="mono" style={{ ...inp, fontSize: 12.5, padding: '5px 6px', width: 130 }} />
         )}
         <button onClick={send} disabled={!canSend || sending} className="mono"
           style={{ ...btn(sent), opacity: canSend ? 1 : 0.4, cursor: canSend && !sending ? 'pointer' : 'default' }}
@@ -1688,7 +1688,7 @@ function CodeRequestRow({ r, leagues, onToggle, reloadLeagues, reload }: { r: Co
           {sending ? 'sending…' : sent ? '✓ sent' : `✉ send ${kind} invite`}
         </button>
         <button onClick={() => { if (link) { copy(link); setCopied(true); setTimeout(() => setCopied(false), 1200); } }} disabled={!code} className="mono" style={{ ...btn(false), opacity: code ? 1 : 0.4, cursor: code ? 'pointer' : 'default' }} title="Copy the invite link">{copied ? '✓ link copied' : '⛓ copy link'}</button>
-        {err && !editEmail && <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--opp, #e5484d)' }}>{err}</span>}
+        {err && !editEmail && <span className="mono" style={{ ...mono, fontSize: 12, color: 'var(--opp, #e5484d)' }}>{err}</span>}
       </div>
     </div>
   );
@@ -1745,18 +1745,18 @@ function AssignRoster({ initial, seated, stillOnPlatform, joiners = [], onAssign
     <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
       {joiners.length > 0 && (
         <select value="" onChange={pick} disabled={busy} className="mono"
-          title="assign a player who joined the pool" style={{ ...inp, fontSize: 10, padding: '5px 7px', maxWidth: 160 }}>
+          title="assign a player who joined the pool" style={{ ...inp, fontSize: 12.5, padding: '5px 7px', maxWidth: 160 }}>
           <option value="">joined players…</option>
           {joiners.map((j) => <option key={j.app_user_id} value={j.app_user_id}>{j.email ?? j.app_user_id.slice(0, 8)}</option>)}
         </select>
       )}
       <input value={email} onChange={(e) => { setEmail(e.target.value); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
         placeholder="assign to email…" type="email" spellCheck={false} autoCapitalize="none" autoCorrect="off"
-        style={{ ...inp, fontSize: 10, padding: '5px 7px', flex: 1, minWidth: 0 }} />
+        style={{ ...inp, fontSize: 12.5, padding: '5px 7px', flex: 1, minWidth: 0 }} />
       <button onClick={go} disabled={busy} className="mono" style={{ ...btn(false), opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'assign'}</button>
       {onClaimSelf && <button onClick={claim} disabled={busy} className="mono" title="claim this team for yourself" style={{ ...btn(true), opacity: busy ? 0.6 : 1 }}>＋ me</button>}
       {seated && <button onClick={unassign} disabled={busy} className="mono" title="free this seat — the manager loses the team and it becomes claimable again" style={{ ...btn(false), color: 'var(--opp)', opacity: busy ? 0.6 : 1 }}>✕ unassign</button>}
-      {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp, #e5484d)' }}>{msg}</span>}
+      {msg && <span className="mono" style={{ ...mono, fontSize: 11.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp, #e5484d)' }}>{msg}</span>}
     </div>
   );
 }
@@ -1782,11 +1782,11 @@ function SeedCoin({ balance, onSeed, hideBalance = false }: {
   };
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: hideBalance ? 0 : 6 }}>
-      {!hideBalance && <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>◇ {Math.round(balance)}</span>}
+      {!hideBalance && <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>◇ {Math.round(balance)}</span>}
       <input value={amt} onChange={(e) => { setAmt(e.target.value.replace(/[^\d-]/g, '')); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
-        placeholder="grant coin…" inputMode="numeric" style={{ ...inp, fontSize: 10, padding: '5px 7px', width: 90 }} />
+        placeholder="grant coin…" inputMode="numeric" style={{ ...inp, fontSize: 12.5, padding: '5px 7px', width: 104 }} />
       <button onClick={go} disabled={busy || !amt} className="mono" style={{ ...btn(false), opacity: busy || !amt ? 0.6 : 1 }}>{busy ? '…' : 'grant'}</button>
-      {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp, #e5484d)' }}>{msg}</span>}
+      {msg && <span className="mono" style={{ ...mono, fontSize: 11.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp, #e5484d)' }}>{msg}</span>}
     </div>
   );
 }
@@ -1827,24 +1827,24 @@ function CoManagerPanel({ leagueId, members }: { leagueId: string; members: Admi
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
       <div style={subhead}>CO-MANAGERS — ONE TEAM, MORE THUMBS</div>
-      {mgrs.length === 0 && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>None yet. A co-manager sets the same lineup as the seat's owner — for shared teams, or extra joiners when the league is past its seats.</div>}
+      {mgrs.length === 0 && <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)' }}>None yet. A co-manager sets the same lineup as the seat's owner — for shared teams, or extra joiners when the league is past its seats.</div>}
       {mgrs.map((g) => (
         <div key={`${g.roster_id}-${g.app_user_id}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
-          <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--text)', flex: 1 }}>
+          <span className="mono" style={{ ...mono, fontSize: 12.5, color: 'var(--text)', flex: 1 }}>
             {teamOf(g.roster_id)} <span style={{ color: 'var(--faint)' }}>⇄</span> {g.email ?? g.app_user_id.slice(0, 8)}
           </span>
           <button onClick={() => remove(g)} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>✕ remove</button>
         </div>
       ))}
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
-        <select value={seat} onChange={(e) => setSeat(e.target.value)} style={{ ...inp, padding: '5px 7px', fontSize: 10.5 }}>
+        <select value={seat} onChange={(e) => setSeat(e.target.value)} style={{ ...inp, padding: '5px 7px', fontSize: 13 }}>
           <option value="">team…</option>
           {seated.map((m) => <option key={m.roster_id} value={m.roster_id}>{m.team ?? `Roster ${m.roster_id}`}</option>)}
         </select>
         <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="comanager@email.com"
-          onKeyDown={(e) => { if (e.key === 'Enter') add(); }} style={{ ...inp, fontSize: 10.5, padding: '5px 7px', width: 190 }} />
+          onKeyDown={(e) => { if (e.key === 'Enter') add(); }} style={{ ...inp, fontSize: 13, padding: '5px 7px', width: 190 }} />
         <button onClick={add} disabled={busy || !seat || !email.trim()} className="mono" style={{ ...btn(true), opacity: busy || !seat || !email.trim() ? 0.6 : 1 }}>＋ add</button>
-        {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</span>}
+        {msg && <span className="mono" style={{ ...mono, fontSize: 11.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</span>}
       </div>
     </div>
   );
@@ -1883,20 +1883,20 @@ function WeeklyBudget({ l, onGranted }: { l: AdminLeague; onGranted: () => void 
   };
   return (
     <div style={{ marginBottom: 10, padding: '9px 10px', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6 }}>
-      <div className="mono" style={{ ...mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 7 }}>◈ WEEKLY BUDGET</div>
+      <div className="mono" style={{ ...mono, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 7 }}>◈ WEEKLY BUDGET</div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <input value={amt} onChange={(e) => { setAmt(e.target.value.replace(/[^\d]/g, '')); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
-          placeholder="coin / week" inputMode="numeric" style={{ ...inp, fontSize: 11, padding: '5px 7px', width: 90 }} />
+          placeholder="coin / week" inputMode="numeric" style={{ ...inp, fontSize: 13.5, padding: '5px 7px', width: 90 }} />
         <button onClick={save} disabled={busy === 'save' || !dirty} className="mono" style={{ ...btn(false), opacity: busy === 'save' || !dirty ? 0.6 : 1 }}>{busy === 'save' ? '…' : 'set budget'}</button>
-        <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>each team, per week — drops automatically as the week starts</span>
+        <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>each team, per week — drops automatically as the week starts</span>
       </div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 7, flexWrap: 'wrap' }}>
-        <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)' }}>grant week</span>
+        <span className="mono" style={{ ...mono, fontSize: 12, color: 'var(--dim)' }}>grant week</span>
         <input value={week} onChange={(e) => { setWeek(e.target.value.replace(/[^\d]/g, '')); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter') grant(); }}
-          inputMode="numeric" style={{ ...inp, fontSize: 11, padding: '5px 7px', width: 48, textAlign: 'center' }} />
+          inputMode="numeric" style={{ ...inp, fontSize: 13.5, padding: '5px 7px', width: 48, textAlign: 'center' }} />
         <button onClick={grant} disabled={busy === 'grant' || saved <= 0} title={saved <= 0 ? 'set a budget above 0 first' : 'credit every team this week’s budget'} className="mono" style={{ ...btn(false), opacity: busy === 'grant' || saved <= 0 ? 0.6 : 1 }}>{busy === 'grant' ? '…' : 'grant to all teams'}</button>
       </div>
-      {msg && <div className="mono" style={{ ...mono, fontSize: 9, marginTop: 6, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--dim)' }}>{msg}</div>}
+      {msg && <div className="mono" style={{ ...mono, fontSize: 11.5, marginTop: 6, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--dim)' }}>{msg}</div>}
     </div>
   );
 }
@@ -1935,7 +1935,7 @@ function WeekLockControl({ leagueId }: { leagueId: string }) {
     setBusy(false);
     load();
   };
-  const btn: React.CSSProperties = { fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', border: '1px solid var(--warn)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', background: 'var(--bg)', color: 'var(--warn)' };
+  const btn: React.CSSProperties = { fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', border: '1px solid var(--warn)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', background: 'var(--bg)', color: 'var(--warn)' };
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
       {holds.map((wk) => (
@@ -1945,12 +1945,12 @@ function WeekLockControl({ leagueId }: { leagueId: string }) {
         </button>
       ))}
       <input value={week} onChange={(e) => setWeek(e.target.value.replace(/\D/g, ''))} placeholder="wk (102…)"
-        className="mono" style={{ width: 64, fontSize: 10, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 4 }} />
+        className="mono" style={{ width: 64, fontSize: 12.5, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 4 }} />
       <button onClick={() => go(Number(week), false)} disabled={busy || !week} title="Emergency unlock: reopen this week's picks for THIS league and hold every lock off until relocked here."
         className="mono" style={{ ...btn, opacity: busy || !week ? 0.6 : 1 }}>{busy ? '…' : '🔓 unlock wk'}</button>
       <button onClick={() => go(Number(week), true)} disabled={busy || !week} title="Release the hold on this week and restore its natural lock time."
         className="mono" style={{ ...btn, opacity: busy || !week ? 0.6 : 1 }}>{busy ? '…' : '🔒 lock wk'}</button>
-      {note && <span className="mono" style={{ fontSize: 9, color: 'var(--dim)' }}>{note}</span>}
+      {note && <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)' }}>{note}</span>}
     </div>
   );
 }
@@ -1966,7 +1966,7 @@ function TestLiveToggle({ on, leagueId, reload }: { on: boolean; leagueId: strin
   };
   return (
     <button onClick={go} disabled={busy} title={on ? 'Live-test mode is ON — the board runs a compressed Setup→Locked→Live→Final clock for everyone. Click to turn off.' : 'Turn on live-test mode: the board runs a compressed real-time clock so you can test the flow now.'}
-      className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--warn)', background: on ? 'var(--warn)' : 'var(--bg)', border: '1px solid var(--warn)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+      className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--warn)', background: on ? 'var(--warn)' : 'var(--bg)', border: '1px solid var(--warn)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
       {busy ? '…' : on ? '🧪 LIVE TEST: ON' : '🧪 live test'}
     </button>
   );
@@ -2058,7 +2058,7 @@ function PreseasonPractice({ on, leagueId, season, admin, reload }: { on: boolea
   };
 
   const bs = (fill: boolean): React.CSSProperties => ({
-    fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: fill ? 'var(--on-accent)' : 'var(--you)',
+    fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: fill ? 'var(--on-accent)' : 'var(--you)',
     background: fill ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--you)', borderRadius: 4,
     padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
   });
@@ -2076,7 +2076,7 @@ function PreseasonPractice({ on, leagueId, season, admin, reload }: { on: boolea
       <div style={subhead}>PRESEASON PRACTICE</div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         {closed ? (
-          <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5 }}>{closedWhy}</span>
+          <span className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', lineHeight: 1.5 }}>{closedWhy}</span>
         ) : on ? (
           <>
             <span className="mono" style={bs(true)}>🏈 PRACTICE: ON</span>
@@ -2102,15 +2102,15 @@ function PreseasonPractice({ on, leagueId, season, admin, reload }: { on: boolea
         {/* An admin acting outside the window is doing it deliberately — say so
             rather than silently letting them create weeks nothing will feed. */}
         {admin && win && !win.open && !on && (
-          <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--warn)' }}>⚠ outside the preseason window — nothing will feed these weeks</span>
+          <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--warn)' }}>⚠ outside the preseason window — nothing will feed these weeks</span>
         )}
       </div>
       {!closed && (
-        <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+        <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
           Real {season} preseason games on live play-by-play, with throwaway deep rosters — every backup on the slate is pickable, since they take the snaps. Opponents are drawn at random each practice week, so this works before the draft finishes — no schedule needed. Nothing carries over: no standings, no seeding, no coin, no power-up inventory. Turning it off removes the practice weeks entirely.
         </div>
       )}
-      {note && <div className="mono" style={{ ...mono, fontSize: 9, marginTop: 6, color: note.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{note}</div>}
+      {note && <div className="mono" style={{ ...mono, fontSize: 11.5, marginTop: 6, color: note.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{note}</div>}
     </div>
   );
 }
@@ -2131,7 +2131,7 @@ function CardThemeToggle({ leagueId }: { leagueId: string }) {
   };
   return (
     <button onClick={flip} disabled={on == null} title={on ? 'This league uses the card-table board (the default) — lineups as a heads-up card table. Click to switch this league to the classic simple view.' : 'This league is on the classic simple view. Click to restore the card-table board (the default).'}
-      className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '4px 8px', cursor: on == null ? 'default' : 'pointer', opacity: on == null ? 0.6 : 1 }}>
+      className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '4px 8px', cursor: on == null ? 'default' : 'pointer', opacity: on == null ? 0.6 : 1 }}>
       {on == null ? '…' : on ? '🃏 CARDS' : '▤ SIMPLE VIEW'}
     </button>
   );
@@ -2186,30 +2186,30 @@ function WindowPotToggle({ l, reload }: { l: AdminLeague; reload: () => void }) 
         title={on
           ? `Window Pot is ON for this league — ◎${l.pot_ante} ante, ◎${l.pot_cap} cap. Managers can put coin on any window until its picks lock. Click to turn off (pots already running will still close themselves).`
           : 'Turn on the Window Pot: managers can put ◎10 on any window and wager against each other until that window\u2019s picks lock. Off by default; nothing appears in the app until this is on.'}
-        className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--warn)' : 'var(--bg)', border: `1px solid ${on ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+        className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--warn)' : 'var(--bg)', border: `1px solid ${on ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
         {busy ? '…' : on ? `🪙 POT: ON ◎${l.pot_ante}` : '🪙 window pot'}
       </button>
       {on && (
-        <button onClick={() => setTune((t) => !t)} className="mono" style={{ ...linkBtn, fontSize: 9 }}>
+        <button onClick={() => setTune((t) => !t)} className="mono" style={{ ...linkBtn, fontSize: 11.5 }}>
           {tune ? 'done' : 'tune'}
         </button>
       )}
       {openPots > 0 && (
         <button onClick={unwind} disabled={busy} title="Void every open pot in this league and refund every chip. Already-settled pots are untouched."
-          className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--opp)', background: 'var(--bg)', border: '1px solid var(--opp)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+          className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--opp)', background: 'var(--bg)', border: '1px solid var(--opp)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
           ⟲ void {openPots} open
         </button>
       )}
       {tune && on && (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-          <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>ante ◎</span>
+          <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>ante ◎</span>
           <input value={ante} onChange={(e) => setAnte(e.target.value.replace(/\D/g, ''))} inputMode="numeric" style={{ ...inp, width: 44, padding: '3px 5px', textAlign: 'center' }} />
-          <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>cap ◎</span>
+          <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>cap ◎</span>
           <input value={cap} onChange={(e) => setCap(e.target.value.replace(/\D/g, ''))} inputMode="numeric" style={{ ...inp, width: 52, padding: '3px 5px', textAlign: 'center' }} />
-          <button onClick={() => apply(true, Number(ante) || 10, Number(cap) || 120)} disabled={busy} className="mono" style={{ ...linkBtn, fontSize: 9 }}>save</button>
+          <button onClick={() => apply(true, Number(ante) || 10, Number(cap) || 120)} disabled={busy} className="mono" style={{ ...linkBtn, fontSize: 11.5 }}>save</button>
         </span>
       )}
-      {msg && <span className="mono" style={{ ...mono, fontSize: 9, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</span>}
+      {msg && <span className="mono" style={{ ...mono, fontSize: 11.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</span>}
     </div>
   );
 }
@@ -2229,9 +2229,9 @@ function DemoCardThemePanel() {
     <div style={card}>
       <div style={h}>DEMO BOARD</div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <span className="mono" style={{ fontSize: 11, color: 'var(--text)' }}>
+        <span className="mono" style={{ fontSize: 13.5, color: 'var(--text)' }}>
           Front-door demo · <b>{on == null ? '…' : on ? 'CARDS' : 'SIMPLE VIEW'}</b>
-          <span style={{ display: 'block', fontSize: 9.5, color: 'var(--dim)', marginTop: 3, maxWidth: 360 }}>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--dim)', marginTop: 3, maxWidth: 360 }}>
             The generic vs-AI demo everyone lands on. Cards is the default; switch to the classic simple view for all visitors.
           </span>
         </span>
@@ -2257,17 +2257,17 @@ function DeleteLeague({ name, onDelete }: { name: string; onDelete: () => Promis
     // on success the row unmounts (parent reloads) — no need to reset state
   };
   if (!open) return (
-    <button onClick={() => setOpen(true)} className="mono" style={{ ...linkBtn, fontSize: 9, color: danger }} title="permanently delete this league">🗑 delete league</button>
+    <button onClick={() => setOpen(true)} className="mono" style={{ ...linkBtn, fontSize: 11.5, color: danger }} title="permanently delete this league">🗑 delete league</button>
   );
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-      <span className="mono" style={{ ...mono, fontSize: 9, color: danger }}>type “{name}” to confirm:</span>
+      <span className="mono" style={{ ...mono, fontSize: 11.5, color: danger }}>type “{name}” to confirm:</span>
       <input value={confirm} onChange={(e) => { setConfirm(e.target.value); setErr(null); }} onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
-        autoFocus spellCheck={false} style={{ ...inp, fontSize: 10, padding: '4px 7px', minWidth: 140, borderColor: danger }} />
+        autoFocus spellCheck={false} style={{ ...inp, fontSize: 12.5, padding: '4px 7px', minWidth: 140, borderColor: danger }} />
       <button onClick={go} disabled={busy || confirm.trim() !== name} className="mono"
-        style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-accent, #fff)', background: danger, border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', opacity: busy || confirm.trim() !== name ? 0.5 : 1 }}>{busy ? 'deleting…' : 'delete forever'}</button>
-      <button onClick={() => { setOpen(false); setConfirm(''); setErr(null); }} className="mono" style={{ ...linkBtn, fontSize: 9 }}>cancel</button>
-      {err && <span className="mono" style={{ ...mono, fontSize: 9, color: danger }}>{err}</span>}
+        style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--on-accent, #fff)', background: danger, border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', opacity: busy || confirm.trim() !== name ? 0.5 : 1 }}>{busy ? 'deleting…' : 'delete forever'}</button>
+      <button onClick={() => { setOpen(false); setConfirm(''); setErr(null); }} className="mono" style={{ ...linkBtn, fontSize: 11.5 }}>cancel</button>
+      {err && <span className="mono" style={{ ...mono, fontSize: 11.5, color: danger }}>{err}</span>}
     </div>
   );
 }
@@ -2286,15 +2286,15 @@ function FeatureFlags() {
     setBusy(false);
     setMsg(r.ok ? `✓ ${feature} ${on ? 'ON' : 'OFF'} for ${email.trim()}` : `⚠ ${(r as { error?: string }).error ?? 'failed'}`);
   };
-  const b: React.CSSProperties = { fontSize: 9.5, fontWeight: 700, letterSpacing: '0.05em', color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 9px', cursor: 'pointer', fontFamily: 'inherit' };
+  const b: React.CSSProperties = { fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 9px', cursor: 'pointer', fontFamily: 'inherit' };
   return (
     <div style={card}>
       <div style={h}>FEATURE FLAGS</div>
-      <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
+      <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
         <b>solo</b> — standalone pods + weekly showdowns · <b>dfs_commish</b> — may create DFS leagues · <b>native</b> — may create drafted-on-site leagues (incl. mocks). Account must exist (signed in once).
       </div>
       <input value={email} onChange={(e) => { setEmail(e.target.value); setMsg(null); }} placeholder="player@email.com" type="email"
-        style={{ fontFamily: 'inherit', fontSize: 12, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 10px', outline: 'none', width: '100%', boxSizing: 'border-box' }} />
+        style={{ fontFamily: 'inherit', fontSize: 14, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 10px', outline: 'none', width: '100%', boxSizing: 'border-box' }} />
       <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
         <button className="mono" style={{ ...b, color: 'var(--you)' }} disabled={busy} onClick={() => set('solo', true)}>+ solo</button>
         <button className="mono" style={b} disabled={busy} onClick={() => set('solo', false)}>− solo</button>
@@ -2303,7 +2303,7 @@ function FeatureFlags() {
         <button className="mono" style={{ ...b, color: 'var(--text)' }} disabled={busy} onClick={() => set('native', true)}>+ native</button>
         <button className="mono" style={b} disabled={busy} onClick={() => set('native', false)}>− native</button>
       </div>
-      {msg && <div className="mono" style={{ ...mono, fontSize: 10, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{msg}</div>}
+      {msg && <div className="mono" style={{ ...mono, fontSize: 12.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{msg}</div>}
     </div>
   );
 }
@@ -2329,26 +2329,26 @@ function SoloPasses() {
   return (
     <div style={card}>
       <div style={h}>SOLO PASSES</div>
-      <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
+      <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
         The demo funnel auto-mints a pass per solo request, capped per rolling 7 days; over the cap requesters land on the waitlist (their lead is still captured above). Redeeming a pass sets the account’s <b>solo</b> flag.
       </div>
-      <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)', marginBottom: 8 }}>
+      <div className="mono" style={{ ...mono, fontSize: 13, color: 'var(--text)', marginBottom: 8 }}>
         minted last 7d: <b>{data?.minted_7d ?? '…'}</b> / {data?.weekly_quota ?? '…'} · claimed: <b>{data?.claimed_7d ?? '…'}</b>
       </div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <input value={quota} onChange={(e) => { setQuota(e.target.value.replace(/\D/g, '')); setMsg(null); }} inputMode="numeric" placeholder="25"
-          style={{ fontFamily: 'inherit', fontSize: 12, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 10px', outline: 'none', width: 90 }} />
+          style={{ fontFamily: 'inherit', fontSize: 14, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 10px', outline: 'none', width: 90 }} />
         <button className="mono" disabled={busy || !quota.trim()} onClick={saveQuota}
-          style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.05em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 11px', cursor: 'pointer', fontFamily: 'inherit', opacity: busy || !quota.trim() ? 0.6 : 1 }}>set weekly cap</button>
+          style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 11px', cursor: 'pointer', fontFamily: 'inherit', opacity: busy || !quota.trim() ? 0.6 : 1 }}>set weekly cap</button>
       </div>
-      {msg && <div className="mono" style={{ ...mono, fontSize: 10, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{msg}</div>}
+      {msg && <div className="mono" style={{ ...mono, fontSize: 12.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{msg}</div>}
       {data && data.passes.length > 0 && (
         <div style={{ marginTop: 10, maxHeight: 180, overflow: 'auto' }}>
           {data.passes.map((p) => (
             <div key={p.code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
-              <span className="mono" style={{ ...mono, fontSize: 10, color: p.claimed ? 'var(--faint)' : 'var(--you)' }}>{p.code}</span>
-              <span style={{ fontSize: 10.5, color: 'var(--dim)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.email}</span>
-              <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{p.claimed ? '✓ claimed' : 'unclaimed'} · {new Date(p.created_at).toLocaleDateString()}</span>
+              <span className="mono" style={{ ...mono, fontSize: 12.5, color: p.claimed ? 'var(--faint)' : 'var(--you)' }}>{p.code}</span>
+              <span style={{ fontSize: 13, color: 'var(--dim)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.email}</span>
+              <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>{p.claimed ? '✓ claimed' : 'unclaimed'} · {new Date(p.created_at).toLocaleDateString()}</span>
             </div>
           ))}
         </div>
@@ -2375,11 +2375,11 @@ function ViewAs({ user, onClose, onLeaveAdmin }: { user: AdminUser; onClose: () 
     } catch (e) { setErr(errMsg(e, 'load failed')); }
   };
   useEffect(() => { load(Number(week) || 1); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
-  const label: React.CSSProperties = { ...mono, fontSize: 9, color: 'var(--faint)' };
+  const label: React.CSSProperties = { ...mono, fontSize: 11.5, color: 'var(--faint)' };
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 75, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 560, marginTop: 24 }}>
-        <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 5, padding: '7px 9px', lineHeight: 1.5 }}>
+        <div className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 5, padding: '7px 9px', lineHeight: 1.5 }}>
           👁 VIEWING AS {user.email ?? user.id.slice(0, 8)} — READ ONLY<br />
           <span style={{ fontWeight: 400, color: 'var(--dim)' }}>You are still signed in as yourself. Nothing here can change their data or act in their name.</span>
         </div>
@@ -2398,11 +2398,11 @@ function ViewAs({ user, onClose, onLeaveAdmin }: { user: AdminUser; onClose: () 
           <button onClick={onClose} className="mono" style={linkBtn}>close</button>
         </div>
 
-        {err && <div className="mono" style={{ ...mono, fontSize: 10, color: 'var(--opp)' }}>⚠ {err}</div>}
+        {err && <div className="mono" style={{ ...mono, fontSize: 12.5, color: 'var(--opp)' }}>⚠ {err}</div>}
         {!err && !state && <Muted text="Loading…" />}
         {state && (
           <>
-            <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', marginBottom: 10 }}>
+            <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--dim)', marginBottom: 10 }}>
               {state.user.sleeper_username ? `@${state.user.sleeper_username}` : 'no Sleeper account linked'}
               {state.user.sleeper_user_id ? ` · ${state.user.sleeper_user_id}` : ''} · joined {new Date(state.user.created_at).toLocaleDateString()}
             </div>
@@ -2417,7 +2417,7 @@ function ViewAs({ user, onClose, onLeaveAdmin }: { user: AdminUser; onClose: () 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Avatar name={lg.name} accent="var(--warn)" src={lg.avatar_url} size={26} />
                     <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{lg.team_name} <span className="mono" style={label}>· {lg.name} {lg.season}</span></div>
+                      <div style={{ fontSize: 13.5, color: 'var(--text)' }}>{lg.team_name} <span className="mono" style={label}>· {lg.name} {lg.season}</span></div>
                       <div className="mono" style={label}>
                         roster {lg.roster_id} · {lg.provider}
                         {lg.is_commish ? ' · commissioner' : ''}
@@ -2425,7 +2425,7 @@ function ViewAs({ user, onClose, onLeaveAdmin }: { user: AdminUser; onClose: () 
                       </div>
                     </div>
                   </div>
-                  <div className="mono" style={{ ...mono, fontSize: 9.5, marginTop: 6, lineHeight: 1.6, color: 'var(--dim)' }}>
+                  <div className="mono" style={{ ...mono, fontSize: 12, marginTop: 6, lineHeight: 1.6, color: 'var(--dim)' }}>
                     <div style={{ color: pool ? 'var(--dim)' : 'var(--warn)' }}>
                       pick pool: {pool ? `${pool} players` : '⚠ empty — nothing to build a lineup from this week'}
                     </div>
@@ -2440,7 +2440,7 @@ function ViewAs({ user, onClose, onLeaveAdmin }: { user: AdminUser; onClose: () 
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 3 }}>
                             {m.picks.map((p, i) => (
                               <span key={i} className="mono" title={`${p.game_window} ${p.roster_slot}${p.metric_id ? ` · ${p.metric_id}` : ''}`}
-                                style={{ ...mono, fontSize: 8, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }}>
+                                style={{ ...mono, fontSize: 10.5, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }}>
                                 {p.player_slug ? fmtSlug(p.player_slug) : '—'}
                               </span>
                             ))}
@@ -2474,17 +2474,17 @@ function Users({ onLeaveAdmin }: { onLeaveAdmin?: () => void }) {
       <div style={h}>USERS ({users?.length ?? '…'})</div>
       {!!users?.length && (
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="filter by email or Sleeper handle…"
-          style={{ ...inp, width: '100%', boxSizing: 'border-box', fontSize: 10, padding: '5px 7px', marginBottom: 6 }} />
+          style={{ ...inp, width: '100%', boxSizing: 'border-box', fontSize: 12.5, padding: '5px 7px', marginBottom: 6 }} />
       )}
       {users === null ? <Muted text="Loading…" /> : users.length === 0 ? <Muted text="No users yet." /> : shown.map((u) => (
         <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 11.5, color: 'var(--text)' }}>{u.email ?? '—'}</div>
-            <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{u.sleeper_username ? `@${u.sleeper_username}` : 'no Sleeper link'} · {u.enrolled} enrolled</div>
+            <div style={{ fontSize: 13.5, color: 'var(--text)' }}>{u.email ?? '—'}</div>
+            <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>{u.sleeper_username ? `@${u.sleeper_username}` : 'no Sleeper link'} · {u.enrolled} enrolled</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <button onClick={() => setViewing(u)} className="mono" style={{ ...linkBtn, color: 'var(--you)' }} title="see what this user sees — read-only">👁 view as</button>
-            <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)' }}>{new Date(u.created_at).toLocaleDateString()}</span>
+            <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>{new Date(u.created_at).toLocaleDateString()}</span>
           </div>
         </div>
       ))}
@@ -2502,7 +2502,7 @@ function PickPills({ picks }: { picks: BoardPick[] }) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
       {picks.map((p, i) => (
-        <span key={i} className="mono" style={{ ...mono, fontSize: 8, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }} title={p.metric ?? ''}>
+        <span key={i} className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }} title={p.metric ?? ''}>
           {p.slug ? fmtSlug(p.slug) : '—'}
         </span>
       ))}
@@ -2523,12 +2523,12 @@ function SlotScoreRows({ slotScores, homeLeads, winTied }: { slotScores: BoardSl
         const a = awaySlots.find((x) => x.slot === slot);
         return (
           <div key={slot} style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 6, padding: '2px 0' }}>
-            <span className="mono" style={{ ...mono, fontSize: 8.5, color: homeLeads || winTied ? 'var(--text)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span className="mono" style={{ ...mono, fontSize: 11, color: homeLeads || winTied ? 'var(--text)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {h ? fmtSlug(h.slug ?? '') : <span style={{ color: 'var(--faint)' }}>—</span>}
               {h && <span style={{ color: homeLeads ? 'var(--you)' : 'var(--faint)', marginLeft: 4 }}>{rnd(h.score)}</span>}
             </span>
-            <span className="mono" style={{ ...mono, fontSize: 7.5, color: 'var(--faint)', textAlign: 'center', alignSelf: 'center' }}>{h?.metric ?? a?.metric ?? ''}</span>
-            <span className="mono" style={{ ...mono, fontSize: 8.5, color: !homeLeads || winTied ? 'var(--text)' : 'var(--dim)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)', textAlign: 'center', alignSelf: 'center' }}>{h?.metric ?? a?.metric ?? ''}</span>
+            <span className="mono" style={{ ...mono, fontSize: 11, color: !homeLeads || winTied ? 'var(--text)' : 'var(--dim)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {a && <span style={{ color: !homeLeads ? 'var(--you)' : 'var(--faint)', marginRight: 4 }}>{rnd(a.score)}</span>}
               {a ? fmtSlug(a.slug ?? '') : <span style={{ color: 'var(--faint)' }}>—</span>}
             </span>
@@ -2571,42 +2571,42 @@ function AdminMatchupBoard({ matchupId, onClose }: { matchupId: string; onClose:
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 440, background: 'var(--bg)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 10, padding: 18, maxHeight: '90vh', overflow: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <span className="mono" style={{ ...mono, fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)', fontWeight: 700 }}>
+          <span className="mono" style={{ ...mono, fontSize: 11.5, letterSpacing: '0.12em', color: 'var(--faint)', fontWeight: 700 }}>
             LIVE BOARD{m ? ` · W${m.week}` : ''}
             {m && <span style={{ color: live ? 'var(--you)' : 'var(--faint)', marginLeft: 6 }}>{live ? '● LIVE' : m.status.toUpperCase()}</span>}
           </span>
           <button onClick={onClose} className="mono" style={linkBtn}>✕ close</button>
         </div>
-        {err && <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--opp)', marginBottom: 8 }}>{err}</div>}
+        {err && <div className="mono" style={{ ...mono, fontSize: 13, color: 'var(--opp)', marginBottom: 8 }}>{err}</div>}
         {!b && !err ? <Muted text="Loading…" /> : m && (
           <>
             {/* Scoreboard header */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'end', gap: 8 }}>
               <div style={{ minWidth: 0 }}>
-                {isFinal && homeLeads && <div className="mono" style={{ ...mono, fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', marginBottom: 3 }}>WINNER ▲</div>}
+                {isFinal && homeLeads && <div className="mono" style={{ ...mono, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', marginBottom: 3 }}>WINNER ▲</div>}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
                   {b.home_avatar && <img src={b.home_avatar} alt="" width={20} height={20} style={{ borderRadius: 4, flexShrink: 0 }} />}
-                  <span style={{ fontSize: 12, fontWeight: 700, color: homeLeads ? 'var(--you)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.home_team ?? `roster ${m.home_roster_id}`}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: homeLeads ? 'var(--you)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.home_team ?? `roster ${m.home_roster_id}`}</span>
                 </div>
                 <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, color: homeLeads ? 'var(--you)' : tied ? 'var(--text)' : 'var(--dim)', lineHeight: 1.1 }}>{homeScore}</div>
               </div>
               <div style={{ textAlign: 'center', paddingBottom: 6 }}>
-                <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}>vs</span>
+                <span className="mono" style={{ ...mono, fontSize: 12.5, color: 'var(--faint)' }}>vs</span>
                 {!tied && (homeScore > 0 || awayScore > 0) && (
-                  <div className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--dim)', marginTop: 2 }}>{homeLeads ? '←' : '→'} +{margin}</div>
+                  <div className="mono" style={{ ...mono, fontSize: 11, color: 'var(--dim)', marginTop: 2 }}>{homeLeads ? '←' : '→'} +{margin}</div>
                 )}
               </div>
               <div style={{ minWidth: 0, textAlign: 'right' }}>
-                {isFinal && !homeLeads && !tied && <div className="mono" style={{ ...mono, fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', marginBottom: 3, textAlign: 'right' }}>▲ WINNER</div>}
+                {isFinal && !homeLeads && !tied && <div className="mono" style={{ ...mono, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', marginBottom: 3, textAlign: 'right' }}>▲ WINNER</div>}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, overflow: 'hidden' }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: !homeLeads && !tied ? 'var(--you)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{b.away_team ?? `roster ${m.away_roster_id}`}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: !homeLeads && !tied ? 'var(--you)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{b.away_team ?? `roster ${m.away_roster_id}`}</span>
                   {b.away_avatar && <img src={b.away_avatar} alt="" width={20} height={20} style={{ borderRadius: 4, flexShrink: 0 }} />}
                 </div>
                 <div className="grotesk" style={{ fontSize: 30, fontWeight: 700, color: !homeLeads && !tied ? 'var(--you)' : tied ? 'var(--text)' : 'var(--dim)', lineHeight: 1.1, textAlign: 'right' }}>{awayScore}</div>
               </div>
             </div>
             {(m.home_coin != null || m.away_coin != null) && (
-              <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', marginTop: 6 }}>◇ coin {rnd(m.home_coin ?? 0)} / {rnd(m.away_coin ?? 0)}</div>
+              <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', textAlign: 'center', marginTop: 6 }}>◇ coin {rnd(m.home_coin ?? 0)} / {rnd(m.away_coin ?? 0)}</div>
             )}
 
             {/* Per-window scores + player detail */}
@@ -2620,9 +2620,9 @@ function AdminMatchupBoard({ matchupId, onClose }: { matchupId: string; onClose:
                 return (
                   <div key={s.game_window} style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 5, overflow: 'hidden' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, padding: '5px 8px' }}>
-                      <span className="mono" style={{ ...mono, fontSize: 13, fontWeight: 700, color: winWin ? 'var(--you)' : winTied ? 'var(--text)' : 'var(--dim)' }}>{rnd(hw)}</span>
-                      <span className="mono" style={{ ...mono, fontSize: 8.5, letterSpacing: '0.08em', color: 'var(--faint)', textAlign: 'center' }}>{winLabel(s.game_window)}</span>
-                      <span className="mono" style={{ ...mono, fontSize: 13, fontWeight: 700, color: !winWin && !winTied ? 'var(--you)' : winTied ? 'var(--text)' : 'var(--dim)', textAlign: 'right' }}>{rnd(aw)}</span>
+                      <span className="mono" style={{ ...mono, fontSize: 15, fontWeight: 700, color: winWin ? 'var(--you)' : winTied ? 'var(--text)' : 'var(--dim)' }}>{rnd(hw)}</span>
+                      <span className="mono" style={{ ...mono, fontSize: 11, letterSpacing: '0.08em', color: 'var(--faint)', textAlign: 'center' }}>{winLabel(s.game_window)}</span>
+                      <span className="mono" style={{ ...mono, fontSize: 15, fontWeight: 700, color: !winWin && !winTied ? 'var(--you)' : winTied ? 'var(--text)' : 'var(--dim)', textAlign: 'right' }}>{rnd(aw)}</span>
                     </div>
                     {hasSlots
                       ? <SlotScoreRows slotScores={s.slot_scores} homeLeads={winWin} winTied={winTied} />
@@ -2631,7 +2631,7 @@ function AdminMatchupBoard({ matchupId, onClose }: { matchupId: string; onClose:
                             <PickPills picks={s.home_picks} />
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'flex-end' }}>
                               {s.away_picks.map((p, i) => (
-                                <span key={i} className="mono" style={{ ...mono, fontSize: 8, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }} title={p.metric ?? ''}>
+                                <span key={i} className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }} title={p.metric ?? ''}>
                                   {p.slug ? fmtSlug(p.slug) : '—'}
                                 </span>
                               ))}
@@ -2643,7 +2643,7 @@ function AdminMatchupBoard({ matchupId, onClose }: { matchupId: string; onClose:
                 );
               })}
             </div>
-            <div className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)', textAlign: 'center', marginTop: 10 }}>
+            <div className="mono" style={{ ...mono, fontSize: 11, color: 'var(--faint)', textAlign: 'center', marginTop: 10 }}>
               {live && <span style={{ color: 'var(--you)' }}>auto-refreshing every 2.5s · </span>}
               {b.updated_at ? `updated ${new Date(b.updated_at).toLocaleTimeString()}` : 'no updates yet'}
             </div>
@@ -2678,15 +2678,15 @@ function HealthPanel() {
   const syncStale = !!hp && (!hp.last_lineup_sync || Date.now() - new Date(hp.last_lineup_sync).getTime() > 86_400_000);
   const stat = (label: string, value: React.ReactNode, color = 'var(--text)') => (
     <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '6px 9px', minWidth: 0 }}>
-      <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.08em', color: 'var(--faint)', fontWeight: 700 }}>{label}</div>
-      <div className="mono" style={{ ...mono, fontSize: 12, fontWeight: 700, color, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>
+      <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.08em', color: 'var(--faint)', fontWeight: 700 }}>{label}</div>
+      <div className="mono" style={{ ...mono, fontSize: 14, fontWeight: 700, color, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>
     </div>
   );
   return (
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <div style={h}>SYSTEM HEALTH{liveOn && <span style={{ color: 'var(--you)', marginLeft: 6 }}>● {hp!.live_matchups} LIVE</span>}</div>
-        <button onClick={load} className="mono" style={{ ...linkBtn, fontSize: 9 }}>↻</button>
+        <button onClick={load} className="mono" style={{ ...linkBtn, fontSize: 11.5 }}>↻</button>
       </div>
       {err ? <Muted text={err} /> : !hp ? <Muted text="Loading…" /> : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))', gap: 6 }}>
@@ -2704,8 +2704,8 @@ function HealthPanel() {
           {stat('LAST SYNC', ago(hp.last_lineup_sync), syncStale ? 'var(--warn)' : 'var(--text)')}
         </div>
       )}
-      {ingestStale && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--opp)', marginTop: 8 }}>⚠ games are live but no play ingested in over 90s — check the poller.</div>}
-      {syncStale && <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--opp)', marginTop: 8 }}>⚠ no lineup sync in over a day — the worker may not be running (fly.io → drip-pilot-worker).</div>}
+      {ingestStale && <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--opp)', marginTop: 8 }}>⚠ games are live but no play ingested in over 90s — check the poller.</div>}
+      {syncStale && <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--opp)', marginTop: 8 }}>⚠ no lineup sync in over a day — the worker may not be running (fly.io → drip-pilot-worker).</div>}
     </div>
   );
 }
@@ -2764,8 +2764,8 @@ function PickReadinessTab({ leagueId, week, admin }: { leagueId: string; week: n
     const st = SIDE_STATUS(s);
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0' }}>
-        <span style={{ fontSize: 11, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.team ?? `roster ${s.roster_id}`}</span>
-        <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, color: st.color, border: `1px solid ${st.color}`, borderRadius: 4, padding: '1px 5px', whiteSpace: 'nowrap' }}>{st.label}</span>
+        <span style={{ fontSize: 13.5, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.team ?? `roster ${s.roster_id}`}</span>
+        <span className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: st.color, border: `1px solid ${st.color}`, borderRadius: 4, padding: '1px 5px', whiteSpace: 'nowrap' }}>{st.label}</span>
         <button style={{ ...btn(s.controller === 'ai'), padding: '3px 6px' }} onClick={() => toggleAi(m, side)} title={s.controller === 'ai' ? 'hand back to the manager' : 'set this team to AI auto-pilot'}>🤖</button>
         {admin && s.enrolled && s.controller !== 'ai' && (
           <>
@@ -2781,13 +2781,13 @@ function PickReadinessTab({ leagueId, week, admin }: { leagueId: string; week: n
   const empties = rows.reduce((n, m) => n + (m.home.enrolled && m.home.picks_set === 0 ? 1 : 0) + (m.away.enrolled && m.away.picks_set === 0 ? 1 : 0), 0);
   return (
     <div style={{ marginTop: 10 }}>
-      <div className="mono" style={{ ...mono, fontSize: 9.5, color: empties ? 'var(--opp)' : 'var(--you)', marginBottom: 8 }}>
+      <div className="mono" style={{ ...mono, fontSize: 12, color: empties ? 'var(--opp)' : 'var(--you)', marginBottom: 8 }}>
         week {week} · {empties ? `${empties} enrolled manager${empties > 1 ? 's' : ''} with NO lineup` : 'all enrolled managers have a lineup'}
       </div>
-      {busy && <div className="mono" style={{ ...mono, fontSize: 9.5, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginBottom: 6 }}>{busy}</div>}
+      {busy && <div className="mono" style={{ ...mono, fontSize: 12, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginBottom: 6 }}>{busy}</div>}
       {rows.length === 0 ? <Muted text="No matchups this week (run sync week)." /> : rows.map((m) => (
         <div key={m.matchup_id} style={{ borderTop: '1px solid var(--bd)', padding: '6px 0' }}>
-          <div className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)', marginBottom: 2 }}>{m.home.team ?? `Roster ${m.home_roster_id}`} v {m.away.team ?? `Roster ${m.away_roster_id}`} · {m.status}</div>
+          <div className="mono" style={{ ...mono, fontSize: 11, color: 'var(--faint)', marginBottom: 2 }}>{m.home.team ?? `Roster ${m.home_roster_id}`} v {m.away.team ?? `Roster ${m.away_roster_id}`} · {m.status}</div>
           {sideRow(m, 'home')}
           {sideRow(m, 'away')}
         </div>
@@ -2806,7 +2806,7 @@ function SendLink({ email }: { email: string }) {
   };
   return (
     <button onClick={send} disabled={s === 'sending' || s === 'sent'} className="mono"
-      style={{ ...linkBtn, fontSize: 9, color: s === 'sent' ? 'var(--you)' : s === 'err' ? 'var(--opp)' : 'var(--dim)' }}
+      style={{ ...linkBtn, fontSize: 11.5, color: s === 'sent' ? 'var(--you)' : s === 'err' ? 'var(--opp)' : 'var(--dim)' }}
       title={`email a sign-in link to ${email}`}>
       {s === 'sent' ? '✓ link sent' : s === 'sending' ? '…' : s === 'err' ? 'failed' : '✉ send link'}
     </button>
@@ -2819,7 +2819,7 @@ function SendLink({ email }: { email: string }) {
 function KdstSelect({ suffix, value, taken, onChange }: { suffix: 'k' | 'dst'; value: string | null; taken?: Set<string>; onChange: (v: string | null) => void }) {
   return (
     <select value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}
-      style={{ ...inp, padding: '3px 4px', fontSize: 10, width: 104 }} title={suffix === 'k' ? 'kicker team' : 'defense team'}>
+      style={{ ...inp, padding: '3px 4px', fontSize: 12.5, width: 104 }} title={suffix === 'k' ? 'kicker team' : 'defense team'}>
       <option value="">{suffix === 'k' ? 'K · random' : 'DEF · random'}</option>
       {NFL_CODES.map((c) => {
         const slug = `${c}-${suffix}`;
@@ -2852,7 +2852,7 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
     setSeedOrder((cur) => cur ?? s.standings.map((x) => x.roster_id));
   };
   useEffect(() => { load().catch((e) => setMsg(errMsg(e, 'load failed'))); /* eslint-disable-next-line */ }, [leagueId]);
-  if (!st) return <div className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', marginTop: 12 }}>{msg ?? 'loading playoffs…'}</div>;
+  if (!st) return <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', marginTop: 12 }}>{msg ?? 'loading playoffs…'}</div>;
 
   const teamName = (rid: number) => st.standings.find((s) => s.roster_id === rid)?.team ?? `Team ${rid}`;
   const seedOf = (rid: number) => { const i = (st.seeds ?? []).indexOf(rid); return i >= 0 ? i + 1 : null; };
@@ -2876,15 +2876,15 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
     setSeedOrder(next);
   };
   const toggle = (on: boolean, label: string, onClick: () => void, off = false) => (
-    <button onClick={onClick} disabled={off} className="mono" style={{ ...mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', cursor: off ? 'default' : 'pointer', opacity: off ? 0.5 : 1, color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 999, padding: '4px 10px' }}>{label}</button>
+    <button onClick={onClick} disabled={off} className="mono" style={{ ...mono, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.04em', cursor: off ? 'default' : 'pointer', opacity: off ? 0.5 : 1, color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 999, padding: '4px 10px' }}>{label}</button>
   );
   const side = (m: PlayoffMatchup, rid: number, score: number | null) => {
     const won = m.winner === rid;
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0' }}>
-        <span className="mono" style={{ ...mono, fontSize: 8, color: 'var(--faint)', width: 14 }}>{seedOf(rid) ? `#${seedOf(rid)}` : ''}</span>
-        <span style={{ fontSize: 11.5, fontWeight: won ? 700 : 400, color: won ? 'var(--you)' : 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{teamName(rid)}{won ? ' ✓' : ''}</span>
-        <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: won ? 'var(--you)' : 'var(--dim)' }}>{score != null ? Number(score).toFixed(0) : '—'}</span>
+        <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)', width: 14 }}>{seedOf(rid) ? `#${seedOf(rid)}` : ''}</span>
+        <span style={{ fontSize: 13.5, fontWeight: won ? 700 : 400, color: won ? 'var(--you)' : 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{teamName(rid)}{won ? ' ✓' : ''}</span>
+        <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: won ? 'var(--you)' : 'var(--dim)' }}>{score != null ? Number(score).toFixed(0) : '—'}</span>
       </div>
     );
   };
@@ -2892,25 +2892,25 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
       {st.champion != null && (
         <div style={{ background: 'var(--bg)', border: '1px solid var(--you)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: '12px 14px' }}>
-          <span className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--you)' }}>🏆 {st.champion_team ?? teamName(st.champion)} — league champion</span>
+          <span className="grotesk" style={{ fontSize: 17.5, fontWeight: 700, color: 'var(--you)' }}>🏆 {st.champion_team ?? teamName(st.champion)} — league champion</span>
         </div>
       )}
-      {msg && <div className="mono" style={{ ...mono, fontSize: 9.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</div>}
+      {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</div>}
 
       <div>
         <div style={subhead}>PLAYOFF SETTINGS</div>
         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>TEAMS</div>
+            <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>TEAMS</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
               {[2, 4, 6, 8].map((n) => toggle(teams === n, String(n), () => setTeams(n), st.underway))}
             </div>
           </div>
           <div style={{ textAlign: 'center' }}>
-            <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>START WEEK</div>
+            <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>START WEEK</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5, opacity: st.underway ? 0.5 : 1 }}>
               <button onClick={() => !st.underway && setStartWeek(Math.max(2, startWeek - 1))} className="mono" style={stepBtnStyle}>−</button>
-              <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', minWidth: 24, textAlign: 'center' }}>{startWeek}</span>
+              <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 24, textAlign: 'center' }}>{startWeek}</span>
               <button onClick={() => !st.underway && setStartWeek(Math.min(18, startWeek + 1))} className="mono" style={stepBtnStyle}>＋</button>
             </div>
           </div>
@@ -2922,9 +2922,9 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
               {st.generated ? '↻ regenerate bracket' : '🏆 generate bracket'}
             </button>
           )}
-          {st.underway && <span className="mono" style={{ ...mono, fontSize: 9, color: 'var(--warn)' }}>playoffs underway — settings locked</span>}
+          {st.underway && <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--warn)' }}>playoffs underway — settings locked</span>}
         </div>
-        <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+        <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
           Seeding = regular-season standings (wins, then points-for). Higher seeds host; a 6-team bracket gives the top two seeds byes; ties advance the better seed. Rounds are one week apart from the start week; finished rounds roll forward automatically.
         </div>
       </div>
@@ -2935,7 +2935,7 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
             {rounds.map((ms, ri) => (
               <div key={ri} style={{ flex: '1 1 180px', minWidth: 170, maxWidth: 260 }}>
-                <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700, marginBottom: 6 }}>
+                <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700, marginBottom: 6 }}>
                   {ms[0]?.label?.toUpperCase() ?? `ROUND ${ri + 1}`} · WK {ms[0]?.week}
                 </div>
                 {ms.map((m) => (
@@ -2943,7 +2943,7 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
                     {side(m, m.home, m.home_final)}
                     <div style={{ borderTop: '1px solid var(--bd)' }} />
                     {side(m, m.away, m.away_final)}
-                    <div className="mono" style={{ ...mono, fontSize: 7.5, color: 'var(--faint)', marginTop: 3 }}>{m.status.toUpperCase()}</div>
+                    <div className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)', marginTop: 3 }}>{m.status.toUpperCase()}</div>
                   </div>
                 ))}
               </div>
@@ -2958,27 +2958,27 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
             {conRounds.map((ms, ri) => ms?.length ? (
               <div key={ri} style={{ flex: '1 1 180px', minWidth: 170, maxWidth: 260 }}>
-                <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700, marginBottom: 6 }}>WK {ms[0].week}</div>
+                <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700, marginBottom: 6 }}>WK {ms[0].week}</div>
                 {ms.map((m) => (
                   <div key={m.id} style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '6px 9px', marginBottom: 8 }}>
-                    {m.label && m.label !== 'Consolation' && <div className="mono" style={{ ...mono, fontSize: 7.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', marginBottom: 2 }}>{m.label.toUpperCase()}</div>}
+                    {m.label && m.label !== 'Consolation' && <div className="mono" style={{ ...mono, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', marginBottom: 2 }}>{m.label.toUpperCase()}</div>}
                     {side(m, m.home, m.home_final)}
                     <div style={{ borderTop: '1px solid var(--bd)' }} />
                     {side(m, m.away, m.away_final)}
-                    <div className="mono" style={{ ...mono, fontSize: 7.5, color: 'var(--faint)', marginTop: 3 }}>{m.status.toUpperCase()}</div>
+                    <div className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)', marginTop: 3 }}>{m.status.toUpperCase()}</div>
                   </div>
                 ))}
               </div>
             ) : null)}
             <div style={{ flex: '1 1 150px', minWidth: 140 }}>
-              <div className="mono" style={{ ...mono, fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700, marginBottom: 6 }}>LADDER{st.champion != null ? ' (FINAL)' : ''}</div>
+              <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700, marginBottom: 6 }}>LADDER{st.champion != null ? ' (FINAL)' : ''}</div>
               {(st.consolation ?? []).map((rid, i) => (
                 <div key={rid} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '3px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
-                  <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, color: 'var(--dim)', width: 20 }}>{teams + i + 1}.</span>
-                  <span style={{ fontSize: 11, color: 'var(--text)' }}>{teamName(rid)}</span>
+                  <span className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: 'var(--dim)', width: 20 }}>{teams + i + 1}.</span>
+                  <span style={{ fontSize: 13.5, color: 'var(--text)' }}>{teamName(rid)}</span>
                 </div>
               ))}
-              <div className="mono" style={{ ...mono, fontSize: 8.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>Winners climb a rung each week; playoff losers join at the top as they fall.</div>
+              <div className="mono" style={{ ...mono, fontSize: 11, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>Winners climb a rung each week; playoff losers join at the top as they fall.</div>
             </div>
           </div>
         </div>
@@ -2988,8 +2988,8 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
           <div style={subhead}>SEEDING{st.underway ? ' (LOCKED)' : ''}</div>
           {customOrder && !st.underway && <>
-            <span className="mono" style={{ ...mono, fontSize: 8.5, fontWeight: 700, color: 'var(--warn)' }}>CUSTOM ORDER</span>
-            <button onClick={() => setSeedOrder(standingsIds)} className="mono" style={{ ...linkBtn, fontSize: 9 }}>↺ back to standings</button>
+            <span className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: 'var(--warn)' }}>CUSTOM ORDER</span>
+            <button onClick={() => setSeedOrder(standingsIds)} className="mono" style={{ ...linkBtn, fontSize: 11.5 }}>↺ back to standings</button>
           </>}
         </div>
         {order.map((rid, i) => {
@@ -2997,10 +2997,10 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
           const seeded = i < teams;
           return (
             <div key={rid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
-              <span className="mono" style={{ ...mono, fontSize: 9, fontWeight: 700, color: seeded ? 'var(--you)' : 'var(--faint)', width: 22 }}>{seeded ? `#${i + 1}` : '—'}</span>
-              <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, fontWeight: seeded ? 700 : 400 }}>{row?.team ?? `Team ${rid}`}</span>
-              <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--dim)', width: 52, textAlign: 'right' }}>{row ? `${row.wins}-${row.losses}${row.ties ? `-${row.ties}` : ''}` : ''}</span>
-              <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)', width: 64, textAlign: 'right' }}>{row ? `PF ${Number(row.pf).toFixed(0)}` : ''}</span>
+              <span className="mono" style={{ ...mono, fontSize: 11.5, fontWeight: 700, color: seeded ? 'var(--you)' : 'var(--faint)', width: 22 }}>{seeded ? `#${i + 1}` : '—'}</span>
+              <span style={{ fontSize: 13.5, color: 'var(--text)', flex: 1, fontWeight: seeded ? 700 : 400 }}>{row?.team ?? `Team ${rid}`}</span>
+              <span className="mono" style={{ ...mono, fontSize: 12, color: 'var(--dim)', width: 52, textAlign: 'right' }}>{row ? `${row.wins}-${row.losses}${row.ties ? `-${row.ties}` : ''}` : ''}</span>
+              <span className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', width: 64, textAlign: 'right' }}>{row ? `PF ${Number(row.pf).toFixed(0)}` : ''}</span>
               {!st.underway && <>
                 <button onClick={() => moveSeed(i, -1)} className="mono" style={{ ...linkBtn, padding: '0 3px' }}>↑</button>
                 <button onClick={() => moveSeed(i, 1)} className="mono" style={{ ...linkBtn, padding: '0 3px' }}>↓</button>
@@ -3008,7 +3008,7 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
             </div>
           );
         })}
-        <div className="mono" style={{ ...mono, fontSize: 9, color: 'var(--faint)', marginTop: 6 }}>
+        <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6 }}>
           {st.underway ? 'Seeds locked into the bracket.'
             : `Top ${teams} make the playoffs — everyone else starts on the consolation ladder. Use ↑↓ to override the seeding before generating.`}
         </div>

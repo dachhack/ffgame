@@ -22,10 +22,10 @@ import { ModalBackdrop, Img } from './ui';
 
 const FLAG_PURPLE = '#A87BD8';
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, width: '100%', maxWidth: 420, maxHeight: '80vh', overflowY: 'auto', boxSizing: 'border-box' };
-const input: React.CSSProperties = { fontFamily: 'inherit', fontSize: 13, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '9px 11px', outline: 'none', width: '100%', boxSizing: 'border-box' };
-const btn: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 3, padding: '9px 14px', cursor: 'pointer', whiteSpace: 'nowrap' };
+const input: React.CSSProperties = { fontFamily: 'inherit', fontSize: 15, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '9px 11px', outline: 'none', width: '100%', boxSizing: 'border-box' };
+const btn: React.CSSProperties = { fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 3, padding: '9px 14px', cursor: 'pointer', whiteSpace: 'nowrap' };
 const ghostBtn: React.CSSProperties = { ...btn, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)' };
-const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer', padding: '2px 4px' };
+const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 12.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer', padding: '2px 4px' };
 
 const prettify = (slug: string) =>
   slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
@@ -59,7 +59,7 @@ export function CommishNoteBanner() {
   return (
     <div className="mono" style={{ marginTop: 7, display: 'flex', justifyContent: 'flex-end' }}>
       <span title="commissioner scoring adjustments in force — every matchup in this league scores with these"
-        style={{ fontWeight: 700, fontSize: 9.5, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 7px' }}>
+        style={{ fontWeight: 700, fontSize: 12, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 7px' }}>
         ⚖ {scoringLabel(liveScoring)}
       </span>
     </div>
@@ -88,25 +88,25 @@ export function CommishToolsPanel({ leagueId }: { leagueId: string }) {
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
 
   const section: React.CSSProperties = { border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' };
-  const sHdr: React.CSSProperties = { fontSize: 9, letterSpacing: '0.12em', color: FLAG_PURPLE, fontWeight: 700, flex: 'none' };
+  const sHdr: React.CSSProperties = { fontSize: 11.5, letterSpacing: '0.12em', color: FLAG_PURPLE, fontWeight: 700, flex: 'none' };
   const editBtn = (tool: 'note' | 'flags', label: string) => (
-    <button onClick={() => setOpenTool(tool)} className="mono" style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9, marginLeft: 'auto', flex: 'none' }}>{label}</button>
+    <button onClick={() => setOpenTool(tool)} className="mono" style={{ ...ghostBtn, padding: '5px 10px', fontSize: 11.5, marginLeft: 'auto', flex: 'none' }}>{label}</button>
   );
   return (
     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.5 }}>
+      <div className="mono" style={{ fontSize: 11.5, color: 'var(--faint)', lineHeight: 1.5 }}>
         The commissioner's kit — the same tools as the live board's ⚑ banner. Everything here is league-visible; scoring and flag rules apply from the worker's next tick.
       </div>
       <div style={section}>
         <span className="mono" style={sHdr}>⚑ LEAGUE NOTE</span>
-        <span className="mono" style={{ fontSize: 10.5, color: note?.text ? 'var(--text)' : 'var(--faint)', flex: '1 1 200px', minWidth: 0, whiteSpace: 'pre-wrap' }}>
+        <span className="mono" style={{ fontSize: 13, color: note?.text ? 'var(--text)' : 'var(--faint)', flex: '1 1 200px', minWidth: 0, whiteSpace: 'pre-wrap' }}>
           {note == null ? 'loading…' : note.text ?? 'nothing posted'}
         </span>
         {editBtn('note', note?.text ? '✎ EDIT' : '✎ WRITE')}
       </div>
       <div style={section}>
         <span className="mono" style={sHdr}>⚑ PLAYER FLAGS</span>
-        <span className="mono" style={{ fontSize: 10.5, color: flags?.length ? 'var(--text)' : 'var(--faint)', flex: '1 1 200px', minWidth: 0 }}>
+        <span className="mono" style={{ fontSize: 13, color: flags?.length ? 'var(--text)' : 'var(--faint)', flex: '1 1 200px', minWidth: 0 }}>
           {flags == null ? 'loading…'
             : flags.length === 0 ? 'none'
             : flags.slice(0, 4).map((f) => `${prettify(f.slug)} (${f.label}${ruleGlyphs(f.rules) ? ` ${ruleGlyphs(f.rules)}` : ''})`).join(' · ') + (flags.length > 4 ? ` · +${flags.length - 4} more` : '')}
@@ -121,10 +121,10 @@ export function CommishToolsPanel({ leagueId }: { leagueId: string }) {
       {scoring && !scoringIsDefault(scoring) && (
         <div style={section}>
           <span className="mono" style={sHdr}>⚖ SCORING</span>
-          <span className="mono" style={{ fontSize: 10.5, color: 'var(--warn)', flex: '1 1 200px', minWidth: 0 }}>
+          <span className="mono" style={{ fontSize: 13, color: 'var(--warn)', flex: '1 1 200px', minWidth: 0 }}>
             {scoringLabel(scoring)}
           </span>
-          <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginLeft: 'auto', flex: 'none' }}>edit under ⚖ SCORING → ADJUSTMENTS</span>
+          <span className="mono" style={{ fontSize: 11.5, color: 'var(--faint)', marginLeft: 'auto', flex: 'none' }}>edit under ⚖ SCORING → ADJUSTMENTS</span>
         </div>
       )}
       {openTool === 'note' && note && (
@@ -197,12 +197,12 @@ export function ScoringEditor({ leagueId, initial, onDone, onClose, inline = fal
   const stepper = (label: string, hint: string, v: number, set: (n: number) => void,
     b: { min: number; max: number; step: number }, fmt: (n: number) => string) => (
     <div style={{ marginTop: 12 }}>
-      <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700 }}>{label}</div>
+      <div className="mono" style={{ fontSize: 11.5, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700 }}>{label}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
         <button onClick={() => set(Math.round(Math.max(b.min, v - b.step) * 10) / 10)} className="mono" style={{ ...ghostBtn, padding: '6px 12px' }}>−</button>
-        <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', minWidth: 52, textAlign: 'center' }}>{fmt(v)}</span>
+        <span className="grotesk" style={{ fontSize: 18.5, fontWeight: 700, color: 'var(--text)', minWidth: 52, textAlign: 'center' }}>{fmt(v)}</span>
         <button onClick={() => set(Math.round(Math.min(b.max, v + b.step) * 10) / 10)} className="mono" style={{ ...ghostBtn, padding: '6px 12px' }}>＋</button>
-        <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.4, flex: 1 }}>{hint}</span>
+        <span className="mono" style={{ fontSize: 11.5, color: 'var(--faint)', lineHeight: 1.4, flex: 1 }}>{hint}</span>
       </div>
     </div>
   );
@@ -217,8 +217,8 @@ export function ScoringEditor({ leagueId, initial, onDone, onClose, inline = fal
     ));
   return (
     <Shell>
-        {!inline && <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>⚖ League scoring</div>}
-        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 4, lineHeight: 1.5 }}>
+        {!inline && <div className="grotesk" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--text)' }}>⚖ League scoring</div>}
+        <div className="mono" style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 4, lineHeight: 1.5 }}>
           Adjustments layer on the base game — the metric catalog stays as written; these apply on top, to every matchup in this league. Every member sees them on their board. Changing them mid-week changes how the current week scores from the next tick.
         </div>
         {stepper('TD BONUS', 'extra points on every touchdown your players score (defensive TDs included)', td, setTd, SCORING_BOUNDS.tdBonus, (n) => `${n > 0 ? '+' : ''}${n}`)}
@@ -227,13 +227,13 @@ export function ScoringEditor({ leagueId, initial, onDone, onClose, inline = fal
 
         {/* SCOPED BONUSES (0145): the founder's "team, position, tenure"
             filters — rules that pay only players matching the scope. */}
-        <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginTop: 16, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>SCOPED BONUSES</div>
-        <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
+        <div className="mono" style={{ fontSize: 11.5, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginTop: 16, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>SCOPED BONUSES</div>
+        <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
           Bonuses for players matching a position / team / tenure scope. Rules stack — multipliers multiply, points sum.
         </div>
         {scoped.map((r, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--bd)' }}>
-            <span className="mono" style={{ fontSize: 10, color: 'var(--warn)', fontWeight: 700, flex: 1, minWidth: 0 }}>⚖ {scopedRuleLabel(r)}</span>
+            <span className="mono" style={{ fontSize: 12.5, color: 'var(--warn)', fontWeight: 700, flex: 1, minWidth: 0 }}>⚖ {scopedRuleLabel(r)}</span>
             <button onClick={() => setScoped(scoped.filter((_, j) => j !== i))} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>✕</button>
           </div>
         ))}
@@ -242,42 +242,42 @@ export function ScoringEditor({ leagueId, initial, onDone, onClose, inline = fal
             const on = dPos.has(p);
             return (
               <button key={p} onClick={() => setDPos((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; })} className="mono"
-                style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}` }}>{p}</button>
+                style={{ fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}` }}>{p}</button>
             );
           })}
           <select value={dTeam} onChange={(e) => setDTeam(e.target.value)} className="mono"
-            style={{ fontSize: 9.5, background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, padding: '3px 6px' }}>
+            style={{ fontSize: 12, background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, padding: '3px 6px' }}>
             <option value="ALL">ANY TEAM</option>
             {ALL_TEAMS.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
           {TENURES.map((t) => (
             <button key={t.id} onClick={() => setDTen(dTen === t.id ? 'ALL' : t.id)} className="mono"
-              style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: dTen === t.id ? 'var(--on-accent)' : 'var(--dim)', background: dTen === t.id ? 'var(--warn)' : 'var(--bg)', border: `1px solid ${dTen === t.id ? 'var(--warn)' : 'var(--bd)'}` }}>{t.label}</button>
+              style={{ fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: dTen === t.id ? 'var(--on-accent)' : 'var(--dim)', background: dTen === t.id ? 'var(--warn)' : 'var(--bg)', border: `1px solid ${dTen === t.id ? 'var(--warn)' : 'var(--bd)'}` }}>{t.label}</button>
           ))}
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 7 }}>
-          <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>PTS ×</span>
+          <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>PTS ×</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <button onClick={() => setDMult(Math.round(Math.max(0.5, dMult - 0.1) * 10) / 10)} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>−</button>
-            <span className="mono" style={{ fontSize: 10, fontWeight: 700, minWidth: 30, textAlign: 'center', color: dMult !== 1 ? 'var(--warn)' : 'var(--dim)' }}>×{dMult}</span>
-            <button onClick={() => setDMult(Math.round(Math.min(3, dMult + 0.1) * 10) / 10)} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>＋</button>
+            <button onClick={() => setDMult(Math.round(Math.max(0.5, dMult - 0.1) * 10) / 10)} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 11.5 }}>−</button>
+            <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, minWidth: 30, textAlign: 'center', color: dMult !== 1 ? 'var(--warn)' : 'var(--dim)' }}>×{dMult}</span>
+            <button onClick={() => setDMult(Math.round(Math.min(3, dMult + 0.1) * 10) / 10)} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 11.5 }}>＋</button>
           </span>
-          <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>BONUS</span>
+          <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>BONUS</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <button onClick={() => setDPts(Math.round(Math.max(-10, dPts - 0.5) * 10) / 10)} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>−</button>
-            <span className="mono" style={{ fontSize: 10, fontWeight: 700, minWidth: 26, textAlign: 'center', color: dPts !== 0 ? 'var(--warn)' : 'var(--dim)' }}>{dPts > 0 ? '+' : ''}{dPts}</span>
-            <button onClick={() => setDPts(Math.round(Math.min(10, dPts + 0.5) * 10) / 10)} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>＋</button>
+            <button onClick={() => setDPts(Math.round(Math.max(-10, dPts - 0.5) * 10) / 10)} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 11.5 }}>−</button>
+            <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, minWidth: 26, textAlign: 'center', color: dPts !== 0 ? 'var(--warn)' : 'var(--dim)' }}>{dPts > 0 ? '+' : ''}{dPts}</span>
+            <button onClick={() => setDPts(Math.round(Math.min(10, dPts + 0.5) * 10) / 10)} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 11.5 }}>＋</button>
           </span>
-          <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>TD</span>
+          <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>TD</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <button onClick={() => setDTd(Math.max(-3, dTd - 1))} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>−</button>
-            <span className="mono" style={{ fontSize: 10, fontWeight: 700, minWidth: 26, textAlign: 'center', color: dTd !== 0 ? 'var(--warn)' : 'var(--dim)' }}>{dTd > 0 ? '+' : ''}{dTd}</span>
-            <button onClick={() => setDTd(Math.min(6, dTd + 1))} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>＋</button>
+            <button onClick={() => setDTd(Math.max(-3, dTd - 1))} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 11.5 }}>−</button>
+            <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, minWidth: 26, textAlign: 'center', color: dTd !== 0 ? 'var(--warn)' : 'var(--dim)' }}>{dTd > 0 ? '+' : ''}{dTd}</span>
+            <button onClick={() => setDTd(Math.min(6, dTd + 1))} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 11.5 }}>＋</button>
           </span>
-          <button onClick={addRule} className="mono" style={{ ...ghostBtn, padding: '4px 10px', fontSize: 9 }}>＋ ADD RULE</button>
+          <button onClick={addRule} className="mono" style={{ ...ghostBtn, padding: '4px 10px', fontSize: 11.5 }}>＋ ADD RULE</button>
         </div>
 
-        {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 10 }}>{err}</div>}
+        {err && <div className="mono" style={{ fontSize: 12.5, color: 'var(--opp)', marginTop: 10 }}>{err}</div>}
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
           <button onClick={() => save(td, yd, to)} disabled={busy} className="mono" style={{ ...btn, flex: 1, opacity: busy ? 0.5 : 1 }}>SAVE</button>
           <button onClick={() => save(DEFAULT_SCORING.tdBonus, DEFAULT_SCORING.ydMult, DEFAULT_SCORING.toPenalty, [])} disabled={busy} className="mono" style={{ ...ghostBtn }}>RESET TO BASE</button>
@@ -306,14 +306,14 @@ function NoteEditor({ leagueId, initial, onDone, onClose }: {
   return (
     <ModalBackdrop onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={card}>
-        <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>⚑ League note</div>
-        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 4, lineHeight: 1.5 }}>
+        <div className="grotesk" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--text)' }}>⚑ League note</div>
+        <div className="mono" style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 4, lineHeight: 1.5 }}>
           One standing announcement, shown to every member on their board. Saving replaces the old note.
         </div>
         <textarea value={draft} autoFocus maxLength={500} rows={4} onChange={(e) => setDraft(e.target.value)}
           placeholder="e.g. Practice week is open — set your boards by Friday 6PM ET."
           style={{ ...input, marginTop: 10, resize: 'vertical', fontFamily: 'inherit' }} />
-        {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8 }}>{err}</div>}
+        {err && <div className="mono" style={{ fontSize: 12.5, color: 'var(--opp)', marginTop: 8 }}>{err}</div>}
         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
           <button onClick={() => save(draft)} disabled={busy || !draft.trim()} className="mono" style={{ ...btn, flex: 1, opacity: busy || !draft.trim() ? 0.5 : 1 }}>SAVE NOTE</button>
           {initial && <button onClick={() => save(null)} disabled={busy} className="mono" style={{ ...ghostBtn, color: 'var(--opp)' }}>CLEAR</button>}
@@ -361,9 +361,9 @@ export const autoLabel = (r?: FlagRulesRaw | null): string | null => {
 function RuleControls({ draft, set }: { draft: FlagRulesRaw; set: (r: FlagRulesRaw) => void }) {
   const mini = (v: number, dflt: number, min: number, max: number, step: number, key: 'bonus_mult' | 'bonus_pts', fmt: (n: number) => string) => (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-      <button onClick={() => set({ ...draft, [key]: Math.round(Math.max(min, v - step) * 10) / 10 })} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>−</button>
-      <span className="mono" style={{ fontSize: 10, fontWeight: 700, minWidth: 30, textAlign: 'center', color: v !== dflt ? 'var(--warn)' : 'var(--dim)' }}>{fmt(v)}</span>
-      <button onClick={() => set({ ...draft, [key]: Math.round(Math.min(max, v + step) * 10) / 10 })} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 9 }}>＋</button>
+      <button onClick={() => set({ ...draft, [key]: Math.round(Math.max(min, v - step) * 10) / 10 })} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 11.5 }}>−</button>
+      <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, minWidth: 30, textAlign: 'center', color: v !== dflt ? 'var(--warn)' : 'var(--dim)' }}>{fmt(v)}</span>
+      <button onClick={() => set({ ...draft, [key]: Math.round(Math.min(max, v + step) * 10) / 10 })} className="mono" style={{ ...ghostBtn, padding: '2px 7px', fontSize: 11.5 }}>＋</button>
     </span>
   );
   return (
@@ -372,14 +372,14 @@ function RuleControls({ draft, set }: { draft: FlagRulesRaw; set: (r: FlagRulesR
         const on = draft[d.key] === true;
         return (
           <button key={d.key} onClick={() => set({ ...draft, [d.key]: on ? undefined : true })} title={d.hint} className="mono"
-            style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? FLAG_PURPLE : 'var(--bg)', border: `1px solid ${on ? FLAG_PURPLE : 'var(--bd)'}` }}>
+            style={{ fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? FLAG_PURPLE : 'var(--bg)', border: `1px solid ${on ? FLAG_PURPLE : 'var(--bd)'}` }}>
             {d.label}
           </button>
         );
       })}
-      <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>PTS ×</span>
+      <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>PTS ×</span>
       {mini(draft.bonus_mult ?? 1, 1, 0.5, 3, 0.1, 'bonus_mult', (n) => `×${n}`)}
-      <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>BONUS</span>
+      <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>BONUS</span>
       {mini(draft.bonus_pts ?? 0, 0, -10, 10, 0.5, 'bonus_pts', (n) => `${n > 0 ? '+' : ''}${n}`)}
     </div>
   );
@@ -476,9 +476,9 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
         <div style={{ display: 'flex', gap: 6 }}>
           <input value={labelDraft} autoFocus maxLength={40} onChange={(e) => setLabelDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && effective) void save(slug, effective, rulesDraft); if (e.key === 'Escape') setLabelFor(null); }}
-            placeholder="keeper · out for season · ineligible…" style={{ ...input, padding: '5px 8px', fontSize: 11 }} />
+            placeholder="keeper · out for season · ineligible…" style={{ ...input, padding: '5px 8px', fontSize: 13.5 }} />
           <button onClick={() => effective && void save(slug, effective, rulesDraft)} disabled={busy || !effective}
-            className="mono" style={{ ...btn, padding: '5px 10px', fontSize: 9 }}>SET</button>
+            className="mono" style={{ ...btn, padding: '5px 10px', fontSize: 11.5 }}>SET</button>
         </div>
         <RuleControls draft={rulesDraft} set={setRulesDraft} />
       </div>
@@ -489,21 +489,21 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
     <ModalBackdrop onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ ...card, maxWidth: 470 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', flex: 1 }}>⚑ Player flags</div>
-          <button onClick={() => { setBulk((v) => !v); setSelected(new Set()); setLabelFor(null); }} className="mono" style={{ ...ghostBtn, padding: '4px 9px', fontSize: 9, color: bulk ? 'var(--warn)' : 'var(--text)' }}>
+          <div className="grotesk" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--text)', flex: 1 }}>⚑ Player flags</div>
+          <button onClick={() => { setBulk((v) => !v); setSelected(new Set()); setLabelFor(null); }} className="mono" style={{ ...ghostBtn, padding: '4px 9px', fontSize: 11.5, color: bulk ? 'var(--warn)' : 'var(--text)' }}>
             {bulk ? '✓ BULK ON' : '⧉ BULK'}
           </button>
         </div>
-        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 4, lineHeight: 1.5 }}>
+        <div className="mono" style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 4, lineHeight: 1.5 }}>
           A label the whole league sees — and RULES that bite: block trades/adds/starts/powerups, grant immunity, or pay a scoring bonus (docs in the chip tooltips). Rules apply from the next tick.
         </div>
         {/* bulk errors render at the BUTTON, not up here — up here they sit
             scrolled out of view above a 500-row list, and a click that only
             writes an invisible error reads as a dead button. */}
-        {!bulk && err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8 }}>{err}</div>}
+        {!bulk && err && <div className="mono" style={{ fontSize: 12.5, color: 'var(--opp)', marginTop: 8 }}>{err}</div>}
 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 12 }}>
-          <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700 }}>CURRENT FLAGS</div>
+          <div className="mono" style={{ fontSize: 11.5, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700 }}>CURRENT FLAGS</div>
           {(rows?.length ?? 0) > 1 && (
             <button disabled={busy}
               onClick={() => { if (window.confirm(`Remove all ${rows!.length} flags from this league?`)) void unflag(rows!.map((f) => f.slug)); }}
@@ -512,23 +512,23 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
             </button>
           )}
         </div>
-        {rows == null && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 6 }}>Loading…</div>}
-        {rows?.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 6 }}>None yet.</div>}
+        {rows == null && <div className="mono" style={{ fontSize: 12.5, color: 'var(--faint)', marginTop: 6 }}>Loading…</div>}
+        {rows?.length === 0 && <div className="mono" style={{ fontSize: 12.5, color: 'var(--faint)', marginTop: 6 }}>None yet.</div>}
         {rows?.map((f) => (
           <div key={f.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--bd)', flexWrap: 'wrap' }}>
-            <Img src={headshot(f.slug)} size={22} radius={11} fallback={<span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>?</span>} />
-            <span style={{ fontSize: 12, color: 'var(--text)', flex: 'none' }}>{prettify(f.slug)}</span>
+            <Img src={headshot(f.slug)} size={22} radius={11} fallback={<span className="mono" style={{ fontSize: 11.5, color: 'var(--faint)' }}>?</span>} />
+            <span style={{ fontSize: 14, color: 'var(--text)', flex: 'none' }}>{prettify(f.slug)}</span>
             {labelFor === f.slug
               ? labelInput(f.slug)
               : <>
-                  <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: FLAG_PURPLE, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>⚑ {f.label}{ruleGlyphs(f.rules) ? ` · ${ruleGlyphs(f.rules)}` : ''}</span>
+                  <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: FLAG_PURPLE, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>⚑ {f.label}{ruleGlyphs(f.rules) ? ` · ${ruleGlyphs(f.rules)}` : ''}</span>
                   <button onClick={() => { setLabelFor(f.slug); setLabelDraft(f.label); setRulesDraft(f.rules ?? {}); }} className="mono" style={linkBtn}>✎</button>
                   <button onClick={() => void save(f.slug, null)} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>✕</button>
                 </>}
           </div>
         ))}
 
-        <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginTop: 14 }}>
+        <div className="mono" style={{ fontSize: 11.5, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginTop: 14 }}>
           {bulk ? `FLAG MANY — ${selected.size} SELECTED` : 'FLAG A PLAYER'}
         </div>
         <input value={q} onChange={(e) => { setQ(e.target.value); if (!bulk) setLabelFor(null); }} placeholder="search any NFL player…" style={{ ...input, marginTop: 6 }} />
@@ -536,24 +536,24 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginTop: 7 }}>
             {['ALL', ...FILTER_POS].map((p) => (
               <button key={p} onClick={() => setFPos(p)} className="mono"
-                style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: fPos === p ? 'var(--on-accent)' : 'var(--dim)', background: fPos === p ? 'var(--you)' : 'var(--bg)', border: `1px solid ${fPos === p ? 'var(--you)' : 'var(--bd)'}` }}>{p}</button>
+                style={{ fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: fPos === p ? 'var(--on-accent)' : 'var(--dim)', background: fPos === p ? 'var(--you)' : 'var(--bg)', border: `1px solid ${fPos === p ? 'var(--you)' : 'var(--bd)'}` }}>{p}</button>
             ))}
             <select value={fTeam} onChange={(e) => setFTeam(e.target.value)} className="mono"
-              style={{ fontSize: 9.5, background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, padding: '3px 6px' }}>
+              style={{ fontSize: 12, background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, padding: '3px 6px' }}>
               <option value="ALL">ALL TEAMS</option>
               {ALL_TEAMS.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
             {TENURES.map((t) => (
               <button key={t.id} onClick={() => setFTen(fTen === t.id ? 'ALL' : t.id)} className="mono"
-                style={{ fontSize: 8.5, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: fTen === t.id ? 'var(--on-accent)' : 'var(--dim)', background: fTen === t.id ? 'var(--warn)' : 'var(--bg)', border: `1px solid ${fTen === t.id ? 'var(--warn)' : 'var(--bd)'}` }}>{t.label}</button>
+                style={{ fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: fTen === t.id ? 'var(--on-accent)' : 'var(--dim)', background: fTen === t.id ? 'var(--warn)' : 'var(--bg)', border: `1px solid ${fTen === t.id ? 'var(--warn)' : 'var(--bd)'}` }}>{t.label}</button>
             ))}
             {matches.length > 0 && (
-              <button onClick={() => setSelected(new Set(matches))} className="mono" style={{ ...ghostBtn, padding: '3px 9px', fontSize: 8.5 }}>
+              <button onClick={() => setSelected(new Set(matches))} className="mono" style={{ ...ghostBtn, padding: '3px 9px', fontSize: 11 }}>
                 ☑ SELECT ALL {matches.length}
               </button>
             )}
             {selected.size > 0 && (
-              <button onClick={() => setSelected(new Set())} className="mono" style={{ ...linkBtn, fontSize: 8.5 }}>clear</button>
+              <button onClick={() => setSelected(new Set())} className="mono" style={{ ...linkBtn, fontSize: 11 }}>clear</button>
             )}
           </div>
         )}
@@ -563,20 +563,20 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
               <input type="checkbox" checked={selected.has(slug)}
                 onChange={() => setSelected((cur) => { const n = new Set(cur); if (n.has(slug)) n.delete(slug); else n.add(slug); return n; })} />
             )}
-            <Img src={headshot(slug)} size={22} radius={11} fallback={<span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>?</span>} />
-            <span style={{ fontSize: 12, color: 'var(--text)', flex: !bulk && labelFor === slug ? 'none' : 1 }}>{prettify(slug)}</span>
+            <Img src={headshot(slug)} size={22} radius={11} fallback={<span className="mono" style={{ fontSize: 11.5, color: 'var(--faint)' }}>?</span>} />
+            <span style={{ fontSize: 14, color: 'var(--text)', flex: !bulk && labelFor === slug ? 'none' : 1 }}>{prettify(slug)}</span>
             {!bulk && (labelFor === slug
               ? labelInput(slug)
-              : <button onClick={() => { setLabelFor(slug); setLabelDraft(''); setRulesDraft({}); }} className="mono" style={{ ...ghostBtn, padding: '4px 9px', fontSize: 9 }}>⚑ FLAG</button>)}
+              : <button onClick={() => { setLabelFor(slug); setLabelDraft(''); setRulesDraft({}); }} className="mono" style={{ ...ghostBtn, padding: '4px 9px', fontSize: 11.5 }}>⚑ FLAG</button>)}
           </div>
         ))}
         {q.trim().length >= 2 && matches.length === 0 && (
-          <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 6 }}>No player matches that.</div>
+          <div className="mono" style={{ fontSize: 12.5, color: 'var(--faint)', marginTop: 6 }}>No player matches that.</div>
         )}
         {bulk && (
           <div style={{ marginTop: 10, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
             <input value={labelDraft} maxLength={40} onChange={(e) => setLabelDraft(e.target.value)}
-              placeholder="label — leave empty and the rules name it…" style={{ ...input, fontSize: 11 }} />
+              placeholder="label — leave empty and the rules name it…" style={{ ...input, fontSize: 13.5 }} />
             <RuleControls draft={rulesDraft} set={setRulesDraft} />
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               <button onClick={() => void saveBulk()} disabled={busy || !selected.size}
@@ -589,13 +589,13 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
                 ✕ UNFLAG
               </button>
             </div>
-            {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 5, lineHeight: 1.4 }}>{err}</div>}
+            {err && <div className="mono" style={{ fontSize: 12.5, color: 'var(--opp)', marginTop: 5, lineHeight: 1.4 }}>{err}</div>}
             {!labelDraft.trim() && selected.size > 0 && (
               autoLabel(rulesDraft)
-                ? <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 5, lineHeight: 1.4 }}>
+                ? <div className="mono" style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 5, lineHeight: 1.4 }}>
                     no label — the flag will read “{autoLabel(rulesDraft)}”
                   </div>
-                : <div className="mono" style={{ fontSize: 9, color: 'var(--warn)', marginTop: 5, lineHeight: 1.4 }}>
+                : <div className="mono" style={{ fontSize: 11.5, color: 'var(--warn)', marginTop: 5, lineHeight: 1.4 }}>
                     ↑ give it a label or a rule — the label is what the league sees on every flagged player’s chip
                   </div>
             )}
