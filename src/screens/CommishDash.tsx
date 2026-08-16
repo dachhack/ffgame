@@ -120,6 +120,28 @@ function LastSeenCard({ leagueId }: { leagueId: string }) {
 // Normie mode (0157): DRIP ⇄ CLASSIC, plus the PPR knob while classic. Frozen
 // once the draft starts — the server refuses and the card says why. CLASSIC
 // only appears where the founder has flagged it available (0158).
+// A builder spot's local draft row: pos/bb plus the PER-SLOT player filter
+// (0172) as raw input strings, so partial typing never fights the keyboard.
+type SpotDraft = { pos: string[]; bb?: boolean; fTeams: string; fMin: string; fMax: string };
+const toSpotDraft = (x: SlotSpec): SpotDraft => ({
+  pos: [...x.pos], bb: !!x.bb,
+  fTeams: (x.teams ?? []).join(', '),
+  fMin: x.min_exp != null ? String(x.min_exp) : '',
+  fMax: x.max_exp != null ? String(x.max_exp) : '',
+});
+const fromSpotDraft = (s: SpotDraft): SlotSpec => {
+  const teams = s.fTeams.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
+  const mn = s.fMin.trim() === '' ? null : Number(s.fMin);
+  const mx = s.fMax.trim() === '' ? null : Number(s.fMax);
+  return {
+    pos: s.pos, bb: s.bb,
+    ...(teams.length ? { teams } : {}),
+    ...(mn != null && Number.isFinite(mn) ? { min_exp: mn } : {}),
+    ...(mx != null && Number.isFinite(mx) ? { max_exp: mx } : {}),
+  };
+};
+const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim());
+
 function GameModeCard({ leagueId }: { leagueId: string }) {
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
   const [ppr, setPpr] = useState(1);
@@ -128,8 +150,10 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
   // locally, one SAVE writes the whole spec. Initialized from the stored spec,
   // or derived from the 0161 counts + best-ball names so a legacy league's
   // first SAVE migrates it to the builder model losslessly.
-  const [spots, setSpots] = useState<SlotSpec[] | null>(null);
+  const [spots, setSpots] = useState<SpotDraft[] | null>(null);
   const [spotsDirty, setSpotsDirty] = useState(false);
+  // Which spot's PER-SLOT filter editor (0172) is open.
+  const [fltOpen, setFltOpen] = useState<number | null>(null);
   // BENCH/TAXI/IR (0164) — with the derived draft-rounds readout.
   const [shape, setShape] = useState<{ bench: number; taxi: number; ir: number }>({ bench: 6, taxi: 0, ir: 0 });
   const [rounds, setRounds] = useState<number | null>(null);
@@ -153,8 +177,8 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
     leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); scInit(r.scoring ?? {});
       const legacy = classicSlots(r.roster && Object.keys(r.roster).length ? r.roster : null);
       setSpots(r.slots?.length
-        ? r.slots.map((x) => ({ pos: [...x.pos], bb: !!x.bb }))
-        : legacy.map((d) => ({ pos: [...d.pos], bb: (r.bestball ?? []).includes(d.slot) })));
+        ? r.slots.map(toSpotDraft)
+        : legacy.map((d) => toSpotDraft({ pos: [...d.pos], bb: (r.bestball ?? []).includes(d.slot) })));
       setSpotsDirty(false);
       if (r.shape) setShape({ bench: r.shape.bench ?? 6, taxi: r.shape.taxi ?? 0, ir: r.shape.ir ?? 0 });
       setRounds(r.rounds ?? null);
@@ -202,8 +226,8 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
     if (busy || !spots || !spots.length) return;
     setBusy(true); setNote(null);
     try {
-      const r = await setLeagueClassicSlots(leagueId, spots);
-      if (r.ok) { setSpots((r.slots ?? spots).map((x) => ({ pos: [...x.pos], bb: !!x.bb }))); setSpotsDirty(false); setNote('✓ lineup saved'); }
+      const r = await setLeagueClassicSlots(leagueId, spots.map(fromSpotDraft));
+      if (r.ok) { setSpots(r.slots ? r.slots.map(toSpotDraft) : spots); setSpotsDirty(false); setNote('✓ lineup saved'); }
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
@@ -281,18 +305,37 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
                 <button disabled={busy} title="Best ball: this spot fills itself with the top scorer"
                   onClick={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, bb: !x.bb })); setSpotsDirty(true); }}
                   className="mono" style={{ ...pill(!!sp.bb), padding: '3px 8px', fontSize: 8.5 }}>🎯 BB</button>
+                <button disabled={busy} title="Per-spot player filter: only these teams / this tenure window may fill the spot"
+                  onClick={() => setFltOpen((cur) => cur === i ? null : i)}
+                  className="mono" style={{ ...pill(spotHasFlt(sp)), padding: '3px 8px', fontSize: 8.5 }}>🔎</button>
                 <button disabled={busy || spots.length <= 1} title="Remove this spot"
                   onClick={() => { setSpots((cur) => cur!.filter((_, j) => j !== i)); setSpotsDirty(true); }}
                   className="mono" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--opp)', fontSize: 11, padding: '0 3px' }}>✕</button>
+                {/* PER-SLOT FILTER (0172): who may FILL this spot — teams and/or a
+                    tenure window (0 = rookie). Never shrinks the draft pool. */}
+                {fltOpen === i && (
+                  <div style={{ flexBasis: '100%', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                    <input value={sp.fTeams} onChange={(e) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fTeams: e.target.value })); setSpotsDirty(true); }}
+                      placeholder="teams (e.g. KC, SF) — empty = all"
+                      className="mono" style={{ fontFamily: 'inherit', fontSize: 9.5, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, flex: '1 1 160px' }} />
+                    <input value={sp.fMin} onChange={(e) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fMin: e.target.value })); setSpotsDirty(true); }}
+                      placeholder="min yrs" inputMode="numeric"
+                      className="mono" style={{ fontFamily: 'inherit', fontSize: 9.5, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, width: 58 }} />
+                    <input value={sp.fMax} onChange={(e) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fMax: e.target.value })); setSpotsDirty(true); }}
+                      placeholder="max yrs" inputMode="numeric"
+                      className="mono" style={{ fontFamily: 'inherit', fontSize: 9.5, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, width: 58 }} />
+                    <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>rookies only → max 0 · SAVE LINEUP applies</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
             <button disabled={busy || spots.length >= 20}
-              onClick={() => { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'] }]); setSpotsDirty(true); }}
+              onClick={() => { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'], fTeams: '', fMin: '', fMax: '' }]); setSpotsDirty(true); }}
               className="mono" style={{ ...pill(false), padding: '4px 14px' }}>＋ ADD SPOT</button>
             <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', lineHeight: 1.5 }}>
-              Any position combination per spot · 🎯 BB spots fill themselves with the top scorer · locks once the draft starts.
+              Any position combination per spot · 🎯 BB spots fill themselves with the top scorer · 🔎 limits who may fill the spot (teams / tenure — an RB spot for rookies only) · tenure filters need a pool re-seed so player experience is loaded · locks once the draft starts.
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>

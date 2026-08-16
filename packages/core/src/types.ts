@@ -37,6 +37,7 @@ export interface Player {
   pos: Pos;
   team: string;      // NFL team
   stats: PlayerStats; // per-season totals
+  exp?: number | null; // years of NFL experience (0 = rookie) — set where per-slot filters need it (0172)
 }
 
 export interface Metric {

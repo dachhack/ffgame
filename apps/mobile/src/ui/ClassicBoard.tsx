@@ -6,7 +6,7 @@
 // the same live play stream, refreshed every 60s.
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
-import { leagueSlotDefs, leagueBestball, slotEligiblePos, isRetSlot, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec, type SlotFilter } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
@@ -14,7 +14,7 @@ import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import {
   myMatchup, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
-  leagueGameMode, weekLivePlays, friendlyError, playerFlags,
+  leagueGameMode, weekLivePlays, friendlyError, playerFlags, leaguePoolExp,
   type LiveMatchup, type PoolPlayer, type TeamInfo,
   nativeRosters,
 } from '@drip/core/data/liveApi';
@@ -38,6 +38,16 @@ const fmtLock = (iso: string | null) => {
   catch { return iso; }
 };
 const r1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
+// Short human label for a spot's player filter (0172): "KC/SF · ROOKIES".
+const fltLabel = (f?: SlotFilter | null): string => {
+  if (!f) return '';
+  const parts: string[] = [];
+  if (f.teams?.length) parts.push(f.teams.join('/'));
+  if (f.min_exp != null || f.max_exp != null) {
+    parts.push(f.max_exp === 0 ? 'ROOKIES ONLY' : `${f.min_exp ?? 0}–${f.max_exp ?? '30'} YRS`);
+  }
+  return parts.join(' · ');
+};
 
 export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; leagueId: string; rosterId: number }) {
   const t = useTheme();
@@ -53,6 +63,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // TAXI/IR stashes (0164): stashed players can't start or best-ball fill —
   // the DB refuses them; filtering here keeps the picker and fills honest.
   const [stashed, setStashed] = useState<Set<string>>(new Set());
+  // Tenure by slug (0172) — loaded only when a spot actually filters on it.
+  const [expMap, setExpMap] = useState<Record<string, number>>({});
   const [pool, setPool] = useState<PoolPlayer[]>([]);
   const [oppPool, setOppPool] = useState<PoolPlayer[]>([]);
   const [mine, setMine] = useState<Record<string, string | null>>({});
@@ -74,7 +86,13 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         nativeRosters(leagueId).then((rows) => {
           setStashed(new Set(rows.filter((x) => x.spot && x.spot !== 'active').map((x) => x.slug)));
         }).catch(() => {});
-        leagueGameMode(leagueId).then((gm) => { if (gm.ok) { if (gm.ppr != null) setPpr(Number(gm.ppr)); setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRosterCfg(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); } }).catch(() => {});
+        leagueGameMode(leagueId).then((gm) => {
+          if (gm.ok) { if (gm.ppr != null) setPpr(Number(gm.ppr)); setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRosterCfg(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); }
+          // A spot with a tenure window (0172) needs years_exp from league_pool.
+          if (gm.ok && (gm.slots ?? []).some((s) => s.min_exp != null || s.max_exp != null)) {
+            leaguePoolExp(leagueId).then(setExpMap).catch(() => {});
+          }
+        }).catch(() => {});
         // Flag rules (0144) bite classic scoring (bonus_mult / bonus_pts) and
         // the best-ball fill (no_start) — same cache the drip screens keep.
         playerFlags(leagueId).then((f) => {
@@ -158,7 +176,9 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         if (manual[d.slot]) manualPicks.push({ slot: d.slot, player: mkPlayer(manual[d.slot]!) });
       }
       if (locked && matchup && bb.size) {
-        for (const f of bestballFill(manualPicks, bestball, rosterSlugs.filter((x) => !stashed.has(x)).map(mkPlayer), matchup.week, sc, slotDefs)) out[f.slot] = f.player.id;
+        // exp rides along (0172) so tenure-filtered spots fill honestly.
+        const ros = rosterSlugs.filter((x) => !stashed.has(x)).map((x) => ({ ...mkPlayer(x), exp: expMap[x] ?? null }));
+        for (const f of bestballFill(manualPicks, bestball, ros, matchup.week, sc, slotDefs)) out[f.slot] = f.player.id;
       }
       return out;
     };
@@ -166,7 +186,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       mine: build(mine, pool.map((p) => p.slug)),
       theirs: build(theirs, oppPool.map((p) => p.slug)),
     };
-  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed]);
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap]);
 
   // Only MANUAL starters reserve players; best-ball slots never block the picker.
   const used = useMemo(() => new Set(
@@ -271,13 +291,13 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       {/* Picker */}
       {!locked && pickerSlot && slotDef && (
         <Card>
-          <Mono size={9} tone="faint" weight="700" style={{ marginBottom: 8 }}>SET {pickerSlot} — {slotDef.pos.join(' / ')}</Mono>
+          <Mono size={9} tone="faint" weight="700" style={{ marginBottom: 8 }}>SET {pickerSlot} — {slotDef.pos.join(' / ')}{fltLabel(slotDef.flt) ? ` · ${fltLabel(slotDef.flt)}` : ''}</Mono>
           {mine[pickerSlot] && (
             <Pressable onPress={() => { void assign(pickerSlot, null); }} style={{ paddingVertical: 7 }}>
               <Mono size={10} tone="dim">✕ CLEAR SLOT</Mono>
             </Pressable>
           )}
-          {bench.filter((p) => slotEligiblePos(slotDef.pos).includes(p.pos)).map((p) => (
+          {bench.filter((p) => slotAllows(slotDef, { pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null })).map((p) => (
             <Pressable key={p.slug} onPress={() => { void assign(pickerSlot, p.slug); }}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7 }}>
               <Face slug={p.slug} />

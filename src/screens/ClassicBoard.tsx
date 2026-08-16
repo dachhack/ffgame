@@ -10,14 +10,14 @@
 // stream the drip boards run on, refreshed every 60s.
 import { useEffect, useMemo, useState } from 'react';
 import type { Pos } from '@drip/core/types';
-import { leagueSlotDefs, leagueBestball, slotEligiblePos, isRetSlot, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec, type SlotFilter } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
-  leagueGameMode, weekLivePlays, friendlyError, playerFlags,
+  leagueGameMode, weekLivePlays, friendlyError, playerFlags, leaguePoolExp,
   type LiveMatchup, type PoolPlayer, type TeamInfo,
   nativeRosters,
 } from '@drip/core/data/liveApi';
@@ -40,6 +40,17 @@ const prettySlug = (slug: string): string => {
   return shortName(slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
 };
 
+// Short human label for a spot's player filter (0172): "KC/SF · ROOKIES".
+const fltLabel = (f?: SlotFilter | null): string => {
+  if (!f) return '';
+  const parts: string[] = [];
+  if (f.teams?.length) parts.push(f.teams.join('/'));
+  if (f.min_exp != null || f.max_exp != null) {
+    parts.push(f.max_exp === 0 ? 'ROOKIES ONLY' : `${f.min_exp ?? 0}–${f.max_exp ?? '30'} YRS`);
+  }
+  return parts.join(' · ');
+};
+
 const fmtLock = (iso: string | null) => {
   if (!iso) return 'first kickoff';
   try { return new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
@@ -60,6 +71,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   // TAXI/IR stashes (0164): stashed players can't start or best-ball fill —
   // the DB refuses them; filtering here keeps the picker and fills honest.
   const [stashed, setStashed] = useState<Set<string>>(new Set());
+  // Tenure by slug (0172) — loaded only when a spot actually filters on it.
+  const [expMap, setExpMap] = useState<Record<string, number>>({});
   const [pool, setPool] = useState<PoolPlayer[]>([]);
   const [oppPool, setOppPool] = useState<PoolPlayer[]>([]);
   const [mine, setMine] = useState<Record<string, string | null>>({});
@@ -88,6 +101,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         leagueGameMode(r.leagueId).then((gm) => {
           if (gm.ok && gm.ppr != null) setPpr(Number(gm.ppr));
           if (gm.ok) { setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRoster(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); }
+          // A spot with a tenure window (0172) needs years_exp from league_pool.
+          if (gm.ok && (gm.slots ?? []).some((s) => s.min_exp != null || s.max_exp != null)) {
+            leaguePoolExp(r.leagueId).then(setExpMap).catch(() => {});
+          }
         }).catch(() => {});
         // Flag rules (0144) bite classic scoring (bonus_mult / bonus_pts) and
         // the best-ball fill (no_start) — same cache the drip screens keep.
@@ -174,7 +191,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         if (manual[d.slot]) manualPicks.push({ slot: d.slot, player: mkPlayer(manual[d.slot]!) });
       }
       if (locked && matchup && bb.size) {
-        for (const f of bestballFill(manualPicks, bestball, rosterSlugs.filter((x) => !stashed.has(x)).map(mkPlayer), matchup.week, sc, slotDefs)) out[f.slot] = f.player.id;
+        // exp rides along (0172) so tenure-filtered spots fill honestly.
+        const ros = rosterSlugs.filter((x) => !stashed.has(x)).map((x) => ({ ...mkPlayer(x), exp: expMap[x] ?? null }));
+        for (const f of bestballFill(manualPicks, bestball, ros, matchup.week, sc, slotDefs)) out[f.slot] = f.player.id;
       }
       return out;
     };
@@ -182,7 +201,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
       mine: build(mine, pool.map((p) => p.slug)),
       theirs: build(theirs, oppPool.map((p) => p.slug)),
     };
-  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed]);
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap]);
 
   // Only MANUAL starters reserve players; best-ball slots never block the picker.
   const used = useMemo(() => new Set(
@@ -281,6 +300,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         <div style={card}>
           <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--faint)', marginBottom: 8 }}>
             SET {pickerSlot} — {slotDefs.find((d) => d.slot === pickerSlot)?.pos.join(' / ')}
+            {(() => { const l = fltLabel(slotDefs.find((d) => d.slot === pickerSlot)?.flt); return l ? <span style={{ color: 'var(--you)' }}> · {l}</span> : null; })()}
           </div>
           {mine[pickerSlot] && (
             <button onClick={() => { void assign(pickerSlot, null); }} className="mono"
@@ -288,7 +308,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
               ✕ CLEAR SLOT
             </button>
           )}
-          {bench.filter((p) => slotEligiblePos(slotDefs.find((d) => d.slot === pickerSlot)!.pos).includes(p.pos)).map((p) => (
+          {bench.filter((p) => slotAllows(slotDefs.find((d) => d.slot === pickerSlot)!, { pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null })).map((p) => (
             <button key={p.slug} onClick={() => { void assign(pickerSlot, p.slug); }}
               style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '7px 8px', marginBottom: 2, background: 'none', border: 'none', borderRadius: 6, cursor: 'pointer', color: 'inherit' }}>
               <PlayerImg playerId={p.slug} team={p.team} pos={p.pos as Pos} size={26} />
