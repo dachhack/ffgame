@@ -1,4 +1,4 @@
-// The draft room's SPOT ASSIGNMENT, checked in Node.
+// The classic SPOT ASSIGNMENT and the SPOT LABELS, checked in Node.
 //
 // `assignSpots` decides what the draft room's TEAMS panel shows: each pick
 // against the starting spot it will fill. It lives in check:parity rather
@@ -11,7 +11,13 @@
 // must claim its player before a plain spot takes them, and the general
 // property — no arrangement of these players fills more spots than the one
 // shown. That last one is checked by brute force, not by argument.
-import { assignSpots, slotAllows, slotDisplayName, classicSlotsFromSpec } from '../packages/core/src/engine/classic';
+// The label half is here for the same reason: both hosts print these strings
+// on the lineup setter and the draft panel, and a spot that READS differently
+// than it BEHAVES is the bug the 0174 label was one edit away from causing.
+import {
+  assignSpots, slotAllows, slotDisplayName, slotDisplayNames, slotAcceptsLabel, slotFilterLabel,
+  classicSlotsFromSpec, classicSlots,
+} from '../packages/core/src/engine/classic';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -171,6 +177,45 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
     if (filled(a) !== max) { worst = { why: `filled ${filled(a)}, best possible ${max}`, spec, players }; break; }
   }
   ok(`no arrangement fills more spots (${cases} random shapes, brute-forced)`, worst === null, worst);
+}
+
+// ── The labels a manager reads on the lineup setter ─────────────────────────
+{
+  const s = spots({ pos: ['RB'] }, { pos: ['RB'] }, { pos: ['QB'] }, { pos: ['RB', 'WR', 'TE'] });
+  ok('repeated spots are numbered so you know which row you are setting',
+    JSON.stringify(slotDisplayNames(s)) === JSON.stringify(['RB 1', 'RB 2', 'QB', 'FLEX (RB/WR/TE)']), slotDisplayNames(s));
+  ok('a spot that appears once is NOT numbered', slotDisplayNames(spots({ pos: ['QB'] }))[0] === 'QB');
+  // The counts model already generated RB1/RB2 — those must not become "RB1 1".
+  const counted = classicSlots({ QB: 1, RB: 2 }).map((d) => d.slot);
+  ok('the counts model keeps its own generated names', JSON.stringify(counted) === JSON.stringify(['QB', 'RB1', 'RB2']), counted);
+  // Custom labels are disambiguated the same way — two "FLAG SPOT"s are two rows.
+  const dup = spots({ pos: ['WR'], label: 'FLAG SPOT' }, { pos: ['TE'], label: 'FLAG SPOT' });
+  ok('two spots sharing a custom label are still told apart',
+    JSON.stringify(slotDisplayNames(dup)) === JSON.stringify(['FLAG SPOT 1', 'FLAG SPOT 2']), slotDisplayNames(dup));
+}
+{
+  // The accepts line says the half the NAME doesn't.
+  ok('a derived name already says the positions, so the line stays empty',
+    slotAcceptsLabel({ pos: ['RB', 'WR', 'TE'] }) === '', slotAcceptsLabel({ pos: ['RB', 'WR', 'TE'] }));
+  ok('a CUSTOM label hides eligibility, so the positions are spelled out',
+    slotAcceptsLabel({ pos: ['WR', 'TE'], label: 'Only NFC Players' }) === 'WR/TE',
+    slotAcceptsLabel({ pos: ['WR', 'TE'], label: 'Only NFC Players' }));
+  ok('a filter shows whether or not the spot is labelled',
+    slotAcceptsLabel({ pos: ['RB'], max_exp: 0, flt: { max_exp: 0 } }) === 'ROOKIES ONLY'
+    && slotAcceptsLabel({ pos: ['RB'], label: 'The Kid', flt: { teams: ['KC'] } }) === 'RB · KC');
+  ok('no filter reads as nothing, never as "undefined"', slotFilterLabel(null) === '' && slotFilterLabel(undefined) === '');
+  ok('a tenure window reads as a range', slotFilterLabel({ min_exp: 2, max_exp: 5 }) === '2–5 YRS', slotFilterLabel({ min_exp: 2, max_exp: 5 }));
+  ok('an open-ended window still reads', slotFilterLabel({ min_exp: 4 }) === '4–30 YRS', slotFilterLabel({ min_exp: 4 }));
+}
+{
+  // The load-bearing one: what a spot READS must match what it ACCEPTS.
+  const s = spots({ pos: ['WR', 'TE'], label: 'Only NFC Players', teams: ['PHI'] })[0];
+  const legal = { pos: 'WR', team: 'PHI', exp: 3 };
+  const wrongTeam = { pos: 'WR', team: 'KC', exp: 3 };
+  const wrongPos = { pos: 'RB', team: 'PHI', exp: 3 };
+  ok('the accepts line names exactly the rule slotAllows enforces',
+    slotAcceptsLabel(s) === 'WR/TE · PHI' && slotAllows(s, legal) && !slotAllows(s, wrongTeam) && !slotAllows(s, wrongPos),
+    slotAcceptsLabel(s));
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');

@@ -21,7 +21,7 @@ import {
   leaguePoolExp, friendlyError,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type PosCaps, type GameModeInfo,
 } from '@drip/core/data/liveApi';
-import { leagueSlotDefs, assignSpots, slotDisplayName, type SpotPlayer } from '@drip/core/engine/classic';
+import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, type SpotPlayer } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
 import { ADP_2026 } from '@drip/core/data/adp2026';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
@@ -243,6 +243,9 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   // The league's starting spots, in the commissioner's own order. Null for a
   // drip league (no starting spec) or while the mode read is outstanding.
   const spotDefs = gm?.mode === 'classic' ? leagueSlotDefs({ roster: gm.roster ?? null, slots: gm.slots ?? null }) : null;
+  // Repeats numbered (RB 1 / RB 2) so two identical rows can be told apart —
+  // the same names the lineup setter uses, from the same core helper.
+  const spotNames = spotDefs ? slotDisplayNames(spotDefs) : [];
   /** A seat's picks mapped onto the spots they'll fill — see assignSpots.
    *  A pick the pool doesn't know (pos '?') matches nothing and benches, so a
    *  missing pool row costs a spot, never a row. */
@@ -614,12 +617,14 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                 <Mono size={8.5} tone="faint" track={0.14} style={{ paddingBottom: 4 }}>
                   {`STARTING LINEUP · ${seated}/${fill.spots.length} FILLED`}
                 </Mono>
-                {fill.spots.map((s) => (s.player
-                  ? row(s.def.slot, slotDisplayName(s.def), s.player.id, true)
+                {fill.spots.map((s, si) => (s.player
+                  ? row(s.def.slot, spotNames[si], s.player.id, true)
                   : (
                     <View key={s.def.slot} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, opacity: 0.55 }}>
-                      <Mono size={9} tone="faint" style={{ width: 72 }} numberOfLines={1}>{slotDisplayName(s.def)}</Mono>
-                      <Mono size={10} tone="faint" style={{ flex: 1 }}>— empty</Mono>
+                      <Mono size={9} tone="faint" style={{ width: 72 }} numberOfLines={1}>{spotNames[si]}</Mono>
+                      <Mono size={10} tone="faint" style={{ flex: 1 }} numberOfLines={1}>
+                        {`— empty${slotAcceptsLabel(s.def) ? ` · ${slotAcceptsLabel(s.def)}` : ''}`}
+                      </Mono>
                     </View>
                   )))}
                 <Mono size={8.5} tone="faint" track={0.14} style={{ paddingTop: 10, paddingBottom: 4 }}>

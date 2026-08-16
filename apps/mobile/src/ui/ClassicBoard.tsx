@@ -6,7 +6,7 @@
 // the same live play stream, refreshed every 60s.
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
-import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayName, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec, type SlotFilter } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { buildMatchupBoard, gameFor, entryState, type BoardEntry, type BoardSide } from '@drip/core/engine/matchupBoard';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
@@ -119,16 +119,6 @@ const r1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
 const fmtKick = (iso: string): string => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
-};
-// Short human label for a spot's player filter (0172): "KC/SF · ROOKIES".
-const fltLabel = (f?: SlotFilter | null): string => {
-  if (!f) return '';
-  const parts: string[] = [];
-  if (f.teams?.length) parts.push(f.teams.join('/'));
-  if (f.min_exp != null || f.max_exp != null) {
-    parts.push(f.max_exp === 0 ? 'ROOKIES ONLY' : `${f.min_exp ?? 0}–${f.max_exp ?? '30'} YRS`);
-  }
-  return parts.join(' · ');
 };
 
 export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; leagueId: string; rosterId: number }) {
@@ -250,6 +240,16 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const sc = useMemo<Partial<ClassicScoring>>(() => ({ ...scoring, ppr }), [scoring, ppr]);
   // The league's configured lineup (0161) — slot names, types, eligibility.
   const slotDefs = useMemo(() => leagueSlotDefs({ roster, slots: slotsSpec }), [roster, slotsSpec]);
+  // What each spot is CALLED on screen. The stored name (S1, RB2) is a storage
+  // key, not something to set a lineup against — this is the commissioner's own
+  // label (0174) or the derived one, with repeats numbered so two identical
+  // rows can be told apart. One map, so the setter, the picker and the locked
+  // board can never disagree about what a spot is called.
+  const slotName = useMemo(() => {
+    const names = slotDisplayNames(slotDefs);
+    return new Map(slotDefs.map((d, i) => [d.slot, names[i]]));
+  }, [slotDefs]);
+  const nameOf = (d: { slot: string; label?: string; pos: string[] }) => slotName.get(d.slot) ?? d.slot;
   const pts = useMemo(() => {
     void playsAt; void flagsVer;
     if (!matchup) return () => 0;
@@ -339,7 +339,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       ir: benchList.filter((p) => stashed.has(p.slug)).map((p) => entryFor(p.slug)).filter((e): e is BoardEntry => !!e),
     });
     return buildMatchupBoard({
-      week: matchup.week, locked, slots: slotDefs, labelFor: slotDisplayName,
+      week: matchup.week, locked, slots: slotDefs, labelFor: nameOf,
       home: mkSide(rosterId, names.me, avatars.me, effective.mine, bench),
       // The opponent's bench isn't readable, and shouldn't be — an empty
       // column beside mine would imply they had nobody, not that I can't see.
@@ -462,9 +462,17 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           const auto = bb.has(d.slot);
           const my = effective.mine[d.slot];
           const their = effective.theirs[d.slot];
+          const accepts = slotAcceptsLabel(d);
           return (
           <View key={d.slot} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderTopWidth: i ? 1 : 0, borderTopColor: t.bd }}>
-            <Mono size={9} tone={auto ? 'you' : 'dim'} weight="700" style={{ width: 34 }}>{auto ? `${d.slot}\n🎯` : d.slot}</Mono>
+            {/* The spot as the commissioner built it: what it's CALLED, and —
+                when the name doesn't already say it — what it ACCEPTS. A custom
+                label ("Only NFC Players") hides eligibility entirely, which is
+                exactly when a manager needs the positions spelled out. */}
+            <View style={{ width: 76 }}>
+              <Mono size={9} tone={auto ? 'you' : 'dim'} weight="700" numberOfLines={1}>{nameOf(d)}{auto ? ' 🎯' : ''}</Mono>
+              {!!accepts && <Mono size={8} tone="faint" numberOfLines={1}>{accepts}</Mono>}
+            </View>
             <Pressable
               onPress={() => { if (!locked && !auto) { tap(); setPickerSlot(pickerSlot === d.slot ? null : d.slot); } }}
               style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7 }}>
@@ -479,7 +487,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   </View>
                 </>
               ) : (
-                <Mono size={10} tone={locked || auto ? 'faint' : 'you'}>{locked || auto ? '—' : `+ SET ${d.slot}`}</Mono>
+                <Mono size={10} tone={locked || auto ? 'faint' : 'you'}>{locked || auto ? '—' : '+ SET'}</Mono>
               )}
             </Pressable>
             <Mono size={12} tone="you" weight="700">{locked || my ? r1(pts(my, d.pos)) : ''}</Mono>
@@ -503,7 +511,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       {/* Picker */}
       {!locked && pickerSlot && slotDef && (
         <Card>
-          <Mono size={9} tone="faint" weight="700" style={{ marginBottom: 8 }}>SET {slotDisplayName(slotDef)} — {slotDef.pos.join(' / ')}{fltLabel(slotDef.flt) ? ` · ${fltLabel(slotDef.flt)}` : ''}</Mono>
+          <Mono size={9} tone="faint" weight="700" style={{ marginBottom: 8 }}>SET {nameOf(slotDef)} — {slotDef.pos.join(' / ')}{slotFilterLabel(slotDef.flt) ? ` · ${slotFilterLabel(slotDef.flt)}` : ''}</Mono>
           {mine[pickerSlot] && (
             <Pressable onPress={() => { void assign(pickerSlot, null); }} style={{ paddingVertical: 7 }}>
               <Mono size={10} tone="dim">✕ CLEAR SLOT</Mono>
