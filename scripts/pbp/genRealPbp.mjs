@@ -245,6 +245,10 @@ for (const rows of games.values()) {
       push(week, slug, { c, ...T, k:d.extra_point_result === 'good' ? 'xp' : 'xpmiss', y: 0, td: 0, ca: 0, tg: 0 });
       if (isSet(d.kicker_player_name)) kickerName[d.posteam] = fmtName(d.kicker_player_name);
     }
+    // ── Punter rows (0167 groundwork) — distance-keyed, team pseudo-player ──
+    if (pt === 'punt' && isSet(d.posteam) && isSet(d.kick_distance)) {
+      push(week, `${String(d.posteam).toLowerCase()}-p`, { c, ...T, k:'punt', y: Number(d.kick_distance) || 0, td: 0, ca: 0, tg: 0 });
+    }
     // ── Team defense — sacks, takeaways, def/ST TDs, safeties, keyed by defteam ("dal-dst") ──
     if (isSet(d.defteam)) {
       const slug = `${String(d.defteam).toLowerCase()}-dst`;
@@ -253,7 +257,42 @@ for (const rows of games.values()) {
       if (Number(d.fumble_lost) === 1 && d.fumble_recovery_1_team === d.defteam) push(week, slug, { c, ...T, k:'fumrec', y: 0, td: 0, ca: 0, tg: 0 });
       if (Number(d.safety) === 1) push(week, slug, { c, ...T, k:'safety', y: 0, td: 0, ca: 0, tg: 0 });
       if (isSet(d.td_team) && d.td_team === d.defteam) push(week, slug, { c, ...T, k:'dst_td', y: 0, td: 0, ca: 0, tg: 0 });
+      // Blocked FG / PAT (0167) — the columns carry the result; blocked punts
+      // need punt_blocked, which this dump set predates (guarded for the re-pull).
+      if ((pt === 'field_goal' && d.field_goal_result === 'blocked')
+        || (pt === 'extra_point' && d.extra_point_result === 'blocked')
+        || Number(d.punt_blocked ?? 0) === 1) push(week, slug, { c, ...T, k:'blk', y: 0, td: 0, ca: 0, tg: 0 });
     }
+  }
+}
+
+// ── Team brackets (0167): one `pa` + one `ya` game-summary row per defense at
+// each game's end. Points from scoring plays (TDs via td_team, FG/XP by
+// posteam, safeties to the defense; 2-pt guarded — the columns predate this
+// dump set). Yards = net scrimmage yards_gained by the offense. ──
+for (const [gid, rows] of games) {
+  const week = +gid.split('_')[1];
+  if (!pbp[week]) continue;
+  const scored = {}, teamYds = {}, teams = new Set();
+  let maxC = 0;
+  for (const d of rows) {
+    if (isSet(d.posteam)) teams.add(d.posteam);
+    if (d.qtr != null && d.time != null) { const cc = clockOf(Number(d.qtr), d.time); if (cc > maxC) maxC = cc; }
+    if (isSet(d.td_team)) scored[d.td_team] = (scored[d.td_team] || 0) + 6;
+    if (d.play_type === 'field_goal' && d.field_goal_result === 'made') scored[d.posteam] = (scored[d.posteam] || 0) + 3;
+    if (d.play_type === 'extra_point' && d.extra_point_result === 'good') scored[d.posteam] = (scored[d.posteam] || 0) + 1;
+    if (Number(d.safety) === 1 && isSet(d.defteam)) scored[d.defteam] = (scored[d.defteam] || 0) + 2;
+    if (Number(d.two_point_attempt ?? 0) === 1 && d.two_point_conv_result === 'success') scored[d.posteam] = (scored[d.posteam] || 0) + 2;
+    if ((d.play_type === 'pass' || d.play_type === 'run' || d.play_type === 'qb_kneel') && isSet(d.posteam)) {
+      teamYds[d.posteam] = (teamYds[d.posteam] || 0) + (Number(d.yards_gained) || 0);
+    }
+  }
+  const pair = [...teams];
+  if (pair.length !== 2) continue;
+  for (const [me, opp] of [[pair[0], pair[1]], [pair[1], pair[0]]]) {
+    const slug = `${String(me).toLowerCase()}-dst`;
+    push(week, slug, { c: maxC, k: 'pa', y: scored[opp] || 0, td: 0, ca: 0, tg: 0 });
+    push(week, slug, { c: maxC, k: 'ya', y: teamYds[opp] || 0, td: 0, ca: 0, tg: 0 });
   }
 }
 

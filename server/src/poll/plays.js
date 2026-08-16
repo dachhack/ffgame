@@ -33,8 +33,8 @@ export async function pollGame(eventId, week, playerIndex) {
         week, game_id: eventId, player_slug: slug,
         c: p.c, t: p.t ?? null, pid: p.pid ?? null,
         k: p.k, y: p.y, td: p.td, ca: p.ca, tg: p.tg, to: p.to ?? null,
-        // 0166 truth flags — null on rows that don't carry them
-        fd: p.fd ?? null, cp: p.cp ?? null, ic: p.ic ?? null, sk: p.sk ?? null,
+        // 0166 truth flags + 0167 return kind — null on rows that don't carry them
+        fd: p.fd ?? null, cp: p.cp ?? null, ic: p.ic ?? null, sk: p.sk ?? null, rk: p.rk ?? null,
       });
     }
   }

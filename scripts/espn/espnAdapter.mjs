@@ -214,10 +214,20 @@ export function playToRows(p, roster, eventId, gameStartMs) {
     if (rm) {
       // Returner = last roster name before the "for N yards" return clause. The
       // kicker is named earlier ("X kicks/punts ..."), so the later name wins.
+      // rk (0167) splits the KR/PR yardage knobs; retYd still scores combined.
       let h = null; for (const n of names) if (n.idx < rm.index) h = n; else break;
       const returner = h ? resolve(h.abbr) : null;
-      if (returner) out.push({ slug: returner.slug, play: row(c, ride, 'return', Number(rm[1]) || 0, /TOUCHDOWN/i.test(text) ? 1 : 0, 0, 0, 0) });
+      const rk = typeText.startsWith('Kickoff') ? 'kr' : 'pr';
+      if (returner) out.push({ slug: returner.slug, play: row(c, ride, 'return', Number(rm[1]) || 0, /TOUCHDOWN/i.test(text) ? 1 : 0, 0, 0, 0, { rk }) });
     }
+  }
+
+  // Punter rows (0167 groundwork): distance-keyed like the kicker's FG rows,
+  // on the team pseudo-player "xxx-p". No knob scores them until position P
+  // exists — the data just starts accumulating now.
+  if (typeText === 'Punt' || typeText === 'Blocked Punt' || typeText === 'Punt Return Touchdown') {
+    const pm = /\bpunts (\d+) yards?/.exec(text);
+    if (pm && offTeam) out.push({ slug: `${offTeam.toLowerCase()}-p`, play: row(c, ride, 'punt', Number(pm[1]) || 0, 0, 0, 0, 0) });
   }
 
   // Team defense — sack / INT / fumble recovery / def(+ST) TD / safety, keyed by
@@ -232,6 +242,8 @@ export function playToRows(p, roster, eventId, gameStartMs) {
     // Defensive / special-teams TD (INT-return, fumble-return, punt/kick-return):
     // scored by the team on defense for this play (matches the baker's td_team===defteam).
     if (/Return Touchdown$/.test(typeText)) out.push({ slug: d, play: row(c, ride, 'dst_td', 0, 0, 0, 0, 0) });
+    // Blocked punt / PAT / FG (0167) — the blocking defense's play.
+    if (typeText.startsWith('Blocked') || /is BLOCKED/i.test(text)) out.push({ slug: d, play: row(c, ride, 'blk', 0, 0, 0, 0, 0) });
   }
   return out;
 }
@@ -386,6 +398,37 @@ export function gameToRealPlays(summary, resolveSlug = slugOf) {
       (pbp[slug] ||= []).push(play);
     }
   }
+
+  // Team brackets (0167): once the game is FINAL, each defense gets one `pa`
+  // (points allowed = opponent's final score) and one `ya` (opponent total
+  // yards, from the boxscore) game-summary row. Stable synthetic pids keep the
+  // per-poll live_play reconcile idempotent; before final, the rows simply
+  // don't exist, so brackets never score a game in progress.
+  const comp2 = summary?.header?.competitions?.[0];
+  if (comp2?.status?.type?.completed) {
+    const score = new Map(); let homeAb = '', awayAb = '';
+    for (const cmt of comp2?.competitors ?? []) {
+      const a = fixTeam(cmt?.team?.abbreviation ?? '');
+      score.set(a, Number(cmt?.score ?? 0) || 0);
+      if (cmt?.homeAway === 'home') homeAb = a; else if (cmt?.homeAway === 'away') awayAb = a;
+    }
+    const yardsOf = new Map();
+    for (const tb of summary?.boxscore?.teams ?? []) {
+      const a = fixTeam(tb?.team?.abbreviation ?? '');
+      const ty = (tb?.statistics ?? []).find((s) => s?.name === 'totalYards');
+      const v = Number(ty?.displayValue ?? NaN);
+      if (Number.isFinite(v)) yardsOf.set(a, v);
+    }
+    let maxC = 0;
+    for (const arr of Object.values(pbp)) for (const p of arr) if (p.c > maxC) maxC = p.c;
+    for (const [me, opp] of [[homeAb, awayAb], [awayAb, homeAb]]) {
+      if (!me || !opp) continue;
+      const d = `${me.toLowerCase()}-dst`;
+      (pbp[d] ||= []).push({ c: maxC, pid: 900000001, k: 'pa', y: score.get(opp) ?? 0, td: 0, ca: 0, tg: 0 });
+      if (yardsOf.has(opp)) (pbp[d] ||= []).push({ c: maxC, pid: 900000002, k: 'ya', y: yardsOf.get(opp), td: 0, ca: 0, tg: 0 });
+    }
+  }
+
   for (const slug of Object.keys(pbp)) pbp[slug].sort((a, b) => a.c - b.c);
   return pbp;
 }

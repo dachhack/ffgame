@@ -15,7 +15,15 @@ export type RealPlayKind =
                                                  // and legacy/drip scorers skip them free
   | 'return'                                     // kick/punt return yards
   | 'fg' | 'fgmiss' | 'xp' | 'xpmiss'           // kicker
+  | 'punt'                                       // punter row, y = punt distance (0167
+                                                 // groundwork — keyed "xxx-p", unscored
+                                                 // until position P exists)
   | 'sack' | 'int' | 'fumrec' | 'dst_td' | 'safety'  // team defense
+  | 'blk'                                        // team defense: blocked punt/PAT/FG (0167)
+  | 'pa' | 'ya'                                  // team-defense game-summary rows (0167):
+                                                 // y = points / total yards allowed, one of
+                                                 // each per DEF once the game is FINAL —
+                                                 // the brackets knobs score off them
   | 'tackle';                                        // IDP (individual defender)
 // `c` is the game-elapsed clock (seconds). `t` is the REAL wall-clock time of
 // the play, in seconds since the game's first snap (baked from nflverse
@@ -26,7 +34,9 @@ export type RealPlayKind =
 // Phase-1 truth flags (0166, all optional — legacy rows simply lack them):
 // `fd` first down gained · `cp` completed pass (QB row) · `ic` incomplete
 // pass attempt, INTs included (QB row) · `sk` QB was sacked on this dropback.
-export interface RealPlay { c: number; t?: number; pid?: number; k: RealPlayKind; y: number; td: number; ca: number; tg: number; to?: number; fd?: number; cp?: number; ic?: number; sk?: number; }
+// Phase-2 (0167): `rk` on return rows — 'kr' kickoff / 'pr' punt — for the
+// split return-yardage knobs (legacy return rows score the combined knob only).
+export interface RealPlay { c: number; t?: number; pid?: number; k: RealPlayKind; y: number; td: number; ca: number; tg: number; to?: number; fd?: number; cp?: number; ic?: number; sk?: number; rk?: string; }
 
 interface WeekData { pbp: Record<string, RealPlay[]>; points: Record<string, number>; poss?: Record<string, number[][]>; wall?: Record<string, number[]>; ends?: Record<string, number>; kick?: Record<string, number>; }
 
@@ -62,12 +72,13 @@ export function setLivePlays(week: number, pbp: Record<string, RealPlay[]>, poin
 export function clearLivePlays(): void { livePbp.clear(); livePts.clear(); }
 
 /** live_play DB rows → {slug: RealPlay[]} (mirrors the worker's rowsToPbp). */
-export function liveRowsToPbp(rows: { player_slug: string; c: number; t: number | null; pid: number | null; k: string; y: number; td: number; ca: number; tg: number; to: number | null; fd?: number | null; cp?: number | null; ic?: number | null; sk?: number | null }[]): Record<string, RealPlay[]> {
+export function liveRowsToPbp(rows: { player_slug: string; c: number; t: number | null; pid: number | null; k: string; y: number; td: number; ca: number; tg: number; to: number | null; fd?: number | null; cp?: number | null; ic?: number | null; sk?: number | null; rk?: string | null }[]): Record<string, RealPlay[]> {
   const by: Record<string, RealPlay[]> = {};
   for (const r of rows) (by[r.player_slug] ||= []).push({
     c: r.c, t: r.t ?? undefined, pid: r.pid ?? undefined, k: r.k as RealPlayKind, y: r.y, td: r.td, ca: r.ca, tg: r.tg,
     ...(r.to ? { to: r.to } : {}),
     ...(r.fd ? { fd: 1 } : {}), ...(r.cp ? { cp: 1 } : {}), ...(r.ic ? { ic: 1 } : {}), ...(r.sk ? { sk: 1 } : {}),
+    ...(r.rk ? { rk: r.rk } : {}),
   });
   for (const s of Object.keys(by)) by[s].sort((a, b) => a.c - b.c);
   return by;
